@@ -1,7 +1,8 @@
 import React from "react";
 import { useState, useRef, useEffect } from "react";
 import { ref, onValue, set } from "firebase/database";
-import { db } from "./firebase";
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
+import { db, auth } from "./firebase";
 
 var INDOOR=[{id:"i1",capacity:2},{id:"i2",capacity:2},{id:"i3",capacity:2},{id:"i4",capacity:2}];
 var OUTDOOR=[{id:"1A",capacity:2},{id:"1B",capacity:2},{id:"2",capacity:2},{id:"3",capacity:2},{id:"4",capacity:2},{id:"5A",capacity:2},{id:"5B",capacity:2},{id:"6",capacity:2},{id:"7",capacity:4}];
@@ -269,7 +270,7 @@ function ListView(props){
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
-export default function App(){
+function BookingApp(props){
   var bs=useState([]);var bookings=bs[0],setBookings=bs[1];
   var loaded=useRef(false);
   var remoteUpdate=useRef(false);
@@ -433,7 +434,8 @@ export default function App(){
         RC("div",null,RC("div",{style:{fontSize:isMobile?18:22,fontWeight:700}},"Me Gustas Tu bookings"),RC("div",{style:{fontSize:12,color:S.muted,fontWeight:500}},"4 indoor  9 outdoor  "+OPEN+":00 - "+CLOSE+":00")),
         RC("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
           ["timeline","list"].map(function(v){return RC("button",{key:v,onClick:function(){setView(v);},style:mkBtn({background:view===v?S.border:"transparent",fontWeight:view===v?700:400,textTransform:"capitalize",minHeight:40})},v);}),
-          RC("button",{onClick:openNew,style:{background:S.accent,border:"none",borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:700,color:"#fff",minHeight:40}},"+ New"))),
+          RC("button",{onClick:openNew,style:{background:S.accent,border:"none",borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:700,color:"#fff",minHeight:40}},"+ New"),
+          RC("button",{onClick:function(){signOut(auth);},style:mkBtn({fontSize:12,color:S.muted})},"Log out"))),
       RC("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12}},
         RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()-1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 14px",fontSize:18,fontWeight:700}),dangerouslySetInnerHTML:{__html:"&#8249;"}}),
         RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()+1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 14px",fontSize:18,fontWeight:700}),dangerouslySetInnerHTML:{__html:"&#8250;"}}),
@@ -443,4 +445,46 @@ export default function App(){
       ineffBanner,
       mainView,
       formModal,delModal,manualModal));
+}
+
+// ── Login Screen ─────────────────────────────────────────────────────────────
+function LoginScreen(){
+  var es=useState("");var email=es[0],setEmail=es[1];
+  var ps=useState("");var password=ps[0],setPassword=ps[1];
+  var ers=useState("");var error=ers[0],setError=ers[1];
+  var ls=useState(false);var loading=ls[0],setLoading=ls[1];
+  function handleLogin(){
+    if(!email||!password){setError("Please enter email and password.");return;}
+    setLoading(true);setError("");
+    signInWithEmailAndPassword(auth,email,password).then(function(){setLoading(false);}).catch(function(err){
+      setLoading(false);
+      if(err.code==="auth/invalid-credential"||err.code==="auth/wrong-password"||err.code==="auth/user-not-found") setError("Invalid email or password.");
+      else if(err.code==="auth/too-many-requests") setError("Too many attempts. Please wait a moment.");
+      else setError("Login failed. Please try again.");
+    });
+  }
+  function handleKey(e){if(e.key==="Enter") handleLogin();}
+  var RC=React.createElement;
+  return RC("div",{style:{background:S.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:"var(--font-sans)"}},
+    RC("div",{style:{background:S.card,borderRadius:12,border:"0.5px solid "+S.border,padding:"32px 28px",width:"100%",maxWidth:360}},
+      RC("div",{style:{fontSize:22,fontWeight:700,color:S.text,marginBottom:4}},"Me Gustas Tu"),
+      RC("div",{style:{fontSize:14,color:S.muted,marginBottom:24}},"Staff login"),
+      RC("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+        RC("input",{type:"email",value:email,onChange:function(e){setEmail(e.target.value);},onKeyDown:handleKey,placeholder:"Email",style:{width:"100%",boxSizing:"border-box",background:S.bg,border:"0.5px solid "+S.border,borderRadius:8,padding:"12px 14px",fontSize:15,color:S.text}}),
+        RC("input",{type:"password",value:password,onChange:function(e){setPassword(e.target.value);},onKeyDown:handleKey,placeholder:"Password",style:{width:"100%",boxSizing:"border-box",background:S.bg,border:"0.5px solid "+S.border,borderRadius:8,padding:"12px 14px",fontSize:15,color:S.text}}),
+        error?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"8px 12px",background:"#fee2e2",borderRadius:8}},error):null,
+        RC("button",{onClick:handleLogin,disabled:loading,style:{background:S.accent,border:"none",borderRadius:8,padding:"12px",fontSize:15,fontWeight:700,color:"#fff",cursor:loading?"wait":"pointer",opacity:loading?0.7:1,minHeight:44}},loading?"Logging in...":"Log in"))));
+}
+
+// ── Auth Wrapper ─────────────────────────────────────────────────────────────
+export default function App(){
+  var us=useState(null);var user=us[0],setUser=us[1];
+  var cs=useState(true);var checking=cs[0],setChecking=cs[1];
+  useEffect(function(){
+    var unsub=onAuthStateChanged(auth,function(u){setUser(u);setChecking(false);});
+    return unsub;
+  },[]);
+  if(checking) return React.createElement("div",{style:{background:S.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-sans)",color:S.muted,fontSize:15}},"Loading...");
+  if(!user) return React.createElement(LoginScreen,null);
+  return React.createElement(BookingApp,null);
 }
