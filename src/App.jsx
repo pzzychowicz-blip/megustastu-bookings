@@ -274,12 +274,26 @@ function BookingApp(props){
   var bs=useState([]);var bookings=bs[0],setBookings=bs[1];
   var loaded=useRef(false);
   var remoteUpdate=useRef(false);
+  var cleanedUp=useRef(false);
   useEffect(function(){
     var dbRef=ref(db,"bookings");
     var unsub=onValue(dbRef,function(snapshot){
       var data=snapshot.val();
+      var all=data&&Array.isArray(data)?data:[];
+      // Auto-cleanup: remove bookings older than 30 days (runs once per session)
+      if(!cleanedUp.current&&all.length>0){
+        var cutoff=new Date();cutoff.setDate(cutoff.getDate()-30);
+        var cutoffStr=cutoff.toISOString().slice(0,10);
+        var fresh=all.filter(function(b){return b&&b.date>=cutoffStr;});
+        if(fresh.length<all.length){
+          cleanedUp.current=true;
+          set(ref(db,"bookings"),fresh);
+          return; // onValue will fire again with the cleaned data
+        }
+      }
+      cleanedUp.current=true;
       remoteUpdate.current=true;
-      setBookings(data&&Array.isArray(data)?data:[]);
+      setBookings(all);
       loaded.current=true;
     });
     return unsub;
