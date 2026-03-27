@@ -40,6 +40,8 @@ function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
 function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
 function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function sanitize(b){if(!b||typeof b!=="object") return null;return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:b.time||"13:00",size:Number(b.size)||2,duration:Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict};}
+function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var vals=Object.values(arr);return vals.map(sanitize).filter(Boolean);}return arr.map(sanitize).filter(Boolean);}
 function isIn(id){return id.startsWith("i");}
 function isAllIn(ids){return ids.every(isIn);}
 function isAllOut(ids){return ids.every(function(id){return !isIn(id);});}
@@ -334,7 +336,7 @@ function BookingApp(props){
     var dbRef=ref(db,"bookings");
     var unsub=onValue(dbRef,function(snapshot){
       var data=snapshot.val();
-      var all=data&&Array.isArray(data)?data:[];
+      var all=sanitizeAll(data);
       if(!cleanedUp.current&&all.length>0){
         var cutoff=new Date();cutoff.setDate(cutoff.getDate()-30);
         var cutoffStr=cutoff.toISOString().slice(0,10);
