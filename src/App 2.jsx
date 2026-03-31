@@ -5,7 +5,7 @@ import { db, auth } from "./firebase";
 
 var INDOOR=[{id:"i1",capacity:2},{id:"i2",capacity:2},{id:"i3",capacity:2},{id:"i4",capacity:2}];
 var OUTDOOR=[{id:"1A",capacity:2},{id:"1B",capacity:2},{id:"2",capacity:2},{id:"3",capacity:2},{id:"4",capacity:2},{id:"5A",capacity:2},{id:"5B",capacity:2},{id:"6",capacity:2},{id:"7",capacity:4}];
-var ALL_TABLES=OUTDOOR.concat(INDOOR);
+var ALL_TABLES=INDOOR.concat(OUTDOOR);
 var TIMELINE_TABLES=OUTDOOR.concat(INDOOR);
 var VALID_COMBOS=[
   {ids:["7"],cap:4},
@@ -61,10 +61,9 @@ function canAssign(ids,slots,s,e){
   return true;
 }
 function _hasI1(c){return c.ids.indexOf("i1")>=0?1:0;}
-function _comboLoc(c){if(isAllOut(c.ids)) return 0;if(isAllIn(c.ids)) return 1;return 2;}
 function findBest(size,pref,s,e,slots){
   var sg=ALL_TABLES.filter(function(t){return t.capacity>=size&&comboOk([t.id],pref)&&canAssign([t.id],slots,s,e);});
-  var co=VALID_COMBOS.filter(function(c){return c.cap>=size&&comboOk(c.ids,pref)&&canAssign(c.ids,slots,s,e);}).sort(function(a,b){return _comboLoc(a)-_comboLoc(b)||_hasI1(b)-_hasI1(a)||a.cap-b.cap||a.ids.length-b.ids.length;});
+  var co=VALID_COMBOS.filter(function(c){return c.cap>=size&&comboOk(c.ids,pref)&&canAssign(c.ids,slots,s,e);}).sort(function(a,b){return _hasI1(b)-_hasI1(a)||a.cap-b.cap||a.ids.length-b.ids.length;});
   if(size<=2){var n7=sg.filter(function(t){return t.id!=="7";});if(pref==="outdoor"||pref==="auto"){var out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}if(pref==="indoor"||pref==="auto"){var ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}if(n7.length) return [n7[0].id];if(sg.length) return [sg[0].id];if(co.length) return co[0].ids;return null;}
   if(size<=4){if(canAssign(["7"],slots,s,e)&&comboOk(["7"],pref)) return ["7"];if(co.length) return co[0].ids;if(sg.length) return [sg[0].id];return null;}
   if(co.length) return co[0].ids;
@@ -445,7 +444,7 @@ function BookingApp(props){
     var max=0;bookings.forEach(function(b){if(b.date===today&&b.name&&b.name.indexOf("Walk-in ")===0){var n=parseInt(b.name.slice(8));if(n>max) max=n;}});
     return max+1;
   }
-  function nowTime(){var d=new Date();return toTime(d.getHours()*60+d.getMinutes());}
+  function nowTime(){var d=new Date();var m=d.getHours()*60+d.getMinutes();m=Math.floor(m/15)*15;return toTime(m);}
   function openWalkin(){setWalkinForm({size:2,notes:"",tables:[],time:nowTime()});setWalkinError("");setShowWalkin(true);}
   function saveWalkin(){
     var wf=walkinForm;
