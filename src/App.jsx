@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { ref, onValue, set } from "firebase/database";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
@@ -51,6 +51,13 @@ function comboOk(ids,pref){var mixed=!isAllIn(ids)&&!isAllOut(ids);if(mixed&&pre
 function comboCap(ids){var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});return c?c.cap:ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
 function isLocked(b){return b&&(b._locked===true||b.status==="seated");}
 function isActive(b){return b.status!=="cancelled"&&b.status!=="completed";}
+function getBlockSlots(blocks,date){
+  return blocks.filter(function(bl){return bl.date===date;}).map(function(bl){
+    var s=bl.allDay?OPEN*60:toMins(bl.from);
+    var e=bl.allDay?GRID_CLOSE*60:toMins(bl.to);
+    return {tables:[bl.tableId],s:s,e:e};
+  });
+}
 function getBusy(slots,s,e){var busy=new Set();slots.forEach(function(sl){if(!overlaps(s,e,sl.s,sl.e)) return;sl.tables.forEach(function(id){busy.add(id);});});return busy;}
 function canAssign(ids,slots,s,e){
   var busy=getBusy(slots,s,e);
@@ -77,27 +84,45 @@ function findBestAny(size,s,e,slots){
   var mx=VALID_COMBOS.filter(function(c){return c.cap>=size&&c.ids.every(function(id){return !busy.has(id);})&&isMixedLarge(c.ids)&&canAssign(c.ids,slots,s,e);}).sort(function(a,b){return _hasI1(b)-_hasI1(a)||a.cap-b.cap||a.ids.length-b.ids.length;});
   return mx.length?mx[0].ids:null;
 }
-function findTimes(date,size,pref,existing,dur,around){
+function findTimes(date,size,pref,existing,dur,around,blocks){
   var slots=existing.filter(function(b){return b.date===date&&b.status!=="cancelled";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});
+  if(blocks) slots=slots.concat(getBlockSlots(blocks,date));
   var times=Array.from({length:(CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
   var valid=times.filter(function(s){var e=s+dur;if(e>CLOSE*60) return false;var t=findBest(size,pref,s,e,slots);if(!t&&pref==="auto") t=findBestAny(size,s,e,slots);return !!t;});
   if(!around) return valid;
   return valid.filter(function(s){return s<around;}).concat(valid.filter(function(s){return s>around;}));
 }
-function optimise(bookings,date){
+function formatSugg(sugg,around){
+  if(!sugg||!sugg.length) return {earlier:[],later:[]};
+  return {earlier:sugg.filter(function(s){return s<around;}).map(toTime),later:sugg.filter(function(s){return s>around;}).map(toTime)};
+}
+function AvailBanner(props){
+  var msg=props.msg||"No tables available.";var sugg=props.sugg;var style=props.style||{};
+  var bgClr=props.warn?"#fff7ed":"#fee2e2";var brdClr=props.warn?"#fed7aa":"#fca5a5";var txtClr=props.warn?"#9a3412":"#991b1b";
+  var hasEarlier=sugg&&sugg.earlier&&sugg.earlier.length>0;
+  var hasLater=sugg&&sugg.later&&sugg.later.length>0;
+  var hasSugg=hasEarlier||hasLater;
+  return RC("div",{style:Object.assign({padding:"10px 14px",borderRadius:10,border:"0.5px solid "+brdClr,background:bgClr,marginBottom:14,fontSize:13,color:txtClr},style)},
+    RC("div",{style:{fontWeight:700,marginBottom:hasSugg?6:0}},msg),
+    hasEarlier?RC("div",{style:{marginBottom:hasLater?4:0}},RC("span",{style:{fontWeight:700}},"Before: "),sugg.earlier.join(", ")):null,
+    hasLater?RC("div",null,RC("span",{style:{fontWeight:700}},"After: "),sugg.later.join(", ")):null,
+    !hasSugg&&sugg?RC("div",{style:{marginTop:4}},"No availability found."):null);
+}
+function optimise(bookings,date,blocks){
   var completed=bookings.filter(function(b){return b&&b.date===date&&b.status==="completed"&&(b.tables||[]).length>0;});
   var slots=completed.map(function(b){return {tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
+  if(blocks) slots=slots.concat(getBlockSlots(blocks,date));
   var day=bookings.filter(function(b){return b&&b.date===date&&isActive(b);}).sort(function(a,b){var la=isLocked(a)?0:1,lb=isLocked(b)?0:1;if(la!==lb) return la-lb;var pa=a.preference!=="auto"?0:1,pb=b.preference!=="auto"?0:1;if(pa!==pb) return pa-pb;if(b.size!==a.size) return b.size-a.size;return toMins(a.time)-toMins(b.time);});
   var assigned={};
   day.forEach(function(b){if(!b||!b.time) return;var s=toMins(b.time),e=s+(b.duration||90);var tables;if(isLocked(b)){tables=b.tables;}else{tables=findBest(b.size||2,b.preference||"auto",s,e,slots);if(!tables) tables=findBestAny(b.size||2,s,e,slots);}assigned[b.id]=tables||null;if(tables) slots.push({tables:tables,s:s,e:e});});
   return assigned;
 }
-function applyOpt(bookings,date){
-  var map=optimise(bookings,date);
+function applyOpt(bookings,date,blocks){
+  var map=optimise(bookings,date,blocks);
   return bookings.map(function(b){if(b.date!==date||b.status==="cancelled"||b.status==="completed") return Object.assign({},b);var tables=isLocked(b)?b.tables:(map[b.id]||[]);return Object.assign({},b,{tables:tables,_conflict:!tables||!tables.length});});
 }
 function verifyClean(bookings,date){
-  var day=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&(b.tables||[]).length>0;});
+  var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&(b.tables||[]).length>0;});
   for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){var a=day[i],b=day[j];var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;if(!overlaps(as,ae,bs,be)) continue;if(!canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)) return false;}}
   return true;
 }
@@ -182,14 +207,14 @@ function TableGrid(props){
 
 // ── Manual Modal ──────────────────────────────────────────────────────────
 function ManualModal(props){
-  var booking=props.booking,bookings=props.bookings,onSave=props.onSave,onClose=props.onClose,titleText=props.titleText;
+  var booking=props.booking,bookings=props.bookings,onSave=props.onSave,onClose=props.onClose,titleText=props.titleText,blocks=props.blocks||[];
   var ss=useState(booking&&booking.tables?booking.tables.slice():[]);var selected=ss[0],setSelected=ss[1];
   var sbs=useState(false);var swapBusy=sbs[0],setSwapBusy=sbs[1];
   if(!booking) return null;
   var needed=booking.size||2;
   var s=toMins(booking.time||"13:00"),e=s+(booking.duration||90);
   var otherBookings=bookings.filter(function(b){return b&&b.id!==booking.id&&b.date===booking.date&&b.status!=="cancelled"&&(b.tables||[]).length>0;});
-  var otherSlots=otherBookings.map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+(b.duration||90),status:b.status,id:b.id,name:b.name};});
+  var otherSlots=otherBookings.map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+(b.duration||90),status:b.status,id:b.id,name:b.name};}).concat(getBlockSlots(blocks,booking.date).map(function(sl){return Object.assign({},sl,{status:"blocked",id:"__block__",name:"Blocked"});}));
   var busy=getBusy(otherSlots,s,e);
   var seatedBusy=new Set();otherSlots.forEach(function(sl){if(!overlaps(s,e,sl.s,sl.e)) return;if(sl.status==="seated") sl.tables.forEach(function(id){seatedBusy.add(id);});});
   function getCapOf(ids){if(ids.length===0) return 0;var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});if(c) return c.cap;var bestCap=0,bestIds=[];VALID_COMBOS.forEach(function(combo){if(combo.ids.length<=ids.length&&combo.ids.every(function(id){return ids.includes(id);})&&combo.cap>bestCap){bestCap=combo.cap;bestIds=combo.ids;}});if(bestIds.length>0){var rem=ids.filter(function(id){return !bestIds.includes(id);});return bestCap+rem.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}return ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
@@ -251,11 +276,58 @@ function ManualModal(props){
       RC("button",{disabled:!ok,onClick:function(){if(ok)onSave(selected,true,isSwapping?affectedBookings:null);},style:{background:ok?(isSwapping?BTN.orange:S.accent):"#ccc",border:"none",borderRadius:8,padding:"10px 20px",cursor:ok?"pointer":"not-allowed",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},assignLabel)));
 }
 
+// ── Block Modal ──────────────────────────────────────────────────────────
+function BlockModal(props){
+  var tableId=props.tableId,date=props.date,blocks=props.blocks||[],onSave=props.onSave,onRemove=props.onRemove,onClose=props.onClose;
+  if(!tableId) return null;
+  var existing=blocks.filter(function(bl){return bl.tableId===tableId&&bl.date===date;});
+  var indoor=isIn(tableId);var tc=indoor?TBL.ind:TBL.out;
+  var ms=useState(existing.length>0?"view":"add");var mode=ms[0],setMode=ms[1];
+  var frs=useState(OPEN+":00");var from=frs[0],setFrom=frs[1];
+  var tos=useState(GRID_CLOSE+":00");var to=tos[0],setTo=tos[1];
+  function handleSave(){
+    if(!from||!to||toMins(to)<=toMins(from)) return;
+    onSave({tableId:tableId,date:date,allDay:false,from:from,to:to});
+  }
+  var viewEls=existing.map(function(bl,i){
+    var label=bl.allDay?OPEN+":00 – "+GRID_CLOSE+":00":bl.from+" – "+bl.to;
+    return RC("div",{key:i,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:8,background:"#fee2e2",border:"0.5px solid #fca5a5",marginBottom:8}},
+      RC("div",null,RC("div",{style:{fontSize:14,fontWeight:700,color:"#991b1b"}},"Blocked"),RC("div",{style:{fontSize:13,color:"#991b1b"}},label)),
+      RC("button",{onClick:function(){onRemove(bl);},style:mkBtn({background:BTN.del,fontSize:12})},"Unblock"));
+  });
+  if(mode==="view"&&existing.length>0){
+    return RC(Overlay,{onClose:onClose},
+      RC("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:16}},
+        RC("span",{style:{fontSize:12,fontWeight:700,padding:"4px 10px",borderRadius:8,background:tc.bg,color:tc.text,border:"1px solid "+tc.border}},tableId),
+        RC("span",{style:{fontSize:17,fontWeight:700,color:S.text}},"Table "+tableId+" — "+date)),
+      viewEls,
+      RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}},
+        RC("button",{style:mkBtn({minHeight:40,padding:"8px 16px",background:"#64748b"}),onClick:function(){setMode("add");}},"+ Add block"),
+        RC("button",{style:mkBtn({minHeight:40,padding:"8px 16px",background:BTN.cancel}),onClick:onClose},"Close")));
+  }
+  return RC(Overlay,{onClose:onClose},
+    RC("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},
+      RC("span",{style:{fontSize:12,fontWeight:700,padding:"4px 10px",borderRadius:8,background:tc.bg,color:tc.text,border:"1px solid "+tc.border}},tableId),
+      RC("span",{style:{fontSize:17,fontWeight:700,color:S.text}},"Block table "+tableId)),
+    RC("div",{style:{fontSize:13,color:S.muted,marginBottom:16}},date),
+    RC(Section,null,
+      RC("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+        RC(Fld,{label:"From"},RC("input",{type:"time",value:from,onChange:function(e){setFrom(e.target.value);},min:OPEN+":00",max:GRID_CLOSE+":00",style:mkInp()})),
+        RC(Fld,{label:"To"},RC("input",{type:"time",value:to,onChange:function(e){setTo(e.target.value);},min:OPEN+":00",max:GRID_CLOSE+":00",style:mkInp()})))),
+    RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}},
+      RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:onClose},"Cancel"),
+      RC("button",{onClick:handleSave,style:{background:"#991b1b",border:"none",borderRadius:8,padding:"10px 22px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Block")));
+}
+
 // ── Timeline ──────────────────────────────────────────────────────────────────
 function TimelineView(props){
-  var bookings=props.bookings,date=props.date,onEdit=props.onEdit,onManual=props.onManual;
+  var bookings=props.bookings,date=props.date,onEdit=props.onEdit,onManual=props.onManual,blocks=props.blocks||[],onBlock=props.onBlock,nowMins=props.nowMins||0,warnings=props.warnings||{};
+  var zs=useState(1);var zoom=zs[0],setZoom=zs[1];
+  var scrollRef=useRef(null);
   var day=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled";});
+  var dayBlocks=blocks.filter(function(bl){return bl.date===date;});
   var totalMins=(GRID_CLOSE-OPEN)*60;
+  var gridW=Math.max(320,totalMins*zoom*1.2);
   var unassigned=day.filter(function(b){return !(b.tables||[]).length||b._conflict;});
   function pct(mins){return ((mins-OPEN*60)/totalMins)*100+"%";}
   function GridLines(){
@@ -263,44 +335,69 @@ function TimelineView(props){
     lines.push(RC("div",{key:"end",style:{position:"absolute",top:0,bottom:0,right:0,borderLeft:"1px solid #c8b99a",opacity:0.7}}));
     return RC("div",{style:{position:"absolute",inset:0}},lines);
   }
+  function liveDur(b){if(b.status==="seated"){var elapsed=nowMins-toMins(b.time);return Math.max(15,elapsed);}return b.duration;}
   function Block(bp){
-    var b=bp.b;var sm=toMins(b.time)-OPEN*60;var left=pct(OPEN*60+sm);var w=Math.max((b.duration/totalMins)*100,0.5)+"%";
-    var bgc=BLOCK_BG[b.status]||BLOCK_BG.confirmed;
-    var lbl=b.name+" ("+b.size+")"+(isLocked(b)?" [L]":"");
-    return RC("div",{onClick:function(){onEdit(b);},style:{position:"absolute",top:3,height:ROW_H-8+"px",left:left,width:w,background:bgc,borderRadius:6,overflow:"hidden",display:"flex",alignItems:"center",boxSizing:"border-box",cursor:"pointer"}},
+    var b=bp.b;var d=liveDur(b);var sm=toMins(b.time)-OPEN*60;var left=pct(OPEN*60+sm);var w=Math.max((d/totalMins)*100,0.5)+"%";
+    var warn=warnings[b.id];var bgc=BLOCK_BG[b.status]||BLOCK_BG.confirmed;
+    var border=warn?(warn.overdue?"3px solid #dc2626":"3px solid #f59e0b"):"none";
+    var lbl=b.name+" ("+b.size+")"+(isLocked(b)?" [L]":"")+(warn&&warn.overdue?" !!":"");
+    return RC("div",{onClick:function(){onEdit(b);},style:{position:"absolute",top:3,height:ROW_H-8+"px",left:left,width:w,background:bgc,borderRadius:6,overflow:"hidden",display:"flex",alignItems:"center",boxSizing:"border-box",cursor:"pointer",border:border}},
       RC("span",{style:{flex:1,padding:"0 8px",fontSize:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},lbl),
       RC("span",{onClick:function(e){e.stopPropagation();onManual(b.id);},style:{padding:"0 6px",fontSize:13,cursor:"pointer",color:"rgba(255,255,255,0.7)",borderLeft:"1px solid rgba(255,255,255,0.3)",height:"100%",display:"flex",alignItems:"center",minWidth:28}},"="));
   }
+  function BlockBar(bp){
+    var bl=bp.bl;
+    var bS=bl.allDay?OPEN*60:toMins(bl.from);var bE=bl.allDay?GRID_CLOSE*60:toMins(bl.to);
+    var left=pct(bS);var w=Math.max(((bE-bS)/totalMins)*100,0.5)+"%";
+    return RC("div",{style:{position:"absolute",top:1,height:ROW_H-4+"px",left:left,width:w,background:"repeating-linear-gradient(45deg,#991b1b,#991b1b 4px,#7f1d1d 4px,#7f1d1d 8px)",borderRadius:4,opacity:0.6,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}},
+      RC("span",{style:{fontSize:9,fontWeight:700,color:"#fff",textTransform:"uppercase",letterSpacing:1}},"blocked"));
+  }
   var headerLines=QUARTER_HOURS.concat([GRID_CLOSE*60]).map(function(m){var isH=m%60===0;return RC("div",{key:"l"+m,style:{position:"absolute",top:0,left:pct(m),bottom:0,borderLeft:isH?"1px solid #c8b99a":"0.5px solid #ddd0b8"}});});
   var headerLabels=QUARTER_HOURS.filter(function(m){return m%60===0&&m<GRID_CLOSE*60;}).map(function(m){var center=((m+30-OPEN*60)/totalMins)*100;return RC("span",{key:"h"+m,style:{position:"absolute",top:3,left:center+"%",transform:"translateX(-50%)",fontSize:10,fontWeight:700,color:"#fff",whiteSpace:"nowrap",pointerEvents:"none",background:"#8c7a5e",padding:"2px 5px",borderRadius:4,zIndex:1}},String(Math.floor(m/60)).padStart(2,"0")+":00");});
-  var tableRows=TIMELINE_TABLES.map(function(tbl){var id=tbl.id,indoor=isIn(id);var rows=day.filter(function(b){return (b.tables||[]).includes(id);});return RC("div",{key:id,style:{display:"flex",alignItems:"center",height:ROW_H+"px",borderBottom:"1px solid #c8b99a"}},
-    RC("div",{style:{width:LABEL_W+"px",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:6}},RC("span",{style:{fontSize:11,fontWeight:700,padding:"3px 0",borderRadius:8,background:indoor?TBL.ind.bg:TBL.out.bg,color:indoor?TBL.ind.text:TBL.out.text,border:"1px solid "+(indoor?TBL.ind.border:TBL.out.border),width:32,textAlign:"center",display:"inline-block",boxSizing:"border-box"}},id)),
-    RC("div",{style:{flex:1,position:"relative",height:"100%"}},RC(GridLines,null),rows.map(function(b){return RC(Block,{key:b.id,b:b});})));});
-  var unassignedRow=unassigned.length>0?RC("div",{style:{display:"flex",alignItems:"center",height:ROW_H+"px",borderTop:"1px dashed #fca5a5",marginTop:4}},
-    RC("div",{style:{width:LABEL_W+"px",flexShrink:0,fontSize:10,fontWeight:700,color:"#991b1b",textAlign:"right",paddingRight:6}},"unassigned"),
-    RC("div",{style:{flex:1,position:"relative",height:"100%"}},RC(GridLines,null),unassigned.map(function(b){return RC(Block,{key:b.id,b:b});}))):null;
+  // Labels column
+  var labelCol=RC("div",{style:{width:LABEL_W+"px",flexShrink:0}},
+    RC("div",{style:{height:24,background:"#f0e8d0",borderRadius:"6px 0 0 0"}}),
+    TIMELINE_TABLES.map(function(tbl){var id=tbl.id,indoor=isIn(id);var hasBlock=dayBlocks.some(function(bl){return bl.tableId===id;});
+      return RC("div",{key:id,onClick:function(){if(onBlock) onBlock(id);},style:{height:ROW_H+"px",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:6,borderBottom:"1px solid #c8b99a",cursor:"pointer"}},
+        RC("span",{style:{fontSize:11,fontWeight:700,padding:"3px 0",borderRadius:8,background:hasBlock?"#991b1b":indoor?TBL.ind.bg:TBL.out.bg,color:hasBlock?"#fff":indoor?TBL.ind.text:TBL.out.text,border:"1px solid "+(hasBlock?"#991b1b":indoor?TBL.ind.border:TBL.out.border),width:32,textAlign:"center",display:"inline-block",boxSizing:"border-box"}},id));}),
+    unassigned.length>0?RC("div",{style:{height:ROW_H+"px",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:6,borderTop:"1px dashed #fca5a5",marginTop:4}},RC("span",{style:{fontSize:10,fontWeight:700,color:"#991b1b"}},"unassigned")):null);
+  // Grid column (scrollable)
+  var gridRows=TIMELINE_TABLES.map(function(tbl){var id=tbl.id;var rows=day.filter(function(b){return (b.tables||[]).includes(id);});var tblBlocks=dayBlocks.filter(function(bl){return bl.tableId===id;});
+    return RC("div",{key:id,style:{height:ROW_H+"px",position:"relative",borderBottom:"1px solid #c8b99a"}},RC(GridLines,null),tblBlocks.map(function(bl,i){return RC(BlockBar,{key:"blk"+i,bl:bl});}),rows.map(function(b){return RC(Block,{key:b.id,b:b});}));});
+  var unassignedGrid=unassigned.length>0?RC("div",{style:{height:ROW_H+"px",position:"relative",borderTop:"1px dashed #fca5a5",marginTop:4}},RC(GridLines,null),unassigned.map(function(b){return RC(Block,{key:b.id,b:b});})):null;
+  var gridCol=RC("div",{ref:scrollRef,style:{flex:1,overflowX:"auto",overflowY:"hidden"}},
+    RC("div",{style:{width:gridW+"px",minWidth:"100%"}},
+      RC("div",{style:{position:"relative",borderBottom:"1px solid #c8b99a",background:"#f0e8d0",borderRadius:"0 6px 0 0",height:24,overflow:"hidden"}},headerLines,headerLabels),
+      gridRows,
+      unassignedGrid));
+  var zoomBtns=RC("div",{style:{display:"flex",gap:4,alignItems:"center"}},
+    RC("button",{onClick:function(){setZoom(function(z){return Math.max(1,z-0.5);});},style:mkBtn({minHeight:32,minWidth:32,padding:"4px 10px",fontSize:16,background:BTN.nav})},"-"),
+    RC("button",{onClick:function(){setZoom(1);},style:mkBtn({minHeight:32,padding:"4px 10px",fontSize:11,background:zoom===1?"#64748b":BTN.nav})},zoom===1?"1x":zoom+"x → 1x"),
+    RC("button",{onClick:function(){setZoom(function(z){return Math.min(5,z+0.5);});},style:mkBtn({minHeight:32,minWidth:32,padding:"4px 10px",fontSize:16,background:BTN.nav})},"+"));
   var legendEls=Object.keys(STATUS_COLORS).map(function(s){return RC("span",{key:s,style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:BLOCK_BG[s]||"#999",color:"#fff",border:"none",fontWeight:700,textTransform:"capitalize"}},s);});
   legendEls.push(RC("span",{key:"in",style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:TBL.ind.bg,color:"#fff",border:"none",fontWeight:700}},"indoor"));
   legendEls.push(RC("span",{key:"out",style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:TBL.out.bg,color:"#fff",border:"none",fontWeight:700}},"outdoor"));
-  legendEls.push(RC("span",{key:"hint",style:{fontSize:11,color:S.text}},"tap to edit  |  = to assign  |  [L] locked"));
-  return RC("div",{style:{background:S.card,borderRadius:12,border:"0.5px solid "+S.border,padding:"10px 12px",overflowX:"auto"}},
-    RC("div",{style:{minWidth:320,width:"100%",boxSizing:"border-box"}},
-      RC("div",{style:{display:"flex",alignItems:"stretch",marginBottom:2}},
-        RC("div",{style:{width:LABEL_W+"px",flexShrink:0,background:"#f0e8d0",borderRadius:"6px 0 0 0"}}),
-        RC("div",{style:{flex:1,position:"relative",borderBottom:"1px solid #c8b99a",background:"#f0e8d0",borderRadius:"0 6px 0 0",height:24,overflow:"hidden"}},headerLines,headerLabels)),
-      RC("div",null,tableRows),
-      unassignedRow,
-      RC("div",{style:{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}},legendEls)));
+  legendEls.push(RC("span",{key:"blocked",style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:"#991b1b",color:"#fff",border:"none",fontWeight:700}},"blocked"));
+  return RC("div",{style:{background:S.card,borderRadius:12,border:"0.5px solid "+S.border,padding:"10px 12px"}},
+    RC("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}},
+      RC("span",{style:{fontSize:11,color:S.text}},"tap booking to edit  |  = assign  |  tap table label to block"),
+      zoomBtns),
+    RC("div",{style:{display:"flex"}},labelCol,gridCol),
+    RC("div",{style:{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}},legendEls));
 }
 
 // ── List View ─────────────────────────────────────────────────────────────────
 function ListView(props){
-  var bookings=props.bookings,date=props.date,onEdit=props.onEdit,onStatus=props.onStatus,onDelete=props.onDelete,onManual=props.onManual;
+  var bookings=props.bookings,date=props.date,onEdit=props.onEdit,onStatus=props.onStatus,onDelete=props.onDelete,onManual=props.onManual,nowMins=props.nowMins||0,warnings=props.warnings||{};
   function statusOrder(s){return s==="seated"?0:s==="confirmed"?1:s==="completed"?2:3;}
   var day=bookings.filter(function(b){return b.date===date;}).sort(function(a,b){var sa=statusOrder(a.status),sb=statusOrder(b.status);if(sa!==sb) return sa-sb;return a.time.localeCompare(b.time);});
   if(!day.length) return RC("div",{style:{textAlign:"center",padding:"48px 0",color:S.text,fontSize:15}},"No bookings for this date.");
   return RC("div",{style:{display:"flex",flexDirection:"column",gap:10}},day.map(function(b){
-    var end=toTime(toMins(b.time)+b.duration);
+    var liveDur=b.status==="seated"?Math.max(15,nowMins-toMins(b.time)):b.duration;
+    var end=toTime(toMins(b.time)+liveDur);
+    var durationTag=b.status==="seated"?RC(SmallTag,{label:liveDur+" min",style:{background:"#166534",color:"#fff",border:"none"}}):null;
+    var warn=warnings[b.id];
+    var warnEl=warn?RC("div",{style:{fontSize:13,fontWeight:700,marginBottom:8,padding:"6px 10px",borderRadius:8,background:warn.overdue?"#fee2e2":"#fff7ed",color:warn.overdue?"#991b1b":"#9a3412",border:"0.5px solid "+(warn.overdue?"#fca5a5":"#fed7aa")}},warn.overdue?"Overdue — next booking ("+warn.next+") at "+warn.nextTime+" is waiting":"Next booking ("+warn.next+") at "+warn.nextTime+" in "+warn.gap+" min"):null;
     var conflictEl=b._conflict?RC("div",{style:{fontSize:13,color:"#991b1b",fontWeight:700,marginBottom:8,background:"#fee2e2",borderRadius:8,padding:"6px 10px"}},"No table assigned — use manual assignment."):null;
     var manualTag=b._manual&&!isLocked(b)?RC(SmallTag,{label:"manual",style:{background:"#0369a1",color:"#fff",border:"none"}}):null;
     var lockedTag=b._locked?RC(SmallTag,{label:"locked",style:{background:"#854d0e",color:"#fff",border:"none"}}):null;
@@ -310,15 +407,17 @@ function ListView(props){
     var sc=STATUS_COLORS[b.status];
     var useStatusColor=b.status==="seated"||b.status==="completed"||b.status==="cancelled";
     var cardBg=useStatusColor?sc.bg:S.card;
-    var cardBrd=b._conflict?"#fca5a5":useStatusColor?sc.border:S.border;
-    return RC("div",{key:b.id,style:{background:cardBg,border:"0.5px solid "+cardBrd,borderRadius:12,padding:"14px 16px",opacity:b.status==="completed"||b.status==="cancelled"?0.75:1}},
+    var cardBrd=warn?(warn.overdue?"#dc2626":"#f59e0b"):b._conflict?"#fca5a5":useStatusColor?sc.border:S.border;
+    var cardBrdW=warn?"2px":"0.5px";
+    return RC("div",{key:b.id,style:{background:cardBg,border:cardBrdW+" solid "+cardBrd,borderRadius:12,padding:"14px 16px",opacity:b.status==="completed"||b.status==="cancelled"?0.75:1}},
       conflictEl,
+      warnEl,
       RC("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:8}},
         RC("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
           RC("span",{style:{fontWeight:700,fontSize:16,color:S.text}},b.name),
           RC(SBadge,{status:b.status}),
           RC("span",{style:{fontSize:13,color:S.text,fontWeight:700}},b.size+" pax"),
-          manualTag,lockedTag),
+          manualTag,lockedTag,durationTag),
         RC("span",{style:{fontSize:14,fontWeight:700,color:S.text}},b.time+"–"+end)),
       RC("div",{style:{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:8}},(b.tables||[]).map(function(t){return RC(TBadge,{key:t,id:t});}),phonEl),
       notesEl,
@@ -330,47 +429,7 @@ function ListView(props){
   }));
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  LOGIN SCREEN
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function LoginScreen(props){
-  var es=useState("");var email=es[0],setEmail=es[1];
-  var ps=useState("");var pass=ps[0],setPass=ps[1];
-  var ers=useState("");var err=ers[0],setErr=ers[1];
-  var ls=useState(false);var loading=ls[0],setLoading=ls[1];
-  function handleLogin(){
-    if(!email||!pass){setErr("Please enter email and password.");return;}
-    setLoading(true);setErr("");
-    signInWithEmailAndPassword(auth,email,pass)
-      .then(function(){setLoading(false);})
-      .catch(function(e){
-        setLoading(false);
-        if(e.code==="auth/user-not-found"||e.code==="auth/wrong-password"||e.code==="auth/invalid-credential")
-          setErr("Invalid email or password.");
-        else if(e.code==="auth/too-many-requests")
-          setErr("Too many attempts. Please try again later.");
-        else setErr("Login failed: "+e.message);
-      });
-  }
-  function handleKey(e){if(e.key==="Enter") handleLogin();}
-  return RC("div",{style:{minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",background:S.bg,padding:20,fontFamily:"system-ui, -apple-system, sans-serif"}},
-    RC("div",{style:{background:S.card,border:"0.5px solid "+S.border,borderRadius:16,padding:"40px 32px",width:"100%",maxWidth:380,boxSizing:"border-box"}},
-      RC("div",{style:{fontSize:24,fontWeight:700,color:S.text,marginBottom:4,textAlign:"center"}},"Me Gustas Tu"),
-      RC("div",{style:{fontSize:14,color:S.muted,marginBottom:32,textAlign:"center"}},"Staff login"),
-      RC("div",{style:{display:"flex",flexDirection:"column",gap:16}},
-        RC("div",{style:{display:"flex",flexDirection:"column",gap:4}},
-          RC("label",{style:{fontSize:13,fontWeight:700,color:S.muted}},"Email"),
-          RC("input",{type:"email",value:email,onChange:function(e){setEmail(e.target.value);},onKeyDown:handleKey,placeholder:"you@restaurant.com",autoComplete:"email",style:mkInp()})),
-        RC("div",{style:{display:"flex",flexDirection:"column",gap:4}},
-          RC("label",{style:{fontSize:13,fontWeight:700,color:S.muted}},"Password"),
-          RC("input",{type:"password",value:pass,onChange:function(e){setPass(e.target.value);},onKeyDown:handleKey,placeholder:"••••••••",autoComplete:"current-password",style:mkInp()})),
-        err?RC("div",{style:{fontSize:13,color:"#991b1b",background:"#fee2e2",borderRadius:8,padding:"10px 14px",border:"0.5px solid #fca5a5"}},err):null,
-        RC("button",{onClick:handleLogin,disabled:loading,style:{background:S.accent,border:"none",borderRadius:8,padding:"12px",fontSize:15,fontWeight:700,color:"#fff",cursor:loading?"wait":"pointer",opacity:loading?0.7:1,minHeight:48}},loading?"Logging in...":"Log in"))));
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  MAIN APP (with Firebase instead of window.storage)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ── App ───────────────────────────────────────────────────────────────────────
 function BookingApp(props){
   var bs=useState([]);var bookings=bs[0],setBookings=bs[1];
   var loaded=useRef(false);
@@ -414,23 +473,92 @@ function BookingApp(props){
   });
 
   var vs=useState("timeline");var view=vs[0],setView=vs[1];
+  var tbs=useState([]);var tableBlocks=tbs[0],setTableBlocks=tbs[1];
+  var tbLoaded=useRef(false);
+  var tbRemote=useRef(false);
+  useEffect(function(){
+    var dbRef=ref(db,"tableBlocks");
+    var unsub=onValue(dbRef,function(snapshot){
+      var data=snapshot.val();
+      tbRemote.current=true;
+      setTableBlocks(Array.isArray(data)?data:[]);
+      tbLoaded.current=true;
+    });
+    return unsub;
+  },[]);
+  useEffect(function(){
+    if(!tbLoaded.current) return;
+    if(tbRemote.current){tbRemote.current=false;return;}
+    set(ref(db,"tableBlocks"),tableBlocks);
+  });
+  var bts=useState(null);var blockTarget=bts[0],setBlockTarget=bts[1];
   var vds=useState(new Date().toISOString().slice(0,10));var viewDate=vds[0],setViewDate=vds[1];
   var sfs=useState(false);var showForm=sfs[0],setShowForm=sfs[1];
   var fms=useState(EMPTY_FORM);var form=fms[0],setForm=fms[1];
   var eis=useState(null);var editId=eis[0],setEditId=eis[1];
   var ers=useState("");var error=ers[0],setError=ers[1];
   var cds=useState(null);var confirmDel=cds[0],setConfirmDel=cds[1];
+  var ccs=useState(null);var confirmCancel=ccs[0],setConfirmCancel=ccs[1];
   var rss=useState(false);var reshuffled=rss[0],setReshuffled=rss[1];
   var mts=useState(null);var manualTarget=mts[0],setManualTarget=mts[1];
   var dis=useState(null);var dismissedIneff=dis[0],setDismissedIneff=dis[1];
   var formRef=useRef(EMPTY_FORM);
   var sas=useState(null);var swapAffected=sas[0],setSwapAffected=sas[1];
   useEffect(function(){formRef.current=form;},[form]);
+  useEffect(function(){if(error) setError("");},[form.time,form.size,form.date,form.preference,form.customDur]);
+  // Real-time clock for seated duration
+  var nms=useState(function(){var d=new Date();return d.getHours()*60+d.getMinutes();});var nowMins=nms[0],setNowMins=nms[1];
+  useEffect(function(){var t=setInterval(function(){var d=new Date();setNowMins(d.getHours()*60+d.getMinutes());},15000);return function(){clearInterval(t);};},[]);
+  // Auto-extend seated bookings that exceed their stored duration
+  var lastExtend=useRef("");
+  useEffect(function(){
+    var today=new Date().toISOString().slice(0,10);
+    var seated=bookings.filter(function(b){return b.date===today&&b.status==="seated";});
+    var needsUpdate=false;
+    var updated=bookings.map(function(b){
+      if(b.date!==today||b.status!=="seated") return b;
+      var elapsed=nowMins-toMins(b.time);
+      if(elapsed>b.duration){needsUpdate=true;return Object.assign({},b,{duration:elapsed,customDur:elapsed});}
+      return b;
+    });
+    if(!needsUpdate) return;
+    var key=seated.map(function(b){return b.id+":"+nowMins;}).join(",");
+    if(key===lastExtend.current) return;
+    lastExtend.current=key;
+    setBookings(applyOpt(updated,today,tableBlocks));
+  },[nowMins]);
   var winW=useWinW();
   var isMobile=winW<600;
 
   var dayCount=bookings.filter(function(b){return b.date===viewDate&&b.status!=="cancelled";}).length;
   var inefficient=bookings.length>0&&checkInefficent(bookings,viewDate);
+
+  // Overlap warnings: seated bookings whose live end is within 15 min of next booking on same table
+  var overlapWarnings=(function(){
+    var today=new Date().toISOString().slice(0,10);
+    if(viewDate!==today) return {};
+    var warnings={};
+    var active=bookings.filter(function(b){return b.date===today&&b.status!=="cancelled"&&b.status!=="completed"&&(b.tables||[]).length>0;});
+    var seated=active.filter(function(b){return b.status==="seated";});
+    seated.forEach(function(sb){
+      var liveEnd=nowMins;
+      var sbTables=sb.tables||[];
+      var nextOnTable=null;var nextStart=Infinity;
+      active.forEach(function(ob){
+        if(ob.id===sb.id||ob.status==="seated") return;
+        var oTables=ob.tables||[];
+        var shared=sbTables.some(function(t){return oTables.includes(t);});
+        if(!shared) return;
+        var os=toMins(ob.time);
+        if(os>=toMins(sb.time)&&os<nextStart){nextStart=os;nextOnTable=ob;}
+      });
+      if(nextOnTable){
+        var gap=nextStart-liveEnd;
+        if(gap<=15) warnings[sb.id]={next:nextOnTable.name,nextTime:nextOnTable.time,gap:gap,overdue:gap<=0};
+      }
+    });
+    return warnings;
+  })();
 
   function flash(){setReshuffled(true);setTimeout(function(){setReshuffled(false);},3000);}
   function openNew(){setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
@@ -467,7 +595,7 @@ function BookingApp(props){
       var dur=f.customDur||getDur(size);
       var cleanPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";
       var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
-      if(mt.length&&!swapAffected){var ex=bookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
+      if(mt.length&&!swapAffected){var ex=bookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
       if(editId){
         var orig=bookings.find(function(b){return b.id===editId;});
         var needsR=!orig||size!==orig.size||f.time!==orig.time||f.date!==orig.date||f.preference!==orig.preference;
@@ -478,23 +606,30 @@ function BookingApp(props){
           if(swapAffected){var match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){var remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
           return b;
         });
-        setBookings(applyOpt(upd,f.date));if(needsR||swapAffected||f.status==="completed") flash();setShowForm(false);setViewDate(f.date);
+        setBookings(applyOpt(upd,f.date,tableBlocks));if(needsR||swapAffected||f.status==="completed") flash();setShowForm(false);setViewDate(f.date);
       } else {
         var newId=genId();
         var nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,size:size,duration:dur,preference:f.preference,notes:f.notes,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0};
-        if(!mt.length){var exSl=bookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});var pre=findBest(size,f.preference,sm,sm+dur,exSl)||(f.preference==="auto"?findBestAny(size,sm,sm+dur,exSl):null);if(!pre){var sugg=findTimes(f.date,size,f.preference,bookings,dur,sm);setError("No tables available"+(f.preference!=="auto"?" ("+f.preference+" preference)":"")+". "+(sugg.length?"Available slots nearby: "+sugg.map(toTime).join(", "):"No availability found."));return;}}
+        if(!mt.length){var exSl=bookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});exSl=exSl.concat(getBlockSlots(tableBlocks,f.date));var pre=findBest(size,f.preference,sm,sm+dur,exSl)||(f.preference==="auto"?findBestAny(size,sm,sm+dur,exSl):null);if(!pre){setError("No tables available — see suggestions below or try manual assignment.");return;}}
         var base=bookings;
         if(swapAffected){base=bookings.map(function(b){var match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){var remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}return b;});}
-        var fin=applyOpt(base.concat([nb]),f.date);
+        var fin=applyOpt(base.concat([nb]),f.date,tableBlocks);
         if(!mt.length){var ne=fin.find(function(b){return b.id===newId;});if(!ne||(ne.tables||[]).length===0){setError("Could not assign a table — try manual assignment.");return;}}
         setBookings(fin);flash();setShowForm(false);setViewDate(f.date);
       }
     }catch(err){setError("Error: "+err.message);}
   }
 
-  function forceReshuffle(){setBookings(function(b){return applyOpt(b,viewDate);});flash();}
-  function delBooking(id){setBookings(function(b){return applyOpt(b.filter(function(x){return x.id!==id;}),viewDate);});setConfirmDel(null);flash();}
-  function updateStatus(id,status){setBookings(function(b){var updated=b.map(function(x){if(x.id!==id) return x;var extra={status:status};if(status==="completed"){var now=new Date();var nowMins=now.getHours()*60+now.getMinutes();var startMins=toMins(x.time);var actualDur=Math.max(15,nowMins-startMins);extra.duration=actualDur;extra.customDur=actualDur;}return Object.assign({},x,extra);});return applyOpt(updated,viewDate);});if(status==="completed") flash();}
+  function forceReshuffle(){setBookings(function(b){return applyOpt(b,viewDate,tableBlocks);});flash();}
+  function delBooking(id){setBookings(function(b){return applyOpt(b.filter(function(x){return x.id!==id;}),viewDate,tableBlocks);});setConfirmDel(null);flash();}
+  function updateStatus(id,status){
+    if(status==="cancelled"){setConfirmCancel(id);return;}
+    setBookings(function(b){var updated=b.map(function(x){if(x.id!==id) return x;var extra={status:status};if(status==="completed"){var now=new Date();var nowMins=now.getHours()*60+now.getMinutes();var startMins=toMins(x.time);var actualDur=Math.max(15,nowMins-startMins);extra.duration=actualDur;extra.customDur=actualDur;}return Object.assign({},x,extra);});return applyOpt(updated,viewDate,tableBlocks);});if(status==="completed") flash();
+  }
+  function doCancelBooking(id,noShow){
+    setBookings(function(b){var updated=b.map(function(x){if(x.id!==id) return x;var extra={status:"cancelled"};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});return applyOpt(updated,viewDate,tableBlocks);});
+    setConfirmCancel(null);flash();
+  }
   function manualAssign(bookingId,tables,locked,affected){
     setBookings(function(b){
       var updated=b.map(function(x){
@@ -510,11 +645,26 @@ function BookingApp(props){
         return x;
       });
       // Re-optimize to reassign affected bookings to new tables
-      if(affected&&affected.length>0) return applyOpt(updated,viewDate);
+      if(affected&&affected.length>0) return applyOpt(updated,viewDate,tableBlocks);
       return updated;
     });
     setManualTarget(null);
     if(affected&&affected.length>0) flash();
+  }
+
+  function addBlock(block){
+    var next=tableBlocks.concat([block]);
+    setTableBlocks(next);
+    setBookings(function(b){return applyOpt(b,block.date,next);});
+    flash();
+    setBlockTarget(null);
+  }
+  function removeBlock(block){
+    var next=tableBlocks.filter(function(bl){return !(bl.tableId===block.tableId&&bl.date===block.date&&bl.allDay===block.allDay&&bl.from===block.from&&bl.to===block.to);});
+    setTableBlocks(next);
+    setBookings(function(b){return applyOpt(b,block.date,next);});
+    flash();
+    if(next.filter(function(bl){return bl.tableId===block.tableId&&bl.date===block.date;}).length===0) setBlockTarget(null);
   }
 
   var manualBooking=(function(){
@@ -529,28 +679,55 @@ function BookingApp(props){
   var auto=getDur(Number(form.size));
   var dur=form.customDur||auto;
 
+  // ── Real-time availability check ──
+  var formAvail=(function(){
+    if(!showForm||!form.time) return null;
+    var sm=toMins(form.time);
+    if(sm<OPEN*60||sm>CLOSE*60) return null;
+    var size=Number(form.size)||2;
+    var d=form.customDur||getDur(size);
+    var mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
+    if(mt) return {ok:true,tables:mt,sugg:null};
+    var exSl=bookings.filter(function(b){return b.date===form.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};}).concat(getBlockSlots(tableBlocks,form.date));
+    var pre=findBest(size,form.preference,sm,sm+d,exSl);
+    if(!pre&&form.preference==="auto") pre=findBestAny(size,sm,sm+d,exSl);
+    if(pre) return {ok:true,tables:pre,sugg:null};
+    var sugg=findTimes(form.date,size,form.preference,bookings,d,sm,tableBlocks);
+    return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
+  })();
+
   var tablesBtn=(function(){
     var mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
+    var previewTbls=mt?null:(formAvail&&formAvail.ok?formAvail.tables:null);
     if(editId){
       var cur=bookings.find(function(b){return b.id===editId;});
-      var tbl=mt||(cur&&cur.tables&&cur.tables.length>0?cur.tables:null);
+      var changed=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||(form.customDur&&form.customDur!==cur.duration));
+      var curTbl=cur&&cur.tables&&cur.tables.length>0?cur.tables:null;
+      var showTbl=mt||(changed?null:curTbl);
       return RC(Section,null,RC("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
         RC("span",{style:{fontSize:13,color:"#6b5740",fontWeight:700}},"Tables"),
         RC("button",{style:mkBtn({background:BTN.tables}),onClick:function(){setManualTarget(editId);}},"= Assign"),
-        tbl?tbl.map(function(id){return RC(TBadge,{key:id,id:id});}):null,
+        showTbl?showTbl.map(function(id){return RC(TBadge,{key:id,id:id});}):null,
+        !showTbl&&previewTbls?previewTbls.map(function(id){return RC(TBadge,{key:id,id:id});}):null,
+        !showTbl&&previewTbls?RC("span",{key:"auto",style:{fontSize:11,color:S.muted,fontStyle:"italic"}},"(auto)"):null,
+        changed&&!mt&&curTbl?RC("span",{key:"prev",style:{fontSize:11,color:S.muted,fontStyle:"italic"}},"was: "+curTbl.join(", ")):null,
         mt?RC("button",{style:mkBtn({fontSize:12,background:BTN.clear}),onClick:function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});setSwapAffected(null);}},"Clear"):null));
     }
     return RC(Section,null,RC("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
       RC("span",{style:{fontSize:13,color:"#6b5740",fontWeight:700}},"Tables"),
       RC("button",{style:mkBtn({background:BTN.tables}),onClick:function(){setManualTarget("__new__");}},"= Assign"),
       mt?mt.map(function(id){return RC(TBadge,{key:id,id:id});}):null,
+      !mt&&previewTbls?previewTbls.map(function(id){return RC(TBadge,{key:id,id:id});}):null,
+      !mt&&previewTbls?RC("span",{key:"auto",style:{fontSize:11,color:S.muted,fontStyle:"italic"}},"(auto)"):null,
       mt?RC("button",{style:mkBtn({fontSize:12,background:BTN.clear}),onClick:function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});setSwapAffected(null);}},"Clear"):null));
   })();
+
+  var availBanner=showForm&&formAvail&&!formAvail.ok?RC(AvailBanner,{msg:"No tables available"+(form.preference!=="auto"?" ("+form.preference+" preference)":"")+".",sugg:formAvail.sugg}):null;
 
   var quickStatusBtns=editId?RC(Section,null,
     RC("div",{style:{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}},
       RC("span",{style:{fontSize:13,color:"#6b5740",fontWeight:700,marginRight:4}},"Status:"),
-      ["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return RC("button",{key:s,style:mkBtn({background:BLOCK_BG[s],textTransform:"capitalize",minHeight:40}),onClick:function(){setForm(function(f){return Object.assign({},f,{status:s});});}},"> "+s);}))):null;
+      ["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return RC("button",{key:s,style:mkBtn({background:BLOCK_BG[s],textTransform:"capitalize",minHeight:40}),onClick:function(){if(s==="cancelled"){setConfirmCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}},"> "+s);}))):null;
 
   var errorEl=error?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"#fee2e2",borderRadius:10,border:"0.5px solid #fca5a5",marginBottom:14}},error):null;
 
@@ -562,8 +739,8 @@ function BookingApp(props){
 
 
   var mainView=view==="timeline"
-    ?RC(TimelineView,{bookings:bookings,date:viewDate,onEdit:openEdit,onManual:function(id){setManualTarget(id);}})
-    :RC(ListView,{bookings:bookings,date:viewDate,onEdit:openEdit,onStatus:updateStatus,onDelete:function(id){setConfirmDel(id);},onManual:function(id){setManualTarget(id);}});
+    ?RC(TimelineView,{bookings:bookings,date:viewDate,onEdit:openEdit,onManual:function(id){setManualTarget(id);},blocks:tableBlocks,onBlock:function(id){setBlockTarget(id);},nowMins:nowMins,warnings:overlapWarnings})
+    :RC(ListView,{bookings:bookings,date:viewDate,onEdit:openEdit,onStatus:updateStatus,onDelete:function(id){setConfirmDel(id);},onManual:function(id){setManualTarget(id);},nowMins:nowMins,warnings:overlapWarnings});
 
   var formModal=showForm?RC(Overlay,{onClose:function(){setShowForm(false);}},
     RC("div",{style:{fontSize:18,fontWeight:700,marginBottom:16,color:S.text}},editId?"Edit booking":"New booking"),
@@ -589,6 +766,7 @@ function BookingApp(props){
     RC(Section,null,
       RC(Fld,{label:"Notes"},RC("textarea",{value:form.notes,onChange:function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});},rows:2,placeholder:"Allergies, special requests...",style:Object.assign({},inp(),{resize:"vertical"})}))),
     tablesBtn,
+    availBanner,
     quickStatusBtns,
     errorEl,
     RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}},
@@ -602,7 +780,7 @@ function BookingApp(props){
       RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setConfirmDel(null);}},"Cancel"),
       RC("button",{onClick:function(){delBooking(confirmDel);},style:{background:"#dc2626",border:"none",borderRadius:8,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Delete"))):null;
 
-  var manualModal=manualBooking?RC(ManualModal,{booking:manualBooking,bookings:manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings,onSave:function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{manualAssign(manualBooking.id,tables,locked,affected);}},onClose:function(){setManualTarget(null);}}):null;
+  var manualModal=manualBooking?RC(ManualModal,{booking:manualBooking,bookings:manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings,blocks:tableBlocks,onSave:function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{manualAssign(manualBooking.id,tables,locked,affected);}},onClose:function(){setManualTarget(null);}}):null;
 
   var walkinModal=(function(){
     if(!showWalkin) return null;
@@ -612,8 +790,14 @@ function BookingApp(props){
     var wDur=getDur(wSize);
     var wDate=new Date().toISOString().slice(0,10);
     var wS=toMins(wTime),wE=wS+wDur;
-    var wOther=bookings.filter(function(b){return b&&b.date===wDate&&b.status!=="cancelled"&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
+    var wOther=bookings.filter(function(b){return b&&b.date===wDate&&b.status!=="cancelled"&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};}).concat(getBlockSlots(tableBlocks,wDate));
     var wBusy=getBusy(wOther,wS,wE);
+    var wAutoCheck=(function(){
+      var pre=findBest(wSize,"auto",wS,wE,wOther)||(findBestAny(wSize,wS,wE,wOther));
+      if(pre) return null;
+      var sugg=findTimes(wDate,wSize,"auto",bookings,wDur,wS,tableBlocks);
+      return formatSugg(sugg,wS);
+    })();
     function getCapOf(ids){if(ids.length===0) return 0;var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});if(c) return c.cap;var bestCap=0,bestIds=[];VALID_COMBOS.forEach(function(combo){if(combo.ids.length<=ids.length&&combo.ids.every(function(id){return ids.includes(id);})&&combo.cap>bestCap){bestCap=combo.cap;bestIds=combo.ids;}});if(bestIds.length>0){var rem=ids.filter(function(id){return !bestIds.includes(id);});return bestCap+rem.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}return ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
     function wToggle(id){
       if(wBusy.has(id)) return;
@@ -644,9 +828,9 @@ function BookingApp(props){
         RC("div",{style:{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}},
           RC(Fld,{label:"Time"},RC("input",{type:"time",value:wTime,onChange:function(e){setWalkinForm(function(f){return Object.assign({},f,{tables:[],time:e.target.value});});},min:"13:00",max:"22:00",style:mkInp()})),
           RC(Fld,{label:"Number of guests"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
-            RC("button",{style:{background:S.card,border:"0.5px solid "+S.border,borderRadius:8,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.max(1,(Number(f.size)||2)-1)});});}},"-"),
+            RC("button",{style:{background:S.card,border:"0.5px solid "+S.border,borderRadius:8,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.max(1,(Number(f.size)||2)-1),tables:[]});});}},"-"),
             RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},String(wSize)),
-            RC("button",{style:{background:S.card,border:"0.5px solid "+S.border,borderRadius:8,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.min(25,(Number(f.size)||2)+1)});});}},"+"))),
+            RC("button",{style:{background:S.card,border:"0.5px solid "+S.border,borderRadius:8,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.min(25,(Number(f.size)||2)+1),tables:[]});});}},"+"))),
         RC(Fld,{label:"Notes",style:{marginTop:12}},RC("textarea",{value:wf.notes,onChange:function(e){setWalkinForm(function(f){return Object.assign({},f,{notes:e.target.value});});},rows:2,placeholder:"Special requests...",style:Object.assign({},mkInp(),{resize:"vertical"})})))),
       RC("div",{style:{fontSize:13,color:S.text,marginBottom:10,marginTop:4}},"Tap tables to select / deselect."),
       RC("div",{style:{marginBottom:14,padding:"12px 14px",borderRadius:8,background:S.bg,border:"0.5px solid "+(wOk?"#86efac":S.border),display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}},
@@ -655,6 +839,7 @@ function BookingApp(props){
           RC("div",{style:{fontSize:13,color:wSummaryColor,fontWeight:500,marginTop:2}},wSummaryText)),
         wClearBtn),
       RC(TableGrid,{selected:wSel,toggle:wToggle,busy:wBusy,seatedBusy:new Set(),swapBusy:false}),
+      wAutoCheck&&wSel.length===0?RC(AvailBanner,{msg:"No tables available at "+wTime+".",sugg:wAutoCheck,warn:true}):null,
       walkinError?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"#fee2e2",borderRadius:10,border:"0.5px solid #fca5a5",marginBottom:14}},walkinError):null,
       RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}},
         RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setShowWalkin(false);}},"Cancel"),
@@ -669,7 +854,7 @@ function BookingApp(props){
           ["timeline","list"].map(function(v){return RC("button",{key:v,onClick:function(){setView(v);},style:mkBtn({background:view===v?S.accent:"#6b5740",textTransform:"capitalize",minHeight:40})},v);}),
           RC("button",{onClick:openWalkin,style:{background:"#166534",border:"none",borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:700,color:"#fff",minHeight:40}},"Walk-in"),
           RC("button",{onClick:openNew,style:{background:S.accent,border:"none",borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:700,color:"#fff",minHeight:40}},"+ New"),
-          RC("button",{onClick:function(){signOut(auth);},style:mkBtn({background:"#64748b",minHeight:40})},"Logout"))),
+          RC("button",{onClick:function(){signOut(auth);},style:mkBtn({fontSize:12,background:"#78716c"})},"Log out"))),
       RC("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12}},
         RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()-1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 14px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8249;"}}),
         RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()+1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 14px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8250;"}}),
@@ -679,30 +864,55 @@ function BookingApp(props){
       reshuffledBanner,
       ineffBanner,
       mainView,
-      formModal,delModal,manualModal,walkinModal));
+      formModal,delModal,manualModal,walkinModal,
+      blockTarget?RC(BlockModal,{tableId:blockTarget,date:viewDate,blocks:tableBlocks,onSave:addBlock,onRemove:removeBlock,onClose:function(){setBlockTarget(null);}}):null,
+      confirmCancel?RC(Overlay,{onClose:function(){setConfirmCancel(null);}},
+        RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}},"Cancel booking?"),
+        RC("div",{style:{fontSize:14,color:S.text,marginBottom:18}},"Tables will be re-optimised after cancellation."),
+        RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}},
+          RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setConfirmCancel(null);}},"Back"),
+          RC("button",{onClick:function(){doCancelBooking(confirmCancel,true);setShowForm(false);},style:{background:"#9a3412",border:"none",borderRadius:8,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"No show"),
+          RC("button",{onClick:function(){doCancelBooking(confirmCancel,false);setShowForm(false);},style:{background:BLOCK_BG.cancelled,border:"none",borderRadius:8,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Cancel booking"))):null));
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  ROOT: Auth gate — shows Login or BookingApp
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ── Login Screen ─────────────────────────────────────────────────────────────
+function LoginScreen(){
+  var es=useState("");var email=es[0],setEmail=es[1];
+  var ps=useState("");var password=ps[0],setPassword=ps[1];
+  var ers=useState("");var error=ers[0],setError=ers[1];
+  var ls=useState(false);var loading=ls[0],setLoading=ls[1];
+  function handleLogin(){
+    if(!email||!password){setError("Please enter email and password.");return;}
+    setLoading(true);setError("");
+    signInWithEmailAndPassword(auth,email,password).then(function(){setLoading(false);}).catch(function(err){
+      setLoading(false);
+      if(err.code==="auth/invalid-credential"||err.code==="auth/wrong-password"||err.code==="auth/user-not-found") setError("Invalid email or password.");
+      else if(err.code==="auth/too-many-requests") setError("Too many attempts. Please wait a moment.");
+      else setError("Login failed. Please try again.");
+    });
+  }
+  function handleKey(e){if(e.key==="Enter") handleLogin();}
+  var RC=React.createElement;
+  return RC("div",{style:{background:S.bg,minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:"var(--font-sans)"}},
+    RC("div",{style:{background:S.card,borderRadius:12,border:"0.5px solid "+S.border,padding:"32px 28px",width:"100%",maxWidth:360}},
+      RC("div",{style:{fontSize:22,fontWeight:700,color:S.text,marginBottom:4}},"Me Gustas Tu"),
+      RC("div",{style:{fontSize:14,color:S.text,marginBottom:24}},"Staff login"),
+      RC("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+        RC("input",{type:"email",value:email,onChange:function(e){setEmail(e.target.value);},onKeyDown:handleKey,placeholder:"Email",style:{width:"100%",boxSizing:"border-box",background:S.bg,border:"0.5px solid "+S.border,borderRadius:8,padding:"12px 14px",fontSize:16,color:S.text}}),
+        RC("input",{type:"password",value:password,onChange:function(e){setPassword(e.target.value);},onKeyDown:handleKey,placeholder:"Password",style:{width:"100%",boxSizing:"border-box",background:S.bg,border:"0.5px solid "+S.border,borderRadius:8,padding:"12px 14px",fontSize:16,color:S.text}}),
+        error?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"8px 12px",background:"#fee2e2",borderRadius:8}},error):null,
+        RC("button",{onClick:handleLogin,disabled:loading,style:{background:S.accent,border:"none",borderRadius:8,padding:"12px",fontSize:15,fontWeight:700,color:"#fff",cursor:loading?"wait":"pointer",opacity:loading?0.7:1,minHeight:44}},loading?"Logging in...":"Log in"))));
+}
+
+// ── Auth Wrapper ─────────────────────────────────────────────────────────────
 export default function App(){
   var us=useState(null);var user=us[0],setUser=us[1];
   var cs=useState(true);var checking=cs[0],setChecking=cs[1];
-
   useEffect(function(){
-    var unsub=onAuthStateChanged(auth,function(u){
-      setUser(u);
-      setChecking(false);
-    });
+    var unsub=onAuthStateChanged(auth,function(u){setUser(u);setChecking(false);});
     return unsub;
   },[]);
-
-  if(checking){
-    return RC("div",{style:{minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",background:S.bg,fontFamily:"system-ui, -apple-system, sans-serif"}},
-      RC("div",{style:{fontSize:16,color:S.muted,fontWeight:500}},"Loading..."));
-  }
-
-  if(!user) return RC(LoginScreen,null);
-
-  return RC(BookingApp,null);
+  if(checking) return React.createElement("div",{style:{background:S.bg,minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-sans)",color:S.text,fontSize:15}},"Loading...");
+  if(!user) return React.createElement(LoginScreen,null);
+  return React.createElement(BookingApp,null);
 }
