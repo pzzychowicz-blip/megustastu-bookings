@@ -28,6 +28,7 @@ var VALID_COMBOS=[
 ];
 var CLUSTERS={"1A":["1A","1B","7"],"1B":["1A","1B","7"],"7":["1A","1B","7"],"2":["2","3","4"],"3":["2","3","4"],"4":["2","3","4"],"5A":["5A","5B","6"],"5B":["5A","5B","6"],"6":["5A","5B","6"],"i1":["i1"],"i2":["i2","i3","i4"],"i3":["i2","i3","i4"],"i4":["i2","i3","i4"]};
 var OPEN=13,CLOSE=22,GRID_CLOSE=23;
+var KITCHEN_TABLE_LIMIT=3;
 var QUARTER_HOURS=Array.from({length:(GRID_CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
 var ROW_H=44,LABEL_W=58;
 var STATUS_COLORS={confirmed:{bg:"#fef9c3",text:"#854d0e",border:"#fde68a"},seated:{bg:"#dcfce7",text:"#166534",border:"#86efac"},completed:{bg:"#f1f5f9",text:"#64748b",border:"#cbd5e1"},cancelled:{bg:"#fee2e2",text:"#991b1b",border:"#fca5a5"}};
@@ -97,16 +98,49 @@ function formatSugg(sugg,around){
   return {earlier:sugg.filter(function(s){return s<around;}).map(toTime),later:sugg.filter(function(s){return s>around;}).map(toTime)};
 }
 function AvailBanner(props){
-  var msg=props.msg||"No tables available.";var sugg=props.sugg;var style=props.style||{};
+  var msg=props.msg||"No tables available.";var sugg=props.sugg;var style=props.style||{};var onTap=props.onTapTime;
   var bgClr=props.warn?"#fff7ed":"#fee2e2";var brdClr=props.warn?"#fed7aa":"#fca5a5";var txtClr=props.warn?"#9a3412":"#991b1b";
   var hasEarlier=sugg&&sugg.earlier&&sugg.earlier.length>0;
   var hasLater=sugg&&sugg.later&&sugg.later.length>0;
   var hasSugg=hasEarlier||hasLater;
+  function renderChips(arr){
+    if(!onTap) return arr.join(", ");
+    return RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},arr.map(function(t){
+      return RC("span",{key:t,onClick:function(){onTap(t);},style:{cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:600,fontSize:12,background:"#dcfce7",color:"#166534",border:"1px solid #86efac"}},t);
+    }));
+  }
   return RC("div",{style:Object.assign({padding:"10px 14px",borderRadius:10,border:"0.5px solid "+brdClr,background:bgClr,marginBottom:14,fontSize:13,color:txtClr},style)},
     RC("div",{style:{fontWeight:700,marginBottom:hasSugg?6:0}},msg),
-    hasEarlier?RC("div",{style:{marginBottom:hasLater?4:0}},RC("span",{style:{fontWeight:700}},"Before: "),sugg.earlier.join(", ")):null,
-    hasLater?RC("div",null,RC("span",{style:{fontWeight:700}},"After: "),sugg.later.join(", ")):null,
+    hasEarlier?RC("div",{style:{marginBottom:hasLater?4:0}},RC("span",{style:{fontWeight:700}},"Before: "),renderChips(sugg.earlier)):null,
+    hasLater?RC("div",null,RC("span",{style:{fontWeight:700}},"After: "),renderChips(sugg.later)):null,
     !hasSugg&&sugg?RC("div",{style:{marginTop:4}},"No availability found."):null);
+}
+function getKitchenLoad(bookings,date,time,dur,excludeId){
+  if(!time) return {tables:0,guests:0,starts:0};
+  var s=toMins(time);
+  var active=bookings.filter(function(b){return b&&b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==excludeId;});
+  var starting=active.filter(function(b){var bs=toMins(b.time);return Math.abs(bs-s)<15;});
+  var tblCount=0;var guests=0;
+  starting.forEach(function(b){guests+=b.size||2;tblCount+=(b.tables||[]).length||1;});
+  return {tables:tblCount,guests:guests,starts:starting.length};
+}
+function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excludeId,blocks){
+  var times=Array.from({length:(CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
+  var aroundM=toMins(around);
+  var results=[];
+  var exSl=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});
+  if(blocks) exSl=exSl.concat(getBlockSlots(blocks,date));
+  times.forEach(function(m){
+    if(m===aroundM) return;
+    if(m+dur>CLOSE*60) return;
+    var load=getKitchenLoad(bookings,date,toTime(m),dur,excludeId);
+    if(load.starts+1>=KITCHEN_TABLE_LIMIT) return;
+    var hasTables=!!findBest(size,pref,m,m+dur,exSl)||(pref==="auto"?!!findBestAny(size,m,m+dur,exSl):false);
+    results.push({time:m,timeStr:toTime(m),hasTables:hasTables});
+  });
+  var before=results.filter(function(r){return r.time<aroundM;}).slice(-5);
+  var after=results.filter(function(r){return r.time>aroundM;}).slice(0,5);
+  return {before:before,after:after};
 }
 function optimise(bookings,date,blocks){
   var completed=bookings.filter(function(b){return b&&b.date===date&&b.status==="completed"&&(b.tables||[]).length>0;});
@@ -322,8 +356,13 @@ function BlockModal(props){
 // ── Timeline ──────────────────────────────────────────────────────────────────
 function TimelineView(props){
   var bookings=props.bookings,date=props.date,onEdit=props.onEdit,onManual=props.onManual,blocks=props.blocks||[],onBlock=props.onBlock,nowMins=props.nowMins||0,warnings=props.warnings||{};
-  var zs=useState(1);var zoom=zs[0],setZoom=zs[1];
+  var zoom=props.zoom||1,setZoom=props.setZoom;
+  var scrollPosRef=props.scrollPosRef;
   var scrollRef=useRef(null);
+  useEffect(function(){
+    if(scrollRef.current&&scrollPosRef&&scrollPosRef.current>0){scrollRef.current.scrollLeft=scrollPosRef.current;}
+  });
+  function onGridScroll(){if(scrollRef.current&&scrollPosRef){scrollPosRef.current=scrollRef.current.scrollLeft;}}
   var day=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled";});
   var dayBlocks=blocks.filter(function(bl){return bl.date===date;});
   var totalMins=(GRID_CLOSE-OPEN)*60;
@@ -356,18 +395,18 @@ function TimelineView(props){
   var headerLabels=QUARTER_HOURS.filter(function(m){return m%60===0&&m<GRID_CLOSE*60;}).map(function(m){var center=((m+30-OPEN*60)/totalMins)*100;return RC("span",{key:"h"+m,style:{position:"absolute",top:3,left:center+"%",transform:"translateX(-50%)",fontSize:10,fontWeight:700,color:"#fff",whiteSpace:"nowrap",pointerEvents:"none",background:"#8c7a5e",padding:"2px 5px",borderRadius:4,zIndex:1}},String(Math.floor(m/60)).padStart(2,"0")+":00");});
   // Labels column
   var labelCol=RC("div",{style:{width:LABEL_W+"px",flexShrink:0}},
-    RC("div",{style:{height:24,background:"#f0e8d0",borderRadius:"6px 0 0 0"}}),
+    RC("div",{style:{height:24,background:"#f0e8d0",borderRadius:"6px 0 0 0",borderBottom:"1px solid #c8b99a",boxSizing:"border-box"}}),
     TIMELINE_TABLES.map(function(tbl){var id=tbl.id,indoor=isIn(id);var hasBlock=dayBlocks.some(function(bl){return bl.tableId===id;});
-      return RC("div",{key:id,onClick:function(){if(onBlock) onBlock(id);},style:{height:ROW_H+"px",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:6,borderBottom:"1px solid #c8b99a",cursor:"pointer"}},
+      return RC("div",{key:id,onClick:function(){if(onBlock) onBlock(id);},style:{height:ROW_H+"px",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:6,borderBottom:"1px solid #c8b99a",cursor:"pointer",boxSizing:"border-box"}},
         RC("span",{style:{fontSize:11,fontWeight:700,padding:"3px 0",borderRadius:8,background:hasBlock?"#991b1b":indoor?TBL.ind.bg:TBL.out.bg,color:hasBlock?"#fff":indoor?TBL.ind.text:TBL.out.text,border:"1px solid "+(hasBlock?"#991b1b":indoor?TBL.ind.border:TBL.out.border),width:32,textAlign:"center",display:"inline-block",boxSizing:"border-box"}},id));}),
-    unassigned.length>0?RC("div",{style:{height:ROW_H+"px",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:6,borderTop:"1px dashed #fca5a5",marginTop:4}},RC("span",{style:{fontSize:10,fontWeight:700,color:"#991b1b"}},"unassigned")):null);
+    unassigned.length>0?RC("div",{style:{height:ROW_H+"px",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:6,borderTop:"1px dashed #fca5a5",marginTop:4,boxSizing:"border-box"}},RC("span",{style:{fontSize:10,fontWeight:700,color:"#991b1b"}},"unassigned")):null);
   // Grid column (scrollable)
   var gridRows=TIMELINE_TABLES.map(function(tbl){var id=tbl.id;var rows=day.filter(function(b){return (b.tables||[]).includes(id);});var tblBlocks=dayBlocks.filter(function(bl){return bl.tableId===id;});
-    return RC("div",{key:id,style:{height:ROW_H+"px",position:"relative",borderBottom:"1px solid #c8b99a"}},RC(GridLines,null),tblBlocks.map(function(bl,i){return RC(BlockBar,{key:"blk"+i,bl:bl});}),rows.map(function(b){return RC(Block,{key:b.id,b:b});}));});
-  var unassignedGrid=unassigned.length>0?RC("div",{style:{height:ROW_H+"px",position:"relative",borderTop:"1px dashed #fca5a5",marginTop:4}},RC(GridLines,null),unassigned.map(function(b){return RC(Block,{key:b.id,b:b});})):null;
-  var gridCol=RC("div",{ref:scrollRef,style:{flex:1,overflowX:"auto",overflowY:"hidden"}},
+    return RC("div",{key:id,style:{height:ROW_H+"px",position:"relative",borderBottom:"1px solid #c8b99a",boxSizing:"border-box"}},RC(GridLines,null),tblBlocks.map(function(bl,i){return RC(BlockBar,{key:"blk"+i,bl:bl});}),rows.map(function(b){return RC(Block,{key:b.id,b:b});}));});
+  var unassignedGrid=unassigned.length>0?RC("div",{style:{height:ROW_H+"px",position:"relative",borderTop:"1px dashed #fca5a5",marginTop:4,boxSizing:"border-box"}},RC(GridLines,null),unassigned.map(function(b){return RC(Block,{key:b.id,b:b});})):null;
+  var gridCol=RC("div",{ref:scrollRef,onScroll:onGridScroll,style:{flex:1,overflowX:"auto",overflowY:"hidden"}},
     RC("div",{style:{width:gridW+"px",minWidth:"100%"}},
-      RC("div",{style:{position:"relative",borderBottom:"1px solid #c8b99a",background:"#f0e8d0",borderRadius:"0 6px 0 0",height:24,overflow:"hidden"}},headerLines,headerLabels),
+      RC("div",{style:{position:"relative",borderBottom:"1px solid #c8b99a",background:"#f0e8d0",borderRadius:"0 6px 0 0",height:24,overflow:"hidden",boxSizing:"border-box"}},headerLines,headerLabels),
       gridRows,
       unassignedGrid));
   var zoomBtns=RC("div",{style:{display:"flex",gap:4,alignItems:"center"}},
@@ -433,7 +472,6 @@ function ListView(props){
 function BookingApp(props){
   var bs=useState([]);var bookings=bs[0],setBookings=bs[1];
   var loaded=useRef(false);
-  // Ensure optimal viewport scaling on all devices
   useEffect(function(){
     var meta=document.querySelector('meta[name="viewport"]');
     if(!meta){meta=document.createElement("meta");meta.name="viewport";document.head.appendChild(meta);}
@@ -447,23 +485,13 @@ function BookingApp(props){
   useEffect(function(){
     var dbRef=ref(db,"bookings");
     var unsub=onValue(dbRef,function(snapshot){
-      var data=snapshot.val();
-      var all=sanitizeAll(data);
+      var data=snapshot.val();var all=sanitizeAll(data);
       if(!cleanedUp.current&&all.length>0){
         var cutoff=new Date();cutoff.setDate(cutoff.getDate()-30);
         var cutoffStr=cutoff.toISOString().slice(0,10);
         var fresh=all.filter(function(b){return b&&b.date>=cutoffStr;});
-        if(fresh.length<all.length){
-          cleanedUp.current=true;
-          set(ref(db,"bookings"),fresh);
-          return;
-        }
-      }
-      cleanedUp.current=true;
-      remoteUpdate.current=true;
-      setBookings(all);
-      loaded.current=true;
-    });
+        if(fresh.length<all.length){cleanedUp.current=true;set(ref(db,"bookings"),fresh);return;}}
+      cleanedUp.current=true;remoteUpdate.current=true;setBookings(all);loaded.current=true;});
     return unsub;
   },[]);
   useEffect(function(){
@@ -473,17 +501,16 @@ function BookingApp(props){
   });
 
   var vs=useState("timeline");var view=vs[0],setView=vs[1];
+  var zms=useState(1);var timelineZoom=zms[0],setTimelineZoom=zms[1];
+  var timelineScrollRef=useRef(0);
   var tbs=useState([]);var tableBlocks=tbs[0],setTableBlocks=tbs[1];
   var tbLoaded=useRef(false);
   var tbRemote=useRef(false);
   useEffect(function(){
     var dbRef=ref(db,"tableBlocks");
     var unsub=onValue(dbRef,function(snapshot){
-      var data=snapshot.val();
-      tbRemote.current=true;
-      setTableBlocks(Array.isArray(data)?data:[]);
-      tbLoaded.current=true;
-    });
+      var data=snapshot.val();tbRemote.current=true;
+      setTableBlocks(Array.isArray(data)?data:[]);tbLoaded.current=true;});
     return unsub;
   },[]);
   useEffect(function(){
@@ -504,6 +531,7 @@ function BookingApp(props){
   var dis=useState(null);var dismissedIneff=dis[0],setDismissedIneff=dis[1];
   var formRef=useRef(EMPTY_FORM);
   var sas=useState(null);var swapAffected=sas[0],setSwapAffected=sas[1];
+  var cks=useState(null);var confirmKitchen=cks[0],setConfirmKitchen=cks[1];
   useEffect(function(){formRef.current=form;},[form]);
   useEffect(function(){if(error) setError("");},[form.time,form.size,form.date,form.preference,form.customDur]);
   // Real-time clock for seated duration
@@ -574,17 +602,27 @@ function BookingApp(props){
     return max+1;
   }
   function nowTime(){var d=new Date();return toTime(d.getHours()*60+d.getMinutes());}
-  function openWalkin(){setWalkinForm({size:2,notes:"",tables:[],time:nowTime()});setWalkinError("");setShowWalkin(true);}
-  function saveWalkin(){
+  function openWalkin(){setWalkinForm({size:2,notes:"",tables:[],time:nowTime(),customDur:null});setWalkinError("");setShowWalkin(true);}
+  function doSaveWalkin(){
     var wf=walkinForm;
     if(!wf.tables||!wf.tables.length){setWalkinError("Please assign tables first.");return;}
-    var t=wf.time||nowTime();var size=Number(wf.size)||2;var dur=getDur(size);
-    var nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:new Date().toISOString().slice(0,10),time:t,size:size,duration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:null,_manual:true,_locked:true};
+    var t=wf.time||nowTime();var size=Number(wf.size)||2;var dur=wf.customDur||getDur(size);
+    var nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:new Date().toISOString().slice(0,10),time:t,size:size,duration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true};
     setBookings(function(prev){return prev.concat([nb]);});
     setShowWalkin(false);setViewDate(new Date().toISOString().slice(0,10));
   }
+  function saveWalkin(){
+    var wf=walkinForm;
+    var t=wf.time||nowTime();var size=Number(wf.size)||2;var dur=wf.customDur||getDur(size);
+    var wDate=new Date().toISOString().slice(0,10);
+    var load=getKitchenLoad(bookings,wDate,t,dur,null);
+    if(load.starts+1>=KITCHEN_TABLE_LIMIT&&!confirmKitchen){
+      setConfirmKitchen("walkin");return;
+    }
+    setConfirmKitchen(null);doSaveWalkin();
+  }
 
-  function save(){
+  function doSave(){
     var f=formRef.current;
     try{
       if(!f.name||!f.name.trim()){setError("Customer name is required.");return;}
@@ -618,6 +656,16 @@ function BookingApp(props){
         setBookings(fin);flash();setShowForm(false);setViewDate(f.date);
       }
     }catch(err){setError("Error: "+err.message);}
+  }
+  function save(){
+    var f=formRef.current;
+    if(!f.time) return doSave();
+    var size=Number(f.size)||2;var d=f.customDur||getDur(size);
+    var load=getKitchenLoad(bookings,f.date,f.time,d,editId);
+    if(load.starts+1>=KITCHEN_TABLE_LIMIT&&!confirmKitchen){
+      setConfirmKitchen("form");return;
+    }
+    setConfirmKitchen(null);doSave();
   }
 
   function forceReshuffle(){setBookings(function(b){return applyOpt(b,viewDate,tableBlocks);});flash();}
@@ -722,7 +770,26 @@ function BookingApp(props){
       mt?RC("button",{style:mkBtn({fontSize:12,background:BTN.clear}),onClick:function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});setSwapAffected(null);}},"Clear"):null));
   })();
 
-  var availBanner=showForm&&formAvail&&!formAvail.ok?RC(AvailBanner,{msg:"No tables available"+(form.preference!=="auto"?" ("+form.preference+" preference)":"")+".",sugg:formAvail.sugg}):null;
+  var availBanner=showForm&&formAvail&&!formAvail.ok?RC(AvailBanner,{msg:"No tables available"+(form.preference!=="auto"?" ("+form.preference+" preference)":"")+".",sugg:formAvail.sugg,onTapTime:function(t){setForm(function(f){return Object.assign({},f,{time:t});});}}):null;
+
+  var kitchenLoad=(showForm&&form.time)?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
+  var kitchenStarts=kitchenLoad?kitchenLoad.starts+1:1;
+  var kitchenGuests=kitchenLoad?kitchenLoad.guests+(Number(form.size)||2):Number(form.size)||2;
+  var kitchenBusy=kitchenLoad&&kitchenStarts>=KITCHEN_TABLE_LIMIT;
+  var kitchenSugg=kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks):null;
+  function renderKitchenTimes(arr){
+    if(!arr||!arr.length) return null;
+    return arr.map(function(r){return RC("span",{key:r.timeStr,onClick:function(){setForm(function(f){return Object.assign({},f,{time:r.timeStr});});},style:{cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:600,fontSize:12,background:r.hasTables?"#dcfce7":"#fef9c3",color:r.hasTables?"#166534":"#854d0e",border:"1px solid "+(r.hasTables?"#86efac":"#fde68a")}},r.timeStr);});
+  }
+  var kitchenSection=kitchenLoad?RC("div",{style:{padding:"10px 14px",borderRadius:10,border:"0.5px solid "+(kitchenBusy?"#fed7aa":S.border),background:kitchenBusy?"#fff7ed":S.bg,marginBottom:14,fontSize:13,color:kitchenBusy?"#9a3412":S.muted}},
+    RC("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      RC("span",null,RC("span",{style:{fontWeight:700}},"Starting at this time: "),kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")),
+      kitchenBusy?RC("span",{style:{fontWeight:700,color:"#dc2626",fontSize:12}},"Kitchen busy"):null),
+    kitchenSugg&&(kitchenSugg.before.length||kitchenSugg.after.length)?RC("div",{style:{marginTop:8}},
+      RC("div",{style:{fontSize:11,color:S.muted,marginBottom:6}},RC("span",{style:{background:"#dcfce7",color:"#166534",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700}},"green")," = tables available  ",RC("span",{style:{background:"#fef9c3",color:"#854d0e",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700}},"yellow")," = kitchen ok, tables tight"),
+      kitchenSugg.before.length?RC("div",{style:{marginBottom:4}},RC("span",{style:{fontWeight:700,fontSize:12}},"Before: "),RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},renderKitchenTimes(kitchenSugg.before))):null,
+      kitchenSugg.after.length?RC("div",null,RC("span",{style:{fontWeight:700,fontSize:12}},"After: "),RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},renderKitchenTimes(kitchenSugg.after))):null):
+    kitchenBusy?RC("div",{style:{marginTop:6,fontSize:12,color:"#991b1b"}},"No kitchen-friendly alternatives found nearby."):null):null;
 
   var quickStatusBtns=editId?RC(Section,null,
     RC("div",{style:{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}},
@@ -739,7 +806,7 @@ function BookingApp(props){
 
 
   var mainView=view==="timeline"
-    ?RC(TimelineView,{bookings:bookings,date:viewDate,onEdit:openEdit,onManual:function(id){setManualTarget(id);},blocks:tableBlocks,onBlock:function(id){setBlockTarget(id);},nowMins:nowMins,warnings:overlapWarnings})
+    ?RC(TimelineView,{bookings:bookings,date:viewDate,onEdit:openEdit,onManual:function(id){setManualTarget(id);},blocks:tableBlocks,onBlock:function(id){setBlockTarget(id);},nowMins:nowMins,warnings:overlapWarnings,zoom:timelineZoom,setZoom:setTimelineZoom,scrollPosRef:timelineScrollRef})
     :RC(ListView,{bookings:bookings,date:viewDate,onEdit:openEdit,onStatus:updateStatus,onDelete:function(id){setConfirmDel(id);},onManual:function(id){setManualTarget(id);},nowMins:nowMins,warnings:overlapWarnings});
 
   var formModal=showForm?RC(Overlay,{onClose:function(){setShowForm(false);}},
@@ -769,6 +836,7 @@ function BookingApp(props){
     availBanner,
     quickStatusBtns,
     errorEl,
+    kitchenSection,
     RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}},
       RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setShowForm(false);}},"Cancel"),
       RC("button",{onClick:save,style:{background:S.accent,border:"none",borderRadius:8,padding:"10px 22px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Save booking"))):null;
@@ -787,7 +855,7 @@ function BookingApp(props){
     var wf=walkinForm;
     var wSize=Number(wf.size)||2;
     var wTime=wf.time||nowTime();
-    var wDur=getDur(wSize);
+    var wDur=wf.customDur||getDur(wSize);
     var wDate=new Date().toISOString().slice(0,10);
     var wS=toMins(wTime),wE=wS+wDur;
     var wOther=bookings.filter(function(b){return b&&b.date===wDate&&b.status!=="cancelled"&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};}).concat(getBlockSlots(tableBlocks,wDate));
@@ -821,6 +889,24 @@ function BookingApp(props){
     var wSummaryColor=wOk?"#166534":"#9a3412";
     var wSummaryText=wSel.length===0?"Select tables below.":"Capacity: "+wCap+(wCap>=wSize?" (fits "+wSize+" pax)":" — need "+wSize+" pax");
     var wClearBtn=wSel.length>0?RC("button",{key:"clr",style:mkBtn({fontSize:12,padding:"6px 12px",background:BTN.clear}),onClick:function(){setWalkinForm(function(f){return Object.assign({},f,{tables:[]});});}},"Clear"):null;
+    var wKitchenLoad=getKitchenLoad(bookings,wDate,wTime,wDur,null);
+    var wKitchenStarts=wKitchenLoad.starts+1;
+    var wKitchenGuests=wKitchenLoad.guests+wSize;
+    var wKitchenBusy=wKitchenStarts>=KITCHEN_TABLE_LIMIT;
+    var wKitchenSugg=wKitchenBusy?findKitchenFriendlyTimes(bookings,wDate,wSize,"auto",wDur,wTime,null,tableBlocks):null;
+    function wRenderKT(arr){
+      if(!arr||!arr.length) return null;
+      return arr.map(function(r){return RC("span",{key:r.timeStr,onClick:function(){setWalkinForm(function(f){return Object.assign({},f,{tables:[],time:r.timeStr});});},style:{cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:600,fontSize:12,background:r.hasTables?"#dcfce7":"#fef9c3",color:r.hasTables?"#166534":"#854d0e",border:"1px solid "+(r.hasTables?"#86efac":"#fde68a")}},r.timeStr);});
+    }
+    var wKitchenSection=RC("div",{style:{padding:"10px 14px",borderRadius:10,border:"0.5px solid "+(wKitchenBusy?"#fed7aa":S.border),background:wKitchenBusy?"#fff7ed":S.bg,marginBottom:14,fontSize:13,color:wKitchenBusy?"#9a3412":S.muted}},
+      RC("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
+        RC("span",null,RC("span",{style:{fontWeight:700}},"Starting at this time: "),wKitchenStarts+" booking"+(wKitchenStarts!==1?"s":"")+" · "+wKitchenGuests+" guest"+(wKitchenGuests!==1?"s":"")),
+        wKitchenBusy?RC("span",{style:{fontWeight:700,color:"#dc2626",fontSize:12}},"Kitchen busy"):null),
+      wKitchenSugg&&(wKitchenSugg.before.length||wKitchenSugg.after.length)?RC("div",{style:{marginTop:8}},
+        RC("div",{style:{fontSize:11,color:S.muted,marginBottom:6}},RC("span",{style:{background:"#dcfce7",color:"#166534",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700}},"green")," = tables available  ",RC("span",{style:{background:"#fef9c3",color:"#854d0e",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700}},"yellow")," = kitchen ok, tables tight"),
+        wKitchenSugg.before.length?RC("div",{style:{marginBottom:4}},RC("span",{style:{fontWeight:700,fontSize:12}},"Before: "),RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},wRenderKT(wKitchenSugg.before))):null,
+        wKitchenSugg.after.length?RC("div",null,RC("span",{style:{fontWeight:700,fontSize:12}},"After: "),RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},wRenderKT(wKitchenSugg.after))):null):
+      wKitchenBusy?RC("div",{style:{marginTop:6,fontSize:12,color:"#991b1b"}},"No kitchen-friendly alternatives found nearby."):null);
     return RC(Overlay,{onClose:function(){setShowWalkin(false);}},
       RC("div",{style:{fontSize:18,fontWeight:700,marginBottom:4,color:S.text}},"Walk-in"),
       RC("div",{style:{fontSize:13,color:S.text,marginBottom:16}},"Walk-in "+getNextWalkinNum()+" · Seated"),
@@ -831,6 +917,12 @@ function BookingApp(props){
             RC("button",{style:{background:S.card,border:"0.5px solid "+S.border,borderRadius:8,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.max(1,(Number(f.size)||2)-1),tables:[]});});}},"-"),
             RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},String(wSize)),
             RC("button",{style:{background:S.card,border:"0.5px solid "+S.border,borderRadius:8,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.min(25,(Number(f.size)||2)+1),tables:[]});});}},"+"))),
+          RC(Fld,{label:"Duration"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
+            RC("button",{style:{background:S.card,border:"0.5px solid "+S.border,borderRadius:8,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){var cd=f.customDur||getDur(Number(f.size)||2);return Object.assign({},f,{customDur:Math.max(15,cd-15)});});}},"-"),
+            RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},wDur+" min"),
+            RC("button",{style:{background:S.card,border:"0.5px solid "+S.border,borderRadius:8,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){var cd=f.customDur||getDur(Number(f.size)||2);return Object.assign({},f,{customDur:Math.min(480,cd+15)});});}},"+"),
+            RC("span",{style:{fontSize:13,color:S.muted,marginLeft:4}},"End: "+toTime(toMins(wTime)+wDur)),
+            wf.customDur?RC("button",{style:mkBtn({fontSize:12,background:BTN.reset}),onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{customDur:null});});}},"Reset"):null)),
         RC(Fld,{label:"Notes",style:{marginTop:12}},RC("textarea",{value:wf.notes,onChange:function(e){setWalkinForm(function(f){return Object.assign({},f,{notes:e.target.value});});},rows:2,placeholder:"Special requests...",style:Object.assign({},mkInp(),{resize:"vertical"})})))),
       RC("div",{style:{fontSize:13,color:S.text,marginBottom:10,marginTop:4}},"Tap tables to select / deselect."),
       RC("div",{style:{marginBottom:14,padding:"12px 14px",borderRadius:8,background:S.bg,border:"0.5px solid "+(wOk?"#86efac":S.border),display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}},
@@ -839,8 +931,9 @@ function BookingApp(props){
           RC("div",{style:{fontSize:13,color:wSummaryColor,fontWeight:500,marginTop:2}},wSummaryText)),
         wClearBtn),
       RC(TableGrid,{selected:wSel,toggle:wToggle,busy:wBusy,seatedBusy:new Set(),swapBusy:false}),
-      wAutoCheck&&wSel.length===0?RC(AvailBanner,{msg:"No tables available at "+wTime+".",sugg:wAutoCheck,warn:true}):null,
+      wAutoCheck&&wSel.length===0?RC(AvailBanner,{msg:"No tables available at "+wTime+".",sugg:wAutoCheck,warn:true,onTapTime:function(t){setWalkinForm(function(f){return Object.assign({},f,{tables:[],time:t});});}}):null,
       walkinError?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"#fee2e2",borderRadius:10,border:"0.5px solid #fca5a5",marginBottom:14}},walkinError):null,
+      wKitchenSection,
       RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}},
         RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setShowWalkin(false);}},"Cancel"),
         RC("button",{onClick:saveWalkin,disabled:!wOk,style:{background:wOk?"#166534":"#ccc",border:"none",borderRadius:8,padding:"10px 22px",cursor:wOk?"pointer":"not-allowed",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Seat")));
@@ -855,12 +948,14 @@ function BookingApp(props){
           RC("button",{onClick:openWalkin,style:{background:"#166534",border:"none",borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:700,color:"#fff",minHeight:40}},"Walk-in"),
           RC("button",{onClick:openNew,style:{background:S.accent,border:"none",borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:700,color:"#fff",minHeight:40}},"+ New"),
           RC("button",{onClick:function(){signOut(auth);},style:mkBtn({fontSize:12,background:"#78716c"})},"Log out"))),
-      RC("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12}},
-        RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()-1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 14px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8249;"}}),
-        RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()+1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 14px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8250;"}}),
-        RC("input",{type:"date",value:viewDate,onChange:function(e){setViewDate(e.target.value);},style:{fontSize:14,padding:"8px 10px",borderRadius:8,border:"0.5px solid "+S.border,background:S.card,color:S.text,fontWeight:700,flex:1,maxWidth:180,minHeight:40}}),
-        viewDate!==new Date().toISOString().slice(0,10)?RC("button",{onClick:function(){setViewDate(new Date().toISOString().slice(0,10));},style:mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})},"Today"):null,
-        RC("span",{style:{fontSize:13,color:S.text}},dayCount+" booking"+(dayCount!==1?"s":""))),
+      RC("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}},
+        RC("div",{style:{display:"flex",gap:4,alignItems:"center"}},
+          RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()-1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8249;"}}),
+          RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()+1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8250;"}}),
+          RC("input",{type:"date",value:viewDate,onChange:function(e){setViewDate(e.target.value);},style:{fontSize:14,padding:"8px 10px",borderRadius:8,border:"0.5px solid "+S.border,background:S.card,color:S.text,fontWeight:700,minWidth:130,minHeight:40,boxSizing:"border-box"}})),
+        RC("div",{style:{display:"flex",gap:6,alignItems:"center"}},
+          viewDate!==new Date().toISOString().slice(0,10)?RC("button",{onClick:function(){setViewDate(new Date().toISOString().slice(0,10));},style:mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})},"Today"):null,
+          RC("span",{style:{fontSize:13,color:S.text}},dayCount+" booking"+(dayCount!==1?"s":"")))),
       reshuffledBanner,
       ineffBanner,
       mainView,
@@ -872,10 +967,15 @@ function BookingApp(props){
         RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}},
           RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setConfirmCancel(null);}},"Back"),
           RC("button",{onClick:function(){doCancelBooking(confirmCancel,true);setShowForm(false);},style:{background:"#9a3412",border:"none",borderRadius:8,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"No show"),
-          RC("button",{onClick:function(){doCancelBooking(confirmCancel,false);setShowForm(false);},style:{background:BLOCK_BG.cancelled,border:"none",borderRadius:8,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Cancel booking"))):null));
+          RC("button",{onClick:function(){doCancelBooking(confirmCancel,false);setShowForm(false);},style:{background:BLOCK_BG.cancelled,border:"none",borderRadius:8,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Cancel booking"))):null,
+      confirmKitchen?RC(Overlay,{onClose:function(){setConfirmKitchen(null);}},
+        RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:"#9a3412"}},"Kitchen may be busy"),
+        RC("div",{style:{fontSize:14,color:S.text,marginBottom:12}},"There are already "+(confirmKitchen==="walkin"?(function(){var wf=walkinForm;var t=wf.time||nowTime();var d=wf.customDur||getDur(Number(wf.size)||2);var l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){var f=formRef.current;var d=f.customDur||getDur(Number(f.size)||2);var l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."),
+        RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}},
+          RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setConfirmKitchen(null);}},"Back"),
+          RC("button",{onClick:function(){var isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();},style:{background:"#9a3412",border:"none",borderRadius:8,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Confirm"))):null));
 }
 
-// ── Login Screen ─────────────────────────────────────────────────────────────
 function LoginScreen(){
   var es=useState("");var email=es[0],setEmail=es[1];
   var ps=useState("");var password=ps[0],setPassword=ps[1];
@@ -904,7 +1004,6 @@ function LoginScreen(){
         RC("button",{onClick:handleLogin,disabled:loading,style:{background:S.accent,border:"none",borderRadius:8,padding:"12px",fontSize:15,fontWeight:700,color:"#fff",cursor:loading?"wait":"pointer",opacity:loading?0.7:1,minHeight:44}},loading?"Logging in...":"Log in"))));
 }
 
-// ── Auth Wrapper ─────────────────────────────────────────────────────────────
 export default function App(){
   var us=useState(null);var user=us[0],setUser=us[1];
   var cs=useState(true);var checking=cs[0],setChecking=cs[1];
