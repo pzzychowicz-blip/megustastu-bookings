@@ -13,8 +13,6 @@ var VALID_COMBOS=[
   {ids:["2","3"],cap:4},{ids:["3","4"],cap:4},{ids:["2","3","4"],cap:9},
   {ids:["5A","5B"],cap:4},{ids:["5B","6"],cap:4},{ids:["5A","5B","6"],cap:8},
   {ids:["i2","i3"],cap:4},{ids:["i3","i4"],cap:4},{ids:["i2","i3","i4"],cap:8},
-  {ids:["i1","i2"],cap:4},{ids:["i1","i3"],cap:4},
-  {ids:["i1","i2","i3"],cap:6},{ids:["i1","i2","i4"],cap:6},{ids:["i1","i3","i4"],cap:6},
   {ids:["i1","i2","i3","i4"],cap:10},
   {ids:["1A","1B","7","i1"],cap:11},{ids:["1A","1B","7","i2"],cap:10},{ids:["1A","1B","7","i3"],cap:10},{ids:["1A","1B","7","i4"],cap:10},
   {ids:["1A","1B","7","i1","i2"],cap:12},{ids:["1A","1B","7","i1","i3"],cap:12},{ids:["1A","1B","7","i1","i4"],cap:12},{ids:["1A","1B","7","i2","i3"],cap:12},{ids:["1A","1B","7","i3","i4"],cap:12},
@@ -42,7 +40,9 @@ function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
 function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
 function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
-function sanitize(b){if(!b||typeof b!=="object") return null;return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:b.time||"13:00",size:Number(b.size)||2,duration:Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict};}
+function sanitize(b){if(!b||typeof b!=="object") return null;return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:b.time||"13:00",size:Number(b.size)||2,duration:Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,history:Array.isArray(b.history)?b.history:[]};}
+function histEntry(action,user){return {at:new Date().toISOString(),by:user||"staff",action:action};}
+function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=orig.phone||"";var formPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");return ch.length?ch.join(", "):"saved (no field changes)";}
 function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var vals=Object.values(arr);return vals.map(sanitize).filter(Boolean);}return arr.map(sanitize).filter(Boolean);}
 function isIn(id){return id.startsWith("i");}
 function isAllIn(ids){return ids.every(isIn);}
@@ -72,7 +72,7 @@ function _hasI1(c){return c.ids.indexOf("i1")>=0?1:0;}
 function _comboLoc(c){if(isAllOut(c.ids)) return 0;if(isAllIn(c.ids)) return 1;return 2;}
 function findBest(size,pref,s,e,slots){
   var sg=ALL_TABLES.filter(function(t){return t.capacity>=size&&comboOk([t.id],pref)&&canAssign([t.id],slots,s,e);});
-  var co=VALID_COMBOS.filter(function(c){return c.cap>=size&&comboOk(c.ids,pref)&&canAssign(c.ids,slots,s,e);}).sort(function(a,b){return _comboLoc(a)-_comboLoc(b)||_hasI1(b)-_hasI1(a)||a.cap-b.cap||a.ids.length-b.ids.length;});
+  var co=VALID_COMBOS.filter(function(c){return c.cap>=size&&comboOk(c.ids,pref)&&canAssign(c.ids,slots,s,e);}).sort(function(a,b){var la=_comboLoc(a),lb=_comboLoc(b);if(la!==lb) return la-lb;if(la===2){var ia=_hasI1(a),ib=_hasI1(b);if(ia!==ib) return ib-ia;}return a.cap-b.cap||a.ids.length-b.ids.length;});
   if(size<=2){var n7=sg.filter(function(t){return t.id!=="7";});if(pref==="outdoor"||pref==="auto"){var out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}if(pref==="indoor"||pref==="auto"){var ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}if(n7.length) return [n7[0].id];if(sg.length) return [sg[0].id];if(co.length) return co[0].ids;return null;}
   if(size<=4){if(canAssign(["7"],slots,s,e)&&comboOk(["7"],pref)) return ["7"];if(co.length) return co[0].ids;if(sg.length) return [sg[0].id];return null;}
   if(co.length) return co[0].ids;
@@ -146,7 +146,7 @@ function optimise(bookings,date,blocks){
   var completed=bookings.filter(function(b){return b&&b.date===date&&b.status==="completed"&&(b.tables||[]).length>0;});
   var slots=completed.map(function(b){return {tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
   if(blocks) slots=slots.concat(getBlockSlots(blocks,date));
-  var day=bookings.filter(function(b){return b&&b.date===date&&isActive(b);}).sort(function(a,b){var la=isLocked(a)?0:1,lb=isLocked(b)?0:1;if(la!==lb) return la-lb;var pa=a.preference!=="auto"?0:1,pb=b.preference!=="auto"?0:1;if(pa!==pb) return pa-pb;if(b.size!==a.size) return b.size-a.size;return toMins(a.time)-toMins(b.time);});
+  var day=bookings.filter(function(b){return b&&b.date===date&&isActive(b);}).sort(function(a,b){var la=isLocked(a)?0:1,lb=isLocked(b)?0:1;if(la!==lb) return la-lb;if(b.size!==a.size) return b.size-a.size;var pa=a.preference!=="auto"?0:1,pb=b.preference!=="auto"?0:1;if(pa!==pb) return pa-pb;return toMins(a.time)-toMins(b.time);});
   var assigned={};
   day.forEach(function(b){if(!b||!b.time) return;var s=toMins(b.time),e=s+(b.duration||90);var tables;if(isLocked(b)){tables=b.tables;}else{tables=findBest(b.size||2,b.preference||"auto",s,e,slots);if(!tables) tables=findBestAny(b.size||2,s,e,slots);}assigned[b.id]=tables||null;if(tables) slots.push({tables:tables,s:s,e:e});});
   return assigned;
@@ -532,6 +532,7 @@ function BookingApp(props){
   var formRef=useRef(EMPTY_FORM);
   var sas=useState(null);var swapAffected=sas[0],setSwapAffected=sas[1];
   var cks=useState(null);var confirmKitchen=cks[0],setConfirmKitchen=cks[1];
+  var shs=useState(false);var showHistory=shs[0],setShowHistory=shs[1];
   useEffect(function(){formRef.current=form;},[form]);
   useEffect(function(){if(error) setError("");},[form.time,form.size,form.date,form.preference,form.customDur]);
   // Real-time clock for seated duration
@@ -557,6 +558,7 @@ function BookingApp(props){
   },[nowMins]);
   var winW=useWinW();
   var isMobile=winW<600;
+  function getUser(){return auth.currentUser?auth.currentUser.email:"staff";}
 
   var dayCount=bookings.filter(function(b){return b.date===viewDate&&b.status!=="cancelled";}).length;
   var inefficient=bookings.length>0&&checkInefficent(bookings,viewDate);
@@ -590,7 +592,7 @@ function BookingApp(props){
 
   function flash(){setReshuffled(true);setTimeout(function(){setReshuffled(false);},3000);}
   function openNew(){setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:b.duration!==getDur(b.size)?b.duration:null,manualTables:[]});setEditId(b.id);setError("");setSwapAffected(null);setShowForm(true);}
+  function openEdit(b){setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:b.duration!==getDur(b.size)?b.duration:null,manualTables:[]});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
 
   // Walk-in
   var wis=useState(false);var showWalkin=wis[0],setShowWalkin=wis[1];
@@ -607,7 +609,7 @@ function BookingApp(props){
     var wf=walkinForm;
     if(!wf.tables||!wf.tables.length){setWalkinError("Please assign tables first.");return;}
     var t=wf.time||nowTime();var size=Number(wf.size)||2;var dur=wf.customDur||getDur(size);
-    var nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:new Date().toISOString().slice(0,10),time:t,size:size,duration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true};
+    var nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:new Date().toISOString().slice(0,10),time:t,size:size,duration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true,history:[histEntry("walk-in created",getUser())]};
     setBookings(function(prev){return prev.concat([nb]);});
     setShowWalkin(false);setViewDate(new Date().toISOString().slice(0,10));
   }
@@ -636,19 +638,20 @@ function BookingApp(props){
       if(mt.length&&!swapAffected){var ex=bookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
       if(editId){
         var orig=bookings.find(function(b){return b.id===editId;});
-        var needsR=!orig||size!==orig.size||f.time!==orig.time||f.date!==orig.date||f.preference!==orig.preference;
+        var needsR=!orig||size!==orig.size||f.time!==orig.time||f.date!==orig.date||f.preference!==orig.preference||f._clearManual;
         var saveDur=dur;var saveCustDur=f.customDur||null;
         if(f.status==="completed"&&orig&&orig.status!=="completed"){var now=new Date();var nowMins=now.getHours()*60+now.getMinutes();var startMins=toMins(f.time);var actualDur=Math.max(15,nowMins-startMins);saveDur=actualDur;saveCustDur=actualDur;}
+        var clearM=!!f._clearManual;
+        var editHist=orig?histEntry("edited: "+diffBooking(orig,f,size),getUser()):histEntry("edited",getUser());
         var upd=bookings.map(function(b){
-          if(b.id===editId) return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:f.time,size:size,duration:saveDur,preference:f.preference,notes:f.notes,status:f.status,tables:mt.length?mt:(!needsR?b.tables:[]),customDur:saveCustDur,_manual:mt.length>0,_locked:mt.length>0?true:b._locked});
+          if(b.id===editId){var h=(b.history||[]).concat([editHist]);return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:f.time,size:size,duration:saveDur,preference:f.preference,notes:f.notes,status:f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:b._locked),history:h});}
           if(swapAffected){var match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){var remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
           return b;
         });
         setBookings(applyOpt(upd,f.date,tableBlocks));if(needsR||swapAffected||f.status==="completed") flash();setShowForm(false);setViewDate(f.date);
       } else {
         var newId=genId();
-        var nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,size:size,duration:dur,preference:f.preference,notes:f.notes,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0};
-        if(!mt.length){var exSl=bookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});exSl=exSl.concat(getBlockSlots(tableBlocks,f.date));var pre=findBest(size,f.preference,sm,sm+dur,exSl)||(f.preference==="auto"?findBestAny(size,sm,sm+dur,exSl):null);if(!pre){setError("No tables available — see suggestions below or try manual assignment.");return;}}
+        var nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,size:size,duration:dur,preference:f.preference,notes:f.notes,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,history:[histEntry("created",getUser())]};
         var base=bookings;
         if(swapAffected){base=bookings.map(function(b){var match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){var remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}return b;});}
         var fin=applyOpt(base.concat([nb]),f.date,tableBlocks);
@@ -672,16 +675,19 @@ function BookingApp(props){
   function delBooking(id){setBookings(function(b){return applyOpt(b.filter(function(x){return x.id!==id;}),viewDate,tableBlocks);});setConfirmDel(null);flash();}
   function updateStatus(id,status){
     if(status==="cancelled"){setConfirmCancel(id);return;}
-    setBookings(function(b){var updated=b.map(function(x){if(x.id!==id) return x;var extra={status:status};if(status==="completed"){var now=new Date();var nowMins=now.getHours()*60+now.getMinutes();var startMins=toMins(x.time);var actualDur=Math.max(15,nowMins-startMins);extra.duration=actualDur;extra.customDur=actualDur;}return Object.assign({},x,extra);});return applyOpt(updated,viewDate,tableBlocks);});if(status==="completed") flash();
+    var user=getUser();
+    setBookings(function(b){var updated=b.map(function(x){if(x.id!==id) return x;var extra={status:status,history:(x.history||[]).concat([histEntry("status → "+status,user)])};if(status==="completed"){var now=new Date();var nowMins=now.getHours()*60+now.getMinutes();var startMins=toMins(x.time);var actualDur=Math.max(15,nowMins-startMins);extra.duration=actualDur;extra.customDur=actualDur;}return Object.assign({},x,extra);});return applyOpt(updated,viewDate,tableBlocks);});if(status==="completed") flash();
   }
   function doCancelBooking(id,noShow){
-    setBookings(function(b){var updated=b.map(function(x){if(x.id!==id) return x;var extra={status:"cancelled"};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});return applyOpt(updated,viewDate,tableBlocks);});
+    var user=getUser();
+    setBookings(function(b){var updated=b.map(function(x){if(x.id!==id) return x;var extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});return applyOpt(updated,viewDate,tableBlocks);});
     setConfirmCancel(null);flash();
   }
   function manualAssign(bookingId,tables,locked,affected){
+    var user=getUser();
     setBookings(function(b){
       var updated=b.map(function(x){
-        if(x.id===bookingId) return Object.assign({},x,{tables:tables,_conflict:false,_manual:true,_locked:locked===true});
+        if(x.id===bookingId) return Object.assign({},x,{tables:tables,_conflict:false,_manual:true,_locked:locked===true,history:(x.history||[]).concat([histEntry("tables manually assigned: "+tables.join(", "),user)])});
         // If swapping, strip taken tables from affected bookings and unlock them for re-optimization
         if(affected&&affected.length>0){
           var match=affected.find(function(ab){return ab.id===x.id;});
@@ -718,7 +724,9 @@ function BookingApp(props){
   var manualBooking=(function(){
     if(!manualTarget) return null;
     if(manualTarget==="__new__"){return {id:"__new__",name:form.name||"New booking",size:Number(form.size)||2,time:form.time||"13:00",duration:form.customDur||getDur(Number(form.size)||2),tables:Array.isArray(form.manualTables)?form.manualTables:[],date:form.date,status:"confirmed",_locked:true};}
-    return bookings.find(function(b){return b.id===manualTarget;})||null;
+    var found=bookings.find(function(b){return b.id===manualTarget;})||null;
+    if(found&&manualTarget===editId){found=Object.assign({},found,{size:Number(form.size)||2,time:form.time||found.time,duration:form.customDur||getDur(Number(form.size)||2),date:form.date||found.date,preference:form.preference||found.preference});}
+    return found;
   })();
 
   // Build form
@@ -727,7 +735,7 @@ function BookingApp(props){
   var auto=getDur(Number(form.size));
   var dur=form.customDur||auto;
 
-  // ── Real-time availability check ──
+  // ── Real-time availability check (trial optimization) ──
   var formAvail=(function(){
     if(!showForm||!form.time) return null;
     var sm=toMins(form.time);
@@ -736,10 +744,12 @@ function BookingApp(props){
     var d=form.customDur||getDur(size);
     var mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
     if(mt) return {ok:true,tables:mt,sugg:null};
-    var exSl=bookings.filter(function(b){return b.date===form.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};}).concat(getBlockSlots(tableBlocks,form.date));
-    var pre=findBest(size,form.preference,sm,sm+d,exSl);
-    if(!pre&&form.preference==="auto") pre=findBestAny(size,sm,sm+d,exSl);
-    if(pre) return {ok:true,tables:pre,sugg:null};
+    var trialId=editId||"__trial__";
+    var trialBooking={id:trialId,name:"",phone:"",date:form.date,time:form.time,size:size,duration:d,preference:form.preference||"auto",notes:"",status:"confirmed",tables:[],customDur:form.customDur||null,_manual:false,_locked:false,_conflict:false};
+    var base=editId?bookings.map(function(b){return b.id===editId?trialBooking:b;}):bookings.concat([trialBooking]);
+    var result=applyOpt(base,form.date,tableBlocks);
+    var assigned=result.find(function(b){return b.id===trialId;});
+    if(assigned&&assigned.tables&&assigned.tables.length>0) return {ok:true,tables:assigned.tables,sugg:null};
     var sugg=findTimes(form.date,size,form.preference,bookings,d,sm,tableBlocks);
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
   })();
@@ -750,16 +760,20 @@ function BookingApp(props){
     if(editId){
       var cur=bookings.find(function(b){return b.id===editId;});
       var changed=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||(form.customDur&&form.customDur!==cur.duration));
+      var cleared=!!form._clearManual;
       var curTbl=cur&&cur.tables&&cur.tables.length>0?cur.tables:null;
-      var showTbl=mt||(changed?null:curTbl);
+      var isManual=cur&&(cur._manual||cur._locked)&&curTbl;
+      var showTbl=mt||((changed||cleared)?null:curTbl);
+      var showClearManual=isManual&&!mt&&!cleared;
       return RC(Section,null,RC("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
         RC("span",{style:{fontSize:13,color:"#6b5740",fontWeight:700}},"Tables"),
         RC("button",{style:mkBtn({background:BTN.tables}),onClick:function(){setManualTarget(editId);}},"= Assign"),
         showTbl?showTbl.map(function(id){return RC(TBadge,{key:id,id:id});}):null,
         !showTbl&&previewTbls?previewTbls.map(function(id){return RC(TBadge,{key:id,id:id});}):null,
         !showTbl&&previewTbls?RC("span",{key:"auto",style:{fontSize:11,color:S.muted,fontStyle:"italic"}},"(auto)"):null,
-        changed&&!mt&&curTbl?RC("span",{key:"prev",style:{fontSize:11,color:S.muted,fontStyle:"italic"}},"was: "+curTbl.join(", ")):null,
-        mt?RC("button",{style:mkBtn({fontSize:12,background:BTN.clear}),onClick:function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});setSwapAffected(null);}},"Clear"):null));
+        (changed||cleared)&&!mt&&curTbl?RC("span",{key:"prev",style:{fontSize:11,color:S.muted,fontStyle:"italic"}},"was: "+curTbl.join(", ")):null,
+        mt?RC("button",{style:mkBtn({fontSize:12,background:BTN.clear}),onClick:function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});setSwapAffected(null);}},"Clear"):null,
+        showClearManual?RC("button",{style:mkBtn({fontSize:12,background:BTN.clear}),onClick:function(){setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});setSwapAffected(null);}},"Clear"):null));
     }
     return RC(Section,null,RC("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
       RC("span",{style:{fontSize:13,color:"#6b5740",fontWeight:700}},"Tables"),
@@ -796,6 +810,36 @@ function BookingApp(props){
       RC("span",{style:{fontSize:13,color:"#6b5740",fontWeight:700,marginRight:4}},"Status:"),
       ["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return RC("button",{key:s,style:mkBtn({background:BLOCK_BG[s],textTransform:"capitalize",minHeight:40}),onClick:function(){if(s==="cancelled"){setConfirmCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}},"> "+s);}))):null;
 
+  var historyBtn=(function(){
+    if(!editId) return null;
+    var cur=bookings.find(function(b){return b.id===editId;});
+    if(!cur||!cur.history||!cur.history.length) return null;
+    return RC("button",{onClick:function(){setShowHistory(true);},style:mkBtn({fontSize:12,background:"#64748b",padding:"8px 16px",minHeight:36})},"History ("+cur.history.length+")");
+  })();
+
+  var historyPopup=(function(){
+    if(!showHistory||!editId) return null;
+    var cur=bookings.find(function(b){return b.id===editId;});
+    var hist=cur&&cur.history&&cur.history.length>0?cur.history:[];
+    var reversed=hist.slice().reverse();
+    return RC(Overlay,{onClose:function(){setShowHistory(false);}},
+      RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:12,color:S.text}},"Booking history"),
+      RC("div",{style:{fontSize:13,color:S.muted,marginBottom:12}},cur.name+" — "+cur.date+" "+cur.time),
+      RC("div",{style:{maxHeight:300,overflowY:"auto",borderRadius:8,border:"0.5px solid "+S.border,background:S.bg,padding:"10px 12px"}},
+        reversed.length?reversed.map(function(h,i){
+          var d=new Date(h.at);
+          var dateStr=d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+          var timeStr=d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+          return RC("div",{key:i,style:{fontSize:12,color:S.muted,padding:"6px 0",borderBottom:i<reversed.length-1?"0.5px solid "+S.border:"none"}},
+            RC("span",{style:{fontWeight:600,color:S.text}},dateStr+" "+timeStr),
+            " — ",
+            RC("span",{style:{color:"#0369a1",fontWeight:600}},h.by||"staff"),
+            RC("div",{style:{marginTop:2,color:S.text}},h.action));
+        }):RC("div",{style:{fontSize:12,color:S.muted}},"No history yet.")),
+      RC("div",{style:{display:"flex",justifyContent:"flex-end",marginTop:14}},
+        RC("button",{style:mkBtn({minHeight:40,padding:"8px 18px",background:"#64748b"}),onClick:function(){setShowHistory(false);}},"Close")));
+  })();
+
   var errorEl=error?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"#fee2e2",borderRadius:10,border:"0.5px solid #fca5a5",marginBottom:14}},error):null;
 
   var reshuffledBanner=reshuffled?RC("div",{style:{background:"#fef9c3",border:"0.5px solid #fde68a",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"#854d0e"}},"Tables re-optimised."):null;
@@ -830,16 +874,18 @@ function BookingApp(props){
           RC("button",{style:{background:S.card,border:"0.5px solid "+S.border,borderRadius:8,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},onPointerDown:function(e){e.preventDefault();var v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}},"+"),
           RC("span",{style:{fontSize:13,color:S.text,marginLeft:4}},"End: "+endTime),
           resetDurBtn)))),
-    RC(Section,null,
-      RC(Fld,{label:"Notes"},RC("textarea",{value:form.notes,onChange:function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});},rows:2,placeholder:"Allergies, special requests...",style:Object.assign({},inp(),{resize:"vertical"})}))),
+    kitchenSection,
     tablesBtn,
     availBanner,
     quickStatusBtns,
+    RC(Section,null,
+      RC(Fld,{label:"Notes"},RC("textarea",{value:form.notes,onChange:function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});},rows:2,placeholder:"Allergies, special requests...",style:Object.assign({},inp(),{resize:"vertical"})}))),
     errorEl,
-    kitchenSection,
-    RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}},
-      RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setShowForm(false);}},"Cancel"),
-      RC("button",{onClick:save,style:{background:S.accent,border:"none",borderRadius:8,padding:"10px 22px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Save booking"))):null;
+    RC("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:18}},
+      historyBtn||RC("div",null),
+      RC("div",{style:{display:"flex",gap:8}},
+        RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setShowForm(false);}},"Cancel"),
+        RC("button",{onClick:save,style:{background:S.accent,border:"none",borderRadius:8,padding:"10px 22px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Save booking")))):null;
 
   var delModal=confirmDel?RC(Overlay,{onClose:function(){setConfirmDel(null);}},
     RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}},"Delete booking?"),
@@ -973,7 +1019,8 @@ function BookingApp(props){
         RC("div",{style:{fontSize:14,color:S.text,marginBottom:12}},"There are already "+(confirmKitchen==="walkin"?(function(){var wf=walkinForm;var t=wf.time||nowTime();var d=wf.customDur||getDur(Number(wf.size)||2);var l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){var f=formRef.current;var d=f.customDur||getDur(Number(f.size)||2);var l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."),
         RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}},
           RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setConfirmKitchen(null);}},"Back"),
-          RC("button",{onClick:function(){var isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();},style:{background:"#9a3412",border:"none",borderRadius:8,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Confirm"))):null));
+          RC("button",{onClick:function(){var isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();},style:{background:"#9a3412",border:"none",borderRadius:8,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:700,color:"#fff",minHeight:44}},"Confirm"))):null,
+      historyPopup));
 }
 
 function LoginScreen(){
