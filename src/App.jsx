@@ -404,11 +404,18 @@ function TimelineView(props){
   var gridRows=TIMELINE_TABLES.map(function(tbl){var id=tbl.id;var rows=day.filter(function(b){return (b.tables||[]).includes(id);});var tblBlocks=dayBlocks.filter(function(bl){return bl.tableId===id;});
     return RC("div",{key:id,style:{height:ROW_H+"px",position:"relative",borderBottom:"1px solid #c8b99a",boxSizing:"border-box"}},RC(GridLines,null),tblBlocks.map(function(bl,i){return RC(BlockBar,{key:"blk"+i,bl:bl});}),rows.map(function(b){return RC(Block,{key:b.id,b:b});}));});
   var unassignedGrid=unassigned.length>0?RC("div",{style:{height:ROW_H+"px",position:"relative",borderTop:"1px dashed #fca5a5",marginTop:4,boxSizing:"border-box"}},RC(GridLines,null),unassigned.map(function(b){return RC(Block,{key:b.id,b:b});})):null;
+  // Now line (today only)
+  var isToday=date===new Date().toISOString().slice(0,10);
+  var nowInRange=isToday&&nowMins>=OPEN*60&&nowMins<=GRID_CLOSE*60;
+  var nowLine=nowInRange?RC("div",{key:"now",style:{position:"absolute",top:0,bottom:0,left:pct(nowMins),zIndex:10,pointerEvents:"none"}},
+    RC("div",{style:{position:"absolute",top:3,left:"50%",transform:"translateX(-50%)",fontSize:10,fontWeight:700,color:"#fff",background:"#1a1a1a",padding:"2px 5px",borderRadius:4,whiteSpace:"nowrap",zIndex:11}},toTime(nowMins)),
+    RC("div",{style:{position:"absolute",top:11,bottom:0,left:"50%",transform:"translateX(-50%)",width:2,background:"#1a1a1a"}})):null;
   var gridCol=RC("div",{ref:scrollRef,onScroll:onGridScroll,style:{flex:1,overflowX:"auto",overflowY:"hidden"}},
-    RC("div",{style:{width:gridW+"px",minWidth:"100%"}},
-      RC("div",{style:{position:"relative",borderBottom:"1px solid #c8b99a",background:"#f0e8d0",borderRadius:"0 6px 0 0",height:24,overflow:"hidden",boxSizing:"border-box"}},headerLines,headerLabels),
+    RC("div",{style:{width:gridW+"px",minWidth:"100%",position:"relative"}},
+      RC("div",{style:{position:"relative",borderBottom:"1px solid #c8b99a",background:"#f0e8d0",borderRadius:"0 6px 0 0",height:24,overflow:"visible",boxSizing:"border-box"}},headerLines,headerLabels),
       gridRows,
-      unassignedGrid));
+      unassignedGrid,
+      nowLine));
   var zoomBtns=RC("div",{style:{display:"flex",gap:4,alignItems:"center"}},
     RC("button",{onClick:function(){setZoom(function(z){return Math.max(1,z-0.5);});},style:mkBtn({minHeight:32,minWidth:32,padding:"4px 10px",fontSize:16,background:BTN.nav})},"-"),
     RC("button",{onClick:function(){setZoom(1);},style:mkBtn({minHeight:32,padding:"4px 10px",fontSize:11,background:zoom===1?"#64748b":BTN.nav})},zoom===1?"1x":zoom+"x → 1x"),
