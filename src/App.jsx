@@ -488,11 +488,12 @@ function TimelineView(props){
     var border=warn?(warn.overdue?"3px solid #dc2626":"3px solid #f59e0b"):"none";
     var hasPrefT=b.preferredTables&&b.preferredTables.length>0;
     var lbl=b.name+" ("+b.size+")"+(isLocked(b)?" [L]":"")+(hasPrefT?" ★":"")+(warn&&warn.overdue?" !!":"");
-    var pressTimer=useRef(null);var didLong=useRef(false);var touchStartPos=useRef(null);
+    var pressTimer=useRef(null);var didLong=useRef(false);var touchStartPos=useRef(null);var blockEl=useRef(null);
     function onTouchStart(e){
       didLong.current=false;
       var t=e.touches[0];touchStartPos.current={x:t.clientX,y:t.clientY};
-      pressTimer.current=setTimeout(function(){didLong.current=true;var rect=e.currentTarget.getBoundingClientRect();setQuickStatus({booking:b,x:rect.left,y:rect.top,w:rect.width,h:rect.height});},400);
+      var el=e.currentTarget;
+      pressTimer.current=setTimeout(function(){didLong.current=true;var rect=el.getBoundingClientRect();setQuickStatus({booking:b,x:rect.left,y:rect.top,w:rect.width,h:rect.height});},400);
     }
     function onTouchMove(e){
       if(!touchStartPos.current) return;
@@ -500,8 +501,9 @@ function TimelineView(props){
       if(dx>8||dy>8){clearTimeout(pressTimer.current);pressTimer.current=null;}
     }
     function onTouchEnd(e){clearTimeout(pressTimer.current);pressTimer.current=null;if(didLong.current){e.preventDefault();}}
+    function onCtx(e){e.preventDefault();}
     function handleClick(){if(didLong.current) return;onEdit(b);}
-    return RC("div",{onClick:handleClick,onTouchStart:onTouchStart,onTouchMove:onTouchMove,onTouchEnd:onTouchEnd,style:{position:"absolute",top:3,height:ROW_H-8+"px",left:left,width:w,background:bgc,borderRadius:6,overflow:"hidden",display:"flex",alignItems:"center",boxSizing:"border-box",cursor:"pointer",border:border,WebkitTouchCallout:"none",WebkitUserSelect:"none",userSelect:"none"}},
+    return RC("div",{onClick:handleClick,onTouchStart:onTouchStart,onTouchMove:onTouchMove,onTouchEnd:onTouchEnd,onContextMenu:onCtx,style:{position:"absolute",top:3,height:ROW_H-8+"px",left:left,width:w,background:bgc,borderRadius:6,overflow:"hidden",display:"flex",alignItems:"center",boxSizing:"border-box",cursor:"pointer",border:border,WebkitTouchCallout:"none",WebkitUserSelect:"none",userSelect:"none"}},
       RC("span",{style:{flex:1,padding:"0 8px",fontSize:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},lbl),
       RC("span",{onClick:function(e){e.stopPropagation();onManual(b.id);},style:{padding:"0 6px",fontSize:13,cursor:"pointer",color:"rgba(255,255,255,0.7)",borderLeft:"1px solid rgba(255,255,255,0.3)",height:"100%",display:"flex",alignItems:"center",minWidth:28}},"="));
   }
