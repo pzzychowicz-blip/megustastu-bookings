@@ -21,6 +21,7 @@ var VALID_COMBOS=[
   {ids:["1A","1B","7","2","3"],cap:15},{ids:["1A","1B","7","3","4"],cap:14},{ids:["1A","1B","7","2","3","4"],cap:18},
   {ids:["1A","1B","7","5A","5B"],cap:15},{ids:["1A","1B","7","5B","6"],cap:15},{ids:["1A","1B","7","5A","5B","6"],cap:18},
   {ids:["2","3","4","5A","5B","6"],cap:16},{ids:["2","3","4","5A","5B"],cap:13},{ids:["2","3","4","5B","6"],cap:13},
+  {ids:["2","3","4","5A","5B","6","7"],cap:20},
   {ids:["1A","1B","7","2","3","4","5A","5B","6"],cap:26},{ids:["1A","1B","7","2","3","4","5A","5B"],cap:23},{ids:["1A","1B","7","2","3","4","5B","6"],cap:23},
 ];
 var CLUSTERS={"1A":["1A","1B"],"1B":["1A","1B"],"7":["7"],"2":["2","3","4"],"3":["2","3","4"],"4":["2","3","4"],"5A":["5A","5B","6"],"5B":["5A","5B","6"],"6":["5A","5B","6"],"i1":["i1"],"i2":["i2","i3","i4"],"i3":["i2","i3","i4"],"i4":["i2","i3","i4"]};
@@ -300,9 +301,9 @@ function Toggle(props){return RC("button",{onClick:props.onClick,style:{width:48
 
 // ── Table Grid ───────────────────────────────────────────────────────────
 var TABLE_GROUPS=[
-  {name:"Tables: 1A / 1B / 7",color:"#92400e",note:"1A=3, 1B=2, 7=3 joined (standalone 4)",tables:[{id:"1A",cap:2},{id:"1B",cap:2},{id:"7",cap:4}]},
-  {name:"Tables: 2 / 3 / 4",color:"#92400e",note:"Full cluster seats 9",tables:[{id:"2",cap:2},{id:"3",cap:2},{id:"4",cap:2}]},
-  {name:"Tables: 5A / 5B / 6",color:"#92400e",note:"Each seats 2 individually",tables:[{id:"5A",cap:2},{id:"5B",cap:2},{id:"6",cap:2}]},
+  {name:"Tables: 1A / 1B / 7",color:"#92400e",note:"1A+1B joined = 6 · 7 standalone = 4",tables:[{id:"1A",cap:2},{id:"1B",cap:2},{id:"7",cap:4}]},
+  {name:"Tables: 2 / 3 / 4",color:"#92400e",note:"Full cluster = 8 · 2+3 = 5 · 3+4 = 4",tables:[{id:"2",cap:2},{id:"3",cap:2},{id:"4",cap:2}]},
+  {name:"Tables: 5A / 5B / 6",color:"#92400e",note:"Full cluster = 8 · 5A+5B or 5B+6 = 5",tables:[{id:"5A",cap:2},{id:"5B",cap:2},{id:"6",cap:2}]},
   {name:"Tables: i2 / i3 / i4",color:"#5b21b6",note:"Join these first",tables:[{id:"i2",cap:2},{id:"i3",cap:2},{id:"i4",cap:2}]},
   {name:"Table: i1",color:"#5b21b6",note:"Add only when extra capacity needed",tables:[{id:"i1",cap:2}]},
 ];
@@ -931,14 +932,7 @@ function BookingApp(){
       setForm(function(f){
         var cur=f.preferredTables||[];
         if(cur.includes(id)) return Object.assign({},f,{preferredTables:cur.filter(function(x){return x!==id;})});
-        var next=cur.concat([id]);
-        if(getCapOf(next)>needed){
-          var trimmed=cur.slice();
-          while(trimmed.length>0&&getCapOf(trimmed)>=needed){trimmed=trimmed.slice(1);}
-          next=trimmed.concat([id]);
-          if(getCapOf(next)>needed&&next.length>1) return f;
-        }
-        return Object.assign({},f,{preferredTables:next});
+        return Object.assign({},f,{preferredTables:cur.concat([id])});
       });
     }
     var cap=getCapOf(prefs);
