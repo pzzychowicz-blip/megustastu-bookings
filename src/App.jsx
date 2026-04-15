@@ -284,7 +284,7 @@ function Overlay(props){
         RC("div",{style:{minHeight:"100%",padding:"16px 18px",paddingTop:"max(16px, env(safe-area-inset-top))",paddingBottom:"max(80px, calc(40px + env(safe-area-inset-bottom)))",boxSizing:"border-box"}},props.children)));
   }
   return RC("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.25)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:12},onClick:function(e){if(e.target===e.currentTarget)props.onClose();}},
-    RC("div",{style:{background:"rgba(255,255,255,0.72)",backdropFilter:"blur(40px)",WebkitBackdropFilter:"blur(40px)",borderRadius:20,border:"1px solid rgba(255,255,255,0.5)",padding:"24px",width:"100%",maxWidth:580,maxHeight:"90dvh",overflowY:"auto",boxSizing:"border-box",boxShadow:"0 8px 40px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.8)"}},props.children));
+    RC("div",{style:{background:"rgba(245,247,251,0.98)",borderRadius:20,border:"1px solid rgba(210,215,225,0.7)",padding:"24px",width:"100%",maxWidth:580,maxHeight:"90dvh",overflowY:"auto",boxSizing:"border-box",boxShadow:"0 8px 40px rgba(0,0,0,0.12)"}},props.children));
 }
 function Fld(props){
   var starEl=props.req?RC("span",{style:{color:"#dc2626"}},"*"):null;
@@ -550,10 +550,11 @@ function TimelineView(props){
   legendEls.push(RC("span",{key:"in",style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:TBL.ind.bg,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",fontWeight:600}},"indoor"));
   legendEls.push(RC("span",{key:"out",style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:TBL.out.bg,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",fontWeight:600}},"outdoor"));
   legendEls.push(RC("span",{key:"blocked",style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:"rgba(153,27,27,0.85)",color:"#fff",border:"1px solid rgba(255,255,255,0.2)",fontWeight:600}},"blocked"));
-  var quickPopup=quickStatus?RC("div",{onClick:function(){setQuickStatus(null);},style:{position:"fixed",inset:0,zIndex:300}},
-    RC("div",{onClick:function(e){e.stopPropagation();},style:{position:"fixed",left:Math.min(quickStatus.x,window.innerWidth-200),top:Math.max(0,quickStatus.y-52),background:"rgba(255,255,255,0.75)",backdropFilter:"blur(30px)",WebkitBackdropFilter:"blur(30px)",borderRadius:14,border:"1px solid rgba(255,255,255,0.5)",boxShadow:"0 8px 32px rgba(0,0,0,0.15), inset 0 1px 1px rgba(255,255,255,0.6)",padding:"8px 10px",display:"flex",gap:6,alignItems:"center",zIndex:301,flexWrap:"wrap",maxWidth:220}},
-      RC("span",{style:{fontSize:11,fontWeight:700,color:S.text,maxWidth:60,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},quickStatus.booking.name),
-      ["confirmed","seated","completed","cancelled"].filter(function(st){return st!==quickStatus.booking.status;}).map(function(st){return RC("button",{key:st,style:{background:BLOCK_BG[st],border:"1px solid rgba(255,255,255,0.25)",borderRadius:10,padding:"4px 10px",fontSize:11,fontWeight:600,color:"#fff",cursor:"pointer",textTransform:"capitalize",minHeight:28,backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"},onClick:function(){onStatus(quickStatus.booking.id,st);setQuickStatus(null);}},st);}))):null;
+  var quickPopup=quickStatus?RC("div",{onClick:function(){setQuickStatus(null);},style:{position:"fixed",inset:0,zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.18)"}},
+    RC("div",{onClick:function(e){e.stopPropagation();},style:{background:"#eef1f7",borderRadius:20,border:"1px solid "+S.border,boxShadow:"0 8px 32px rgba(0,0,0,0.14)",padding:"20px 24px",minWidth:240,maxWidth:320,zIndex:301}},
+      RC("div",{style:{fontSize:20,fontWeight:700,color:S.text,marginBottom:16}},quickStatus.booking.name),
+      RC("div",{style:{display:"flex",gap:10,flexWrap:"wrap"}},
+        ["confirmed","seated","completed","cancelled"].filter(function(st){return st!==quickStatus.booking.status;}).map(function(st){return RC("button",{key:st,style:{background:BLOCK_BG[st],border:"none",borderRadius:12,padding:"10px 18px",fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer",textTransform:"capitalize",minHeight:44,flex:"1 1 auto"},onClick:function(){onStatus(quickStatus.booking.id,st);setQuickStatus(null);}},st);})))):null;
   return RC("div",{style:{background:"rgba(255,255,255,0.4)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:20,border:"1px solid rgba(255,255,255,0.45)",padding:"10px 12px",boxShadow:"0 2px 16px rgba(0,0,0,0.06), inset 0 1px 1px rgba(255,255,255,0.6)"}},
     RC("div",{style:{display:"flex",alignItems:"center",justifyContent:"flex-end",marginBottom:8}},
       zoomBtns),
