@@ -280,7 +280,7 @@ function Overlay(props){
   },[mob]);
   if(mob){
     return RC("div",{style:{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:200}},
-      RC("div",{style:{position:"absolute",top:0,left:0,right:0,bottom:0,background:"rgba(245,247,250,0.92)",backdropFilter:"blur(40px)",WebkitBackdropFilter:"blur(40px)",overflowY:"scroll",WebkitOverflowScrolling:"touch"}},
+      RC("div",{style:{position:"absolute",top:0,left:0,right:0,bottom:0,background:"rgba(240,243,248,0.98)",overflowY:"scroll",WebkitOverflowScrolling:"touch"}},
         RC("div",{style:{minHeight:"100%",padding:"16px 18px",paddingTop:"max(16px, env(safe-area-inset-top))",paddingBottom:"max(80px, calc(40px + env(safe-area-inset-bottom)))",boxSizing:"border-box"}},props.children)));
   }
   return RC("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.25)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:12},onClick:function(e){if(e.target===e.currentTarget)props.onClose();}},
@@ -683,7 +683,7 @@ function BookingApp(){
   },[nowMins]);
   var winW=useWinW();
   var isMobile=winW<600;
-  function getUser(){return "staff";}
+  function getUser(){return (auth.currentUser&&auth.currentUser.email)||"staff";}
 
   var dayCount=bookings.filter(function(b){return b.date===viewDate&&b.status!=="cancelled";}).length;
   var inefficient=bookings.length>0&&checkInefficent(bookings,viewDate);
