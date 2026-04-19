@@ -13,13 +13,14 @@ var VALID_COMBOS=[
   {ids:["5A","5B"],cap:5},{ids:["5B","6"],cap:5},{ids:["5A","5B","6"],cap:8},
   {ids:["i2","i3"],cap:6},{ids:["i3","i4"],cap:6},{ids:["i2","i3","i4"],cap:8},
   {ids:["i1","i2","i3","i4"],cap:10},
-  {ids:["1A","1B","7","i1"],cap:10},{ids:["1A","1B","7","i2"],cap:10},{ids:["1A","1B","7","i3"],cap:10},{ids:["1A","1B","7","i4"],cap:10},
+  {ids:["1A","1B","7","i1"],cap:11},{ids:["1A","1B","7","i2"],cap:10},{ids:["1A","1B","7","i3"],cap:10},{ids:["1A","1B","7","i4"],cap:11},
   {ids:["1A","1B","7","i1","i2"],cap:12},{ids:["1A","1B","7","i1","i3"],cap:12},{ids:["1A","1B","7","i1","i4"],cap:12},{ids:["1A","1B","7","i2","i3"],cap:12},{ids:["1A","1B","7","i3","i4"],cap:12},
   {ids:["1A","1B","7","i1","i2","i3"],cap:14},{ids:["1A","1B","7","i1","i2","i4"],cap:14},{ids:["1A","1B","7","i1","i3","i4"],cap:14},{ids:["1A","1B","7","i2","i3","i4"],cap:14},
   {ids:["1A","1B","7","i1","i2","i3","i4"],cap:16},
   {ids:["1A","1B","7","2","3"],cap:15},{ids:["1A","1B","7","3","4"],cap:14},{ids:["1A","1B","7","2","3","4"],cap:18},
   {ids:["1A","1B","7","5A","5B"],cap:15},{ids:["1A","1B","7","5B","6"],cap:15},{ids:["1A","1B","7","5A","5B","6"],cap:18},
   {ids:["2","3","4","5A","5B","6"],cap:16},{ids:["2","3","4","5A","5B"],cap:13},{ids:["2","3","4","5B","6"],cap:13},{ids:["2","3","4","5A","5B","6","7"],cap:20},
+  {ids:["2","3","4","5A","5B","6","i1"],cap:20},{ids:["2","3","4","5A","5B","6","i4"],cap:20},
   {ids:["1A","1B","7","2","3","4","5A","5B","6"],cap:26},{ids:["1A","1B","7","2","3","4","5A","5B"],cap:23},{ids:["1A","1B","7","2","3","4","5B","6"],cap:23},
 ];
 var CLUSTERS={"1A":["1A","1B"],"1B":["1A","1B"],"7":["7"],"2":["2","3","4"],"3":["2","3","4"],"4":["2","3","4"],"5A":["5A","5B","6"],"5B":["5A","5B","6"],"6":["5A","5B","6"],"i1":["i1"],"i2":["i2","i3","i4"],"i3":["i2","i3","i4"],"i4":["i2","i3","i4"]};
@@ -38,9 +39,9 @@ function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
 function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
 function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
-function sanitize(b){if(!b||typeof b!=="object") return null;return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:b.time||"13:00",size:Number(b.size)||2,duration:Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],history:Array.isArray(b.history)?b.history:[]};}
+function sanitize(b){if(!b||typeof b!=="object") return null;return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:b.time||"13:00",size:Number(b.size)||2,duration:Number(b.duration)||90,originalDuration:Number(b.originalDuration)||Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],history:Array.isArray(b.history)?b.history:[]};}
 function histEntry(action,user){return {at:new Date().toISOString(),by:user||"staff",action:action};}
-function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=orig.phone||"";var formPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
+function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=orig.phone||"";var formPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
 function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var vals=Object.values(arr);return vals.map(sanitize).filter(Boolean);}return arr.map(sanitize).filter(Boolean);}
 function isIn(id){return id.startsWith("i");}
 function isAllIn(ids){return ids.every(isIn);}
@@ -68,11 +69,11 @@ function canAssign(ids,slots,s,e){
 }
 function _indoorPri(c){if(c.ids.indexOf("i4")>=0) return 2;if(c.ids.indexOf("i1")>=0) return 1;return 0;}
 function _comboLoc(c){if(isAllOut(c.ids)) return 0;if(isAllIn(c.ids)) return 1;return 2;}
-function _comboPri(c,size){var k=c.ids.slice().sort().join("|");if(k==="1A|1B"&&size>=4&&size<=6) return -10;if(k==="2|3"&&size===4) return -5;if(size>=7&&size<=8){if(k==="2|3|4") return -10;if(k==="5A|5B|6") return -9;}if(size>=9&&size<=12){if(k==="1A|1B|7|i4") return -10;if(k==="1A|1B|7|i1") return -9;if(k==="1A|1B|7|i2"||k==="1A|1B|7|i3") return -7;}if(size>=13&&size<=16){if(c.ids.every(function(id){return ["2","3","4","5A","5B","6"].indexOf(id)>=0;})) return -10;}if(size>=17&&size<=20){if(k==="2|3|4|5A|5B|6|7") return -10;}if(k==="i1|i2|i3|i4") return 100;return 0;}
+function _comboPri(c,size){var k=c.ids.slice().sort().join("|");if(k==="1A|1B"&&size>=4&&size<=6) return -10;if(k==="2|3"&&size===4) return -5;if(size>=7&&size<=8){if(k==="2|3|4") return -10;if(k==="5A|5B|6") return -9;}if(size>=9&&size<=12){if(k==="1A|1B|7|i4") return -10;if(k==="1A|1B|7|i1") return -9;if(k==="1A|1B|7|i2"||k==="1A|1B|7|i3") return -7;}if(size>=13&&size<=16){if(c.ids.every(function(id){return ["2","3","4","5A","5B","6"].indexOf(id)>=0;})) return -10;}if(size>=17&&size<=20){if(k==="2|3|4|5A|5B|6|i4") return -10;if(k==="2|3|4|5A|5B|6|i1") return -9;if(k==="2|3|4|5A|5B|6|7") return -8;}if(k==="i1|i2|i3|i4") return 100;return 0;}
 function findBest(size,pref,s,e,slots){
   var sg=ALL_TABLES.filter(function(t){return t.capacity>=size&&comboOk([t.id],pref)&&canAssign([t.id],slots,s,e);});
   var co=VALID_COMBOS.filter(function(c){return c.cap>=size&&comboOk(c.ids,pref)&&canAssign(c.ids,slots,s,e);}).sort(function(a,b){var pa=_comboPri(a,size),pb=_comboPri(b,size);if(pa!==pb) return pa-pb;var la=_comboLoc(a),lb=_comboLoc(b);if(la!==lb) return la-lb;if(la===2){var ia=_indoorPri(a),ib=_indoorPri(b);if(ia!==ib) return ib-ia;}return a.cap-b.cap||a.ids.length-b.ids.length;});
-  if(size<=2){var n7=sg.filter(function(t){return t.id!=="7";});var ind,out;if(size===1){if(pref==="indoor"||pref==="auto"){ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}if(pref==="outdoor"||pref==="auto"){out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}}else{if(pref==="outdoor"||pref==="auto"){out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}if(pref==="indoor"||pref==="auto"){ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}}if(n7.length) return [n7[0].id];if(sg.length) return [sg[0].id];if(co.length) return co[0].ids;return null;}
+  if(size<=2){var n7=sg.filter(function(t){return t.id!=="7";});if(size===1){if(pref==="indoor"||pref==="auto"){var ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}if(pref==="outdoor"||pref==="auto"){var out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}}else{if(pref==="outdoor"||pref==="auto"){var out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}if(pref==="indoor"||pref==="auto"){var ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}}if(n7.length) return [n7[0].id];if(sg.length) return [sg[0].id];if(co.length) return co[0].ids;return null;}
   if(size<=4){if(canAssign(["7"],slots,s,e)&&comboOk(["7"],pref)) return ["7"];if(co.length) return co[0].ids;if(sg.length) return [sg[0].id];return null;}
   if(co.length) return co[0].ids;
   return null;
@@ -84,7 +85,11 @@ function findBestAny(size,s,e,slots){
   var mx=VALID_COMBOS.filter(function(c){return c.cap>=size&&c.ids.every(function(id){return !busy.has(id);})&&isMixedLarge(c.ids)&&canAssign(c.ids,slots,s,e);}).sort(function(a,b){return _indoorPri(b)-_indoorPri(a)||a.cap-b.cap||a.ids.length-b.ids.length;});
   return mx.length?mx[0].ids:null;
 }
-function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
+function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTables,noReshuffle){
+  // When optimizer is OFF for today: slot-only check, no reshuffle simulation
+  if(noReshuffle){
+    return findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables);
+  }
   var trialId=editId||"__trial__";
   var trial={id:trialId,name:"",phone:"",date:date,time:time,size:size,duration:dur,preference:pref||"auto",notes:"",status:"confirmed",tables:[],customDur:null,_manual:false,_locked:false,_conflict:false,preferredTables:Array.isArray(prefTables)?prefTables:[],history:[]};
   var base=editId?bookings.map(function(b){return b.id===editId?trial:b;}):bookings.concat([trial]);
@@ -100,13 +105,13 @@ function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
   }
   return assigned.tables;
 }
-function findTimes(date,size,pref,existing,dur,around,blocks,editId){
+function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle){
   var times=Array.from({length:(CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
   var aroundM=around||0;
   var valid=times.filter(function(m){
     if(m+dur>CLOSE*60) return false;
     if(m===aroundM) return false;
-    return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId);
+    return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId,null,noReshuffle);
   });
   return valid;
 }
@@ -250,6 +255,53 @@ function applyOpt(bookings,date,blocks){
   var map=optimise(bookings,date,blocks);
   return bookings.map(function(b){if(b.date!==date||b.status==="cancelled") return Object.assign({},b);if(b.status==="completed") return Object.assign({},b,{_conflict:false});var tables=isLocked(b)?b.tables:(map[b.id]||[]);return Object.assign({},b,{tables:tables,_conflict:!tables||!tables.length});});
 }
+// ── Optimizer-OFF helpers ─────────────────────────────────────────────────────
+// When the auto-optimizer is OFF (after 15:00 today), we do not reshuffle other
+// bookings. We only find a free slot for the booking being added/edited.
+function optimizerActiveFor(date,autoOptimizerState){
+  var today=new Date().toISOString().slice(0,10);
+  if(date===today&&autoOptimizerState===false) return false;
+  return true;
+}
+function syncLiveDurations(bookings,today,nowM){
+  return bookings.map(function(b){
+    if(b.date===today&&b.status==="seated"){
+      var elapsed=nowM-toMins(b.time);
+      if(elapsed>(b.duration||90)) return Object.assign({},b,{duration:elapsed,customDur:elapsed});
+    }
+    return b;
+  });
+}
+function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
+  var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
+  if(blocks) slots=slots.concat(getBlockSlots(blocks,date));
+  var s=toMins(time),e=s+dur;
+  var pt=Array.isArray(prefTables)?prefTables:[];
+  if(pt.length>0&&canAssign(pt,slots,s,e)&&comboOk(pt,pref||"auto")&&comboCap(pt)>=size) return pt;
+  var tables=findBest(size,pref||"auto",s,e,slots);
+  if(!tables&&(pref||"auto")==="auto") tables=findBestAny(size,s,e,slots);
+  return tables;
+}
+// Drop-in replacement for applyOpt() in user-triggered actions. Respects the
+// autoOptimizer state for today. When ON → applyOpt as usual. When OFF → keep
+// all existing tables untouched; only reassign `changedId` if forceReassign.
+function bookingsAfterAction(updatedBks,date,blocks,changedId,forceReassign,autoOptimizerState){
+  var today=new Date().toISOString().slice(0,10);
+  var d=new Date();var nowM=d.getHours()*60+d.getMinutes();
+  var synced=syncLiveDurations(updatedBks,today,nowM);
+  if(optimizerActiveFor(date,autoOptimizerState)) return applyOpt(synced,date,blocks);
+  // OFF path: preserve everyone's tables
+  if(!changedId||!forceReassign) return synced.map(function(b){return Object.assign({},b);});
+  // Find a slot for changedId without touching others
+  var target=synced.find(function(b){return b.id===changedId;});
+  if(!target||target.date!==date||!isActive(target)) return synced.map(function(b){return Object.assign({},b);});
+  if(isLocked(target)&&(target.tables||[]).length>0) return synced.map(function(b){return Object.assign({},b);});
+  var tables=findFreeSlot(synced.filter(function(b){return b.id!==changedId;}),date,target.time,target.size||2,target.preference||"auto",target.duration||90,blocks,null,target.preferredTables);
+  return synced.map(function(b){
+    if(b.id===changedId) return Object.assign({},b,{tables:tables||[],_conflict:!tables||!tables.length});
+    return Object.assign({},b);
+  });
+}
 function verifyClean(bookings,date){
   var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&(b.tables||[]).length>0;});
   for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){var a=day[i],b=day[j];var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;if(!overlaps(as,ae,bs,be)) continue;if(!canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)) return false;}}
@@ -262,7 +314,7 @@ function checkInefficent(bookings,date){
 function useWinW(){var ws=useState(typeof window!=="undefined"?window.innerWidth:1024);var w=ws[0],setW=ws[1];useEffect(function(){function h(){setW(window.innerWidth);}window.addEventListener("resize",h);return function(){window.removeEventListener("resize",h);};},[]);return w;}
 
 // ── Style helpers ─────────────────────────────────────────────────────────────
-function mkInp(){return {width:"100%",boxSizing:"border-box",background:"rgba(255,255,255,0.5)",border:"1px solid rgba(220,225,235,0.9)",borderRadius:12,padding:"10px 12px",fontSize:16,color:S.text,fontWeight:500,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"};}
+function mkInp(){return {width:"100%",boxSizing:"border-box",background:"rgba(255,255,255,0.5)",border:"1px solid rgba(255,255,255,0.4)",borderRadius:12,padding:"10px 12px",fontSize:16,color:S.text,fontWeight:500,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"};}
 function mkBtn(extra){return Object.assign({border:"1px solid rgba(255,255,255,0.3)",background:"rgba(120,130,150,0.55)",borderRadius:12,padding:"8px 14px",cursor:"pointer",fontSize:13,color:"#fff",fontWeight:600,minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.25)",letterSpacing:"0.01em"},extra||{});}
 var BTN={tables:"rgba(0,122,255,0.75)",edit:"rgba(0,122,255,0.7)",del:"rgba(220,60,60,0.75)",cancel:"rgba(220,60,60,0.75)",clear:"rgba(220,60,60,0.7)",reset:"rgba(220,60,60,0.7)",today:"rgba(0,122,255,0.7)",nav:"rgba(120,130,150,0.5)",dismiss:"rgba(220,60,60,0.7)",orange:"rgba(230,100,30,0.8)"};
 var RC=React.createElement;
@@ -284,7 +336,7 @@ function Overlay(props){
         RC("div",{style:{minHeight:"100%",padding:"16px 18px",paddingTop:"max(16px, env(safe-area-inset-top))",paddingBottom:"max(80px, calc(40px + env(safe-area-inset-bottom)))",boxSizing:"border-box"}},props.children)));
   }
   return RC("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.25)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:12},onClick:function(e){if(e.target===e.currentTarget)props.onClose();}},
-    RC("div",{style:{background:"rgba(248,250,254,0.94)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:20,border:"1px solid rgba(220,226,238,0.8)",padding:"24px",width:"100%",maxWidth:580,maxHeight:"90dvh",overflowY:"auto",boxSizing:"border-box",boxShadow:"0 8px 40px rgba(0,0,0,0.12)"}},props.children));
+    RC("div",{style:{background:"rgba(255,255,255,0.72)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:20,border:"1px solid rgba(255,255,255,0.5)",padding:"24px",width:"100%",maxWidth:580,maxHeight:"90dvh",overflowY:"auto",boxSizing:"border-box",boxShadow:"0 8px 40px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.8)"}},props.children));
 }
 function Fld(props){
   var starEl=props.req?RC("span",{style:{color:"#dc2626"}},"*"):null;
@@ -387,11 +439,11 @@ function ManualModal(props){
   var swapTitleClr=swapBusy?"#9a3412":S.text;
   var swapSubClr=swapBusy?"#c2410c":S.text;
   return RC(Overlay,{onClose:onClose},
-    RC("div",{style:{textAlign:"center",marginBottom:4}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.15)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},titleText||"Manual table assignment")),
+    RC("div",{style:{textAlign:"center",marginBottom:4}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},titleText||"Manual table assignment")),
     RC("div",{style:{fontSize:13,color:S.text,marginBottom:4,marginTop:6,textAlign:"center"}},booking.name+" · "+booking.size+" pax · "+booking.time+"–"+toTime(e)),
     RC("div",{style:{marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:14,background:swapBg,border:swapBrd,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
       RC("div",null,RC("div",{style:{fontSize:13,fontWeight:700,color:swapTitleClr}},"Swap busy"),RC("div",{style:{fontSize:11,color:swapSubClr,marginTop:2}},"Reassign confirmed bookings to other tables (not seated)")),
-      RC(Toggle,{on:swapBusy,onClick:function(){setSwapBusy(function(v){if(!v) setSelected([]);return !v;});}})),
+      RC(Toggle,{on:swapBusy,onClick:function(){var next=!swapBusy;if(next) setSelected([]);setSwapBusy(next);}})),
     RC("div",{style:{fontSize:13,color:S.text,marginBottom:14}},"Tap tables to select / deselect."),
     RC("div",{style:{marginBottom:14,padding:"12px 14px",borderRadius:14,background:"rgba(255,255,255,0.35)",border:"2px solid "+(conflict?"rgba(252,165,165,0.6)":ok?"rgba(134,239,172,0.6)":"rgba(255,255,255,0.5)"),display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
       RC("div",null,
@@ -454,6 +506,9 @@ function TimelineView(props){
   var zoom=props.zoom||1,setZoom=props.setZoom;
   var followNow=props.followNow,setFollowNow=props.setFollowNow;
   var scrollPosRef=props.scrollPosRef;
+  var autoOptimizer=props.autoOptimizer!==false;
+  var setAutoOptimizer=props.setAutoOptimizer||function(){};
+  var onReshuffle=props.onReshuffle||function(){};
   var scrollRef=useRef(null);
   var qss=useState(null);var quickStatus=qss[0],setQuickStatus=qss[1];
   var isToday=date===new Date().toISOString().slice(0,10);
@@ -469,7 +524,7 @@ function TimelineView(props){
     } else if(scrollPosRef&&scrollPosRef.current>0){
       scrollRef.current.scrollLeft=scrollPosRef.current;
     }
-  },[followNow,nowMins,gridW]);
+  },[followNow,isToday,nowMins,gridW]);
   function onGridScroll(){
     if(scrollRef.current&&scrollPosRef){scrollPosRef.current=scrollRef.current.scrollLeft;}
     if(quickStatus) setQuickStatus(null);
@@ -527,7 +582,7 @@ function TimelineView(props){
     unassigned.length>0?RC("div",{style:{height:ROW_H+"px",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:6,borderTop:"1px dashed rgba(220,60,60,0.4)",marginTop:4,boxSizing:"border-box"}},RC("span",{style:{fontSize:10,fontWeight:600,color:"#991b1b"}},"unassigned")):null);
   // Grid column (scrollable)
   var gridRows=TIMELINE_TABLES.map(function(tbl){var id=tbl.id;var rows=day.filter(function(b){return (b.tables||[]).includes(id);});var tblBlocks=dayBlocks.filter(function(bl){return bl.tableId===id;});
-    return RC("div",{key:id,style:{height:ROW_H+"px",position:"relative",borderBottom:"1px solid rgba(180,190,210,0.2)",boxSizing:"border-box"}},RC(GridLines,null),tblBlocks.map(function(bl,i){return RC(BlockBar,{key:"blk"+i,bl:bl});}),rows.filter(function(b){return b.status==="seated";}).map(function(b){var origD=b.duration;var sm=toMins(b.time)-OPEN*60;var gLeft=pct(OPEN*60+sm);var gW=Math.max((origD/totalMins)*100,0.5)+"%";return RC("div",{key:"ghost_"+b.id,style:{position:"absolute",top:3,height:(ROW_H-8)+"px",left:gLeft,width:gW,background:"transparent",borderRadius:10,border:"2px dashed "+BLOCK_BG.seated,boxSizing:"border-box",pointerEvents:"none"}});}),rows.map(function(b){return RC(Block,{key:b.id,b:b});}));});
+    return RC("div",{key:id,style:{height:ROW_H+"px",position:"relative",borderBottom:"1px solid rgba(180,190,210,0.2)",boxSizing:"border-box"}},RC(GridLines,null),tblBlocks.map(function(bl,i){return RC(BlockBar,{key:"blk"+i,bl:bl});}),rows.filter(function(b){return b.status==="seated";}).map(function(b){var origD=b.originalDuration||b.duration;var sm=toMins(b.time)-OPEN*60;var gLeft=pct(OPEN*60+sm);var gW=Math.max((origD/totalMins)*100,0.5)+"%";return RC("div",{key:"ghost_"+b.id,style:{position:"absolute",top:3,height:(ROW_H-8)+"px",left:gLeft,width:gW,background:"transparent",borderRadius:10,border:"2px dashed "+BLOCK_BG.seated,boxSizing:"border-box",pointerEvents:"none"}});}),rows.map(function(b){return RC(Block,{key:b.id,b:b});}));});
   var unassignedGrid=unassigned.length>0?RC("div",{style:{height:ROW_H+"px",position:"relative",borderTop:"1px dashed rgba(220,60,60,0.4)",marginTop:4,boxSizing:"border-box"}},RC(GridLines,null),unassigned.map(function(b){return RC(Block,{key:b.id,b:b});})):null;
   // Now line (today only)
   var nowInRange=isToday&&nowMins>=OPEN*60&&nowMins<=GRID_CLOSE*60;
@@ -546,6 +601,10 @@ function TimelineView(props){
     RC("button",{onClick:function(){setZoom(function(z){return Math.max(1,z-0.5);});},style:mkBtn({minHeight:32,minWidth:32,padding:"4px 10px",fontSize:16,background:BTN.nav})},"-"),
     RC("button",{onClick:function(){setZoom(1);setFollowNow(false);},style:mkBtn({minHeight:32,padding:"4px 10px",fontSize:11,background:zoom===1?"#64748b":BTN.nav})},zoom===1?"1x":zoom+"x → 1x"),
     RC("button",{onClick:function(){setZoom(function(z){return Math.min(5,z+0.5);});},style:mkBtn({minHeight:32,minWidth:32,padding:"4px 10px",fontSize:16,background:BTN.nav})},"+"));
+  // Optimizer toggle + Reshuffle (today only)
+  var optBtns=isToday?RC("div",{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}},
+    RC("button",{onClick:function(){setAutoOptimizer(!autoOptimizer);},style:mkBtn({minHeight:32,padding:"4px 12px",fontSize:11,background:autoOptimizer?"rgba(22,101,52,0.75)":"rgba(120,130,150,0.55)"})},"Optimizer: "+(autoOptimizer?"ON":"OFF")),
+    !autoOptimizer?RC("button",{onClick:onReshuffle,style:mkBtn({minHeight:32,padding:"4px 12px",fontSize:11,background:BTN.orange})},"Reshuffle"):null):null;
   var legendEls=Object.keys(STATUS_COLORS).map(function(s){return RC("span",{key:s,style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:BLOCK_BG[s]||"#999",color:"#fff",border:"1px solid rgba(255,255,255,0.2)",fontWeight:600,textTransform:"capitalize",boxShadow:"0 1px 3px rgba(0,0,0,0.08)"}},s);});
   legendEls.push(RC("span",{key:"in",style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:TBL.ind.bg,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",fontWeight:600}},"indoor"));
   legendEls.push(RC("span",{key:"out",style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:TBL.out.bg,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",fontWeight:600}},"outdoor"));
@@ -556,7 +615,8 @@ function TimelineView(props){
       RC("div",{style:{display:"flex",gap:10,flexWrap:"wrap"}},
         ["confirmed","seated","completed","cancelled"].filter(function(st){return st!==quickStatus.booking.status;}).map(function(st){return RC("button",{key:st,style:{background:BLOCK_BG[st],border:"none",borderRadius:12,padding:"10px 18px",fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer",textTransform:"capitalize",minHeight:44,flex:"1 1 auto"},onClick:function(){onStatus(quickStatus.booking.id,st);setQuickStatus(null);}},st);})))):null;
   return RC("div",{style:{background:"rgba(255,255,255,0.4)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:20,border:"1px solid rgba(255,255,255,0.45)",padding:"10px 12px",boxShadow:"0 2px 16px rgba(0,0,0,0.06), inset 0 1px 1px rgba(255,255,255,0.6)"}},
-    RC("div",{style:{display:"flex",alignItems:"center",justifyContent:"flex-end",marginBottom:8}},
+    RC("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8,flexWrap:"wrap"}},
+      optBtns||RC("div",null),
       zoomBtns),
     RC("div",{style:{display:"flex"}},labelCol,gridCol),
     RC("div",{style:{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}},legendEls),
@@ -608,13 +668,23 @@ function ListView(props){
   }));
 }
 
-// ── App ───────────────────────────────────────────────────────────────────────
+// ── Booking App ───────────────────────────────────────────────────────────────
 function BookingApp(){
   var bs=useState([]);var bookings=bs[0],setBookings=bs[1];
-  var tbs2=useState([]);var tableBlocks=tbs2[0],setTableBlocks=tbs2[1];
-  // Firebase save helpers — write-on-action only (prevents multi-device data corruption)
-  function saveBookings(next){setBookings(next);set(ref(db,"bookings"),next).catch(function(){});}
-  function saveBlocks(next){setTableBlocks(next);set(ref(db,"tableBlocks"),next).catch(function(){});}
+  var tbs=useState([]);var tableBlocks=tbs[0],setTableBlocks=tbs[1];
+  // ── Firebase write-guard system ─────────────────────────────────────────────
+  // These refs track whether we've received AT LEAST ONE onValue callback from
+  // Firebase for each path. Until that's happened, React state is [] regardless
+  // of what's in Firebase — writing that empty state would wipe real data.
+  // saveBookings/saveBlocks REFUSE to write to Firebase until their respective
+  // dataLoaded ref is true. This is the critical safety net added after the
+  // v13 first-deploy incident where empty in-memory state was persisted to
+  // Firebase before the read listener had fired.
+  var bookingsLoaded=useRef(false);
+  var blocksLoaded=useRef(false);
+  var ws=useState(null);var writeWarning=ws[0],setWriteWarning=ws[1];
+  var lbs=useState(false);var loadBannerShown=lbs[0],setLoadBannerShown=lbs[1];
+  var firstLoadCount=useRef(null); // number of bookings on first successful load
   // Ensure optimal viewport scaling on all devices
   useEffect(function(){
     var meta=document.querySelector('meta[name="viewport"]');
@@ -624,11 +694,58 @@ function BookingApp(){
     document.body.style.cssText="height:100%;overflow:auto;margin:0;-webkit-overflow-scrolling:touch;overscroll-behavior:none;";
     return function(){document.documentElement.style.cssText="";document.body.style.cssText="";};
   },[]);
-  // Firebase real-time listeners — read only, never write back
+  // Firebase save helpers — write-on-action only (prevents multi-device data corruption).
+  // GUARDED: will refuse to write until Firebase has sent us the initial snapshot.
+  // GUARDED: will refuse to overwrite non-empty Firebase with an empty in-memory array
+  //   unless firstLoadCount was also 0 (i.e. DB is genuinely new/empty).
+  function saveBookings(next){
+    function persist(computed){
+      if(!bookingsLoaded.current){
+        console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
+        setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
+        return;
+      }
+      if(Array.isArray(computed)&&computed.length===0&&firstLoadCount.current!==null&&firstLoadCount.current>0){
+        console.warn("[SAFE] Refused to write empty bookings array — Firebase had "+firstLoadCount.current+" entries on load. This is a safety check against accidental wipe.");
+        setWriteWarning("Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.");
+        return;
+      }
+      set(ref(db,"bookings"),computed).catch(function(){});
+    }
+    if(typeof next==="function"){
+      setBookings(function(prev){var computed=next(prev);persist(computed);return computed;});
+    } else {
+      setBookings(next);persist(next);
+    }
+  }
+  function saveBlocks(next){
+    function persist(computed){
+      if(!blocksLoaded.current){
+        console.warn("[SAFE] Refused to write tableBlocks — initial read has not completed yet.");
+        return;
+      }
+      set(ref(db,"tableBlocks"),computed).catch(function(){});
+    }
+    if(typeof next==="function"){
+      setTableBlocks(function(prev){var computed=next(prev);persist(computed);return computed;});
+    } else {
+      setTableBlocks(next);persist(next);
+    }
+  }
+  // Firebase real-time listeners — read only, never write back.
+  // The `bookingsLoaded.current=true` line MUST run on every callback, including
+  // when val is null (truly empty DB), otherwise saves would stay blocked forever
+  // on a brand-new database.
   useEffect(function(){
     var unsub=onValue(ref(db,"bookings"),function(snap){
       var val=snap.val();
-      if(val) setBookings(sanitizeAll(val));
+      var arr=val?sanitizeAll(val):[];
+      setBookings(arr);
+      if(firstLoadCount.current===null){
+        firstLoadCount.current=arr.length;
+        setLoadBannerShown(true);
+      }
+      bookingsLoaded.current=true;
     });
     return unsub;
   },[]);
@@ -636,23 +753,33 @@ function BookingApp(){
     var unsub=onValue(ref(db,"tableBlocks"),function(snap){
       var val=snap.val();
       if(val){var arr=Array.isArray(val)?val:Object.values(val);setTableBlocks(arr.filter(Boolean));}
+      else setTableBlocks([]);
+      blocksLoaded.current=true;
     });
     return unsub;
   },[]);
+  // Auto-hide the first-load banner after 6 seconds
+  useEffect(function(){
+    if(!loadBannerShown) return;
+    var t=setTimeout(function(){setLoadBannerShown(false);},6000);
+    return function(){clearTimeout(t);};
+  },[loadBannerShown]);
+
   var vs=useState("timeline");var view=vs[0],setView=vs[1];
   var zms=useState(1);var timelineZoom=zms[0],setTimelineZoom=zms[1];
   var timelineScrollRef=useRef(0);
   var fns=useState(false);var followNow=fns[0],setFollowNow=fns[1];
+  var bts=useState(null);var blockTarget=bts[0],setBlockTarget=bts[1];
   var vds=useState(new Date().toISOString().slice(0,10));var viewDate=vds[0],setViewDate=vds[1];
   var sfs=useState(false);var showForm=sfs[0],setShowForm=sfs[1];
   var fms=useState(EMPTY_FORM);var form=fms[0],setForm=fms[1];
   var eis=useState(null);var editId=eis[0],setEditId=eis[1];
   var ers=useState("");var error=ers[0],setError=ers[1];
   var cds=useState(null);var confirmDel=cds[0],setConfirmDel=cds[1];
+  var crs=useState(false);var confirmReshuffle=crs[0],setConfirmReshuffle=crs[1];
   var ccs=useState(null);var confirmCancel=ccs[0],setConfirmCancel=ccs[1];
   var rss=useState(false);var reshuffled=rss[0],setReshuffled=rss[1];
   var mts=useState(null);var manualTarget=mts[0],setManualTarget=mts[1];
-  var bts=useState(null);var blockTarget=bts[0],setBlockTarget=bts[1];
   var dis=useState(null);var dismissedIneff=dis[0],setDismissedIneff=dis[1];
   var formRef=useRef(EMPTY_FORM);
   var sas=useState(null);var swapAffected=sas[0],setSwapAffected=sas[1];
@@ -664,24 +791,55 @@ function BookingApp(){
   // Real-time clock for seated duration
   var nms=useState(function(){var d=new Date();return d.getHours()*60+d.getMinutes();});var nowMins=nms[0],setNowMins=nms[1];
   useEffect(function(){var t=setInterval(function(){var d=new Date();setNowMins(d.getHours()*60+d.getMinutes());},15000);return function(){clearInterval(t);};},[]);
+  // Optimizer auto-off at 15:00 for today's shift
+  var aos=useState(function(){var d=new Date();return d.getHours()*60+d.getMinutes()<15*60;});
+  var autoOptimizer=aos[0],setAutoOptimizer=aos[1];
+  var autoFlippedRef=useRef(null);
+  useEffect(function(){
+    if(nowMins<15*60) return;
+    var today=new Date().toISOString().slice(0,10);
+    if(autoFlippedRef.current===today) return;
+    autoFlippedRef.current=today;
+    setAutoOptimizer(false);
+  },[nowMins]);
+  // Optimizer auto-on at new day start (before 15:00). Day transitions detected via
+  // date-string key, so this fires at ~00:00 when the new day begins — or at app
+  // mount if we start before 15:00. No reshuffle on flip.
+  var autoOnRef=useRef(null);
+  useEffect(function(){
+    if(nowMins>=15*60) return;
+    var today=new Date().toISOString().slice(0,10);
+    if(autoOnRef.current===today) return;
+    autoOnRef.current=today;
+    setAutoOptimizer(true);
+  },[nowMins]);
   // Auto-extend seated bookings that exceed their stored duration
   var lastExtend=useRef("");
   useEffect(function(){
     var today=new Date().toISOString().slice(0,10);
-    var seated=bookings.filter(function(b){return b.date===today&&b.status==="seated";});
-    var needsUpdate=false;
-    var updated=bookings.map(function(b){
-      if(b.date!==today||b.status!=="seated") return b;
-      var elapsed=nowMins-toMins(b.time);
-      if(elapsed>b.duration){needsUpdate=true;return Object.assign({},b,{duration:elapsed,customDur:elapsed});}
-      return b;
+    saveBookings(function(prev){
+      var needsUpdate=false;
+      var updated=prev.map(function(b){
+        if(b.date!==today||b.status!=="seated") return b;
+        var elapsed=nowMins-toMins(b.time);
+        if(elapsed>b.duration){needsUpdate=true;return Object.assign({},b,{duration:elapsed,customDur:elapsed});}
+        return b;
+      });
+      if(!needsUpdate) return prev;
+      var seated=prev.filter(function(b){return b.date===today&&b.status==="seated";});
+      var key=seated.map(function(b){return b.id+":"+nowMins;}).join(",");
+      if(key===lastExtend.current) return prev;
+      lastExtend.current=key;
+      return bookingsAfterAction(updated,today,tableBlocks,null,false,autoOptimizer);
     });
-    if(!needsUpdate) return;
-    var key=seated.map(function(b){return b.id+":"+nowMins;}).join(",");
-    if(key===lastExtend.current) return;
-    lastExtend.current=key;
-    saveBookings(applyOpt(updated,today,tableBlocks));
-  },[nowMins]);
+  },[nowMins,tableBlocks,autoOptimizer]);
+  // Derived: bookings with seated-today durations synced to live time.
+  // Used by form/walk-in availability checks so they match what bookingsAfterAction
+  // will see on save.
+  var liveBookings=(function(){
+    var today=new Date().toISOString().slice(0,10);
+    return syncLiveDurations(bookings,today,nowMins);
+  })();
   var winW=useWinW();
   var isMobile=winW<600;
   function getUser(){return (auth.currentUser&&auth.currentUser.email)||"staff";}
@@ -710,15 +868,15 @@ function BookingApp(){
       });
       if(nextOnTable){
         var gap=nextStart-liveEnd;
-        if(gap<=15) warnings[sb.id]={next:nextOnTable.name,nextTime:nextOnTable.time,gap:gap,overdue:gap<=0};
+        if(gap<=15) warnings[sb.id]={next:nextOnTable.name,nextTime:nextOnTable.time,gap:gap,overdue:gap<=0,nextId:nextOnTable.id};
       }
     });
     return warnings;
   })();
 
   function flash(){setReshuffled(true);setTimeout(function(){setReshuffled(false);},3000);}
-  function openNew(){setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setConfirmKitchen(null);setShowForm(true);}
-  function openEdit(b){setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:b.duration!==getDur(b.size)?b.duration:null,manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[]});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openNew(){setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  function openEdit(b){setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[]});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
 
   // Walk-in
   var wis=useState(false);var showWalkin=wis[0],setShowWalkin=wis[1];
@@ -730,13 +888,13 @@ function BookingApp(){
     return max+1;
   }
   function nowTime(){var d=new Date();return toTime(d.getHours()*60+d.getMinutes());}
-  function openWalkin(){setWalkinForm({size:2,notes:"",tables:[],time:nowTime(),customDur:null});setWalkinError("");setConfirmKitchen(null);setShowWalkin(true);}
+  function openWalkin(){setWalkinForm({size:2,notes:"",tables:[],time:nowTime(),customDur:null});setWalkinError("");setShowWalkin(true);}
   function doSaveWalkin(){
     var wf=walkinForm;
     if(!wf.tables||!wf.tables.length){setWalkinError("Please assign tables first.");return;}
     var t=wf.time||nowTime();var size=Number(wf.size)||2;var dur=wf.customDur||getDur(size);
-    var nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:new Date().toISOString().slice(0,10),time:t,size:size,duration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true,history:[histEntry("walk-in created",getUser())]};
-    saveBookings(bookings.concat([nb]));
+    var nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:new Date().toISOString().slice(0,10),time:t,size:size,duration:dur,originalDuration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true,history:[histEntry("walk-in created",getUser())]};
+    saveBookings(function(prev){return prev.concat([nb]);});
     setShowWalkin(false);setViewDate(new Date().toISOString().slice(0,10));
   }
   function saveWalkin(){
@@ -761,7 +919,7 @@ function BookingApp(){
       var dur=f.customDur||getDur(size);
       var cleanPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";
       var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
-      if(mt.length&&!swapAffected){var ex=bookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
+      if(mt.length&&!swapAffected){var ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
       if(editId){
         var orig=bookings.find(function(b){return b.id===editId;});
         var origPt=(orig&&Array.isArray(orig.preferredTables))?orig.preferredTables.slice().sort().join(","):"";
@@ -769,18 +927,23 @@ function BookingApp(){
         var prefTablesChanged=origPt!==newPt;
         var needsR=!orig||size!==orig.size||f.time!==orig.time||f.date!==orig.date||f.preference!==orig.preference||f._clearManual||prefTablesChanged;
         var prefOnly=orig&&size===orig.size&&f.time===orig.time&&f.date===orig.date&&!f._clearManual;
-        var saveDur=dur;var saveCustDur=f.customDur||null;
-        if(f.status==="completed"&&orig&&orig.status!=="completed"&&!f.customDur){var now=new Date();var nowM=now.getHours()*60+now.getMinutes();var startMins=toMins(f.time);var actualDur=Math.max(15,nowM-startMins);saveDur=actualDur;saveCustDur=actualDur;}
+        var formPlan=f.customDur||getDur(size);
+        var origPlan=orig?(orig.originalDuration||orig.duration||90):formPlan;
+        var planChanged=formPlan!==origPlan;
+        var saveDur=planChanged?formPlan:(orig?(orig.duration||90):formPlan);
+        var saveOrigDur=planChanged?formPlan:origPlan;
+        var saveCustDur=planChanged?(f.customDur||null):(orig?(orig.customDur||null):(f.customDur||null));
+        if(f.status==="completed"&&orig&&orig.status!=="completed"&&!f.customDur){var now=new Date();var nowMins=now.getHours()*60+now.getMinutes();var startMins=toMins(f.time);var actualDur=Math.max(15,nowMins-startMins);saveDur=actualDur;saveCustDur=actualDur;}
         var clearM=!!f._clearManual;
         var wasSeatedLocked=orig&&isLocked(orig)&&!mt.length;
         var editHist=orig?histEntry("edited: "+diffBooking(orig,f,size),getUser()):histEntry("edited",getUser());
         var upd=bookings.map(function(b){
-          if(b.id===editId){var h=(b.history||[]).concat([editHist]);var unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:f.time,size:size,duration:saveDur,preference:f.preference,notes:f.notes,status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});}
+          if(b.id===editId){var h=(b.history||[]).concat([editHist]);var unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:f.time,size:size,duration:saveDur,originalDuration:saveOrigDur,preference:f.preference,notes:f.notes,status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});}
           if(swapAffected){var match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){var remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
           return b;
         });
-        var fin=applyOpt(upd,f.date,tableBlocks);
-        if(wasSeatedLocked&&needsR&&!mt.length){fin=fin.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
+        var fin=bookingsAfterAction(upd,f.date,tableBlocks,editId,needsR&&!mt.length,autoOptimizer);
+        if(wasSeatedLocked&&needsR&&!mt.length&&!clearM){fin=fin.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
         if(!mt.length&&needsR&&!prefOnly){
           var prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
           var displaced=fin.filter(function(b){return b.id!==editId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
@@ -794,10 +957,10 @@ function BookingApp(){
         saveBookings(fin);if(needsR||swapAffected||f.status==="completed") flash();setShowForm(false);setViewDate(f.date);
       } else {
         var newId=genId();
-        var nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,size:size,duration:dur,preference:f.preference,notes:f.notes,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:[histEntry("created",getUser())]};
+        var nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:[histEntry("created",getUser())]};
         var base=bookings;
         if(swapAffected){base=bookings.map(function(b){var match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){var remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}return b;});}
-        var fin=applyOpt(base.concat([nb]),f.date,tableBlocks);
+        var fin=bookingsAfterAction(base.concat([nb]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);
         if(!mt.length){
           var ne=fin.find(function(b){return b.id===newId;});
           if(!ne||(ne.tables||[]).length===0){setError("Could not assign a table — try manual assignment.");return;}
@@ -821,39 +984,56 @@ function BookingApp(){
     setConfirmKitchen(null);doSave();
   }
 
-  function forceReshuffle(){saveBookings(applyOpt(bookings,viewDate,tableBlocks));flash();}
-  function delBooking(id){saveBookings(applyOpt(bookings.filter(function(x){return x.id!==id;}),viewDate,tableBlocks));setConfirmDel(null);flash();}
+  function forceReshuffle(){saveBookings(function(b){return applyOpt(b,viewDate,tableBlocks);});flash();}
+  // Reassign a single booking to a different set of tables without touching any
+  // other booking. Used by the overlap warning's Reassign button when Optimizer
+  // is OFF and staff need a quick escape hatch for a booking about to be crowded
+  // out by an overstaying guest. Skips locked bookings (manual intent preserved).
+  function reassignBooking(id){
+    var target=bookings.find(function(b){return b.id===id;});
+    if(!target){setError("Booking not found.");return;}
+    if(isLocked(target)){setError("Booking is manually locked. Edit manually to change tables.");return;}
+    var tables=findFreeSlot(bookings,target.date,target.time,target.size||2,target.preference||"auto",target.duration||90,tableBlocks,id,target.preferredTables);
+    if(!tables||!tables.length){setError("No alternative tables available for "+target.name+" at "+target.time+".");return;}
+    var prevTables=(target.tables||[]).join("+")||"none";
+    var user=getUser();
+    saveBookings(function(prev){return prev.map(function(b){
+      if(b.id!==id) return b;
+      return Object.assign({},b,{tables:tables,_manual:false,_conflict:false,history:(b.history||[]).concat([histEntry("reassigned "+prevTables+" → "+tables.join("+"),user)])});
+    });});
+    setError("");
+    flash();
+  }
+  function delBooking(id){saveBookings(function(b){var target=b.find(function(x){return x.id===id;});var d=target?target.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);flash();}
   function updateStatus(id,status){
     if(status==="cancelled"){setConfirmCancel(id);return;}
     var user=getUser();
-    var updated=bookings.map(function(x){if(x.id!==id) return x;var extra={status:status,history:(x.history||[]).concat([histEntry("status → "+status,user)])};if(status==="completed"){var now=new Date();var nowM2=now.getHours()*60+now.getMinutes();var startMins=toMins(x.time);var actualDur=Math.max(15,nowM2-startMins);extra.duration=actualDur;extra.customDur=actualDur;}return Object.assign({},x,extra);});
-    saveBookings(applyOpt(updated,viewDate,tableBlocks));if(status==="completed") flash();
+    saveBookings(function(b){var target=b.find(function(x){return x.id===id;});var d=target?target.date:viewDate;var updated=b.map(function(x){if(x.id!==id) return x;var extra={status:status,history:(x.history||[]).concat([histEntry("status → "+status,user)])};if(status==="completed"){var now=new Date();var nowMins=now.getHours()*60+now.getMinutes();var startMins=toMins(x.time);var actualDur=Math.max(15,nowMins-startMins);extra.duration=actualDur;extra.customDur=actualDur;}return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});if(status==="completed") flash();
   }
   function doCancelBooking(id,noShow){
     var user=getUser();
-    var updated=bookings.map(function(x){if(x.id!==id) return x;var extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});
-    saveBookings(applyOpt(updated,viewDate,tableBlocks));
+    saveBookings(function(b){var target=b.find(function(x){return x.id===id;});var d=target?target.date:viewDate;var updated=b.map(function(x){if(x.id!==id) return x;var extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
     setConfirmCancel(null);flash();
   }
   function manualAssign(bookingId,tables,locked,affected){
     var user=getUser();
-    var updated=bookings.map(function(x){
-      if(x.id===bookingId) return Object.assign({},x,{tables:tables,_conflict:false,_manual:true,_locked:locked===true,history:(x.history||[]).concat([histEntry("tables manually assigned: "+tables.join(", "),user)])});
-      // If swapping, strip taken tables from affected bookings and unlock them for re-optimization
-      if(affected&&affected.length>0){
-        var match=affected.find(function(ab){return ab.id===x.id;});
-        if(match){
-          var remaining=(x.tables||[]).filter(function(t){return !match.tables.includes(t);});
-          return Object.assign({},x,{tables:remaining,_locked:false,_manual:false});
+    saveBookings(function(b){
+      var updated=b.map(function(x){
+        if(x.id===bookingId) return Object.assign({},x,{tables:tables,_conflict:false,_manual:true,_locked:locked===true,history:(x.history||[]).concat([histEntry("tables manually assigned: "+tables.join(", "),user)])});
+        // If swapping, strip taken tables from affected bookings and unlock them for re-optimization
+        if(affected&&affected.length>0){
+          var match=affected.find(function(ab){return ab.id===x.id;});
+          if(match){
+            var remaining=(x.tables||[]).filter(function(t){return !match.tables.includes(t);});
+            return Object.assign({},x,{tables:remaining,_locked:false,_manual:false});
+          }
         }
-      }
-      return x;
+        return x;
+      });
+      // Re-optimize to reassign affected bookings to new tables (when optimizer active)
+      if(affected&&affected.length>0) return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
+      return updated;
     });
-    // Re-optimize to reassign affected bookings to new tables
-    var bk=bookings.find(function(x){return x.id===bookingId;});
-    var bkDate=bk?bk.date:viewDate;
-    var fin=(affected&&affected.length>0)?applyOpt(updated,bkDate,tableBlocks):updated;
-    saveBookings(fin);
     setManualTarget(null);
     if(affected&&affected.length>0) flash();
   }
@@ -861,14 +1041,14 @@ function BookingApp(){
   function addBlock(block){
     var next=tableBlocks.concat([block]);
     saveBlocks(next);
-    saveBookings(applyOpt(bookings,block.date,next));
+    saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
     flash();
     setBlockTarget(null);
   }
   function removeBlock(block){
     var next=tableBlocks.filter(function(bl){return !(bl.tableId===block.tableId&&bl.date===block.date&&bl.allDay===block.allDay&&bl.from===block.from&&bl.to===block.to);});
     saveBlocks(next);
-    saveBookings(applyOpt(bookings,block.date,next));
+    saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
     flash();
     if(next.filter(function(bl){return bl.tableId===block.tableId&&bl.date===block.date;}).length===0) setBlockTarget(null);
   }
@@ -896,9 +1076,10 @@ function BookingApp(){
     var d=form.customDur||getDur(size);
     var mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
     if(mt) return {ok:true,tables:mt,sugg:null};
-    var tables=trialFits(bookings,form.date,form.time,size,form.preference||"auto",d,tableBlocks,editId,form.preferredTables);
+    var noResh=!optimizerActiveFor(form.date,autoOptimizer);
+    var tables=trialFits(liveBookings,form.date,form.time,size,form.preference||"auto",d,tableBlocks,editId,form.preferredTables,noResh);
     if(tables) return {ok:true,tables:tables,sugg:null};
-    var sugg=findTimes(form.date,size,form.preference,bookings,d,sm,tableBlocks,editId);
+    var sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh);
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
   })();
 
@@ -968,7 +1149,6 @@ function BookingApp(){
           width:64,height:48,padding:0,borderRadius:12,
           border:"2px solid "+(isPref?"#0d9488":tc.bg),
           background:isPref?"rgba(13,148,136,0.8)":"rgba(255,255,255,0.4)",
-          
           color:isPref?"#fff":S.text,fontWeight:600,fontSize:14,
           cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,boxSizing:"border-box",
           boxShadow:"0 1px 4px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.3)"
@@ -979,7 +1159,7 @@ function BookingApp(){
         RC("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},tableEls));
     });
     return RC(Overlay,{onClose:function(){setShowPrefPicker(false);}},
-      RC("div",{style:{textAlign:"center",marginBottom:4}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"#0d9488",border:"1px solid rgba(255,255,255,0.15)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Preferred table")),
+      RC("div",{style:{textAlign:"center",marginBottom:4}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"#0d9488",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Preferred table")),
       RC("div",{style:{fontSize:13,color:S.text,marginBottom:14}},"Soft hint — optimizer tries this first, falls back if unavailable."),
       RC("div",{style:{marginBottom:14,padding:"10px 14px",borderRadius:14,background:"rgba(255,255,255,0.35)",border:"2px solid "+(capOk?"rgba(134,239,172,0.6)":"rgba(255,255,255,0.5)"),boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
         RC("div",{style:{fontSize:14,fontWeight:700,color:S.text}},"Selected: "+(prefs.length?prefs.join(" + "):"none")),
@@ -1030,8 +1210,8 @@ function BookingApp(){
     var reversed=hist.slice().reverse();
     return RC(Overlay,{onClose:function(){setShowHistory(false);}},
       RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:12,color:S.text}},"Booking history"),
-      RC("div",{style:{fontSize:13,color:S.muted,marginBottom:12}},cur?(cur.name+" — "+cur.date+" "+cur.time):""),
-      RC("div",{style:{maxHeight:300,overflowY:"auto",borderRadius:14,border:"2px solid rgba(160,170,190,0.4)",background:"rgba(240,244,250,0.95)",padding:"10px 12px",boxShadow:"inset 0 1px 4px rgba(0,0,0,0.06)"}},
+      RC("div",{style:{fontSize:13,color:S.muted,marginBottom:12}},cur.name+" — "+cur.date+" "+cur.time),
+      RC("div",{style:{maxHeight:300,overflowY:"auto",borderRadius:14,border:"2px solid rgba(160,170,190,0.4)",background:"rgba(255,255,255,0.35)",padding:"10px 12px",boxShadow:"inset 0 1px 4px rgba(0,0,0,0.06)"}},
         reversed.length?reversed.map(function(h,i){
           var d=new Date(h.at);
           var dateStr=d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
@@ -1048,19 +1228,39 @@ function BookingApp(){
 
   var errorEl=error?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"rgba(254,226,226,0.7)",borderRadius:14,border:"2px solid rgba(252,165,165,0.55)",marginBottom:14}},error):null;
 
-  var reshuffledBanner=reshuffled?RC("div",{style:{background:"rgba(254,249,195,0.7)",border:"2px solid rgba(253,230,138,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#854d0e",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},"Tables re-optimised."):null;
-  var ineffBanner=(!reshuffled&&inefficient&&dismissedIneff!==viewDate)?RC("div",{style:{background:"rgba(255,237,213,0.7)",border:"2px solid rgba(253,186,116,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#9a3412",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},RC("span",null,"Tables could be reshuffled for better efficiency."),RC("div",{style:{display:"flex",gap:6}},RC("button",{onClick:function(){setDismissedIneff(viewDate);},style:mkBtn({fontSize:13,minHeight:36,padding:"6px 14px",background:BTN.dismiss})},"Dismiss"),RC("button",{onClick:forceReshuffle,style:{background:BTN.orange,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:600,minHeight:36,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Reshuffle"))):null;
+  var reshuffledBanner=reshuffled?RC("div",{style:{background:"rgba(254,249,195,0.7)",border:"2px solid rgba(253,230,138,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#854d0e",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."):null;
+  var ineffBanner=(!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer))?RC("div",{style:{background:"rgba(255,237,213,0.7)",border:"2px solid rgba(253,186,116,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#9a3412",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},RC("span",null,"Tables could be reshuffled for better efficiency."),RC("div",{style:{display:"flex",gap:6}},RC("button",{onClick:function(){setDismissedIneff(viewDate);},style:mkBtn({fontSize:13,minHeight:36,padding:"6px 14px",background:BTN.dismiss})},"Dismiss"),RC("button",{onClick:function(){setConfirmReshuffle(true);},style:{background:BTN.orange,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:600,minHeight:36,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Reshuffle"))):null;
+
+  // Overlap warnings banner — shows when one or more seated guests are overstaying
+  // into the start time of a booking on the same table. Each row shows a one-tap
+  // Reassign button that reroutes the crowded-out booking to a free table without
+  // disturbing anyone else. Visible regardless of view (timeline or list).
+  var overlapEntries=Object.keys(overlapWarnings).map(function(sbId){
+    var w=overlapWarnings[sbId];
+    var sb=bookings.find(function(b){return b.id===sbId;});
+    if(!sb) return null;
+    var rowBg=w.overdue?"rgba(254,226,226,0.6)":"rgba(255,237,213,0.6)";
+    var rowBrd=w.overdue?"rgba(252,165,165,0.55)":"rgba(253,186,116,0.55)";
+    var rowTxt=w.overdue?"#991b1b":"#9a3412";
+    var msg=sb.name+" (overstaying) → "+w.next+" at "+w.nextTime+(w.overdue?" — overdue":" — in "+w.gap+" min");
+    return RC("div",{key:sbId,style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",padding:"8px 12px",borderRadius:12,background:rowBg,border:"1px solid "+rowBrd,marginTop:6}},
+      RC("span",{style:{fontSize:13,color:rowTxt,fontWeight:600,flex:"1 1 auto",minWidth:0}},msg),
+      RC("button",{onClick:function(){reassignBooking(w.nextId);},style:mkBtn({fontSize:12,minHeight:32,padding:"4px 12px",background:BTN.orange})},"Reassign "+w.next));
+  }).filter(Boolean);
+  var overlapBanner=overlapEntries.length?RC("div",{style:{background:"rgba(255,250,235,0.55)",border:"2px solid rgba(253,186,116,0.45)",borderRadius:14,padding:"10px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
+    RC("div",{style:{fontSize:13,fontWeight:700,color:"#9a3412",marginBottom:2}},"Overlap warnings"),
+    overlapEntries):null;
 
   var resetDurBtn=form.customDur?RC("button",{key:"rd",style:mkBtn({fontSize:12,background:BTN.reset}),onPointerDown:function(){setForm(function(f){return Object.assign({},f,{customDur:null});})}},  "Reset"):null;
   var endTime=form.time?toTime(toMins(form.time)+dur):"--";
 
 
   var mainView=view==="timeline"
-    ?RC(TimelineView,{bookings:bookings,date:viewDate,onEdit:openEdit,onManual:function(id){setManualTarget(id);},onStatus:updateStatus,blocks:tableBlocks,onBlock:function(id){setBlockTarget(id);},nowMins:nowMins,warnings:overlapWarnings,zoom:timelineZoom,setZoom:setTimelineZoom,scrollPosRef:timelineScrollRef,followNow:followNow,setFollowNow:setFollowNow})
+    ?RC(TimelineView,{bookings:bookings,date:viewDate,onEdit:openEdit,onManual:function(id){setManualTarget(id);},onStatus:updateStatus,blocks:tableBlocks,onBlock:function(id){setBlockTarget(id);},nowMins:nowMins,warnings:overlapWarnings,zoom:timelineZoom,setZoom:setTimelineZoom,scrollPosRef:timelineScrollRef,followNow:followNow,setFollowNow:setFollowNow,autoOptimizer:autoOptimizer,setAutoOptimizer:setAutoOptimizer,onReshuffle:function(){setConfirmReshuffle(true);}})
     :RC(ListView,{bookings:bookings,date:viewDate,onEdit:openEdit,onStatus:updateStatus,onDelete:function(id){setConfirmDel(id);},onManual:function(id){setManualTarget(id);},nowMins:nowMins,warnings:overlapWarnings});
 
   var formModal=showForm?RC(Overlay,{onClose:function(){setShowForm(false);}},
-    RC("div",{style:{textAlign:"center",marginBottom:16}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.15)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},editId?"Edit booking":"New booking")),
+    RC("div",{style:{textAlign:"center",marginBottom:16}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},editId?"Edit booking":"New booking")),
     RC(Section,null,
       RC("div",{style:{display:"grid",gridTemplateColumns:formCols,gap:12}},
         RC(Fld,{label:"Customer name",req:true},RC("input",{value:form.name,onChange:function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});},placeholder:"Full name",style:inp()})),
@@ -1071,13 +1271,13 @@ function BookingApp(){
         RC(Fld,{label:"Time"},RC("input",{type:"time",value:form.time,onChange:function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});},min:"13:00",max:"22:00",style:inp()})),
         RC(Fld,{label:"Seating preference"},RC("select",{value:form.preference,onChange:function(e){setForm(function(f){return Object.assign({},f,{preference:e.target.value});});},style:inp()},RC("option",{value:"auto"},"Auto (recommended)"),RC("option",{value:"indoor"},"Indoor"),RC("option",{value:"outdoor"},"Outdoor"))),
         RC(Fld,{label:"Number of guests"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
-          RC("button",{style:{background:"rgba(255,255,255,0.45)",border:"1px solid rgba(220,225,235,0.9)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}},"-"),
+          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}},"-"),
           RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},String(Number(form.size)||2)),
-          RC("button",{style:{background:"rgba(255,255,255,0.45)",border:"1px solid rgba(220,225,235,0.9)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});}},"+"))),
+          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});}},"+"))),
         RC(Fld,{label:"Duration"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
-          RC("button",{style:{background:"rgba(255,255,255,0.45)",border:"1px solid rgba(220,225,235,0.9)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}},"-"),
+          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}},"-"),
           RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},dur+" min"),
-          RC("button",{style:{background:"rgba(255,255,255,0.45)",border:"1px solid rgba(220,225,235,0.9)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}},"+"),
+          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}},"+"),
           RC("span",{style:{fontSize:13,color:S.text,marginLeft:4}},"End: "+endTime),
           resetDurBtn)))),
     kitchenSection,
@@ -1091,7 +1291,7 @@ function BookingApp(){
       historyBtn||RC("div",null),
       RC("div",{style:{display:"flex",gap:8}},
         RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setShowForm(false);}},"Cancel"),
-        RC("button",{onClick:save,style:{background:"rgba(0,122,255,0.8)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:14,padding:"10px 22px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)"}},"Save booking")))):null;
+        RC("button",{onClick:save,style:{background:"rgba(0,122,255,0.8)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)"}},"Save booking")))):null;
 
   var delModal=confirmDel?RC(Overlay,{onClose:function(){setConfirmDel(null);}},
     RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}},"Delete booking?"),
@@ -1110,12 +1310,13 @@ function BookingApp(){
     var wDur=wf.customDur||getDur(wSize);
     var wDate=new Date().toISOString().slice(0,10);
     var wS=toMins(wTime),wE=wS+wDur;
-    var wOther=bookings.filter(function(b){return b&&b.date===wDate&&b.status!=="cancelled"&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};}).concat(getBlockSlots(tableBlocks,wDate));
+    var wOther=liveBookings.filter(function(b){return b&&b.date===wDate&&b.status!=="cancelled"&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};}).concat(getBlockSlots(tableBlocks,wDate));
     var wBusy=getBusy(wOther,wS,wE);
     var wAutoCheck=(function(){
       var pre=findBest(wSize,"auto",wS,wE,wOther)||(findBestAny(wSize,wS,wE,wOther));
       if(pre) return null;
-      var sugg=findTimes(wDate,wSize,"auto",bookings,wDur,wS,tableBlocks);
+      var noResh=!optimizerActiveFor(wDate,autoOptimizer);
+      var sugg=findTimes(wDate,wSize,"auto",liveBookings,wDur,wS,tableBlocks,null,noResh);
       return formatSugg(sugg,wS);
     })();
     function getCapOf(ids){if(ids.length===0) return 0;var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});if(c) return c.cap;var bestCap=0,bestIds=[];VALID_COMBOS.forEach(function(combo){if(combo.ids.length<=ids.length&&combo.ids.every(function(id){return ids.includes(id);})&&combo.cap>bestCap){bestCap=combo.cap;bestIds=combo.ids;}});if(bestIds.length>0){var rem=ids.filter(function(id){return !bestIds.includes(id);});return bestCap+rem.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}return ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
@@ -1160,19 +1361,19 @@ function BookingApp(){
         wKitchenSugg.after.length?RC("div",null,RC("span",{style:{fontWeight:700,fontSize:12}},"After: "),RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},wRenderKT(wKitchenSugg.after))):null):
       wKitchenBusy?RC("div",{style:{marginTop:6,fontSize:12,color:"#991b1b"}},"No kitchen-friendly alternatives found nearby."):null);
     return RC(Overlay,{onClose:function(){setShowWalkin(false);}},
-      RC("div",{style:{textAlign:"center",marginBottom:4}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(22,101,52,0.75)",border:"1px solid rgba(255,255,255,0.15)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Walk-in")),
+      RC("div",{style:{textAlign:"center",marginBottom:4}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(22,101,52,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Walk-in")),
       RC("div",{style:{fontSize:13,color:S.text,marginBottom:16,textAlign:"center"}},"Walk-in "+getNextWalkinNum()+" · Seated"),
       RC(Section,null,
         RC("div",{style:{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}},
           RC(Fld,{label:"Time"},RC("input",{type:"time",value:wTime,onChange:function(e){setWalkinForm(function(f){return Object.assign({},f,{tables:[],time:e.target.value});});},min:"13:00",max:"22:00",style:mkInp()})),
           RC(Fld,{label:"Number of guests"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
-            RC("button",{style:{background:"rgba(255,255,255,0.45)",border:"1px solid rgba(220,225,235,0.9)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.max(1,(Number(f.size)||2)-1),tables:[]});});}},"-"),
+            RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.max(1,(Number(f.size)||2)-1),tables:[]});});}},"-"),
             RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},String(wSize)),
-            RC("button",{style:{background:"rgba(255,255,255,0.45)",border:"1px solid rgba(220,225,235,0.9)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.min(25,(Number(f.size)||2)+1),tables:[]});});}},"+"))),
+            RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.min(25,(Number(f.size)||2)+1),tables:[]});});}},"+"))),
           RC(Fld,{label:"Duration"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
-            RC("button",{style:{background:"rgba(255,255,255,0.45)",border:"1px solid rgba(220,225,235,0.9)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){var cd=f.customDur||getDur(Number(f.size)||2);return Object.assign({},f,{customDur:Math.max(15,cd-15)});});}},"-"),
+            RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){var cd=f.customDur||getDur(Number(f.size)||2);return Object.assign({},f,{customDur:Math.max(15,cd-15)});});}},"-"),
             RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},wDur+" min"),
-            RC("button",{style:{background:"rgba(255,255,255,0.45)",border:"1px solid rgba(220,225,235,0.9)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){var cd=f.customDur||getDur(Number(f.size)||2);return Object.assign({},f,{customDur:Math.min(480,cd+15)});});}},"+"),
+            RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){var cd=f.customDur||getDur(Number(f.size)||2);return Object.assign({},f,{customDur:Math.min(480,cd+15)});});}},"+"),
             RC("span",{style:{fontSize:13,color:S.muted,marginLeft:4}},"End: "+toTime(toMins(wTime)+wDur)),
             wf.customDur?RC("button",{style:mkBtn({fontSize:12,background:BTN.reset}),onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{customDur:null});});}},"Reset"):null)),
         RC(Fld,{label:"Notes",style:{marginTop:12}},RC("textarea",{value:wf.notes,onChange:function(e){setWalkinForm(function(f){return Object.assign({},f,{notes:e.target.value});});},rows:2,placeholder:"Special requests...",style:Object.assign({},mkInp(),{resize:"vertical"})})))),
@@ -1187,8 +1388,8 @@ function BookingApp(){
       walkinError?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"rgba(254,226,226,0.7)",borderRadius:14,border:"2px solid rgba(252,165,165,0.55)",marginBottom:14}},walkinError):null,
       wKitchenSection,
       RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}},
-        RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setConfirmKitchen(null);setShowWalkin(false);}},"Cancel"),
-        RC("button",{onClick:saveWalkin,disabled:!wOk,style:{background:wOk?"rgba(22,101,52,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:14,padding:"10px 22px",cursor:wOk?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:wOk?"0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)":"none"}},"Seat")));
+        RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setShowWalkin(false);}},"Cancel"),
+        RC("button",{onClick:saveWalkin,disabled:!wOk,style:{background:wOk?"rgba(22,101,52,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:wOk?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:wOk?"0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)":"none"}},"Seat")));
   })();
 
   return RC("div",{style:{background:"linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,boxSizing:"border-box"}},
@@ -1197,19 +1398,22 @@ function BookingApp(){
         RC("div",null,RC("div",{style:{fontSize:isMobile?18:22,fontWeight:700}},"Me Gustas T\u00fa"),RC("div",{style:{fontSize:12,color:S.text,fontWeight:500}},"4 indoor  9 outdoor  "+OPEN+":00 - "+CLOSE+":00")),
         RC("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
           ["timeline","list"].map(function(v){return RC("button",{key:v,onClick:function(){setView(v);},style:mkBtn({background:view===v?S.accent:"rgba(120,130,150,0.55)",textTransform:"capitalize",minHeight:40})},v);}),
-          RC("button",{onClick:openWalkin,style:{background:"rgba(22,101,52,0.75)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"#fff",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Walk-in"),
-          RC("button",{onClick:openNew,style:{background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"#fff",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"+ New"),
+          RC("button",{onClick:openWalkin,style:{background:"rgba(22,101,52,0.75)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"#fff",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Walk-in"),
+          RC("button",{onClick:openNew,style:{background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"#fff",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"+ New"),
           RC("button",{onClick:function(){signOut(auth);},style:mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:"rgba(120,130,150,0.5)"})},"Log out"))),
       RC("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}},
         RC("div",{style:{display:"flex",gap:4,alignItems:"center"}},
           RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()-1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8249;"}}),
           RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()+1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8250;"}}),
-          RC("input",{type:"date",value:viewDate,onChange:function(e){setViewDate(e.target.value);},style:{fontSize:14,padding:"8px 10px",borderRadius:12,border:"1px solid rgba(255,255,255,0.4)",background:"rgba(240,244,250,0.95)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}})),
+          RC("input",{type:"date",value:viewDate,onChange:function(e){setViewDate(e.target.value);},style:{fontSize:14,padding:"8px 10px",borderRadius:12,border:"1px solid rgba(255,255,255,0.4)",background:"rgba(255,255,255,0.45)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}})),
         RC("div",{style:{display:"flex",gap:6,alignItems:"center"}},
           viewDate!==new Date().toISOString().slice(0,10)?RC("button",{onClick:function(){setViewDate(new Date().toISOString().slice(0,10));},style:mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})},"Today"):null,
           RC("span",{style:{fontSize:13,color:S.text}},dayCount+" booking"+(dayCount!==1?"s":"")))),
+      loadBannerShown?RC("div",{style:{background:"rgba(220,252,231,0.8)",border:"2px solid rgba(134,239,172,0.6)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#166534",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."):null,
+      writeWarning?RC("div",{style:{background:"rgba(254,226,226,0.85)",border:"2px solid rgba(252,165,165,0.7)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"#991b1b",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},RC("span",null,"⚠ "+writeWarning),RC("button",{style:mkBtn({fontSize:12,background:"#78828c",minHeight:32,padding:"4px 12px"}),onClick:function(){setWriteWarning(null);}},"Dismiss")):null,
       reshuffledBanner,
       ineffBanner,
+      overlapBanner,
       mainView,
       formModal,delModal,manualModal,walkinModal,prefPickerModal,
       blockTarget?RC(BlockModal,{tableId:blockTarget,date:viewDate,blocks:tableBlocks,onSave:addBlock,onRemove:removeBlock,onClose:function(){setBlockTarget(null);}}):null,
@@ -1226,6 +1430,12 @@ function BookingApp(){
         RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}},
           RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setConfirmKitchen(null);}},"Back"),
           RC("button",{onClick:function(){var isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();},style:{background:"#9a3412",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Confirm"))):null,
+      confirmReshuffle?RC(Overlay,{onClose:function(){setConfirmReshuffle(false);}},
+        RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:"#9a3412"}},"Reshuffle all bookings?"),
+        RC("div",{style:{fontSize:14,color:S.text,marginBottom:18}},"Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved."),
+        RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}},
+          RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setConfirmReshuffle(false);}},"Back"),
+          RC("button",{onClick:function(){setConfirmReshuffle(false);forceReshuffle();},style:{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Reshuffle"))):null,
       historyPopup));
 }
 
