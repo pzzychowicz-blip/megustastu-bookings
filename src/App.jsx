@@ -698,16 +698,20 @@ function BookingApp(){
   // GUARDED: will refuse to write until Firebase has sent us the initial snapshot.
   // GUARDED: will refuse to overwrite non-empty Firebase with an empty in-memory array
   //   unless firstLoadCount was also 0 (i.e. DB is genuinely new/empty).
-  function saveBookings(next){
+  // If `isSilent` is true, refusals only log to console — no user-facing warning.
+  // If `isSilent` is false/omitted (default = user action), refusals also surface a red banner.
+  // This keeps harmless mount-time effect calls quiet (auto-extend passes isSilent=true)
+  // while still alerting on real user-blocked saves.
+  function saveBookings(next,isSilent){
     function persist(computed){
       if(!bookingsLoaded.current){
         console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
-        setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
+        if(!isSilent) setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
         return;
       }
       if(Array.isArray(computed)&&computed.length===0&&firstLoadCount.current!==null&&firstLoadCount.current>0){
         console.warn("[SAFE] Refused to write empty bookings array — Firebase had "+firstLoadCount.current+" entries on load. This is a safety check against accidental wipe.");
-        setWriteWarning("Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.");
+        if(!isSilent) setWriteWarning("Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.");
         return;
       }
       set(ref(db,"bookings"),computed).catch(function(){});
@@ -718,7 +722,7 @@ function BookingApp(){
       setBookings(next);persist(next);
     }
   }
-  function saveBlocks(next){
+  function saveBlocks(next,isSilent){
     function persist(computed){
       if(!blocksLoaded.current){
         console.warn("[SAFE] Refused to write tableBlocks — initial read has not completed yet.");
@@ -813,26 +817,29 @@ function BookingApp(){
     autoOnRef.current=today;
     setAutoOptimizer(true);
   },[nowMins]);
-  // Auto-extend seated bookings that exceed their stored duration
+  // Auto-extend seated bookings that exceed their stored duration.
+  // IMPORTANT: computes the update in a pure pass first and only calls saveBookings
+  // if something actually needs to change. This prevents a spurious write attempt
+  // on first mount (when onValue may not have returned yet, the write-guard would
+  // fire even though no real change is being made).
   var lastExtend=useRef("");
   useEffect(function(){
+    if(!bookingsLoaded.current) return; // no work to do until initial read lands
     var today=new Date().toISOString().slice(0,10);
-    saveBookings(function(prev){
-      var needsUpdate=false;
-      var updated=prev.map(function(b){
-        if(b.date!==today||b.status!=="seated") return b;
-        var elapsed=nowMins-toMins(b.time);
-        if(elapsed>b.duration){needsUpdate=true;return Object.assign({},b,{duration:elapsed,customDur:elapsed});}
-        return b;
-      });
-      if(!needsUpdate) return prev;
-      var seated=prev.filter(function(b){return b.date===today&&b.status==="seated";});
-      var key=seated.map(function(b){return b.id+":"+nowMins;}).join(",");
-      if(key===lastExtend.current) return prev;
-      lastExtend.current=key;
-      return bookingsAfterAction(updated,today,tableBlocks,null,false,autoOptimizer);
+    var needsUpdate=false;
+    var updated=bookings.map(function(b){
+      if(b.date!==today||b.status!=="seated") return b;
+      var elapsed=nowMins-toMins(b.time);
+      if(elapsed>b.duration){needsUpdate=true;return Object.assign({},b,{duration:elapsed,customDur:elapsed});}
+      return b;
     });
-  },[nowMins,tableBlocks,autoOptimizer]);
+    if(!needsUpdate) return;
+    var seated=bookings.filter(function(b){return b.date===today&&b.status==="seated";});
+    var key=seated.map(function(b){return b.id+":"+nowMins;}).join(",");
+    if(key===lastExtend.current) return;
+    lastExtend.current=key;
+    saveBookings(bookingsAfterAction(updated,today,tableBlocks,null,false,autoOptimizer),true); // silent — non-interactive auto-extend
+  },[nowMins,tableBlocks,autoOptimizer,bookings]);
   // Derived: bookings with seated-today durations synced to live time.
   // Used by form/walk-in availability checks so they match what bookingsAfterAction
   // will see on save.
