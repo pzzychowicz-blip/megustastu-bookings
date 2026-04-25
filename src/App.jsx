@@ -1373,7 +1373,11 @@ function BookingApp(){
   })();
   var winW=useWinW();
   var isMobile=winW<600;
-  function getUser(){return "staff";}
+  // v14 deployment fix: history entries must attribute to the logged-in user
+  // (their email), not the generic "staff" stub used in standalone preview.
+  // "staff" remains as a fallback for the rare case where auth.currentUser
+  // is unavailable at the moment of the write.
+  function getUser(){return (auth.currentUser&&auth.currentUser.email)||"staff";}
 
   var dayCount=bookings.filter(function(b){return b.date===viewDate&&b.status!=="cancelled";}).length;
   var inefficient=bookings.length>0&&checkInefficent(bookings,viewDate);
