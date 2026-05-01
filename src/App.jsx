@@ -1,13 +1,60 @@
+/**
+ * Me Gustas Tú — Booking System
+ * Version 14.1
+ *
+ * Copyright © 2026 Patryk Zychowicz. All rights reserved.
+ *
+ * This source code is proprietary and confidential.
+ * Unauthorized copying, distribution, modification, or use
+ * is strictly prohibited. See the LICENSE file in the repo root.
+ *
+ * Author:  Patryk Zychowicz
+ * Contact: pz.zychowicz@gmail.com
+ */
 import React, { useState, useRef, useEffect } from "react";
 import { ref, onValue, set } from "firebase/database";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
+
+// ── App fingerprint (do not remove) ──────────────────────────────────────────
+// Module-level identity record. Survives bundling/minification — the strings
+// below remain readable in any deployed bundle. Referenced by the boot banner
+// (window assignment + console.log) so the bundler cannot tree-shake it.
+// Forensic evidence of origin if this code appears in an unauthorized deployment.
+var __APP_SIGNATURE__={
+  app:"Me Gustas Tú Booking System",
+  version:"14.1",
+  author:"Patryk Zychowicz",
+  contact:"pz.zychowicz@gmail.com",
+  copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
+  license:"Proprietary — All rights reserved. See LICENSE.",
+  build:"v14.1-deployment"
+};
+if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
+
+// ── Console boot banner ──────────────────────────────────────────────────────
+// Logs ownership/version when the app loads. Visible to anyone opening DevTools.
+console.log(
+  "%c"+__APP_SIGNATURE__.app+" — v"+__APP_SIGNATURE__.version,
+  "color:#60a5fa;font-size:18px;font-weight:500;font-family:Menlo,Monaco,Consolas,monospace;padding:2px 0;"
+);
+console.log(
+  "%c"+__APP_SIGNATURE__.copyright,
+  "color:#9ca3af;font-size:13px;font-family:Menlo,Monaco,Consolas,monospace;"
+);
+console.log(
+  "%cUnauthorized use, copying, redistribution, or modification is prohibited.",
+  "color:#9ca3af;font-size:12px;font-family:Menlo,Monaco,Consolas,monospace;"
+);
+
 // ── v14 Deployment — Firebase + auth integrated ───────────────────────────────
 // This file is the production target for v14. All v14 preview work is overlaid
 // on top of v13 dev: Book Again, Overlap Reassign fix, Seated-shift on
 // Confirmed→Seated, Settings cog & tabbed modal, full keyboard shortcuts,
 // thicker grid lines, and the v14 preview 7 Reminder system.
-// In-app version label (General tab in Settings): "version 14".
+// v14.1: connection-status banner, IP protection layer (header, LICENSE,
+// fingerprint, console banner, visible credit in Settings).
+// In-app version label (General tab in Settings): "version 14.1".
 
 var INDOOR=[{id:"i1",capacity:2},{id:"i2",capacity:2},{id:"i3",capacity:2},{id:"i4",capacity:2}];
 var OUTDOOR=[{id:"1A",capacity:2},{id:"1B",capacity:2},{id:"2",capacity:2},{id:"3",capacity:2},{id:"4",capacity:2},{id:"5A",capacity:2},{id:"5B",capacity:2},{id:"6",capacity:2},{id:"7",capacity:4}];
@@ -568,11 +615,12 @@ function TabBar(props){
     }));
 }
 
-// General tab — currently just the version line. Reserved for future app-level
-// toggles (e.g. notification sound, default view preference).
+// General tab — version line + visible copyright credit. Reserved for future
+// app-level toggles (e.g. notification sound, default view preference).
 function GeneralTabContent(){
   return RC("div",{style:{padding:"28px 12px",textAlign:"center"}},
-    RC("div",{style:{fontSize:13,fontWeight:600,color:"#5a6474",letterSpacing:"0.02em"}},"version 14"));
+    RC("div",{style:{fontSize:13,fontWeight:600,color:"#5a6474",letterSpacing:"0.02em"}},"version 14.1"),
+    RC("div",{style:{fontSize:11,fontWeight:500,color:"#8a94a3",letterSpacing:"0.02em",marginTop:8}},"© 2026 Patryk Zychowicz — MGT Booking System"));
 }
 
 // One row in the Reminders tab — shows text, times, recurrence summary, an
@@ -1060,6 +1108,13 @@ function BookingApp(){
   var ws=useState(null);var writeWarning=ws[0],setWriteWarning=ws[1];
   var lbs=useState(false);var loadBannerShown=lbs[0],setLoadBannerShown=lbs[1];
   var firstLoadCount=useRef(null); // number of bookings on first successful load
+  // v14.1: Connection-status state. isOnline drives the amber offline banner;
+  // reconnectShown is a brief 4-second blue flash after offline→online.
+  // hasConnectedRef gates BOTH banners so we never show "offline" before
+  // the very first successful Firebase connection (avoids a false flash on boot).
+  var ots=useState(true);var isOnline=ots[0],setIsOnline=ots[1];
+  var rrs=useState(false);var reconnectShown=rrs[0],setReconnectShown=rrs[1];
+  var hasConnectedRef=useRef(false);
   // Ensure optimal viewport scaling on all devices
   useEffect(function(){
     var meta=document.querySelector('meta[name="viewport"]');
@@ -1143,6 +1198,29 @@ function BookingApp(){
     var t=setTimeout(function(){setLoadBannerShown(false);},6000);
     return function(){clearTimeout(t);};
   },[loadBannerShown]);
+  // v14.1: Subscribe to Firebase's special .info/connected ref. Drives the
+  // offline banner and the reconnected flash. The hasConnectedRef gate makes
+  // sure the offline banner never shows before the first successful handshake.
+  useEffect(function(){
+    var unsub=onValue(ref(db,".info/connected"),function(snap){
+      var connected=snap.val()===true;
+      if(connected){
+        if(!hasConnectedRef.current){
+          // First successful connection on boot — silent.
+          hasConnectedRef.current=true;
+          setIsOnline(true);
+          return;
+        }
+        // Reconnect after a real outage.
+        setIsOnline(true);
+        setReconnectShown(true);
+        setTimeout(function(){setReconnectShown(false);},4000);
+      } else {
+        if(hasConnectedRef.current) setIsOnline(false);
+      }
+    });
+    return unsub;
+  },[]);
 
   var vs=useState("timeline");var view=vs[0],setView=vs[1];
   var zms=useState(1);var timelineZoom=zms[0],setTimelineZoom=zms[1];
@@ -2384,6 +2462,8 @@ function BookingApp(){
         RC("div",{style:{display:"flex",gap:6,alignItems:"center"}},
           viewDate!==new Date().toISOString().slice(0,10)?RC("button",{onClick:function(){setViewDate(new Date().toISOString().slice(0,10));},style:mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})},"Today"):null,
           RC("span",{style:{fontSize:13,color:S.text}},dayCount+" booking"+(dayCount!==1?"s":"")))),
+      !isOnline?RC("div",{style:{background:"rgba(254,243,199,0.85)",border:"2px solid rgba(252,211,77,0.7)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"#92400e",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},"⚠ Working offline — your changes are saved locally and will sync when the connection returns. Keep this tab open."):null,
+      reconnectShown?RC("div",{style:{background:"rgba(219,234,254,0.85)",border:"2px solid rgba(147,197,253,0.7)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#1e40af",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},"✓ Reconnected — changes synced."):null,
       loadBannerShown?RC("div",{style:{background:"rgba(220,252,231,0.8)",border:"2px solid rgba(134,239,172,0.6)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#166534",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."):null,
       writeWarning?RC("div",{style:{background:"rgba(254,226,226,0.85)",border:"2px solid rgba(252,165,165,0.7)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"#991b1b",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},RC("span",null,"⚠ "+writeWarning),RC("button",{style:mkBtn({fontSize:12,background:"#78828c",minHeight:32,padding:"4px 12px"}),onClick:function(){setWriteWarning(null);}},"Dismiss")):null,
       reshuffledBanner,
