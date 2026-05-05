@@ -1,0 +1,335 @@
+// src/lib/booking-logic.js
+// Pure booking-management logic — table assignment, optimization, kitchen-load
+// checks, seated-shift, displacement protection. No React, no DOM, no Firebase.
+// Fully testable in isolation.
+//
+// Phase A extraction (v15-refactor): moved verbatim from App v.14.1 dev.jsx
+// lines 90–176 (helpers + finders + trial fits) and 195–400 (kitchen, optimise,
+// applyOpt, optimizer-OFF helpers). No semantic changes.
+//
+// Internal helpers (prefixed `_`) are not exported; everything else is.
+
+import {
+  ALL_TABLES,
+  VALID_COMBOS,
+  CLUSTERS,
+  OPEN,
+  CLOSE,
+  GRID_CLOSE,
+  KITCHEN_TABLE_LIMIT
+} from "./constants";
+
+// ── Primitive helpers ─────────────────────────────────────────────────────────
+export function getDur(s){return s<5?90:120;}
+export function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
+export function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
+export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
+export function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+
+// ── Booking sanitisation / diffing ────────────────────────────────────────────
+export function sanitize(b){if(!b||typeof b!=="object") return null;var t=b.time||"13:00";return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:t,scheduledTime:b.scheduledTime||t,size:Number(b.size)||2,duration:Number(b.duration)||90,originalDuration:Number(b.originalDuration)||Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],returnOf:b.returnOf||null,history:Array.isArray(b.history)?b.history:[]};}
+export function histEntry(action,user){return {at:new Date().toISOString(),by:user||"staff",action:action};}
+export function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=orig.phone||"";var formPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
+export function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var vals=Object.values(arr);return vals.map(sanitize).filter(Boolean);}return arr.map(sanitize).filter(Boolean);}
+
+// ── Table classification ──────────────────────────────────────────────────────
+export function isIn(id){return id.startsWith("i");}
+export function isAllIn(ids){return ids.every(isIn);}
+export function isAllOut(ids){return ids.every(function(id){return !isIn(id);});}
+export function isMixedLarge(ids){if(!ids.some(isIn)||!ids.some(function(id){return !isIn(id);})) return false;return ids.includes("1A")&&ids.includes("1B")&&ids.includes("7");}
+export function comboOk(ids,pref){var mixed=!isAllIn(ids)&&!isAllOut(ids);if(mixed&&pref!=="auto") return false;if(mixed&&!isMixedLarge(ids)) return false;if(pref==="indoor") return isAllIn(ids);if(pref==="outdoor") return isAllOut(ids);return true;}
+export function comboCap(ids){var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});return c?c.cap:ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
+export function isLocked(b){return b&&(b._locked===true||b.status==="seated");}
+export function isActive(b){return b.status!=="cancelled"&&b.status!=="completed";}
+
+// ── Slot/busy/assignment checks ───────────────────────────────────────────────
+export function getBlockSlots(blocks,date){
+  return blocks.filter(function(bl){return bl.date===date;}).map(function(bl){
+    var s=bl.allDay?OPEN*60:toMins(bl.from);
+    var e=bl.allDay?GRID_CLOSE*60:toMins(bl.to);
+    return {tables:[bl.tableId],s:s,e:e};
+  });
+}
+export function getBusy(slots,s,e){var busy=new Set();slots.forEach(function(sl){if(!overlaps(s,e,sl.s,sl.e)) return;sl.tables.forEach(function(id){busy.add(id);});});return busy;}
+export function canAssign(ids,slots,s,e){
+  var busy=getBusy(slots,s,e);
+  if(ids.some(function(id){return busy.has(id);})) return false;
+  if(ids.length<2) return true;
+  var mc={};ids.forEach(function(id){var cl=CLUSTERS[id];if(!cl||cl.length<2) return;var k=cl.slice().sort().join("|");if(!mc[k]) mc[k]=0;mc[k]++;});
+  for(var i=0;i<slots.length;i++){var sl=slots[i];if(!overlaps(s,e,sl.s,sl.e)||sl.tables.length<2) continue;var tc={};sl.tables.forEach(function(id){var cl=CLUSTERS[id];if(!cl||cl.length<2) return;var k=cl.slice().sort().join("|");if(!tc[k]) tc[k]=0;tc[k]++;});var ks=Object.keys(mc);for(var j=0;j<ks.length;j++){if(mc[ks[j]]>=2&&tc[ks[j]]&&tc[ks[j]]>=2) return false;}}
+  return true;
+}
+
+// ── Combo prioritisation (internal) ───────────────────────────────────────────
+function _indoorPri(c){if(c.ids.indexOf("i4")>=0) return 2;if(c.ids.indexOf("i1")>=0) return 1;return 0;}
+function _comboLoc(c){if(isAllOut(c.ids)) return 0;if(isAllIn(c.ids)) return 1;return 2;}
+function _comboPri(c,size){var k=c.ids.slice().sort().join("|");if(k==="1A|1B"&&size>=4&&size<=6) return -10;if(k==="2|3"&&size===4) return -5;if(size>=7&&size<=8){if(k==="2|3|4") return -10;if(k==="5A|5B|6") return -9;}if(size>=9&&size<=12){if(k==="1A|1B|7|i4") return -10;if(k==="1A|1B|7|i1") return -9;if(k==="1A|1B|7|i2"||k==="1A|1B|7|i3") return -7;}if(size>=13&&size<=16){if(c.ids.every(function(id){return ["2","3","4","5A","5B","6"].indexOf(id)>=0;})) return -10;}if(size>=17&&size<=20){if(k==="2|3|4|5A|5B|6|i4") return -10;if(k==="2|3|4|5A|5B|6|i1") return -9;if(k==="2|3|4|5A|5B|6|7") return -8;}if(k==="i1|i2|i3|i4") return 100;return 0;}
+
+// ── Best-table finders ────────────────────────────────────────────────────────
+export function findBest(size,pref,s,e,slots){
+  var sg=ALL_TABLES.filter(function(t){return t.capacity>=size&&comboOk([t.id],pref)&&canAssign([t.id],slots,s,e);});
+  var co=VALID_COMBOS.filter(function(c){return c.cap>=size&&comboOk(c.ids,pref)&&canAssign(c.ids,slots,s,e);}).sort(function(a,b){var pa=_comboPri(a,size),pb=_comboPri(b,size);if(pa!==pb) return pa-pb;var la=_comboLoc(a),lb=_comboLoc(b);if(la!==lb) return la-lb;if(la===2){var ia=_indoorPri(a),ib=_indoorPri(b);if(ia!==ib) return ib-ia;}return a.cap-b.cap||a.ids.length-b.ids.length;});
+  if(size<=2){var n7=sg.filter(function(t){return t.id!=="7";});if(size===1){if(pref==="indoor"||pref==="auto"){var ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}if(pref==="outdoor"||pref==="auto"){var out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}}else{if(pref==="outdoor"||pref==="auto"){var out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}if(pref==="indoor"||pref==="auto"){var ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}}if(n7.length) return [n7[0].id];if(sg.length) return [sg[0].id];if(co.length) return co[0].ids;return null;}
+  if(size<=4){if(canAssign(["7"],slots,s,e)&&comboOk(["7"],pref)) return ["7"];if(co.length) return co[0].ids;if(sg.length) return [sg[0].id];return null;}
+  if(co.length) return co[0].ids;
+  return null;
+}
+export function findBestAny(size,s,e,slots){
+  var r=findBest(size,"outdoor",s,e,slots)||findBest(size,"indoor",s,e,slots);
+  if(r) return r;
+  var busy=getBusy(slots,s,e);
+  var mx=VALID_COMBOS.filter(function(c){return c.cap>=size&&c.ids.every(function(id){return !busy.has(id);})&&isMixedLarge(c.ids)&&canAssign(c.ids,slots,s,e);}).sort(function(a,b){return _indoorPri(b)-_indoorPri(a)||a.cap-b.cap||a.ids.length-b.ids.length;});
+  return mx.length?mx[0].ids:null;
+}
+
+// ── Trial-fit + alternative-time finders ──────────────────────────────────────
+export function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTables,noReshuffle){
+  // When optimizer is OFF for today: slot-only check, no reshuffle simulation
+  if(noReshuffle){
+    return findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables);
+  }
+  var trialId=editId||"__trial__";
+  var trial={id:trialId,name:"",phone:"",date:date,time:time,size:size,duration:dur,preference:pref||"auto",notes:"",status:"confirmed",tables:[],customDur:null,_manual:false,_locked:false,_conflict:false,preferredTables:Array.isArray(prefTables)?prefTables:[],history:[]};
+  var base=editId?bookings.map(function(b){return b.id===editId?trial:b;}):bookings.concat([trial]);
+  var result=applyOpt(base,date,blocks);
+  var assigned=result.find(function(b){return b.id===trialId;});
+  if(!assigned||!assigned.tables||!assigned.tables.length) return null;
+  // Displacement check only for new bookings (not edits)
+  if(!editId){
+    var prevAssigned=bookings.filter(function(b){return b.date===date&&isActive(b)&&b.tables&&b.tables.length>0;});
+    var displaced=result.filter(function(b){return b.id!==trialId&&b.date===date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
+    var kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
+    if(kicked.length>0) return null;
+  }
+  return assigned.tables;
+}
+export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle){
+  var times=Array.from({length:(CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
+  var aroundM=around||0;
+  var valid=times.filter(function(m){
+    if(m+dur>CLOSE*60) return false;
+    if(m===aroundM) return false;
+    return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId,null,noReshuffle);
+  });
+  return valid;
+}
+export function formatSugg(sugg,around){
+  if(!sugg||!sugg.length) return {earlier:[],later:[]};
+  var before=sugg.filter(function(s){return s<around;}).slice(-10).map(toTime);
+  var after=sugg.filter(function(s){return s>around;}).slice(0,10).map(toTime);
+  return {earlier:before,later:after};
+}
+
+// ── Kitchen-load helpers ──────────────────────────────────────────────────────
+export function getKitchenLoad(bookings,date,time,dur,excludeId){
+  if(!time) return {tables:0,guests:0,starts:0};
+  var s=toMins(time);
+  var active=bookings.filter(function(b){return b&&b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==excludeId;});
+  var starting=active.filter(function(b){var bs=toMins(b.time);return Math.abs(bs-s)<15;});
+  var tblCount=0;var guests=0;
+  starting.forEach(function(b){guests+=b.size||2;tblCount+=(b.tables||[]).length||1;});
+  return {tables:tblCount,guests:guests,starts:starting.length};
+}
+export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excludeId,blocks){
+  var times=Array.from({length:(CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
+  var aroundM=toMins(around);
+  var results=[];
+  var exSl=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});
+  if(blocks) exSl=exSl.concat(getBlockSlots(blocks,date));
+  times.forEach(function(m){
+    if(m===aroundM) return;
+    if(m+dur>CLOSE*60) return;
+    var load=getKitchenLoad(bookings,date,toTime(m),dur,excludeId);
+    if(load.starts+1>=KITCHEN_TABLE_LIMIT) return;
+    var hasTables=!!findBest(size,pref,m,m+dur,exSl)||(pref==="auto"?!!findBestAny(size,m,m+dur,exSl):false);
+    results.push({time:m,timeStr:toTime(m),hasTables:hasTables});
+  });
+  var before=results.filter(function(r){return r.time<aroundM;}).slice(-5);
+  var after=results.filter(function(r){return r.time>aroundM;}).slice(0,5);
+  return {before:before,after:after};
+}
+export function findAllOptions(size,pref,s,e,slots){
+  var results=[];
+  var sg=ALL_TABLES.filter(function(t){return t.capacity>=size&&comboOk([t.id],pref)&&canAssign([t.id],slots,s,e);});
+  sg.forEach(function(t){results.push([t.id]);});
+  var co=VALID_COMBOS.filter(function(c){return c.cap>=size&&comboOk(c.ids,pref)&&canAssign(c.ids,slots,s,e);});
+  co.forEach(function(c){results.push(c.ids);});
+  if(pref==="auto"){
+    var mx=VALID_COMBOS.filter(function(c){return c.cap>=size&&isMixedLarge(c.ids)&&canAssign(c.ids,slots,s,e);});
+    mx.forEach(function(c){var k=c.ids.slice().sort().join("|");if(!results.some(function(r){return r.slice().sort().join("|")===k;})) results.push(c.ids);});
+  }
+  return results;
+}
+
+// ── Optimizer (greedy + retry passes) ─────────────────────────────────────────
+function _runGreedy(day,baseSlots){
+  var slots=baseSlots.slice();var assigned={};
+  day.forEach(function(b){if(!b||!b.time) return;var s=toMins(b.time),e=s+(b.duration||90);var tables;if(isLocked(b)){tables=b.tables;}else{
+    if(b.preferredTables&&b.preferredTables.length>0){var pt=b.preferredTables;var ptCap=comboCap(pt);if(ptCap>=(b.size||2)&&canAssign(pt,slots,s,e)) tables=pt;}
+    if(!tables){tables=findBest(b.size||2,b.preference||"auto",s,e,slots);if(!tables) tables=findBestAny(b.size||2,s,e,slots);}}assigned[b.id]=tables||null;if(tables) slots.push({tables:tables,s:s,e:e});});
+  return assigned;
+}
+export function optimise(bookings,date,blocks){
+  var completed=bookings.filter(function(b){return b&&b.date===date&&b.status==="completed"&&(b.tables||[]).length>0;});
+  var baseSlots=completed.map(function(b){return {tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
+  if(blocks) baseSlots=baseSlots.concat(getBlockSlots(blocks,date));
+  var day=bookings.filter(function(b){return b&&b.date===date&&isActive(b);}).sort(function(a,b){var la=isLocked(a)?0:1,lb=isLocked(b)?0:1;if(la!==lb) return la-lb;if(b.size!==a.size) return b.size-a.size;var pa=a.preference!=="auto"?0:1,pb=b.preference!=="auto"?0:1;if(pa!==pb) return pa-pb;return toMins(a.time)-toMins(b.time);});
+  // First pass
+  var assigned=_runGreedy(day,baseSlots);
+  // Table 7 swap: if a size-4 has table 7 and an overlapping size-3 exists, give 7 to the 3 and let greedy re-assign everyone else
+  var t7fours=day.filter(function(b){return !isLocked(b)&&assigned[b.id]&&assigned[b.id].length===1&&assigned[b.id][0]==="7"&&b.size===4;});
+  if(t7fours.length){t7fours.forEach(function(fb){var fs=toMins(fb.time),fe=fs+(fb.duration||90);var three=day.find(function(b){return !isLocked(b)&&b.size===3&&b.id!==fb.id&&overlaps(fs,fe,toMins(b.time),toMins(b.time)+(b.duration||90))&&(!assigned[b.id]||assigned[b.id][0]!=="7");});if(!three) return;var lockedSlots=baseSlots.slice();day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)});});var ts=toMins(three.time),te=ts+(three.duration||90);if(!canAssign(["7"],lockedSlots,ts,te)) return;var trialSlots=lockedSlots.slice();trialSlots.push({tables:["7"],s:ts,e:te});var trialAssigned={};trialAssigned[three.id]=["7"];var others=day.filter(function(b){return b.id!==three.id&&!isLocked(b);}).sort(function(a,b){return b.size-a.size||toMins(a.time)-toMins(b.time);});others.forEach(function(b){var bs=toMins(b.time),be=bs+(b.duration||90);var tables;if(b.preferredTables&&b.preferredTables.length>0){var pt=b.preferredTables;if(comboCap(pt)>=(b.size||2)&&canAssign(pt,trialSlots,bs,be)) tables=pt;}if(!tables){tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}trialAssigned[b.id]=tables||null;if(tables) trialSlots.push({tables:tables,s:bs,e:be});});day.forEach(function(b){if(isLocked(b)) trialAssigned[b.id]=b.tables;});var curUn=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];}).length;var tryUn=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;if(tryUn<=curUn) assigned=trialAssigned;});}
+  // Preference retry: if any non-auto booking got wrong area, force-fix it
+  var prefMismatch=day.filter(function(b){if(isLocked(b)||!assigned[b.id]||b.preference==="auto") return false;var tbl=assigned[b.id];if(b.preference==="indoor") return !isAllIn(tbl);if(b.preference==="outdoor") return !isAllOut(tbl);return false;});
+  if(prefMismatch.length){
+    var lockedSlots=baseSlots.slice();day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)});});
+    prefMismatch.forEach(function(pb){
+      var s=toMins(pb.time),e=s+(pb.duration||90);
+      var prefTables=findBest(pb.size||2,pb.preference,s,e,lockedSlots);
+      if(!prefTables) return;
+      var trialSlots=baseSlots.slice();trialSlots.push({tables:prefTables,s:s,e:e});
+      var trialAssigned={};trialAssigned[pb.id]=prefTables;
+      day.forEach(function(b){if(!b||!b.time||b.id===pb.id) return;var bs=toMins(b.time),be=bs+(b.duration||90);var tables;if(isLocked(b)){tables=b.tables;}else{tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}trialAssigned[b.id]=tables||null;if(tables) trialSlots.push({tables:tables,s:bs,e:be});});
+      var curUn=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];}).length;
+      var tryUn=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;
+      if(tryUn<=curUn){assigned=trialAssigned;}
+    });
+  }
+  // Retry: find combo bookings that could use alternatives
+  var unassigned=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];});
+  if(!unassigned.length) return assigned;
+  // Retry: try reshuffling any assigned booking that overlaps with unassigned ones
+  var unTimes=unassigned.map(function(b){return {s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
+  var comboBookings=day.filter(function(b){if(isLocked(b)||!assigned[b.id]) return false;var bs=toMins(b.time),be=bs+(b.duration||90);return unTimes.some(function(u){return overlaps(bs,be,u.s,u.e);});}).sort(function(a,b){return b.size-a.size;}).slice(0,8);
+  if(!comboBookings.length) return assigned;
+  var bestAssigned=assigned;
+  var bestUnassignedCount=unassigned.length;
+  comboBookings.forEach(function(cb){
+    var s=toMins(cb.time),e=s+(cb.duration||90);
+    var lockedSlots=baseSlots.slice();
+    day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)});});
+    var options=findAllOptions(cb.size||2,cb.preference||"auto",s,e,lockedSlots);
+    var currentKey=assigned[cb.id].slice().sort().join("|");
+    options.forEach(function(opt){
+      var optKey=opt.slice().sort().join("|");
+      if(optKey===currentKey) return;
+      // Reserve forced booking's tables first
+      var trialSlots=baseSlots.slice();
+      var cbs=toMins(cb.time),cbe=cbs+(cb.duration||90);
+      trialSlots.push({tables:opt,s:cbs,e:cbe});
+      var trialAssigned={};
+      trialAssigned[cb.id]=opt;
+      day.forEach(function(b){
+        if(!b||!b.time||b.id===cb.id) return;
+        var bs=toMins(b.time),be=bs+(b.duration||90);
+        var tables;
+        if(isLocked(b)){tables=b.tables;}
+        else{tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}
+        trialAssigned[b.id]=tables||null;
+        if(tables) trialSlots.push({tables:tables,s:bs,e:be});
+      });
+      var trialUnassigned=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;
+      var prefBroken=false;day.forEach(function(b){if(prefBroken||b.preference==="auto"||isLocked(b)) return;var orig=assigned[b.id];var trial=trialAssigned[b.id];if(!orig||!trial) return;var oOk=b.preference==="indoor"?isAllIn(orig):isAllOut(orig);var tOk=b.preference==="indoor"?isAllIn(trial):isAllOut(trial);if(oOk&&!tOk) prefBroken=true;});
+      if(trialUnassigned<bestUnassignedCount&&!prefBroken){bestUnassignedCount=trialUnassigned;bestAssigned=trialAssigned;}
+    });
+  });
+  return bestAssigned;
+}
+export function applyOpt(bookings,date,blocks){
+  var map=optimise(bookings,date,blocks);
+  return bookings.map(function(b){if(b.date!==date||b.status==="cancelled") return Object.assign({},b);if(b.status==="completed") return Object.assign({},b,{_conflict:false});var tables=isLocked(b)?b.tables:(map[b.id]||[]);return Object.assign({},b,{tables:tables,_conflict:!tables||!tables.length});});
+}
+
+// ── Optimizer-OFF helpers ─────────────────────────────────────────────────────
+// When the auto-optimizer is OFF (after 15:00 today), we do not reshuffle other
+// bookings. We only find a free slot for the booking being added/edited.
+export function optimizerActiveFor(date,autoOptimizerState){
+  var today=new Date().toISOString().slice(0,10);
+  if(date===today&&autoOptimizerState===false) return false;
+  return true;
+}
+export function syncLiveDurations(bookings,today,nowM){
+  return bookings.map(function(b){
+    if(b.date===today&&b.status==="seated"){
+      var elapsed=nowM-toMins(b.time);
+      if(elapsed>(b.duration||90)) return Object.assign({},b,{duration:elapsed,customDur:elapsed});
+    }
+    return b;
+  });
+}
+
+// ── v14: Seated start-time adjustment helper ─────────────────────────────────
+// When a booking's status flips to "seated", its actual start time should match
+// NOW (whether the guest arrived early OR late) and the end time stays pinned to
+// the ORIGINAL scheduled end — so new duration = scheduledEnd - NOW.
+// Returns null (no shift) when:
+//   (1) now === scheduledStart (no adjustment needed)
+//   (2) now >= scheduledEnd   (arriving past original end; nonsensical to shrink)
+//   (3) shifted window [now, scheduledEnd] would overlap an active booking on
+//       any shared table (per user rule 3a: don't shift).
+// Otherwise returns {newTime, newDuration, oldTime, direction}.
+export function applySeatedShift(booking,nowM,allBookings){
+  if(!booking||!booking.time) return null;
+  var scheduledStart=toMins(booking.time);
+  var scheduledDur=booking.duration||90;
+  var scheduledEnd=scheduledStart+scheduledDur;
+  if(nowM===scheduledStart) return null;
+  if(nowM>=scheduledEnd) return null;
+  var myTables=booking.tables||[];
+  if(myTables.length>0){
+    var conflict=allBookings.some(function(other){
+      if(!other||other.id===booking.id) return false;
+      if(other.date!==booking.date) return false;
+      if(other.status==="cancelled"||other.status==="completed") return false;
+      if(!other.tables||!other.tables.length) return false;
+      var shared=myTables.some(function(t){return other.tables.includes(t);});
+      if(!shared) return false;
+      var os=toMins(other.time);
+      var oe=os+(other.duration||90);
+      return overlaps(nowM,scheduledEnd,os,oe);
+    });
+    if(conflict) return null;
+  }
+  return {newTime:toTime(nowM),newDuration:scheduledEnd-nowM,oldTime:booking.time,direction:nowM<scheduledStart?"early":"late"};
+}
+export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
+  var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
+  if(blocks) slots=slots.concat(getBlockSlots(blocks,date));
+  var s=toMins(time),e=s+dur;
+  var pt=Array.isArray(prefTables)?prefTables:[];
+  if(pt.length>0&&canAssign(pt,slots,s,e)&&comboOk(pt,pref||"auto")&&comboCap(pt)>=size) return pt;
+  var tables=findBest(size,pref||"auto",s,e,slots);
+  if(!tables&&(pref||"auto")==="auto") tables=findBestAny(size,s,e,slots);
+  return tables;
+}
+// Drop-in replacement for applyOpt() in user-triggered actions. Respects the
+// autoOptimizer state for today. When ON → applyOpt as usual. When OFF → keep
+// all existing tables untouched; only reassign `changedId` if forceReassign.
+export function bookingsAfterAction(updatedBks,date,blocks,changedId,forceReassign,autoOptimizerState){
+  var today=new Date().toISOString().slice(0,10);
+  var d=new Date();var nowM=d.getHours()*60+d.getMinutes();
+  var synced=syncLiveDurations(updatedBks,today,nowM);
+  if(optimizerActiveFor(date,autoOptimizerState)) return applyOpt(synced,date,blocks);
+  // OFF path: preserve everyone's tables
+  if(!changedId||!forceReassign) return synced.map(function(b){return Object.assign({},b);});
+  // Find a slot for changedId without touching others
+  var target=synced.find(function(b){return b.id===changedId;});
+  if(!target||target.date!==date||!isActive(target)) return synced.map(function(b){return Object.assign({},b);});
+  if(isLocked(target)&&(target.tables||[]).length>0) return synced.map(function(b){return Object.assign({},b);});
+  var tables=findFreeSlot(synced.filter(function(b){return b.id!==changedId;}),date,target.time,target.size||2,target.preference||"auto",target.duration||90,blocks,null,target.preferredTables);
+  return synced.map(function(b){
+    if(b.id===changedId) return Object.assign({},b,{tables:tables||[],_conflict:!tables||!tables.length});
+    return Object.assign({},b);
+  });
+}
+
+// ── Validation / efficiency check ─────────────────────────────────────────────
+export function verifyClean(bookings,date){
+  var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&(b.tables||[]).length>0;});
+  for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){var a=day[i],b=day[j];var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;if(!overlaps(as,ae,bs,be)) continue;if(!canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)) return false;}}
+  return true;
+}
+export function checkInefficent(bookings,date){
+  var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&!isLocked(b);});
+  return day.some(function(b){var oth=day.filter(function(x){return x.id!==b.id;}).map(function(x){return {tables:x.tables,s:toMins(x.time),e:toMins(x.time)+x.duration};});var best=findBest(b.size,b.preference,toMins(b.time),toMins(b.time)+b.duration,oth);return best&&best.length<(b.tables||[]).length;});
+}
