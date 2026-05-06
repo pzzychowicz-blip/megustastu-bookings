@@ -13,7 +13,7 @@
  */
 import React, { useState, useRef, useEffect } from "react";
 import { ref, onValue, set } from "firebase/database";
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
 
 // ── Phase A extraction (v15-refactor) ────────────────────────────────────────
@@ -83,6 +83,20 @@ import { ReminderEditor }          from "./components/ReminderEditor";
 import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 
+// ── Phase B5 (v15-refactor): Final modal & screen extraction ──────────────
+// LoginScreen (the unauthenticated entry screen), WalkinForm (the walk-in
+// flow), PrefPickerModal (the preferred-tables soft-hint picker), and
+// HistoryPopup (the per-booking audit trail) extracted to ./components/.
+// JSX style. App.jsx still calls them via `RC(Component, props)` — RC works
+// with any component reference. BookingForm intentionally NOT extracted in
+// this phase: its dependency on ~25 closure values would force an 18+ prop
+// API, which is the wrong shape for a structural-only refactor. Deferred to
+// Phase C, when proper context wiring will reduce that to a clean 4–5 props.
+import { LoginScreen }     from "./components/LoginScreen";
+import { WalkinForm }      from "./components/WalkinForm";
+import { PrefPickerModal } from "./components/PrefPickerModal";
+import { HistoryPopup }    from "./components/HistoryPopup";
+
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
 // Module-level identity record. Survives bundling/minification — the strings
@@ -91,12 +105,12 @@ import { ListView }     from "./components/ListView";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 var __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.1",
+  version:"14.1.1",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
   license:"Proprietary — All rights reserved. See LICENSE.",
-  build:"v14.1-deployment"
+  build:"v14.1.1-deployment"
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 
@@ -122,7 +136,7 @@ console.log(
 // thicker grid lines, and the v14 preview 7 Reminder system.
 // v14.1: connection-status banner, IP protection layer (header, LICENSE,
 // fingerprint, console banner, visible credit in Settings).
-// In-app version label (General tab in Settings): "version 14.1".
+// In-app version label (General tab in Settings): "version 14.1.1".
 
 
 function useWinW(){var ws=useState(typeof window!=="undefined"?window.innerWidth:1024);var w=ws[0],setW=ws[1];useEffect(function(){function h(){setW(window.innerWidth);}window.addEventListener("resize",h);return function(){window.removeEventListener("resize",h);};},[]);return w;}
@@ -1170,50 +1184,7 @@ function BookingApp(){
         prefBtn)));
   })();
 
-  var prefPickerModal=(function(){
-    if(!showPrefPicker) return null;
-    var prefs=form.preferredTables||[];
-    var needed=Number(form.size)||2;
-    function getCapOf(ids){if(ids.length===0) return 0;var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});if(c) return c.cap;return ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
-    function togglePref(id){
-      setForm(function(f){
-        var cur=f.preferredTables||[];
-        if(cur.includes(id)) return Object.assign({},f,{preferredTables:cur.filter(function(x){return x!==id;})});
-        if(cur.length>0&&getCapOf(cur)>=needed) return f;
-        return Object.assign({},f,{preferredTables:cur.concat([id])});
-      });
-    }
-    var cap=getCapOf(prefs);
-    var capOk=prefs.length===0||cap>=needed;
-    var capText=prefs.length===0?"No preference (auto)":"Capacity: "+cap+" / "+needed+" pax"+(cap>=needed?" ✓":" — need more");
-    var capColor=prefs.length===0?S.muted:cap>=needed?"#166534":"#9a3412";
-    var groupEls=TABLE_GROUPS.map(function(grp){
-      var tableEls=grp.tables.map(function(t){
-        var isPref=prefs.includes(t.id);var indoor=isIn(t.id);var tc=indoor?TBL.ind:TBL.out;
-        return RC("button",{key:t.id,onClick:function(){togglePref(t.id);},style:{
-          width:64,height:48,padding:0,borderRadius:12,
-          border:"2px solid "+(isPref?"#0d9488":tc.bg),
-          background:isPref?"rgba(13,148,136,0.8)":"rgba(255,255,255,0.4)",
-          color:isPref?"#fff":S.text,fontWeight:600,fontSize:14,
-          cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,boxSizing:"border-box",
-          boxShadow:"0 1px 4px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.3)"
-        }},RC("span",null,t.id),RC("span",{style:{fontSize:10,fontWeight:500,color:isPref?"rgba(255,255,255,0.8)":S.muted}},"cap "+t.cap));
-      });
-      return RC("div",{key:grp.name,style:{marginBottom:14}},
-        RC("div",{style:{fontSize:13,fontWeight:700,color:grp.color,marginBottom:4}},grp.name),
-        RC("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},tableEls));
-    });
-    return RC(Overlay,{onClose:function(){setShowPrefPicker(false);}},
-      RC("div",{style:{textAlign:"center",marginBottom:4}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"#0d9488",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Preferred table")),
-      RC("div",{style:{fontSize:13,color:S.text,marginBottom:14}},"Soft hint — optimizer tries this first, falls back if unavailable."),
-      RC("div",{style:{marginBottom:14,padding:"10px 14px",borderRadius:14,background:"rgba(255,255,255,0.35)",border:"2px solid "+(capOk?"rgba(134,239,172,0.6)":"rgba(255,255,255,0.5)"),boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
-        RC("div",{style:{fontSize:14,fontWeight:700,color:S.text}},"Selected: "+(prefs.length?prefs.join(" + "):"none")),
-        RC("div",{style:{fontSize:13,color:capColor,fontWeight:500,marginTop:2}},capText)),
-      groupEls,
-      RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:16}},
-        prefs.length>0?RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.clear}),onClick:function(){setForm(function(f){return Object.assign({},f,{preferredTables:[]});});}},"Clear"):null,
-        RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setShowPrefPicker(false);}},"Done")));
-  })();
+  var prefPickerModal=showPrefPicker?RC(PrefPickerModal,{selected:form.preferredTables||[],partySize:form.size,onChange:function(next){setForm(function(f){return Object.assign({},f,{preferredTables:next});});},onClose:function(){setShowPrefPicker(false);}}):null;
 
   var availBanner=showForm&&formAvail&&!formAvail.ok?RC(AvailBanner,{msg:"No tables available"+(form.preference!=="auto"?" ("+form.preference+" preference)":"")+".",sugg:formAvail.sugg,onTapTime:function(t){setForm(function(f){return Object.assign({},f,{time:t});});}}):null;
 
@@ -1270,28 +1241,7 @@ function BookingApp(){
       "Return guest — re-booking from "+src.name+" ("+src.date+" at "+srcTime+"). Please set a date.");
   })();
 
-  var historyPopup=(function(){
-    if(!showHistory||!editId) return null;
-    var cur=bookings.find(function(b){return b.id===editId;});
-    var hist=cur&&cur.history&&cur.history.length>0?cur.history:[];
-    var reversed=hist.slice().reverse();
-    return RC(Overlay,{onClose:function(){setShowHistory(false);}},
-      RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:12,color:S.text}},"Booking history"),
-      RC("div",{style:{fontSize:13,color:S.muted,marginBottom:12}},cur.name+" — "+cur.date+" "+cur.time),
-      RC("div",{style:{maxHeight:300,overflowY:"auto",borderRadius:14,border:"2px solid rgba(160,170,190,0.4)",background:"rgba(255,255,255,0.35)",padding:"10px 12px",boxShadow:"inset 0 1px 4px rgba(0,0,0,0.06)"}},
-        reversed.length?reversed.map(function(h,i){
-          var d=new Date(h.at);
-          var dateStr=d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
-          var timeStr=d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
-          return RC("div",{key:i,style:{fontSize:12,color:S.muted,padding:"6px 0",borderBottom:i<reversed.length-1?"1px solid rgba(160,170,190,0.25)":"none"}},
-            RC("span",{style:{fontWeight:600,color:S.text}},dateStr+" "+timeStr),
-            " — ",
-            RC("span",{style:{color:"#0369a1",fontWeight:600}},h.by||"staff"),
-            RC("div",{style:{marginTop:2,color:S.text}},h.action));
-        }):RC("div",{style:{fontSize:12,color:S.muted}},"No history yet.")),
-      RC("div",{style:{display:"flex",justifyContent:"flex-end",marginTop:14}},
-        RC("button",{style:mkBtn({minHeight:40,padding:"8px 18px",background:"#64748b"}),onClick:function(){setShowHistory(false);}},"Close")));
-  })();
+  var historyPopup=(showHistory&&editId)?(function(){var cur=bookings.find(function(b){return b.id===editId;});return cur?RC(HistoryPopup,{booking:cur,onClose:function(){setShowHistory(false);}}):null;})():null;
 
   var errorEl=error?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"rgba(254,226,226,0.7)",borderRadius:14,border:"2px solid rgba(252,165,165,0.55)",marginBottom:14}},error):null;
 
@@ -1397,95 +1347,7 @@ function BookingApp(){
 
   var manualModal=manualBooking?RC(ManualModal,{booking:manualBooking,bookings:manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings,blocks:tableBlocks,onSave:function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{manualAssign(manualBooking.id,tables,locked,affected);}},onClose:function(){setManualTarget(null);}}):null;
 
-  var walkinModal=(function(){
-    if(!showWalkin) return null;
-    var wf=walkinForm;
-    var wSize=Number(wf.size)||2;
-    var wTime=wf.time||nowTime();
-    var wDur=wf.customDur||getDur(wSize);
-    var wDate=new Date().toISOString().slice(0,10);
-    var wS=toMins(wTime),wE=wS+wDur;
-    var wOther=liveBookings.filter(function(b){return b&&b.date===wDate&&b.status!=="cancelled"&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};}).concat(getBlockSlots(tableBlocks,wDate));
-    var wBusy=getBusy(wOther,wS,wE);
-    var wAutoCheck=(function(){
-      var pre=findBest(wSize,"auto",wS,wE,wOther)||(findBestAny(wSize,wS,wE,wOther));
-      if(pre) return null;
-      var noResh=!optimizerActiveFor(wDate,autoOptimizer);
-      var sugg=findTimes(wDate,wSize,"auto",liveBookings,wDur,wS,tableBlocks,null,noResh);
-      return formatSugg(sugg,wS);
-    })();
-    function getCapOf(ids){if(ids.length===0) return 0;var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});if(c) return c.cap;var bestCap=0,bestIds=[];VALID_COMBOS.forEach(function(combo){if(combo.ids.length<=ids.length&&combo.ids.every(function(id){return ids.includes(id);})&&combo.cap>bestCap){bestCap=combo.cap;bestIds=combo.ids;}});if(bestIds.length>0){var rem=ids.filter(function(id){return !bestIds.includes(id);});return bestCap+rem.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}return ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
-    function wToggle(id){
-      if(wBusy.has(id)) return;
-      var sel=wf.tables||[];
-      if(sel.includes(id)){setWalkinForm(function(f){return Object.assign({},f,{tables:sel.filter(function(x){return x!==id;})});});return;}
-      var next=sel.concat([id]);
-      var h1=next.includes("i1"),h4=next.includes("i4"),h2=next.includes("i2"),h3=next.includes("i3");
-      if(h1&&h4&&(!h2||!h3)) return;
-      if(sel.length>0&&getCapOf(sel)>=wSize){
-        var trimmed=sel.slice();
-        while(trimmed.length>0&&getCapOf(trimmed)>=wSize){trimmed=trimmed.slice(1);}
-        next=trimmed.concat([id]);
-        h1=next.includes("i1");h4=next.includes("i4");h2=next.includes("i2");h3=next.includes("i3");
-        if(h1&&h4&&(!h2||!h3)) return;
-      }
-      setWalkinForm(function(f){return Object.assign({},f,{tables:next});});
-    }
-    var wSel=wf.tables||[];
-    var wCap=getCapOf(wSel);
-    var wOk=wSel.length>0&&wCap>=wSize;
-    var wSummaryColor=wOk?"#166534":"#9a3412";
-    var wSummaryText=wSel.length===0?"Select tables below.":"Capacity: "+wCap+(wCap>=wSize?" (fits "+wSize+" pax)":" — need "+wSize+" pax");
-    var wClearBtn=wSel.length>0?RC("button",{key:"clr",style:mkBtn({fontSize:12,padding:"6px 12px",background:BTN.clear}),onClick:function(){setWalkinForm(function(f){return Object.assign({},f,{tables:[]});});}},"Clear"):null;
-    var wKitchenLoad=getKitchenLoad(bookings,wDate,wTime,wDur,null);
-    var wKitchenStarts=wKitchenLoad.starts+1;
-    var wKitchenGuests=wKitchenLoad.guests+wSize;
-    var wKitchenBusy=wKitchenStarts>=KITCHEN_TABLE_LIMIT;
-    var wKitchenSugg=wKitchenBusy?findKitchenFriendlyTimes(bookings,wDate,wSize,"auto",wDur,wTime,null,tableBlocks):null;
-    function wRenderKT(arr){
-      if(!arr||!arr.length) return null;
-      return arr.map(function(r){return RC("span",{key:r.timeStr,onClick:function(){setWalkinForm(function(f){return Object.assign({},f,{tables:[],time:r.timeStr});});},style:{cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:600,fontSize:12,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?"#166534":"#854d0e",border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}},r.timeStr);});
-    }
-    var wKitchenSection=RC("div",{style:{padding:"10px 14px",borderRadius:14,border:"2px solid "+(wKitchenBusy?"rgba(253,186,116,0.55)":"rgba(255,255,255,0.45)"),background:wKitchenBusy?"rgba(255,237,213,0.6)":"rgba(255,255,255,0.35)",marginBottom:14,fontSize:13,color:wKitchenBusy?"#9a3412":S.muted}},
-      RC("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
-        RC("span",null,RC("span",{style:{fontWeight:700}},"Starting at this time: "),wKitchenStarts+" booking"+(wKitchenStarts!==1?"s":"")+" · "+wKitchenGuests+" guest"+(wKitchenGuests!==1?"s":"")),
-        wKitchenBusy?RC("span",{style:{fontWeight:700,color:"#dc2626",fontSize:13,padding:"4px 12px",borderRadius:8,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}},"Kitchen busy"):null),
-      wKitchenSugg&&(wKitchenSugg.before.length||wKitchenSugg.after.length)?RC("div",{style:{marginTop:8}},
-        RC("div",{style:{fontSize:11,color:S.muted,marginBottom:6}},RC("span",{style:{background:"rgba(220,252,231,0.8)",color:"#166534",padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:600}},"green")," = tables available  ",RC("span",{style:{background:"rgba(254,249,195,0.8)",color:"#854d0e",padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:600}},"yellow")," = kitchen ok, tables tight"),
-        wKitchenSugg.before.length?RC("div",{style:{marginBottom:4}},RC("span",{style:{fontWeight:700,fontSize:12}},"Before: "),RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},wRenderKT(wKitchenSugg.before))):null,
-        wKitchenSugg.after.length?RC("div",null,RC("span",{style:{fontWeight:700,fontSize:12}},"After: "),RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},wRenderKT(wKitchenSugg.after))):null):
-      wKitchenBusy?RC("div",{style:{marginTop:6,fontSize:12,color:"#991b1b"}},"No kitchen-friendly alternatives found nearby."):null);
-    return RC(Overlay,{onClose:function(){setShowWalkin(false);}},
-      RC("div",{style:{textAlign:"center",marginBottom:4}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(22,101,52,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Walk-in")),
-      RC("div",{style:{fontSize:13,color:S.text,marginBottom:16,textAlign:"center"}},"Walk-in "+getNextWalkinNum()+" · Seated"),
-      RC(Section,null,
-        RC("div",{style:{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}},
-          RC(Fld,{label:"Time"},RC("input",{type:"time",value:wTime,onChange:function(e){setWalkinForm(function(f){return Object.assign({},f,{tables:[],time:e.target.value});});},min:"13:00",max:"22:00",style:mkInp()})),
-          RC(Fld,{label:"Number of guests"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
-            RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.max(1,(Number(f.size)||2)-1),tables:[]});});}},"-"),
-            RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},String(wSize)),
-            RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{size:Math.min(25,(Number(f.size)||2)+1),tables:[]});});}},"+"))),
-          RC(Fld,{label:"Duration"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
-            RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){var cd=f.customDur||getDur(Number(f.size)||2);return Object.assign({},f,{customDur:Math.max(15,cd-15)});});}},"-"),
-            RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},wDur+" min"),
-            RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){var cd=f.customDur||getDur(Number(f.size)||2);return Object.assign({},f,{customDur:Math.min(480,cd+15)});});}},"+"),
-            RC("span",{style:{fontSize:13,color:S.muted,marginLeft:4}},"End: "+toTime(toMins(wTime)+wDur)),
-            wf.customDur?RC("button",{style:mkBtn({fontSize:12,background:BTN.reset}),onPointerDown:function(e){e.preventDefault();setWalkinForm(function(f){return Object.assign({},f,{customDur:null});});}},"Reset"):null)),
-        RC(Fld,{label:"Notes",style:{marginTop:12}},RC("textarea",{value:wf.notes,onChange:function(e){setWalkinForm(function(f){return Object.assign({},f,{notes:e.target.value});});},rows:2,placeholder:"Special requests...",style:Object.assign({},mkInp(),{resize:"vertical"})})))),
-      RC("div",{style:{fontSize:13,color:S.text,marginBottom:14}},"Tap tables to select / deselect."),
-      RC("div",{style:{marginBottom:14,padding:"12px 14px",borderRadius:14,background:"rgba(255,255,255,0.35)",border:"2px solid "+(wOk?"rgba(134,239,172,0.6)":"rgba(255,255,255,0.5)"),display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
-        RC("div",null,
-          RC("div",{style:{fontSize:14,fontWeight:700,color:S.text}},"Selected: "+(wSel.length?wSel.join(" + "):"none")),
-          RC("div",{style:{fontSize:13,color:wSummaryColor,fontWeight:500,marginTop:2}},wSummaryText)),
-        wClearBtn),
-      RC(TableGrid,{selected:wSel,toggle:wToggle,busy:wBusy,seatedBusy:new Set(),swapBusy:false}),
-      wAutoCheck&&wSel.length===0?RC(AvailBanner,{msg:"No tables available at "+wTime+".",sugg:wAutoCheck,warn:true,onTapTime:function(t){setWalkinForm(function(f){return Object.assign({},f,{tables:[],time:t});});}}):null,
-      walkinError?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"rgba(254,226,226,0.7)",borderRadius:14,border:"2px solid rgba(252,165,165,0.55)",marginBottom:14}},walkinError):null,
-      wKitchenSection,
-      RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}},
-        RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setShowWalkin(false);}},"Cancel"),
-        RC("button",{onClick:saveWalkin,disabled:!wOk,style:{background:wOk?"rgba(22,101,52,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:wOk?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:wOk?"0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)":"none"}},"Seat")));
-  })();
+  var walkinModal=showWalkin?RC(WalkinForm,{draft:walkinForm,setDraft:setWalkinForm,error:walkinError,liveBookings:liveBookings,bookings:bookings,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,walkinNum:getNextWalkinNum(),isMobile:isMobile,onSave:saveWalkin,onClose:function(){setShowWalkin(false);}}):null;
 
   return RC("div",{style:{background:"linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,boxSizing:"border-box"}},
     RC("div",{style:{maxWidth:1000,margin:"0 auto"}},
@@ -1570,33 +1432,6 @@ function BookingApp(){
       historyPopup));
 }
 
-// ── Login Screen ──────────────────────────────────────────────────────────────
-function LoginScreen(){
-  var es=useState("");var email=es[0],setEmail=es[1];
-  var ps=useState("");var password=ps[0],setPassword=ps[1];
-  var ers=useState("");var error=ers[0],setError=ers[1];
-  var ls=useState(false);var loading=ls[0],setLoading=ls[1];
-  function handleLogin(){
-    if(!email||!password){setError("Please enter email and password.");return;}
-    setLoading(true);setError("");
-    signInWithEmailAndPassword(auth,email,password).then(function(){setLoading(false);}).catch(function(err){
-      setLoading(false);
-      if(err.code==="auth/invalid-credential"||err.code==="auth/wrong-password"||err.code==="auth/user-not-found") setError("Invalid email or password.");
-      else if(err.code==="auth/too-many-requests") setError("Too many attempts. Please wait a moment.");
-      else setError("Login failed. Please try again.");
-    });
-  }
-  function handleKey(e){if(e.key==="Enter") handleLogin();}
-  return RC("div",{style:{background:"linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text}},
-    RC("div",{style:{background:"rgba(255,255,255,0.55)",backdropFilter:"blur(40px)",WebkitBackdropFilter:"blur(40px)",borderRadius:20,border:"1px solid rgba(255,255,255,0.5)",padding:"32px 28px",width:"100%",maxWidth:360,boxShadow:"0 8px 40px rgba(0,0,0,0.10), inset 0 1px 1px rgba(255,255,255,0.8)"}},
-      RC("div",{style:{fontSize:22,fontWeight:700,color:S.text,marginBottom:4}},"Me Gustas T\u00fa"),
-      RC("div",{style:{fontSize:14,color:S.muted,marginBottom:24}},"Staff login"),
-      RC("div",{style:{display:"flex",flexDirection:"column",gap:12}},
-        RC("input",{type:"email",value:email,onChange:function(e){setEmail(e.target.value);},onKeyDown:handleKey,placeholder:"Email",style:mkInp()}),
-        RC("input",{type:"password",value:password,onChange:function(e){setPassword(e.target.value);},onKeyDown:handleKey,placeholder:"Password",style:mkInp()}),
-        error?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"8px 12px",background:"rgba(254,226,226,0.7)",borderRadius:12,border:"2px solid rgba(252,165,165,0.55)"}},error):null,
-        RC("button",{onClick:handleLogin,disabled:loading,style:Object.assign({},mkBtn({fontSize:15,minHeight:44,padding:"12px"}),{background:"rgba(0,122,255,0.75)",opacity:loading?0.7:1,cursor:loading?"wait":"pointer"})},loading?"Logging in...":"Log in"))));
-}
 
 // ── Auth Wrapper ──────────────────────────────────────────────────────────────
 export default function App(){
