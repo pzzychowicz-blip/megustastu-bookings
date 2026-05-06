@@ -180,3 +180,46 @@ JSX, `const`, destructured props with default values, spread for style merging, 
 - No unused imports in either new file.
 - App.jsx call sites for `RC(TimelineView, …)` and `RC(ListView, …)` preserved.
 - Live smoke test confirmed: timeline render, scroll, zoom, follow-now, optimizer toggle, reshuffle, long-press status popup, cog → Settings, list-view sort order, live duration tag on seated bookings, status-change buttons.
+
+---
+
+## Phase B5 — Final modal & screen extraction + version bump
+
+**Date**: 2026-05-07
+**Branch**: `v15-refactor` → merged to `main`
+**Status**: ✅ shipped
+
+### Files created
+- `src/components/LoginScreen.jsx` (124 lines) — JSX, the unauthenticated entry screen. Email + password inputs, Firebase auth wiring, error mapping for invalid-credential / wrong-password / user-not-found / too-many-requests. Self-contained, 0 props.
+- `src/components/WalkinForm.jsx` (484 lines) — JSX, the walk-in seating modal. Time / party size / duration steppers, table picker (via `TableGrid`), kitchen-load section with alternative-time chips, capacity check, AvailBanner integration. 11 props.
+- `src/components/PrefPickerModal.jsx` (160 lines) — JSX, the soft-hint preferred-tables picker. Capacity-capped selection (refuses additions once party fits), Clear / Done buttons. 4 props.
+- `src/components/HistoryPopup.jsx` (87 lines) — JSX, per-booking audit-trail viewer. Reverse-chronological entries with en-GB locale formatting. 2 props.
+
+### Files modified
+- `src/App.jsx` — 1,612 → 1,447 lines (−165). Imports added for the four new components as a B5 phase block. `signInWithEmailAndPassword` dropped from the `firebase/auth` import (now only used inside LoginScreen). Inline `LoginScreen` function definition + section header deleted. The `prefPickerModal`, `historyPopup`, and `walkinModal` IIFEs replaced with single-line conditional `RC(Component, props)` call sites. Version strings bumped: `__APP_SIGNATURE__.version` 14.1 → 14.1.1, `__APP_SIGNATURE__.build` v14.1-deployment → v14.1.1-deployment, version-label comment updated.
+- `src/components/Settings.jsx` — visible version label in `GeneralTabContent` bumped 14.1 → 14.1.1; header comment expanded to record the bump.
+
+### Style: continued JSX template from atoms.jsx
+JSX, `const`, destructured props with default values, spread for state updates, inline `&&` and `?:` for conditional renders. App.jsx itself stays mixed (RC/`var`) — modernisation belongs to Phase C.
+
+### Key decisions
+1. **BookingForm extraction skipped.** Dependency analysis showed a `BookingForm` component would need 18+ closure props plus 12+ booking-logic helpers — splitting App.jsx complexity across two files without clarifying anything. Deferred to Phase C, where context wiring will reduce the surface to ~5 props. The thread summary's original B5 plan was based on the file structure pre-analysis; the analysis revealed the form is structurally different from TimelineView / ListView (which had bounded prop counts).
+2. **B5 reframed as "Final modal & screen extraction"** — captures the four naturally bounded UI units. Total reduction (165 lines) is comparable to what B5-with-BookingForm would have achieved minus the architectural debt.
+3. **Three IIFEs collapsed to conditional `RC()` call sites.** All the IIFE-internal logic moved entirely inside the new components; parent retains only visibility decisions and a small prop set. Matches the pattern established by ManualModal / BlockModal in B2.
+4. **`walkinNum` and `isMobile` passed as derived props** rather than imported. The parent recomputes `getNextWalkinNum()` each render (matching original behaviour); `useWinW` stays inline in App.jsx until Phase C moves it to a hooks module.
+5. **`signInWithEmailAndPassword` import migrated**, not kept as a pass-through. LoginScreen is the only consumer in code, so the import lives where the use is. Same logic as `CogIcon` migration in B4.
+6. **Three `getCapOf` variants now exist** — in `ManualModal`, `WalkinForm`, and `PrefPickerModal`. Each preserved verbatim. All three flagged for Phase C consolidation alongside `pct`, `statusOrder`, `liveDur` (B4 carry-over).
+7. **Version bump policy formalised** this thread: file-split refactor only = patch version (14.1 → 14.1.1), new components or feature additions = minor version (→ 14.2.x), major rewrite = major version (→ 15.x). End-of-B5 ships as 14.1.1 because the file split is complete with no behavioural change.
+
+### Validation performed
+- All six files pass `@babel/parser` JSX parse-check.
+- Every imported symbol verified to exist as an export in its source module.
+- No unused imports in any of the four new component files.
+- App.jsx call-site checks: 4 new `RC()` invocations present, 0 leftover IIFEs for the three replaced ones, 0 references to `signInWithEmailAndPassword`, 0 occurrences of the old version strings.
+- Live smoke test confirmed: login with valid + invalid credentials, walk-in flow including kitchen-busy confirmation path, preferred-tables soft-hint pick / clear / done, history popup with multiple entries, DevTools boot banner reads `v14.1.1`, Settings → General shows `version 14.1.1`.
+
+### Cumulative milestone — file-split phase of v15 refactor: COMPLETE
+- Original `App.jsx` (pre-Phase 0): 2,570 lines · 1 module
+- After B5: 1,447 lines · 16 modules (`atoms`, `constants`, `reminders`, `booking-logic`, `firebase` + 11 component files)
+- Total extracted: **~44% of original line count**
+- Next: Phase C (modernization — `var` → `const`/`let`, `RC()` → JSX in App.jsx, helper consolidation, `useWinW` → hooks module, BookingForm extraction with proper context). Best done in a fresh thread.
