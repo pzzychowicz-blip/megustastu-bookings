@@ -42,3 +42,20 @@ export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,1
 // Phase B1 addition: BTN was previously defined inline in App.jsx; moved here
 // so component files (atoms.jsx and future B2–B5 extractions) can import it.
 export var BTN={tables:"rgba(0,122,255,0.75)",edit:"rgba(0,122,255,0.7)",del:"rgba(220,60,60,0.75)",cancel:"rgba(220,60,60,0.75)",clear:"rgba(220,60,60,0.7)",reset:"rgba(220,60,60,0.7)",today:"rgba(0,122,255,0.7)",nav:"rgba(120,130,150,0.5)",dismiss:"rgba(220,60,60,0.7)",orange:"rgba(230,100,30,0.8)"};
+
+// ── Table groupings for UI pickers ────────────────────────────────────────────
+// Phase B2 addition: TABLE_GROUPS was previously defined inline in App.jsx
+// alongside the original TableGrid component. With TableGrid extracted to
+// ./components/, and a second consumer remaining in App.jsx (the inline
+// "Preferred tables" picker in the new-booking form), the array is shared
+// from here. Used by:
+//   • src/components/TableGrid.jsx — the assignment grid
+//   • src/App.jsx                  — the "Preferred tables" picker
+// `tables[].cap` is the standalone capacity for the visual chip label.
+export var TABLE_GROUPS=[
+  {name:"Tables: 1A / 1B / 7",color:"#78716c",note:"1A+1B = 6 · table 7 = 4 standalone",tables:[{id:"1A",cap:2},{id:"1B",cap:2},{id:"7",cap:4}]},
+  {name:"Tables: 2 / 3 / 4",color:"#78716c",note:"2+3 = 5 · 3+4 = 4 · 2+3+4 = 8",tables:[{id:"2",cap:2},{id:"3",cap:2},{id:"4",cap:2}]},
+  {name:"Tables: 5A / 5B / 6",color:"#78716c",note:"5A+5B = 5 · 5B+6 = 5 · 5A+5B+6 = 8",tables:[{id:"5A",cap:2},{id:"5B",cap:2},{id:"6",cap:2}]},
+  {name:"Tables: i2 / i3 / i4",color:"#7c3aed",note:"i2+i3 = 6 · i3+i4 = 6 · i2+i3+i4 = 8",tables:[{id:"i2",cap:2},{id:"i3",cap:2},{id:"i4",cap:2}]},
+  {name:"Table: i1",color:"#7c3aed",note:"Standalone cap 2 · all 4 indoor = 10",tables:[{id:"i1",cap:2}]},
+];

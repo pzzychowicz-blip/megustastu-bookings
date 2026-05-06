@@ -20,7 +20,7 @@ import { db, auth } from "./firebase";
 // Pure data and pure logic moved into ./lib/* modules. Symbols below are now
 // imported rather than defined inline. Behaviour and signatures are unchanged.
 import {
-  INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, VALID_COMBOS, CLUSTERS,
+  INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, VALID_COMBOS, CLUSTERS, TABLE_GROUPS,
   OPEN, CLOSE, GRID_CLOSE, KITCHEN_TABLE_LIMIT, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, S, TBL, BTN, EMPTY_FORM
 } from "./lib/constants";
@@ -52,6 +52,16 @@ import {
   Overlay, Fld, Section, SBadge, TBadge, SmallTag, Toggle, Kbd,
   AvailBanner, mkInp, mkBtn
 } from "./components/atoms";
+
+
+// ── Phase B2 (v15-refactor): secondary modals + table grid ─────────────────
+// TableGrid (the 13-table picker), ManualModal (assign/swap UI), and
+// BlockModal (table-level block editor) extracted to ./components/. Each is
+// JSX (matching atoms.jsx style template). App.jsx still calls them via
+// `RC(Component, props)` — RC works with any component reference.
+import { TableGrid }   from "./components/TableGrid";
+import { ManualModal } from "./components/ManualModal";
+import { BlockModal }  from "./components/BlockModal";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -315,178 +325,6 @@ function CogIcon(){
     RC("path",{d:"M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"}));
 }
 
-
-// ── Table Grid ───────────────────────────────────────────────────────────
-var TABLE_GROUPS=[
-  {name:"Tables: 1A / 1B / 7",color:"#78716c",note:"1A+1B = 6 · table 7 = 4 standalone",tables:[{id:"1A",cap:2},{id:"1B",cap:2},{id:"7",cap:4}]},
-  {name:"Tables: 2 / 3 / 4",color:"#78716c",note:"2+3 = 5 · 3+4 = 4 · 2+3+4 = 8",tables:[{id:"2",cap:2},{id:"3",cap:2},{id:"4",cap:2}]},
-  {name:"Tables: 5A / 5B / 6",color:"#78716c",note:"5A+5B = 5 · 5B+6 = 5 · 5A+5B+6 = 8",tables:[{id:"5A",cap:2},{id:"5B",cap:2},{id:"6",cap:2}]},
-  {name:"Tables: i2 / i3 / i4",color:"#7c3aed",note:"i2+i3 = 6 · i3+i4 = 6 · i2+i3+i4 = 8",tables:[{id:"i2",cap:2},{id:"i3",cap:2},{id:"i4",cap:2}]},
-  {name:"Table: i1",color:"#7c3aed",note:"Standalone cap 2 · all 4 indoor = 10",tables:[{id:"i1",cap:2}]},
-];
-function TableGrid(props){
-  var selected=props.selected,toggle=props.toggle,busy=props.busy,seatedBusy=props.seatedBusy||new Set(),swapBusy=!!props.swapBusy;
-  function isBlocked(id){if(!busy.has(id)) return false;if(swapBusy&&!seatedBusy.has(id)) return false;return true;}
-  var groupEls=TABLE_GROUPS.map(function(grp){
-    var noteEl=grp.note?RC("div",{key:"note",style:{fontSize:12,color:S.text,marginBottom:6,fontStyle:"italic"}},grp.note):null;
-    var tableEls=grp.tables.map(function(t){
-      var blocked=isBlocked(t.id),isSel=selected.includes(t.id),isBusyT=busy.has(t.id)&&!blocked;
-      var indoor=isIn(t.id);var tc=indoor?TBL.ind:TBL.out;
-      var bg,clr,brd;
-      if(isSel){bg="rgba(249,115,22,0.8)";clr="#fff";brd="2px solid rgba(249,115,22,0.9)";}
-      else if(blocked){bg="rgba(220,60,60,0.75)";clr="#fff";brd="2px solid rgba(220,60,60,0.8)";}
-      else if(isBusyT){bg="rgba(250,204,21,0.7)";clr="#fff";brd="2px solid rgba(250,204,21,0.8)";}
-      else{bg="rgba(255,255,255,0.4)";clr=S.text;brd="2px solid "+tc.bg;}
-      var label=blocked?"busy":isBusyT?"swap":isSel?"selected":"cap "+t.cap;
-      var subClr=isSel||blocked||isBusyT?"rgba(255,255,255,0.8)":S.text;
-      return RC("button",{key:t.id,onClick:function(){toggle(t.id);},style:{width:64,height:52,padding:0,borderRadius:12,border:brd,background:bg,color:clr,fontWeight:600,fontSize:14,cursor:blocked?"not-allowed":"pointer",opacity:blocked?0.5:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,boxSizing:"border-box",boxShadow:"0 1px 4px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.3)"}},
-        RC("span",null,t.id),RC("span",{style:{fontSize:10,fontWeight:500,color:subClr}},label));
-    });
-    return RC("div",{key:grp.name,style:{marginBottom:16}},
-      RC("div",{style:{fontSize:13,fontWeight:700,color:grp.color,marginBottom:2}},grp.name),
-      noteEl,
-      RC("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},tableEls));
-  });
-  return RC("div",null,groupEls);
-}
-
-// ── Manual Modal ──────────────────────────────────────────────────────────
-function ManualModal(props){
-  var booking=props.booking,bookings=props.bookings,onSave=props.onSave,onClose=props.onClose,titleText=props.titleText,blocks=props.blocks||[];
-  var ss=useState(booking&&booking.tables?booking.tables.slice():[]);var selected=ss[0],setSelected=ss[1];
-  var sbs=useState(false);var swapBusy=sbs[0],setSwapBusy=sbs[1];
-  if(!booking) return null;
-  var needed=booking.size||2;
-  var s=toMins(booking.time||"13:00"),e=s+(booking.duration||90);
-  var otherBookings=bookings.filter(function(b){return b&&b.id!==booking.id&&b.date===booking.date&&b.status!=="cancelled"&&(b.tables||[]).length>0;});
-  var otherSlots=otherBookings.map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+(b.duration||90),status:b.status,id:b.id,name:b.name};}).concat(getBlockSlots(blocks,booking.date).map(function(sl){return Object.assign({},sl,{status:"blocked",id:"__block__",name:"Blocked"});}));
-  var busy=getBusy(otherSlots,s,e);
-  var seatedBusy=new Set();otherSlots.forEach(function(sl){if(!overlaps(s,e,sl.s,sl.e)) return;if(sl.status==="seated") sl.tables.forEach(function(id){seatedBusy.add(id);});});
-  function getCapOf(ids){if(ids.length===0) return 0;var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});if(c) return c.cap;var bestCap=0,bestIds=[];VALID_COMBOS.forEach(function(combo){if(combo.ids.length<=ids.length&&combo.ids.every(function(id){return ids.includes(id);})&&combo.cap>bestCap){bestCap=combo.cap;bestIds=combo.ids;}});if(bestIds.length>0){var rem=ids.filter(function(id){return !bestIds.includes(id);});return bestCap+rem.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}return ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
-  function toggle(id){
-    if(selected.includes(id)){setSelected(selected.filter(function(x){return x!==id;}));return;}
-    if(busy.has(id)&&!(swapBusy&&!seatedBusy.has(id))) return;
-    var next=selected.concat([id]);
-    var h1=next.includes("i1"),h4=next.includes("i4"),h2=next.includes("i2"),h3=next.includes("i3");
-    if(h1&&h4&&(!h2||!h3)) return;
-    if(selected.length>0&&getCapOf(selected)>=needed){
-      var trimmed=selected.slice();
-      while(trimmed.length>0&&getCapOf(trimmed)>=needed){trimmed=trimmed.slice(1);}
-      next=trimmed.concat([id]);
-      h1=next.includes("i1");h4=next.includes("i4");h2=next.includes("i2");h3=next.includes("i3");
-      if(h1&&h4&&(!h2||!h3)) return;
-    }
-    setSelected(next);
-  }
-  var affectedBookings=[];
-  if(swapBusy&&selected.length>0){
-    otherSlots.forEach(function(sl){
-      if(!overlaps(s,e,sl.s,sl.e)||sl.status==="seated") return;
-      var taken=sl.tables.filter(function(id){return selected.includes(id);});
-      if(taken.length>0) affectedBookings.push({name:sl.name,id:sl.id,tables:taken});
-    });
-  }
-  var cap=getCapOf(selected);
-  var slotsForConflict=otherSlots.filter(function(sl){return !swapBusy||sl.status==="seated";});
-  var conflict=selected.length>=2&&!canAssign(selected,slotsForConflict,s,e);
-  var ok=selected.length>0&&cap>=needed&&!conflict;
-  var summaryColor=conflict?"#991b1b":ok?"#166534":"#9a3412";
-  var summaryText=selected.length===0?"Select tables below.":conflict?"Conflict: cannot use these tables together.":"Capacity: "+cap+(cap>=needed?" (fits "+needed+" pax)":" — need "+needed+" pax");
-  var clearBtn=selected.length>0?RC("button",{key:"clr",style:mkBtn({fontSize:12,padding:"6px 12px",background:BTN.clear}),onClick:function(){setSelected([]);}},"Clear"):null;
-  var isSwapping=affectedBookings.length>0;
-  var assignLabel=isSwapping?"Swap & Assign":"Assign";
-  var affectedEl=isSwapping?RC("div",{style:{marginTop:8,padding:"10px 14px",borderRadius:14,background:"rgba(255,237,213,0.65)",border:"2px solid rgba(253,186,116,0.55)"}},
-    RC("div",{style:{fontSize:13,fontWeight:700,color:"#9a3412",marginBottom:4}},"Will reassign:"),
-    affectedBookings.map(function(ab){return RC("div",{key:ab.id,style:{fontSize:12,color:"#9a3412"}},ab.name+" — losing table "+(ab.tables.join(", ")));})):null;
-  var swapBg=swapBusy?"rgba(255,237,213,0.6)":S.bg;
-  var swapBrd="2px solid "+(swapBusy?"rgba(253,186,116,0.6)":"rgba(255,255,255,0.5)");
-  var swapTitleClr=swapBusy?"#9a3412":S.text;
-  var swapSubClr=swapBusy?"#c2410c":S.text;
-  // v14 preview 3: Internal keyboard shortcuts scoped to this modal.
-  //   S     → toggle Swap busy (same effect as clicking the Toggle)
-  //   C     → clear selected tables (same as the Clear button)
-  //   Enter → primary action (Assign / Swap & Assign) if selection is valid
-  // S/C are suppressed when focus is on an input/textarea/select so the user
-  // can still type normally. Modifier keys (Ctrl/Meta/Alt) always pass through
-  // so browser / OS shortcuts keep working.
-  useEffect(function(){
-    function isTyping(el){if(!el) return false;var t=el.tagName;return t==="INPUT"||t==="TEXTAREA"||t==="SELECT"||el.isContentEditable;}
-    function handler(ev){
-      if(ev.ctrlKey||ev.metaKey||ev.altKey) return;
-      var k=ev.key;
-      if(k==="Enter"){
-        if(isTyping(ev.target)&&ev.target.tagName==="TEXTAREA") return;
-        if(ok){ev.preventDefault();onSave(selected,true,isSwapping?affectedBookings:null);}
-        return;
-      }
-      if(isTyping(ev.target)) return;
-      if(k==="s"||k==="S"){ev.preventDefault();var next=!swapBusy;if(next) setSelected([]);setSwapBusy(next);return;}
-      if(k==="c"||k==="C"){ev.preventDefault();setSelected([]);return;}
-    }
-    window.addEventListener("keydown",handler);
-    return function(){window.removeEventListener("keydown",handler);};
-  },[swapBusy,selected,ok,isSwapping,affectedBookings,onSave]);
-  return RC(Overlay,{onClose:onClose},
-    RC("div",{style:{textAlign:"center",marginBottom:4}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},titleText||"Manual table assignment")),
-    RC("div",{style:{fontSize:13,color:S.text,marginBottom:4,marginTop:6,textAlign:"center"}},booking.name+" · "+booking.size+" pax · "+booking.time+"–"+toTime(e)),
-    RC("div",{style:{marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:14,background:swapBg,border:swapBrd,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
-      RC("div",null,RC("div",{style:{fontSize:13,fontWeight:700,color:swapTitleClr}},"Swap busy"),RC("div",{style:{fontSize:11,color:swapSubClr,marginTop:2}},"Reassign confirmed bookings to other tables (not seated)")),
-      RC(Toggle,{on:swapBusy,onClick:function(){var next=!swapBusy;if(next) setSelected([]);setSwapBusy(next);}})),
-    RC("div",{style:{fontSize:13,color:S.text,marginBottom:14}},"Tap tables to select / deselect."),
-    RC("div",{style:{marginBottom:14,padding:"12px 14px",borderRadius:14,background:"rgba(255,255,255,0.35)",border:"2px solid "+(conflict?"rgba(252,165,165,0.6)":ok?"rgba(134,239,172,0.6)":"rgba(255,255,255,0.5)"),display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
-      RC("div",null,
-        RC("div",{style:{fontSize:14,fontWeight:700,color:S.text}},"Selected: "+(selected.length?selected.join(" + "):"none")),
-        RC("div",{style:{fontSize:13,color:summaryColor,fontWeight:500,marginTop:2}},summaryText)),
-      clearBtn),
-    affectedEl,
-    RC(TableGrid,{selected:selected,toggle:toggle,busy:busy,seatedBusy:seatedBusy,swapBusy:swapBusy}),
-    RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:16}},
-      RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:onClose},"Cancel"),
-      RC("button",{disabled:!ok,onClick:function(){if(ok)onSave(selected,true,isSwapping?affectedBookings:null);},style:{background:ok?(isSwapping?BTN.orange:S.accent):"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 20px",cursor:ok?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:ok?"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)":"none"}},assignLabel)));
-}
-
-// ── Block Modal ──────────────────────────────────────────────────────────
-function BlockModal(props){
-  var tableId=props.tableId,date=props.date,blocks=props.blocks||[],onSave=props.onSave,onRemove=props.onRemove,onClose=props.onClose;
-  if(!tableId) return null;
-  var existing=blocks.filter(function(bl){return bl.tableId===tableId&&bl.date===date;});
-  var indoor=isIn(tableId);var tc=indoor?TBL.ind:TBL.out;
-  var ms=useState(existing.length>0?"view":"add");var mode=ms[0],setMode=ms[1];
-  var frs=useState(OPEN+":00");var from=frs[0],setFrom=frs[1];
-  var tos=useState(GRID_CLOSE+":00");var to=tos[0],setTo=tos[1];
-  function handleSave(){
-    if(!from||!to||toMins(to)<=toMins(from)) return;
-    onSave({tableId:tableId,date:date,allDay:false,from:from,to:to});
-  }
-  var viewEls=existing.map(function(bl,i){
-    var label=bl.allDay?OPEN+":00 – "+GRID_CLOSE+":00":bl.from+" – "+bl.to;
-    return RC("div",{key:i,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:14,background:"rgba(254,226,226,0.65)",border:"2px solid rgba(252,165,165,0.55)",marginBottom:8}},
-      RC("div",null,RC("div",{style:{fontSize:14,fontWeight:700,color:"#991b1b"}},"Blocked"),RC("div",{style:{fontSize:13,color:"#991b1b"}},label)),
-      RC("button",{onClick:function(){onRemove(bl);},style:mkBtn({background:BTN.del,fontSize:12})},"Unblock"));
-  });
-  if(mode==="view"&&existing.length>0){
-    return RC(Overlay,{onClose:onClose},
-      RC("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:16}},
-        RC("span",{style:{fontSize:12,fontWeight:700,padding:"4px 10px",borderRadius:8,background:tc.bg,color:tc.text,border:"1px solid "+tc.border}},tableId),
-        RC("span",{style:{fontSize:17,fontWeight:700,color:S.text}},"Table "+tableId+" — "+date)),
-      viewEls,
-      RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}},
-        RC("button",{style:mkBtn({minHeight:40,padding:"8px 16px",background:"#64748b"}),onClick:function(){setMode("add");}},"+ Add block"),
-        RC("button",{style:mkBtn({minHeight:40,padding:"8px 16px",background:BTN.cancel}),onClick:onClose},"Close")));
-  }
-  return RC(Overlay,{onClose:onClose},
-    RC("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},
-      RC("span",{style:{fontSize:12,fontWeight:700,padding:"4px 10px",borderRadius:8,background:tc.bg,color:tc.text,border:"1px solid "+tc.border}},tableId),
-      RC("span",{style:{fontSize:17,fontWeight:700,color:S.text}},"Block table "+tableId)),
-    RC("div",{style:{fontSize:13,color:S.muted,marginBottom:16}},date),
-    RC(Section,null,
-      RC("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
-        RC(Fld,{label:"From"},RC("input",{type:"time",value:from,onChange:function(e){setFrom(e.target.value);},min:OPEN+":00",max:GRID_CLOSE+":00",style:mkInp()})),
-        RC(Fld,{label:"To"},RC("input",{type:"time",value:to,onChange:function(e){setTo(e.target.value);},min:OPEN+":00",max:GRID_CLOSE+":00",style:mkInp()})))),
-    RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}},
-      RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:onClose},"Cancel"),
-      RC("button",{onClick:handleSave,style:{background:"rgba(153,27,27,0.85)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Block")));
-}
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
 function TimelineView(props){
