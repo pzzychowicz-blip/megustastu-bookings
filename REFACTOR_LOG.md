@@ -90,3 +90,60 @@ JSX, `const`, destructured props, spread for style merging, inline `&&` and `?:`
 | After Phase A | 2,194 | 4 |
 | After Phase B1 | 2,149 | 5 |
 | **After Phase B2** | **1,987** | **8** |
+
+---
+
+## Phase B3 — Settings modal tree extraction
+
+**Date**: 2026-05-06
+**Branch**: `v15-refactor` → merged to `main`
+**Status**: ✅ shipped
+
+### Files created
+- `src/components/Settings.jsx` — JSX, the Settings shell. Exports `SettingsContent` (tab dispatcher), `TabBar` (pill-shaped tab switcher), `GeneralTabContent` (version + copyright), `CogIcon` (gear SVG used as Settings trigger).
+- `src/components/Reminders.jsx` — JSX, the Reminders tab body. Exports `RemindersTabContent` (header + list), `ReminderListItem` (one card). Module-level `DAY_SHORT_LABELS` constant co-located here.
+- `src/components/Shortcuts.jsx` — JSX, the Shortcuts cheatsheet. Exports `ShortcutsContent` (sectioned cheatsheet), `ShortcutRow` (one keycap-and-label row). Module-level `SHORTCUT_SECTIONS` constant co-located here.
+- `src/components/ReminderEditor.jsx` — JSX, the standalone reminder editor modal at z-index 250 (sits above the Settings Overlay's 200). Pure presentational — `draft` and `setDraft` owned by BookingApp.
+
+### Files modified
+- `src/App.jsx` — 1,987 → 1,783 lines (−204). Imports added for `SettingsContent`, `CogIcon`, `ReminderEditor`; nine inline component definitions and the `DAY_SHORT_LABELS` module-level constant deleted.
+
+### Style: continued JSX template
+JSX, `const`, destructured props, spread for state updates (`{...draft, text:v}` instead of `Object.assign`), inline `&&` and `?:` for conditional renders. App.jsx itself stays in `RC()`/`var` style — coexistence works.
+
+### Key decisions
+1. **Four files (Option C)**, not two (Option A monolith) or three (Option B Reminders+Editor merged). Reasons: each file = one logical concern; well-balanced sizes (largest is ReminderEditor at ~310 lines including comments); ReminderEditor is structurally a top-level modal like ManualModal/BlockModal so it earns its own file by B2 precedent; future tabs can add new files instead of bloating an existing one.
+2. **No Phase D bonuses bundled** — same reasoning as B2; kept B3 focused on structural extraction. ErrorBoundary / useMemo / viewport / logout-confirm still deferred.
+3. **`DAY_SHORT_LABELS` co-located in Reminders.jsx** — was previously a top-level App.jsx constant only used by ReminderListItem. Moving it inside its only consumer is the obvious cleanup.
+4. **Outdated comment fixed silently.** The original ShortcutsContent header claimed it was "shared by Settings modal AND the standalone `?` popup." No `?` popup exists in the codebase — `?` key dispatches `setShowSettings(true)`. The dual-use claim was removed in the new file's header.
+5. **Hardcoded "version 14.1" preserved** in GeneralTabContent. Per refactor plan, this string bumps to "15.0" at end of B5.
+6. **Custom overlay kept inline in ReminderEditor** — the Overlay component from atoms.jsx uses z-index 200; ReminderEditor needs 250 to sit above the Settings modal. Lifting ReminderEditor's overlay markup to a shared "z-aware Overlay" was out of scope; flagged for Phase C consideration.
+
+### Pre-merge validation
+- **Anchor checks** — 8 distinct line-position anchors verified against the post-B2 App.jsx before any mutation (BlockModal import close, RC alias, Settings section comment, ShortcutRow def, DAY_SHORT_LABELS const, ReminderEditor def, CogIcon def + closing brace, Timeline header).
+- **Reference sweep** — confirmed every remaining Settings-tree symbol in the modified App.jsx is either an import line, a reference inside the import-block comment, or a legitimate consumer at expected call sites.
+- **JSX-aware parse** — all 5 affected files (4 new + modified App.jsx) parsed cleanly with `@babel/parser` + JSX plugin.
+- **Import resolution audit** — all 13 imported symbols across the 4 new files resolve to actual exports in their source files (constants.js, booking-logic.js, reminders.js, atoms.jsx, sibling components).
+- **Brace / paren / bracket balance** — perfect across all files.
+
+### Verified on
+- localhost:5173 — Settings cog opens modal; tab switching (click + ←/→ keys); General tab shows version + copyright; Reminders tab empty state, list state, "+ New reminder" launches editor at z=250 above Settings; Save / toggle / edit / delete flows; Shortcuts tab renders 7 sections; `?` key opens Settings from anywhere; Reminder editor validation (empty text, past date, all-times-past for one-off); Esc key closes editor.
+- Vercel preview build — read-only smoke test
+- Production after merge — same smoke test on live URL
+
+### Notes for B4
+- TimelineView (~125 lines) and ListView (~50 lines) are the next targets. Both live near the top of App.jsx now (post-deletion area).
+- TimelineView has heavier dependencies than B2/B3 components: zoom state, follow-now state, busy-window calculations, the cog button, AvailBanner integration. Read carefully before drafting.
+- Decide single-file (`Views.jsx` bundling both) vs split (`TimelineView.jsx` + `ListView.jsx`) at the start of B4 based on dependency overlap. My instinct: split, because they share almost no dependencies and List is much smaller.
+- App.jsx target after B4: ~1,600 lines.
+
+### Cumulative progress
+| Phase | App.jsx lines | Modules in `src/` |
+|---|---|---|
+| Pre-refactor (v14.1) | 2,570 | 1 (`App.jsx`) |
+| After Phase A | 2,194 | 4 |
+| After Phase B1 | 2,149 | 5 |
+| After Phase B2 | 1,987 | 8 |
+| **After Phase B3** | **1,783** | **12** |
+
+We're 31% of the way through reducing App.jsx's pre-refactor size. Two sub-phases remaining (B4, B5).

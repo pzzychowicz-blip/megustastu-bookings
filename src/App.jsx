@@ -68,11 +68,20 @@ import { BlockModal }  from "./components/BlockModal";
 // extracted to ./components/Settings.jsx. The Reminders tab body and the
 // Shortcuts cheatsheet live in ./components/Reminders.jsx and Shortcuts.jsx
 // respectively (each imported transitively by Settings.jsx — App.jsx only
-// needs SettingsContent and CogIcon). ReminderEditor (modal at z-index 250)
+// needs SettingsContent). ReminderEditor (modal at z-index 250)
 // gets its own file because it's a top-level modal, mirroring how
 // ManualModal and BlockModal were treated in B2.
-import { SettingsContent, CogIcon } from "./components/Settings";
+import { SettingsContent }         from "./components/Settings";
 import { ReminderEditor }          from "./components/ReminderEditor";
+
+// ── Phase B4 (v15-refactor): Timeline + List views ────────────────────────
+// TimelineView (the Gantt-style scrollable grid) and ListView (the sorted
+// card list) extracted to ./components/. JSX style. App.jsx still calls them
+// via `RC(Component, props)` — RC works with any component reference.
+// CogIcon (originally imported by App.jsx in B3) moved to TimelineView's
+// imports because TimelineView is its only consumer.
+import { TimelineView } from "./components/TimelineView";
+import { ListView }     from "./components/ListView";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -120,186 +129,6 @@ function useWinW(){var ws=useState(typeof window!=="undefined"?window.innerWidth
 
 var RC=React.createElement;
 
-
-
-// ── Timeline ──────────────────────────────────────────────────────────────────
-function TimelineView(props){
-  var bookings=props.bookings,date=props.date,onEdit=props.onEdit,onManual=props.onManual,onStatus=props.onStatus,blocks=props.blocks||[],onBlock=props.onBlock,nowMins=props.nowMins||0,warnings=props.warnings||{};
-  var zoom=props.zoom||1,setZoom=props.setZoom;
-  var followNow=props.followNow,setFollowNow=props.setFollowNow;
-  var scrollPosRef=props.scrollPosRef;
-  var autoOptimizer=props.autoOptimizer!==false;
-  var setAutoOptimizer=props.setAutoOptimizer||function(){};
-  var onReshuffle=props.onReshuffle||function(){};
-  var onOpenSettings=props.onOpenSettings||function(){};
-  var scrollRef=useRef(null);
-  var qss=useState(null);var quickStatus=qss[0],setQuickStatus=qss[1];
-  var isToday=date===new Date().toISOString().slice(0,10);
-  var totalMins=(GRID_CLOSE-OPEN)*60;
-  var gridW=Math.max(320,totalMins*zoom*1.2);
-  useEffect(function(){
-    if(!scrollRef.current) return;
-    if(followNow&&isToday&&nowMins>=OPEN*60&&nowMins<=GRID_CLOSE*60){
-      var targetMins=Math.max(OPEN*60,nowMins-30);
-      var scrollPos=((targetMins-OPEN*60)/totalMins)*gridW;
-      scrollRef.current.scrollLeft=scrollPos;
-      if(scrollPosRef) scrollPosRef.current=scrollPos;
-    } else if(scrollPosRef&&scrollPosRef.current>0){
-      scrollRef.current.scrollLeft=scrollPosRef.current;
-    }
-  },[followNow,isToday,nowMins,gridW]);
-  function onGridScroll(){
-    if(scrollRef.current&&scrollPosRef){scrollPosRef.current=scrollRef.current.scrollLeft;}
-    if(quickStatus) setQuickStatus(null);
-  }
-  var day=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled";});
-  var dayBlocks=blocks.filter(function(bl){return bl.date===date;});
-  var unassigned=day.filter(function(b){return b.status!=="completed"&&(!(b.tables||[]).length||b._conflict);});
-  function pct(mins){return ((mins-OPEN*60)/totalMins)*100+"%";}
-  function GridLines(){
-    var lines=QUARTER_HOURS.map(function(m){var isH=m%60===0;return RC("div",{key:m,style:{position:"absolute",top:0,bottom:0,left:pct(m),borderLeft:isH?"2px solid rgba(120,130,155,0.45)":"0.5px solid rgba(140,150,175,0.3)",opacity:1}});});
-    lines.push(RC("div",{key:"end",style:{position:"absolute",top:0,bottom:0,right:0,borderLeft:"2px solid rgba(120,130,155,0.45)"}}));
-    return RC("div",{style:{position:"absolute",inset:0}},lines);
-  }
-  function liveDur(b){if(b.status==="seated"){var elapsed=nowMins-toMins(b.time);return Math.max(15,elapsed);}return b.duration;}
-  function Block(bp){
-    var b=bp.b;var d=liveDur(b);var sm=toMins(b.time)-OPEN*60;var left=pct(OPEN*60+sm);var w=Math.max((d/totalMins)*100,0.5)+"%";
-    var warn=warnings[b.id];var bgc=BLOCK_BG[b.status]||BLOCK_BG.confirmed;
-    var border=warn?(warn.overdue?"3px solid #dc2626":"3px solid #f59e0b"):"none";
-    var hasPrefT=b.preferredTables&&b.preferredTables.length>0;
-    var lbl=b.name+" ("+b.size+")"+(isLocked(b)?" [L]":"")+(hasPrefT?" ★":"")+(warn&&warn.overdue?" !!":"");
-    var pressTimer=useRef(null);var didLong=useRef(false);var touchStartPos=useRef(null);var blockEl=useRef(null);
-    function onTouchStart(e){
-      didLong.current=false;
-      var t=e.touches[0];touchStartPos.current={x:t.clientX,y:t.clientY};
-      var el=e.currentTarget;
-      pressTimer.current=setTimeout(function(){didLong.current=true;var rect=el.getBoundingClientRect();setQuickStatus({booking:b,x:rect.left,y:rect.top,w:rect.width,h:rect.height});},400);
-    }
-    function onTouchMove(e){
-      if(!touchStartPos.current) return;
-      var t=e.touches[0];var dx=Math.abs(t.clientX-touchStartPos.current.x);var dy=Math.abs(t.clientY-touchStartPos.current.y);
-      if(dx>8||dy>8){clearTimeout(pressTimer.current);pressTimer.current=null;}
-    }
-    function onTouchEnd(e){clearTimeout(pressTimer.current);pressTimer.current=null;if(didLong.current){e.preventDefault();}}
-    function onCtx(e){e.preventDefault();}
-    function handleClick(){if(didLong.current) return;onEdit(b);}
-    return RC("div",{onClick:handleClick,onTouchStart:onTouchStart,onTouchMove:onTouchMove,onTouchEnd:onTouchEnd,onContextMenu:onCtx,style:{position:"absolute",top:3,height:ROW_H-8+"px",left:left,width:w,background:bgc,borderRadius:10,overflow:"hidden",display:"flex",alignItems:"center",boxSizing:"border-box",cursor:"pointer",border:border||"1px solid rgba(255,255,255,0.2)",WebkitTouchCallout:"none",WebkitUserSelect:"none",userSelect:"none",boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},
-      RC("span",{style:{flex:1,padding:"0 8px",fontSize:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},lbl),
-      RC("span",{onClick:function(e){e.stopPropagation();onManual(b.id);},style:{padding:"0 6px",fontSize:13,cursor:"pointer",color:"rgba(255,255,255,0.7)",borderLeft:"1px solid rgba(255,255,255,0.3)",height:"100%",display:"flex",alignItems:"center",minWidth:28}},"="));
-  }
-  function BlockBar(bp){
-    var bl=bp.bl;
-    var bS=bl.allDay?OPEN*60:toMins(bl.from);var bE=bl.allDay?GRID_CLOSE*60:toMins(bl.to);
-    var left=pct(bS);var w=Math.max(((bE-bS)/totalMins)*100,0.5)+"%";
-    return RC("div",{style:{position:"absolute",top:1,height:ROW_H-4+"px",left:left,width:w,background:"repeating-linear-gradient(45deg,#991b1b,#991b1b 4px,#7f1d1d 4px,#7f1d1d 8px)",borderRadius:4,opacity:0.6,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}},
-      RC("span",{style:{fontSize:9,fontWeight:700,color:"#fff",textTransform:"uppercase",letterSpacing:1}},"blocked"));
-  }
-  var headerLines=QUARTER_HOURS.concat([GRID_CLOSE*60]).map(function(m){var isH=m%60===0;return RC("div",{key:"l"+m,style:{position:"absolute",top:0,left:pct(m),bottom:0,borderLeft:isH?"2px solid rgba(120,130,155,0.45)":"0.5px solid rgba(140,150,175,0.3)"}});});
-  var headerLabels=QUARTER_HOURS.filter(function(m){return m%60===0&&m<GRID_CLOSE*60;}).map(function(m){var center=((m+30-OPEN*60)/totalMins)*100;return RC("span",{key:"h"+m,style:{position:"absolute",top:3,left:center+"%",transform:"translateX(-50%)",fontSize:10,fontWeight:600,color:"#fff",whiteSpace:"nowrap",pointerEvents:"none",background:"rgba(90,100,120,0.9)",padding:"2px 5px",borderRadius:6,zIndex:1,boxShadow:"0 1px 3px rgba(0,0,0,0.1)"}},String(Math.floor(m/60)).padStart(2,"0")+":00");});
-  // Labels column
-  var labelCol=RC("div",{style:{width:LABEL_W+"px",flexShrink:0}},
-    RC("div",{style:{height:24,background:"rgba(220,225,235,0.45)",borderRadius:"6px 0 0 0",borderBottom:"2px solid rgba(180,190,210,0.3)",boxSizing:"border-box"}}),
-    TIMELINE_TABLES.map(function(tbl){var id=tbl.id,indoor=isIn(id);var hasBlock=dayBlocks.some(function(bl){return bl.tableId===id;});
-      return RC("div",{key:id,onClick:function(){if(onBlock) onBlock(id);},style:{height:ROW_H+"px",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:6,borderBottom:"2px solid rgba(180,190,210,0.2)",cursor:"pointer",boxSizing:"border-box"}},
-        RC("span",{style:{fontSize:11,fontWeight:600,padding:"3px 0",borderRadius:8,background:hasBlock?"rgba(153,27,27,0.85)":indoor?TBL.ind.bg:TBL.out.bg,color:hasBlock?"#fff":indoor?TBL.ind.text:TBL.out.text,border:"1px solid "+(hasBlock?"rgba(153,27,27,0.5)":indoor?TBL.ind.border:TBL.out.border),width:32,textAlign:"center",display:"inline-block",boxSizing:"border-box",boxShadow:"0 1px 3px rgba(0,0,0,0.1)"}},id));}),
-    unassigned.length>0?RC("div",{style:{height:ROW_H+"px",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:6,borderTop:"1px dashed rgba(220,60,60,0.4)",marginTop:4,boxSizing:"border-box"}},RC("span",{style:{fontSize:10,fontWeight:600,color:"#991b1b"}},"unassigned")):null);
-  // Grid column (scrollable)
-  var gridRows=TIMELINE_TABLES.map(function(tbl){var id=tbl.id;var rows=day.filter(function(b){return (b.tables||[]).includes(id);});var tblBlocks=dayBlocks.filter(function(bl){return bl.tableId===id;});
-    return RC("div",{key:id,style:{height:ROW_H+"px",position:"relative",borderBottom:"2px solid rgba(180,190,210,0.2)",boxSizing:"border-box"}},RC(GridLines,null),tblBlocks.map(function(bl,i){return RC(BlockBar,{key:"blk"+i,bl:bl});}),rows.filter(function(b){return b.status==="seated";}).map(function(b){var origD=b.originalDuration||b.duration;var sm=toMins(b.time)-OPEN*60;var gLeft=pct(OPEN*60+sm);var gW=Math.max((origD/totalMins)*100,0.5)+"%";return RC("div",{key:"ghost_"+b.id,style:{position:"absolute",top:3,height:(ROW_H-8)+"px",left:gLeft,width:gW,background:"transparent",borderRadius:10,border:"2px dashed "+BLOCK_BG.seated,boxSizing:"border-box",pointerEvents:"none"}});}),rows.map(function(b){return RC(Block,{key:b.id,b:b});}));});
-  var unassignedGrid=unassigned.length>0?RC("div",{style:{height:ROW_H+"px",position:"relative",borderTop:"1px dashed rgba(220,60,60,0.4)",marginTop:4,boxSizing:"border-box"}},RC(GridLines,null),unassigned.map(function(b){return RC(Block,{key:b.id,b:b});})):null;
-  // Now line (today only)
-  var nowInRange=isToday&&nowMins>=OPEN*60&&nowMins<=GRID_CLOSE*60;
-  var nowLine=nowInRange?RC("div",{key:"now",style:{position:"absolute",top:0,bottom:0,left:pct(nowMins),zIndex:10,pointerEvents:"none"}},
-    RC("div",{style:{position:"absolute",top:3,left:"50%",transform:"translateX(-50%)",fontSize:10,fontWeight:600,color:"#fff",background:"rgba(0,0,0,0.9)",padding:"2px 5px",borderRadius:6,whiteSpace:"nowrap",zIndex:11,boxShadow:"0 1px 4px rgba(0,0,0,0.15)"}},toTime(nowMins)),
-    RC("div",{style:{position:"absolute",top:11,bottom:0,left:"50%",transform:"translateX(-50%)",width:2,background:"rgba(0,0,0,0.6)"}})):null;
-  var gridCol=RC("div",{ref:scrollRef,onScroll:onGridScroll,style:{flex:1,overflowX:"auto",overflowY:"hidden"}},
-    RC("div",{style:{width:gridW+"px",minWidth:"100%",position:"relative"}},
-      RC("div",{style:{position:"relative",borderBottom:"2px solid rgba(180,190,210,0.3)",background:"rgba(220,225,235,0.45)",borderRadius:"0 6px 0 0",height:24,overflow:"visible",boxSizing:"border-box"}},headerLines,headerLabels),
-      gridRows,
-      unassignedGrid,
-      nowLine));
-  var followBtn=isToday?RC("button",{onClick:function(){if(!followNow){setFollowNow(true);if(zoom<4) setZoom(4);}else{setFollowNow(false);}},style:mkBtn({minHeight:32,padding:"4px 10px",fontSize:11,background:followNow?"rgba(0,0,0,0.6)":"rgba(120,130,150,0.5)"})},followNow?"Follow":"Follow"):null;
-  var zoomBtns=RC("div",{style:{display:"flex",gap:4,alignItems:"center"}},
-    followBtn,
-    RC("button",{onClick:function(){setZoom(function(z){return Math.max(1,z-0.5);});},style:mkBtn({minHeight:32,minWidth:32,padding:"4px 10px",fontSize:16,background:BTN.nav})},"-"),
-    RC("button",{onClick:function(){setZoom(1);setFollowNow(false);},style:mkBtn({minHeight:32,padding:"4px 10px",fontSize:11,background:zoom===1?"#64748b":BTN.nav})},zoom===1?"1x":zoom+"x → 1x"),
-    RC("button",{onClick:function(){setZoom(function(z){return Math.min(5,z+0.5);});},style:mkBtn({minHeight:32,minWidth:32,padding:"4px 10px",fontSize:16,background:BTN.nav})},"+"));
-  // Optimizer toggle + Reshuffle (today only)
-  var optBtns=isToday?RC("div",{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}},
-    RC("button",{onClick:function(){setAutoOptimizer(!autoOptimizer);},style:mkBtn({minHeight:32,padding:"4px 12px",fontSize:11,background:autoOptimizer?"rgba(22,101,52,0.75)":"rgba(120,130,150,0.55)"})},"Optimizer: "+(autoOptimizer?"ON":"OFF")),
-    !autoOptimizer?RC("button",{onClick:onReshuffle,style:mkBtn({minHeight:32,padding:"4px 12px",fontSize:11,background:BTN.orange})},"Reshuffle"):null):null;
-  var legendEls=Object.keys(STATUS_COLORS).map(function(s){return RC("span",{key:s,style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:BLOCK_BG[s]||"#999",color:"#fff",border:"1px solid rgba(255,255,255,0.2)",fontWeight:600,textTransform:"capitalize",boxShadow:"0 1px 3px rgba(0,0,0,0.08)"}},s);});
-  legendEls.push(RC("span",{key:"in",style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:TBL.ind.bg,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",fontWeight:600}},"indoor"));
-  legendEls.push(RC("span",{key:"out",style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:TBL.out.bg,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",fontWeight:600}},"outdoor"));
-  legendEls.push(RC("span",{key:"blocked",style:{fontSize:11,padding:"3px 8px",borderRadius:8,background:"rgba(153,27,27,0.85)",color:"#fff",border:"1px solid rgba(255,255,255,0.2)",fontWeight:600}},"blocked"));
-  var quickPopup=quickStatus?RC("div",{onClick:function(){setQuickStatus(null);},style:{position:"fixed",inset:0,zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.18)"}},
-    RC("div",{onClick:function(e){e.stopPropagation();},style:{background:"#eef1f7",borderRadius:20,border:"1px solid "+S.border,boxShadow:"0 8px 32px rgba(0,0,0,0.14)",padding:"20px 24px",minWidth:240,maxWidth:320,zIndex:301}},
-      RC("div",{style:{fontSize:20,fontWeight:700,color:S.text,marginBottom:16}},quickStatus.booking.name),
-      RC("div",{style:{display:"flex",gap:10,flexWrap:"wrap"}},
-        ["confirmed","seated","completed","cancelled"].filter(function(st){return st!==quickStatus.booking.status;}).map(function(st){return RC("button",{key:st,style:{background:BLOCK_BG[st],border:"none",borderRadius:12,padding:"10px 18px",fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer",textTransform:"capitalize",minHeight:44,flex:"1 1 auto"},onClick:function(){onStatus(quickStatus.booking.id,st);setQuickStatus(null);}},st);})))):null;
-  return RC("div",{style:{background:"rgba(255,255,255,0.4)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:20,border:"1px solid rgba(255,255,255,0.45)",padding:"10px 12px",boxShadow:"0 2px 16px rgba(0,0,0,0.06), inset 0 1px 1px rgba(255,255,255,0.6)"}},
-    RC("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8,flexWrap:"wrap"}},
-      optBtns||RC("div",null),
-      zoomBtns),
-    RC("div",{style:{display:"flex"}},labelCol,gridCol),
-    RC("div",{style:{marginTop:10,display:"flex",gap:8,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap"}},
-      RC("div",{style:{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flex:"1 1 auto",minWidth:0}},legendEls),
-      RC("button",{onClick:onOpenSettings,title:"Settings & keyboard shortcuts",style:{background:"rgba(120,130,150,0.4)",border:"1px solid rgba(255,255,255,0.45)",borderRadius:10,width:34,height:34,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0,color:S.text,boxShadow:"0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"}},RC(CogIcon,null))),
-    RC("div",{style:{marginTop:6,fontSize:11,color:S.muted}},"tap booking to edit  ·  = assign  ·  hold to change status  ·  tap table label to block"),
-    quickPopup);
-}
-
-// ── List View ─────────────────────────────────────────────────────────────────
-function ListView(props){
-  var bookings=props.bookings,date=props.date,onEdit=props.onEdit,onStatus=props.onStatus,onDelete=props.onDelete,onManual=props.onManual,nowMins=props.nowMins||0,warnings=props.warnings||{};
-  function statusOrder(s){return s==="seated"?0:s==="confirmed"?1:s==="completed"?2:3;}
-  var day=bookings.filter(function(b){return b.date===date;}).sort(function(a,b){var sa=statusOrder(a.status),sb=statusOrder(b.status);if(sa!==sb) return sa-sb;return a.time.localeCompare(b.time);});
-  if(!day.length) return RC("div",{style:{textAlign:"center",padding:"48px 0",color:S.text,fontSize:15}},"No bookings for this date.");
-  return RC("div",{style:{display:"flex",flexDirection:"column",gap:10}},day.map(function(b){
-    // v14 p1 (Issue 2 fix): end-time label is pinned to the scheduled plan
-    // (time + duration) while the guest is within plan; once they overstay,
-    // syncLiveDurations bumps b.duration to elapsed and the label starts
-    // tracking live time from that moment on.
-    // v14 p1 follow-up: the duration TAG is separate from end-time — it shows
-    // actual minutes since seating (live, min 15) so staff can see how long
-    // the party has been at the table regardless of the planned end.
-    var elapsedMin=b.status==="seated"?Math.max(15,nowMins-toMins(b.time)):0;
-    var liveDur=b.status==="seated"?Math.max(elapsedMin,b.duration||90):b.duration;
-    var end=toTime(toMins(b.time)+liveDur);
-    var durationTag=b.status==="seated"?RC(SmallTag,{label:elapsedMin+" min",style:{background:"#166534",color:"#fff",border:"none"}}):null;
-    var warn=warnings[b.id];
-    var warnEl=warn?RC("div",{style:{fontSize:13,fontWeight:700,marginBottom:8,padding:"6px 10px",borderRadius:12,background:warn.overdue?"rgba(254,226,226,0.65)":"rgba(255,237,213,0.65)",color:warn.overdue?"#991b1b":"#9a3412",border:"2px solid "+(warn.overdue?"rgba(252,165,165,0.55)":"rgba(253,186,116,0.55)")}},warn.overdue?"Overdue — next booking ("+warn.next+") at "+warn.nextTime+" is waiting":"Next booking ("+warn.next+") at "+warn.nextTime+" in "+warn.gap+" min"):null;
-    var conflictEl=b._conflict&&b.status!=="completed"?RC("div",{style:{fontSize:13,color:"#991b1b",fontWeight:700,marginBottom:8,background:"rgba(254,226,226,0.65)",border:"2px solid rgba(252,165,165,0.55)",borderRadius:12,padding:"6px 10px"}},"No table assigned — use manual assignment."):null;
-    var manualTag=b._manual&&!isLocked(b)?RC(SmallTag,{label:"manual",style:{background:"#0369a1",color:"#fff",border:"none"}}):null;
-    var lockedTag=b._locked?RC(SmallTag,{label:"locked",style:{background:"#854d0e",color:"#fff",border:"none"}}):null;
-    var prefTag=b.preferredTables&&b.preferredTables.length>0?RC(SmallTag,{label:"★ "+b.preferredTables.join("+"),style:{background:"#0d9488",color:"#fff",border:"none"}}):null;
-    var notesEl=b.notes?RC("div",{style:{fontSize:13,color:S.text,borderTop:"0.5px solid "+S.border,paddingTop:8,marginTop:8}},b.notes):null;
-    var phonEl=b.phone?RC("span",{style:{fontSize:13,color:S.text,marginLeft:4}},b.phone):null;
-    var statusBtns=["confirmed","seated","completed","cancelled"].filter(function(s){return s!==b.status;}).map(function(s){return RC("button",{key:s,style:mkBtn({background:BLOCK_BG[s],textTransform:"capitalize"}),onClick:function(){onStatus(b.id,s);}},"> "+s);});
-    var sc=STATUS_COLORS[b.status];
-    var useStatusColor=b.status==="seated"||b.status==="completed"||b.status==="cancelled";
-    var cardBg=useStatusColor?"rgba(255,255,255,0.35)":"rgba(255,255,255,0.45)";
-    var cardBrd=warn?(warn.overdue?"rgba(220,60,60,0.5)":"rgba(245,158,11,0.5)"):b._conflict?"rgba(252,165,165,0.5)":useStatusColor?sc.border:"rgba(255,255,255,0.4)";
-    var cardBrdW=warn?"3px":useStatusColor?"3px":"1px";
-    return RC("div",{key:b.id,style:{background:cardBg,border:cardBrdW+" solid "+cardBrd,borderRadius:16,padding:"14px 16px",opacity:b.status==="completed"||b.status==="cancelled"?0.75:1,boxShadow:"0 2px 12px rgba(0,0,0,0.06), inset 0 1px 1px rgba(255,255,255,0.5)"}},
-      conflictEl,
-      warnEl,
-      RC("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:8}},
-        RC("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
-          RC("span",{style:{fontWeight:700,fontSize:16,color:S.text}},b.name),
-          RC(SBadge,{status:b.status}),
-          RC("span",{style:{fontSize:13,color:S.text,fontWeight:700}},b.size+" pax"),
-          manualTag,lockedTag,prefTag,durationTag),
-        RC("span",{style:{fontSize:14,fontWeight:700,color:S.text}},b.time+"–"+end)),
-      RC("div",{style:{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:8}},(b.tables||[]).map(function(t){return RC(TBadge,{key:t,id:t});}),phonEl),
-      notesEl,
-      RC("div",{style:{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}},
-        RC("button",{style:mkBtn({background:BTN.tables}),onClick:function(){onManual(b.id);}},"= Tables"),
-        RC("button",{style:mkBtn({background:BTN.edit}),onClick:function(){onEdit(b);}},"Edit"),
-        RC("button",{style:mkBtn({background:BTN.del}),onClick:function(){onDelete(b.id);}},"Delete"),
-        statusBtns));
-  }));
-}
 
 // ── Booking App ───────────────────────────────────────────────────────────────
 function BookingApp(){
