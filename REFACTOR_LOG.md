@@ -147,3 +147,36 @@ JSX, `const`, destructured props, spread for state updates (`{...draft, text:v}`
 | **After Phase B3** | **1,783** | **12** |
 
 We're 31% of the way through reducing App.jsx's pre-refactor size. Two sub-phases remaining (B4, B5).
+
+---
+
+## Phase B4 — Timeline + List view extraction
+
+**Date**: 2026-05-07
+**Branch**: `v15-refactor` → merged to `main`
+**Status**: ✅ shipped
+
+### Files created
+- `src/components/TimelineView.jsx` (651 lines) — JSX, the Gantt-style scrollable grid. Includes zoom controls, follow-now mode (today only), optimizer toggle + reshuffle button, long-press → quick-status popup, and the cog button that opens Settings. Inline sub-components `GridLines`, `Block`, `BlockBar` close over parent state and stay inside.
+- `src/components/ListView.jsx` (187 lines) — JSX, sorted booking card list. Status-priority ordering (seated → confirmed → completed → cancelled), live duration tags on seated bookings, conflict and warn banners, action buttons.
+
+### Files modified
+- `src/App.jsx` — 1,783 → 1,612 lines (−171). Imports added for `TimelineView` and `ListView`. `CogIcon` dropped from the Settings import line because App.jsx no longer uses it directly — `TimelineView` (which uses it for the legend-row settings trigger) now imports it from `./components/Settings`. Two inline component definitions and their section header comments deleted.
+
+### Style: continued JSX template from atoms.jsx
+JSX, `const`, destructured props with default values, spread for style merging, inline `&&` and `?:` for conditional renders. App.jsx itself stays mixed (RC/`var`) — coexistence works.
+
+### Key decisions
+1. **Two separate component files**, not one bundled `views.jsx`. Both are consumed only by BookingApp but they share zero dependencies and have very different sizes (651 vs 187 lines). Matches the B2 / B3 one-file-per-logical-unit precedent.
+2. **`CogIcon` import migrated to TimelineView**, not kept in App.jsx as a pass-through. TimelineView is its only consumer in code, so the import lives where the use is.
+3. **Inline helpers preserved**. `pct(mins)` (TimelineView, time-axis percentage) and `statusOrder(s)` (ListView, sort priority) are pure but stay inline for now — promoting them mid-extraction would mix structural and logic moves. Both flagged for Phase C alongside `getCapOf` from B2.
+4. **Inline sub-components stay inline**. `GridLines`, `Block`, and `BlockBar` close over `pct`, `setQuickStatus`, `warnings`, `onEdit`, `onManual`, etc. Lifting them out would force prop-passing for ~10 closure-captured values per call.
+5. **Unused `blockEl = useRef(null)` preserved verbatim** inside the `Block` sub-component. It's a runtime allocation (not a comment), so dropping it would have been a behavioural change rather than a structural one. Flagged for Phase C cleanup.
+6. **No Phase D bonuses bundled** — kept B4 focused on structural extraction. ErrorBoundary / `useMemo` / cleanup of stale refs deferred.
+
+### Validation performed
+- All three files pass `@babel/parser` JSX parse-check.
+- Every imported symbol verified to exist as an export in its source module.
+- No unused imports in either new file.
+- App.jsx call sites for `RC(TimelineView, …)` and `RC(ListView, …)` preserved.
+- Live smoke test confirmed: timeline render, scroll, zoom, follow-now, optimizer toggle, reshuffle, long-press status popup, cog → Settings, list-view sort order, live duration tag on seated bookings, status-change buttons.
