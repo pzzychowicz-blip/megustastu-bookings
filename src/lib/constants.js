@@ -37,3 +37,8 @@ export var BLOCK_BG={confirmed:"rgba(180,130,40,0.85)",seated:"rgba(34,160,80,0.
 export var S={bg:"transparent",card:"rgba(255,255,255,0.45)",border:"rgba(255,255,255,0.35)",muted:"#5a6474",text:"#1a1d24",accent:"#007AFF"};
 export var TBL={out:{bg:"rgba(0,122,255,0.8)",text:"#fff",border:"rgba(0,122,255,0.5)"},ind:{bg:"rgba(175,82,222,0.8)",text:"#fff",border:"rgba(175,82,222,0.5)"}};
 export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,10),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,manualTables:[],preferredTables:[],returnOf:null};
+
+// ── Button colour tokens ──────────────────────────────────────────────────────
+// Phase B1 addition: BTN was previously defined inline in App.jsx; moved here
+// so component files (atoms.jsx and future B2–B5 extractions) can import it.
+export var BTN={tables:"rgba(0,122,255,0.75)",edit:"rgba(0,122,255,0.7)",del:"rgba(220,60,60,0.75)",cancel:"rgba(220,60,60,0.75)",clear:"rgba(220,60,60,0.7)",reset:"rgba(220,60,60,0.7)",today:"rgba(0,122,255,0.7)",nav:"rgba(120,130,150,0.5)",dismiss:"rgba(220,60,60,0.7)",orange:"rgba(230,100,30,0.8)"};

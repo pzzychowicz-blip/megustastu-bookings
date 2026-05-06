@@ -22,7 +22,7 @@ import { db, auth } from "./firebase";
 import {
   INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, VALID_COMBOS, CLUSTERS,
   OPEN, CLOSE, GRID_CLOSE, KITCHEN_TABLE_LIMIT, QUARTER_HOURS,
-  ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, S, TBL, EMPTY_FORM
+  ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, S, TBL, BTN, EMPTY_FORM
 } from "./lib/constants";
 
 import {
@@ -42,6 +42,16 @@ import {
   reminderFireKey, reminderAppliesTo, getActiveReminderBanners,
   pruneOldReminderFires, validateReminderDraft
 } from "./lib/reminders";
+
+
+// ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
+// First component file in the codebase using JSX syntax. App.jsx itself stays
+// in RC() style for now; atoms render correctly when called from RC()
+// because React.createElement accepts any component reference.
+import {
+  Overlay, Fld, Section, SBadge, TBadge, SmallTag, Toggle, Kbd,
+  AvailBanner, mkInp, mkBtn
+} from "./components/atoms";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -85,63 +95,9 @@ console.log(
 // In-app version label (General tab in Settings): "version 14.1".
 
 
-function AvailBanner(props){
-  var msg=props.msg||"No tables available.";var sugg=props.sugg;var style=props.style||{};var onTap=props.onTapTime;
-  var bgClr=props.warn?"rgba(255,237,213,0.7)":"rgba(254,226,226,0.7)";var brdClr=props.warn?"rgba(253,186,116,0.55)":"rgba(252,165,165,0.55)";var txtClr=props.warn?"#9a3412":"#991b1b";
-  var hasEarlier=sugg&&sugg.earlier&&sugg.earlier.length>0;
-  var hasLater=sugg&&sugg.later&&sugg.later.length>0;
-  var hasSugg=hasEarlier||hasLater;
-  function renderChips(arr){
-    if(!onTap) return arr.join(", ");
-    return RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},arr.map(function(t){
-      return RC("span",{key:t,onClick:function(){onTap(t);},style:{cursor:"pointer",padding:"3px 8px",borderRadius:8,fontWeight:600,fontSize:12,background:"rgba(220,252,231,0.8)",color:"#166534",border:"1px solid rgba(134,239,172,0.5)",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}},t);
-    }));
-  }
-  return RC("div",{style:Object.assign({padding:"10px 14px",borderRadius:14,border:"2px solid "+brdClr,background:bgClr,marginBottom:14,fontSize:13,color:txtClr,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"},style)},
-    RC("div",{style:{fontWeight:700,marginBottom:hasSugg?6:0}},msg),
-    hasEarlier?RC("div",{style:{marginBottom:hasLater?4:0}},RC("span",{style:{fontWeight:700}},"Before: "),renderChips(sugg.earlier)):null,
-    hasLater?RC("div",null,RC("span",{style:{fontWeight:700}},"After: "),renderChips(sugg.later)):null,
-    !hasSugg&&sugg?RC("div",{style:{marginTop:4}},"No availability found."):null);
-}
 function useWinW(){var ws=useState(typeof window!=="undefined"?window.innerWidth:1024);var w=ws[0],setW=ws[1];useEffect(function(){function h(){setW(window.innerWidth);}window.addEventListener("resize",h);return function(){window.removeEventListener("resize",h);};},[]);return w;}
 
-// ── Style helpers ─────────────────────────────────────────────────────────────
-function mkInp(){return {width:"100%",boxSizing:"border-box",background:"rgba(255,255,255,0.5)",border:"1px solid rgba(255,255,255,0.4)",borderRadius:12,padding:"10px 12px",fontSize:16,color:S.text,fontWeight:500,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"};}
-function mkBtn(extra){return Object.assign({border:"1px solid rgba(255,255,255,0.3)",background:"rgba(120,130,150,0.55)",borderRadius:12,padding:"8px 14px",cursor:"pointer",fontSize:13,color:"#fff",fontWeight:600,minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.25)",letterSpacing:"0.01em"},extra||{});}
-var BTN={tables:"rgba(0,122,255,0.75)",edit:"rgba(0,122,255,0.7)",del:"rgba(220,60,60,0.75)",cancel:"rgba(220,60,60,0.75)",clear:"rgba(220,60,60,0.7)",reset:"rgba(220,60,60,0.7)",today:"rgba(0,122,255,0.7)",nav:"rgba(120,130,150,0.5)",dismiss:"rgba(220,60,60,0.7)",orange:"rgba(230,100,30,0.8)"};
 var RC=React.createElement;
-
-// ── Tiny UI atoms ─────────────────────────────────────────────────────────────
-function Overlay(props){
-  var mob=typeof window!=="undefined"&&window.innerWidth<600;
-  var lockRef=useRef(false);
-  useEffect(function(){
-    if(!mob) return;
-    var orig=document.body.style.overflow;
-    document.body.style.overflow="hidden";
-    lockRef.current=true;
-    return function(){document.body.style.overflow=orig;lockRef.current=false;};
-  },[mob]);
-  if(mob){
-    return RC("div",{style:{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:200}},
-      RC("div",{style:{position:"absolute",top:0,left:0,right:0,bottom:0,background:"rgba(240,243,248,0.98)",overflowY:"scroll",WebkitOverflowScrolling:"touch"}},
-        RC("div",{style:{minHeight:"100%",padding:"16px 18px",paddingTop:"max(16px, env(safe-area-inset-top))",paddingBottom:"max(80px, calc(40px + env(safe-area-inset-bottom)))",boxSizing:"border-box"}},props.children)));
-  }
-  return RC("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.25)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:12},onClick:function(e){if(e.target===e.currentTarget)props.onClose();}},
-    RC("div",{style:{background:"rgba(255,255,255,0.72)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:20,border:"1px solid rgba(255,255,255,0.5)",padding:"24px",width:"100%",maxWidth:580,maxHeight:"90dvh",overflowY:"auto",boxSizing:"border-box",boxShadow:"0 8px 40px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.8)"}},props.children));
-}
-function Fld(props){
-  var starEl=props.req?RC("span",{style:{color:"#dc2626"}},"*"):null;
-  return RC("div",{style:Object.assign({display:"flex",flexDirection:"column",gap:4},props.style||{})},
-    RC("label",{style:{fontSize:13,color:"#4a5568",fontWeight:600,letterSpacing:"0.01em"}},props.label,starEl),props.children);
-}
-function Section(props){
-  return RC("div",{style:Object.assign({background:"rgba(248,250,253,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:16,padding:"14px",marginBottom:14,boxShadow:"0 2px 12px rgba(0,0,0,0.06), inset 0 1px 1px rgba(255,255,255,0.6)"},props.style||{})},props.children);
-}
-function SBadge(props){return RC("span",{style:{fontSize:12,padding:"4px 10px",borderRadius:10,background:BLOCK_BG[props.status]||BLOCK_BG.confirmed,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",fontWeight:600,textTransform:"capitalize",display:"inline-block",boxShadow:"0 1px 3px rgba(0,0,0,0.1)"}},props.status);}
-function TBadge(props){var id=props.id,indoor=isIn(id);var t=indoor?TBL.ind:TBL.out;return RC("span",{style:{fontSize:12,padding:"4px 10px",borderRadius:10,background:t.bg,color:t.text,border:"1px solid "+t.border,fontWeight:600,display:"inline-block",boxShadow:"0 1px 3px rgba(0,0,0,0.08)"}},id);}
-function SmallTag(props){return RC("span",{style:Object.assign({fontSize:11,padding:"3px 8px",borderRadius:8,fontWeight:600,display:"inline-block"},props.style||{})},props.label);}
-function Toggle(props){return RC("button",{onClick:props.onClick,style:{width:48,height:26,borderRadius:13,border:"1px solid rgba(255,255,255,0.3)",cursor:"pointer",background:props.on?"rgba(0,122,255,0.7)":"rgba(180,180,190,0.4)",position:"relative",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(0,0,0,0.08)"}},RC("div",{style:{position:"absolute",top:3,left:props.on?24:3,width:20,height:20,borderRadius:10,background:"#fff",boxShadow:"0 1px 4px rgba(0,0,0,0.15)"}}));}
 
 
 // ── v14 preview 3: Settings / keyboard-shortcut helpers ─────────────────────
@@ -149,7 +105,6 @@ function Toggle(props){return RC("button",{onClick:props.onClick,style:{width:48
 // description. `ShortcutsContent` is the shared cheatsheet body used in both the
 // Settings modal (via the cog icon) and the standalone `?` popup — single source
 // of truth so edits in one place propagate everywhere.
-function Kbd(props){return RC("span",{style:{display:"inline-block",padding:"2px 8px",borderRadius:6,background:"rgba(255,255,255,0.75)",border:"1px solid rgba(180,190,210,0.55)",fontFamily:"-apple-system, 'SF Mono', Menlo, monospace",fontSize:12,fontWeight:600,color:"#1a1d24",boxShadow:"0 1px 2px rgba(0,0,0,0.06), inset 0 -1px 0 rgba(0,0,0,0.08)",minWidth:22,textAlign:"center",boxSizing:"border-box",lineHeight:"16px"}},props.k);}
 function ShortcutRow(props){
   var keys=props.keys;var els=[];
   keys.forEach(function(k,i){if(i>0) els.push(RC("span",{key:"s"+i,style:{fontSize:11,color:"#5a6474",margin:"0 3px"}},"/"));els.push(RC(Kbd,{key:"k"+i,k:k}));});
