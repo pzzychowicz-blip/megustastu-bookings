@@ -63,6 +63,17 @@ import { TableGrid }   from "./components/TableGrid";
 import { ManualModal } from "./components/ManualModal";
 import { BlockModal }  from "./components/BlockModal";
 
+// ── Phase B3 (v15-refactor): Settings modal tree ──────────────────────────
+// SettingsContent (modal body), TabBar, GeneralTabContent and CogIcon
+// extracted to ./components/Settings.jsx. The Reminders tab body and the
+// Shortcuts cheatsheet live in ./components/Reminders.jsx and Shortcuts.jsx
+// respectively (each imported transitively by Settings.jsx — App.jsx only
+// needs SettingsContent and CogIcon). ReminderEditor (modal at z-index 250)
+// gets its own file because it's a top-level modal, mirroring how
+// ManualModal and BlockModal were treated in B2.
+import { SettingsContent, CogIcon } from "./components/Settings";
+import { ReminderEditor }          from "./components/ReminderEditor";
+
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
 // Module-level identity record. Survives bundling/minification — the strings
@@ -109,221 +120,6 @@ function useWinW(){var ws=useState(typeof window!=="undefined"?window.innerWidth
 
 var RC=React.createElement;
 
-
-// ── v14 preview 3: Settings / keyboard-shortcut helpers ─────────────────────
-// `Kbd` renders a single keycap. `ShortcutRow` pairs one or more keycaps with a
-// description. `ShortcutsContent` is the shared cheatsheet body used in both the
-// Settings modal (via the cog icon) and the standalone `?` popup — single source
-// of truth so edits in one place propagate everywhere.
-function ShortcutRow(props){
-  var keys=props.keys;var els=[];
-  keys.forEach(function(k,i){if(i>0) els.push(RC("span",{key:"s"+i,style:{fontSize:11,color:"#5a6474",margin:"0 3px"}},"/"));els.push(RC(Kbd,{key:"k"+i,k:k}));});
-  return RC("div",{style:{display:"flex",alignItems:"center",gap:10,padding:"5px 0",borderBottom:"1px solid rgba(180,190,210,0.2)"}},
-    RC("div",{style:{minWidth:108,display:"flex",gap:2,alignItems:"center",flexShrink:0}},els),
-    RC("span",{style:{fontSize:13,color:"#1a1d24"}},props.label));
-}
-function ShortcutsContent(){
-  var sections=[
-    {title:"Navigation",rows:[
-      {keys:["T"],label:"Timeline view"},
-      {keys:["L"],label:"List view"},
-      {keys:["D"],label:"Jump to today"},
-      {keys:["←","→"],label:"Previous / next day"},
-      {keys:["N"],label:"New booking"},
-      {keys:["W"],label:"Walk-in"},
-      {keys:["?"],label:"Show this help"}
-    ]},
-    {title:"Timeline",rows:[
-      {keys:["F"],label:"Toggle Follow (today only)"},
-      {keys:["+","="],label:"Zoom in"},
-      {keys:["−"],label:"Zoom out"},
-      {keys:["0"],label:"Reset zoom to 1×"},
-      {keys:["O"],label:"Toggle Optimizer (today)"},
-      {keys:["R"],label:"Reshuffle (today, optimizer OFF)"}
-    ]},
-    {title:"Edit / New Booking",rows:[
-      {keys:["A"],label:"Manual table assignment"},
-      {keys:["P"],label:"Preferred tables"},
-      {keys:["C"],label:"Clear tables assignment"},
-      {keys:["B"],label:"Book Again (edit only, seated / completed)"},
-      {keys:["H"],label:"View history (edit only)"}
-    ]},
-    {title:"Preferred Table picker",rows:[
-      {keys:["C"],label:"Clear preferred tables"}
-    ]},
-    {title:"Manual Table Assignment",rows:[
-      {keys:["S"],label:"Toggle Swap busy"},
-      {keys:["C"],label:"Clear selected tables"}
-    ]},
-    {title:"Settings",rows:[
-      {keys:["\u2190","\u2192"],label:"Switch between tabs"}
-    ]},
-    {title:"Universal",rows:[
-      {keys:["Esc"],label:"Close current window"},
-      {keys:["Enter"],label:"Confirm primary action"}
-    ]}
-  ];
-  return RC("div",null,sections.map(function(sec,si){
-    return RC("div",{key:si,style:{marginBottom:si<sections.length-1?14:0}},
-      RC("div",{style:{fontSize:11,fontWeight:700,color:"#007AFF",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.05em"}},sec.title),
-      RC("div",null,sec.rows.map(function(r,ri){return RC(ShortcutRow,{key:ri,keys:r.keys,label:r.label});})));
-  }));
-}
-// Version line + shortcuts cheatsheet — the body of the Settings modal.
-// v14 preview 7: converted to tabbed layout (General / Reminders / Shortcuts).
-// Takes props for tab state + reminder list handlers. The actual reminder-list
-// state lives in BookingApp; this component is purely presentational.
-function SettingsContent(props){
-  var tab=props.tab,setTab=props.setTab;
-  var content;
-  if(tab==="general") content=RC(GeneralTabContent,null);
-  else if(tab==="reminders") content=RC(RemindersTabContent,{
-    reminders:props.reminders,
-    onAdd:props.onAddReminder,
-    onEdit:props.onEditReminder,
-    onDelete:props.onDeleteReminder,
-    onToggle:props.onToggleReminder
-  });
-  else content=RC(ShortcutsContent,null);
-  return RC("div",null,
-    RC(TabBar,{tabs:[
-      {id:"general",label:"General"},
-      {id:"reminders",label:"Reminders"},
-      {id:"shortcuts",label:"Shortcuts"}
-    ],current:tab,onSelect:setTab}),
-    content);
-}
-
-// Tab switcher for the Settings modal. Pill-shaped with active tab lifted in
-// white. Used only once for now but kept modular so future modals can reuse.
-function TabBar(props){
-  return RC("div",{style:{display:"flex",gap:4,padding:4,borderRadius:12,background:"rgba(240,243,248,0.8)",marginBottom:16,border:"1px solid rgba(210,218,230,0.6)"}},
-    props.tabs.map(function(t){
-      var active=t.id===props.current;
-      return RC("button",{key:t.id,onClick:function(){props.onSelect(t.id);},style:{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:active?"rgba(255,255,255,0.95)":"transparent",color:active?"#007AFF":"#5a6474",fontWeight:active?700:600,fontSize:13,cursor:"pointer",boxShadow:active?"0 1px 3px rgba(0,0,0,0.08)":"none",transition:"all 0.15s"}},t.label);
-    }));
-}
-
-// General tab — version line + visible copyright credit. Reserved for future
-// app-level toggles (e.g. notification sound, default view preference).
-function GeneralTabContent(){
-  return RC("div",{style:{padding:"28px 12px",textAlign:"center"}},
-    RC("div",{style:{fontSize:13,fontWeight:600,color:"#5a6474",letterSpacing:"0.02em"}},"version 14.1"),
-    RC("div",{style:{fontSize:11,fontWeight:500,color:"#8a94a3",letterSpacing:"0.02em",marginTop:8}},"© 2026 Patryk Zychowicz — MGT Booking System"));
-}
-
-// One row in the Reminders tab — shows text, times, recurrence summary, an
-// active/inactive toggle, and Edit / Delete buttons. Fades to 55% when
-// inactive so the user can see disabled ones are still there.
-var DAY_SHORT_LABELS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-function ReminderListItem(props){
-  var r=props.reminder;
-  var rec=r.recurrence||{};
-  var recText="";
-  if(rec.type==="once") recText="Once on "+rec.date;
-  else if(rec.type==="weekly"){
-    var ds=(rec.days||[]).slice().sort(function(a,b){return a-b;}).map(function(i){return DAY_SHORT_LABELS[i];});
-    recText="Weekly: "+ds.join(", ");
-  }
-  var timesText=(r.times||[]).join(", ");
-  return RC("div",{style:{background:"rgba(248,250,253,0.9)",border:"1px solid rgba(210,218,230,0.7)",borderRadius:12,padding:"12px 14px",marginBottom:8,opacity:r.active?1:0.55,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}},
-    RC("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:6}},
-      RC("div",{style:{flex:1,minWidth:0}},
-        RC("div",{style:{fontSize:14,fontWeight:700,color:"#1a1d24",marginBottom:2,wordBreak:"break-word"}},r.text),
-        RC("div",{style:{fontSize:12,color:"#5a6474"}},timesText+"  ·  "+recText)),
-      RC(Toggle,{on:r.active,onClick:function(){props.onToggle(r.id);}})),
-    RC("div",{style:{display:"flex",gap:6,marginTop:8}},
-      RC("button",{onClick:function(){props.onEdit(r);},style:mkBtn({fontSize:12,minHeight:32,padding:"4px 12px",background:BTN.edit})},"Edit"),
-      RC("button",{onClick:function(){props.onDelete(r.id);},style:mkBtn({fontSize:12,minHeight:32,padding:"4px 12px",background:BTN.del})},"Delete")));
-}
-
-// Reminders tab body — header row with count + New button, then the list or
-// an empty-state placeholder.
-function RemindersTabContent(props){
-  var reminders=props.reminders||[];
-  var listEls=reminders.length===0
-    ?RC("div",{style:{textAlign:"center",padding:"28px 14px",color:"#5a6474",fontSize:13,background:"rgba(248,250,253,0.6)",borderRadius:12,border:"1px dashed rgba(180,190,210,0.5)"}},"No reminders yet. Click \u201c+ New reminder\u201d to add one.")
-    :RC("div",null,reminders.map(function(r){return RC(ReminderListItem,{key:r.id,reminder:r,onEdit:props.onEdit,onDelete:props.onDelete,onToggle:props.onToggle});}));
-  return RC("div",null,
-    RC("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,gap:8,flexWrap:"wrap"}},
-      RC("div",{style:{fontSize:13,color:"#5a6474"}},reminders.length+" reminder"+(reminders.length!==1?"s":"")),
-      RC("button",{onClick:props.onAdd,style:mkBtn({minHeight:36,padding:"6px 14px",background:"rgba(0,122,255,0.75)"})},"+ New reminder")),
-    listEls);
-}
-
-// Reminder editor — new/edit modal shown on top of Settings (z-index 250 vs
-// Overlay's 200). Validation is computed on every render so Save stays live
-// with field changes. Days are displayed Mon→Sun (European convention) but
-// stored as getDay() indices (0=Sun).
-function ReminderEditor(props){
-  var draft=props.draft,setDraft=props.setDraft;
-  var err=validateReminderDraft(draft);
-  var rec=draft.recurrence||{};
-  var todayStr=new Date().toISOString().slice(0,10);
-  var DAY_LABELS=[
-    {i:1,s:"Mon"},{i:2,s:"Tue"},{i:3,s:"Wed"},{i:4,s:"Thu"},
-    {i:5,s:"Fri"},{i:6,s:"Sat"},{i:0,s:"Sun"}
-  ];
-  function updText(v){setDraft(Object.assign({},draft,{text:v}));}
-  function updTime(idx,v){var ts=draft.times.slice();ts[idx]=v;setDraft(Object.assign({},draft,{times:ts}));}
-  function addTime(){var ts=draft.times.slice();ts.push("21:00");setDraft(Object.assign({},draft,{times:ts}));}
-  function removeTime(idx){if(draft.times.length<=1) return;var ts=draft.times.slice();ts.splice(idx,1);setDraft(Object.assign({},draft,{times:ts}));}
-  function setType(t){
-    var newRec;
-    if(t==="once") newRec={type:"once",date:rec.date||todayStr,days:rec.days||[]};
-    else newRec={type:"weekly",date:rec.date||todayStr,days:rec.days&&rec.days.length?rec.days:[new Date().getDay()]};
-    setDraft(Object.assign({},draft,{recurrence:newRec}));
-  }
-  function setDate(v){setDraft(Object.assign({},draft,{recurrence:Object.assign({},rec,{date:v})}));}
-  function toggleDay(i){
-    var cur=Array.isArray(rec.days)?rec.days.slice():[];
-    var idx=cur.indexOf(i);
-    if(idx>=0) cur.splice(idx,1); else cur.push(i);
-    setDraft(Object.assign({},draft,{recurrence:Object.assign({},rec,{days:cur})}));
-  }
-  function toggleActive(){setDraft(Object.assign({},draft,{active:!draft.active}));}
-  return RC("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.25)",backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:250,padding:12},onClick:function(e){if(e.target===e.currentTarget)props.onCancel();}},
-    RC("div",{style:{background:"rgba(255,255,255,0.85)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderRadius:20,border:"1px solid rgba(255,255,255,0.5)",padding:"22px",width:"100%",maxWidth:520,maxHeight:"90dvh",overflowY:"auto",boxSizing:"border-box",boxShadow:"0 8px 40px rgba(0,0,0,0.15), inset 0 1px 1px rgba(255,255,255,0.8)"}},
-      // v14 p7: header matches New booking / Edit booking pattern — centered
-      // wrapper + pill-shaped inner with blue background, white bold text.
-      RC("div",{style:{textAlign:"center",marginBottom:16}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},props.isNew?"New reminder":"Edit reminder")),
-      RC(Fld,{label:"Text",style:{marginBottom:12}},
-        RC("textarea",{value:draft.text,onChange:function(e){updText(e.target.value);},rows:2,placeholder:"e.g. Place order to Coca Cola today",style:Object.assign({},mkInp(),{resize:"vertical"})})),
-      RC(Fld,{label:"Times",style:{marginBottom:12}},
-        RC("div",null,
-          draft.times.map(function(t,i){
-            return RC("div",{key:i,style:{display:"flex",gap:6,alignItems:"center",marginBottom:6}},
-              RC("input",{type:"time",value:t,onChange:function(e){updTime(i,e.target.value);},style:Object.assign({},mkInp(),{flex:1})}),
-              draft.times.length>1?RC("button",{onClick:function(){removeTime(i);},style:mkBtn({minHeight:40,minWidth:40,padding:"0",fontSize:18,background:BTN.del,lineHeight:1})},"\u00d7"):null);
-          }),
-          RC("button",{onClick:addTime,style:mkBtn({minHeight:36,padding:"6px 12px",fontSize:12,background:BTN.nav})},"+ Add time"))),
-      RC(Fld,{label:"Recurrence",style:{marginBottom:12}},
-        RC("div",{style:{display:"flex",gap:6}},
-          RC("button",{onClick:function(){setType("once");},style:mkBtn({flex:1,minHeight:40,background:rec.type==="once"?S.accent:"rgba(120,130,150,0.45)"})},"One-off"),
-          RC("button",{onClick:function(){setType("weekly");},style:mkBtn({flex:1,minHeight:40,background:rec.type==="weekly"?S.accent:"rgba(120,130,150,0.45)"})},"Weekly"))),
-      rec.type==="once"?RC(Fld,{label:"Date",style:{marginBottom:12}},
-        RC("input",{type:"date",value:rec.date||"",min:todayStr,onChange:function(e){setDate(e.target.value);},style:mkInp()})):null,
-      rec.type==="weekly"?RC(Fld,{label:"Days",style:{marginBottom:12}},
-        RC("div",{style:{display:"flex",gap:4,flexWrap:"wrap"}},
-          DAY_LABELS.map(function(d){
-            var sel=(rec.days||[]).indexOf(d.i)>=0;
-            return RC("button",{key:d.i,onClick:function(){toggleDay(d.i);},style:mkBtn({flex:1,minWidth:48,minHeight:40,padding:"8px 6px",fontSize:12,background:sel?S.accent:"rgba(120,130,150,0.45)"})},d.s);
-          }))):null,
-      RC("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"10px 12px",background:"rgba(248,250,253,0.7)",borderRadius:12,border:"1px solid rgba(210,218,230,0.6)"}},
-        RC(Toggle,{on:draft.active,onClick:toggleActive}),
-        RC("span",{style:{fontSize:13,color:"#1a1d24",fontWeight:600}},draft.active?"Active":"Inactive")),
-      err?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"8px 12px",background:"rgba(254,226,226,0.7)",borderRadius:12,border:"1px solid rgba(252,165,165,0.55)",marginBottom:12}},err):null,
-      RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8}},
-        RC("button",{onClick:props.onCancel,style:mkBtn({minHeight:40,padding:"8px 18px",background:BTN.cancel})},"Cancel"),
-        RC("button",{onClick:function(){if(!err) props.onSave();},disabled:!!err,style:{background:err?"rgba(180,180,190,0.4)":"rgba(22,101,52,0.8)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:err?"not-allowed":"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:40,boxShadow:err?"none":"0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Save"))));
-}
-// Cog (gear) SVG — 20×20, used as the Settings trigger in TimelineView's
-// legend row. Stroke inherits from the button's `color` via currentColor.
-function CogIcon(){
-  return RC("svg",{width:20,height:20,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},
-    RC("circle",{cx:12,cy:12,r:3}),
-    RC("path",{d:"M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"}));
-}
 
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
