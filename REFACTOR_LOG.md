@@ -223,3 +223,111 @@ JSX, `const`, destructured props with default values, spread for state updates, 
 - After B5: 1,447 lines · 16 modules (`atoms`, `constants`, `reminders`, `booking-logic`, `firebase` + 11 component files)
 - Total extracted: **~44% of original line count**
 - Next: Phase C (modernization — `var` → `const`/`let`, `RC()` → JSX in App.jsx, helper consolidation, `useWinW` → hooks module, BookingForm extraction with proper context). Best done in a fresh thread.
+
+## Phase C1 — Helper consolidation + Follow button label fix
+**Shipped:** 2026-05-07
+**Version:** 14.1.1 → **14.1.2** (patch)
+**Branch:** `v15-refactor` → `main`
+
+### Summary
+First Phase-C sub-phase: pure helper consolidation, no extraction. Five helpers
+that were duplicated across component files / buried inside closures are now
+single canonical exports in `lib/booking-logic.js`. One pre-existing bug (an
+unused `useRef` in `TimelineView`) is dropped, and the Follow-now button label
+is fixed so its active state reads "Following" instead of relying on
+background colour alone.
+
+This is a structural / hygiene release. The only user-visible change is the
+Follow button label.
+
+### What moved into `lib/booking-logic.js`
+| New export | Sourced from | Algorithm preserved |
+|---|---|---|
+| `nowTime()` | App.jsx (local) + WalkinForm (`localNowTime`) | Identical — `toTime(h*60+m)` of `new Date()` |
+| `statusOrder(s)` | ListView (file-local) | Identical — seated → confirmed → completed → cancelled |
+| `pct(mins)` | TimelineView (closure over `totalMins`) | Identical — `totalMins` now computed internally from `OPEN`/`GRID_CLOSE` |
+| `liveBarDur(b, nowMins)` | TimelineView (closure as `liveDur`) | Identical — `seated → max(15, elapsed)`, else `b.duration` |
+| `comboCapBest(ids)` | ManualModal + WalkinForm (both `getCapOf`) | Identical — exact-match → greedy best-subset → sum-of-standalones |
+
+### Critical finding mid-phase: `getCapOf` was two variants, not three
+Pre-flight analysis assumed three near-identical copies of `getCapOf`. The
+actual landscape:
+- **ManualModal** and **WalkinForm** had byte-equal "best-subset greedy"
+  implementations. Both replaced with `comboCapBest`.
+- **PrefPickerModal** had a strictly simpler variant — exact-match in
+  `VALID_COMBOS` → fallback to sum-of-standalones, no greedy. That algorithm
+  already existed in `booking-logic.js` as the `comboCap` export. Replaced
+  with the existing import; no new code shipped for this case.
+
+The PrefPickerModal variant is not a bug to be fixed by upgrading to
+`comboCapBest`. The two variants are intentional: best-subset greedy is for
+hard-assignment paths (which need the most permissive capacity calculation),
+the simpler variant is for soft-hint preferences (which don't need partial-
+match scoring). Both are now first-class library exports rather than copies.
+
+### Critical finding: `liveDur` is intentionally NOT consolidated
+ListView contains an inline calculation that looks like `liveDur` but has
+*different* semantics — its end-time is pinned to the planned `b.duration`
+until a guest overstays, whereas TimelineView's `liveDur` always returns
+`max(15, elapsed)` for seated bookings. These were noted as duplicates in
+the previous thread's "items still flagged" list, but the close read
+revealed they're not actually the same function. ListView's stays inline.
+
+### `Block.blockEl` — unused ref dropped
+The `Block` sub-component inside `TimelineView` declared
+`const blockEl = useRef(null)` and never referenced it. Carried as-is
+through B4. Removed in C1 along with its preserved-verbatim comment.
+
+### Follow-now button label
+Was: `{followNow ? "Follow" : "Follow"}` — both branches identical, state
+conveyed only by background colour change.
+Now: `{followNow ? "Following" : "Follow"}` — text and colour both flip.
+
+### File deltas
+| File | Before | After | Δ |
+|---|---:|---:|---:|
+| `src/lib/booking-logic.js` | 335 | 406 | +71 |
+| `src/App.jsx` | 1,447 | 1,451 | +4 |
+| `src/components/TimelineView.jsx` | 651 | 639 | −12 |
+| `src/components/WalkinForm.jsx` | 484 | 458 | −26 |
+| `src/components/ManualModal.jsx` | 293 | 271 | −22 |
+| `src/components/ListView.jsx` | 187 | 182 | −5 |
+| `src/components/PrefPickerModal.jsx` | 160 | 156 | −4 |
+| `src/components/Settings.jsx` | 141 | 143 | +2 |
+
+Net: +8 lines across the codebase, but redistributed — duplication eliminated,
+helpers concentrated in the lib module where they belong.
+
+### Validation
+1. `@babel/parser` JSX parse-check — 8/8 files clean.
+2. Import-existence — 71/71 imports from `booking-logic.js` resolve to real
+   exports.
+3. Unused-import check — 7/7 files clean for new imports introduced this
+   phase. (Pre-existing dead imports in App.jsx — flagged below — are
+   unchanged.)
+4. Live smoke test on dev — Timeline rendering, Follow toggle (label flips),
+   List sort order, Manual assign capacity, Walk-in capacity, Preferred
+   tables capacity, Walk-in time pre-fill, Settings → General version line,
+   console boot banner. All confirmed on 14.1.2.
+
+### Items still flagged (carry forward, not addressed in C1)
+- **31 dead imports in App.jsx** left over from B1–B5. Symbols like `INDOOR`,
+  `OUTDOOR`, `VALID_COMBOS`, `findBest`, `comboCap`, `SBadge`, `Toggle`, etc.
+  are imported but never referenced in App.jsx itself. Recommend folding
+  into C2 (which already touches App.jsx for `useWinW`).
+- `useWinW` — still inline in App.jsx → C2.
+- `var` → `const`/`let` and `RC()` → JSX in App.jsx → C3.
+- BookingForm extraction → C4.
+
+### Workflow rules confirmed this phase
+- Design-first, code-second held: pre-flight analysis caught the
+  two-variants-not-three reality and the `liveDur` semantic divergence
+  before any code was written.
+- Anchor-based file patches (every `str_replace` was unique-match);
+  no line-number drift.
+- Validation chain ran before shipping (parse → imports exist → imports used
+  → sanity grep of removed code).
+- Byte-identical behaviour mandate held everywhere except the one place it
+  was explicitly broken (Follow button label).
+
+  
