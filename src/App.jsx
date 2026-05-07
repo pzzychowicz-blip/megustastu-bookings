@@ -19,28 +19,30 @@ import { db, auth } from "./firebase";
 // ── Phase A extraction (v15-refactor) ────────────────────────────────────────
 // Pure data and pure logic moved into ./lib/* modules. Symbols below are now
 // imported rather than defined inline. Behaviour and signatures are unchanged.
+//
+// Phase C2 (v15-refactor): import lists pruned to only what App.jsx actually
+// references in its body. Symbols only used inside ./components/* and
+// ./lib/* modules are no longer imported here — they're imported directly
+// by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, VALID_COMBOS, CLUSTERS, TABLE_GROUPS,
-  OPEN, CLOSE, GRID_CLOSE, KITCHEN_TABLE_LIMIT, QUARTER_HOURS,
-  ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, S, TBL, BTN, EMPTY_FORM
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM
 } from "./lib/constants";
 
 import {
-  getDur, toMins, toTime, overlaps, genId,
+  getDur, toMins, toTime, genId,
   sanitize, histEntry, diffBooking, sanitizeAll,
-  isIn, isAllIn, isAllOut, isMixedLarge, comboOk, comboCap, isLocked, isActive,
-  getBlockSlots, getBusy, canAssign,
-  findBest, findBestAny,
+  isLocked, isActive,
+  getBlockSlots, canAssign,
   trialFits, findTimes, formatSugg,
-  getKitchenLoad, findKitchenFriendlyTimes, findAllOptions,
-  optimise, applyOpt,
+  getKitchenLoad, findKitchenFriendlyTimes,
+  applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction,
-  verifyClean, checkInefficent,
+  checkInefficent,
   nowTime
 } from "./lib/booking-logic";
 
 import {
-  reminderFireKey, reminderAppliesTo, getActiveReminderBanners,
+  reminderAppliesTo, getActiveReminderBanners,
   pruneOldReminderFires, validateReminderDraft
 } from "./lib/reminders";
 
@@ -50,7 +52,7 @@ import {
 // in RC() style for now; atoms render correctly when called from RC()
 // because React.createElement accepts any component reference.
 import {
-  Overlay, Fld, Section, SBadge, TBadge, SmallTag, Toggle, Kbd,
+  Overlay, Fld, Section, TBadge,
   AvailBanner, mkInp, mkBtn
 } from "./components/atoms";
 
@@ -99,6 +101,13 @@ import { PrefPickerModal } from "./components/PrefPickerModal";
 import { HistoryPopup }    from "./components/HistoryPopup";
 
 
+// ── Phase C2 (v15-refactor): custom hooks extracted to ./hooks/ ───────────
+// `useWinW` (viewport-width hook used to compute isMobile) moved out of
+// App.jsx. One hook per file in src/hooks/, mirroring the components/
+// pattern. No barrel index — explicit imports keep dependencies visible.
+import { useWinW } from "./hooks/useWinW";
+
+
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
 // Module-level identity record. Survives bundling/minification — the strings
 // below remain readable in any deployed bundle. Referenced by the boot banner
@@ -106,12 +115,12 @@ import { HistoryPopup }    from "./components/HistoryPopup";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 var __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.1.2",
+  version:"14.1.3",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
   license:"Proprietary — All rights reserved. See LICENSE.",
-  build:"v14.1.2-deployment"
+  build:"v14.1.3-deployment"
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 
@@ -141,10 +150,10 @@ console.log(
 // v14.1.2: helper consolidation (Phase C1) — getCapOf, pct, statusOrder,
 // liveDur, nowTime promoted to lib/booking-logic.js; unused blockEl ref
 // dropped; Follow button label fixed (Following / Follow).
-// In-app version label (General tab in Settings): "version 14.1.2".
+// v14.1.3: useWinW hook extracted to ./hooks/useWinW.js (Phase C2);
+// 31 leftover dead imports cleaned up from App.jsx import block.
+// In-app version label (General tab in Settings): "version 14.1.3".
 
-
-function useWinW(){var ws=useState(typeof window!=="undefined"?window.innerWidth:1024);var w=ws[0],setW=ws[1];useEffect(function(){function h(){setW(window.innerWidth);}window.addEventListener("resize",h);return function(){window.removeEventListener("resize",h);};},[]);return w;}
 
 var RC=React.createElement;
 

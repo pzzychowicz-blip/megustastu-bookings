@@ -330,4 +330,122 @@ helpers concentrated in the lib module where they belong.
 - Byte-identical behaviour mandate held everywhere except the one place it
   was explicitly broken (Follow button label).
 
-  
+  ## Phase C2 — useWinW hook extraction + dead-import cleanup
+**Shipped:** 2026-05-07
+**Version:** 14.1.2 → **14.1.3** (patch)
+**Branch:** `v15-refactor` → `main`
+
+### Summary
+Second Phase-C sub-phase: extract the `useWinW` viewport-width hook into its
+own module, and clean up 31 leftover dead imports in App.jsx that B1–B5 left
+behind. Two small, contained changes shipped together because they both touch
+App.jsx's import block and have zero behavioural overlap with anything else.
+
+This is a structural / hygiene release. **Zero user-visible changes.**
+
+### What moved into `src/hooks/useWinW.js`
+A new top-level folder, `src/hooks/`, mirrors the `src/components/` pattern:
+one custom hook per file, no barrel `index.js` until there's a second hook
+to barrel. Direct imports keep dependency graphs explicit.
+
+| Item | Before | After |
+|---|---|---|
+| `useWinW` definition | Inline in App.jsx (line 156, single-line block) | `src/hooks/useWinW.js`, 38 lines with header docs |
+| `useWinW` consumer | App.jsx — single call site at line 513 | Same — imported from new path |
+| `var` style | `var ws = useState(...)`, `function h(){…}` | Identical — no modernisation in C2 |
+
+API decision: kept the hook's signature exactly as-is (returns the raw
+`number`, not a derived `boolean`). The alternative `useIsMobile()` reshape
+would have been a free win in isolation but the magic `< 600` threshold
+still lives at the call site, so consolidating it would be cosmetic. Defer
+to whenever a second consumer of the breakpoint emerges.
+
+### Dead-import cleanup
+The validator flagged **31 imports in App.jsx that were never referenced in
+its body** — leftovers from B1–B5 where symbols moved into component files
+without their parent imports being pruned. Each candidate was re-verified
+with a word-boundary grep (must appear exactly once: the import line
+itself); all 31 confirmed dead.
+
+| Import block | Was | Now | Dropped |
+|---:|---:|---:|---|
+| `./lib/constants` | 21 | 7 | INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, VALID_COMBOS, CLUSTERS, TABLE_GROUPS, GRID_CLOSE, QUARTER_HOURS, ROW_H, LABEL_W, STATUS_COLORS, TBL (14) |
+| `./lib/booking-logic` | 37 | 25 | overlaps, isIn, isAllIn, isAllOut, isMixedLarge, comboOk, comboCap, getBusy, findBest, findBestAny, findAllOptions, optimise, verifyClean (12) |
+| `./lib/reminders` | 5 | 4 | reminderFireKey (1) |
+| `./components/atoms` | 11 | 7 | SBadge, SmallTag, Toggle, Kbd (4) |
+
+These symbols are still very much in use — just not in App.jsx itself.
+They're imported directly by their actual consumers in
+`./components/*.jsx` and `./lib/*.js`. The cleanup makes App.jsx's
+dependency surface honest: now you can read its import block and know
+exactly what App.jsx itself touches.
+
+### File deltas
+| File | Before | After | Δ |
+|---|---:|---:|---:|
+| `src/App.jsx` | 1,447 | 1,460 | +13 |
+| `src/hooks/useWinW.js` | (new) | 38 | +38 |
+| `src/components/Settings.jsx` | 143 | 146 | +3 |
+
+App.jsx grows by +13 despite dropping 31 import lines — the multi-line
+import blocks shrink by ~14 lines, but the new `useWinW` import block (with
+its header comment) adds ~7 lines and the C2 changelog comment in the
+deployment-notes block adds ~2 lines. Body of file unchanged.
+
+### Validation
+1. `@babel/parser` JSX parse-check — 3/3 files clean.
+2. Import-existence — 44/44 App.jsx imports from local modules resolve to
+   real exports (5 modules: `./lib/constants`, `./lib/booking-logic`,
+   `./lib/reminders`, `./components/atoms`, `./hooks/useWinW`).
+3. Unused-import check — 66/66 imports in App.jsx referenced somewhere in
+   its body. Down from 31 unused before this phase.
+4. Removal sanity — confirmed no local `function useWinW(){…}` survives in
+   App.jsx; confirmed `hooks/useWinW.js` exports the function.
+5. Version sanity — `__APP_SIGNATURE__.version = "14.1.3"`, Settings label
+   reads `version 14.1.3`.
+6. Live smoke test on dev — desktop layout, narrow-viewport reflow, form
+   column collapse, walk-in form mobile single-column, Settings label,
+   console boot banner. All confirmed on 14.1.3.
+
+### Items still flagged (carry forward, not addressed in C2)
+- `var` → `const`/`let` and `RC()` → JSX in App.jsx → C3 (the big mechanical
+  pass; may want to split further by section).
+- BookingForm extraction with proper context wiring → C4. Still the hardest
+  remaining problem; ~25 closure values from BookingApp need to drop to
+  ~5 props via Context, custom hook, or co-located state.
+
+### Architectural decisions made this phase
+**`hooks/` folder convention** — one hook per file, named after the hook,
+direct imports (no barrel). Future hooks land here. This means a future
+`useFollowNow()` or `useKeyboardShortcuts()` extraction has an obvious home.
+
+**`useWinW` API kept verbatim** — see "API decision" note above. The hook
+returns the raw width number; consumers compute their own thresholds. Two
+reasons: (a) the only call site is App.jsx, so abstraction-shape hardly
+matters; (b) `useIsMobile()` would still leave the magic 600 hardcoded
+inside the hook. Deferring until there's a real second consumer.
+
+**Dead-import cleanup folded into C2** — not a separately-shipped phase.
+The cleanup touches the same import block that the hook extraction does, so
+shipping them together is one diff to review instead of two.
+
+### Workflow rules confirmed this phase
+- Pre-flight grep verification before deletion: every one of the 31 dead
+  imports was independently confirmed to have exactly 1 occurrence in
+  App.jsx (the import line) before being removed.
+- Validator re-run after the patch: 0 imports unused, 0 missing — net effect
+  matches intent exactly.
+- Anchor-based file patches; every `str_replace` was unique-match.
+- Byte-identical behaviour mandate held: no observable change at the user
+  level (verified by smoke test).
+
+### Notes for the next phase (C3)
+C3 is the big modernisation: `var` → `const`/`let` and `RC()` → JSX inside
+App.jsx itself. Two heads-up items from this phase that affect C3:
+- **The dead-import cleanup makes C3 safer**, because the import block now
+  reflects only what App.jsx actually touches. No "did I break this symbol's
+  usage somewhere?" surprises during the JSX rewrite.
+- **The new `hooks/useWinW.js` file is already modern style** (`import`,
+  `export function`, no `RC()`). When App.jsx itself goes JSX in C3, no
+  changes needed in this file.
+

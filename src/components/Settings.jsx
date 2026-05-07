@@ -16,6 +16,8 @@
 // complete; no behavioural change).
 // Phase C1: visible version label bumped 14.1.1 → 14.1.2 (helper
 // consolidation + Follow button label fix).
+// Phase C2: visible version label bumped 14.1.2 → 14.1.3 (useWinW hook
+// extracted; dead-import cleanup in App.jsx).
 
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
@@ -64,12 +66,13 @@ export function TabBar({ tabs, current, onSelect }) {
 // ── General tab — version line + visible copyright credit ───────────────────
 // Reserved for future app-level toggles (default view, sound preference,
 // etc.). The version label is hardcoded; bumped at the end of each shipping
-// phase (currently 14.1.2 — end of C1, helper consolidation + Follow label).
+// phase (currently 14.1.3 — end of C2, useWinW hook extracted + import
+// cleanup).
 export function GeneralTabContent() {
   return (
     <div style={{ padding: "28px 12px", textAlign: "center" }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: "#5a6474", letterSpacing: "0.02em" }}>
-        version 14.1.2
+        version 14.1.3
       </div>
       <div style={{ fontSize: 11, fontWeight: 500, color: "#8a94a3", letterSpacing: "0.02em", marginTop: 8 }}>
         © 2026 Patryk Zychowicz — MGT Booking System
