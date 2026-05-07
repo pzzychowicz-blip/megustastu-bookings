@@ -26,15 +26,14 @@
 //
 // Phase B4 (v15-refactor): extracted from App.jsx and converted RC() → JSX.
 // Behaviour, output markup, and all inline styles are byte-identical to the
-// original. Notes:
-//   • The `pct` and `liveDur` helpers are kept inline; `pct` could be
-//     promoted to booking-logic.js in Phase C alongside `getCapOf` from B2.
-//   • The `Block` sub-component declares an unused `useRef(null)` named
-//     `blockEl` — preserved verbatim from the original to keep this a pure
-//     structural extraction. Flagged for Phase C cleanup.
-//   • The Follow-now button label is `followNow ? "Follow" : "Follow"` (yes,
-//     both branches the same — also preserved verbatim; the visual state is
-//     conveyed by the background colour, not the label).
+// original.
+//
+// Phase C1 (v15-refactor): helper consolidation + cleanup.
+//   • `pct` and `liveDur` (now `liveBarDur`) moved to booking-logic.js.
+//   • Unused `blockEl = useRef(null)` dropped from the `Block` sub-component.
+//   • Follow-now button now reads "Following" when active and "Follow" when
+//     idle — fixes the previous "Follow"/"Follow" duplicate that relied on
+//     colour alone to convey state.
 
 import { useState, useRef, useEffect } from "react";
 import {
@@ -42,7 +41,7 @@ import {
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG,
   S, TBL, BTN, TIMELINE_TABLES
 } from "../lib/constants";
-import { toMins, toTime, isLocked, isIn } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { mkBtn } from "./atoms";
 import { CogIcon } from "./Settings";
 
@@ -92,16 +91,6 @@ export function TimelineView({
     b.status !== "completed" && (!(b.tables || []).length || b._conflict)
   );
 
-  // ── Helpers (closures — depend on totalMins / nowMins) ──────────────────
-  function pct(mins) { return ((mins - OPEN * 60) / totalMins) * 100 + "%"; }
-  function liveDur(b) {
-    if (b.status === "seated") {
-      const elapsed = nowMins - toMins(b.time);
-      return Math.max(15, elapsed);
-    }
-    return b.duration;
-  }
-
   // ── Sub-components (close over parent state — must stay inline) ─────────
   function GridLines() {
     return (
@@ -128,7 +117,7 @@ export function TimelineView({
   }
 
   function Block({ b }) {
-    const d = liveDur(b);
+    const d = liveBarDur(b, nowMins);
     const sm = toMins(b.time) - OPEN * 60;
     const left = pct(OPEN * 60 + sm);
     const w = Math.max((d / totalMins) * 100, 0.5) + "%";
@@ -143,12 +132,10 @@ export function TimelineView({
       + (hasPrefT ? " ★" : "")
       + (warn && warn.overdue ? " !!" : "");
 
-    // Per-instance refs for long-press detection. `blockEl` is unused —
-    // preserved verbatim from original; flagged for Phase C cleanup.
+    // Per-instance refs for long-press detection.
     const pressTimer = useRef(null);
     const didLong = useRef(false);
     const touchStartPos = useRef(null);
-    const blockEl = useRef(null);
 
     function onTouchStart(e) {
       didLong.current = false;
@@ -440,9 +427,10 @@ export function TimelineView({
   );
 
   // ── Header controls (top row above the grid) ─────────────────────────────
-  // Follow-now button: today only. Both label branches read "Follow" — visual
-  // state is conveyed by the background colour. Preserved verbatim from
-  // the original.
+  // Follow-now button: today only. Phase C1 — label flips between "Following"
+  // and "Follow" so screen-readers and quick visual scans get the state from
+  // the text, not just the background colour. Background still flips for
+  // emphasis.
   const followBtn = isToday ? (
     <button
       onClick={() => {
@@ -458,7 +446,7 @@ export function TimelineView({
         background: followNow ? "rgba(0,0,0,0.6)" : "rgba(120,130,150,0.5)"
       })}
     >
-      {followNow ? "Follow" : "Follow"}
+      {followNow ? "Following" : "Follow"}
     </button>
   ) : null;
 

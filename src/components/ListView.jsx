@@ -14,21 +14,16 @@
 //
 // Phase B4 (v15-refactor): extracted from App.jsx and converted RC() → JSX.
 // Behaviour, output markup, and all inline styles are byte-identical to the
-// original. The internal `statusOrder` helper is preserved here unchanged;
-// it could be promoted to booking-logic.js in Phase C.
+// original.
+//
+// Phase C1 (v15-refactor): `statusOrder` moved to booking-logic.js. The
+// inline `liveDur` / `elapsedMin` calculations stay here — they have
+// different semantics from TimelineView's `liveBarDur` (end-time pinned to
+// plan vs live bar width) and aren't shared.
 
 import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
-import { toMins, toTime, isLocked } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder } from "../lib/booking-logic";
 import { SmallTag, SBadge, TBadge, mkBtn } from "./atoms";
-
-// ── Sort priority ────────────────────────────────────────────────────────────
-// Seated guests first (most operationally urgent — at the table now), then
-// confirmed (upcoming), then completed (already left), then cancelled. Ties
-// broken by booking time (alphabetical on "HH:MM" string is correct since
-// times are zero-padded).
-function statusOrder(s) {
-  return s === "seated" ? 0 : s === "confirmed" ? 1 : s === "completed" ? 2 : 3;
-}
 
 export function ListView({
   bookings, date, onEdit, onStatus, onDelete, onManual,

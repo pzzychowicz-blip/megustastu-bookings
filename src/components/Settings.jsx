@@ -13,7 +13,9 @@
 //
 // Phase B3 (v15-refactor): extracted from App.jsx and converted RC() → JSX.
 // Phase B5: visible version label bumped 14.1 → 14.1.1 (file-split refactor
-// complete; no behavioural change — the patch version reflects that).
+// complete; no behavioural change).
+// Phase C1: visible version label bumped 14.1.1 → 14.1.2 (helper
+// consolidation + Follow button label fix).
 
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
@@ -62,12 +64,12 @@ export function TabBar({ tabs, current, onSelect }) {
 // ── General tab — version line + visible copyright credit ───────────────────
 // Reserved for future app-level toggles (default view, sound preference,
 // etc.). The version label is hardcoded; bumped at the end of each shipping
-// phase (currently 14.1.1 — end of B5, file-split refactor complete).
+// phase (currently 14.1.2 — end of C1, helper consolidation + Follow label).
 export function GeneralTabContent() {
   return (
     <div style={{ padding: "28px 12px", textAlign: "center" }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: "#5a6474", letterSpacing: "0.02em" }}>
-        version 14.1.1
+        version 14.1.2
       </div>
       <div style={{ fontSize: 11, fontWeight: 500, color: "#8a94a3", letterSpacing: "0.02em", marginTop: 8 }}>
         © 2026 Patryk Zychowicz — MGT Booking System

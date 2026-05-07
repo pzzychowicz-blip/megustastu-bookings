@@ -26,30 +26,26 @@
 //
 // Phase B5 (v15-refactor): extracted from App.jsx (the inline `prefPickerModal`
 // IIFE) and converted RC() → JSX. Behaviour, output markup, and all inline
-// styles are byte-identical to the original. The internal `getCapOf` helper
-// is preserved as in the original — flagged for Phase C consolidation
-// alongside the variants in ManualModal and WalkinForm.
+// styles are byte-identical to the original.
+//
+// Phase C1 (v15-refactor): the local `getCapOf` is replaced by the existing
+// `comboCap` export from booking-logic.js — same algorithm (exact-match →
+// sum-of-standalones, no greedy). ManualModal and WalkinForm use a
+// different export (`comboCapBest`) which adds a greedy best-subset branch;
+// for soft-hint preferences here, the simpler version is correct.
 
-import { S, BTN, TBL, VALID_COMBOS, ALL_TABLES, TABLE_GROUPS } from "../lib/constants";
-import { isIn } from "../lib/booking-logic";
+import { S, BTN, TBL, TABLE_GROUPS } from "../lib/constants";
+import { isIn, comboCap } from "../lib/booking-logic";
 import { Overlay, mkBtn } from "./atoms";
 
 export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
   const prefs = selected || [];
   const needed = Number(partySize) || 2;
 
-  // Capacity computation (simpler than ManualModal's). Exact-match in
-  // VALID_COMBOS wins; otherwise sum of standalone capacities.
-  function getCapOf(ids) {
-    if (ids.length === 0) return 0;
-    const k = ids.slice().sort().join("|");
-    const c = VALID_COMBOS.find((x) => x.ids.slice().sort().join("|") === k);
-    if (c) return c.cap;
-    return ids.reduce((a, id) => {
-      const t = ALL_TABLES.find((x) => x.id === id);
-      return a + (t ? t.capacity : 0);
-    }, 0);
-  }
+  // Capacity computation — see booking-logic.js#comboCap (exact-match in
+  // VALID_COMBOS, otherwise sum of standalones; no greedy branch). Local
+  // alias keeps existing call sites readable.
+  const getCapOf = comboCap;
 
   function togglePref(id) {
     if (prefs.includes(id)) {

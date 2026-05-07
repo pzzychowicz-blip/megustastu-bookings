@@ -7,6 +7,11 @@
 // lines 90–176 (helpers + finders + trial fits) and 195–400 (kitchen, optimise,
 // applyOpt, optimizer-OFF helpers). No semantic changes.
 //
+// Phase C1 additions: helper consolidation. Five new exports moved here from
+// component files / App.jsx — `nowTime`, `statusOrder`, `pct`, `liveBarDur`,
+// `comboCapBest`. Each preserves its original semantics exactly. See the
+// "Phase C1 helpers" section near the bottom of the file.
+//
 // Internal helpers (prefixed `_`) are not exported; everything else is.
 
 import {
@@ -332,4 +337,70 @@ export function verifyClean(bookings,date){
 export function checkInefficent(bookings,date){
   var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&!isLocked(b);});
   return day.some(function(b){var oth=day.filter(function(x){return x.id!==b.id;}).map(function(x){return {tables:x.tables,s:toMins(x.time),e:toMins(x.time)+x.duration};});var best=findBest(b.size,b.preference,toMins(b.time),toMins(b.time)+b.duration,oth);return best&&best.length<(b.tables||[]).length;});
+}
+
+// ── Phase C1 helpers ─────────────────────────────────────────────────────────
+// Five helpers consolidated from component files / App.jsx. Each was either
+// duplicated across files or buried inside a closure. Moving them here makes
+// them testable in isolation and removes a class of "which copy is canonical?"
+// confusion. Style intentionally matches the rest of this module (var, no
+// JSX) — modernisation comes in Phase C3.
+
+// Current local time as "HH:MM" — module-level convenience for any caller
+// that needs "right now" formatted as a clock string. Previously inlined in
+// App.jsx and WalkinForm (`localNowTime`).
+export function nowTime(){var d=new Date();return toTime(d.getHours()*60+d.getMinutes());}
+
+// Sort priority for the day-list view: seated first (most operationally
+// urgent), then confirmed (upcoming), completed (already left), cancelled.
+// Previously inlined in ListView. Pure function of the status string.
+export function statusOrder(s){return s==="seated"?0:s==="confirmed"?1:s==="completed"?2:3;}
+
+// Position-percentage helper for the timeline grid — converts a clock-minutes
+// value into a CSS `left` percentage relative to the open–close span. The
+// total span is computed internally from OPEN/GRID_CLOSE, so callers pass
+// only the minute they want positioned. Previously inlined in TimelineView,
+// where it closed over a derived `totalMins` constant.
+export function pct(mins){var totalMins=(GRID_CLOSE-OPEN)*60;return ((mins-OPEN*60)/totalMins)*100+"%";}
+
+// Live duration for the Gantt bar width on the timeline. For a seated
+// booking, returns max(15, elapsed-since-seating) so the bar always shows at
+// least 15 min and grows as the party stays. For non-seated, returns the
+// stored duration. Previously inlined in TimelineView as a closure over
+// `nowMins`. NB: ListView's similarly-shaped inline `liveDur` has different
+// semantics (pinned-to-plan end-time) and is intentionally NOT consolidated
+// here — that lives in ListView and is a separate concern.
+export function liveBarDur(b,nowMins){
+  if(b&&b.status==="seated"){
+    var elapsed=nowMins-toMins(b.time);
+    return Math.max(15,elapsed);
+  }
+  return b?b.duration:0;
+}
+
+// Capacity of a chosen subset of table ids using "best-subset greedy"
+// matching. Algorithm: exact-match in VALID_COMBOS wins; otherwise find the
+// largest VALID_COMBO entirely contained in `ids` and add the standalone
+// capacities of any leftover ids; falls back to sum-of-standalones if no
+// containing combo exists. Previously duplicated as `getCapOf` in
+// ManualModal and WalkinForm. PrefPickerModal uses the simpler `comboCap`
+// (also exported above) which has no greedy branch — by design, since for
+// soft-hint preferences we don't need partial-match scoring.
+export function comboCapBest(ids){
+  if(ids.length===0) return 0;
+  var k=ids.slice().sort().join("|");
+  var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});
+  if(c) return c.cap;
+  var bestCap=0;var bestIds=[];
+  VALID_COMBOS.forEach(function(combo){
+    if(combo.ids.length<=ids.length&&combo.ids.every(function(id){return ids.includes(id);})&&combo.cap>bestCap){
+      bestCap=combo.cap;
+      bestIds=combo.ids;
+    }
+  });
+  if(bestIds.length>0){
+    var rem=ids.filter(function(id){return !bestIds.includes(id);});
+    return bestCap+rem.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);
+  }
+  return ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);
 }

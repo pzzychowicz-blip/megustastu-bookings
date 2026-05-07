@@ -22,13 +22,16 @@
 //
 // Phase B2 (v15-refactor): extracted from App.jsx and converted RC() → JSX.
 // Behaviour, output markup, and all inline styles are byte-identical to the
-// original. The internal `getCapOf` helper is preserved here unchanged; it
-// will be promoted to booking-logic.js in Phase C.
+// original.
+//
+// Phase C1 (v15-refactor): the local `getCapOf` is now imported as
+// `comboCapBest` from booking-logic.js. Same algorithm, single canonical
+// source. The duplicate in WalkinForm has been replaced with the same import.
 
 import { useState, useEffect } from "react";
-import { S, BTN, VALID_COMBOS, ALL_TABLES } from "../lib/constants";
+import { S, BTN } from "../lib/constants";
 import {
-  toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy
+  toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest
 } from "../lib/booking-logic";
 import { Overlay, Toggle, mkBtn } from "./atoms";
 import { TableGrid } from "./TableGrid";
@@ -62,35 +65,10 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
     if (sl.status === "seated") sl.tables.forEach((id) => seatedBusy.add(id));
   });
 
-  // Compute the capacity of a chosen subset of table ids by looking up the
-  // best matching VALID_COMBO and filling any leftover ids with their
-  // standalone capacities. Exact-match wins; otherwise greedy on largest
-  // contained subset, then sum the remainders as singletons.
-  function getCapOf(ids) {
-    if (ids.length === 0) return 0;
-    const k = ids.slice().sort().join("|");
-    const c = VALID_COMBOS.find((x) => x.ids.slice().sort().join("|") === k);
-    if (c) return c.cap;
-    let bestCap = 0;
-    let bestIds = [];
-    VALID_COMBOS.forEach((combo) => {
-      if (combo.ids.length <= ids.length && combo.ids.every((id) => ids.includes(id)) && combo.cap > bestCap) {
-        bestCap = combo.cap;
-        bestIds = combo.ids;
-      }
-    });
-    if (bestIds.length > 0) {
-      const rem = ids.filter((id) => !bestIds.includes(id));
-      return bestCap + rem.reduce((a, id) => {
-        const t = ALL_TABLES.find((x) => x.id === id);
-        return a + (t ? t.capacity : 0);
-      }, 0);
-    }
-    return ids.reduce((a, id) => {
-      const t = ALL_TABLES.find((x) => x.id === id);
-      return a + (t ? t.capacity : 0);
-    }, 0);
-  }
+  // Compute the capacity of a chosen subset using "best-subset greedy"
+  // matching — see booking-logic.js#comboCapBest for the algorithm.
+  // Local alias keeps existing call sites readable.
+  const getCapOf = comboCapBest;
 
   // Toggle a table on/off. Auto-prunes the selection so the host doesn't
   // accumulate redundant tables once `needed` is met. Refuses i1+i4 without

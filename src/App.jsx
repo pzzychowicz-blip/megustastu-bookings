@@ -35,7 +35,8 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes, findAllOptions,
   optimise, applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction,
-  verifyClean, checkInefficent
+  verifyClean, checkInefficent,
+  nowTime
 } from "./lib/booking-logic";
 
 import {
@@ -105,12 +106,12 @@ import { HistoryPopup }    from "./components/HistoryPopup";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 var __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.1.1",
+  version:"14.1.2",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
   license:"Proprietary — All rights reserved. See LICENSE.",
-  build:"v14.1.1-deployment"
+  build:"v14.1.2-deployment"
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 
@@ -136,7 +137,11 @@ console.log(
 // thicker grid lines, and the v14 preview 7 Reminder system.
 // v14.1: connection-status banner, IP protection layer (header, LICENSE,
 // fingerprint, console banner, visible credit in Settings).
-// In-app version label (General tab in Settings): "version 14.1.1".
+// v14.1.1: file-split refactor complete (B1–B5).
+// v14.1.2: helper consolidation (Phase C1) — getCapOf, pct, statusOrder,
+// liveDur, nowTime promoted to lib/booking-logic.js; unused blockEl ref
+// dropped; Follow button label fixed (Following / Follow).
+// In-app version label (General tab in Settings): "version 14.1.2".
 
 
 function useWinW(){var ws=useState(typeof window!=="undefined"?window.innerWidth:1024);var w=ws[0],setW=ws[1];useEffect(function(){function h(){setW(window.innerWidth);}window.addEventListener("resize",h);return function(){window.removeEventListener("resize",h);};},[]);return w;}
@@ -587,7 +592,6 @@ function BookingApp(){
     var max=0;bookings.forEach(function(b){if(b.date===today&&b.name&&b.name.indexOf("Walk-in ")===0){var n=parseInt(b.name.slice(8));if(n>max) max=n;}});
     return max+1;
   }
-  function nowTime(){var d=new Date();return toTime(d.getHours()*60+d.getMinutes());}
   function openWalkin(){setWalkinForm({size:2,notes:"",tables:[],time:nowTime(),customDur:null});setWalkinError("");setShowWalkin(true);}
   function doSaveWalkin(){
     var wf=walkinForm;

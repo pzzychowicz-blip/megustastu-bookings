@@ -28,17 +28,21 @@
 //
 // Phase B5 (v15-refactor): extracted from App.jsx (the inline `walkinModal`
 // IIFE) and converted RC() → JSX. Behaviour, output markup, and all inline
-// styles are byte-identical to the original. The internal `getCapOf` helper
-// is preserved verbatim — same one as ManualModal, flagged for Phase C
-// consolidation.
+// styles are byte-identical to the original.
+//
+// Phase C1 (v15-refactor): the local `getCapOf` is now imported as
+// `comboCapBest` from booking-logic.js (same algorithm, single canonical
+// source — also used by ManualModal). The `localNowTime` fallback is
+// replaced by the imported `nowTime`.
 
-import { S, BTN, KITCHEN_TABLE_LIMIT, VALID_COMBOS, ALL_TABLES } from "../lib/constants";
+import { S, BTN, KITCHEN_TABLE_LIMIT } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy,
   findBest, findBestAny,
   optimizerActiveFor, findTimes, formatSugg,
-  getKitchenLoad, findKitchenFriendlyTimes
+  getKitchenLoad, findKitchenFriendlyTimes,
+  comboCapBest, nowTime
 } from "../lib/booking-logic";
 import { Overlay, Section, Fld, AvailBanner, mkInp, mkBtn } from "./atoms";
 import { TableGrid } from "./TableGrid";
@@ -52,14 +56,10 @@ export function WalkinForm({
 }) {
   const wf = draft;
   const wSize = Number(wf.size) || 2;
-  // Local fallback if the draft has no time (initial state). Parent's
-  // openWalkin already seeds `time` to nowTime(), so this branch is rarely
-  // taken — kept for parity with the original.
-  function localNowTime() {
-    const d = new Date();
-    return toTime(d.getHours() * 60 + d.getMinutes());
-  }
-  const wTime = wf.time || localNowTime();
+  // Fallback if the draft has no time (initial state). Parent's openWalkin
+  // already seeds `time` to nowTime(), so this branch is rarely taken — kept
+  // for parity with the original.
+  const wTime = wf.time || nowTime();
   const wDur = wf.customDur || getDur(wSize);
   const wDate = new Date().toISOString().slice(0, 10);
   const wS = toMins(wTime);
@@ -89,35 +89,9 @@ export function WalkinForm({
     return formatSugg(sugg, wS);
   })();
 
-  // Capacity computation — same algorithm as ManualModal: exact-match in
-  // VALID_COMBOS, otherwise greedy best-subset + sum remainders.
-  function getCapOf(ids) {
-    if (ids.length === 0) return 0;
-    const k = ids.slice().sort().join("|");
-    const c = VALID_COMBOS.find((x) => x.ids.slice().sort().join("|") === k);
-    if (c) return c.cap;
-    let bestCap = 0;
-    let bestIds = [];
-    VALID_COMBOS.forEach((combo) => {
-      if (combo.ids.length <= ids.length
-        && combo.ids.every((id) => ids.includes(id))
-        && combo.cap > bestCap) {
-        bestCap = combo.cap;
-        bestIds = combo.ids;
-      }
-    });
-    if (bestIds.length > 0) {
-      const rem = ids.filter((id) => !bestIds.includes(id));
-      return bestCap + rem.reduce((a, id) => {
-        const t = ALL_TABLES.find((x) => x.id === id);
-        return a + (t ? t.capacity : 0);
-      }, 0);
-    }
-    return ids.reduce((a, id) => {
-      const t = ALL_TABLES.find((x) => x.id === id);
-      return a + (t ? t.capacity : 0);
-    }, 0);
-  }
+  // Capacity computation — see booking-logic.js#comboCapBest. Local alias
+  // keeps existing call sites readable.
+  const getCapOf = comboCapBest;
 
   // Toggle a table on/off. Auto-prunes the selection so the host doesn't
   // accumulate redundant tables once `wSize` is met. Refuses i1+i4 without
