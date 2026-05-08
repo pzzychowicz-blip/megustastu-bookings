@@ -449,3 +449,154 @@ App.jsx itself. Two heads-up items from this phase that affect C3:
   `export function`, no `RC()`). When App.jsx itself goes JSX in C3, no
   changes needed in this file.
 
+## Phase C3a — `var` → `const`/`let` modernization + useState destructuring
+**Shipped:** 2026-05-08
+**Version:** 14.1.3 → **14.1.4** (patch)
+**Branch:** `v15-refactor` → `main`
+
+### Summary
+Third Phase-C sub-phase: a purely lexical refactor of `App.jsx`. All 380 `var`
+keywords are converted to `const` (325) or `let` (16), and 38 `useState`
+declarations are collapsed to modern destructured form
+(`const [x, setX] = useState(...)`). No code is moved, no logic is changed,
+no imports are touched.
+
+This is the first half of Phase C3 — the second half (C3b) will convert the
+154 `RC(...)` call sites to JSX in a separate thread. Splitting C3 keeps each
+deploy reviewable as a single concern and isolates any TDZ regressions
+(C3a) from any JSX-build regressions (C3b).
+
+**Zero user-visible changes. Zero behavioural changes.**
+
+### Pre-flight
+A multi-pass static audit ran before any code was touched:
+
+1. **Hoisting risk scan** — for every `var NAME` declaration, found all
+   word-boundary references to `NAME` and flagged any that occurred *before*
+   the declaration line at indent ≤ the declaration's indent. Filtered out
+   string literals, property keys, dot-access, callback parameter binders,
+   and import paths. **Result: 0 genuine hoisting risks across all 1460
+   lines.** Every `var` was already declared before any reference resolved
+   to it.
+2. **Block-scope leak scan** — searched for `for (var ...)`, `var` inside
+   `if`/`while`/`switch` blocks, and `var {…}` destructuring. **Result: 0
+   patterns** (App.jsx had never used these).
+3. **Reassignment scan** — for every `var NAME`, found every `NAME = …`,
+   `NAME +=`, `NAME++`, `NAME--` that wasn't the declaration itself, wasn't
+   a property assignment, and wasn't inside a callback that took `NAME` as
+   its own parameter. **Result: 13 names need `let`** (cross-line audit).
+4. **Same-line declare-then-reassign scan** — caught 3 additional cases the
+   cross-line audit had missed (`max` at original L601, `ex` at L638,
+   `curIdx` at L936). These are all of the form
+   `var X = init; …; X = newval;` on a single line. After the patch:
+   **16 `let` declarations total**.
+
+### Execution
+Conversion was applied in 5 sections, each with its own per-section
+post-pass audit verifying that every emitted `const` was truly never
+reassigned anywhere in the file. One false-positive flag in Section 4
+(`fin` at L735) was confirmed safe via brace-matching the surrounding
+`if`/`else` structure — same identifier in disjoint branches, one needs
+`let`, one needs `const`.
+
+| Section | Range | Vars converted | `let` cases |
+|---|---|---:|---|
+| 1 | Module-level (L116, L158) | 2 | — |
+| 2 | BookingApp body declarations (L162–340) | 51 | `meta` |
+| 3 | Reminder helpers + auto-extend + overlap warnings + walk-in (L341–620) | 78 | `needsUpdate`, `nextOnTable`, `nextStart`, `max` |
+| 4 | `doSave` + booking actions + keyboard handler + `updateStatus`/`manualAssign` (L622–1123) | 123 | `ex`, `seatedShift`, `saveDur`, `saveCustDur`, `saveTime`, `h`, `fin`, `base`, `curIdx`, `seatedShiftHappened` |
+| 5 | IIFE memoizations + render tree + auth wrapper (L1125–end) | 93 | `found` |
+
+Each section's output passed an Acorn ESM/ES2022 parse check before being
+carried forward into the next section. The deployment file passed Acorn at
+the end too.
+
+### `useState` collapses (38 total)
+Every `var <temp>=useState(<v>);var <state>=<temp>[0],<setter>=<temp>[1];`
+pattern was collapsed to `const [<state>, <setter>] = useState(<v>)`.
+
+Three sub-shapes were handled:
+
+- **Oneline (33 cases):** the entire pattern fits on one source line, e.g.
+  `var bs=useState([]);var bookings=bs[0],setBookings=bs[1];`
+  → `const [bookings, setBookings] = useState([]);`
+- **Twoline (4 cases):** the temp var and the destructure are on consecutive
+  lines (the `reminders`/`reminderFires` block plus 2 stragglers). These
+  collapsed two lines into one, accounting for the file's net −3 line delta.
+- **Setter-only (1 case):** `var rts30=useState(0);var setReminderTick=rts30[1];`
+  → `const [, setReminderTick] = useState(0);` — the leading comma keeps the
+  unused-value pattern explicit, matching the existing comment that
+  documents *why* the value is discarded.
+
+`useState(...)` and `useRef(...)` call counts are bit-identical before and
+after (39 and 12 respectively).
+
+### `let` cases — every reassignment confirmed by code review
+
+| Name | Decl line (final file) | Why `let` |
+|---|---:|---|
+| `meta` | 190 | Viewport `<meta>` tag fallback creation |
+| `needsUpdate` | 498 | Auto-extend flag toggled inside seated-booking map |
+| `nextOnTable` | 540 | forEach accumulator (nearest next booking on shared table) |
+| `nextStart` | 540 | forEach accumulator (paired with `nextOnTable`) |
+| `max` | 598 | Walk-in number scan: `let max=0;…if(n>max) max=n;` (same-line) |
+| `ex` | 635 | Manual-tables guard: declared then `ex=ex.concat(…)` (same-line) |
+| `seatedShift` | 646 | Reassigned inside conditional if confirmed→seated transition |
+| `saveDur` | 657 | Reassigned in completed-status branch and seated-shift branch |
+| `saveCustDur` | 659 | Parallel to `saveDur` |
+| `saveTime` | 663 | Reassigned if `seatedShift` |
+| `h` | 686 | History array extended via `h=h.concat(...)` if seatedShift |
+| `fin` | 697 | Reassigned in `wasSeatedLocked` post-process branch (if-branch only — the parallel `fin` at L735 in else-branch is `const`) |
+| `base` | 725 | Bookings array remapped on `swapAffected` and again on Book Again source |
+| `curIdx` | 933 | Settings tab cycle: `let curIdx=…; if(curIdx<0) curIdx=0;` (same-line) |
+| `seatedShiftHappened` | 1049 | Flag toggled true inside map callback |
+| `found` | 1128 | manualBooking IIFE: `let found=…; if(...) found=Object.assign(…);` |
+
+### File metrics
+
+| Metric | Before (14.1.3) | After (14.1.4) |
+|---|---:|---:|
+| Lines | 1460 | 1457 |
+| `var` keyword count (in code) | 380 | **0** |
+| `const` keyword count | 0 | 325 |
+| `let` keyword count | 0 | 16 |
+| `useState(...)` calls | 39 | 39 |
+| `useRef(...)` calls | 12 | 12 |
+| Acorn ESM/ES2022 parse | OK | OK |
+
+### What this *doesn't* do
+- **No JSX conversion.** The 154 `RC(...)` call sites remain. That's C3b.
+- **No structural extraction.** No code moves out of `App.jsx`. That's
+  Phase D and beyond.
+- **No `let → const` refactors of the 16 `let` cases.** The all-`const`
+  ideal would require ternary-folding or restructuring the conditional
+  reassignments, which would mix lexical refactor with semantic rewrites.
+  Out of scope; revisit if/when desired as a separate hygiene pass.
+- **No changes outside `App.jsx`.** Settings.jsx, the `lib/` modules, the
+  `components/` files, and `useWinW.js` are untouched.
+
+### Smoke-test surface (post-deploy verification)
+Because the refactor only changes declaration keywords, runtime regressions
+can only appear via TDZ — and the pre-flight confirmed zero hoisting
+risks. Still, the live build was exercised on the flows that touch the
+trickiest `let` cases:
+
+| Flow | `let` validated |
+|---|---|
+| Sequential walk-in creation (Walk-in 1 → 2 → 3) | `max` |
+| Edit confirmed booking → set status to seated past arrival time | `seatedShift`, `saveDur`, `saveCustDur`, `saveTime`, `h`, `fin` |
+| Book Again from a seated/completed guest | `base` |
+| Settings open → ←/→ to cycle General/Reminders/Shortcuts | `curIdx` |
+| Auto-extend triggers when seated guest overstays | `needsUpdate` |
+| Seated guest table conflicts with upcoming booking | `nextOnTable`, `nextStart`, `seatedShiftHappened`, `found` |
+| Manual table assignment with new vs existing booking | `ex` |
+| Open booking form on narrow viewport → viewport meta still injected | `meta` |
+| Auth wrapper boot path (sign in / sign out / refresh) | App-level `user`, `checking` collapses |
+
+### Next
+**Phase C3b** — `RC(React.createElement)` → JSX conversion across the same
+file. ~154 call sites. Will be approached in a fresh thread with its own
+pre-flight — the codemod approach (`react-codemod`'s
+`create-element-to-jsx`, or the equivalent Babel plugin) is the leading
+candidate to avoid hand-converting that many sites.
+
