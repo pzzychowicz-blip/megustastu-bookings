@@ -113,14 +113,14 @@ import { useWinW } from "./hooks/useWinW";
 // below remain readable in any deployed bundle. Referenced by the boot banner
 // (window assignment + console.log) so the bundler cannot tree-shake it.
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
-var __APP_SIGNATURE__={
+const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.1.3",
+  version:"14.1.4",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
   license:"Proprietary — All rights reserved. See LICENSE.",
-  build:"v14.1.3-deployment"
+  build:"v14.1.4-deployment"
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 
@@ -153,15 +153,21 @@ console.log(
 // v14.1.3: useWinW hook extracted to ./hooks/useWinW.js (Phase C2);
 // 31 leftover dead imports cleaned up from App.jsx import block.
 // In-app version label (General tab in Settings): "version 14.1.3".
+// v14.1.4: Phase C3a — modern declarations pass on App.jsx. All 380 `var`
+// keywords converted to `const` (325) or `let` (16); 38 useState patterns
+// collapsed to destructured form `const [x, setX] = useState(...)`. Pure
+// lexical refactor — zero behavioural change. File net −3 lines (1460 →
+// 1457) from the four useState collapses that previously spanned two
+// lines each. JSX conversion (Phase C3b) is the next step.
 
 
-var RC=React.createElement;
+const RC=React.createElement;
 
 
 // ── Booking App ───────────────────────────────────────────────────────────────
 function BookingApp(){
-  var bs=useState([]);var bookings=bs[0],setBookings=bs[1];
-  var tbs=useState([]);var tableBlocks=tbs[0],setTableBlocks=tbs[1];
+  const [bookings, setBookings] = useState([]);
+  const [tableBlocks, setTableBlocks] = useState([]);
   // ── Firebase write-guard system ─────────────────────────────────────────────
   // These refs track whether we've received AT LEAST ONE onValue callback from
   // Firebase for each path. Until that's happened, React state is [] / {}
@@ -170,24 +176,24 @@ function BookingApp(){
   // dataLoaded ref is true. This is the critical safety net added after the
   // v13 first-deploy incident where empty in-memory state was persisted to
   // Firebase before the read listener had fired.
-  var bookingsLoaded=useRef(false);
-  var blocksLoaded=useRef(false);
+  const bookingsLoaded=useRef(false);
+  const blocksLoaded=useRef(false);
   // v14 p7 deployment: same write-guard pattern applied to reminder data.
-  var remindersLoaded=useRef(false);
-  var reminderFiresLoaded=useRef(false);
-  var ws=useState(null);var writeWarning=ws[0],setWriteWarning=ws[1];
-  var lbs=useState(false);var loadBannerShown=lbs[0],setLoadBannerShown=lbs[1];
-  var firstLoadCount=useRef(null); // number of bookings on first successful load
+  const remindersLoaded=useRef(false);
+  const reminderFiresLoaded=useRef(false);
+  const [writeWarning, setWriteWarning] = useState(null);
+  const [loadBannerShown, setLoadBannerShown] = useState(false);
+  const firstLoadCount=useRef(null); // number of bookings on first successful load
   // v14.1: Connection-status state. isOnline drives the amber offline banner;
   // reconnectShown is a brief 4-second blue flash after offline→online.
   // hasConnectedRef gates BOTH banners so we never show "offline" before
   // the very first successful Firebase connection (avoids a false flash on boot).
-  var ots=useState(true);var isOnline=ots[0],setIsOnline=ots[1];
-  var rrs=useState(false);var reconnectShown=rrs[0],setReconnectShown=rrs[1];
-  var hasConnectedRef=useRef(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [reconnectShown, setReconnectShown] = useState(false);
+  const hasConnectedRef=useRef(false);
   // Ensure optimal viewport scaling on all devices
   useEffect(function(){
-    var meta=document.querySelector('meta[name="viewport"]');
+    let meta=document.querySelector('meta[name="viewport"]');
     if(!meta){meta=document.createElement("meta");meta.name="viewport";document.head.appendChild(meta);}
     meta.content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover";
     document.documentElement.style.cssText="height:100%;overflow:hidden;";
@@ -217,7 +223,7 @@ function BookingApp(){
       set(ref(db,"bookings"),computed).catch(function(){});
     }
     if(typeof next==="function"){
-      setBookings(function(prev){var computed=next(prev);persist(computed);return computed;});
+      setBookings(function(prev){const computed=next(prev);persist(computed);return computed;});
     } else {
       setBookings(next);persist(next);
     }
@@ -231,7 +237,7 @@ function BookingApp(){
       set(ref(db,"tableBlocks"),computed).catch(function(){});
     }
     if(typeof next==="function"){
-      setTableBlocks(function(prev){var computed=next(prev);persist(computed);return computed;});
+      setTableBlocks(function(prev){const computed=next(prev);persist(computed);return computed;});
     } else {
       setTableBlocks(next);persist(next);
     }
@@ -241,9 +247,9 @@ function BookingApp(){
   // when val is null (truly empty DB), otherwise saves would stay blocked forever
   // on a brand-new database.
   useEffect(function(){
-    var unsub=onValue(ref(db,"bookings"),function(snap){
-      var val=snap.val();
-      var arr=val?sanitizeAll(val):[];
+    const unsub=onValue(ref(db,"bookings"),function(snap){
+      const val=snap.val();
+      const arr=val?sanitizeAll(val):[];
       setBookings(arr);
       if(firstLoadCount.current===null){
         firstLoadCount.current=arr.length;
@@ -254,9 +260,9 @@ function BookingApp(){
     return unsub;
   },[]);
   useEffect(function(){
-    var unsub=onValue(ref(db,"tableBlocks"),function(snap){
-      var val=snap.val();
-      if(val){var arr=Array.isArray(val)?val:Object.values(val);setTableBlocks(arr.filter(Boolean));}
+    const unsub=onValue(ref(db,"tableBlocks"),function(snap){
+      const val=snap.val();
+      if(val){const arr=Array.isArray(val)?val:Object.values(val);setTableBlocks(arr.filter(Boolean));}
       else setTableBlocks([]);
       blocksLoaded.current=true;
     });
@@ -265,15 +271,15 @@ function BookingApp(){
   // Auto-hide the first-load banner after 6 seconds
   useEffect(function(){
     if(!loadBannerShown) return;
-    var t=setTimeout(function(){setLoadBannerShown(false);},6000);
+    const t=setTimeout(function(){setLoadBannerShown(false);},6000);
     return function(){clearTimeout(t);};
   },[loadBannerShown]);
   // v14.1: Subscribe to Firebase's special .info/connected ref. Drives the
   // offline banner and the reconnected flash. The hasConnectedRef gate makes
   // sure the offline banner never shows before the first successful handshake.
   useEffect(function(){
-    var unsub=onValue(ref(db,".info/connected"),function(snap){
-      var connected=snap.val()===true;
+    const unsub=onValue(ref(db,".info/connected"),function(snap){
+      const connected=snap.val()===true;
       if(connected){
         if(!hasConnectedRef.current){
           // First successful connection on boot — silent.
@@ -292,30 +298,30 @@ function BookingApp(){
     return unsub;
   },[]);
 
-  var vs=useState("timeline");var view=vs[0],setView=vs[1];
-  var zms=useState(1);var timelineZoom=zms[0],setTimelineZoom=zms[1];
-  var timelineScrollRef=useRef(0);
-  var fns=useState(false);var followNow=fns[0],setFollowNow=fns[1];
-  var bts=useState(null);var blockTarget=bts[0],setBlockTarget=bts[1];
-  var vds=useState(new Date().toISOString().slice(0,10));var viewDate=vds[0],setViewDate=vds[1];
-  var sfs=useState(false);var showForm=sfs[0],setShowForm=sfs[1];
-  var fms=useState(EMPTY_FORM);var form=fms[0],setForm=fms[1];
-  var eis=useState(null);var editId=eis[0],setEditId=eis[1];
-  var ers=useState("");var error=ers[0],setError=ers[1];
-  var cds=useState(null);var confirmDel=cds[0],setConfirmDel=cds[1];
-  var crs=useState(false);var confirmReshuffle=crs[0],setConfirmReshuffle=crs[1];
-  var ccs=useState(null);var confirmCancel=ccs[0],setConfirmCancel=ccs[1];
-  var rss=useState(false);var reshuffled=rss[0],setReshuffled=rss[1];
-  var mts=useState(null);var manualTarget=mts[0],setManualTarget=mts[1];
-  var dis=useState(null);var dismissedIneff=dis[0],setDismissedIneff=dis[1];
-  var formRef=useRef(EMPTY_FORM);
-  var sas=useState(null);var swapAffected=sas[0],setSwapAffected=sas[1];
-  var cks=useState(null);var confirmKitchen=cks[0],setConfirmKitchen=cks[1];
-  var shs=useState(false);var showHistory=shs[0],setShowHistory=shs[1];
-  var pps=useState(false);var showPrefPicker=pps[0],setShowPrefPicker=pps[1];
+  const [view, setView] = useState("timeline");
+  const [timelineZoom, setTimelineZoom] = useState(1);
+  const timelineScrollRef=useRef(0);
+  const [followNow, setFollowNow] = useState(false);
+  const [blockTarget, setBlockTarget] = useState(null);
+  const [viewDate, setViewDate] = useState(new Date().toISOString().slice(0,10));
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [editId, setEditId] = useState(null);
+  const [error, setError] = useState("");
+  const [confirmDel, setConfirmDel] = useState(null);
+  const [confirmReshuffle, setConfirmReshuffle] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(null);
+  const [reshuffled, setReshuffled] = useState(false);
+  const [manualTarget, setManualTarget] = useState(null);
+  const [dismissedIneff, setDismissedIneff] = useState(null);
+  const formRef=useRef(EMPTY_FORM);
+  const [swapAffected, setSwapAffected] = useState(null);
+  const [confirmKitchen, setConfirmKitchen] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showPrefPicker, setShowPrefPicker] = useState(false);
   // v14 preview 3: Settings / keyboard-shortcuts modal. Toggled by the cog
   // icon in TimelineView's legend row and by the `?` keyboard shortcut.
-  var sts=useState(false);var showSettings=sts[0],setShowSettings=sts[1];
+  const [showSettings, setShowSettings] = useState(false);
   // v14 preview 7: Reminders state.
   //   reminders        — list of staff-set reminders (see reminderAppliesTo).
   //   reminderFires    — map of slot-key → {status, until?, at?} for dismissed
@@ -327,17 +333,15 @@ function BookingApp(){
   //   setReminderTick  — unused readback; 30s interval bumps this so banners
   //                      re-evaluate even between nowMins minute-boundary
   //                      updates (catches snooze expiry and time-arrivals).
-  var rms=useState([]);
-  var reminders=rms[0],setReminders=rms[1];
-  var rfs=useState({});
-  var reminderFires=rfs[0],setReminderFires=rfs[1];
-  var stts=useState("general");var settingsTab=stts[0],setSettingsTab=stts[1];
-  var res=useState(null);var reminderEditor=res[0],setReminderEditor=res[1];
+  const [reminders, setReminders] = useState([]);
+  const [reminderFires, setReminderFires] = useState({});
+  const [settingsTab, setSettingsTab] = useState("general");
+  const [reminderEditor, setReminderEditor] = useState(null);
   // v14 p7 fix: in-app confirmation for reminder deletion — window.confirm is
   // blocked in sandboxed / embedded preview environments, so it never showed
   // the dialog. Matches the confirmDel / confirmCancel pattern used elsewhere.
-  var crd=useState(null);var confirmReminderDel=crd[0],setConfirmReminderDel=crd[1];
-  var rts30=useState(0);var setReminderTick=rts30[1];
+  const [confirmReminderDel, setConfirmReminderDel] = useState(null);
+  const [, setReminderTick] = useState(0);
   // v14 p7 deployment: Firebase-persisted reminder writes, write-guarded.
   //   `reminders` uses the same empty-array safety guard as bookings: if the
   //   DB had any reminders on load, saving an empty array would be refused
@@ -354,7 +358,7 @@ function BookingApp(){
       set(ref(db,"reminders"),computed).catch(function(){});
     }
     if(typeof next==="function"){
-      setReminders(function(prev){var c=next(prev);persist(c);return c;});
+      setReminders(function(prev){const c=next(prev);persist(c);return c;});
     } else {setReminders(next);persist(next);}
   }
   function saveReminderFires(next){
@@ -366,16 +370,16 @@ function BookingApp(){
       set(ref(db,"reminderFires"),computed).catch(function(){});
     }
     if(typeof next==="function"){
-      setReminderFires(function(prev){var c=next(prev);persist(c);return c;});
+      setReminderFires(function(prev){const c=next(prev);persist(c);return c;});
     } else {setReminderFires(next);persist(next);}
   }
   // Firebase listeners — reminders. Array stored; object-form also tolerated
   // (defensive — matches the tableBlocks pattern).
   useEffect(function(){
-    var unsub=onValue(ref(db,"reminders"),function(snap){
-      var val=snap.val();
+    const unsub=onValue(ref(db,"reminders"),function(snap){
+      const val=snap.val();
       if(val){
-        var arr=Array.isArray(val)?val:Object.values(val);
+        const arr=Array.isArray(val)?val:Object.values(val);
         setReminders(arr.filter(Boolean));
       } else {
         setReminders([]);
@@ -385,8 +389,8 @@ function BookingApp(){
     return unsub;
   },[]);
   useEffect(function(){
-    var unsub=onValue(ref(db,"reminderFires"),function(snap){
-      var val=snap.val();
+    const unsub=onValue(ref(db,"reminderFires"),function(snap){
+      const val=snap.val();
       setReminderFires(val&&typeof val==="object"?val:{});
       reminderFiresLoaded.current=true;
     });
@@ -399,8 +403,8 @@ function BookingApp(){
   // each time; we guard by only writing when the key set actually shrinks.
   useEffect(function(){
     if(!reminderFiresLoaded.current) return;
-    var today=new Date().toISOString().slice(0,10);
-    var pruned=pruneOldReminderFires(reminderFires,today);
+    const today=new Date().toISOString().slice(0,10);
+    const pruned=pruneOldReminderFires(reminderFires,today);
     if(Object.keys(pruned).length!==Object.keys(reminderFires||{}).length){
       saveReminderFires(pruned);
     }
@@ -410,24 +414,24 @@ function BookingApp(){
   // only update on minute boundaries). Without this, a snooze expiring
   // mid-minute could stay hidden for up to 60s longer than intended.
   useEffect(function(){
-    var t=setInterval(function(){setReminderTick(function(x){return x+1;});},30000);
+    const t=setInterval(function(){setReminderTick(function(x){return x+1;});},30000);
     return function(){clearInterval(t);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   // Reminder action handlers.
   function markReminderDone(fireKey){
-    saveReminderFires(function(prev){var n=Object.assign({},prev);n[fireKey]={status:"done",at:Date.now()};return n;});
+    saveReminderFires(function(prev){const n=Object.assign({},prev);n[fireKey]={status:"done",at:Date.now()};return n;});
   }
   function snoozeReminderFire(fireKey){
-    saveReminderFires(function(prev){var n=Object.assign({},prev);n[fireKey]={status:"snoozed",until:Date.now()+15*60*1000};return n;});
+    saveReminderFires(function(prev){const n=Object.assign({},prev);n[fireKey]={status:"snoozed",until:Date.now()+15*60*1000};return n;});
   }
   function openNewReminder(){
-    var today=new Date().toISOString().slice(0,10);
+    const today=new Date().toISOString().slice(0,10);
     setReminderEditor({id:"new",draft:{text:"",times:["21:00"],recurrence:{type:"once",date:today,days:[]},active:true}});
   }
   function openEditReminder(r){
     // Deep-clone to prevent live-editing the stored reminder.
-    var draft={
+    const draft={
       text:r.text,
       times:(r.times||[]).slice(),
       recurrence:Object.assign({},r.recurrence||{},{days:(r.recurrence&&r.recurrence.days||[]).slice()}),
@@ -437,14 +441,14 @@ function BookingApp(){
   }
   function saveReminderFromEditor(){
     if(!reminderEditor) return;
-    var d=reminderEditor.draft;
+    const d=reminderEditor.draft;
     if(validateReminderDraft(d)) return; // UI button is disabled; guard here too.
     // Normalize: dedupe times, sort ascending, trim text.
-    var uniqTimes=Array.from(new Set(d.times));uniqTimes.sort();
-    var cleanDraft=Object.assign({},d,{times:uniqTimes,text:d.text.trim()});
-    var id=reminderEditor.id;
+    const uniqTimes=Array.from(new Set(d.times));uniqTimes.sort();
+    const cleanDraft=Object.assign({},d,{times:uniqTimes,text:d.text.trim()});
+    const id=reminderEditor.id;
     if(id==="new"){
-      var newR=Object.assign({id:genId(),createdAt:Date.now()},cleanDraft);
+      const newR=Object.assign({id:genId(),createdAt:Date.now()},cleanDraft);
       saveReminders(function(prev){return prev.concat([newR]);});
     } else {
       saveReminders(function(prev){return prev.map(function(r){return r.id===id?Object.assign({},r,cleanDraft):r;});});
@@ -465,15 +469,14 @@ function BookingApp(){
   useEffect(function(){formRef.current=form;},[form]);
   useEffect(function(){if(error) setError("");},[form.time,form.size,form.date,form.preference,form.customDur]);
   // Real-time clock for seated duration
-  var nms=useState(function(){var d=new Date();return d.getHours()*60+d.getMinutes();});var nowMins=nms[0],setNowMins=nms[1];
-  useEffect(function(){var t=setInterval(function(){var d=new Date();setNowMins(d.getHours()*60+d.getMinutes());},15000);return function(){clearInterval(t);};},[]);
+  const [nowMins, setNowMins] = useState(function(){const d=new Date();return d.getHours()*60+d.getMinutes();});
+  useEffect(function(){const t=setInterval(function(){const d=new Date();setNowMins(d.getHours()*60+d.getMinutes());},15000);return function(){clearInterval(t);};},[]);
   // Optimizer auto-off at 15:00 for today's shift
-  var aos=useState(function(){var d=new Date();return d.getHours()*60+d.getMinutes()<15*60;});
-  var autoOptimizer=aos[0],setAutoOptimizer=aos[1];
-  var autoFlippedRef=useRef(null);
+  const [autoOptimizer, setAutoOptimizer] = useState(function(){const d=new Date();return d.getHours()*60+d.getMinutes()<15*60;});
+  const autoFlippedRef=useRef(null);
   useEffect(function(){
     if(nowMins<15*60) return;
-    var today=new Date().toISOString().slice(0,10);
+    const today=new Date().toISOString().slice(0,10);
     if(autoFlippedRef.current===today) return;
     autoFlippedRef.current=today;
     setAutoOptimizer(false);
@@ -481,10 +484,10 @@ function BookingApp(){
   // Optimizer auto-on at new day start (before 15:00). Day transitions detected via
   // date-string key, so this fires at ~00:00 when the new day begins — or at app
   // mount if we start before 15:00. No reshuffle on flip.
-  var autoOnRef=useRef(null);
+  const autoOnRef=useRef(null);
   useEffect(function(){
     if(nowMins>=15*60) return;
-    var today=new Date().toISOString().slice(0,10);
+    const today=new Date().toISOString().slice(0,10);
     if(autoOnRef.current===today) return;
     autoOnRef.current=today;
     setAutoOptimizer(true);
@@ -494,20 +497,20 @@ function BookingApp(){
   // if something actually needs to change. This prevents a spurious write attempt
   // on first mount (when onValue may not have returned yet, the write-guard would
   // fire even though no real change is being made).
-  var lastExtend=useRef("");
+  const lastExtend=useRef("");
   useEffect(function(){
     if(!bookingsLoaded.current) return; // no work to do until initial read lands
-    var today=new Date().toISOString().slice(0,10);
-    var needsUpdate=false;
-    var updated=bookings.map(function(b){
+    const today=new Date().toISOString().slice(0,10);
+    let needsUpdate=false;
+    const updated=bookings.map(function(b){
       if(b.date!==today||b.status!=="seated") return b;
-      var elapsed=nowMins-toMins(b.time);
+      const elapsed=nowMins-toMins(b.time);
       if(elapsed>b.duration){needsUpdate=true;return Object.assign({},b,{duration:elapsed,customDur:elapsed});}
       return b;
     });
     if(!needsUpdate) return;
-    var seated=bookings.filter(function(b){return b.date===today&&b.status==="seated";});
-    var key=seated.map(function(b){return b.id+":"+nowMins;}).join(",");
+    const seated=bookings.filter(function(b){return b.date===today&&b.status==="seated";});
+    const key=seated.map(function(b){return b.id+":"+nowMins;}).join(",");
     if(key===lastExtend.current) return;
     lastExtend.current=key;
     saveBookings(bookingsAfterAction(updated,today,tableBlocks,null,false,autoOptimizer),true); // silent — non-interactive auto-extend
@@ -515,42 +518,42 @@ function BookingApp(){
   // Derived: bookings with seated-today durations synced to live time.
   // Used by form/walk-in availability checks so they match what bookingsAfterAction
   // will see on save.
-  var liveBookings=(function(){
-    var today=new Date().toISOString().slice(0,10);
+  const liveBookings=(function(){
+    const today=new Date().toISOString().slice(0,10);
     return syncLiveDurations(bookings,today,nowMins);
   })();
-  var winW=useWinW();
-  var isMobile=winW<600;
+  const winW=useWinW();
+  const isMobile=winW<600;
   // v14 deployment fix: history entries must attribute to the logged-in user
   // (their email), not the generic "staff" stub used in standalone preview.
   // "staff" remains as a fallback for the rare case where auth.currentUser
   // is unavailable at the moment of the write.
   function getUser(){return (auth.currentUser&&auth.currentUser.email)||"staff";}
 
-  var dayCount=bookings.filter(function(b){return b.date===viewDate&&b.status!=="cancelled";}).length;
-  var inefficient=bookings.length>0&&checkInefficent(bookings,viewDate);
+  const dayCount=bookings.filter(function(b){return b.date===viewDate&&b.status!=="cancelled";}).length;
+  const inefficient=bookings.length>0&&checkInefficent(bookings,viewDate);
 
   // Overlap warnings: seated bookings whose live end is within 15 min of next booking on same table
-  var overlapWarnings=(function(){
-    var today=new Date().toISOString().slice(0,10);
+  const overlapWarnings=(function(){
+    const today=new Date().toISOString().slice(0,10);
     if(viewDate!==today) return {};
-    var warnings={};
-    var active=bookings.filter(function(b){return b.date===today&&b.status!=="cancelled"&&b.status!=="completed"&&(b.tables||[]).length>0;});
-    var seated=active.filter(function(b){return b.status==="seated";});
+    const warnings={};
+    const active=bookings.filter(function(b){return b.date===today&&b.status!=="cancelled"&&b.status!=="completed"&&(b.tables||[]).length>0;});
+    const seated=active.filter(function(b){return b.status==="seated";});
     seated.forEach(function(sb){
-      var liveEnd=nowMins;
-      var sbTables=sb.tables||[];
-      var nextOnTable=null;var nextStart=Infinity;
+      const liveEnd=nowMins;
+      const sbTables=sb.tables||[];
+      let nextOnTable=null;let nextStart=Infinity;
       active.forEach(function(ob){
         if(ob.id===sb.id||ob.status==="seated") return;
-        var oTables=ob.tables||[];
-        var shared=sbTables.some(function(t){return oTables.includes(t);});
+        const oTables=ob.tables||[];
+        const shared=sbTables.some(function(t){return oTables.includes(t);});
         if(!shared) return;
-        var os=toMins(ob.time);
+        const os=toMins(ob.time);
         if(os>=toMins(sb.time)&&os<nextStart){nextStart=os;nextOnTable=ob;}
       });
       if(nextOnTable){
-        var gap=nextStart-liveEnd;
+        const gap=nextStart-liveEnd;
         if(gap<=15) warnings[sb.id]={next:nextOnTable.name,nextTime:nextOnTable.time,gap:gap,overdue:gap<=0,nextId:nextOnTable.id};
       }
     });
@@ -570,7 +573,7 @@ function BookingApp(){
   // without scheduledTime (sanitize also backfills it on load).
   function bookAgain(sourceBooking){
     if(!sourceBooking) return;
-    var schedTime=sourceBooking.scheduledTime||sourceBooking.time||"13:00";
+    const schedTime=sourceBooking.scheduledTime||sourceBooking.time||"13:00";
     setForm(Object.assign({},EMPTY_FORM,{
       name:sourceBooking.name||"",
       phone:sourceBooking.phone||"+",
@@ -593,28 +596,28 @@ function BookingApp(){
   }
 
   // Walk-in
-  var wis=useState(false);var showWalkin=wis[0],setShowWalkin=wis[1];
-  var wfs=useState({size:2,notes:"",tables:[],time:""});var walkinForm=wfs[0],setWalkinForm=wfs[1];
-  var wes=useState("");var walkinError=wes[0],setWalkinError=wes[1];
+  const [showWalkin, setShowWalkin] = useState(false);
+  const [walkinForm, setWalkinForm] = useState({size:2,notes:"",tables:[],time:""});
+  const [walkinError, setWalkinError] = useState("");
   function getNextWalkinNum(){
-    var today=new Date().toISOString().slice(0,10);
-    var max=0;bookings.forEach(function(b){if(b.date===today&&b.name&&b.name.indexOf("Walk-in ")===0){var n=parseInt(b.name.slice(8));if(n>max) max=n;}});
+    const today=new Date().toISOString().slice(0,10);
+    let max=0;bookings.forEach(function(b){if(b.date===today&&b.name&&b.name.indexOf("Walk-in ")===0){const n=parseInt(b.name.slice(8));if(n>max) max=n;}});
     return max+1;
   }
   function openWalkin(){setWalkinForm({size:2,notes:"",tables:[],time:nowTime(),customDur:null});setWalkinError("");setShowWalkin(true);}
   function doSaveWalkin(){
-    var wf=walkinForm;
+    const wf=walkinForm;
     if(!wf.tables||!wf.tables.length){setWalkinError("Please assign tables first.");return;}
-    var t=wf.time||nowTime();var size=Number(wf.size)||2;var dur=wf.customDur||getDur(size);
-    var nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:new Date().toISOString().slice(0,10),time:t,scheduledTime:t,size:size,duration:dur,originalDuration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true,history:[histEntry("walk-in created",getUser())]};
+    const t=wf.time||nowTime();const size=Number(wf.size)||2;const dur=wf.customDur||getDur(size);
+    const nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:new Date().toISOString().slice(0,10),time:t,scheduledTime:t,size:size,duration:dur,originalDuration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true,history:[histEntry("walk-in created",getUser())]};
     saveBookings(function(prev){return prev.concat([nb]);});
     setShowWalkin(false);setViewDate(new Date().toISOString().slice(0,10));
   }
   function saveWalkin(){
-    var wf=walkinForm;
-    var t=wf.time||nowTime();var size=Number(wf.size)||2;var dur=wf.customDur||getDur(size);
-    var wDate=new Date().toISOString().slice(0,10);
-    var load=getKitchenLoad(bookings,wDate,t,dur,null);
+    const wf=walkinForm;
+    const t=wf.time||nowTime();const size=Number(wf.size)||2;const dur=wf.customDur||getDur(size);
+    const wDate=new Date().toISOString().slice(0,10);
+    const load=getKitchenLoad(bookings,wDate,t,dur,null);
     if(load.starts+1>=KITCHEN_TABLE_LIMIT&&!confirmKitchen){
       setConfirmKitchen("walkin");return;
     }
@@ -622,96 +625,96 @@ function BookingApp(){
   }
 
   function doSave(){
-    var f=formRef.current;
+    const f=formRef.current;
     try{
       if(!f.name||!f.name.trim()){setError("Customer name is required.");return;}
       // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
       // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
       if(!f.date){setError("Please set a date.");return;}
       if(!f.time){setError("Please set a time.");return;}
-      var sm=toMins(f.time);
+      const sm=toMins(f.time);
       if(sm<OPEN*60||sm>CLOSE*60){setError("Bookings accepted between "+OPEN+":00 and "+CLOSE+":00.");return;}
-      var size=Number(f.size)||2;
-      var dur=f.customDur||getDur(size);
-      var cleanPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";
-      var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
-      if(mt.length&&!swapAffected){var ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
+      const size=Number(f.size)||2;
+      const dur=f.customDur||getDur(size);
+      const cleanPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";
+      const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
+      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
       if(editId){
-        var orig=bookings.find(function(b){return b.id===editId;});
-        var origPt=(orig&&Array.isArray(orig.preferredTables))?orig.preferredTables.slice().sort().join(","):"";
-        var newPt=Array.isArray(f.preferredTables)?f.preferredTables.slice().sort().join(","):"";
-        var prefTablesChanged=origPt!==newPt;
+        const orig=bookings.find(function(b){return b.id===editId;});
+        const origPt=(orig&&Array.isArray(orig.preferredTables))?orig.preferredTables.slice().sort().join(","):"";
+        const newPt=Array.isArray(f.preferredTables)?f.preferredTables.slice().sort().join(","):"";
+        const prefTablesChanged=origPt!==newPt;
         // v14: detect confirmed→seated transition here. Only auto-shift time if
         // staff did NOT manually edit time/date in the form (otherwise their
         // explicit edit wins). Compute BEFORE needsR so we can suppress reshuffle.
-        var seatingNow=orig&&orig.status!=="seated"&&f.status==="seated";
-        var timeUntouched=orig&&f.time===orig.time&&f.date===orig.date;
-        var seatedShift=null;
+        const seatingNow=orig&&orig.status!=="seated"&&f.status==="seated";
+        const timeUntouched=orig&&f.time===orig.time&&f.date===orig.date;
+        let seatedShift=null;
         if(seatingNow&&timeUntouched){
           // Use live-synced bookings so overstaying seated guests' tables are
           // correctly treated as occupied when the overlap guard runs.
           seatedShift=applySeatedShift(orig,nowMins,liveBookings);
         }
-        var needsR=!orig||size!==orig.size||f.time!==orig.time||f.date!==orig.date||f.preference!==orig.preference||f._clearManual||prefTablesChanged;
-        var prefOnly=orig&&size===orig.size&&f.time===orig.time&&f.date===orig.date&&!f._clearManual;
-        var formPlan=f.customDur||getDur(size);
-        var origPlan=orig?(orig.originalDuration||orig.duration||90):formPlan;
-        var planChanged=formPlan!==origPlan;
-        var saveDur=planChanged?formPlan:(orig?(orig.duration||90):formPlan);
-        var saveOrigDur=planChanged?formPlan:origPlan;
-        var saveCustDur=planChanged?(f.customDur||null):(orig?(orig.customDur||null):(f.customDur||null));
-        if(f.status==="completed"&&orig&&orig.status!=="completed"&&!f.customDur){var now=new Date();var nowMinsLocal=now.getHours()*60+now.getMinutes();var startMins=toMins(f.time);var actualDur=Math.max(15,nowMinsLocal-startMins);saveDur=actualDur;saveCustDur=actualDur;}
+        const needsR=!orig||size!==orig.size||f.time!==orig.time||f.date!==orig.date||f.preference!==orig.preference||f._clearManual||prefTablesChanged;
+        const prefOnly=orig&&size===orig.size&&f.time===orig.time&&f.date===orig.date&&!f._clearManual;
+        const formPlan=f.customDur||getDur(size);
+        const origPlan=orig?(orig.originalDuration||orig.duration||90):formPlan;
+        const planChanged=formPlan!==origPlan;
+        let saveDur=planChanged?formPlan:(orig?(orig.duration||90):formPlan);
+        const saveOrigDur=planChanged?formPlan:origPlan;
+        let saveCustDur=planChanged?(f.customDur||null):(orig?(orig.customDur||null):(f.customDur||null));
+        if(f.status==="completed"&&orig&&orig.status!=="completed"&&!f.customDur){const now=new Date();const nowMinsLocal=now.getHours()*60+now.getMinutes();const startMins=toMins(f.time);const actualDur=Math.max(15,nowMinsLocal-startMins);saveDur=actualDur;saveCustDur=actualDur;}
         // Apply seated shift (if any) to the values we'll write. Overrides plan
         // numbers above — the shift always wins over default-duration logic.
-        var saveTime=f.time;
+        let saveTime=f.time;
         if(seatedShift){
           saveTime=seatedShift.newTime;
           saveDur=seatedShift.newDuration;
           saveCustDur=seatedShift.newDuration;
         }
-        var clearM=!!f._clearManual;
-        var wasSeatedLocked=orig&&isLocked(orig)&&!mt.length;
-        var editHist=orig?histEntry("edited: "+diffBooking(orig,f,size),getUser()):histEntry("edited",getUser());
+        const clearM=!!f._clearManual;
+        const wasSeatedLocked=orig&&isLocked(orig)&&!mt.length;
+        const editHist=orig?histEntry("edited: "+diffBooking(orig,f,size),getUser()):histEntry("edited",getUser());
         // v14 p1: scheduledTime resolution.
         // - If user manually changed time in the form (f.time !== orig.time), that
         //   is an explicit reschedule → scheduledTime follows the new time.
         // - If the ONLY time change is the seated-shift (auto), scheduledTime stays
         //   pinned to the original — this is what "Book Again" reads from later.
         // - For pre-v14 bookings without scheduledTime, sanitize already backfilled it.
-        var userChangedTime=orig&&f.time!==orig.time;
-        var saveScheduledTime=userChangedTime?f.time:(orig&&orig.scheduledTime?orig.scheduledTime:f.time);
+        const userChangedTime=orig&&f.time!==orig.time;
+        const saveScheduledTime=userChangedTime?f.time:(orig&&orig.scheduledTime?orig.scheduledTime:f.time);
         // v14 p1 (Issue 2 fix #2): when a seated-shift happens, originalDuration
         // must also move to the new duration so the ghost bar anchors at the true
         // scheduled end (e.g. 20:15 + 105 = 22:00), not at the stale 21:45.
-        var saveOrigDurFinal=seatedShift?seatedShift.newDuration:saveOrigDur;
-        var upd=bookings.map(function(b){
+        const saveOrigDurFinal=seatedShift?seatedShift.newDuration:saveOrigDur;
+        const upd=bookings.map(function(b){
           if(b.id===editId){
-            var h=(b.history||[]).concat([editHist]);
+            let h=(b.history||[]).concat([editHist]);
             if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
-            var unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
+            const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
             return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
           }
-          if(swapAffected){var match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){var remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
+          if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
           return b;
         });
         // v14: when seating, force no-reshuffle of other bookings (same rule as
         // updateStatus). The seated-shift must not trigger cascading table moves.
-        var optStateForSave=seatingNow?false:autoOptimizer;
-        var fin=bookingsAfterAction(upd,f.date,tableBlocks,editId,needsR&&!mt.length,optStateForSave);
+        const optStateForSave=seatingNow?false:autoOptimizer;
+        let fin=bookingsAfterAction(upd,f.date,tableBlocks,editId,needsR&&!mt.length,optStateForSave);
         if(wasSeatedLocked&&needsR&&!mt.length&&!clearM){fin=fin.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
         if(!mt.length&&needsR&&!prefOnly){
-          var prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
-          var displaced=fin.filter(function(b){return b.id!==editId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
-          var kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
+          const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
+          const displaced=fin.filter(function(b){return b.id!==editId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
+          const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
           if(kicked.length>0){setError("Not enough capacity — this change would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");return;}
         }
         if(!mt.length&&needsR){
-          var editedInFin=fin.find(function(b){return b.id===editId;});
+          const editedInFin=fin.find(function(b){return b.id===editId;});
           if(editedInFin&&(!editedInFin.tables||!editedInFin.tables.length)){setError("No tables available at this time — see suggestions below.");return;}
         }
         saveBookings(fin);if(needsR||swapAffected||f.status==="completed"||seatingNow) flash();setShowForm(false);setViewDate(f.date);
       } else {
-        var newId=genId();
+        const newId=genId();
         // v14: Book Again flow. When f.returnOf is set, the new booking links
         // back to its source, gets a distinctive "created via Book Again" entry
         // in its own history, and the ORIGINAL booking gets a matching entry
@@ -719,14 +722,14 @@ function BookingApp(){
         // v14 p1: history references source.scheduledTime (the confirmed time)
         // rather than source.time, so "created via Book Again (from X on YYYY-MM-DD
         // at 20:30)" stays accurate even if the source was seated-shifted to 20:15.
-        var returnOfId=f.returnOf||null;
-        var source=returnOfId?bookings.find(function(b){return b.id===returnOfId;}):null;
-        var sourceSchedTime=source?(source.scheduledTime||source.time):"";
-        var createHist=source?histEntry("created via Book Again (from "+source.name+" on "+source.date+" at "+sourceSchedTime+")",getUser()):histEntry("created",getUser());
+        const returnOfId=f.returnOf||null;
+        const source=returnOfId?bookings.find(function(b){return b.id===returnOfId;}):null;
+        const sourceSchedTime=source?(source.scheduledTime||source.time):"";
+        const createHist=source?histEntry("created via Book Again (from "+source.name+" on "+source.date+" at "+sourceSchedTime+")",getUser()):histEntry("created",getUser());
         // v14 p1: scheduledTime=f.time on creation (new bookings always start confirmed).
-        var nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,history:[createHist]};
-        var base=bookings;
-        if(swapAffected){base=bookings.map(function(b){var match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){var remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}return b;});}
+        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,history:[createHist]};
+        let base=bookings;
+        if(swapAffected){base=bookings.map(function(b){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}return b;});}
         // If this is a Book Again creation, append a back-reference entry to the
         // source booking's history (purely informational — no status/table change).
         if(source){
@@ -735,13 +738,13 @@ function BookingApp(){
             return Object.assign({},b,{history:(b.history||[]).concat([histEntry("Book Again → new booking on "+f.date+" at "+f.time,getUser())])});
           });
         }
-        var fin=bookingsAfterAction(base.concat([nb]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);
+        const fin=bookingsAfterAction(base.concat([nb]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);
         if(!mt.length){
-          var ne=fin.find(function(b){return b.id===newId;});
+          const ne=fin.find(function(b){return b.id===newId;});
           if(!ne||(ne.tables||[]).length===0){setError("Could not assign a table — try manual assignment.");return;}
-          var displaced=fin.filter(function(b){return b.id!==newId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
-          var prevAssigned=base.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0;});
-          var kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
+          const displaced=fin.filter(function(b){return b.id!==newId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
+          const prevAssigned=base.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0;});
+          const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
           if(kicked.length>0){setError("Not enough capacity — adding this booking would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");return;}
         }
         saveBookings(fin);flash();setShowForm(false);setViewDate(f.date);
@@ -749,10 +752,10 @@ function BookingApp(){
     }catch(err){setError("Error: "+err.message);}
   }
   function save(){
-    var f=formRef.current;
+    const f=formRef.current;
     if(!f.time) return doSave();
-    var size=Number(f.size)||2;var d=f.customDur||getDur(size);
-    var load=getKitchenLoad(bookings,f.date,f.time,d,editId);
+    const size=Number(f.size)||2;const d=f.customDur||getDur(size);
+    const load=getKitchenLoad(bookings,f.date,f.time,d,editId);
     if(load.starts+1>=KITCHEN_TABLE_LIMIT&&!confirmKitchen){
       setConfirmKitchen("form");return;
     }
@@ -773,42 +776,42 @@ function BookingApp(){
   // as free at target.time, and findFreeSlot would return the same tables the
   // target already has. We only extend for this one lookup; state is unchanged.
   function reassignBooking(id){
-    var target=bookings.find(function(b){return b.id===id;});
+    const target=bookings.find(function(b){return b.id===id;});
     if(!target){setError("Booking not found.");return;}
     if(isLocked(target)){setError("Booking is manually locked. Edit manually to change tables.");return;}
-    var targetStart=toMins(target.time);
-    var targetEnd=targetStart+(target.duration||90);
+    const targetStart=toMins(target.time);
+    const targetEnd=targetStart+(target.duration||90);
     // Build a search-view where any seated booking currently flagged as blocking
     // THIS target (or any seated booking sharing tables whose scheduled end is
     // before target.time) is stretched to at least targetStart+1 minute. That
     // guarantees findFreeSlot treats their tables as busy at target's start.
-    var searchView=liveBookings.map(function(b){
+    const searchView=liveBookings.map(function(b){
       if(b.id===target.id) return b;
       if(b.status!=="seated") return b;
       if(b.date!==target.date) return b;
-      var tables=b.tables||[];
-      var sharesTable=tables.some(function(t){return (target.tables||[]).includes(t);});
+      const tables=b.tables||[];
+      const sharesTable=tables.some(function(t){return (target.tables||[]).includes(t);});
       if(!sharesTable) return b;
-      var bs=toMins(b.time);
-      var be=bs+(b.duration||90);
+      const bs=toMins(b.time);
+      const be=bs+(b.duration||90);
       // Only extend if the seated booking ends before target's END (i.e., it could
       // plausibly overlap or free up within target's window). If it already runs
       // past target end, syncLiveDurations handled it.
       if(be>=targetEnd) return b;
       // Extend to cover target fully so findFreeSlot never considers these tables.
-      var extendedDur=targetEnd-bs;
+      const extendedDur=targetEnd-bs;
       return Object.assign({},b,{duration:extendedDur});
     });
-    var tables=findFreeSlot(searchView,target.date,target.time,target.size||2,target.preference||"auto",target.duration||90,tableBlocks,id,target.preferredTables);
+    const tables=findFreeSlot(searchView,target.date,target.time,target.size||2,target.preference||"auto",target.duration||90,tableBlocks,id,target.preferredTables);
     if(!tables||!tables.length){setError("No alternative tables available for "+target.name+" at "+target.time+".");return;}
     // Sanity: if findFreeSlot returned the same tables (possible if the algorithm
     // found a valid-but-unchanged assignment), surface it as a no-op rather than
     // silently "succeeding" with nothing changed.
-    var curKey=(target.tables||[]).slice().sort().join("|");
-    var newKey=tables.slice().sort().join("|");
+    const curKey=(target.tables||[]).slice().sort().join("|");
+    const newKey=tables.slice().sort().join("|");
     if(curKey===newKey){setError("No alternative tables available for "+target.name+" at "+target.time+".");return;}
-    var prevTables=(target.tables||[]).join("+")||"none";
-    var user=getUser();
+    const prevTables=(target.tables||[]).join("+")||"none";
+    const user=getUser();
     saveBookings(function(prev){return prev.map(function(b){
       if(b.id!==id) return b;
       return Object.assign({},b,{tables:tables,_manual:false,_conflict:false,history:(b.history||[]).concat([histEntry("reassigned "+prevTables+" → "+tables.join("+"),user)])});
@@ -816,7 +819,7 @@ function BookingApp(){
     setError("");
     flash();
   }
-  function delBooking(id){saveBookings(function(b){var target=b.find(function(x){return x.id===id;});var d=target?target.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);flash();}
+  function delBooking(id){saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);flash();}
 
   // v14 preview 3: Global keyboard shortcuts. Uses a ref to capture the latest
   // state and action callbacks on every render so the window-level keydown
@@ -833,7 +836,7 @@ function BookingApp(){
   //      input / textarea / select / contenteditable so typing is never hijacked.
   //      Suppressed as well while any modal is open, except for A/P/B/H which
   //      fire only when the Edit Booking modal is the top layer.
-  var kbRef=useRef({});
+  const kbRef=useRef({});
   kbRef.current={
     view:view,setView:setView,viewDate:viewDate,setViewDate:setViewDate,
     timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoom,
@@ -864,10 +867,10 @@ function BookingApp(){
     forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain
   };
   useEffect(function(){
-    function isTyping(el){if(!el) return false;var t=el.tagName;return t==="INPUT"||t==="TEXTAREA"||t==="SELECT"||el.isContentEditable;}
+    function isTyping(el){if(!el) return false;const t=el.tagName;return t==="INPUT"||t==="TEXTAREA"||t==="SELECT"||el.isContentEditable;}
     function handler(e){
       if(e.ctrlKey||e.metaKey||e.altKey) return;
-      var K=kbRef.current;var k=e.key;var typing=isTyping(e.target);
+      const K=kbRef.current;const k=e.key;const typing=isTyping(e.target);
       // ── Escape: close topmost modal (checked in visual z-order) ──
       if(k==="Escape"){
         // v14 p7: reminderEditor sits above Settings (z=250). Close it first.
@@ -905,7 +908,7 @@ function BookingApp(){
         // Manual Modal handles its own Enter. Quick-status popup is ambiguous.
         if(K.manualTarget) return;
         if(K.confirmKitchen){
-          var isW=K.confirmKitchen==="walkin";
+          const isW=K.confirmKitchen==="walkin";
           e.preventDefault();
           K.setConfirmKitchen(null);
           if(isW) K.doSaveWalkin(); else K.doSave();
@@ -932,9 +935,9 @@ function BookingApp(){
       if(K.showSettings&&!K.reminderEditor&&!K.confirmReminderDel){
         if(k==="ArrowLeft"||k==="ArrowRight"){
           e.preventDefault();
-          var TABS=["general","reminders","shortcuts"];
-          var curIdx=TABS.indexOf(K.settingsTab);if(curIdx<0) curIdx=0;
-          var newIdx=k==="ArrowLeft"?(curIdx-1+TABS.length)%TABS.length:(curIdx+1)%TABS.length;
+          const TABS=["general","reminders","shortcuts"];
+          let curIdx=TABS.indexOf(K.settingsTab);if(curIdx<0) curIdx=0;
+          const newIdx=k==="ArrowLeft"?(curIdx-1+TABS.length)%TABS.length:(curIdx+1)%TABS.length;
           K.setSettingsTab(TABS[newIdx]);
           return;
         }
@@ -947,7 +950,7 @@ function BookingApp(){
       //    precedence).
       if(K.showPrefPicker){
         if(k==="c"||k==="C"){
-          var prefs=Array.isArray(K.form&&K.form.preferredTables)?K.form.preferredTables:[];
+          const prefs=Array.isArray(K.form&&K.form.preferredTables)?K.form.preferredTables:[];
           if(prefs.length>0){
             e.preventDefault();
             K.setForm(function(f){return Object.assign({},f,{preferredTables:[]});});
@@ -963,20 +966,20 @@ function BookingApp(){
       //   buttons: if the user has set manualTables, clear those; else in
       //   edit mode, if the stored booking has a manual assignment not yet
       //   marked cleared, set _clearManual:true; else no-op.
-      var topLayer=K.showSettings||K.showHistory||K.confirmKitchen||K.confirmReshuffle||K.confirmCancel||K.confirmDel||K.blockTarget||K.manualTarget||K.reminderEditor||K.confirmReminderDel;
+      const topLayer=K.showSettings||K.showHistory||K.confirmKitchen||K.confirmReshuffle||K.confirmCancel||K.confirmDel||K.blockTarget||K.manualTarget||K.reminderEditor||K.confirmReminderDel;
       if(K.showForm&&!topLayer){
         if(k==="a"||k==="A"){e.preventDefault();K.setManualTarget(K.editId||"__new__");return;}
         if(k==="p"||k==="P"){e.preventDefault();K.setShowPrefPicker(true);return;}
         if(k==="c"||k==="C"){
-          var mtLen=Array.isArray(K.form&&K.form.manualTables)?K.form.manualTables.length:0;
+          const mtLen=Array.isArray(K.form&&K.form.manualTables)?K.form.manualTables.length:0;
           if(mtLen>0){
             e.preventDefault();
             K.setForm(function(f){return Object.assign({},f,{manualTables:[]});});
             K.setSwapAffected(null);
           } else if(K.editId){
-            var cur3=K.bookings.find(function(b){return b.id===K.editId;});
-            var isManual3=cur3&&(cur3._manual||cur3._locked)&&cur3.tables&&cur3.tables.length>0;
-            var alreadyCleared=!!(K.form&&K.form._clearManual);
+            const cur3=K.bookings.find(function(b){return b.id===K.editId;});
+            const isManual3=cur3&&(cur3._manual||cur3._locked)&&cur3.tables&&cur3.tables.length>0;
+            const alreadyCleared=!!(K.form&&K.form._clearManual);
             if(isManual3&&!alreadyCleared){
               e.preventDefault();
               K.setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});
@@ -987,19 +990,19 @@ function BookingApp(){
         }
         if(K.editId){
           if(k==="b"||k==="B"){
-            var cur=K.bookings.find(function(b){return b.id===K.editId;});
+            const cur=K.bookings.find(function(b){return b.id===K.editId;});
             if(cur&&(cur.status==="seated"||cur.status==="completed")){e.preventDefault();K.bookAgain(cur);}
             return;
           }
           if(k==="h"||k==="H"){
-            var c2=K.bookings.find(function(b){return b.id===K.editId;});
+            const c2=K.bookings.find(function(b){return b.id===K.editId;});
             if(c2&&c2.history&&c2.history.length>0){e.preventDefault();K.setShowHistory(true);}
             return;
           }
         }
       }
       // ── Global shortcuts: suppressed while any modal is open ──
-      var anyModal=K.showForm||K.showWalkin||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.reminderEditor||K.confirmReminderDel;
+      const anyModal=K.showForm||K.showWalkin||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.reminderEditor||K.confirmReminderDel;
       if(anyModal) return;
       if(k==="?"){e.preventDefault();K.setShowSettings(true);return;}
       if(k==="t"||k==="T"){e.preventDefault();K.setView("timeline");return;}
@@ -1007,12 +1010,12 @@ function BookingApp(){
       if(k==="d"||k==="D"){e.preventDefault();K.setViewDate(new Date().toISOString().slice(0,10));return;}
       if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
-      if(k==="ArrowLeft"){e.preventDefault();var d1=new Date(K.viewDate);d1.setDate(d1.getDate()-1);K.setViewDate(d1.toISOString().slice(0,10));return;}
-      if(k==="ArrowRight"){e.preventDefault();var d2=new Date(K.viewDate);d2.setDate(d2.getDate()+1);K.setViewDate(d2.toISOString().slice(0,10));return;}
+      if(k==="ArrowLeft"){e.preventDefault();const d1=new Date(K.viewDate);d1.setDate(d1.getDate()-1);K.setViewDate(d1.toISOString().slice(0,10));return;}
+      if(k==="ArrowRight"){e.preventDefault();const d2=new Date(K.viewDate);d2.setDate(d2.getDate()+1);K.setViewDate(d2.toISOString().slice(0,10));return;}
       // ── Timeline-only shortcuts ──
       if(K.view==="timeline"){
-        var today=new Date().toISOString().slice(0,10);
-        var isToday=K.viewDate===today;
+        const today=new Date().toISOString().slice(0,10);
+        const isToday=K.viewDate===today;
         if(k==="f"||k==="F"){
           if(isToday){
             e.preventDefault();
@@ -1040,28 +1043,28 @@ function BookingApp(){
 
   function updateStatus(id,status){
     if(status==="cancelled"){setConfirmCancel(id);return;}
-    var user=getUser();
-    var nowM=nowMins;
+    const user=getUser();
+    const nowM=nowMins;
     saveBookings(function(b){
-      var target=b.find(function(x){return x.id===id;});
-      var d=target?target.date:viewDate;
+      const target=b.find(function(x){return x.id===id;});
+      const d=target?target.date:viewDate;
       // v14: detect confirmed → seated transition (for any prior non-seated status).
       // If the transition triggers a seated-shift, force no-reshuffle by passing
       // autoOptimizerState=false to bookingsAfterAction, so other bookings never
       // move as a side-effect of someone sitting down early/late.
-      var seatedShiftHappened=false;
-      var updated=b.map(function(x){
+      let seatedShiftHappened=false;
+      const updated=b.map(function(x){
         if(x.id!==id) return x;
-        var histEntries=[histEntry("status → "+status,user)];
-        var extra={status:status};
+        const histEntries=[histEntry("status → "+status,user)];
+        const extra={status:status};
         if(status==="completed"){
-          var startMins=toMins(x.time);
-          var actualDur=Math.max(15,nowM-startMins);
+          const startMins=toMins(x.time);
+          const actualDur=Math.max(15,nowM-startMins);
           extra.duration=actualDur;
           extra.customDur=actualDur;
         }
         if(status==="seated"&&x.status!=="seated"){
-          var shift=applySeatedShift(x,nowM,b);
+          const shift=applySeatedShift(x,nowM,b);
           if(shift){
             extra.time=shift.newTime;
             extra.duration=shift.newDuration;
@@ -1077,26 +1080,26 @@ function BookingApp(){
         return Object.assign({},x,extra);
       });
       // Seated transitions never reshuffle others — even when optimizer is ON.
-      var optState=(status==="seated")?false:autoOptimizer;
+      const optState=(status==="seated")?false:autoOptimizer;
       return bookingsAfterAction(updated,d,tableBlocks,null,false,optState);
     });
     if(status==="completed"||status==="seated") flash();
   }
   function doCancelBooking(id,noShow){
-    var user=getUser();
-    saveBookings(function(b){var target=b.find(function(x){return x.id===id;});var d=target?target.date:viewDate;var updated=b.map(function(x){if(x.id!==id) return x;var extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
+    const user=getUser();
+    saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
     setConfirmCancel(null);flash();
   }
   function manualAssign(bookingId,tables,locked,affected){
-    var user=getUser();
+    const user=getUser();
     saveBookings(function(b){
-      var updated=b.map(function(x){
+      const updated=b.map(function(x){
         if(x.id===bookingId) return Object.assign({},x,{tables:tables,_conflict:false,_manual:true,_locked:locked===true,history:(x.history||[]).concat([histEntry("tables manually assigned: "+tables.join(", "),user)])});
         // If swapping, strip taken tables from affected bookings and unlock them for re-optimization
         if(affected&&affected.length>0){
-          var match=affected.find(function(ab){return ab.id===x.id;});
+          const match=affected.find(function(ab){return ab.id===x.id;});
           if(match){
-            var remaining=(x.tables||[]).filter(function(t){return !match.tables.includes(t);});
+            const remaining=(x.tables||[]).filter(function(t){return !match.tables.includes(t);});
             return Object.assign({},x,{tables:remaining,_locked:false,_manual:false});
           }
         }
@@ -1111,69 +1114,69 @@ function BookingApp(){
   }
 
   function addBlock(block){
-    var next=tableBlocks.concat([block]);
+    const next=tableBlocks.concat([block]);
     saveBlocks(next);
     saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
     flash();
     setBlockTarget(null);
   }
   function removeBlock(block){
-    var next=tableBlocks.filter(function(bl){return !(bl.tableId===block.tableId&&bl.date===block.date&&bl.allDay===block.allDay&&bl.from===block.from&&bl.to===block.to);});
+    const next=tableBlocks.filter(function(bl){return !(bl.tableId===block.tableId&&bl.date===block.date&&bl.allDay===block.allDay&&bl.from===block.from&&bl.to===block.to);});
     saveBlocks(next);
     saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
     flash();
     if(next.filter(function(bl){return bl.tableId===block.tableId&&bl.date===block.date;}).length===0) setBlockTarget(null);
   }
 
-  var manualBooking=(function(){
+  const manualBooking=(function(){
     if(!manualTarget) return null;
     if(manualTarget==="__new__"){return {id:"__new__",name:form.name||"New booking",size:Number(form.size)||2,time:form.time||"13:00",duration:form.customDur||getDur(Number(form.size)||2),tables:Array.isArray(form.manualTables)?form.manualTables:[],date:form.date,status:"confirmed",_locked:true};}
-    var found=bookings.find(function(b){return b.id===manualTarget;})||null;
+    let found=bookings.find(function(b){return b.id===manualTarget;})||null;
     if(found&&manualTarget===editId){found=Object.assign({},found,{size:Number(form.size)||2,time:form.time||found.time,duration:form.customDur||getDur(Number(form.size)||2),date:form.date||found.date,preference:form.preference||found.preference});}
     return found;
   })();
 
   // Build form
-  var inp=mkInp;
-  var formCols=isMobile?"1fr":"1fr 1fr";
-  var auto=getDur(Number(form.size));
-  var dur=form.customDur||auto;
+  const inp=mkInp;
+  const formCols=isMobile?"1fr":"1fr 1fr";
+  const auto=getDur(Number(form.size));
+  const dur=form.customDur||auto;
 
   // ── Real-time availability check (trial optimization) ──
-  var formAvail=(function(){
+  const formAvail=(function(){
     if(!showForm||!form.time) return null;
-    var sm=toMins(form.time);
+    const sm=toMins(form.time);
     if(sm<OPEN*60||sm>CLOSE*60) return null;
-    var size=Number(form.size)||2;
-    var d=form.customDur||getDur(size);
-    var mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
+    const size=Number(form.size)||2;
+    const d=form.customDur||getDur(size);
+    const mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
     if(mt) return {ok:true,tables:mt,sugg:null};
-    var noResh=!optimizerActiveFor(form.date,autoOptimizer);
-    var tables=trialFits(liveBookings,form.date,form.time,size,form.preference||"auto",d,tableBlocks,editId,form.preferredTables,noResh);
+    const noResh=!optimizerActiveFor(form.date,autoOptimizer);
+    const tables=trialFits(liveBookings,form.date,form.time,size,form.preference||"auto",d,tableBlocks,editId,form.preferredTables,noResh);
     if(tables) return {ok:true,tables:tables,sugg:null};
-    var sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh);
+    const sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh);
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
   })();
 
-  var tablesBtn=(function(){
-    var mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
-    var previewTbls=mt?null:(formAvail&&formAvail.ok?formAvail.tables:null);
-    var prefs=form.preferredTables||[];
-    var hasPref=prefs.length>0;
-    var prefBtn=RC("button",{style:mkBtn({background:hasPref?"#0d9488":"#64748b",fontSize:12,padding:"6px 10px"}),onClick:function(){setShowPrefPicker(true);}},hasPref?"★ "+prefs.join("+"):"★ Preferred");
+  const tablesBtn=(function(){
+    const mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
+    const previewTbls=mt?null:(formAvail&&formAvail.ok?formAvail.tables:null);
+    const prefs=form.preferredTables||[];
+    const hasPref=prefs.length>0;
+    const prefBtn=RC("button",{style:mkBtn({background:hasPref?"#0d9488":"#64748b",fontSize:12,padding:"6px 10px"}),onClick:function(){setShowPrefPicker(true);}},hasPref?"★ "+prefs.join("+"):"★ Preferred");
     if(editId){
-      var cur=bookings.find(function(b){return b.id===editId;});
-      var curPrefStr=cur&&Array.isArray(cur.preferredTables)?cur.preferredTables.slice().sort().join(","):"";
-      var formPrefStr=Array.isArray(form.preferredTables)?form.preferredTables.slice().sort().join(","):"";
-      var prefTblChanged=curPrefStr!==formPrefStr;
-      var changed=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||(form.customDur&&form.customDur!==cur.duration)||prefTblChanged);
-      var hardChanged=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||prefTblChanged);
-      var cleared=!!form._clearManual;
-      var curTbl=cur&&cur.tables&&cur.tables.length>0?cur.tables:null;
-      var isManual=cur&&(cur._manual||cur._locked)&&curTbl;
-      var showTbl=mt||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
-      var showClearManual=isManual&&!mt&&!cleared;
-      var leftEls=[
+      const cur=bookings.find(function(b){return b.id===editId;});
+      const curPrefStr=cur&&Array.isArray(cur.preferredTables)?cur.preferredTables.slice().sort().join(","):"";
+      const formPrefStr=Array.isArray(form.preferredTables)?form.preferredTables.slice().sort().join(","):"";
+      const prefTblChanged=curPrefStr!==formPrefStr;
+      const changed=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||(form.customDur&&form.customDur!==cur.duration)||prefTblChanged);
+      const hardChanged=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||prefTblChanged);
+      const cleared=!!form._clearManual;
+      const curTbl=cur&&cur.tables&&cur.tables.length>0?cur.tables:null;
+      const isManual=cur&&(cur._manual||cur._locked)&&curTbl;
+      const showTbl=mt||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
+      const showClearManual=isManual&&!mt&&!cleared;
+      const leftEls=[
         RC("span",{key:"lbl",style:{fontSize:13,color:"#4a5568",fontWeight:600}},"Tables")];
       if(showTbl) showTbl.forEach(function(id){leftEls.push(RC(TBadge,{key:id,id:id}));});
       else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(RC(TBadge,{key:id,id:id}));});leftEls.push(RC("span",{key:"auto",style:{fontSize:11,color:S.muted,fontStyle:"italic"}},"(auto)"));}
@@ -1186,7 +1189,7 @@ function BookingApp(){
           RC("button",{style:mkBtn({background:BTN.tables}),onClick:function(){setManualTarget(editId);}},"= Assign"),
           prefBtn)));
     }
-    var leftEls=[RC("span",{key:"lbl",style:{fontSize:13,color:"#4a5568",fontWeight:600}},"Tables")];
+    const leftEls=[RC("span",{key:"lbl",style:{fontSize:13,color:"#4a5568",fontWeight:600}},"Tables")];
     if(mt) mt.forEach(function(id){leftEls.push(RC(TBadge,{key:id,id:id}));});
     else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(RC(TBadge,{key:id,id:id}));});leftEls.push(RC("span",{key:"auto",style:{fontSize:11,color:S.muted,fontStyle:"italic"}},"(auto)"));}
     if(mt) leftEls.push(RC("button",{key:"clrmt",style:mkBtn({fontSize:12,background:BTN.clear}),onClick:function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});setSwapAffected(null);}},"Clear"));
@@ -1197,20 +1200,20 @@ function BookingApp(){
         prefBtn)));
   })();
 
-  var prefPickerModal=showPrefPicker?RC(PrefPickerModal,{selected:form.preferredTables||[],partySize:form.size,onChange:function(next){setForm(function(f){return Object.assign({},f,{preferredTables:next});});},onClose:function(){setShowPrefPicker(false);}}):null;
+  const prefPickerModal=showPrefPicker?RC(PrefPickerModal,{selected:form.preferredTables||[],partySize:form.size,onChange:function(next){setForm(function(f){return Object.assign({},f,{preferredTables:next});});},onClose:function(){setShowPrefPicker(false);}}):null;
 
-  var availBanner=showForm&&formAvail&&!formAvail.ok?RC(AvailBanner,{msg:"No tables available"+(form.preference!=="auto"?" ("+form.preference+" preference)":"")+".",sugg:formAvail.sugg,onTapTime:function(t){setForm(function(f){return Object.assign({},f,{time:t});});}}):null;
+  const availBanner=showForm&&formAvail&&!formAvail.ok?RC(AvailBanner,{msg:"No tables available"+(form.preference!=="auto"?" ("+form.preference+" preference)":"")+".",sugg:formAvail.sugg,onTapTime:function(t){setForm(function(f){return Object.assign({},f,{time:t});});}}):null;
 
-  var kitchenLoad=(showForm&&form.time)?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
-  var kitchenStarts=kitchenLoad?kitchenLoad.starts+1:1;
-  var kitchenGuests=kitchenLoad?kitchenLoad.guests+(Number(form.size)||2):Number(form.size)||2;
-  var kitchenBusy=kitchenLoad&&kitchenStarts>=KITCHEN_TABLE_LIMIT;
-  var kitchenSugg=kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks):null;
+  const kitchenLoad=(showForm&&form.time)?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
+  const kitchenStarts=kitchenLoad?kitchenLoad.starts+1:1;
+  const kitchenGuests=kitchenLoad?kitchenLoad.guests+(Number(form.size)||2):Number(form.size)||2;
+  const kitchenBusy=kitchenLoad&&kitchenStarts>=KITCHEN_TABLE_LIMIT;
+  const kitchenSugg=kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks):null;
   function renderKitchenTimes(arr){
     if(!arr||!arr.length) return null;
     return arr.map(function(r){return RC("span",{key:r.timeStr,onClick:function(){setForm(function(f){return Object.assign({},f,{time:r.timeStr});});},style:{cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:600,fontSize:12,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?"#166534":"#854d0e",border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}},r.timeStr);});
   }
-  var kitchenSection=kitchenLoad?RC("div",{style:{padding:"10px 14px",borderRadius:14,border:"2px solid "+(kitchenBusy?"rgba(253,186,116,0.55)":"rgba(255,255,255,0.45)"),background:kitchenBusy?"rgba(255,237,213,0.6)":"rgba(255,255,255,0.35)",marginBottom:14,fontSize:13,color:kitchenBusy?"#9a3412":S.muted}},
+  const kitchenSection=kitchenLoad?RC("div",{style:{padding:"10px 14px",borderRadius:14,border:"2px solid "+(kitchenBusy?"rgba(253,186,116,0.55)":"rgba(255,255,255,0.45)"),background:kitchenBusy?"rgba(255,237,213,0.6)":"rgba(255,255,255,0.35)",marginBottom:14,fontSize:13,color:kitchenBusy?"#9a3412":S.muted}},
     RC("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
       RC("span",null,RC("span",{style:{fontWeight:700}},"Starting at this time: "),kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")),
       kitchenBusy?RC("span",{style:{fontWeight:700,color:"#dc2626",fontSize:13,padding:"4px 12px",borderRadius:8,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}},"Kitchen busy"):null),
@@ -1220,14 +1223,14 @@ function BookingApp(){
       kitchenSugg.after.length?RC("div",null,RC("span",{style:{fontWeight:700,fontSize:12}},"After: "),RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},renderKitchenTimes(kitchenSugg.after))):null):
     kitchenBusy?RC("div",{style:{marginTop:6,fontSize:12,color:"#991b1b"}},"No kitchen-friendly alternatives found nearby."):null):null;
 
-  var quickStatusBtns=editId?RC(Section,null,
+  const quickStatusBtns=editId?RC(Section,null,
     RC("div",{style:{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}},
       RC("span",{style:{fontSize:13,color:"#4a5568",fontWeight:600,marginRight:4}},"Status:"),
       ["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return RC("button",{key:s,style:mkBtn({background:BLOCK_BG[s],textTransform:"capitalize",minHeight:40}),onClick:function(){if(s==="cancelled"){setConfirmCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}},"> "+s);}))):null;
 
-  var historyBtn=(function(){
+  const historyBtn=(function(){
     if(!editId) return null;
-    var cur=bookings.find(function(b){return b.id===editId;});
+    const cur=bookings.find(function(b){return b.id===editId;});
     if(!cur||!cur.history||!cur.history.length) return null;
     return RC("button",{onClick:function(){setShowHistory(true);},style:mkBtn({fontSize:12,background:"#64748b",padding:"8px 16px",minHeight:36})},"History ("+cur.history.length+")");
   })();
@@ -1235,9 +1238,9 @@ function BookingApp(){
   // seated or completed. One tap closes the edit modal and opens a new-booking
   // form pre-filled with this customer's details (name, phone, size, preference,
   // preferred tables, original time). Staff must still pick a date.
-  var bookAgainBtn=(function(){
+  const bookAgainBtn=(function(){
     if(!editId) return null;
-    var cur=bookings.find(function(b){return b.id===editId;});
+    const cur=bookings.find(function(b){return b.id===editId;});
     if(!cur) return null;
     if(cur.status!=="seated"&&cur.status!=="completed") return null;
     return RC("button",{onClick:function(){bookAgain(cur);},style:mkBtn({fontSize:12,background:"rgba(22,101,52,0.8)",padding:"8px 16px",minHeight:36})},"Book Again");
@@ -1245,29 +1248,29 @@ function BookingApp(){
   // v14: "return guest" banner at top of form when this is a Book Again creation.
   // v14 p1: reads src.scheduledTime so the displayed time matches the confirmed
   // plan, not the seated-shifted time.
-  var returnOfBanner=(function(){
+  const returnOfBanner=(function(){
     if(editId||!form.returnOf) return null;
-    var src=bookings.find(function(b){return b.id===form.returnOf;});
+    const src=bookings.find(function(b){return b.id===form.returnOf;});
     if(!src) return null;
-    var srcTime=src.scheduledTime||src.time;
+    const srcTime=src.scheduledTime||src.time;
     return RC("div",{style:{background:"rgba(220,252,231,0.7)",border:"2px solid rgba(134,239,172,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#166534",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
       "Return guest — re-booking from "+src.name+" ("+src.date+" at "+srcTime+"). Please set a date.");
   })();
 
-  var historyPopup=(showHistory&&editId)?(function(){var cur=bookings.find(function(b){return b.id===editId;});return cur?RC(HistoryPopup,{booking:cur,onClose:function(){setShowHistory(false);}}):null;})():null;
+  const historyPopup=(showHistory&&editId)?(function(){const cur=bookings.find(function(b){return b.id===editId;});return cur?RC(HistoryPopup,{booking:cur,onClose:function(){setShowHistory(false);}}):null;})():null;
 
-  var errorEl=error?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"rgba(254,226,226,0.7)",borderRadius:14,border:"2px solid rgba(252,165,165,0.55)",marginBottom:14}},error):null;
+  const errorEl=error?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"rgba(254,226,226,0.7)",borderRadius:14,border:"2px solid rgba(252,165,165,0.55)",marginBottom:14}},error):null;
 
   // v14 p7: reminder banners. Recomputed each render (cheap). nowMins ticks
   // every minute; reminderTick forces re-render every 30s for snooze-expiry.
   // Uses TODAY (not viewDate) — reminders are operational, not tied to the
   // day being viewed. So a reminder fires at 21:00 regardless of whether
   // staff are looking at tomorrow's timeline.
-  var reminderTodayStr=new Date().toISOString().slice(0,10);
-  var activeReminderBanners=getActiveReminderBanners(reminders,reminderFires,reminderTodayStr,nowMins);
+  const reminderTodayStr=new Date().toISOString().slice(0,10);
+  const activeReminderBanners=getActiveReminderBanners(reminders,reminderFires,reminderTodayStr,nowMins);
   // One row per active fire slot, stacked vertically. Amber (distinct from the
   // green success toasts and red error banners), with Done + Snooze actions.
-  var reminderBanners=activeReminderBanners.length?RC("div",{style:{marginBottom:10}},
+  const reminderBanners=activeReminderBanners.length?RC("div",{style:{marginBottom:10}},
     activeReminderBanners.map(function(ab){
       return RC("div",{key:ab.fireKey,style:{background:"rgba(254,243,199,0.8)",border:"2px solid rgba(251,191,36,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}},
         RC("div",{style:{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0,flexWrap:"wrap"}},
@@ -1279,57 +1282,57 @@ function BookingApp(){
           RC("button",{onClick:function(){markReminderDone(ab.fireKey);},style:{background:"rgba(22,101,52,0.8)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#fff",minHeight:34,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Done")));
     })):null;
 
-  var reshuffledBanner=reshuffled?RC("div",{style:{background:"rgba(254,249,195,0.7)",border:"2px solid rgba(253,230,138,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#854d0e",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."):null;
-  var ineffBanner=(!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer))?RC("div",{style:{background:"rgba(255,237,213,0.7)",border:"2px solid rgba(253,186,116,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#9a3412",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},RC("span",null,"Tables could be reshuffled for better efficiency."),RC("div",{style:{display:"flex",gap:6}},RC("button",{onClick:function(){setDismissedIneff(viewDate);},style:mkBtn({fontSize:13,minHeight:36,padding:"6px 14px",background:BTN.dismiss})},"Dismiss"),RC("button",{onClick:function(){setConfirmReshuffle(true);},style:{background:BTN.orange,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:600,minHeight:36,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Reshuffle"))):null;
+  const reshuffledBanner=reshuffled?RC("div",{style:{background:"rgba(254,249,195,0.7)",border:"2px solid rgba(253,230,138,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#854d0e",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."):null;
+  const ineffBanner=(!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer))?RC("div",{style:{background:"rgba(255,237,213,0.7)",border:"2px solid rgba(253,186,116,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#9a3412",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},RC("span",null,"Tables could be reshuffled for better efficiency."),RC("div",{style:{display:"flex",gap:6}},RC("button",{onClick:function(){setDismissedIneff(viewDate);},style:mkBtn({fontSize:13,minHeight:36,padding:"6px 14px",background:BTN.dismiss})},"Dismiss"),RC("button",{onClick:function(){setConfirmReshuffle(true);},style:{background:BTN.orange,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:600,minHeight:36,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Reshuffle"))):null;
 
   // Overlap warnings banner — shows when one or more seated guests are overstaying
   // into the start time of a booking on the same table. Each row shows a one-tap
   // Reassign button that reroutes the crowded-out booking to a free table without
   // disturbing anyone else. Visible regardless of view (timeline or list).
-  var overlapEntries=Object.keys(overlapWarnings).map(function(sbId){
-    var w=overlapWarnings[sbId];
-    var sb=bookings.find(function(b){return b.id===sbId;});
+  const overlapEntries=Object.keys(overlapWarnings).map(function(sbId){
+    const w=overlapWarnings[sbId];
+    const sb=bookings.find(function(b){return b.id===sbId;});
     if(!sb) return null;
-    var rowBg=w.overdue?"rgba(254,226,226,0.6)":"rgba(255,237,213,0.6)";
-    var rowBrd=w.overdue?"rgba(252,165,165,0.55)":"rgba(253,186,116,0.55)";
-    var rowTxt=w.overdue?"#991b1b":"#9a3412";
-    var msg=sb.name+" (overstaying) → "+w.next+" at "+w.nextTime+(w.overdue?" — overdue":" — in "+w.gap+" min");
+    const rowBg=w.overdue?"rgba(254,226,226,0.6)":"rgba(255,237,213,0.6)";
+    const rowBrd=w.overdue?"rgba(252,165,165,0.55)":"rgba(253,186,116,0.55)";
+    const rowTxt=w.overdue?"#991b1b":"#9a3412";
+    const msg=sb.name+" (overstaying) → "+w.next+" at "+w.nextTime+(w.overdue?" — overdue":" — in "+w.gap+" min");
     return RC("div",{key:sbId,style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",padding:"8px 12px",borderRadius:12,background:rowBg,border:"1px solid "+rowBrd,marginTop:6}},
       RC("span",{style:{fontSize:13,color:rowTxt,fontWeight:600,flex:"1 1 auto",minWidth:0}},msg),
       RC("button",{onClick:function(){reassignBooking(w.nextId);},style:mkBtn({fontSize:12,minHeight:32,padding:"4px 12px",background:BTN.orange})},"Reassign "+w.next));
   }).filter(Boolean);
-  var overlapBanner=overlapEntries.length?RC("div",{style:{background:"rgba(255,250,235,0.55)",border:"2px solid rgba(253,186,116,0.45)",borderRadius:14,padding:"10px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
+  const overlapBanner=overlapEntries.length?RC("div",{style:{background:"rgba(255,250,235,0.55)",border:"2px solid rgba(253,186,116,0.45)",borderRadius:14,padding:"10px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
     RC("div",{style:{fontSize:13,fontWeight:700,color:"#9a3412",marginBottom:2}},"Overlap warnings"),
     overlapEntries):null;
 
-  var resetDurBtn=form.customDur?RC("button",{key:"rd",style:mkBtn({fontSize:12,background:BTN.reset}),onPointerDown:function(){setForm(function(f){return Object.assign({},f,{customDur:null});})}},  "Reset"):null;
-  var endTime=form.time?toTime(toMins(form.time)+dur):"--";
+  const resetDurBtn=form.customDur?RC("button",{key:"rd",style:mkBtn({fontSize:12,background:BTN.reset}),onPointerDown:function(){setForm(function(f){return Object.assign({},f,{customDur:null});})}},  "Reset"):null;
+  const endTime=form.time?toTime(toMins(form.time)+dur):"--";
 
 
-  var mainView=view==="timeline"
+  const mainView=view==="timeline"
     ?RC(TimelineView,{bookings:bookings,date:viewDate,onEdit:openEdit,onManual:function(id){setManualTarget(id);},onStatus:updateStatus,blocks:tableBlocks,onBlock:function(id){setBlockTarget(id);},nowMins:nowMins,warnings:overlapWarnings,zoom:timelineZoom,setZoom:setTimelineZoom,scrollPosRef:timelineScrollRef,followNow:followNow,setFollowNow:setFollowNow,autoOptimizer:autoOptimizer,setAutoOptimizer:setAutoOptimizer,onReshuffle:function(){setConfirmReshuffle(true);},onOpenSettings:function(){setShowSettings(true);}})
     :RC(ListView,{bookings:bookings,date:viewDate,onEdit:openEdit,onStatus:updateStatus,onDelete:function(id){setConfirmDel(id);},onManual:function(id){setManualTarget(id);},nowMins:nowMins,warnings:overlapWarnings});
 
-  var formModal=showForm?RC(Overlay,{onClose:function(){setShowForm(false);}},
+  const formModal=showForm?RC(Overlay,{onClose:function(){setShowForm(false);}},
     RC("div",{style:{textAlign:"center",marginBottom:16}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking"))),
     returnOfBanner,
     RC(Section,null,
       RC("div",{style:{display:"grid",gridTemplateColumns:formCols,gap:12}},
         RC(Fld,{label:"Customer name",req:true},RC("input",{value:form.name,onChange:function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});},placeholder:"Full name",style:inp()})),
-        RC(Fld,{label:"Phone number"},RC("input",{type:"tel",value:form.phone,onChange:function(e){setForm(function(f){return Object.assign({},f,{phone:e.target.value});});},onFocus:function(e){var el=e.target;if(!el.value) setForm(function(f){return Object.assign({},f,{phone:"+"});});setTimeout(function(){el.selectionStart=el.selectionEnd=el.value.length;},0);},placeholder:"+34 600 000 000",style:inp()})))),
+        RC(Fld,{label:"Phone number"},RC("input",{type:"tel",value:form.phone,onChange:function(e){setForm(function(f){return Object.assign({},f,{phone:e.target.value});});},onFocus:function(e){const el=e.target;if(!el.value) setForm(function(f){return Object.assign({},f,{phone:"+"});});setTimeout(function(){el.selectionStart=el.selectionEnd=el.value.length;},0);},placeholder:"+34 600 000 000",style:inp()})))),
     RC(Section,null,
       RC("div",{style:{display:"grid",gridTemplateColumns:formCols,gap:12}},
         RC(Fld,{label:"Date"},RC("input",{type:"date",value:form.date,onChange:function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});},style:inp()})),
         RC(Fld,{label:"Time"},RC("input",{type:"time",value:form.time,onChange:function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});},min:"13:00",max:"22:00",style:inp()})),
         RC(Fld,{label:"Seating preference"},RC("select",{value:form.preference,onChange:function(e){setForm(function(f){return Object.assign({},f,{preference:e.target.value});});},style:inp()},RC("option",{value:"auto"},"Auto (recommended)"),RC("option",{value:"indoor"},"Indoor"),RC("option",{value:"outdoor"},"Outdoor"))),
         RC(Fld,{label:"Number of guests"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
-          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}},"-"),
+          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}},"-"),
           RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},String(Number(form.size)||2)),
-          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});}},"+"))),
+          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});}},"+"))),
         RC(Fld,{label:"Duration"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
-          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}},"-"),
+          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}},"-"),
           RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},dur+" min"),
-          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();var v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}},"+"),
+          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}},"+"),
           RC("span",{style:{fontSize:13,color:S.text,marginLeft:4}},"End: "+endTime),
           resetDurBtn)))),
     kitchenSection,
@@ -1347,20 +1350,20 @@ function BookingApp(){
           // v14 p1 (Issue 3): Save is disabled when date is empty. Prevents the
           // dd.mm.yyyy placeholder state from being submitted (esp. via Book Again
           // where we intentionally clear the date to force staff to pick one).
-          var canSave=!!form.date;
+          const canSave=!!form.date;
           return RC("button",{disabled:!canSave,onClick:save,style:{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}},"Save booking");
         })()))):null;
 
-  var delModal=confirmDel?RC(Overlay,{onClose:function(){setConfirmDel(null);}},
+  const delModal=confirmDel?RC(Overlay,{onClose:function(){setConfirmDel(null);}},
     RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}},"Delete booking?"),
     RC("div",{style:{fontSize:14,color:S.text,marginBottom:18}},"Tables will be re-optimised after deletion."),
     RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8}},
       RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setConfirmDel(null);}},"Cancel"),
       RC("button",{onClick:function(){delBooking(confirmDel);},style:{background:"#dc2626",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Delete"))):null;
 
-  var manualModal=manualBooking?RC(ManualModal,{booking:manualBooking,bookings:manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings,blocks:tableBlocks,onSave:function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{manualAssign(manualBooking.id,tables,locked,affected);}},onClose:function(){setManualTarget(null);}}):null;
+  const manualModal=manualBooking?RC(ManualModal,{booking:manualBooking,bookings:manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings,blocks:tableBlocks,onSave:function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{manualAssign(manualBooking.id,tables,locked,affected);}},onClose:function(){setManualTarget(null);}}):null;
 
-  var walkinModal=showWalkin?RC(WalkinForm,{draft:walkinForm,setDraft:setWalkinForm,error:walkinError,liveBookings:liveBookings,bookings:bookings,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,walkinNum:getNextWalkinNum(),isMobile:isMobile,onSave:saveWalkin,onClose:function(){setShowWalkin(false);}}):null;
+  const walkinModal=showWalkin?RC(WalkinForm,{draft:walkinForm,setDraft:setWalkinForm,error:walkinError,liveBookings:liveBookings,bookings:bookings,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,walkinNum:getNextWalkinNum(),isMobile:isMobile,onSave:saveWalkin,onClose:function(){setShowWalkin(false);}}):null;
 
   return RC("div",{style:{background:"linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,boxSizing:"border-box"}},
     RC("div",{style:{maxWidth:1000,margin:"0 auto"}},
@@ -1373,8 +1376,8 @@ function BookingApp(){
           RC("button",{onClick:function(){signOut(auth);},style:mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:"rgba(120,130,150,0.5)"})},"Log out"))),
       RC("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}},
         RC("div",{style:{display:"flex",gap:4,alignItems:"center"}},
-          RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()-1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8249;"}}),
-          RC("button",{onClick:function(){var d=new Date(viewDate);d.setDate(d.getDate()+1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8250;"}}),
+          RC("button",{onClick:function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8249;"}}),
+          RC("button",{onClick:function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8250;"}}),
           RC("input",{type:"date",value:viewDate,onChange:function(e){setViewDate(e.target.value);},style:{fontSize:14,padding:"8px 10px",borderRadius:12,border:"1px solid rgba(255,255,255,0.4)",background:"rgba(255,255,255,0.45)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}})),
         RC("div",{style:{display:"flex",gap:6,alignItems:"center"}},
           viewDate!==new Date().toISOString().slice(0,10)?RC("button",{onClick:function(){setViewDate(new Date().toISOString().slice(0,10));},style:mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})},"Today"):null,
@@ -1399,10 +1402,10 @@ function BookingApp(){
           RC("button",{onClick:function(){doCancelBooking(confirmCancel,false);setShowForm(false);},style:{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Cancel booking"))):null,
       confirmKitchen?RC(Overlay,{onClose:function(){setConfirmKitchen(null);}},
         RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:"#9a3412"}},"Kitchen may be busy"),
-        RC("div",{style:{fontSize:14,color:S.text,marginBottom:12}},"There are already "+(confirmKitchen==="walkin"?(function(){var wf=walkinForm;var t=wf.time||nowTime();var d=wf.customDur||getDur(Number(wf.size)||2);var l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){var f=formRef.current;var d=f.customDur||getDur(Number(f.size)||2);var l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."),
+        RC("div",{style:{fontSize:14,color:S.text,marginBottom:12}},"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."),
         RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}},
           RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setConfirmKitchen(null);}},"Back"),
-          RC("button",{onClick:function(){var isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();},style:{background:"#9a3412",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Confirm"))):null,
+          RC("button",{onClick:function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();},style:{background:"#9a3412",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Confirm"))):null,
       confirmReshuffle?RC(Overlay,{onClose:function(){setConfirmReshuffle(false);}},
         RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:"#9a3412"}},"Reshuffle all bookings?"),
         RC("div",{style:{fontSize:14,color:S.text,marginBottom:18}},"Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved."),
@@ -1448,10 +1451,10 @@ function BookingApp(){
 
 // ── Auth Wrapper ──────────────────────────────────────────────────────────────
 export default function App(){
-  var us=useState(null);var user=us[0],setUser=us[1];
-  var cs=useState(true);var checking=cs[0],setChecking=cs[1];
+  const [user, setUser] = useState(null);
+  const [checking, setChecking] = useState(true);
   useEffect(function(){
-    var unsub=onAuthStateChanged(auth,function(u){setUser(u);setChecking(false);});
+    const unsub=onAuthStateChanged(auth,function(u){setUser(u);setChecking(false);});
     return unsub;
   },[]);
   if(checking) return RC("div",{style:{background:"linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,fontSize:15}},"Loading...");
