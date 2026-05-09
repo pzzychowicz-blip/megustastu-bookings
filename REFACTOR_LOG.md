@@ -807,3 +807,178 @@ syntax it's a clean target for splitting BookingApp's body into
 smaller files (booking actions, reminder system, render IIFEs).
 Separate planning thread.
 
+## Phase C3b.1 — JSX runtime cleanup + version-label single source of truth
+**Shipped:** 2026-05-09
+**Version:** 14.1.5 → **14.1.6** (patch)
+**Branch:** `v15-refactor` → `main`
+
+### Summary
+Small follow-up patch to Phase C3b. Two unrelated changes bundled into one
+release because each is too small to ship alone:
+
+1. **C3b.1 cleanup** — remove the dead `const RC=React.createElement;`
+   declaration left in place by C3b, and drop the now-unused default
+   `React` import. Closes the loop on Phase C3.
+2. **Version-label single source of truth** — fix a long-standing display
+   drift where the boot banner (`__APP_SIGNATURE__.version`) and the
+   in-app Settings → General version label could (and did) report
+   different values. The Settings label was hardcoded and last bumped
+   at v14.1.3; the boot banner read 14.1.5. Both now derive from the
+   same constant.
+
+**Zero user-visible changes** beyond the Settings → General tab now
+showing the correct version. **Zero behavioural changes.**
+
+### Pre-flight
+
+The open question from C3b: *under which JSX runtime does Vite compile
+this project?* C3b deliberately left `import React` and the dead `const
+RC=...` line in place because removing either is unsafe under the
+classic transform.
+
+Resolved by inspecting `package.json`:
+
+```json
+"@vitejs/plugin-react": "^6.0.1",
+"react": "^19.2.4"
+```
+
+`@vitejs/plugin-react` v4+ defaults to the **automatic** JSX transform.
+v6 + React 19 doubly confirms it. Practical implication: JSX compiles
+to `_jsx(...)` calls injected by the bundler — `React` does not need
+to be in scope. Both pieces of dead code can be removed safely.
+
+### C3b.1 — App.jsx changes
+
+| # | Edit | Line |
+|---|---|---|
+| 1 | `import React, { useState, useRef, useEffect } from "react";` → `import { useState, useRef, useEffect } from "react";` | 14 |
+| 2 | Remove `const RC=React.createElement;` declaration (and one surrounding blank) | (was 174) |
+| 3 | New v14.1.6 entry appended to the in-file phase changelog comment block | 173–183 |
+
+After these edits the file contains zero `React.*` references in code.
+Three remain, all in source comments documenting the Phase C3b history
+— they're historical record, not instructions to the bundler.
+
+### Version-label fix — the architectural decision
+
+The hardcoded version literal in `Settings.jsx → GeneralTabContent`
+exists because `__APP_SIGNATURE__` is defined inside `App.jsx` and
+isn't currently exported. Two ways to fix the drift:
+
+| Option | Cost | Long-term behaviour |
+|---|---|---|
+| **A. Bump the literal** in Settings.jsx every release | One literal edit per release, easy to forget | Drift will recur — already happened twice (14.1.4, 14.1.5) |
+| **B. Make `__APP_SIGNATURE__.version` the single source of truth** | One-time 4-line edit; future bumps require only the App.jsx edit | Drift cannot recur; same constant feeds the boot banner and the in-app label |
+
+Chose B. Implemented as a prop, not an export, to keep
+`__APP_SIGNATURE__` private to App.jsx (it's the IP-protection
+fingerprint — exporting it broadens its surface area unnecessarily).
+The prop chain:
+
+```
+__APP_SIGNATURE__.version (App.jsx L118)
+  ↓
+<SettingsContent appVersion={__APP_SIGNATURE__.version} ... />  (App.jsx L1553)
+  ↓
+function SettingsContent({ appVersion, ... })                   (Settings.jsx L95)
+  ↓
+<GeneralTabContent appVersion={appVersion} />                   (Settings.jsx L104)
+  ↓
+function GeneralTabContent({ appVersion })                      (Settings.jsx L70)
+  ↓
+"version {appVersion}"                                          (Settings.jsx L74)
+```
+
+Future version bumps require **only** the `version` and `build` strings
+in `__APP_SIGNATURE__` (App.jsx lines 118, 123). Settings.jsx never
+needs touching for version changes again.
+
+### Settings.jsx — exact edits
+
+| # | Edit | Line |
+|---|---|---|
+| 1 | Phase log extended with v14.1.6 entry explaining the prop architecture | 21–25 |
+| 2 | `GeneralTabContent` doc-comment rewritten — no longer mentions hardcoding | 65–69 |
+| 3 | `function GeneralTabContent()` → `function GeneralTabContent({ appVersion })` | 70 |
+| 4 | Hardcoded `version 14.1.6` literal → `version {appVersion}` | 74 |
+| 5 | `SettingsContent` props destructure adds `appVersion` between `setTab` and `reminders` | 95 |
+| 6 | `<GeneralTabContent />` → `<GeneralTabContent appVersion={appVersion} />` | 104 |
+
+### Validation
+
+| Check | Result |
+|---|---|
+| `@babel/parser` parse with JSX plugin (App.jsx) | OK |
+| `@babel/parser` parse with JSX plugin (Settings.jsx) | OK |
+| `React.*` references in App.jsx code | 0 (3 mentions remain in comments only) |
+| `RC(...)` call sites in App.jsx code | 0 (6 mentions remain in comments only) |
+| `var` keywords in App.jsx code | 0 |
+| Default `React` import | Removed |
+| `__APP_SIGNATURE__.version` value | `"14.1.6"` |
+| `__APP_SIGNATURE__.build` value | `"v14.1.6-deployment"` |
+| Hardcoded version literals in Settings.jsx | 0 |
+
+### File metrics
+
+| File | Before | After | Δ |
+|---|---:|---:|---:|
+| App.jsx | 1586 | 1594 | +8 |
+| Settings.jsx | 146 | 152 | +6 |
+
+App.jsx delta: +9 lines new v14.1.6 phase-changelog comment, +1 line for
+the `appVersion` prop on `<SettingsContent>`, −2 lines from removing
+the `const RC=React.createElement;` declaration plus one surrounding
+blank. The dropped default `React,` from the import was a same-line
+edit (no line change).
+
+Settings.jsx delta: +6 lines of phase-log comment, replacement of the
+hardcoded literal and signature additions are same-line.
+
+### Deliberate non-changes
+
+- **Stale `RC(Component, props)` mentions in App.jsx import-block
+  comments** (lines 52, 64, 83, 93). These describe Phase B1–B5 file
+  extractions and assert that "App.jsx still calls them via
+  `RC(Component, props)`" — true at the time of writing, no longer
+  true since C3b. Documentation drift, not a runtime concern.
+  Deferred to an optional comment-cleanup pass.
+- **No prettier run.** Phase C3c remains optional and uncalled.
+- **No structural extraction.** Phase D not started.
+- **`__APP_SIGNATURE__` not exported.** Stays App.jsx-private. The
+  prop-passing pattern is the chosen abstraction; if a third consumer
+  ever needs the version, promote `__APP_SIGNATURE__` to a shared
+  module then. Premature now.
+
+### What this *doesn't* do
+
+- **No file extractions, no logic moves, no behaviour changes.**
+- **No edits to `lib/`, `hooks/`, or any `components/` file other than
+  `Settings.jsx`.**
+- **No prettifying** of the dense post-C3b JSX.
+- **No build-config changes.** `vite.config.js`, `package.json`,
+  `eslint.config.js` all untouched.
+
+### Phase C3 — fully closed
+With C3b.1 shipped, **all of Phase C3 is now complete**. App.jsx is in
+modern React syntax with no leftover dead code:
+
+| Property | State |
+|---|---|
+| `var` declarations | None — all `const`/`let` |
+| `useState` form | All destructured |
+| Render syntax | All JSX, no `React.createElement` |
+| `React` default import | Removed (automatic JSX runtime) |
+| Dead `const RC=...` | Removed |
+
+### Next
+
+**Phase C3c (optional)** — run prettier on App.jsx for cosmetic
+clean-up of densely-packed JSX. Pure formatting; no behavioural
+change. Could be skipped entirely. If run, should ship as its own
+release with a formatting-only diff.
+
+**Phase D** — structural extraction. App.jsx is now a clean target
+for splitting `BookingApp` body into smaller files (booking actions,
+reminder system, render IIFEs). Needs its own pre-flight planning
+thread.

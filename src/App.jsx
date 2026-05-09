@@ -11,7 +11,7 @@
  * Author:  Patryk Zychowicz
  * Contact: pz.zychowicz@gmail.com
  */
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ref, onValue, set } from "firebase/database";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
@@ -115,12 +115,12 @@ import { useWinW } from "./hooks/useWinW";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.1.5",
+  version:"14.1.6",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
   license:"Proprietary — All rights reserved. See LICENSE.",
-  build:"v14.1.5-deployment"
+  build:"v14.1.6-deployment"
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 
@@ -152,7 +152,8 @@ console.log(
 // dropped; Follow button label fixed (Following / Follow).
 // v14.1.3: useWinW hook extracted to ./hooks/useWinW.js (Phase C2);
 // 31 leftover dead imports cleaned up from App.jsx import block.
-// In-app version label (General tab in Settings): "version 14.1.5".
+// In-app version label is now derived from __APP_SIGNATURE__.version
+// (single source of truth — passed to <SettingsContent> as appVersion).
 // v14.1.4: Phase C3a — modern declarations pass on App.jsx. All 380 `var`
 // keywords converted to `const` (325) or `let` (16); 38 useState patterns
 // collapsed to destructured form `const [x, setX] = useState(...)`. Pure
@@ -169,9 +170,15 @@ console.log(
 // patch once the JSX runtime configuration is verified. File +119 lines
 // (1457 → 1576) from JSX's natural multi-line element layout. Zero
 // behavioural change.
-
-
-const RC=React.createElement;
+// v14.1.6: Phase C3b.1 — dead `const RC=React.createElement;` declaration
+// removed; default `React` import dropped (Vite plugin v6 + React 19 use
+// the automatic JSX runtime, so `React` no longer needs to be in scope).
+// Confirmed via package.json: "@vitejs/plugin-react": "^6.0.1". Also fixes
+// the in-app version-label drift: <SettingsContent> now receives
+// `appVersion={__APP_SIGNATURE__.version}` as a prop, making
+// __APP_SIGNATURE__ the single source of truth for the version string.
+// Settings.jsx no longer hardcodes the version. Net −2 lines. Zero
+// behavioural change.
 
 
 // ── Booking App ───────────────────────────────────────────────────────────────
@@ -1543,6 +1550,7 @@ function BookingApp(){
         // resets to 'general' on close so reopens feel fresh.
         showSettings?<Overlay onClose={function(){setShowSettings(false);setSettingsTab("general");}}><div style={{textAlign:"center",marginBottom:14}}><div
               style={{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(120,130,150,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Settings</div></div><SettingsContent
+            appVersion={__APP_SIGNATURE__.version}
             tab={settingsTab}
             setTab={setSettingsTab}
             reminders={reminders}

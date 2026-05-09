@@ -18,6 +18,11 @@
 // consolidation + Follow button label fix).
 // Phase C2: visible version label bumped 14.1.2 → 14.1.3 (useWinW hook
 // extracted; dead-import cleanup in App.jsx).
+// Phase C3b.1 (v14.1.6): version label is no longer hardcoded here — it now
+// arrives as the `appVersion` prop, sourced from __APP_SIGNATURE__.version
+// in App.jsx (single source of truth). Future bumps require only the
+// __APP_SIGNATURE__ edit in App.jsx; this file no longer needs touching
+// for version changes.
 
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
@@ -65,14 +70,14 @@ export function TabBar({ tabs, current, onSelect }) {
 
 // ── General tab — version line + visible copyright credit ───────────────────
 // Reserved for future app-level toggles (default view, sound preference,
-// etc.). The version label is hardcoded; bumped at the end of each shipping
-// phase (currently 14.1.3 — end of C2, useWinW hook extracted + import
-// cleanup).
-export function GeneralTabContent() {
+// etc.). The version string arrives as a prop from App.jsx — sourced from
+// __APP_SIGNATURE__.version, so a single edit there propagates to both the
+// console boot banner and this label.
+export function GeneralTabContent({ appVersion }) {
   return (
     <div style={{ padding: "28px 12px", textAlign: "center" }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: "#5a6474", letterSpacing: "0.02em" }}>
-        version 14.1.3
+        version {appVersion}
       </div>
       <div style={{ fontSize: 11, fontWeight: 500, color: "#8a94a3", letterSpacing: "0.02em", marginTop: 8 }}>
         © 2026 Patryk Zychowicz — MGT Booking System
@@ -87,6 +92,7 @@ export function GeneralTabContent() {
 // state and handlers are also threaded from BookingApp.
 export function SettingsContent({
   tab, setTab,
+  appVersion,
   reminders,
   onAddReminder,
   onEditReminder,
@@ -95,7 +101,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent />;
+    content = <GeneralTabContent appVersion={appVersion} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent
