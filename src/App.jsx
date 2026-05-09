@@ -115,12 +115,12 @@ import { useWinW } from "./hooks/useWinW";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.1.4",
+  version:"14.1.5",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
   license:"Proprietary — All rights reserved. See LICENSE.",
-  build:"v14.1.4-deployment"
+  build:"v14.1.5-deployment"
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 
@@ -152,13 +152,23 @@ console.log(
 // dropped; Follow button label fixed (Following / Follow).
 // v14.1.3: useWinW hook extracted to ./hooks/useWinW.js (Phase C2);
 // 31 leftover dead imports cleaned up from App.jsx import block.
-// In-app version label (General tab in Settings): "version 14.1.3".
+// In-app version label (General tab in Settings): "version 14.1.5".
 // v14.1.4: Phase C3a — modern declarations pass on App.jsx. All 380 `var`
 // keywords converted to `const` (325) or `let` (16); 38 useState patterns
 // collapsed to destructured form `const [x, setX] = useState(...)`. Pure
 // lexical refactor — zero behavioural change. File net −3 lines (1460 →
 // 1457) from the four useState collapses that previously spanned two
 // lines each. JSX conversion (Phase C3b) is the next step.
+// v14.1.5: Phase C3b — RC(...) call sites converted to JSX. All 182
+// `RC(elem, props, ...children)` calls became `<elem ...>...</elem>`,
+// including 145 intrinsic tags (div/span/button/input/option/select/
+// textarea) and 37 component references (Section/Overlay/TBadge/Fld/
+// AvailBanner/etc.). Conversion done via Babel + recast AST codemod with
+// element-count pre/post validation. The `const RC=React.createElement;`
+// declaration is retained as dead code; it'll be removed in a follow-up
+// patch once the JSX runtime configuration is verified. File +119 lines
+// (1457 → 1576) from JSX's natural multi-line element layout. Zero
+// behavioural change.
 
 
 const RC=React.createElement;
@@ -1163,7 +1173,9 @@ function BookingApp(){
     const previewTbls=mt?null:(formAvail&&formAvail.ok?formAvail.tables:null);
     const prefs=form.preferredTables||[];
     const hasPref=prefs.length>0;
-    const prefBtn=RC("button",{style:mkBtn({background:hasPref?"#0d9488":"#64748b",fontSize:12,padding:"6px 10px"}),onClick:function(){setShowPrefPicker(true);}},hasPref?"★ "+prefs.join("+"):"★ Preferred");
+    const prefBtn=<button
+      style={mkBtn({background:hasPref?"#0d9488":"#64748b",fontSize:12,padding:"6px 10px"})}
+      onClick={function(){setShowPrefPicker(true);}}>{hasPref?"★ "+prefs.join("+"):"★ Preferred"}</button>;
     if(editId){
       const cur=bookings.find(function(b){return b.id===editId;});
       const curPrefStr=cur&&Array.isArray(cur.preferredTables)?cur.preferredTables.slice().sort().join(","):"";
@@ -1177,32 +1189,52 @@ function BookingApp(){
       const showTbl=mt||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
       const showClearManual=isManual&&!mt&&!cleared;
       const leftEls=[
-        RC("span",{key:"lbl",style:{fontSize:13,color:"#4a5568",fontWeight:600}},"Tables")];
-      if(showTbl) showTbl.forEach(function(id){leftEls.push(RC(TBadge,{key:id,id:id}));});
-      else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(RC(TBadge,{key:id,id:id}));});leftEls.push(RC("span",{key:"auto",style:{fontSize:11,color:S.muted,fontStyle:"italic"}},"(auto)"));}
-      if((changed||cleared)&&!mt&&curTbl) leftEls.push(RC("span",{key:"prev",style:{fontSize:11,color:S.muted,fontStyle:"italic"}},"was: "+curTbl.join(", ")));
-      if(mt) leftEls.push(RC("button",{key:"clrmt",style:mkBtn({fontSize:12,background:BTN.clear}),onClick:function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});setSwapAffected(null);}},"Clear"));
-      if(showClearManual) leftEls.push(RC("button",{key:"clrman",style:mkBtn({fontSize:12,background:BTN.clear}),onClick:function(){setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});setSwapAffected(null);}},"Clear"));
-      return RC(Section,null,RC("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}},
-        RC("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flex:1,minWidth:0}},leftEls),
-        RC("div",{style:{display:"flex",gap:6,flexShrink:0}},
-          RC("button",{style:mkBtn({background:BTN.tables}),onClick:function(){setManualTarget(editId);}},"= Assign"),
-          prefBtn)));
+        <span key="lbl" style={{fontSize:13,color:"#4a5568",fontWeight:600}}>Tables</span>];
+      if(showTbl) showTbl.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
+      else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize:11,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
+      if((changed||cleared)&&!mt&&curTbl) leftEls.push(<span key="prev" style={{fontSize:11,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
+      if(mt) leftEls.push(<button
+        key="clrmt"
+        style={mkBtn({fontSize:12,background:BTN.clear})}
+        onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});setSwapAffected(null);}}>Clear</button>);
+      if(showClearManual) leftEls.push(<button
+        key="clrman"
+        style={mkBtn({fontSize:12,background:BTN.clear})}
+        onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});setSwapAffected(null);}}>Clear</button>);
+      return (
+        <Section><div
+            style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><div
+              style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flex:1,minWidth:0}}>{leftEls}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
+                style={mkBtn({background:BTN.tables})}
+                onClick={function(){setManualTarget(editId);}}>= Assign</button>{prefBtn}</div></div></Section>
+      );
     }
-    const leftEls=[RC("span",{key:"lbl",style:{fontSize:13,color:"#4a5568",fontWeight:600}},"Tables")];
-    if(mt) mt.forEach(function(id){leftEls.push(RC(TBadge,{key:id,id:id}));});
-    else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(RC(TBadge,{key:id,id:id}));});leftEls.push(RC("span",{key:"auto",style:{fontSize:11,color:S.muted,fontStyle:"italic"}},"(auto)"));}
-    if(mt) leftEls.push(RC("button",{key:"clrmt",style:mkBtn({fontSize:12,background:BTN.clear}),onClick:function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});setSwapAffected(null);}},"Clear"));
-    return RC(Section,null,RC("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}},
-      RC("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flex:1,minWidth:0}},leftEls),
-      RC("div",{style:{display:"flex",gap:6,flexShrink:0}},
-        RC("button",{style:mkBtn({background:BTN.tables}),onClick:function(){setManualTarget("__new__");}},"= Assign"),
-        prefBtn)));
+    const leftEls=[<span key="lbl" style={{fontSize:13,color:"#4a5568",fontWeight:600}}>Tables</span>];
+    if(mt) mt.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
+    else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize:11,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
+    if(mt) leftEls.push(<button
+      key="clrmt"
+      style={mkBtn({fontSize:12,background:BTN.clear})}
+      onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});setSwapAffected(null);}}>Clear</button>);
+    return (
+      <Section><div
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><div
+            style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flex:1,minWidth:0}}>{leftEls}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
+              style={mkBtn({background:BTN.tables})}
+              onClick={function(){setManualTarget("__new__");}}>= Assign</button>{prefBtn}</div></div></Section>
+    );
   })();
 
-  const prefPickerModal=showPrefPicker?RC(PrefPickerModal,{selected:form.preferredTables||[],partySize:form.size,onChange:function(next){setForm(function(f){return Object.assign({},f,{preferredTables:next});});},onClose:function(){setShowPrefPicker(false);}}):null;
+  const prefPickerModal=showPrefPicker?<PrefPickerModal
+    selected={form.preferredTables||[]}
+    partySize={form.size}
+    onChange={function(next){setForm(function(f){return Object.assign({},f,{preferredTables:next});});}}
+    onClose={function(){setShowPrefPicker(false);}} />:null;
 
-  const availBanner=showForm&&formAvail&&!formAvail.ok?RC(AvailBanner,{msg:"No tables available"+(form.preference!=="auto"?" ("+form.preference+" preference)":"")+".",sugg:formAvail.sugg,onTapTime:function(t){setForm(function(f){return Object.assign({},f,{time:t});});}}):null;
+  const availBanner=showForm&&formAvail&&!formAvail.ok?<AvailBanner
+    msg={"No tables available"+(form.preference!=="auto"?" ("+form.preference+" preference)":"")+"."}
+    sugg={formAvail.sugg}
+    onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />:null;
 
   const kitchenLoad=(showForm&&form.time)?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
   const kitchenStarts=kitchenLoad?kitchenLoad.starts+1:1;
@@ -1211,28 +1243,37 @@ function BookingApp(){
   const kitchenSugg=kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks):null;
   function renderKitchenTimes(arr){
     if(!arr||!arr.length) return null;
-    return arr.map(function(r){return RC("span",{key:r.timeStr,onClick:function(){setForm(function(f){return Object.assign({},f,{time:r.timeStr});});},style:{cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:600,fontSize:12,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?"#166534":"#854d0e",border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}},r.timeStr);});
+    return arr.map(function(r){return (
+      <span
+        key={r.timeStr}
+        onClick={function(){setForm(function(f){return Object.assign({},f,{time:r.timeStr});});}}
+        style={{cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:600,fontSize:12,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?"#166534":"#854d0e",border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>{r.timeStr}</span>
+    );});
   }
-  const kitchenSection=kitchenLoad?RC("div",{style:{padding:"10px 14px",borderRadius:14,border:"2px solid "+(kitchenBusy?"rgba(253,186,116,0.55)":"rgba(255,255,255,0.45)"),background:kitchenBusy?"rgba(255,237,213,0.6)":"rgba(255,255,255,0.35)",marginBottom:14,fontSize:13,color:kitchenBusy?"#9a3412":S.muted}},
-    RC("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
-      RC("span",null,RC("span",{style:{fontWeight:700}},"Starting at this time: "),kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")),
-      kitchenBusy?RC("span",{style:{fontWeight:700,color:"#dc2626",fontSize:13,padding:"4px 12px",borderRadius:8,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}},"Kitchen busy"):null),
-    kitchenSugg&&(kitchenSugg.before.length||kitchenSugg.after.length)?RC("div",{style:{marginTop:8}},
-      RC("div",{style:{fontSize:11,color:S.muted,marginBottom:6}},RC("span",{style:{background:"rgba(220,252,231,0.8)",color:"#166534",padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:600}},"green")," = tables available  ",RC("span",{style:{background:"rgba(254,249,195,0.8)",color:"#854d0e",padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:600}},"yellow")," = kitchen ok, tables tight"),
-      kitchenSugg.before.length?RC("div",{style:{marginBottom:4}},RC("span",{style:{fontWeight:700,fontSize:12}},"Before: "),RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},renderKitchenTimes(kitchenSugg.before))):null,
-      kitchenSugg.after.length?RC("div",null,RC("span",{style:{fontWeight:700,fontSize:12}},"After: "),RC("span",{style:{display:"inline-flex",gap:4,flexWrap:"wrap"}},renderKitchenTimes(kitchenSugg.after))):null):
-    kitchenBusy?RC("div",{style:{marginTop:6,fontSize:12,color:"#991b1b"}},"No kitchen-friendly alternatives found nearby."):null):null;
+  const kitchenSection=kitchenLoad?<div
+    style={{padding:"10px 14px",borderRadius:14,border:"2px solid "+(kitchenBusy?"rgba(253,186,116,0.55)":"rgba(255,255,255,0.45)"),background:kitchenBusy?"rgba(255,237,213,0.6)":"rgba(255,255,255,0.35)",marginBottom:14,fontSize:13,color:kitchenBusy?"#9a3412":S.muted}}><div
+      style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span><span style={{fontWeight:700}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<span
+        style={{fontWeight:700,color:"#dc2626",fontSize:13,padding:"4px 12px",borderRadius:8,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}}>Kitchen busy</span>:null}</div>{kitchenSugg&&(kitchenSugg.before.length||kitchenSugg.after.length)?<div style={{marginTop:8}}><div style={{fontSize:11,color:S.muted,marginBottom:6}}><span
+          style={{background:"rgba(220,252,231,0.8)",color:"#166534",padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:600}}>green</span>= tables available  <span
+          style={{background:"rgba(254,249,195,0.8)",color:"#854d0e",padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:600}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight:700,fontSize:12}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight:700,fontSize:12}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
+    kitchenBusy?<div style={{marginTop:6,fontSize:12,color:"#991b1b"}}>No kitchen-friendly alternatives found nearby.</div>:null}</div>:null;
 
-  const quickStatusBtns=editId?RC(Section,null,
-    RC("div",{style:{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}},
-      RC("span",{style:{fontSize:13,color:"#4a5568",fontWeight:600,marginRight:4}},"Status:"),
-      ["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return RC("button",{key:s,style:mkBtn({background:BLOCK_BG[s],textTransform:"capitalize",minHeight:40}),onClick:function(){if(s==="cancelled"){setConfirmCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}},"> "+s);}))):null;
+  const quickStatusBtns=editId?<Section><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"#4a5568",fontWeight:600,marginRight:4}}>Status:</span>{["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return (
+        <button
+          key={s}
+          style={mkBtn({background:BLOCK_BG[s],textTransform:"capitalize",minHeight:40})}
+          onClick={function(){if(s==="cancelled"){setConfirmCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}>{"> "+s}</button>
+      );})}</div></Section>:null;
 
   const historyBtn=(function(){
     if(!editId) return null;
     const cur=bookings.find(function(b){return b.id===editId;});
     if(!cur||!cur.history||!cur.history.length) return null;
-    return RC("button",{onClick:function(){setShowHistory(true);},style:mkBtn({fontSize:12,background:"#64748b",padding:"8px 16px",minHeight:36})},"History ("+cur.history.length+")");
+    return (
+      <button
+        onClick={function(){setShowHistory(true);}}
+        style={mkBtn({fontSize:12,background:"#64748b",padding:"8px 16px",minHeight:36})}>{"History ("+cur.history.length+")"}</button>
+    );
   })();
   // v14: Book Again button — visible only in Edit Booking modal when status is
   // seated or completed. One tap closes the edit modal and opens a new-booking
@@ -1243,7 +1284,11 @@ function BookingApp(){
     const cur=bookings.find(function(b){return b.id===editId;});
     if(!cur) return null;
     if(cur.status!=="seated"&&cur.status!=="completed") return null;
-    return RC("button",{onClick:function(){bookAgain(cur);},style:mkBtn({fontSize:12,background:"rgba(22,101,52,0.8)",padding:"8px 16px",minHeight:36})},"Book Again");
+    return (
+      <button
+        onClick={function(){bookAgain(cur);}}
+        style={mkBtn({fontSize:12,background:"rgba(22,101,52,0.8)",padding:"8px 16px",minHeight:36})}>Book Again</button>
+    );
   })();
   // v14: "return guest" banner at top of form when this is a Book Again creation.
   // v14 p1: reads src.scheduledTime so the displayed time matches the confirmed
@@ -1253,13 +1298,16 @@ function BookingApp(){
     const src=bookings.find(function(b){return b.id===form.returnOf;});
     if(!src) return null;
     const srcTime=src.scheduledTime||src.time;
-    return RC("div",{style:{background:"rgba(220,252,231,0.7)",border:"2px solid rgba(134,239,172,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#166534",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
-      "Return guest — re-booking from "+src.name+" ("+src.date+" at "+srcTime+"). Please set a date.");
+    return (
+      <div
+        style={{background:"rgba(220,252,231,0.7)",border:"2px solid rgba(134,239,172,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#166534",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Return guest — re-booking from "+src.name+" ("+src.date+" at "+srcTime+"). Please set a date."}</div>
+    );
   })();
 
-  const historyPopup=(showHistory&&editId)?(function(){const cur=bookings.find(function(b){return b.id===editId;});return cur?RC(HistoryPopup,{booking:cur,onClose:function(){setShowHistory(false);}}):null;})():null;
+  const historyPopup=(showHistory&&editId)?(function(){const cur=bookings.find(function(b){return b.id===editId;});return cur?<HistoryPopup booking={cur} onClose={function(){setShowHistory(false);}} />:null;})():null;
 
-  const errorEl=error?RC("div",{style:{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"rgba(254,226,226,0.7)",borderRadius:14,border:"2px solid rgba(252,165,165,0.55)",marginBottom:14}},error):null;
+  const errorEl=error?<div
+    style={{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"rgba(254,226,226,0.7)",borderRadius:14,border:"2px solid rgba(252,165,165,0.55)",marginBottom:14}}>{error}</div>:null;
 
   // v14 p7: reminder banners. Recomputed each render (cheap). nowMins ticks
   // every minute; reminderTick forces re-render every 30s for snooze-expiry.
@@ -1270,20 +1318,29 @@ function BookingApp(){
   const activeReminderBanners=getActiveReminderBanners(reminders,reminderFires,reminderTodayStr,nowMins);
   // One row per active fire slot, stacked vertically. Amber (distinct from the
   // green success toasts and red error banners), with Done + Snooze actions.
-  const reminderBanners=activeReminderBanners.length?RC("div",{style:{marginBottom:10}},
-    activeReminderBanners.map(function(ab){
-      return RC("div",{key:ab.fireKey,style:{background:"rgba(254,243,199,0.8)",border:"2px solid rgba(251,191,36,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}},
-        RC("div",{style:{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0,flexWrap:"wrap"}},
-          RC("span",{style:{fontSize:14,fontWeight:700,color:"#78350f"}},"\u23f0 Reminder"),
-          RC("span",{style:{fontSize:11,padding:"2px 8px",borderRadius:6,background:"rgba(146,64,14,0.15)",color:"#78350f",fontWeight:700,letterSpacing:"0.02em",whiteSpace:"nowrap"}},ab.time),
-          RC("span",{style:{fontSize:14,color:"#78350f",fontWeight:700,wordBreak:"break-word"}},ab.reminder.text)),
-        RC("div",{style:{display:"flex",gap:6,flexShrink:0}},
-          RC("button",{onClick:function(){snoozeReminderFire(ab.fireKey);},style:mkBtn({fontSize:12,minHeight:34,padding:"4px 12px",background:BTN.nav})},"Snooze 15m"),
-          RC("button",{onClick:function(){markReminderDone(ab.fireKey);},style:{background:"rgba(22,101,52,0.8)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#fff",minHeight:34,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Done")));
-    })):null;
+  const reminderBanners=activeReminderBanners.length?<div style={{marginBottom:10}}>{activeReminderBanners.map(function(ab){
+      return (
+        <div
+          key={ab.fireKey}
+          style={{background:"rgba(254,243,199,0.8)",border:"2px solid rgba(251,191,36,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div
+            style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0,flexWrap:"wrap"}}><span style={{fontSize:14,fontWeight:700,color:"#78350f"}}>⏰ Reminder</span><span
+              style={{fontSize:11,padding:"2px 8px",borderRadius:6,background:"rgba(146,64,14,0.15)",color:"#78350f",fontWeight:700,letterSpacing:"0.02em",whiteSpace:"nowrap"}}>{ab.time}</span><span
+              style={{fontSize:14,color:"#78350f",fontWeight:700,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
+              onClick={function(){snoozeReminderFire(ab.fireKey);}}
+              style={mkBtn({fontSize:12,minHeight:34,padding:"4px 12px",background:BTN.nav})}>Snooze 15m</button><button
+              onClick={function(){markReminderDone(ab.fireKey);}}
+              style={{background:"rgba(22,101,52,0.8)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#fff",minHeight:34,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Done</button></div></div>
+      );
+    })}</div>:null;
 
-  const reshuffledBanner=reshuffled?RC("div",{style:{background:"rgba(254,249,195,0.7)",border:"2px solid rgba(253,230,138,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#854d0e",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."):null;
-  const ineffBanner=(!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer))?RC("div",{style:{background:"rgba(255,237,213,0.7)",border:"2px solid rgba(253,186,116,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#9a3412",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},RC("span",null,"Tables could be reshuffled for better efficiency."),RC("div",{style:{display:"flex",gap:6}},RC("button",{onClick:function(){setDismissedIneff(viewDate);},style:mkBtn({fontSize:13,minHeight:36,padding:"6px 14px",background:BTN.dismiss})},"Dismiss"),RC("button",{onClick:function(){setConfirmReshuffle(true);},style:{background:BTN.orange,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:600,minHeight:36,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Reshuffle"))):null;
+  const reshuffledBanner=reshuffled?<div
+    style={{background:"rgba(254,249,195,0.7)",border:"2px solid rgba(253,230,138,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#854d0e",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>:null;
+  const ineffBanner=(!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer))?<div
+    style={{background:"rgba(255,237,213,0.7)",border:"2px solid rgba(253,186,116,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#9a3412",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>Tables could be reshuffled for better efficiency.</span><div style={{display:"flex",gap:6}}><button
+        onClick={function(){setDismissedIneff(viewDate);}}
+        style={mkBtn({fontSize:13,minHeight:36,padding:"6px 14px",background:BTN.dismiss})}>Dismiss</button><button
+        onClick={function(){setConfirmReshuffle(true);}}
+        style={{background:BTN.orange,color:"#fff",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:600,minHeight:36,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div></div>:null;
 
   // Overlap warnings banner — shows when one or more seated guests are overstaying
   // into the start time of a booking on the same table. Each row shows a one-tap
@@ -1297,155 +1354,218 @@ function BookingApp(){
     const rowBrd=w.overdue?"rgba(252,165,165,0.55)":"rgba(253,186,116,0.55)";
     const rowTxt=w.overdue?"#991b1b":"#9a3412";
     const msg=sb.name+" (overstaying) → "+w.next+" at "+w.nextTime+(w.overdue?" — overdue":" — in "+w.gap+" min");
-    return RC("div",{key:sbId,style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",padding:"8px 12px",borderRadius:12,background:rowBg,border:"1px solid "+rowBrd,marginTop:6}},
-      RC("span",{style:{fontSize:13,color:rowTxt,fontWeight:600,flex:"1 1 auto",minWidth:0}},msg),
-      RC("button",{onClick:function(){reassignBooking(w.nextId);},style:mkBtn({fontSize:12,minHeight:32,padding:"4px 12px",background:BTN.orange})},"Reassign "+w.next));
+    return (
+      <div
+        key={sbId}
+        style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",padding:"8px 12px",borderRadius:12,background:rowBg,border:"1px solid "+rowBrd,marginTop:6}}><span
+          style={{fontSize:13,color:rowTxt,fontWeight:600,flex:"1 1 auto",minWidth:0}}>{msg}</span><button
+          onClick={function(){reassignBooking(w.nextId);}}
+          style={mkBtn({fontSize:12,minHeight:32,padding:"4px 12px",background:BTN.orange})}>{"Reassign "+w.next}</button></div>
+    );
   }).filter(Boolean);
-  const overlapBanner=overlapEntries.length?RC("div",{style:{background:"rgba(255,250,235,0.55)",border:"2px solid rgba(253,186,116,0.45)",borderRadius:14,padding:"10px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},
-    RC("div",{style:{fontSize:13,fontWeight:700,color:"#9a3412",marginBottom:2}},"Overlap warnings"),
-    overlapEntries):null;
+  const overlapBanner=overlapEntries.length?<div
+    style={{background:"rgba(255,250,235,0.55)",border:"2px solid rgba(253,186,116,0.45)",borderRadius:14,padding:"10px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><div style={{fontSize:13,fontWeight:700,color:"#9a3412",marginBottom:2}}>Overlap warnings</div>{overlapEntries}</div>:null;
 
-  const resetDurBtn=form.customDur?RC("button",{key:"rd",style:mkBtn({fontSize:12,background:BTN.reset}),onPointerDown:function(){setForm(function(f){return Object.assign({},f,{customDur:null});})}},  "Reset"):null;
+  const resetDurBtn=form.customDur?<button
+    key="rd"
+    style={mkBtn({fontSize:12,background:BTN.reset})}
+    onPointerDown={function(){setForm(function(f){return Object.assign({},f,{customDur:null});})}}>Reset</button>:null;
   const endTime=form.time?toTime(toMins(form.time)+dur):"--";
 
 
   const mainView=view==="timeline"
-    ?RC(TimelineView,{bookings:bookings,date:viewDate,onEdit:openEdit,onManual:function(id){setManualTarget(id);},onStatus:updateStatus,blocks:tableBlocks,onBlock:function(id){setBlockTarget(id);},nowMins:nowMins,warnings:overlapWarnings,zoom:timelineZoom,setZoom:setTimelineZoom,scrollPosRef:timelineScrollRef,followNow:followNow,setFollowNow:setFollowNow,autoOptimizer:autoOptimizer,setAutoOptimizer:setAutoOptimizer,onReshuffle:function(){setConfirmReshuffle(true);},onOpenSettings:function(){setShowSettings(true);}})
-    :RC(ListView,{bookings:bookings,date:viewDate,onEdit:openEdit,onStatus:updateStatus,onDelete:function(id){setConfirmDel(id);},onManual:function(id){setManualTarget(id);},nowMins:nowMins,warnings:overlapWarnings});
+    ?<TimelineView
+    bookings={bookings}
+    date={viewDate}
+    onEdit={openEdit}
+    onManual={function(id){setManualTarget(id);}}
+    onStatus={updateStatus}
+    blocks={tableBlocks}
+    onBlock={function(id){setBlockTarget(id);}}
+    nowMins={nowMins}
+    warnings={overlapWarnings}
+    zoom={timelineZoom}
+    setZoom={setTimelineZoom}
+    scrollPosRef={timelineScrollRef}
+    followNow={followNow}
+    setFollowNow={setFollowNow}
+    autoOptimizer={autoOptimizer}
+    setAutoOptimizer={setAutoOptimizer}
+    onReshuffle={function(){setConfirmReshuffle(true);}}
+    onOpenSettings={function(){setShowSettings(true);}} />
+    :<ListView
+    bookings={bookings}
+    date={viewDate}
+    onEdit={openEdit}
+    onStatus={updateStatus}
+    onDelete={function(id){setConfirmDel(id);}}
+    onManual={function(id){setManualTarget(id);}}
+    nowMins={nowMins}
+    warnings={overlapWarnings} />;
 
-  const formModal=showForm?RC(Overlay,{onClose:function(){setShowForm(false);}},
-    RC("div",{style:{textAlign:"center",marginBottom:16}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking"))),
-    returnOfBanner,
-    RC(Section,null,
-      RC("div",{style:{display:"grid",gridTemplateColumns:formCols,gap:12}},
-        RC(Fld,{label:"Customer name",req:true},RC("input",{value:form.name,onChange:function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});},placeholder:"Full name",style:inp()})),
-        RC(Fld,{label:"Phone number"},RC("input",{type:"tel",value:form.phone,onChange:function(e){setForm(function(f){return Object.assign({},f,{phone:e.target.value});});},onFocus:function(e){const el=e.target;if(!el.value) setForm(function(f){return Object.assign({},f,{phone:"+"});});setTimeout(function(){el.selectionStart=el.selectionEnd=el.value.length;},0);},placeholder:"+34 600 000 000",style:inp()})))),
-    RC(Section,null,
-      RC("div",{style:{display:"grid",gridTemplateColumns:formCols,gap:12}},
-        RC(Fld,{label:"Date"},RC("input",{type:"date",value:form.date,onChange:function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});},style:inp()})),
-        RC(Fld,{label:"Time"},RC("input",{type:"time",value:form.time,onChange:function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});},min:"13:00",max:"22:00",style:inp()})),
-        RC(Fld,{label:"Seating preference"},RC("select",{value:form.preference,onChange:function(e){setForm(function(f){return Object.assign({},f,{preference:e.target.value});});},style:inp()},RC("option",{value:"auto"},"Auto (recommended)"),RC("option",{value:"indoor"},"Indoor"),RC("option",{value:"outdoor"},"Outdoor"))),
-        RC(Fld,{label:"Number of guests"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
-          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}},"-"),
-          RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},String(Number(form.size)||2)),
-          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});}},"+"))),
-        RC(Fld,{label:"Duration"},RC("div",{style:{display:"flex",alignItems:"center",gap:6}},
-          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}},"-"),
-          RC("span",{style:{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}},dur+" min"),
-          RC("button",{style:{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"},onPointerDown:function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}},"+"),
-          RC("span",{style:{fontSize:13,color:S.text,marginLeft:4}},"End: "+endTime),
-          resetDurBtn)))),
-    kitchenSection,
-    tablesBtn,
-    availBanner,
-    quickStatusBtns,
-    RC(Section,null,
-      RC(Fld,{label:"Notes"},RC("textarea",{value:form.notes,onChange:function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});},rows:2,placeholder:"Allergies, special requests...",style:Object.assign({},inp(),{resize:"vertical"})}))),
-    errorEl,
-    RC("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:18,flexWrap:"wrap"}},
-      RC("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},historyBtn,bookAgainBtn),
-      RC("div",{style:{display:"flex",gap:8}},
-        RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setShowForm(false);}},"Cancel"),
-        (function(){
+  const formModal=showForm?<Overlay onClose={function(){setShowForm(false);}}><div style={{textAlign:"center",marginBottom:16}}><div
+        style={{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking")}</div></div>{returnOfBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><input
+            value={form.name}
+            onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
+            placeholder="Full name"
+            style={inp()} /></Fld><Fld label="Phone number"><input
+            type="tel"
+            value={form.phone}
+            onChange={function(e){setForm(function(f){return Object.assign({},f,{phone:e.target.value});});}}
+            onFocus={function(e){const el=e.target;if(!el.value) setForm(function(f){return Object.assign({},f,{phone:"+"});});setTimeout(function(){el.selectionStart=el.selectionEnd=el.value.length;},0);}}
+            placeholder="+34 600 000 000"
+            style={inp()} /></Fld></div></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date"><input
+            type="date"
+            value={form.date}
+            onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}
+            style={inp()} /></Fld><Fld label="Time"><input
+            type="time"
+            value={form.time}
+            onChange={function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});}}
+            min="13:00"
+            max="22:00"
+            style={inp()} /></Fld><Fld label="Seating preference"><select
+            value={form.preference}
+            onChange={function(e){setForm(function(f){return Object.assign({},f,{preference:e.target.value});});}}
+            style={inp()}><option value="auto">Auto (recommended)</option><option value="indoor">Indoor</option><option value="outdoor">Outdoor</option></select></Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
+              style={{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}}
+              onPointerDown={function(e){e.preventDefault();const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}}>-</button><span
+              style={{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}}>{String(Number(form.size)||2)}</span><button
+              style={{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}}
+              onPointerDown={function(e){e.preventDefault();const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});}}>+</button></div></Fld><Fld label="Duration"><div style={{display:"flex",alignItems:"center",gap:6}}><button
+              style={{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}}
+              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>-</button><span
+              style={{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}}>{dur+" min"}</span><button
+              style={{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}}
+              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize:13,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section>{kitchenSection}{tablesBtn}{availBanner}{quickStatusBtns}<Section><Fld label="Notes"><textarea
+          value={form.notes}
+          onChange={function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});}}
+          rows={2}
+          placeholder="Allergies, special requests..."
+          style={Object.assign({},inp(),{resize:"vertical"})} /></Fld></Section>{errorEl}<div
+      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:18,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}</div><div style={{display:"flex",gap:8}}><button
+          style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
+          onClick={function(){setShowForm(false);}}>Cancel</button>{(function(){
           // v14 p1 (Issue 3): Save is disabled when date is empty. Prevents the
           // dd.mm.yyyy placeholder state from being submitted (esp. via Book Again
           // where we intentionally clear the date to force staff to pick one).
           const canSave=!!form.date;
-          return RC("button",{disabled:!canSave,onClick:save,style:{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}},"Save booking");
-        })()))):null;
+          return (
+            <button
+              disabled={!canSave}
+              onClick={save}
+              style={{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
+          );
+        })()}</div></div></Overlay>:null;
 
-  const delModal=confirmDel?RC(Overlay,{onClose:function(){setConfirmDel(null);}},
-    RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}},"Delete booking?"),
-    RC("div",{style:{fontSize:14,color:S.text,marginBottom:18}},"Tables will be re-optimised after deletion."),
-    RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8}},
-      RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel}),onClick:function(){setConfirmDel(null);}},"Cancel"),
-      RC("button",{onClick:function(){delBooking(confirmDel);},style:{background:"#dc2626",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Delete"))):null;
+  const delModal=confirmDel?<Overlay onClose={function(){setConfirmDel(null);}}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div><div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
+        onClick={function(){setConfirmDel(null);}}>Cancel</button><button
+        onClick={function(){delBooking(confirmDel);}}
+        style={{background:"#dc2626",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div></Overlay>:null;
 
-  const manualModal=manualBooking?RC(ManualModal,{booking:manualBooking,bookings:manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings,blocks:tableBlocks,onSave:function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{manualAssign(manualBooking.id,tables,locked,affected);}},onClose:function(){setManualTarget(null);}}):null;
+  const manualModal=manualBooking?<ManualModal
+    booking={manualBooking}
+    bookings={manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings}
+    blocks={tableBlocks}
+    onSave={function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{manualAssign(manualBooking.id,tables,locked,affected);}}}
+    onClose={function(){setManualTarget(null);}} />:null;
 
-  const walkinModal=showWalkin?RC(WalkinForm,{draft:walkinForm,setDraft:setWalkinForm,error:walkinError,liveBookings:liveBookings,bookings:bookings,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,walkinNum:getNextWalkinNum(),isMobile:isMobile,onSave:saveWalkin,onClose:function(){setShowWalkin(false);}}):null;
+  const walkinModal=showWalkin?<WalkinForm
+    draft={walkinForm}
+    setDraft={setWalkinForm}
+    error={walkinError}
+    liveBookings={liveBookings}
+    bookings={bookings}
+    tableBlocks={tableBlocks}
+    autoOptimizer={autoOptimizer}
+    walkinNum={getNextWalkinNum()}
+    isMobile={isMobile}
+    onSave={saveWalkin}
+    onClose={function(){setShowWalkin(false);}} />:null;
 
-  return RC("div",{style:{background:"linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,boxSizing:"border-box"}},
-    RC("div",{style:{maxWidth:1000,margin:"0 auto"}},
-      RC("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}},
-        RC("div",null,RC("div",{style:{fontSize:isMobile?18:22,fontWeight:700}},"Me Gustas T\u00fa"),RC("div",{style:{fontSize:12,color:S.text,fontWeight:500}},"4 indoor  9 outdoor  "+OPEN+":00 - "+CLOSE+":00")),
-        RC("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
-          ["timeline","list"].map(function(v){return RC("button",{key:v,onClick:function(){setView(v);},style:mkBtn({background:view===v?S.accent:"rgba(120,130,150,0.55)",textTransform:"capitalize",minHeight:40})},v);}),
-          RC("button",{onClick:openWalkin,style:{background:"rgba(22,101,52,0.75)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"#fff",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Walk-in"),
-          RC("button",{onClick:openNew,style:{background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"#fff",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"+ New"),
-          RC("button",{onClick:function(){signOut(auth);},style:mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:"rgba(120,130,150,0.5)"})},"Log out"))),
-      RC("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}},
-        RC("div",{style:{display:"flex",gap:4,alignItems:"center"}},
-          RC("button",{onClick:function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8249;"}}),
-          RC("button",{onClick:function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);setViewDate(d.toISOString().slice(0,10));},style:mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav}),dangerouslySetInnerHTML:{__html:"&#8250;"}}),
-          RC("input",{type:"date",value:viewDate,onChange:function(e){setViewDate(e.target.value);},style:{fontSize:14,padding:"8px 10px",borderRadius:12,border:"1px solid rgba(255,255,255,0.4)",background:"rgba(255,255,255,0.45)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}})),
-        RC("div",{style:{display:"flex",gap:6,alignItems:"center"}},
-          viewDate!==new Date().toISOString().slice(0,10)?RC("button",{onClick:function(){setViewDate(new Date().toISOString().slice(0,10));},style:mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})},"Today"):null,
-          RC("span",{style:{fontSize:13,color:S.text}},dayCount+" booking"+(dayCount!==1?"s":"")))),
-      !isOnline?RC("div",{style:{background:"rgba(254,243,199,0.85)",border:"2px solid rgba(252,211,77,0.7)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"#92400e",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},"⚠ Working offline — your changes are saved locally and will sync when the connection returns. Keep this tab open."):null,
-      reconnectShown?RC("div",{style:{background:"rgba(219,234,254,0.85)",border:"2px solid rgba(147,197,253,0.7)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#1e40af",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},"✓ Reconnected — changes synced."):null,
-      loadBannerShown?RC("div",{style:{background:"rgba(220,252,231,0.8)",border:"2px solid rgba(134,239,172,0.6)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#166534",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."):null,
-      writeWarning?RC("div",{style:{background:"rgba(254,226,226,0.85)",border:"2px solid rgba(252,165,165,0.7)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"#991b1b",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}},RC("span",null,"⚠ "+writeWarning),RC("button",{style:mkBtn({fontSize:12,background:"#78828c",minHeight:32,padding:"4px 12px"}),onClick:function(){setWriteWarning(null);}},"Dismiss")):null,
-      reshuffledBanner,
-      ineffBanner,
-      overlapBanner,
-      reminderBanners,
-      mainView,
-      formModal,delModal,manualModal,walkinModal,prefPickerModal,
-      blockTarget?RC(BlockModal,{tableId:blockTarget,date:viewDate,blocks:tableBlocks,onSave:addBlock,onRemove:removeBlock,onClose:function(){setBlockTarget(null);}}):null,
-      confirmCancel?RC(Overlay,{onClose:function(){setConfirmCancel(null);}},
-        RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}},"Cancel booking?"),
-        RC("div",{style:{fontSize:14,color:S.text,marginBottom:18}},"Tables will be re-optimised after cancellation."),
-        RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}},
-          RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setConfirmCancel(null);}},"Back"),
-          RC("button",{onClick:function(){doCancelBooking(confirmCancel,true);setShowForm(false);},style:{background:"#9a3412",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"No show"),
-          RC("button",{onClick:function(){doCancelBooking(confirmCancel,false);setShowForm(false);},style:{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Cancel booking"))):null,
-      confirmKitchen?RC(Overlay,{onClose:function(){setConfirmKitchen(null);}},
-        RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:"#9a3412"}},"Kitchen may be busy"),
-        RC("div",{style:{fontSize:14,color:S.text,marginBottom:12}},"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."),
-        RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}},
-          RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setConfirmKitchen(null);}},"Back"),
-          RC("button",{onClick:function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();},style:{background:"#9a3412",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Confirm"))):null,
-      confirmReshuffle?RC(Overlay,{onClose:function(){setConfirmReshuffle(false);}},
-        RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:"#9a3412"}},"Reshuffle all bookings?"),
-        RC("div",{style:{fontSize:14,color:S.text,marginBottom:18}},"Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved."),
-        RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}},
-          RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setConfirmReshuffle(false);}},"Back"),
-          RC("button",{onClick:function(){setConfirmReshuffle(false);forceReshuffle();},style:{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Reshuffle"))):null,
-      // v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
-      // legend row or by pressing `?` anywhere no modal is open.
-      // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
-      // resets to 'general' on close so reopens feel fresh.
-      showSettings?RC(Overlay,{onClose:function(){setShowSettings(false);setSettingsTab("general");}},
-        RC("div",{style:{textAlign:"center",marginBottom:14}},RC("div",{style:{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(120,130,150,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Settings")),
-        RC(SettingsContent,{
-          tab:settingsTab,setTab:setSettingsTab,
-          reminders:reminders,
-          onAddReminder:openNewReminder,
-          onEditReminder:openEditReminder,
-          onDeleteReminder:deleteReminder,
-          onToggleReminder:toggleReminderActive
-        }),
-        RC("div",{style:{display:"flex",justifyContent:"flex-end",marginTop:18}},
-          RC("button",{style:mkBtn({minHeight:40,padding:"8px 18px",background:"#64748b"}),onClick:function(){setShowSettings(false);setSettingsTab("general");}},"Close"))):null,
-      // v14 p7 fix: in-app reminder-delete confirmation (replaces broken
-      // window.confirm which is blocked in sandboxed preview environments).
-      // Renders on top of Settings in DOM order so it visually covers the list.
-      confirmReminderDel?RC(Overlay,{onClose:function(){setConfirmReminderDel(null);}},
-        RC("div",{style:{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}},"Delete reminder?"),
-        RC("div",{style:{fontSize:14,color:S.text,marginBottom:18}},"This reminder will be permanently removed."),
-        RC("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}},
-          RC("button",{style:mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"}),onClick:function(){setConfirmReminderDel(null);}},"Back"),
-          RC("button",{onClick:function(){doDeleteReminder(confirmReminderDel);},style:{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}},"Delete"))):null,
-      // v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
-      reminderEditor?RC(ReminderEditor,{
-        draft:reminderEditor.draft,
-        setDraft:function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});},
-        onSave:saveReminderFromEditor,
-        onCancel:function(){setReminderEditor(null);},
-        isNew:reminderEditor.id==="new"
-      }):null,
-      historyPopup));
+  return (
+    <div
+      style={{background:"linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>Me Gustas Tú</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{"4 indoor  9 outdoor  "+OPEN+":00 - "+CLOSE+":00"}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
+              <button
+                key={v}
+                onClick={function(){setView(v);}}
+                style={mkBtn({background:view===v?S.accent:"rgba(120,130,150,0.55)",textTransform:"capitalize",minHeight:40})}>{v}</button>
+            );})}<button
+              onClick={openWalkin}
+              style={{background:"rgba(22,101,52,0.75)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"#fff",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Walk-in</button><button
+              onClick={openNew}
+              style={{background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"#fff",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>+ New</button><button
+              onClick={function(){signOut(auth);}}
+              style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:"rgba(120,130,150,0.5)"})}>Log out</button></div></div><div
+          style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
+              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);setViewDate(d.toISOString().slice(0,10));}}
+              style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
+              dangerouslySetInnerHTML={{__html:"&#8249;"}} /><button
+              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);setViewDate(d.toISOString().slice(0,10));}}
+              style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
+              dangerouslySetInnerHTML={{__html:"&#8250;"}} /><input
+              type="date"
+              value={viewDate}
+              onChange={function(e){setViewDate(e.target.value);}}
+              style={{fontSize:14,padding:"8px 10px",borderRadius:12,border:"1px solid rgba(255,255,255,0.4)",background:"rgba(255,255,255,0.45)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center"}}>{viewDate!==new Date().toISOString().slice(0,10)?<button
+              onClick={function(){setViewDate(new Date().toISOString().slice(0,10));}}
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button>:null}<span style={{fontSize:13,color:S.text}}>{dayCount+" booking"+(dayCount!==1?"s":"")}</span></div></div>{!isOnline?<div
+          style={{background:"rgba(254,243,199,0.85)",border:"2px solid rgba(252,211,77,0.7)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"#92400e",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>⚠ Working offline — your changes are saved locally and will sync when the connection returns. Keep this tab open.</div>:null}{reconnectShown?<div
+          style={{background:"rgba(219,234,254,0.85)",border:"2px solid rgba(147,197,253,0.7)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#1e40af",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>✓ Reconnected — changes synced.</div>:null}{loadBannerShown?<div
+          style={{background:"rgba(220,252,231,0.8)",border:"2px solid rgba(134,239,172,0.6)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#166534",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."}</div>:null}{writeWarning?<div
+          style={{background:"rgba(254,226,226,0.85)",border:"2px solid rgba(252,165,165,0.7)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"#991b1b",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>{"⚠ "+writeWarning}</span><button
+            style={mkBtn({fontSize:12,background:"#78828c",minHeight:32,padding:"4px 12px"})}
+            onClick={function(){setWriteWarning(null);}}>Dismiss</button></div>:null}{reshuffledBanner}{ineffBanner}{overlapBanner}{reminderBanners}{mainView}{formModal}{delModal}{manualModal}{walkinModal}{prefPickerModal}{blockTarget?<BlockModal
+          tableId={blockTarget}
+          date={viewDate}
+          blocks={tableBlocks}
+          onSave={addBlock}
+          onRemove={removeBlock}
+          onClose={function(){setBlockTarget(null);}} />:null}{confirmCancel?<Overlay onClose={function(){setConfirmCancel(null);}}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Cancel booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"})}
+              onClick={function(){setConfirmCancel(null);}}>Back</button><button
+              onClick={function(){doCancelBooking(confirmCancel,true);setShowForm(false);}}
+              style={{background:"#9a3412",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>No show</button><button
+              onClick={function(){doCancelBooking(confirmCancel,false);setShowForm(false);}}
+              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Cancel booking</button></div></Overlay>:null}{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"#9a3412"}}>Kitchen may be busy</div><div style={{fontSize:14,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"})}
+              onClick={function(){setConfirmKitchen(null);}}>Back</button><button
+              onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
+              style={{background:"#9a3412",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Confirm</button></div></Overlay>:null}{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"#9a3412"}}>Reshuffle all bookings?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"})}
+              onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
+              onClick={function(){setConfirmReshuffle(false);forceReshuffle();}}
+              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div></Overlay>:null}{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
+        // legend row or by pressing `?` anywhere no modal is open.
+        // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
+        // resets to 'general' on close so reopens feel fresh.
+        showSettings?<Overlay onClose={function(){setShowSettings(false);setSettingsTab("general");}}><div style={{textAlign:"center",marginBottom:14}}><div
+              style={{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(120,130,150,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Settings</div></div><SettingsContent
+            tab={settingsTab}
+            setTab={setSettingsTab}
+            reminders={reminders}
+            onAddReminder={openNewReminder}
+            onEditReminder={openEditReminder}
+            onDeleteReminder={deleteReminder}
+            onToggleReminder={toggleReminderActive} /><div style={{display:"flex",justifyContent:"flex-end",marginTop:18}}><button
+              style={mkBtn({minHeight:40,padding:"8px 18px",background:"#64748b"})}
+              onClick={function(){setShowSettings(false);setSettingsTab("general");}}>Close</button></div></Overlay>:null}{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
+        // window.confirm which is blocked in sandboxed preview environments).
+        // Renders on top of Settings in DOM order so it visually covers the list.
+        confirmReminderDel?<Overlay onClose={function(){setConfirmReminderDel(null);}}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete reminder?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"})}
+              onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
+              onClick={function(){doDeleteReminder(confirmReminderDel);}}
+              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div></Overlay>:null}{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
+        reminderEditor?<ReminderEditor
+          draft={reminderEditor.draft}
+          setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
+          onSave={saveReminderFromEditor}
+          onCancel={function(){setReminderEditor(null);}}
+          isNew={reminderEditor.id==="new"} />:null}{historyPopup}</div></div>
+  );
 }
 
 
@@ -1457,7 +1577,10 @@ export default function App(){
     const unsub=onAuthStateChanged(auth,function(u){setUser(u);setChecking(false);});
     return unsub;
   },[]);
-  if(checking) return RC("div",{style:{background:"linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,fontSize:15}},"Loading...");
-  if(!user) return RC(LoginScreen,null);
-  return RC(BookingApp,null);
+  if(checking) return (
+    <div
+      style={{background:"linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,fontSize:15}}>Loading...</div>
+  );
+  if(!user) return <LoginScreen />;
+  return <BookingApp />;
 }
