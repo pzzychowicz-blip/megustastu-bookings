@@ -48,9 +48,9 @@ import {
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
-// First component file in the codebase using JSX syntax. App.jsx itself stays
-// in RC() style for now; atoms render correctly when called from RC()
-// because React.createElement accepts any component reference.
+// First component file in the codebase using JSX syntax. App.jsx now also
+// uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
+// compatibility no longer applies — both files share a single style.
 import {
   Overlay, Fld, Section, TBadge,
   AvailBanner, mkInp, mkBtn
@@ -60,8 +60,8 @@ import {
 // ── Phase B2 (v15-refactor): secondary modals + table grid ─────────────────
 // TableGrid (the 13-table picker), ManualModal (assign/swap UI), and
 // BlockModal (table-level block editor) extracted to ./components/. Each is
-// JSX (matching atoms.jsx style template). App.jsx still calls them via
-// `RC(Component, props)` — RC works with any component reference.
+// JSX (matching atoms.jsx style template). App.jsx renders them as JSX
+// elements (Phase C3b).
 import { TableGrid }   from "./components/TableGrid";
 import { ManualModal } from "./components/ManualModal";
 import { BlockModal }  from "./components/BlockModal";
@@ -79,10 +79,10 @@ import { ReminderEditor }          from "./components/ReminderEditor";
 
 // ── Phase B4 (v15-refactor): Timeline + List views ────────────────────────
 // TimelineView (the Gantt-style scrollable grid) and ListView (the sorted
-// card list) extracted to ./components/. JSX style. App.jsx still calls them
-// via `RC(Component, props)` — RC works with any component reference.
-// CogIcon (originally imported by App.jsx in B3) moved to TimelineView's
-// imports because TimelineView is its only consumer.
+// card list) extracted to ./components/. JSX style. App.jsx renders them
+// as JSX elements (Phase C3b). CogIcon (originally imported by App.jsx in
+// B3) moved to TimelineView's imports because TimelineView is its only
+// consumer.
 import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 
@@ -90,11 +90,11 @@ import { ListView }     from "./components/ListView";
 // LoginScreen (the unauthenticated entry screen), WalkinForm (the walk-in
 // flow), PrefPickerModal (the preferred-tables soft-hint picker), and
 // HistoryPopup (the per-booking audit trail) extracted to ./components/.
-// JSX style. App.jsx still calls them via `RC(Component, props)` — RC works
-// with any component reference. BookingForm intentionally NOT extracted in
-// this phase: its dependency on ~25 closure values would force an 18+ prop
-// API, which is the wrong shape for a structural-only refactor. Deferred to
-// Phase C, when proper context wiring will reduce that to a clean 4–5 props.
+// JSX style. App.jsx renders them as JSX elements (Phase C3b). BookingForm
+// intentionally NOT extracted in this phase: its dependency on ~25 closure
+// values would force an 18+ prop API, which is the wrong shape for a
+// structural-only refactor. Deferred to Phase C, when proper context wiring
+// will reduce that to a clean 4–5 props.
 import { LoginScreen }     from "./components/LoginScreen";
 import { WalkinForm }      from "./components/WalkinForm";
 import { PrefPickerModal } from "./components/PrefPickerModal";
@@ -115,12 +115,12 @@ import { useWinW } from "./hooks/useWinW";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.1.6",
+  version:"14.1.7",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
   license:"Proprietary — All rights reserved. See LICENSE.",
-  build:"v14.1.6-deployment"
+  build:"v14.1.7-deployment"
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 
@@ -179,6 +179,16 @@ console.log(
 // __APP_SIGNATURE__ the single source of truth for the version string.
 // Settings.jsx no longer hardcodes the version. Net −2 lines. Zero
 // behavioural change.
+// v14.1.7: Phase C3-tail — comment drift cleanup. Stale
+// `RC(Component, props)` mentions in the B1/B2/B4/B5 import-block
+// comments rewritten to reflect the post-C3b reality (App.jsx renders
+// components as JSX, not via RC). Pure documentation drift fix; no
+// runtime impact, no behavioural change. Phase C3c (prettier pass) was
+// considered and explicitly dropped: prettier with any config produces
+// a ~4200-line diff that would overwrite the file's deliberate compact
+// style across the board (aligned imports, one-line ifs, no-space-
+// around-`=` object literals). The dense JSX from C3b's recast output
+// is readable as-is; no formatting pass needed.
 
 
 // ── Booking App ───────────────────────────────────────────────────────────────

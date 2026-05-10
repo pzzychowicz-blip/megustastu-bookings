@@ -982,3 +982,192 @@ release with a formatting-only diff.
 for splitting `BookingApp` body into smaller files (booking actions,
 reminder system, render IIFEs). Needs its own pre-flight planning
 thread.
+
+## Phase C3-tail — comment drift cleanup; C3c (prettier) deferred indefinitely
+**Shipped:** 2026-05-10
+**Version:** 14.1.6 → **14.1.7** (patch)
+**Branch:** `v15-refactor` → `main`
+
+### Summary
+Documentation-only release. Two items addressed:
+
+1. **B1/B2/B4/B5 import-block comments updated** — four comment blocks in
+   App.jsx still asserted that "App.jsx still calls them via
+   `RC(Component, props)`" or used phrasing implying RC()-vs-JSX
+   compatibility was relevant. True at the time of writing; false since
+   C3b shipped. Rewritten to describe post-C3b reality.
+2. **Phase C3c (prettier pass) considered and explicitly dropped.**
+   Investigation showed prettier with any reasonable config produces a
+   ~4200-line diff dominated not by JSX line-wrapping (which was the
+   target) but by prettier asserting its canonical style over the
+   file's deliberate compact style. Dropping it is recorded here so
+   it's a closed question, not a perpetually-open one.
+
+**Zero runtime change. Zero behavioural change. No code mutations** —
+diff is exclusively comment-text edits + the two version strings.
+
+### What was wrong with the comments
+
+The B1, B2, B4, and B5 phase-history comments in the import block
+described, at the time of writing, an honest situation:
+> *"App.jsx still calls them via `RC(Component, props)` — RC works with
+> any component reference."*
+
+After Phase C3b, App.jsx no longer calls anything via RC; the entire
+file uses JSX. The comments became wrong. None of this affects the
+build — they're comments — but they would actively mislead anyone
+(future-you, a future maintainer, an LLM tool reading the file) trying
+to reason about the codebase's history.
+
+### Edits made
+
+| File | Lines | Change |
+|---|---|---|
+| App.jsx | 50–53 | B1 comment: "App.jsx itself stays in RC() style for now…" → "App.jsx now also uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX compatibility no longer applies." |
+| App.jsx | 60–64 | B2 comment: "App.jsx still calls them via `RC(Component, props)`…" → "App.jsx renders them as JSX elements (Phase C3b)." |
+| App.jsx | 80–85 | B4 comment: same `RC(...)` claim → JSX-elements rewording |
+| App.jsx | 89–94 | B5 comment: same `RC(...)` claim → JSX-elements rewording |
+| App.jsx | 118 | `__APP_SIGNATURE__.version` bumped `"14.1.6"` → `"14.1.7"` |
+| App.jsx | 123 | `__APP_SIGNATURE__.build` bumped `"v14.1.6-deployment"` → `"v14.1.7-deployment"` |
+| App.jsx | 182–191 | New v14.1.7 entry appended to the in-file phase-comment block |
+
+### Phase C3c (prettier) — investigated and dropped
+
+The C3b log explicitly left C3c open: *"Phase C3c may run prettier as
+an optional cosmetic pass."* Investigated this release. Result: not
+worth doing.
+
+#### Method
+Ran prettier 3.8.3 against App.jsx with three printWidth settings to
+isolate which changes were line-wrapping vs which were style coercion.
+
+| printWidth | Diff lines |
+|---:|---:|
+| 80 (default) | 5196 |
+| 120 | 4479 |
+| 160 | 4297 |
+| 200 | 4200 |
+
+The asymptote at ~4200 lines as printWidth grows tells the story: most
+of the diff is **not** line-length-driven. It's prettier rewriting the
+file's existing style.
+
+#### What prettier actually changes
+
+Sample from the default-config diff:
+
+```diff
+- import { TableGrid }   from "./components/TableGrid";
+- import { BlockModal }  from "./components/BlockModal";
++ import { TableGrid } from "./components/TableGrid";
++ import { BlockModal } from "./components/BlockModal";
+```
+(Aligned-import column stripping — purely stylistic.)
+
+```diff
+- const __APP_SIGNATURE__={
+-   app:"Me Gustas Tú Booking System",
+-   version:"14.1.7",
++ const __APP_SIGNATURE__ = {
++   app: "Me Gustas Tú Booking System",
++   version: "14.1.7",
+```
+(Object-literal `=`/`:` spacing — file-wide rewrite.)
+
+```diff
+- if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
++ if (typeof window !== "undefined") {
++   window.__MGT_BUILD__ = __APP_SIGNATURE__;
++ }
+```
+(One-line `if(){}` exploded to four lines.)
+
+These aren't bugs prettier is fixing — they're consistent stylistic
+choices made throughout App.jsx (compact spacing, aligned imports,
+single-line guard clauses). No prettier setting preserves them; the
+spacing-around-operators, one-line-if, and aligned-import behaviours
+are all hardcoded in prettier's canonical output.
+
+#### Why dropping is the right call
+
+The same diff-hygiene principle that drove C3b's recast-over-generator
+choice applies here. C3b's log records:
+
+> *"Switched to recast. Same AST mutations, very different output: only
+> the modified subtrees re-print, every untouched line keeps its
+> byte-for-byte original formatting."*
+
+Running prettier now produces the opposite result — wholesale
+formatting churn — for negligible benefit. The dense JSX from C3b's
+recast output is readable as-is; "dense" was a worry pre-C3b, not an
+actual problem post-C3b.
+
+There's also an **ongoing-commitment** angle. Once App.jsx is in
+prettier-canonical style, every future edit in the existing compact
+style will look "wrong" relative to the surrounding formatted code,
+and prettier would need to be re-run on every change. That's not a
+one-time cosmetic pass — that's adopting a project-wide formatter
+without committing the config.
+
+#### Decision recorded
+
+Phase C3c is **deferred indefinitely**. Re-evaluate only if/when the
+project moves to a project-wide formatter (with `.prettierrc`
+committed) — and at that point the conversation is "should the project
+adopt prettier?", not "should we run prettier on App.jsx?". Different
+question, different scope.
+
+### Validation
+
+| Check | Result |
+|---|---|
+| `@babel/parser` parse with JSX plugin | OK |
+| Lines changed in code (vs comments + version strings) | 0 |
+| `RC(...)` mentions in App.jsx code | 0 |
+| `RC(...)` mentions in App.jsx comments | 6 (all historical references; intentional) |
+| `React.*` mentions in code | 0 |
+| `var` keywords in code | 0 |
+| `__APP_SIGNATURE__.version` value | `"14.1.7"` |
+| `__APP_SIGNATURE__.build` value | `"v14.1.7-deployment"` |
+| Stale "still calls them via" / "RC works with any" phrasing | 0 |
+
+### File metrics
+
+| File | Before (14.1.6) | After (14.1.7) | Δ |
+|---|---:|---:|---:|
+| App.jsx | 1594 | 1604 | +10 |
+
+Δ is +10 lines from the new v14.1.7 phase-comment entry (10 lines).
+The four B-phase comment edits are roughly line-equivalent (one block
+gained 1 line, another lost 1 — net 0). Version-string edits are
+in-place.
+
+### Deliberate non-changes
+
+- **No prettier run.** Documented above; not happening.
+- **No code mutations.** Every comment-text edit was confined to its
+  comment block; no adjacent code touched.
+- **No edits outside App.jsx.** Settings.jsx, the `lib/` modules, the
+  `components/` files, and `useWinW.js` are untouched.
+- **No structural extraction.** Phase D unchanged.
+
+### Phase C3 — fully closed (and stays that way)
+After v14.1.7, Phase C3 is closed in every dimension that matters:
+
+| Property | State |
+|---|---|
+| `var` declarations | None — all `const`/`let` |
+| `useState` form | All destructured |
+| Render syntax | All JSX, no `React.createElement` |
+| `React` default import | Removed |
+| Dead `const RC=...` | Removed |
+| Phase-history comments | Reflect current code, not historical state |
+| Prettier (C3c) | Considered, dropped — recorded as a closed decision |
+
+### Next
+
+**Phase D** — structural extraction. App.jsx is now a clean target for
+splitting `BookingApp` body into smaller files (booking actions,
+reminder system, render IIFEs). Needs its own pre-flight planning
+thread.
+
