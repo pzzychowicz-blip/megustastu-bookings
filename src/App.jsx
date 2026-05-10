@@ -215,7 +215,7 @@ console.log(
 // Note: `remindersLoaded` and `reminderFiresLoaded` write-guard refs
 // remain in BookingApp; they belong to D2.
 // v14.1.9: Phase D2 — Reminder subsystem extracted from BookingApp into
-// ./hooks/useReminders.js. Owns the four reminder state slots
+// ./hooks/useReminders.jsx. Owns the four reminder state slots
 // (reminders, reminderFires, reminderEditor, confirmReminderDel) plus
 // the anonymous reminderTick; both reminder write-guard refs
 // (remindersLoaded, reminderFiresLoaded); both Firebase listeners
@@ -336,7 +336,7 @@ function BookingApp(){
   // reminderBanners JSX. nowMins drives banner re-evaluation; setWriteWarning
   // (from usePersistence above) lets reminder save-refusals share the same
   // banner as booking save-refusals. Phase D2 (v14.1.9).
-  // See ./hooks/useReminders.js.
+  // See ./hooks/useReminders.jsx.
   const {
     reminders,
     reminderEditor, setReminderEditor,
@@ -1133,7 +1133,7 @@ function BookingApp(){
 
   // reminderBanners is returned by useReminders (Phase D2) and rendered
   // alongside the other top banners further down. Derivation + JSX live
-  // in ./hooks/useReminders.js.
+  // in ./hooks/useReminders.jsx.
 
   const reshuffledBanner=reshuffled?<div
     style={{background:"rgba(254,249,195,0.7)",border:"2px solid rgba(253,230,138,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#854d0e",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>:null;

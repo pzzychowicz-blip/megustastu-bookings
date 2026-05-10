@@ -1,4 +1,4 @@
-// src/hooks/useReminders.js
+// src/hooks/useReminders.jsx
 //
 // Phase D2 (v14.1.9): Reminder subsystem extracted from BookingApp into a
 // self-contained hook. Owns all reminder state (list, fires, editor draft,

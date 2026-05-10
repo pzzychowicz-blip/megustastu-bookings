@@ -1261,10 +1261,12 @@ D2 (useReminders) will use the same sandbox. Phase D's reusable scripts: `invent
 
 # REFACTOR_LOG — Phase D2 entry (append to REFACTOR_LOG.md)
 
+# REFACTOR_LOG — Phase D2 entry (append to REFACTOR_LOG.md)
+
 ## v14.1.8 → v14.1.9 — Phase D2: Reminder subsystem extracted to `useReminders` hook
 
 **Date:** 2026-05-10
-**Files changed:** `src/App.jsx`, `src/hooks/useReminders.js` (new)
+**Files changed:** `src/App.jsx`, `src/hooks/useReminders.jsx` (new — `.jsx` because the hook returns JSX in `reminderBanners`)
 **Behavioural change:** None.
 **Line delta:** App.jsx −112 (1502 → 1390); new hook +220.
 
@@ -1335,7 +1337,7 @@ Same audit suite as D1 (`verify_d2.js`):
 
 2. **Hook-call balance.** Pre-D2 33/7/12 (useState/useRef/useEffect). Post-D2 28/5/8 + hook 5/2/4 = 33/7/12. Exact balance — no accidental duplication or drop.
 
-3. **JSX element-count parity.** Counts across all 26 element types in v14.1.8 App.jsx equal (post-D2 App.jsx + useReminders.js). No JSX dropped or added.
+3. **JSX element-count parity.** Counts across all 26 element types in v14.1.8 App.jsx equal (post-D2 App.jsx + useReminders.jsx). No JSX dropped or added.
 
 4. **Internal-symbol leakage.** All 12 hook-internal names (setReminders, setReminderFires, setReminderTick, reminderFires, reminderTodayStr, activeReminderBanners, saveReminders, saveReminderFires, markReminderDone, snoozeReminderFire, remindersLoaded, reminderFiresLoaded) — **zero AST-level references** in post-D2 App.jsx. Surface-grep matches were all in the v14.1.9 changelog comment block.
 
@@ -1350,6 +1352,12 @@ Same audit suite as D1 (`verify_d2.js`):
 Wrote the reminder banner JSX from memory in the first hook draft. The real JSX used `mkBtn` and `BTN.nav` which I'd forgotten. The byte-check audit (added to verify_d2.js) caught it before deployment. Fix: copied the real JSX verbatim from App.jsx and added the two missing imports to the hook. Verification re-ran clean.
 
 This is the second time on Phase D that a verification audit caught a real bug. The pre-flight question "what does this JSX touch besides state and handlers?" is worth a dedicated step in the D-phase template — for D3 (`useNowMins` / `useAutoOptimizer`) the answer is "nothing" (no JSX moves), so it'll be skipped. For D4 (`useWalkin`) the answer will need a careful look at the walkin modal's styling dependencies.
+
+### Bug caught post-handover
+
+The first delivery used `useReminders.js` as the file extension. Vite's oxc parser rejected it at startup: JSX is not allowed in `.js` files by default — only `.jsx`. Project convention is consistent: all JSX-containing files in `./components/` use `.jsx`; pure-logic files in `./hooks/` and `./lib/` use `.js`. `useReminders` returns JSX (the `reminderBanners` element tree) so it belongs in the `.jsx` bucket. Fix: rename file to `useReminders.jsx`. The import in App.jsx is extensionless (`from "./hooks/useReminders"`) so no import change was needed — Vite resolves either extension automatically.
+
+**Audit gap acknowledged.** The Babel parser used in `verify_d2.js` accepted JSX in a `.js` filename because Babel doesn't gate JSX on filename — it gates on parser plugins. Vite/oxc *does* gate on filename. **For D3 onward: any extracted hook that returns JSX (or contains JSX of any kind) goes in a `.jsx` file from the first draft.** This rule is now a hard one, not a soft preference.
 
 ### Open work
 
