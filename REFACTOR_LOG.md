@@ -1259,3 +1259,101 @@ D2 (useReminders) will use the same sandbox. Phase D's reusable scripts: `invent
 - `remindersLoaded` and `reminderFiresLoaded` refs in BookingApp are placeholders waiting for D2 to claim them.
 - The dismiss-button-on-write-warning JSX inside BookingApp uses `setWriteWarning` directly — that's fine as a permanent consumer; it doesn't need to move.
 
+# REFACTOR_LOG — Phase D2 entry (append to REFACTOR_LOG.md)
+
+## v14.1.8 → v14.1.9 — Phase D2: Reminder subsystem extracted to `useReminders` hook
+
+**Date:** 2026-05-10
+**Files changed:** `src/App.jsx`, `src/hooks/useReminders.js` (new)
+**Behavioural change:** None.
+**Line delta:** App.jsx −112 (1502 → 1390); new hook +220.
+
+### Scope
+
+Second Phase D extraction. Took the reminder subsystem identified in the Phase D pre-flight inventory (S2 in the cluster report — second in the proposed extraction order because of its small surface and shallow upstream dependencies) and moved it into a single hook file. Hook signature:
+
+```js
+const {
+  reminders,
+  reminderEditor, setReminderEditor,
+  confirmReminderDel, setConfirmReminderDel,
+  saveReminderFromEditor,
+  doDeleteReminder,
+  openNewReminder, openEditReminder,
+  deleteReminder, toggleReminderActive,
+  reminderBanners,
+} = useReminders({ nowMins, setWriteWarning });
+```
+
+### What moved
+
+| From App.jsx (v14.1.8) | What |
+|---|---|
+| L224–225 | `remindersLoaded`, `reminderFiresLoaded` write-guard refs |
+| L271–279 | `reminders`/`setReminders`, `reminderFires`/`setReminderFires`, `reminderEditor`/`setReminderEditor`, `confirmReminderDel`/`setConfirmReminderDel`, `[, setReminderTick]` |
+| L286–298 | `saveReminders(next, isSilent)` |
+| L299–310 | `saveReminderFires(next)` |
+| L313–323 | Firebase `reminders` listener |
+| L326–331 | Firebase `reminderFires` listener |
+| L339–347 | Prune-old-fires effect |
+| L351–354 | 30s tick effect (drives banner snooze-expiry re-evaluation) |
+| L357–403 | All 8 action handlers (`markReminderDone`, `snoozeReminderFire`, `openNewReminder`, `openEditReminder`, `saveReminderFromEditor`, `deleteReminder`, `doDeleteReminder`, `toggleReminderActive`) |
+| L1231–1248 | `reminderTodayStr`, `activeReminderBanners`, `reminderBanners` JSX |
+
+### What stayed
+
+- **`settingsTab`/`setSettingsTab`** — belongs to the Settings subsystem, not reminders. Pre-D2 it lived inside the reminder state block under a misleading comment; D2 moved it out and re-annotated it.
+- **Confirm-delete Overlay** (still in main render) — uses `S.text`, `BTN.del`, `Overlay` from App scope; cleanest to leave there. State and handler come back via destructure.
+- **`ReminderEditor` modal mount** — same reasoning.
+- **`validateReminderDraft` import** — App.jsx's keyboard handler reads it at the Enter-saves-reminder path (L733).
+- **kbRef table entries** that wire reminder state into keyboard shortcuts — they consume from the destructured hook output exactly as before.
+
+### Key design decisions
+
+**Banner JSX moves into the hook with the handlers.** `markReminderDone` and `snoozeReminderFire` are only ever called from the two banner buttons — no other consumer. Co-locating the JSX with the handlers keeps both handlers fully internal to the hook (they don't appear in the return surface). The trade-off: the hook imports `mkBtn` from `./components/atoms` and `BTN` from `./lib/constants` to keep the JSX byte-faithful — a small expansion of the hook's import surface, but cleaner than exposing the two handlers when nothing else needs them.
+
+**`setWriteWarning` flows in as an argument.** Reminder save-refusals share the offline-banner UI with booking save-refusals. The setter is owned by `usePersistence`; `useReminders` receives it as a prop. The architectural rule that landed in D1 (write-warning is a single banner shared by all subsystems) survives D2 with one extra wire.
+
+**Imports dropped from App.jsx.** After D2, the only consumers of `ref`, `onValue`, `set` (from `firebase/database`) and `db` (from `./firebase`) lived in the moved reminder code. All four were dropped from App.jsx. `auth` from `./firebase` stayed (used by the outer `App` auth wrapper and `getUser()`). From `./lib/reminders`, only `validateReminderDraft` is still imported; `reminderAppliesTo`, `getActiveReminderBanners`, and `pruneOldReminderFires` moved entirely to the hook's dependency surface.
+
+**`reminderAppliesTo` was actually dead in App.jsx already.** It's used internally by `getActiveReminderBanners` in `./lib/reminders` but never directly by App.jsx — the import was vestigial. D2 dropped it incidentally; that was always safe and was simply waiting for the right moment.
+
+**Insert position.** Hook destructure goes right after the `usePersistence` destructure (which provides `setWriteWarning`). The pre-D2 reminder block sat earlier in BookingApp's body than the autoOptimizer/nowMins block, so the extraction is also a *reordering*: the reminder hook now runs strictly after persistence is set up. Verified that no consumer of reminder state runs before the new destructure point — the kbRef table and all reminder JSX live further down.
+
+### Pre-flight inventory accuracy
+
+The D-phase inventory predicted S2 (reminders) at 20 regions, ~95 lines, "self-contained except `nowMins`". Actuals:
+- 20 region predictions held exactly (4 state + 2 refs + 4 effects + 8 handlers + 2 savers).
+- Line count low — the inventory missed the banner-derivation triplet (`reminderTodayStr`, `activeReminderBanners`, `reminderBanners` at L1231–1248, ~18 lines). After D2 the hook is 220 lines including the JSX moved across.
+- The "self-contained except nowMins" call was almost right but missed `setWriteWarning`. Two inputs, not one. Both flow in cleanly as named args.
+
+### Verification
+
+Same audit suite as D1 (`verify_d2.js`):
+
+1. **Parse-check.** v14.1.8 App.jsx, v14.1.9 App.jsx, both hook files all parse cleanly.
+
+2. **Hook-call balance.** Pre-D2 33/7/12 (useState/useRef/useEffect). Post-D2 28/5/8 + hook 5/2/4 = 33/7/12. Exact balance — no accidental duplication or drop.
+
+3. **JSX element-count parity.** Counts across all 26 element types in v14.1.8 App.jsx equal (post-D2 App.jsx + useReminders.js). No JSX dropped or added.
+
+4. **Internal-symbol leakage.** All 12 hook-internal names (setReminders, setReminderFires, setReminderTick, reminderFires, reminderTodayStr, activeReminderBanners, saveReminders, saveReminderFires, markReminderDone, snoozeReminderFire, remindersLoaded, reminderFiresLoaded) — **zero AST-level references** in post-D2 App.jsx. Surface-grep matches were all in the v14.1.9 changelog comment block.
+
+5. **Exposed-symbol presence.** All 12 returned names referenced from post-D2 App.jsx as expected.
+
+6. **Dropped-import check.** Seven symbols dropped from App.jsx imports (`ref`, `onValue`, `set`, `db`, `pruneOldReminderFires`, `getActiveReminderBanners`, `reminderAppliesTo`) all have **zero AST refs** post-D2.
+
+7. **Reminder banner JSX byte-faithful.** Direct line-by-line equality between the pre-D2 App.jsx JSX block (10 lines starting at the `rgba(254,243,199,0.8)` background marker) and the hook's copy. No visual drift possible.
+
+### Bug caught during execution
+
+Wrote the reminder banner JSX from memory in the first hook draft. The real JSX used `mkBtn` and `BTN.nav` which I'd forgotten. The byte-check audit (added to verify_d2.js) caught it before deployment. Fix: copied the real JSX verbatim from App.jsx and added the two missing imports to the hook. Verification re-ran clean.
+
+This is the second time on Phase D that a verification audit caught a real bug. The pre-flight question "what does this JSX touch besides state and handlers?" is worth a dedicated step in the D-phase template — for D3 (`useNowMins` / `useAutoOptimizer`) the answer is "nothing" (no JSX moves), so it'll be skipped. For D4 (`useWalkin`) the answer will need a careful look at the walkin modal's styling dependencies.
+
+### Open work
+
+- D3 (`useNowMins` + `useAutoOptimizer({bookings, saveBookings, tableBlocks, nowMins})`) is next.
+- D4 (`useWalkin`) after D3.
+- D5 (booking-form treatment) deferred to after D4 lands — relative size will look different by then.
+
