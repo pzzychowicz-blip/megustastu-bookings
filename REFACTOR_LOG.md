@@ -1171,3 +1171,91 @@ splitting `BookingApp` body into smaller files (booking actions,
 reminder system, render IIFEs). Needs its own pre-flight planning
 thread.
 
+# REFACTOR_LOG — Phase D1 entry (append to REFACTOR_LOG.md)
+
+## v14.1.7 → v14.1.8 — Phase D1: Firebase persistence subsystem extracted to `usePersistence` hook
+
+**Date:** 2026-05-10
+**Files changed:** `src/App.jsx`, `src/hooks/usePersistence.js` (new)
+**Behavioural change:** None.
+**Line delta:** App.jsx −103 (1605 → 1502); new hook +183.
+
+### Scope
+
+First Phase D extraction. Took the persistence subsystem identified in the Phase D pre-flight inventory (D1 in the proposed extraction order — chosen first for low coupling and a clean interface) and moved it into a single hook file. Hook signature:
+
+```js
+const {
+  bookings, tableBlocks,
+  saveBookings, saveBlocks,
+  isOnline, writeWarning, setWriteWarning,
+  loadBannerShown, reconnectShown,
+  firstLoadCount,
+} = usePersistence({ autoOptimizer, nowMins });
+```
+
+### What moved
+
+| From App.jsx | What |
+|---|---|
+| L196–197 | `bookings`/`setBookings`, `tableBlocks`/`setTableBlocks` (useState) |
+| L206–207, L213, L220 | `bookingsLoaded`, `blocksLoaded`, `firstLoadCount`, `hasConnectedRef` (useRef) |
+| L211–212, L218–219 | `writeWarning`, `loadBannerShown`, `isOnline`, `reconnectShown` (useState) |
+| L238–257 | `saveBookings(next, isSilent)` |
+| L258–271 | `saveBlocks(next, isSilent)` |
+| L276–288 | Bookings `onValue` listener |
+| L289–297 | TableBlocks `onValue` listener |
+| L299–303 | Load-banner auto-dismiss (6s timeout) |
+| L307–326 | `.info/connected` listener (offline banner + reconnect flash) |
+| L527 | `lastExtend` ref |
+| L528–544 | Auto-extend effect |
+
+`remindersLoaded` and `reminderFiresLoaded` write-guard refs **stayed** in BookingApp; they belong to D2 (`useReminders`).
+
+### Key design decisions
+
+**Auto-extend kept inside the hook.** Asked the write-guard contract question explicitly during pre-flight. Auto-extend is the effect that originally caused the v13 first-deploy data-loss incident (a `saveBookings([])` fired on mount before the onValue listener returned). Keeping it inside `usePersistence` means the write-guard refs (`bookingsLoaded`, `firstLoadCount`, `lastExtend`) never need to cross module boundaries. The hook receives `autoOptimizer` and `nowMins` as named arguments — those remain in BookingApp's body until D3 extracts them.
+
+**`firstLoadCount` exposed as a ref, not a derived primitive.** Caught during the verify-pass: the load-banner JSX in BookingApp reads `firstLoadCount.current` directly to display the count from the first successful Firebase load. `firstLoadCount` cannot become state because `saveBookings`'s empty-array safety guard reads it synchronously without re-render dependency. So the hook returns the ref itself; BookingApp's JSX continues to read `.current` exactly as before. Same call-site contract, just sourced from a destructure.
+
+**`setWriteWarning` exposed.** `saveReminders` (still in BookingApp until D2) writes to the same warning banner. Exposing the setter is a temporary seam — when `useReminders` lands, BookingApp will pass `setWriteWarning` into it as a prop, and the destructure can drop it (or it can stay if the dismiss-button JSX still uses it; we'll see).
+
+**Hook insert position.** Placed after the autoOptimizer/midnight-reset block (around the original L523), right before `liveBookings`. That position satisfies both directions: (1) `autoOptimizer` and `nowMins` are in scope as the hook's inputs, (2) the first downstream consumer of `bookings` (`liveBookings`) sees the destructured value. Earlier consumers like `saveReminders` (L378) reference `setWriteWarning` via closure-resolved-at-call-time semantics — JS function declarations work fine across this kind of forward reference because their bodies don't execute until they're called from event handlers, by which point the destructure has run.
+
+**Dead-import cleanup.** `sanitizeAll` was removed from the `./lib/booking-logic` import line — its only consumer was the moved bookings listener. `sanitize` (without "All") was already dead before D1; left untouched per the C3-tail "narrow scope" discipline.
+
+### Pre-flight pattern
+
+Inventory step delivered the data that drove every decision:
+- Identified 9 subsystems by clustering 140 top-level statements by their references
+- Counted hub bindings (8 referenced by 9+ regions) — these are the structural axes that constrain extraction order
+- Confirmed S1 (persistence) was the cleanest first move: tight interface, owns its hub bindings (`bookings`, `tableBlocks`, `saveBookings`), no upstream dependencies on subsystems we haven't extracted yet
+- The pre-flight produced `inventory.json`, `inventory_report.md`, `cluster_report.md` — kept in the C3-style scratch sandbox, not preserved in outputs
+
+### Verification
+
+Three structural audits run before the deployment files were finalized:
+
+1. **Parse-check.** Both new App.jsx and the new hook file parse cleanly with `@babel/parser` + JSX plugin.
+
+2. **Hook-call balance.** Original App.jsx had 39 useState / 12 useRef / 17 useEffect. New App.jsx has 33 / 7 / 12; new hook has 6 / 5 / 5; sums match exactly. No accidental hook-call duplication or loss.
+
+3. **JSX-element count.** Identical between original and new App.jsx across all 23 element types — no JSX accidentally dropped or added.
+
+4. **Internal-symbol leakage check.** Hook-internal names (`setBookings`, `bookingsLoaded`, `lastExtend`, etc.) audited via AST identifier-traversal in new App.jsx. Zero real consumers (the surface-grep matches were all comment-only mentions in the v14.1.8 changelog block).
+
+5. **Exposed-symbol presence check.** All 10 returned names are referenced from new App.jsx (as expected — the destructure plus their consumers).
+
+### Tooling notes
+
+`/home/claude/inventory/` sandbox installed:
+- `@babel/parser`, `@babel/traverse`, `@babel/types` (no recast needed for D1 since the change was statement-level, not AST-codemod)
+
+D2 (useReminders) will use the same sandbox. Phase D's reusable scripts: `inventory.js`, `detail.js`, `cluster.js`, `verify.js`, `verify2.js`. Recreate from these design notes if the sandbox is fresh.
+
+### Open work
+
+- D2 (`useReminders({nowMins, setWriteWarning})`) is next in the proposed extraction order.
+- `remindersLoaded` and `reminderFiresLoaded` refs in BookingApp are placeholders waiting for D2 to claim them.
+- The dismiss-button-on-write-warning JSX inside BookingApp uses `setWriteWarning` directly — that's fine as a permanent consumer; it doesn't need to move.
+
