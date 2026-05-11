@@ -1461,3 +1461,110 @@ Two new imports added to App.jsx (the hooks themselves). One stale comment line 
 - D5 (booking form, S3) deferred per the original Phase D plan — relative size after D4 will look different.
 - The optimizer banner stack deliberately stays in BookingApp; revisit only if a future phase produces a cleaner home for it (e.g. after S3 extraction frees up `setError`, or after a view-shell extraction owns `viewDate`).
 
+# REFACTOR_LOG — Phase D4 entry (append to REFACTOR_LOG.md)
+
+## v14.1.10 → v14.1.11 — Phase D4: Walk-in subsystem extracted to `useWalkin` hook
+
+**Date:** 2026-05-11
+**Files changed:** `src/App.jsx`, `src/hooks/useWalkin.js` (new — `.js` because the hook contains no JSX).
+**Behavioural change:** None.
+**Line delta:** App.jsx +34 net (1422 → 1456), of which the doc-preamble v14.1.11 entry contributes ~+22 and the BookingApp top-comment D4 paragraph contributes ~+10; `function BookingApp` body net +2 (20-line destructure block replaced 28-line inline block, plus the +10-line top comment). New hook: 108 lines.
+
+### Scope
+
+Fourth Phase D extraction. Took the walk-in subsystem identified in the Phase D pre-flight inventory's S4 cluster (8 regions; one of the smallest standalone subsystems remaining after S1–S3 and S5 were addressed) and moved the entire block into a single hook file. Hook signature:
+
+```js
+const {
+  showWalkin, setShowWalkin,
+  walkinForm, setWalkinForm,
+  walkinError,
+  getNextWalkinNum,
+  openWalkin, saveWalkin, doSaveWalkin,
+} = useWalkin({
+  bookings, saveBookings,
+  setViewDate, getUser,
+  confirmKitchen, setConfirmKitchen,
+});
+```
+
+### What moved
+
+| From App.jsx (v14.1.10) | What |
+|---|---|
+| L464 | `showWalkin`/`setShowWalkin` useState |
+| L465 | `walkinForm`/`setWalkinForm` useState |
+| L466 | `walkinError`/`setWalkinError` useState |
+| L467–471 | `getNextWalkinNum()` helper |
+| L472 | `openWalkin()` |
+| L473–480 | `doSaveWalkin()` |
+| L481–490 | `saveWalkin()` |
+
+Total moved: 3 useState + 4 helper/handler functions. ~28 lines from App.jsx body.
+
+### What stayed in App.jsx
+
+1. **The walk-in modal mount JSX** (~12 lines at the former L1309–1320). Renders `<WalkinForm>` with ~10 props of which 4 come from outside the walk-in subsystem (`liveBookings`, `bookings`, `tableBlocks`, `autoOptimizer`). Moving the JSX into the hook would have grown the input surface from 6 args to 10 purely for prop-routing — no architectural gain. The JSX is wiring, not implementation.
+
+2. **The shared confirm-kitchen modal Overlay** (the JSX block at the former L1367). This modal is raised by *both* `doSave` (the booking-form save path) and `saveWalkin`, with its Confirm button branching on `confirmKitchen === "walkin"` to dispatch back to the correct handler. It's legitimately cross-subsystem and belongs in BookingApp alongside the booking-form save path.
+
+3. **The "Walk-in" trigger button** in the main render's date row (calls `openWalkin`).
+
+4. **`confirmKitchen` state itself.** Owned by BookingApp because it's shared with the booking-form save flow. The hook receives `{confirmKitchen, setConfirmKitchen}` as args — same shared-setter pattern D2 introduced with `setWriteWarning`.
+
+5. **`setWalkinError` setter.** Never used outside the hook (only `doSaveWalkin` writes it; only `openWalkin` clears it). Kept internal — narrows the return surface from 10 to 9.
+
+### Key design decisions
+
+**Largest input surface in Phase D so far.** Six args: `bookings`, `saveBookings`, `setViewDate`, `getUser`, `confirmKitchen`, `setConfirmKitchen`. Compare D1 (2), D2 (2), D3 (1 for useAutoOptimizer, 0 for useNowMins). Walk-in is genuinely more entangled — it crosses persistence (`bookings`, `saveBookings`), view (`setViewDate`), auth (`getUser`), and the shared confirm-kitchen modal (`confirmKitchen`, `setConfirmKitchen`). Each dependency is real and unavoidable; the inventory predicted this shape.
+
+**`getUser` as a function reference, not a string value.** `getUser` reads `auth.currentUser.email` at call time (lazy binding). Passing the function preserves that contract — the hook stores the function reference, and when `doSaveWalkin` later invokes `getUser()` it gets the *current* logged-in user, not whoever was logged in at hook-mount time. Same late-binding pattern that lets browser `setTimeout(fn, ms)` call `fn` at fire time rather than schedule time. (Note: in this concrete codebase, `getUser` is also textually declared *before* `useWalkin` is called, so traditional in-order resolution would also work. The function-reference choice is the *general* contract; the textual order is incidental.)
+
+**confirmKitchen state legitimately stays cross-subsystem.** The pre-flight asked whether confirmKitchen could move into useWalkin. Answer: no, because `doSave` also uses it. Trying to make useWalkin own confirmKitchen would force `doSave` to read it from useWalkin's return, which inverts the natural ownership (the modal is owned by whichever code path raises it, and both paths raise it equally). Cleaner: BookingApp owns the shared state; both the walk-in save path (inside the hook) and the booking-form save path (still in BookingApp) write to it via the same setter. Identical pattern to D2's `setWriteWarning` being owned by `usePersistence` and threaded into `useReminders`.
+
+**No lib imports dropped from App.jsx.** All six lib symbols the walk-in code used (`nowTime`, `getDur`, `genId`, `histEntry`, `getKitchenLoad`, `KITCHEN_TABLE_LIMIT`) are also used heavily elsewhere in App.jsx (booking-form save path, the confirm-kitchen modal's IIFE, edit/cancel/manual-assign flows). The hook imports them in parallel. Unlike D1 (which dropped `sanitizeAll`) and D2 (which dropped 7 symbols), D4 is purely additive on the import side.
+
+**Walk-in modal JSX kept in BookingApp — divergence from D2 pattern explained.** D2's reminder banners moved into `useReminders` because the banners contained inline `<button>` markup whose handlers (`markReminderDone`, `snoozeReminderFire`) had *zero* external callers. The JSX *was* the implementation. D4's walk-in modal is structurally different: the JSX is a wrapper around an already-extracted `<WalkinForm>` component, threading ~10 props. The handlers it consumes (`saveWalkin`, `setShowWalkin`, `setWalkinForm`) all have external callers too (kbRef, the modal's own close handler). Moving the JSX wouldn't hide any handler — it'd just shift prop-routing. So the JSX stays.
+
+### Pre-flight inventory accuracy
+
+The D-phase inventory predicted S4 (walkin) at 8 regions. Actuals: exactly 8 regions moved (3 state + 1 helper + 3 handlers + 1 comment line). Inventory was spot-on. The "self-contained except for bookings/saveBookings/setViewDate/getUser/confirmKitchen" prediction was also accurate — six external symbols, same six the hook receives as args.
+
+### Verification
+
+`verify_d4.js` (same lineage as verify_d3.js — extended to 5 hook files):
+
+1. **Parse-check.** v14.1.10 App.jsx, v14.1.11 App.jsx, useWalkin.js, and all four unchanged hooks (usePersistence, useReminders, useNowMins, useAutoOptimizer) all parse cleanly via `@babel/parser` with JSX plugin.
+
+2. **Hook-call balance.** Pre-D4 totals across App.jsx + 4 hooks: 39 useState / 12 useRef / 17 useEffect. Post-D4 totals across App.jsx + 5 hooks: **39 / 12 / 17**. Exact balance. Internal split: App.jsx alone shrinks from 26/3/5 to 23/3/5 (correctly reflecting 3 useState removed, 0 useRef/useEffect). useWalkin contributes 3/0/0.
+
+3. **JSX element-count parity.** 173 in pre-D4 App.jsx; 173 in post-D4 App.jsx. Identical. No JSX moved this phase.
+
+4. **JSX-in-`.js`-extension check.** useWalkin.js: 0 JSX elements. Clean — `.js` extension correct from first draft. The post-D2 filename rule continues to be respected prospectively.
+
+5. **Internal-symbol leakage.** `setWalkinError` — zero AST-level references in post-D4 App.jsx. Properly hidden.
+
+6. **Exposed-symbol presence.** All 9 returned names referenced in post-D4 App.jsx as expected: `showWalkin` (6 refs), `setShowWalkin` (4), `walkinForm` (3 — modal mount + confirmKitchen IIFE + destructure), `setWalkinForm` (2 — modal mount + destructure), `walkinError` (2), `getNextWalkinNum` (2), `openWalkin` (4 — button + kbRef × 3 paths), `saveWalkin` (4), `doSaveWalkin` (4).
+
+7. **Hook destructure order.** Found order: `[useNowMins, useAutoOptimizer, usePersistence, useReminders, useWalkin]` matches expected. The chain is correct — `bookings` and `saveBookings` (from usePersistence) and `confirmKitchen`/`setConfirmKitchen` (declared earlier in BookingApp's body) are all in scope before useWalkin is called.
+
+### Phase D progress snapshot
+
+| Sub-phase | Status | App.jsx lines after | Hook lines |
+|---|---|---:|---:|
+| D pre-flight | ✓ done | 1605 (v14.1.7) | — |
+| D1 — `usePersistence` | ✓ shipped | 1502 (v14.1.8) | 183 |
+| D2 — `useReminders` | ✓ shipped | 1390 (v14.1.9) | 220 |
+| D3 — `useNowMins` + `useAutoOptimizer` | ✓ shipped | 1422 (v14.1.10) | 36 + 64 = 100 |
+| **D4 — `useWalkin`** | **✓ shipped** | **1456 (v14.1.11)** | **108** |
+| D5 — booking form (S3) | deferred | — | — |
+| D6 — keyboard + view shell | likely skipped | — | — |
+
+Cumulative App.jsx delta from Phase D start (v14.1.7): −149 lines (1605 → 1456) — though some of those lines came back as doc-preamble entries documenting each extraction. Cumulative hook-file output: 611 lines across 5 new files. App.jsx body is dramatically less load-bearing; each subsystem is now structurally testable in isolation.
+
+### Open work
+
+- **D5 (booking form, S3)** is the only remaining major extraction. Pre-flight from the start of Phase D classified S3 as the dominant cluster at 53 regions — by far the largest. With D1–D4 now done, S3's relative size has grown (everything else got smaller; S3 stayed put). A fresh inventory pass against v14.1.11 is warranted before deciding whether to attempt S3 at all, or whether to declare Phase D complete here. The original Phase D plan flagged "decide later after D1–D4 shrink BookingApp" — that decision is now due.
+- **D6 (keyboard + view shell)** remains listed as "likely skipped" per the original plan. Keyboard handlers consume from kbRef which already pulls from the BookingApp local scope — extracting them would require either passing kbRef into the hook (clumsy) or duplicating its bindings. View shell (`view`, `viewDate`, `timelineZoom`, `followNow`, `timelineScrollRef`) is small enough to question whether the extraction earns its cost. Keep on the deferred list unless S5's banner stack is ever revisited and discovers a cleaner home in a view-shell hook.
+- **Optimizer banner stack** still deliberately in BookingApp from D3's Option-A scope decision. No change.
+
