@@ -28,12 +28,11 @@ import {
 } from "./lib/constants";
 
 import {
-  getDur, toMins, toTime, genId,
-  sanitize, histEntry, diffBooking,
+  getDur, toMins, genId,
+  histEntry, diffBooking,
   isLocked, isActive,
   getBlockSlots, canAssign,
-  trialFits, findTimes, formatSugg,
-  getKitchenLoad, findKitchenFriendlyTimes,
+  getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction,
   checkInefficent,
@@ -47,18 +46,13 @@ import { validateReminderDraft } from "./lib/reminders";
 // First component file in the codebase using JSX syntax. App.jsx now also
 // uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
 // compatibility no longer applies — both files share a single style.
-import {
-  Overlay, Fld, Section, TBadge,
-  AvailBanner, mkInp, mkBtn
-} from "./components/atoms";
+import { Overlay, mkBtn } from "./components/atoms";
 
 
-// ── Phase B2 (v15-refactor): secondary modals + table grid ─────────────────
-// TableGrid (the 13-table picker), ManualModal (assign/swap UI), and
-// BlockModal (table-level block editor) extracted to ./components/. Each is
-// JSX (matching atoms.jsx style template). App.jsx renders them as JSX
-// elements (Phase C3b).
-import { TableGrid }   from "./components/TableGrid";
+// ── Phase B2 (v15-refactor): secondary modals ─────────────────────────────
+// ManualModal (assign/swap UI) and BlockModal (table-level block editor)
+// extracted to ./components/. JSX. TableGrid is consumed by both modals
+// internally; no longer imported by App.jsx directly (v14.1.13 cleanup).
 import { ManualModal } from "./components/ManualModal";
 import { BlockModal }  from "./components/BlockModal";
 
@@ -159,12 +153,11 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.1.12",
+  version:"14.1.13",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
   license:"Proprietary — All rights reserved. See LICENSE.",
-  build:"v14.1.9-deployment"
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 
@@ -183,56 +176,23 @@ console.log(
   "color:#9ca3af;font-size:12px;font-family:Menlo,Monaco,Consolas,monospace;"
 );
 
-// ── v14 Deployment — Firebase + auth integrated ───────────────────────────────
-// This file is the production target for v14. All v14 preview work is overlaid
-// on top of v13 dev: Book Again, Overlap Reassign fix, Seated-shift on
-// Confirmed→Seated, Settings cog & tabbed modal, full keyboard shortcuts,
-// thicker grid lines, and the v14 preview 7 Reminder system.
-// v14.1: connection-status banner, IP protection layer (header, LICENSE,
-// fingerprint, console banner, visible credit in Settings).
-// v14.1.1: file-split refactor complete (B1–B5).
-// v14.1.2: helper consolidation (Phase C1) — getCapOf, pct, statusOrder,
-// liveDur, nowTime promoted to lib/booking-logic.js; unused blockEl ref
-// dropped; Follow button label fixed (Following / Follow).
-// v14.1.3: useWinW hook extracted to ./hooks/useWinW.js (Phase C2);
-// 31 leftover dead imports cleaned up from App.jsx import block.
-// In-app version label is now derived from __APP_SIGNATURE__.version
-// (single source of truth — passed to <SettingsContent> as appVersion).
-// v14.1.4: Phase C3a — modern declarations pass on App.jsx. All 380 `var`
-// keywords converted to `const` (325) or `let` (16); 38 useState patterns
-// collapsed to destructured form `const [x, setX] = useState(...)`. Pure
-// lexical refactor — zero behavioural change. File net −3 lines (1460 →
-// 1457) from the four useState collapses that previously spanned two
-// lines each. JSX conversion (Phase C3b) is the next step.
-// v14.1.5: Phase C3b — RC(...) call sites converted to JSX. All 182
-// `RC(elem, props, ...children)` calls became `<elem ...>...</elem>`,
-// including 145 intrinsic tags (div/span/button/input/option/select/
-// textarea) and 37 component references (Section/Overlay/TBadge/Fld/
-// AvailBanner/etc.). Conversion done via Babel + recast AST codemod with
-// element-count pre/post validation. The `const RC=React.createElement;`
-// declaration is retained as dead code; it'll be removed in a follow-up
-// patch once the JSX runtime configuration is verified. File +119 lines
-// (1457 → 1576) from JSX's natural multi-line element layout. Zero
-// behavioural change.
-// v14.1.6: Phase C3b.1 — dead `const RC=React.createElement;` declaration
-// removed; default `React` import dropped (Vite plugin v6 + React 19 use
-// the automatic JSX runtime, so `React` no longer needs to be in scope).
-// Confirmed via package.json: "@vitejs/plugin-react": "^6.0.1". Also fixes
-// the in-app version-label drift: <SettingsContent> now receives
-// `appVersion={__APP_SIGNATURE__.version}` as a prop, making
-// __APP_SIGNATURE__ the single source of truth for the version string.
-// Settings.jsx no longer hardcodes the version. Net −2 lines. Zero
-// behavioural change.
-// v14.1.7: Phase C3-tail — comment drift cleanup. Stale
-// `RC(Component, props)` mentions in the B1/B2/B4/B5 import-block
-// comments rewritten to reflect the post-C3b reality (App.jsx renders
-// components as JSX, not via RC). Pure documentation drift fix; no
-// runtime impact, no behavioural change. Phase C3c (prettier pass) was
-// considered and explicitly dropped: prettier with any config produces
-// a ~4200-line diff that would overwrite the file's deliberate compact
-// style across the board (aligned imports, one-line ifs, no-space-
-// around-`=` object literals). The dense JSX from C3b's recast output
-// is readable as-is; no formatting pass needed.
+// ── Version history ─────────────────────────────────────────────────────────
+// Full detail for each entry below lives in REFACTOR_LOG.md at repo root.
+// Pre-D1 entries are one-line summaries; D1 onward are detailed in-place
+// because they describe live architectural decisions still relevant to the
+// current file's structure.
+// v14.1:   Connection-status banner; IP protection layer (header, LICENSE,
+//          fingerprint, console banner, visible credit in Settings).
+// v14.1.1: File-split refactor complete (Phases B1–B5).
+// v14.1.2: Phase C1 helper consolidation — getCapOf/pct/statusOrder/liveDur/
+//          nowTime promoted to lib/booking-logic.js; Follow button label fix.
+// v14.1.3: Phase C2 — useWinW hook extracted; 31 dead imports cleaned up.
+// v14.1.4: Phase C3a — 380 `var` → const/let; 38 useState patterns collapsed.
+// v14.1.5: Phase C3b — RC(...) call sites converted to JSX via AST codemod.
+// v14.1.6: Phase C3b.1 — dead `const RC=React.createElement;` removed; default
+//          React import dropped (automatic JSX runtime per @vitejs/plugin-react v6).
+// v14.1.7: Phase C3-tail — comment drift cleanup; prettier pass explicitly
+//          declined to preserve the file's compact style.
 // v14.1.8: Phase D1 — Firebase persistence subsystem extracted from
 // BookingApp into ./hooks/usePersistence.js. Owns `bookings`,
 // `tableBlocks`, the four write-guard refs (bookingsLoaded, blocksLoaded,
@@ -337,6 +297,15 @@ console.log(
 // in z-stack), historyPopup mount (one-liner), and manualBooking
 // IIFE (feeds the stayed-in-parent ManualModal). Pure extraction —
 // zero behavioural change. Net −323 lines from App.jsx body.
+// v14.1.13: Spot-audit + cleanup — pure cosmetic, zero behavioural change.
+// 12 dead imports removed (toTime, sanitize, trialFits, findTimes,
+// formatSugg, findKitchenFriendlyTimes, Fld, Section, TBadge, AvailBanner,
+// mkInp, TableGrid) — all were consumers of the form-modal code that moved
+// in E1; AST audit confirmed zero references in post-E1 App.jsx. Stale
+// build:"v14.1.9-deployment" field dropped from __APP_SIGNATURE__ (version
+// is already the source of truth). v14.1 through v14.1.7 entries above
+// compressed to one-line summaries (full detail preserved in
+// REFACTOR_LOG.md). Net −80 lines.
 
 
 // ── Booking App ───────────────────────────────────────────────────────────────
