@@ -106,8 +106,8 @@ import { useWinW } from "./hooks/useWinW";
 // ── Phase D1 (v14.1.8): Firebase persistence subsystem extracted ──────────
 // `usePersistence` owns bookings, tableBlocks, all write-guards, the four
 // Firebase listeners, and the auto-extend effect. Returns the values and
-// savers BookingApp consumes. Args: {autoOptimizer, nowMins} — both still
-// live in BookingApp's body for now; D3 will move them.
+// savers BookingApp consumes. Args: {autoOptimizer, nowMins} — both now
+// sourced from D3 hooks below; hook signature unchanged.
 import { usePersistence } from "./hooks/usePersistence";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
@@ -118,6 +118,19 @@ import { usePersistence } from "./hooks/usePersistence";
 // (from usePersistence) so reminder save-refusals share the same banner.
 import { useReminders } from "./hooks/useReminders";
 
+// ── Phase D3 (v14.1.10): Time tick + optimizer thermostat extracted ───────
+// `useNowMins` owns the 15s wall-clock tick that drives seated-duration math,
+// banner re-evaluation, and downstream hook dep arrays. No args; returns just
+// { nowMins }. Setter stays internal — nothing outside the tick effect writes.
+import { useNowMins } from "./hooks/useNowMins";
+//
+// `useAutoOptimizer` owns the optimizer feature flag plus its daily reset:
+// auto-off at 15:00 for today's shift, auto-on at new-day-start (before
+// 15:00). Args: { nowMins } drives both effects' dep arrays. Returns
+// { autoOptimizer, setAutoOptimizer } — both used externally (kbRef + the
+// TimelineView legend toggle). Daily-reset refs stay internal.
+import { useAutoOptimizer } from "./hooks/useAutoOptimizer";
+
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
 // Module-level identity record. Survives bundling/minification — the strings
@@ -126,7 +139,7 @@ import { useReminders } from "./hooks/useReminders";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.1.9",
+  version:"14.1.10",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -207,11 +220,12 @@ console.log(
 // `saveBookings`/`saveBlocks`, all four Firebase real-time listeners,
 // and the auto-extend effect (kept inside the hook so the write-guard
 // contract never crosses module boundaries). Hook signature:
-// `usePersistence({autoOptimizer, nowMins})` — those two values still
-// live in BookingApp until D3, when useNowMins/useAutoOptimizer extract
-// them. `setWriteWarning` is exposed because saveReminders also surfaces
-// through the same banner; that seam closes when D2 lands. Pure
-// extraction — zero behavioural change. Net −103 lines from App.jsx.
+// `usePersistence({autoOptimizer, nowMins})` — those two values lived
+// in BookingApp until D3 (v14.1.10), when useNowMins/useAutoOptimizer
+// extracted them; the hook signature is unchanged. `setWriteWarning`
+// is exposed because saveReminders also surfaces through the same
+// banner; that seam closed when D2 landed. Pure extraction — zero
+// behavioural change. Net −103 lines from App.jsx.
 // Note: `remindersLoaded` and `reminderFiresLoaded` write-guard refs
 // remain in BookingApp; they belong to D2.
 // v14.1.9: Phase D2 — Reminder subsystem extracted from BookingApp into
@@ -225,20 +239,38 @@ console.log(
 // and the banner derivation + JSX (reminderBanners). Handlers
 // markReminderDone and snoozeReminderFire stay internal to the hook —
 // only the banner JSX calls them, and the JSX moves with them. Hook
-// signature: `useReminders({nowMins, setWriteWarning})`. `nowMins` is
-// still owned by BookingApp until D3; `setWriteWarning` comes from
-// usePersistence so reminder save-refusals surface through the same
-// banner as booking save-refusals. What stays in BookingApp: the
-// confirm-delete Overlay and the ReminderEditor modal mount (both use
-// App-scope styling). Imports dropped from App.jsx: ref/onValue/set
-// from firebase/database (no remaining consumers post-D2), db from
-// ./firebase (auth still consumed), and reminderAppliesTo,
-// getActiveReminderBanners, pruneOldReminderFires from ./lib/reminders.
-// `validateReminderDraft` import stays — App.jsx's keyboard handler
-// reads it at the Enter-saves-reminder path. Pure extraction — zero
-// behavioural change. Net −112 lines from App.jsx (1502 → 1390); new
-// hook +220 lines. The misleading `settingsTab` reference in the
-// old reminder-block comment is now correctly attributed elsewhere.
+// signature: `useReminders({nowMins, setWriteWarning})`. `nowMins` was
+// still owned by BookingApp until D3 (v14.1.10); the hook signature is
+// unchanged. `setWriteWarning` comes from usePersistence so reminder
+// save-refusals surface through the same banner as booking save-refusals.
+// What stays in BookingApp: the confirm-delete Overlay and the
+// ReminderEditor modal mount (both use App-scope styling). Imports
+// dropped from App.jsx: ref/onValue/set from firebase/database (no
+// remaining consumers post-D2), db from ./firebase (auth still
+// consumed), and reminderAppliesTo, getActiveReminderBanners,
+// pruneOldReminderFires from ./lib/reminders. `validateReminderDraft`
+// import stays — App.jsx's keyboard handler reads it at the
+// Enter-saves-reminder path. Pure extraction — zero behavioural change.
+// Net −112 lines from App.jsx (1502 → 1390); new hook +220 lines. The
+// misleading `settingsTab` reference in the old reminder-block comment
+// is now correctly attributed elsewhere.
+// v14.1.10: Phase D3 — Time tick and optimizer thermostat extracted
+// from BookingApp into two sibling hooks: ./hooks/useNowMins.js and
+// ./hooks/useAutoOptimizer.js. useNowMins owns the 15s clock tick;
+// no args; returns just { nowMins } (setter stays internal).
+// useAutoOptimizer owns the autoOptimizer feature flag plus its
+// daily-reset effects (auto-off at 15:00, auto-on at new-day-start),
+// guarded by per-day refs so each transition fires once per ISO date.
+// Hook signature: `useAutoOptimizer({ nowMins })`. Returns
+// { autoOptimizer, setAutoOptimizer } — both used externally (kbRef +
+// TimelineView prop). Both hooks are pure-logic (no JSX) → both use
+// `.js` per the D2-onward filename rule. Hook signatures of
+// usePersistence and useReminders are UNCHANGED — only the source of
+// nowMins/autoOptimizer in BookingApp's body shifts from inline-useState
+// to destructure-from-hook. Per the Option-A scope decision, the
+// optimizer banner stack (state, derivations, handlers, JSX, confirm
+// modal) intentionally stays in BookingApp. Pure extraction — zero
+// behavioural change.
 
 
 // ── Booking App ───────────────────────────────────────────────────────────────
@@ -247,13 +279,24 @@ function BookingApp(){
   // `bookings`, `tableBlocks`, write-guards (bookingsLoaded/blocksLoaded/
   // firstLoadCount/hasConnectedRef), connection-status state, saveBookings/
   // saveBlocks, the four Firebase listeners, and the auto-extend effect all
-  // moved into the hook. The hook is called below, after autoOptimizer and
-  // nowMins are declared (those are its inputs).
+  // moved into the hook. The hook is called below, after useNowMins and
+  // useAutoOptimizer (those provide its inputs).
   // ── Phase D2 (v14.1.9): reminder state lives in ./hooks/useReminders ──
   // remindersLoaded / reminderFiresLoaded write-guards moved into the hook
   // along with all reminder state, effects, savers, handlers, and the banner
   // JSX. The hook is called below, after usePersistence (which provides
   // setWriteWarning).
+  // ── Phase D3 (v14.1.10): time tick + optimizer thermostat live in
+  // ./hooks/useNowMins and ./hooks/useAutoOptimizer. nowMins (15s tick) and
+  // autoOptimizer (with its daily reset effects + per-day refs) all moved
+  // into those two hooks. The hooks are called first below — useNowMins
+  // has no deps; useAutoOptimizer takes nowMins; usePersistence and
+  // useReminders consume both with unchanged signatures. The optimizer
+  // banner/derivation/handler stack (reshuffled, dismissedIneff,
+  // confirmReshuffle, inefficient, overlapWarnings, flash, forceReshuffle,
+  // reassignBooking, and the three banner JSX blocks) intentionally stays
+  // in BookingApp — those reach into form/view/persistence concerns that
+  // aren't yet extracted, and flash() has 8 call sites.
   // Ensure optimal viewport scaling on all devices
   useEffect(function(){
     let meta=document.querySelector('meta[name="viewport"]');
@@ -295,30 +338,20 @@ function BookingApp(){
   const [settingsTab, setSettingsTab] = useState("general");
   useEffect(function(){formRef.current=form;},[form]);
   useEffect(function(){if(error) setError("");},[form.time,form.size,form.date,form.preference,form.customDur]);
-  // Real-time clock for seated duration
-  const [nowMins, setNowMins] = useState(function(){const d=new Date();return d.getHours()*60+d.getMinutes();});
-  useEffect(function(){const t=setInterval(function(){const d=new Date();setNowMins(d.getHours()*60+d.getMinutes());},15000);return function(){clearInterval(t);};},[]);
-  // Optimizer auto-off at 15:00 for today's shift
-  const [autoOptimizer, setAutoOptimizer] = useState(function(){const d=new Date();return d.getHours()*60+d.getMinutes()<15*60;});
-  const autoFlippedRef=useRef(null);
-  useEffect(function(){
-    if(nowMins<15*60) return;
-    const today=new Date().toISOString().slice(0,10);
-    if(autoFlippedRef.current===today) return;
-    autoFlippedRef.current=today;
-    setAutoOptimizer(false);
-  },[nowMins]);
-  // Optimizer auto-on at new day start (before 15:00). Day transitions detected via
-  // date-string key, so this fires at ~00:00 when the new day begins — or at app
-  // mount if we start before 15:00. No reshuffle on flip.
-  const autoOnRef=useRef(null);
-  useEffect(function(){
-    if(nowMins>=15*60) return;
-    const today=new Date().toISOString().slice(0,10);
-    if(autoOnRef.current===today) return;
-    autoOnRef.current=today;
-    setAutoOptimizer(true);
-  },[nowMins]);
+  // ── Time tick hook ──────────────────────────────────────────────────────────
+  // Real-time clock for seated duration. 15s tick. Drives liveBookings, the
+  // overlapWarnings derivation, applySeatedShift inside doSave, updateStatus's
+  // current-time read, and the dep arrays of usePersistence + useReminders.
+  // Phase D3 (v14.1.10). See ./hooks/useNowMins.js.
+  const { nowMins } = useNowMins();
+  // ── Optimizer thermostat hook ───────────────────────────────────────────────
+  // Auto-off at 15:00 for today's shift; auto-on at new-day-start (before 15:00).
+  // Daily-reset refs (autoFlippedRef / autoOnRef) keyed by today's ISO date so
+  // each transition fires exactly once per day. Setter exposed because the
+  // keyboard 'o' shortcut (via kbRef) and TimelineView's legend toggle (via
+  // direct prop) both write to it. Phase D3 (v14.1.10). See
+  // ./hooks/useAutoOptimizer.js.
+  const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins });
   // ── Persistence hook ────────────────────────────────────────────────────────
   // Owns bookings/tableBlocks state, Firebase listeners, savers, and the
   // auto-extend effect. Auto-extend needs autoOptimizer + nowMins which are

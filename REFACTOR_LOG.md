@@ -1365,3 +1365,99 @@ The first delivery used `useReminders.js` as the file extension. Vite's oxc pars
 - D4 (`useWalkin`) after D3.
 - D5 (booking-form treatment) deferred to after D4 lands — relative size will look different by then.
 
+# REFACTOR_LOG — Phase D3 entry (append to REFACTOR_LOG.md)
+
+## v14.1.9 → v14.1.10 — Phase D3: Time tick and optimizer thermostat extracted to two sibling hooks
+
+**Date:** 2026-05-11
+**Files changed:** `src/App.jsx`, `src/hooks/useNowMins.js` (new), `src/hooks/useAutoOptimizer.js` (new — both `.js` because neither contains JSX).
+**Behavioural change:** None.
+**Line delta:** App.jsx +33 net (1389 → 1422), of which the doc-preamble v14.1.10 entry contributes +17 and the D1/D2 preamble corrections contribute +14; `function BookingApp` body net +1 line. New hooks: useNowMins 36, useAutoOptimizer 64.
+
+### Scope
+
+Third Phase D extraction. Took the two state-and-effect pairs in the Phase D pre-flight inventory's S5 cluster head (the time tick and the optimizer thermostat — pre-flight ordered third after persistence and reminders because of their small surface and zero dependency on any other subsystem) and moved them into two single-purpose hooks.
+
+Hook signatures:
+```js
+const { nowMins } = useNowMins();
+const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins });
+```
+
+Hook signatures of `usePersistence` and `useReminders` are **unchanged**.
+
+### What moved
+
+| From App.jsx (v14.1.9) | What | To |
+|---|---|---|
+| L299 | `nowMins`/`setNowMins` useState (initialiser reads `new Date()` at mount) | `useNowMins.js` |
+| L300 | 15s `setInterval` tick useEffect | `useNowMins.js` |
+| L302 | `autoOptimizer`/`setAutoOptimizer` useState (initialiser: `<15*60` at mount) | `useAutoOptimizer.js` |
+| L303 | `autoFlippedRef` | `useAutoOptimizer.js` |
+| L304–310 | Auto-off-at-15:00 useEffect | `useAutoOptimizer.js` |
+| L314 | `autoOnRef` | `useAutoOptimizer.js` |
+| L315–321 | Auto-on-at-new-day useEffect | `useAutoOptimizer.js` |
+
+Total moved: 2 useState + 2 useRef + 3 useEffect.
+
+### What stayed (Option A scope-out)
+
+The pre-flight identified three legitimate scope candidates beyond the thermostat itself:
+1. The optimizer banner stack (`reshuffled` / `dismissedIneff` / `confirmReshuffle` state + `flash` / `forceReshuffle` / `reassignBooking` handlers + `inefficient` / `overlapWarnings` / `overlapEntries` derivations + the three banner JSX blocks).
+2. The confirm-reshuffle modal Overlay JSX.
+3. The keyboard 'o' (toggle) and 'r' (reshuffle confirm-modal trigger) handlers.
+
+All three stayed in BookingApp this phase. Reasoning logged in the pre-flight conversation: the banner stack reaches into form (`setError` inside `reassignBooking`), view (`viewDate` for the banner's date-scoped dismissal), and persistence (`saveBookings`, `liveBookings`) concerns that aren't yet extracted. `flash()` in particular has 8 call sites across BookingApp (save × 2, forceReshuffle, delBooking, reassignBooking, updateStatus, confirmCancel, block edits) — pulling it into a hook would surface an 8-arg dependency or force callers to thread `flash` through every save site. The "smallest defensible boundary" principle wins: the thermostat is a self-contained two-input/two-output unit; the banner stack isn't.
+
+Keyboard handlers stayed automatically — they read from kbRef and kbRef populates from BookingApp's local destructure, so the rewire is purely a sourcing change at the kbRef builder.
+
+### Key design decisions
+
+**Two hooks, not one.** Tempting to bundle `nowMins` and `autoOptimizer` into a single `useClockAndOptimizer` since the thermostat consumes the tick. The pre-flight rejected this: nowMins has 6 external consumers (liveBookings, overlapWarnings, applySeatedShift inside doSave, updateStatus, usePersistence, useReminders) and the thermostat has 4 (kbRef, TimelineView prop, the form's "no reshuffle" banner check, every `bookingsAfterAction` save site). Their consumer sets don't overlap meaningfully — keeping them separate keeps each hook focused on one responsibility, and makes the dep flow (`useNowMins` → `useAutoOptimizer({nowMins})`) explicit in the call site.
+
+**`setNowMins` stays internal.** Unlike `setAutoOptimizer` (which has external writers via the keyboard 'o' shortcut and the TimelineView legend toggle), nothing outside the tick effect writes to `nowMins`. There's no test-clock or fast-forward facility in the app. Hiding the setter makes that contract explicit — future code can't accidentally introduce a write path.
+
+**Daily-reset refs stay inside `useAutoOptimizer`.** `autoFlippedRef` and `autoOnRef` are pure implementation detail of the "fires exactly once per ISO date" behaviour. No external consumer needs them. Hiding them follows the same precedent as `usePersistence`'s `hasConnectedRef` / `lastExtend`.
+
+**Both hooks use `.js`, not `.jsx`.** Neither contains JSX. The post-D2 filename rule ("any JSX → `.jsx`, any pure logic → `.js`") cleanly assigns both files to the `.js` bucket. Verified via verify_d3.js's JSX-count check (both 0).
+
+**Hook order in BookingApp is now fixed:** `useNowMins` → `useAutoOptimizer({nowMins})` → `usePersistence({autoOptimizer, nowMins})` → `useReminders({nowMins, setWriteWarning})`. This chain is verified by audit — nowMins must be in scope before any consumer destructures it. The order is structurally enforced (each hook's destructured name appears in the next hook's argument list).
+
+### Pre-flight inventory accuracy
+
+The D-phase inventory predicted S5 (optimizer + clock) at 16 regions. Actuals split: the **thermostat-and-tick subset** (what D3 actually moved) is exactly 7 regions (2 state + 2 ref + 3 effect). The remaining 9 regions in S5 — the banner derivations, flash, forceReshuffle, reassignBooking, and the banner JSX — were the part Option A correctly identified as cross-subsystem and left in BookingApp. The inventory was right at the cluster level; D3's job was to split S5 along the right seam.
+
+### Verification
+
+`verify_d3.js` (same script lineage as verify_d2.js — see Phase D2 entry for tooling notes):
+
+1. **Parse-check.** v14.1.9 App.jsx, v14.1.10 App.jsx, both new hook files all parse cleanly via `@babel/parser` with JSX plugin.
+
+2. **Hook-call balance.** Pre-D3 totals across App.jsx + usePersistence + useReminders: 39 useState / 12 useRef / 17 useEffect. Post-D3 totals across all four hook files + App.jsx: **39 / 12 / 17**. Exact balance — no accidental duplication or drop. Internal split: App.jsx alone shrinks from 28/5/8 to 26/3/5 (correctly reflecting the 2 useState + 2 useRef + 3 useEffect removed); useNowMins contributes 1/0/1; useAutoOptimizer contributes 1/2/2; the unchanged hooks remain identical.
+
+3. **JSX element-count parity.** 173 in pre-D3 App.jsx; 173 in post-D3 App.jsx. Identical. No JSX moved this phase (Option A scope).
+
+4. **JSX-in-`.js`-extension check (post-D2 rule).** useNowMins.js: 0 JSX elements. useAutoOptimizer.js: 0. Both clean — `.js` extension is correct from first draft. The D2 post-handover bug is now structurally impossible for D3.
+
+5. **Internal-symbol leakage.** Three hook-internal names (`setNowMins`, `autoFlippedRef`, `autoOnRef`) — **zero AST-level references** in post-D3 App.jsx. No surface-grep matches anywhere.
+
+6. **Exposed-symbol presence.** `nowMins` (10 refs), `autoOptimizer` (17 refs), `setAutoOptimizer` (4 refs) — all three present in post-D3 App.jsx as expected.
+
+7. **Hook destructure order.** Found order: `[useNowMins, useAutoOptimizer, usePersistence, useReminders]` matches expected. The chain is correct — `nowMins` is in scope before any consumer destructures it.
+
+### Inventory's filename-rule reinforcement
+
+The D2 post-handover bug (`.js` hook that contained JSX was rejected by Vite/oxc) led to the hard rule: "JSX in hook → `.jsx` from first draft." D3 is the first phase where that rule was applied prospectively rather than reactively. Outcome: both hook files chose the right extension on the first pass, audit confirmed zero JSX in either, and there was no rename round-trip. The rule is now battle-tested in both directions (D2 caught the violation; D3 avoided it).
+
+### Imports — no changes this phase
+
+Unlike D1 (which dropped `sanitizeAll`) and D2 (which dropped 7 symbols across `firebase/database`, `./firebase`, and `./lib/reminders`), D3 drops no imports from App.jsx. The clock tick and thermostat use only React primitives (`useState`, `useRef`, `useEffect`), and BookingApp still consumes all three for its remaining 26/3/5 inline calls.
+
+Two new imports added to App.jsx (the hooks themselves). One stale comment line corrected in the D1 import block ("both still live in BookingApp's body for now; D3 will move them" → "both now sourced from D3 hooks below; hook signature unchanged").
+
+### Open work
+
+- D4 (`useWalkin({bookings, saveBookings, confirmKitchen, setConfirmKitchen})`) is next per the Phase D extraction order. Pre-flight will need to confirm the walkin modal styling dependencies before deciding whether the walkin form JSX moves with the hook (D2 banner-moves-with-handlers pattern) or stays in App.jsx (more likely, since the walkin modal uses App-scope `S`/`BTN`/`Overlay`).
+- D5 (booking form, S3) deferred per the original Phase D plan — relative size after D4 will look different.
+- The optimizer banner stack deliberately stays in BookingApp; revisit only if a future phase produces a cleaner home for it (e.g. after S3 extraction frees up `setError`, or after a view-shell extraction owns `viewDate`).
+
