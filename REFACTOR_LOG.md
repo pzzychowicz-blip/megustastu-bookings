@@ -1707,3 +1707,62 @@ The architectural goal stated at the start of Phase E1 was: *"both major UI unit
 - **Phase E2+** would only happen if a new UI unit emerges that genuinely warrants its own component file. None is currently in scope.
 - The optimizer banner stack (reshuffled, dismissedIneff, confirmReshuffle state + flash + forceReshuffle + reassignBooking + the three banner JSX blocks) intentionally stays in BookingApp from D3's Option A scope decision. No change in E1.
 
+# REFACTOR_LOG — v14.1.13 entry (append to REFACTOR_LOG.md)
+
+## v14.1.12 → v14.1.13 — Spot-audit cleanup pass
+
+**Date:** 2026-05-11
+**Files changed:** `src/App.jsx`
+**Behavioural change:** None.
+**Line delta:** App.jsx −31 (1309 → 1278).
+
+### Scope
+
+Pure cosmetic cleanup pass following the E1 component extraction. AST audit of post-E1 App.jsx surfaced three classes of debris:
+
+1. **Dead imports** — 12 symbols that were exclusively consumed by the form-modal code moved into `BookingFormModal.jsx` during E1.
+2. **Stale `__APP_SIGNATURE__.build` field** — held the literal string `"v14.1.9-deployment"`, drifting four versions behind. The `version` field is already the single source of truth.
+3. **Overgrown version-history preamble** — 13 entries totalling ~155 lines, of which 8 entries (v14.1 through v14.1.7) described pre-refactor history that's fully preserved in REFACTOR_LOG.md.
+
+### Dead imports removed
+
+| Import | From | Was used by |
+|---|---|---|
+| `toTime` | `./lib/booking-logic` | `endTime` derivation (moved to BookingFormModal) |
+| `sanitize` | `./lib/booking-logic` | Comment-only mentions; no real reference |
+| `trialFits` | `./lib/booking-logic` | `formAvail` IIFE (moved) |
+| `findTimes` | `./lib/booking-logic` | `formAvail` IIFE (moved) |
+| `formatSugg` | `./lib/booking-logic` | `formAvail` IIFE (moved) |
+| `findKitchenFriendlyTimes` | `./lib/booking-logic` | `kitchenSugg` derivation (moved) |
+| `Fld` | `./components/atoms` | Form modal field wrappers (moved) |
+| `Section` | `./components/atoms` | Form modal sections (moved) |
+| `TBadge` | `./components/atoms` | `tablesBtn` IIFE (moved) |
+| `AvailBanner` | `./components/atoms` | `availBanner` JSX (moved) |
+| `mkInp` | `./components/atoms` | Form input style helper (moved) |
+| `TableGrid` | `./components/TableGrid` | Never used in App.jsx directly; consumed transitively via `ManualModal` and `BlockModal` |
+
+Audit method: AST traversal counted true identifier references (excluding the import-binding site itself). All 12 returned **0 refs** in post-E1 App.jsx — confirming each was strictly a leftover from pre-E1 form-modal code.
+
+### Other changes
+
+- **`__APP_SIGNATURE__.build` dropped.** The `version` field has been the canonical source since v14.1.6; the `build` field was vestigial.
+- **Version-history compression.** Entries v14.1 through v14.1.7 collapsed from 50 lines (8 entries) to 18 lines (one-line summaries each). Full architectural detail for each version preserved in REFACTOR_LOG.md at repo root. Entries v14.1.8 onward (D1, D2, D3, D4, E1) kept in full because they describe live architectural decisions still relevant to the current file's structure.
+- **Atoms import block collapsed.** Multi-line `import { Overlay, Fld, Section, TBadge, AvailBanner, mkInp, mkBtn } from "./components/atoms"` reduced to a single-line `import { Overlay, mkBtn }` after the 5 dead names were removed.
+- **B2 import-block comment updated** to reflect that `TableGrid` is no longer imported by App.jsx directly.
+
+### Verification
+
+`verify_cleanup.js` (lighter than the structural-change verify suites — pure cosmetic changes need fewer checks):
+
+1. **Parse-check.** Both v14.1.12 and v14.1.13 parse cleanly via `@babel/parser`.
+2. **Hook-call balance.** Pre: `{useState: 23, useRef: 3, useEffect: 5}`. Post: identical. No accidental hook removal.
+3. **JSX element count.** Pre: 85. Post: 85. No accidental JSX removal.
+4. **Removed-import zero-ref check.** All 12 removed names confirmed to have 0 AST references in post-v14.1.13 App.jsx (excluding the now-deleted import-binding sites).
+5. **Version bump.** Confirmed `__APP_SIGNATURE__.version` reads `"14.1.13"`.
+
+### Notes for future cleanup passes
+
+- Dead-import accumulation is a foreseeable side-effect of extraction phases. The pattern: a feature's code moves out; its lib imports stay behind because they were declared at the top of App.jsx and the extraction script didn't touch the import block. A spot-audit pass after every E-phase (and large D-phase) is now part of the workflow.
+- Comment mentions of extracted names (in the version-history preamble or section headers) are **not** counted as dead references — those are intentional historical records and should be preserved.
+- The AST audit script for this pass is reusable. Pattern: parse the post-extraction file, walk `Identifier` nodes excluding `ImportSpecifier.local` sites, report names with 0 refs.
+
