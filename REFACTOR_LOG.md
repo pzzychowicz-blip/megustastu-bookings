@@ -1568,3 +1568,142 @@ Cumulative App.jsx delta from Phase D start (v14.1.7): −149 lines (1605 → 14
 - **D6 (keyboard + view shell)** remains listed as "likely skipped" per the original plan. Keyboard handlers consume from kbRef which already pulls from the BookingApp local scope — extracting them would require either passing kbRef into the hook (clumsy) or duplicating its bindings. View shell (`view`, `viewDate`, `timelineZoom`, `followNow`, `timelineScrollRef`) is small enough to question whether the extraction earns its cost. Keep on the deferred list unless S5's banner stack is ever revisited and discovers a cleaner home in a view-shell hook.
 - **Optimizer banner stack** still deliberately in BookingApp from D3's Option-A scope decision. No change.
 
+# REFACTOR_LOG — Phase E1 entry (append to REFACTOR_LOG.md)
+
+## v14.1.11 → v14.1.12 — Phase E1: Booking form modal extracted to `<BookingFormModal>` component
+
+**Date:** 2026-05-11
+**Files changed:** `src/App.jsx`, `src/components/BookingFormModal.jsx` (new).
+**Behavioural change:** None.
+**Line delta:** App.jsx −147 (1456 → 1309). New component: 275 lines (of which ~50 are doc comments).
+
+### Phase identity
+
+First **component extraction** since Phase B5 (October 2025). Marks the start of Phase E — a different kind of refactor from Phase D's hook extractions. Where D-phases moved stateful logic into hooks that run inside the parent's component instance, E-phases move UI units into components that own their own render boundary. Both refactors hide complexity from BookingApp, but they do it through different mechanisms; see the architectural discussion that preceded this commit for the full rationale.
+
+E1 is also the resolution of the original Phase B5 deferral, which left a note in App.jsx's imports: *"BookingForm intentionally NOT extracted in this phase: its dependency on ~25 closure values would force an 18+ prop API."* The actual prop count post-extraction landed at 17 — the conservative estimate held up well, but callback-shaped triggers compressed the surface meaningfully versus passing setters directly.
+
+### Scope (Option α from pre-flight)
+
+Extract the form modal's render tree and all derivations that exist only to feed it. Keep all form state, all form handlers, and the form effects in BookingApp. Sub-modal mounts (prefPickerModal, manualModal, historyPopup, delModal) stay in BookingApp; triggers from inside the form fire via callback props.
+
+### What moved into BookingFormModal.jsx
+
+Render tree:
+- The 53-line `formModal` JSX itself (now the component's return value).
+
+JSX derivation builders (all IIFEs producing JSX):
+- `tablesBtn` (~50 lines — edit-mode and new-mode branches, "= Assign" + "★ Preferred" buttons, manual-table clear/changed-from indicators).
+- `kitchenSection` (~15 lines including the `renderKitchenTimes` helper) — kitchen-load row with green/yellow suggestion chips.
+- `quickStatusBtns` — the status row in edit mode (confirmed / seated / completed / cancelled buttons).
+- `historyBtn`, `bookAgainBtn`, `returnOfBanner`, `availBanner`, `errorEl`, `resetDurBtn`.
+
+Data derivations:
+- `formAvail` IIFE (real-time trial-optimisation against `liveBookings`).
+- `kitchenLoad` / `kitchenStarts` / `kitchenGuests` / `kitchenBusy` / `kitchenSugg`.
+- `inp` / `formCols` / `auto` / `dur` / `endTime`.
+
+### What stayed in BookingApp
+
+State (12 useState slots + 1 useRef + 2 useEffect):
+- `form`, `editId`, `error`, `showForm`, `confirmDel`, `confirmCancel`, `manualTarget`, `formRef`, `swapAffected`, `showHistory`, `showPrefPicker`.
+- The `formRef.current=form` mirror effect.
+- The auto-clear-error effect.
+
+Handlers (7 functions, ~200 lines):
+- `doSave` (the monster — kitchen-load guard, manual-table reconciliation, optimizer call, history entry).
+- `save` (kitchen-load wrapper around doSave).
+- `openNew`, `openEdit`, `bookAgain`.
+- `manualAssign`, `doCancelBooking`.
+
+Sub-modal mounts (4 inline JSX nodes, each ≤5 lines):
+- `delModal` — confirm-delete overlay (small, no need to relocate).
+- `manualModal` — opens ManualModal; cross-view (also triggered from timeline/list), so doesn't belong inside the booking-form component.
+- `prefPickerModal` — opens PrefPickerModal; triggered from inside the form via callback, but mounted in BookingApp's z-stack alongside the form.
+- `historyPopup` — opens HistoryPopup; one-liner, triggered from inside the form via callback.
+
+Plus the `manualBooking` IIFE (6 lines) that feeds the stayed-in-parent ManualModal.
+
+### Prop interface (17 props)
+
+```js
+<BookingFormModal
+  form, setForm, editId, error
+  bookings, liveBookings, tableBlocks
+  autoOptimizer, isMobile
+  onSave, onClose, onClearSwap, onBookAgain
+  onOpenPrefPicker, onOpenManualAssign, onOpenHistory
+  onRequestCancel
+/>
+```
+
+Breakdown:
+- **9 reads:** `form`, `editId`, `error`, `bookings`, `liveBookings`, `tableBlocks`, `autoOptimizer`, `isMobile` — plus `error` (already display-only).
+- **1 mutator:** `setForm` (every inline input handler in the form modal calls `setForm(function(f){...})` to update fields; passing it directly matches WalkinForm's idiomatic `setDraft` prop).
+- **7 callbacks:** `onSave`, `onClose`, `onClearSwap`, `onBookAgain`, `onOpenPrefPicker`, `onOpenManualAssign`, `onOpenHistory`, `onRequestCancel` — eight actually (I'm losing count). All non-trivial event-shapes wrap parent setters in named callbacks rather than passing setters directly, which keeps the component oblivious to parent state shape and makes the boundary auditable.
+
+### Key design decisions
+
+**Controlled-component pattern.** Form draft state lives in parent; component is a pure render function over its props. This matches WalkinForm's existing pattern in the codebase. Trade-off considered and rejected: moving form state *into* the component would require a `useImperativeHandle` escape hatch so doSave (in parent) could read the latest form values at save time. Controlled pattern avoids that complexity entirely.
+
+**Callback-shaped triggers, not setter-shaped.** The pre-flight estimate was 18+ props if we passed setters directly. Wrapping them in named callbacks (`onOpenPrefPicker` vs `setShowPrefPicker(true)`) costs 1 line per callback at the mount site but produces a cleaner boundary. Net: 17 props with a discoverable interface, vs ~14 props that leak parent state shape into the component.
+
+**Sub-modals stay in parent, triggered via callback.** PrefPickerModal can only be opened from inside the form; nevertheless it stays mounted in BookingApp's render. Reason: its `selected={form.preferredTables}` and `onChange={setForm(...)}` props live naturally in BookingApp's scope where `form` and `setForm` already exist. Moving PrefPickerModal mount into BookingFormModal would force an extra layer of prop-threading for no architectural gain. Same logic for HistoryPopup. ManualModal is genuinely cross-view (also opened from TimelineView and ListView's onManual handlers) and could not move even in theory.
+
+**delModal stays in parent.** Small (one-line JSX, deletes the booking after confirm). Triggered from ListView's onDelete, not from the form. Has nothing to do with form state. Stays.
+
+**manualBooking IIFE stays in parent.** Feeds the parent's ManualModal mount. Reads form state but lives near ManualModal in BookingApp's body. Could move into BookingFormModal but would then need to flow back out as a callback prop — pure plumbing churn.
+
+**Zero React hooks in BookingFormModal.** Pure render function. Verified by the audit. This is the cleanest possible component shape: no internal state, no effects, no refs. All re-renders are driven by prop changes from the parent.
+
+### Verification
+
+`verify_e1.js` — first component-extraction audit suite; different shape from D-phase verify because component extraction moves JSX:
+
+1. **Parse-check.** v14.1.11 App.jsx, v14.1.12 App.jsx, BookingFormModal.jsx, plus all 5 unchanged hooks all parse cleanly via `@babel/parser` with JSX plugin.
+
+2. **Hook-call balance.** Pre-E1 total: 39 useState / 12 useRef / 17 useEffect. Post-E1 total (App.jsx + all 5 hooks + BookingFormModal): **39 / 12 / 17**. BookingFormModal contributes **0 / 0 / 0** — pure render component, audit-asserted.
+
+3. **JSX element-count parity.** Pre-E1 App.jsx: 173. Post-E1 App.jsx: 85. BookingFormModal: 89. Combined post-E1: **174**. Delta: +1, which is exactly the `<BookingFormModal>` wrapper element itself (the new element in the React tree). Audit tolerates +1.
+
+4. **Prop interface match.** Audit extracted both the destructured prop names from BookingFormModal's function signature and the JSX attribute names from App.jsx's mount, then compared as sets. **17 props in component, 17 attributes at mount, identical sets.** Zero drift between the two definitions of the interface.
+
+5. **Internal-symbol leakage.** 17 parent-state names (state setters + state values + handlers) audited for any reference inside BookingFormModal's source — **all zero**. Component reaches into parent state via callbacks only.
+
+6. **Inline-name removal.** 19 previously-inline form-derivation names (formModal, formAvail, tablesBtn, kitchenLoad, kitchenStarts, kitchenGuests, kitchenBusy, kitchenSugg, renderKitchenTimes, kitchenSection, quickStatusBtns, historyBtn, bookAgainBtn, returnOfBanner, availBanner, errorEl, resetDurBtn, endTime, formCols) — **all zero refs in post-E1 App.jsx**. Extraction is complete; no orphaned references.
+
+7. **Component mount in App.jsx.** Audit confirms `<BookingFormModal>` is rendered from App.jsx's JSX tree.
+
+### Import audit
+
+BookingFormModal imports from three sources:
+- `../lib/constants` — OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN (6 symbols)
+- `../lib/booking-logic` — getDur, toMins, toTime, trialFits, findTimes, formatSugg, getKitchenLoad, findKitchenFriendlyTimes, optimizerActiveFor (9 symbols)
+- `./atoms` — Overlay, Fld, Section, TBadge, AvailBanner, mkInp, mkBtn (7 symbols)
+
+Each symbol is also imported and used in App.jsx, so every import is known to be exported by its source module. No new exports needed; no dead imports introduced.
+
+No imports dropped from App.jsx — every lib symbol the form code used is still used by other code paths (booking-form save, manual-assign, walk-in save, etc.).
+
+### Architectural snapshot after E1
+
+| Sub-phase | Status | App.jsx after | Phase D hook lines | Phase E component lines |
+|---|---|---:|---:|---:|
+| Phase D pre | — | 1605 | — | — |
+| D1 ✓ | shipped | 1502 | 183 (usePersistence) | — |
+| D2 ✓ | shipped | 1390 | +220 (useReminders) | — |
+| D3 ✓ | shipped | 1422 | +100 (useNowMins + useAutoOptimizer) | — |
+| D4 ✓ | shipped | 1456 | +108 (useWalkin) | — |
+| **E1 ✓** | **shipped** | **1309** | 611 cumulative | **+275 (BookingFormModal)** |
+
+App.jsx has shed **296 lines** from its peak pre-Phase-D state (1605 → 1309) — an 18% reduction. The 5 hook files + 1 new component file own 886 lines of structurally-bounded code that no longer sits in BookingApp's body. The booking form, which was the largest single coherent block in BookingApp, is now a self-contained component file with a documented 17-prop interface.
+
+The architectural goal stated at the start of Phase E1 was: *"both major UI units are components with clean prop interfaces"* — in preparation for WhatsApp inbox integration which would otherwise have introduced an asymmetry between the (component-shaped) WA panel and the (inline-JSX) booking form. That goal is now achieved. When Phase 1b WhatsApp work begins, the form integration points (`handleAcceptDraft`, `handleOpenLinkedBooking`, `handleCancelLinkedBooking`) plug into BookingApp's existing form state and handler surface exactly as designed — no special integration layer needed for either side.
+
+### Open work
+
+- **No more major extractions planned.** D5 (booking form) was the last large structural concern. After E1, no remaining single-file concern is big enough to justify another extraction in the near term.
+- **Phase 1b (WhatsApp inbox)** is the next major feature work. It builds on top of the E1 architecture; ready when staff are ready.
+- **Phase E2+** would only happen if a new UI unit emerges that genuinely warrants its own component file. None is currently in scope.
+- The optimizer banner stack (reshuffled, dismissedIneff, confirmReshuffle state + flash + forceReshuffle + reassignBooking + the three banner JSX blocks) intentionally stays in BookingApp from D3's Option A scope decision. No change in E1.
+
