@@ -1791,3 +1791,37 @@ None. Documentation only — no `src/` change, no bundle change, no version bump
 - Entries in this log are **appended** (newest at bottom), matching the file's existing order. The handover doc's "prepend" guidance describes Scheduling; Bookings stays append-ordered.
 - The pending `src/hooks/usePersistence.js` comment cleanup (same session) is **deliberately excluded** from this docs-only PR and will ship in a later patch.
 
+---
+
+## Docs — "sum up this thread" rule + reminder hook
+
+**Date**: 2026-05-29
+**Branch**: `chore/sum-up-thread-rule` → PR to `main`
+**Status**: chore — **no app-version bump** (no `src/` change; touches `CLAUDE.md` + a user-scoped hook)
+
+### Files changed
+- `CLAUDE.md` — expanded the **"sum up this thread"** trigger-phrase rule (Workflow → Trigger phrases) to require updating **both** working folders on every sum-up.
+- `~/.claude/settings.json` (user-scoped, **not** in the repo) — added a `UserPromptSubmit` hook that fires on the phrase "sum up this thread" (case-insensitive) and injects a reminder to update both folders. Guarded so it only fires when the session cwd is under a `megustastu-bookings` path — a no-op in other projects.
+- `REFACTOR_LOG.md` — this entry.
+
+### The rule (now in CLAUDE.md)
+On "sum up this thread": produce the summary continuity guide, then update both folders —
+- **Context folder** (`/Users/patrykzychowicz/Desktop/megustastu-bookings context`): save `MGT_Bookings_<topic>_Thread_Summary.md` + refresh the mirror copies of `CLAUDE.md` and `REFACTOR_LOG.md`.
+- **App repo**: keep the canonical `CLAUDE.md` / `REFACTOR_LOG.md` current (repo is source of truth; context copies mirror it).
+
+### Why the hook is user-scoped, not committed
+The context-folder path is machine-specific, and the hook must apply to every future session — including ones in git worktrees under `.claude/worktrees/`. A user-scoped hook in `~/.claude/settings.json` loads in every session/worktree automatically (no git tracking, no machine path committed to the repo). The portable rule lives in the committed `CLAUDE.md`; the hook is machine-local enforcement.
+
+### Verification
+- Hook command pipe-tested: positive (phrase + bookings cwd) prints the reminder; negatives (no phrase / non-bookings cwd) print nothing — all exit 0 (no spurious error on normal prompts).
+- `$PWD` fallback covers hook input that lacks `cwd`.
+- `~/.claude/settings.json` validated with `jq -e`; pre-existing settings (theme, plugins, marketplaces, effortLevel) preserved; the stored command round-trips (extracted via `jq` and re-run) intact.
+- `UserPromptSubmit` fires outside the authoring turn, so in-session proof is deferred; active for future sessions (open `/hooks` once to load it into a running session).
+
+### Behavioural change
+None in the app. Workflow/tooling only.
+
+### Notes
+- Append-ordered (newest at bottom), consistent with the prior entry.
+- The `src/hooks/usePersistence.js` comment cleanup remains pending for a later patch (still excluded here to keep this PR docs/tooling-only).
+
