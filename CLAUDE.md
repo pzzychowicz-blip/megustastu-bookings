@@ -26,7 +26,7 @@ scannable; archive old per-version sub-notes when a block gets long.
 
 ```
 src/
-├── App.jsx                          orchestration layer (~1278 lines)
+├── App.jsx                          orchestration layer (~1315 lines)
 ├── firebase.js                      DEV/PROD env switch (import.meta.env.DEV) — DO NOT bypass the split
 ├── hooks/
 │   ├── usePersistence.js            Firebase + write-guards + auto-extend
@@ -34,7 +34,8 @@ src/
 │   ├── useNowMins.js                15s clock tick
 │   ├── useAutoOptimizer.js          optimizer thermostat + daily reset
 │   ├── useWalkin.js                 walk-in state + handlers
-│   └── useWinW.js                   viewport-width hook
+│   ├── useWinW.js                   viewport-width hook
+│   └── useThemeMode.js              dark-mode resolver (localStorage pref → isDark; writes data-theme)
 ├── components/
 │   ├── BookingFormModal.jsx         booking form (controlled component)
 │   ├── TimelineView.jsx             Gantt-style timeline (horizontal scroller)
@@ -53,7 +54,7 @@ src/
 │   └── atoms.jsx                    Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn
 └── lib/
     ├── booking-logic.js             pure functions (optimizer, sanitisation, derivations)
-    ├── constants.js                 tables, capacities, colours, S/BTN style tokens
+    ├── constants.js                 tables, capacities, colours, S/BTN style tokens (S now var(--…)-backed for theming)
     └── reminders.js                 reminder helpers (validate, fire-window, prune)
 ```
 
@@ -194,11 +195,11 @@ function saveBookings(next, isSilent) {
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
 - ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above).
 
-### Theming / dark mode (being ported from Scheduling — see `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`)
-- Light + dark via CSS custom properties: `:root` (light) + `[data-theme="dark"]` overrides in `index.html`; `<html data-theme="…">` toggled by `document.documentElement.dataset.theme`.
-- Shared contract with Scheduling: `useThemeMode(explicitPref) → isDark`; same token names where concepts match; a no-flash inline script paints the theme before React mounts.
-- **No rgba/hex literals in JS — every colour references `var(--…)`.** Colours used at varying opacity are stored as **RGB-channel triplets** and composed `rgba(var(--…-rgb), a)`.
-- **Persistence is per-device `localStorage`** (not Firebase) — each device keeps its own theme. (Bookings has no shared settings node; this is a deliberate divergence from Scheduling's `settings.darkMode`.)
+### Theming / dark mode (mechanism shipped v14.2.0 — ported from Scheduling; see `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`)
+- Light + dark via CSS custom properties: `:root` (light) + `[data-theme="dark"]` overrides in `index.html`; `<html data-theme="…">` set via `document.documentElement.dataset.theme`. A theme flip is **one DOM attribute change — zero React re-render** of the tree.
+- **Hook:** `useThemeMode(explicitPref) → isDark` (`src/hooks/useThemeMode.js`) writes `data-theme` and follows the OS live when pref is `undefined` — the shared Scheduling contract, unchanged. A no-flash inline script in `index.html` paints the theme before React mounts (the hook alone runs too late).
+- **Persistence is per-device `localStorage["mgt-theme"]`** (`"dark"|"light"|`absent), NOT Firebase (Bookings has no settings node). `readThemePref()` (module scope in `App.jsx`) feeds the hook; the Settings General-tab `Toggle` (`onToggleDark`) writes the key. The no-flash script reads the SAME key — **keep the value convention in sync across all three.**
+- **No rgba/hex literals in JS — every colour references `var(--…)`.** Migrated token-by-token in waves. **v14.2.0 did the core `S` set** (card/border/muted/text/accent → `--bg-card` / `--border-card` / `--text-muted` / `--text-primary` / `--accent`) + the app background (`--bg-app`). **Still literal** (pending waves): `STATUS_COLORS`, `BLOCK_BG`, `TBL`, `BTN`, and the atoms/modals (`Overlay`, `Section`, `mkInp`, `mkBtn`) — so dark mode is **partial until those land**. Colours used at varying opacity become **RGB-channel triplets** composed `rgba(var(--…-rgb), a)`.
 - The PDF/print path stays light regardless of in-app theme (currently no in-app PDF/export exists; keep it light if one is added).
 
 ### Hover affordance (being ported — see `MGT_Bookings_hover-scale_PORT_INSTRUCTIONS.md`)
@@ -349,7 +350,7 @@ Scripts live in `/home/claude/verify/` during a refactor session; re-create from
 
 ## Future work flagged
 
-- **Dark mode / theming port** — in progress; see `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`. Mechanism (token blocks + no-flash script + `useThemeMode` + toggle) then `var(--…)` literal migration in waves.
+- **Dark mode / theming port** — **mechanism shipped v14.2.0** (token blocks + no-flash script + `useThemeMode` + Settings toggle, proven on the core `S` set). Remaining: `var(--…)` literal-migration **waves** (`14.2.x`) — A central (`constants.js` rest + `atoms.jsx`) → B high-density (`TimelineView`, `BookingFormModal`, `WalkinForm`) → C remaining components incl. Settings modal / `Overlay` → D `App.jsx`. See `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`.
 - **`.mgt-hover-scale` hover-lift port** — planned after dark mode; see `MGT_Bookings_hover-scale_PORT_INSTRUCTIONS.md`.
 - **WhatsApp Cloud API integration (Phase 1b)** — designed, not implemented. See `MGT_WhatsApp_Inbox_Phase1b_Design_Summary.md`. Integration points: the `BookingFormModal` callback surface + a new `InboxPanel` component.
 

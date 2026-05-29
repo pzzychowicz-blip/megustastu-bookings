@@ -55,7 +55,7 @@ export function LoginScreen() {
 
   return (
     <div style={{
-      background: "linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",
+      background: "var(--bg-app)",
       minHeight: "100dvh",
       display: "flex", alignItems: "center", justifyContent: "center",
       padding: 20,

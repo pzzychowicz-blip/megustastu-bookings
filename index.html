@@ -1,12 +1,67 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#007AFF" />
     <title>megustastu-bookings</title>
+    <!-- v14.2.0: Dark-mode theming tokens. Light values live in :root; dark
+         values override under [data-theme="dark"]. A theme flip = one
+         data-theme attribute change (see src/hooks/useThemeMode.js) — no React
+         re-render. Every JS colour that participates references a var(--…),
+         migrated token-by-token in waves; v14.2.0 migrated the core `S`
+         surface/text/accent set in src/lib/constants.js. Rule: add a token ->
+         define it in BOTH blocks. Colours used at varying opacity (status /
+         table / block chips) become RGB-channel triplets in a later wave. -->
+    <style>
+      :root {
+        /* App background (6-stop glass gradient) */
+        --bg-app: linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%);
+        /* Core surfaces */
+        --bg-card: rgba(255, 255, 255, 0.45);
+        --border-card: rgba(255, 255, 255, 0.35);
+        /* Text */
+        --text-primary: #1a1d24;
+        --text-muted: #5a6474;
+        /* Accent */
+        --accent: #007aff;
+      }
+      [data-theme="dark"] {
+        --bg-app: linear-gradient(135deg, #15171c 0%, #191c22 20%, #1c1a23 40%, #161c26 60%, #1b1f28 80%, #17191f 100%);
+        --bg-card: rgba(44, 44, 46, 0.55);
+        --border-card: rgba(255, 255, 255, 0.10);
+        --text-primary: #f2f2f7;
+        --text-muted: #9a9aa0;
+        --accent: #0a84ff;
+      }
+      html, body { margin: 0; }
+      body {
+        background: var(--bg-app);
+        min-height: 100dvh;
+        color: var(--text-primary);
+        -webkit-font-smoothing: antialiased;
+      }
+    </style>
   </head>
   <body>
+    <!-- v14.2.0: No-flash theme paint. Runs BEFORE React mounts so a dark-OS
+         (or dark-saved) user never sees a light flash. Reads the per-device
+         preference in localStorage["mgt-theme"] ("dark"|"light"), else falls
+         back to the OS. MUST stay in sync with readThemePref() in src/App.jsx
+         (same key, same value convention). -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("mgt-theme");
+          var dark = saved === "dark"
+            || (saved !== "light"
+                && window.matchMedia
+                && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.dataset.theme = dark ? "dark" : "light";
+        } catch (e) { /* keep default data-theme="light" */ }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
