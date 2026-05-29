@@ -1862,3 +1862,37 @@ New user-visible feature: a Dark mode toggle (General tab) plus automatic OS-the
 - Append-ordered (newest at bottom). CLAUDE.md workflow step 6 still reads "prepend" — stale Scheduling-derived wording (the file convention is append, as the prior two entries note). Flagged to Patryk; left unchanged here.
 - Next: `14.2.x` literal-migration waves — A (central: `constants.js` remaining sets + `atoms.jsx`) → B (high-density: `TimelineView`, `BookingFormModal`, `WalkinForm`) → C (remaining components incl. the Settings modal / `Overlay`) → D (`App.jsx`). After each wave, flip the theme and hunt stray light patches. Hover-scale port follows dark mode.
 
+---
+
+## v14.2.0 → v14.2.1 — Dark-mode wave A (part 1): `constants.js` colour-set tokens
+
+**Date**: 2026-05-30
+**Branch**: `feat/v14.2.1-dark-mode-wave-a` → PR to `main`
+**Status**: refactor (theming) — **app version 14.2.0 → 14.2.1**
+
+Migrates the four `constants.js` data-token colour sets to CSS custom properties. The originally-planned "wave A" (`constants.js` + `atoms.jsx`) is **split into two PRs** for reviewability + incremental dark-mode QA — this is the `constants.js` half; `atoms.jsx` = 14.2.2. Light mode renders byte-identical; the only visible change is dark-mode status-chip text.
+
+### Files updated
+- `index.html` — added tokens to both theme blocks. **Triplets** (bg/border share a hue): `--status-{confirmed,seated,completed,cancelled}-rgb`, `--tbl-out-rgb`, `--tbl-ind-rgb`. **Direct tokens**: `--block-{…}`, `--btn-{…}`, `--text-on-accent`, `--status-{…}-text`. Block / table / button tokens + the status RGB triplets are **theme-invariant** (defined in `:root` only — saturated fills read on both themes); the four `--status-*-text` tokens get **dark overrides** (light text for dark chips).
+- `src/lib/constants.js` — `STATUS_COLORS` + `TBL` compose `rgba(var(--…-rgb), a)`; `BLOCK_BG` + `BTN` reference direct `var(--…)` tokens. Updated the dark-mode comment.
+- `src/App.jsx` — `__APP_SIGNATURE__.version` 14.2.0 → 14.2.1.
+
+### Design decisions
+- **Triplets vs direct tokens.** STATUS_COLORS (bg .12–.15 / border .3–.35) and TBL (bg .8 / border .5) reuse one hue at two alphas → RGB-channel triplets composed in `constants.js`. BLOCK_BG / BTN are each used at a single alpha → direct full-value tokens.
+- **Theme-invariant where colour needn't change.** Block fills, table badges, and buttons are saturated surfaces with white text that read on both themes, so they're defined once in `:root` (no dark override) — zero light-mode change, acceptable on dark. Only status-chip *text* must flip (dark amber/green/slate/red → light variants) to stay legible on dark chips. Status tint **RGB also kept invariant** for now (only text flips).
+- **No component edits.** All four sets are consumed as direct style values; `atoms.jsx` (SBadge/TBadge) and the view components just read the constants, so tokenizing `constants.js` propagates everywhere.
+- **Wave A split.** `constants.js` (this PR — low visual risk) before `atoms.jsx` (14.2.2 — the modal/form/`Overlay` surfaces that benefit from focused visual iteration, incl. the opaque dialog-sheet dark value).
+
+### Verification
+- `npm run build` ✅ — main bundle **163.98 kB gz** (flat vs 14.2.0's 163.97), `index.html` **2.07 kB gz** (+~0.67 kB gz for ~26 new tokens across both blocks).
+- **Token resolve-check on the DEV dev server** (`preview_eval`, read-only): every token resolves (no var-name typos — the silent failure mode the build can't catch). Light values byte-identical to the prior literals (`--status-confirmed-text` `#92400e`, `--status-cancelled-text` `#991b1b`, `--block-confirmed` `rgba(180,130,40,0.85)`, `--btn-edit` `rgba(0,122,255,0.7)`, `--tbl-out-rgb` `0,122,255`). Dark flips verified: status text `#92400e→#fcd34d`, `#991b1b→#fca5a5`; invariants (block/btn/tbl/status-rgb) identical light↔dark.
+- Final visual sign-off on dark chip legibility is Patryk's.
+
+### Behavioural change
+None functional. Visual: dark-mode status chips now use light text (were dark hex — illegible on dark surfaces). Light mode unchanged.
+
+### Notes
+- Append-ordered (newest at bottom).
+- If dark status chips read too faint in QA, give `--status-*-rgb` dark overrides (brighter); the tint alpha is fixed in `constants.js`, so theme-varying the RGB is the lever. Easy follow-up.
+- Next: **14.2.2** = `atoms.jsx` token migration (surfaces / inputs / `Overlay` / `Section` + the opaque dialog-sheet dark value).
+

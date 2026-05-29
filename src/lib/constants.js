@@ -32,22 +32,24 @@ export var OPEN=13,CLOSE=22,GRID_CLOSE=23;
 export var KITCHEN_TABLE_LIMIT=3;
 export var QUARTER_HOURS=Array.from({length:(GRID_CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
 export var ROW_H=44,LABEL_W=58;
-export var STATUS_COLORS={confirmed:{bg:"rgba(250,204,21,0.15)",text:"#92400e",border:"rgba(250,204,21,0.35)"},seated:{bg:"rgba(34,197,94,0.15)",text:"#166534",border:"rgba(34,197,94,0.35)"},completed:{bg:"rgba(148,163,184,0.12)",text:"#64748b",border:"rgba(148,163,184,0.3)"},cancelled:{bg:"rgba(239,68,68,0.12)",text:"#991b1b",border:"rgba(239,68,68,0.3)"}};
-export var BLOCK_BG={confirmed:"rgba(180,130,40,0.85)",seated:"rgba(34,160,80,0.85)",completed:"rgba(140,140,150,0.7)",cancelled:"rgba(200,80,80,0.8)"};
-// v14.2.0 (dark mode): `S` core surface/text/accent values now reference CSS
-// custom properties defined in index.html (:root light / [data-theme="dark"]),
-// so a theme flip re-resolves them with zero JS. STATUS_COLORS / BLOCK_BG / TBL
-// above still hold literals — they migrate to RGB-channel triplets in a later
-// wave (composed as `rgba(var(--…-rgb), a)` for their alpha uses). `bg` stays a
-// literal ("transparent" — not theme-dependent).
+export var STATUS_COLORS={confirmed:{bg:"rgba(var(--status-confirmed-rgb),0.15)",text:"var(--status-confirmed-text)",border:"rgba(var(--status-confirmed-rgb),0.35)"},seated:{bg:"rgba(var(--status-seated-rgb),0.15)",text:"var(--status-seated-text)",border:"rgba(var(--status-seated-rgb),0.35)"},completed:{bg:"rgba(var(--status-completed-rgb),0.12)",text:"var(--status-completed-text)",border:"rgba(var(--status-completed-rgb),0.3)"},cancelled:{bg:"rgba(var(--status-cancelled-rgb),0.12)",text:"var(--status-cancelled-text)",border:"rgba(var(--status-cancelled-rgb),0.3)"}};
+export var BLOCK_BG={confirmed:"var(--block-confirmed)",seated:"var(--block-seated)",completed:"var(--block-completed)",cancelled:"var(--block-cancelled)"};
+// Dark mode (v14.2.0 `S`; v14.2.1 the colour sets STATUS_COLORS / BLOCK_BG /
+// TBL / BTN): values reference CSS custom properties from index.html (:root
+// light / [data-theme="dark"]), so a theme flip re-resolves them with zero JS.
+// Alpha-composited families (STATUS_COLORS bg/border, TBL bg/border) use
+// RGB-channel triplets composed here as `rgba(var(--…-rgb), a)`; single-alpha
+// families (BLOCK_BG, BTN) are direct tokens. Block/table/button tokens are
+// theme-invariant (saturated fills read on both themes); only status-chip
+// *text* flips light in dark. `S.bg` stays the literal "transparent".
 export var S={bg:"transparent",card:"var(--bg-card)",border:"var(--border-card)",muted:"var(--text-muted)",text:"var(--text-primary)",accent:"var(--accent)"};
-export var TBL={out:{bg:"rgba(0,122,255,0.8)",text:"#fff",border:"rgba(0,122,255,0.5)"},ind:{bg:"rgba(175,82,222,0.8)",text:"#fff",border:"rgba(175,82,222,0.5)"}};
+export var TBL={out:{bg:"rgba(var(--tbl-out-rgb),0.8)",text:"var(--text-on-accent)",border:"rgba(var(--tbl-out-rgb),0.5)"},ind:{bg:"rgba(var(--tbl-ind-rgb),0.8)",text:"var(--text-on-accent)",border:"rgba(var(--tbl-ind-rgb),0.5)"}};
 export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,10),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,manualTables:[],preferredTables:[],returnOf:null};
 
 // ── Button colour tokens ──────────────────────────────────────────────────────
 // Phase B1 addition: BTN was previously defined inline in App.jsx; moved here
 // so component files (atoms.jsx and future B2–B5 extractions) can import it.
-export var BTN={tables:"rgba(0,122,255,0.75)",edit:"rgba(0,122,255,0.7)",del:"rgba(220,60,60,0.75)",cancel:"rgba(220,60,60,0.75)",clear:"rgba(220,60,60,0.7)",reset:"rgba(220,60,60,0.7)",today:"rgba(0,122,255,0.7)",nav:"rgba(120,130,150,0.5)",dismiss:"rgba(220,60,60,0.7)",orange:"rgba(230,100,30,0.8)"};
+export var BTN={tables:"var(--btn-tables)",edit:"var(--btn-edit)",del:"var(--btn-del)",cancel:"var(--btn-cancel)",clear:"var(--btn-clear)",reset:"var(--btn-reset)",today:"var(--btn-today)",nav:"var(--btn-nav)",dismiss:"var(--btn-dismiss)",orange:"var(--btn-orange)"};
 
 // ── Table groupings for UI pickers ────────────────────────────────────────────
 // Phase B2 addition: TABLE_GROUPS was previously defined inline in App.jsx
