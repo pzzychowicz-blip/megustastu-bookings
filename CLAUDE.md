@@ -251,7 +251,9 @@ function saveBookings(next, isSilent) {
 ### Trigger phrases (in chat)
 - **"give me the deployment version"** — produce a production-ready file with Firebase integration, auth, cleanup logic, logout.
 - **"give me changelog"** — generate a PDF changelog (use `MGT_Changelog_Instructions.md`).
-- **"sum up this thread"** — produce a markdown thread summary to attach to the next thread.
+- **"sum up this thread"** — produce a markdown thread-summary continuity guide (same format as the context folder's existing `MGT_*_Thread_Summary.md` files) AND update **both working folders** every time (a `UserPromptSubmit` hook in `~/.claude/settings.json` also reminds on this phrase):
+  - **Context folder** (`../megustastu-bookings context`, i.e. `/Users/patrykzychowicz/Desktop/megustastu-bookings context`) — save the summary as `MGT_Bookings_<topic>_Thread_Summary.md`, and refresh the mirror copies of `CLAUDE.md` + `REFACTOR_LOG.md` to match the repo. This folder is the durable store for summaries + working files.
+  - **App repo** (this folder) — keep the canonical `CLAUDE.md` / `REFACTOR_LOG.md` current via the normal per-version flow. The repo is the source of truth; the context-folder copies are mirrors of it.
 - Preview-file naming while iterating: `restaurant_booking_v{X}_preview {N}.jsx` (incrementing, never overwrite).
 
 ### Deployment (Firebase env split — DONE)
