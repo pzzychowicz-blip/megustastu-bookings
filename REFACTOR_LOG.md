@@ -1766,3 +1766,28 @@ Audit method: AST traversal counted true identifier references (excluding the im
 - Comment mentions of extracted names (in the version-history preamble or section headers) are **not** counted as dead references — those are intentional historical records and should be preserved.
 - The AST audit script for this pass is reusable. Pattern: parse the post-extraction file, walk `Identifier` nodes excluding `ImportSpecifier.local` sites, report names with 0 refs.
 
+---
+
+## Docs — Adopt MGT Bookings workflow into `CLAUDE.md`
+
+**Date**: 2026-05-29
+**Branch**: `chore/claude-md-workflow` → PR to `main`
+**Status**: chore — **no app-version bump** (CLAUDE.md is not in the shipped bundle; no `src/` change)
+
+### Files changed
+- `CLAUDE.md` — **now tracked in git** (was an untracked local file, so worktree sessions never auto-loaded it). Merged the `MGT_Bookings_CLAUDE_CODE_WORKFLOW.md` house rules into the living architecture doc.
+- `REFACTOR_LOG.md` — this entry.
+
+### What changed in CLAUDE.md
+- Folded in from the workflow doc: one-version-per-branch / one-branch-per-PR flow; `npm run dev`-only (never `preview`) + DEV-Firebase-sandbox rules; `gh` CLI path; commit/push-only-when-asked; a Lessons section (worktree path anchoring, StrictMode mounted-ref, preserve-inline-styles, don't-spawn-subagents, conversation budget); sibling-app (Scheduling) reference.
+- Corrected stale facts: the DEV/PROD Firebase split is **done** (commit `d15707e`), not "not yet set up"; removed the "production data at risk" warning.
+- Bookings-specific corrections vs the Scheduling-derived docs: `mkInp`/`mkBtn` return **style objects** here (not JSX) — recorded in conventions, the gotchas table, and lessons; the `Toggle({on,onClick})` atom is preferred over raw checkboxes; **no Firebase `settings` node** — per-device prefs (theme) use `localStorage`.
+- Added forward UI contracts for the in-progress ports: dark-mode (CSS vars + `data-theme` + `useThemeMode` + per-device localStorage) and `.mgt-hover-scale`.
+
+### Behavioural change
+None. Documentation only — no `src/` change, no bundle change, no version bump.
+
+### Notes
+- Entries in this log are **appended** (newest at bottom), matching the file's existing order. The handover doc's "prepend" guidance describes Scheduling; Bookings stays append-ordered.
+- The pending `src/hooks/usePersistence.js` comment cleanup (same session) is **deliberately excluded** from this docs-only PR and will ship in a later patch.
+
