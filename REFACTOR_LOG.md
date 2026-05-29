@@ -1825,3 +1825,40 @@ None in the app. Workflow/tooling only.
 - Append-ordered (newest at bottom), consistent with the prior entry.
 - The `src/hooks/usePersistence.js` comment cleanup remains pending for a later patch (still excluded here to keep this PR docs/tooling-only).
 
+---
+
+## v14.1.13 → v14.2.0 — Dark-mode mechanism: theming tokens + no-flash paint + `useThemeMode` + Settings toggle
+
+**Date**: 2026-05-29
+**Branch**: `feat/v14.2.0-dark-mode-mechanism` → PR to `main`
+**Status**: feature — **app version 14.1.13 → 14.2.0**
+
+First dark-mode port session (Session 2 of the approved plan; ports the theming model from MGT Scheduling v0.11.0). Ships the **mechanism** — token blocks, no-flash paint, the resolver hook, and the Settings toggle — proven against the **core** colour set (`S`). The remaining literal migration happens in later `14.2.x` waves.
+
+### Files created
+- `src/hooks/useThemeMode.js` — `useThemeMode(explicitPref) → isDark`. Writes `<html data-theme>`; the `useState` initializer mirrors the effect (no first-render mismatch); follows the OS live when pref is `undefined`, with listener cleanup. Verbatim contract from Scheduling.
+
+### Files updated
+- `index.html` — `<html data-theme="light">`; `<style>` with `:root` (light) + `[data-theme="dark"]` token blocks (`--bg-app`, `--bg-card`, `--border-card`, `--text-primary`, `--text-muted`, `--accent`); base `body` background = `var(--bg-app)`; `<meta name="theme-color">`; **no-flash inline script** before `#root` reading `localStorage["mgt-theme"]` → OS fallback.
+- `src/lib/constants.js` — `S` (card / border / muted / text / accent) now references `var(--…)` instead of literals; `bg` stays `"transparent"`. STATUS_COLORS / BLOCK_BG / TBL untouched (later wave — become RGB triplets).
+- `src/components/Settings.jsx` — `GeneralTabContent` gains a **Dark mode** `Toggle` row (atom signature `{ on, onClick }`); `SettingsContent` threads `isDark` + `onToggleDark`. Imports `Toggle`, `Section` from atoms.
+- `src/App.jsx` — import `useThemeMode`; module-level `readThemePref()` (localStorage → `true|false|undefined`, mirrors the no-flash script); `themePref` state + `isDark = useThemeMode(themePref)` + `onToggleDark()` (writes localStorage, no Firebase); root container **and** the auth "Loading…" screen `background` → `var(--bg-app)`; `<SettingsContent>` gets `isDark` + `onToggleDark`; `__APP_SIGNATURE__.version` bump. (~1278 → ~1315 lines.)
+- `src/components/LoginScreen.jsx` — full-screen `background` → `var(--bg-app)`, so a dark-OS user gets a dark login screen via the no-flash script (LoginScreen doesn't mount the hook). Its glass card / inputs / text stay light — wave C. (Completes the `--bg-app` core token across all three app-background surfaces: BookingApp root, the Loading screen, LoginScreen.)
+
+### Design decisions
+- **Per-device localStorage, not Firebase.** Bookings has no `settings` node, so the preference lives in `localStorage["mgt-theme"]` (`"dark"|"light"|`absent). The hook keeps Scheduling's exact `useThemeMode(explicitPref)` contract; BookingApp supplies the pref from localStorage and the toggle writes it. Three places share the key + value convention: the no-flash script (`index.html`), `readThemePref()`, and `onToggleDark()` (both `App.jsx`).
+- **Core-only token migration this version.** Only `S` + the app background flip at 14.2.0 — enough to prove the plumbing end-to-end. Modals, Sections, inputs, buttons, and status/table colours stay light until the migration waves, so dark mode is **intentionally partial** here. The Settings toggle row uses light literals so it stays readable inside the still-light modal.
+- **6-stop gradient kept.** Bookings' app background is a richer 6-stop gradient than Scheduling's 2-stop; stored whole as `--bg-app` (a documented divergence — concept shared, value richer) rather than decomposing into `--bg-app-from/to`.
+
+### Verification
+- `npm run build` ✅ — 55 modules transformed, no errors. Main bundle **164.10 kB gz** (flat vs 14.1.13 — change is a ~50-line hook + props), `index.html` **1.40 kB gz** (+~1.1 kB gz for the token blocks + no-flash script). The >500 kB chunk warning is pre-existing (Firebase SPA), not introduced here.
+- Hook-count delta is **expected** (this is a feature, not an extraction): +1 `useState` in BookingApp (`themePref`); the new hook adds its own `useState` + `useEffect`. Props at the `<SettingsContent>` mount match the component's destructured signature exactly.
+- `npm run dev` running (DEV Firebase) for visual QA: Settings → General → **Dark mode** toggle flips instantly and persists across reload; dark-OS hard-reload should paint dark with no light flash (no-flash script). Final visual sign-off is Patryk's (prod build is his).
+
+### Behavioural change
+New user-visible feature: a Dark mode toggle (General tab) plus automatic OS-theme following when no explicit choice is saved. No change to booking / optimizer / persistence logic.
+
+### Notes
+- Append-ordered (newest at bottom). CLAUDE.md workflow step 6 still reads "prepend" — stale Scheduling-derived wording (the file convention is append, as the prior two entries note). Flagged to Patryk; left unchanged here.
+- Next: `14.2.x` literal-migration waves — A (central: `constants.js` remaining sets + `atoms.jsx`) → B (high-density: `TimelineView`, `BookingFormModal`, `WalkinForm`) → C (remaining components incl. the Settings modal / `Overlay`) → D (`App.jsx`). After each wave, flip the theme and hunt stray light patches. Hover-scale port follows dark mode.
+

@@ -106,6 +106,15 @@ import { BookingFormModal } from "./components/BookingFormModal";
 // pattern. No barrel index — explicit imports keep dependencies visible.
 import { useWinW } from "./hooks/useWinW";
 
+// ── v14.2.0: Dark-mode theming hook ───────────────────────────────────────
+// `useThemeMode(explicitPref)` -> isDark, writing <html data-theme>. Ported
+// from MGT Scheduling (same cross-app contract). Preference source is
+// per-device localStorage (Bookings has no Firebase settings node) — read via
+// readThemePref() below and written by the Settings toggle. The no-flash
+// script in index.html paints the theme before React mounts.
+// See MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md.
+import { useThemeMode } from "./hooks/useThemeMode";
+
 // ── Phase D1 (v14.1.8): Firebase persistence subsystem extracted ──────────
 // `usePersistence` owns bookings, tableBlocks, all write-guards, the four
 // Firebase listeners, and the auto-extend effect. Returns the values and
@@ -153,13 +162,27 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.1.13",
+  version:"14.2.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
   license:"Proprietary — All rights reserved. See LICENSE.",
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
+
+// ── v14.2.0: Dark-mode preference reader ──────────────────────────────────
+// Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
+// preference for useThemeMode: true (dark) | false (light) | undefined (follow
+// the OS live). MUST mirror the no-flash inline script in index.html — same
+// key, same value convention ("dark"/"light").
+function readThemePref(){
+  try{
+    const v=localStorage.getItem("mgt-theme");
+    if(v==="dark") return true;
+    if(v==="light") return false;
+  }catch(e){}
+  return undefined;
+}
 
 // ── Console boot banner ──────────────────────────────────────────────────────
 // Logs ownership/version when the app loads. Visible to anyone opening DevTools.
@@ -451,6 +474,18 @@ function BookingApp(){
   })();
   const winW=useWinW();
   const isMobile=winW<600;
+  // ── v14.2.0: Dark-mode theme state ────────────────────────────────────────
+  // themePref (localStorage-backed) feeds useThemeMode, which writes
+  // <html data-theme> and returns the resolved isDark. The no-flash script in
+  // index.html reads the SAME localStorage key on first paint. Toggling writes
+  // the key and updates state — per device, no Firebase (no settings node).
+  const [themePref,setThemePref]=useState(readThemePref);
+  const isDark=useThemeMode(themePref);
+  function onToggleDark(){
+    const next=!isDark;
+    try{localStorage.setItem("mgt-theme",next?"dark":"light");}catch(e){}
+    setThemePref(next);
+  }
   // v14 deployment fix: history entries must attribute to the logged-in user
   // (their email), not the generic "staff" stub used in standalone preview.
   // "staff" remains as a fallback for the rare case where auth.currentUser
@@ -1160,7 +1195,7 @@ function BookingApp(){
 
   return (
     <div
-      style={{background:"linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
+      style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>Me Gustas Tú</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{"4 indoor  9 outdoor  "+OPEN+":00 - "+CLOSE+":00"}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
               <button
                 key={v}
@@ -1235,6 +1270,8 @@ function BookingApp(){
         showSettings?<Overlay onClose={function(){setShowSettings(false);setSettingsTab("general");}}><div style={{textAlign:"center",marginBottom:14}}><div
               style={{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"rgba(120,130,150,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Settings</div></div><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
+            isDark={isDark}
+            onToggleDark={onToggleDark}
             tab={settingsTab}
             setTab={setSettingsTab}
             reminders={reminders}
@@ -1271,7 +1308,7 @@ export default function App(){
   },[]);
   if(checking) return (
     <div
-      style={{background:"linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,fontSize:15}}>Loading...</div>
+      style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,fontSize:15}}>Loading...</div>
   );
   if(!user) return <LoginScreen />;
   return <BookingApp />;

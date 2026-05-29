@@ -34,7 +34,13 @@ export var QUARTER_HOURS=Array.from({length:(GRID_CLOSE-OPEN)*4},function(_,i){r
 export var ROW_H=44,LABEL_W=58;
 export var STATUS_COLORS={confirmed:{bg:"rgba(250,204,21,0.15)",text:"#92400e",border:"rgba(250,204,21,0.35)"},seated:{bg:"rgba(34,197,94,0.15)",text:"#166534",border:"rgba(34,197,94,0.35)"},completed:{bg:"rgba(148,163,184,0.12)",text:"#64748b",border:"rgba(148,163,184,0.3)"},cancelled:{bg:"rgba(239,68,68,0.12)",text:"#991b1b",border:"rgba(239,68,68,0.3)"}};
 export var BLOCK_BG={confirmed:"rgba(180,130,40,0.85)",seated:"rgba(34,160,80,0.85)",completed:"rgba(140,140,150,0.7)",cancelled:"rgba(200,80,80,0.8)"};
-export var S={bg:"transparent",card:"rgba(255,255,255,0.45)",border:"rgba(255,255,255,0.35)",muted:"#5a6474",text:"#1a1d24",accent:"#007AFF"};
+// v14.2.0 (dark mode): `S` core surface/text/accent values now reference CSS
+// custom properties defined in index.html (:root light / [data-theme="dark"]),
+// so a theme flip re-resolves them with zero JS. STATUS_COLORS / BLOCK_BG / TBL
+// above still hold literals — they migrate to RGB-channel triplets in a later
+// wave (composed as `rgba(var(--…-rgb), a)` for their alpha uses). `bg` stays a
+// literal ("transparent" — not theme-dependent).
+export var S={bg:"transparent",card:"var(--bg-card)",border:"var(--border-card)",muted:"var(--text-muted)",text:"var(--text-primary)",accent:"var(--accent)"};
 export var TBL={out:{bg:"rgba(0,122,255,0.8)",text:"#fff",border:"rgba(0,122,255,0.5)"},ind:{bg:"rgba(175,82,222,0.8)",text:"#fff",border:"rgba(175,82,222,0.5)"}};
 export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,10),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,manualTables:[],preferredTables:[],returnOf:null};
 

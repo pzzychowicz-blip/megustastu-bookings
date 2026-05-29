@@ -26,6 +26,7 @@
 
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
+import { Toggle, Section } from "./atoms";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
 // Reusable enough for future modals to import; lives here for now because
@@ -73,14 +74,33 @@ export function TabBar({ tabs, current, onSelect }) {
 // etc.). The version string arrives as a prop from App.jsx — sourced from
 // __APP_SIGNATURE__.version, so a single edit there propagates to both the
 // console boot banner and this label.
-export function GeneralTabContent({ appVersion }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark }) {
   return (
-    <div style={{ padding: "28px 12px", textAlign: "center" }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "#5a6474", letterSpacing: "0.02em" }}>
-        version {appVersion}
-      </div>
-      <div style={{ fontSize: 11, fontWeight: 500, color: "#8a94a3", letterSpacing: "0.02em", marginTop: 8 }}>
-        © 2026 Patryk Zychowicz — MGT Booking System
+    <div>
+      {/* v14.2.0: Dark-mode toggle. Per-device (localStorage) — flips
+          <html data-theme> via useThemeMode in BookingApp. `Toggle` is the
+          atom: signature { on, onClick } (NOT checked/onChange). This modal's
+          own surfaces are still light in both themes at v14.2.0 (Overlay /
+          Section migrate in a later wave), so this row keeps light literals to
+          stay readable here for now. */}
+      <Section style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1d24" }}>Dark mode</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "#8a94a3", marginTop: 2 }}>
+              Saved on this device. Defaults to your system setting.
+            </div>
+          </div>
+          <Toggle on={isDark} onClick={onToggleDark} />
+        </div>
+      </Section>
+      <div style={{ padding: "10px 12px 12px", textAlign: "center" }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#5a6474", letterSpacing: "0.02em" }}>
+          version {appVersion}
+        </div>
+        <div style={{ fontSize: 11, fontWeight: 500, color: "#8a94a3", letterSpacing: "0.02em", marginTop: 8 }}>
+          © 2026 Patryk Zychowicz — MGT Booking System
+        </div>
       </div>
     </div>
   );
@@ -93,6 +113,8 @@ export function GeneralTabContent({ appVersion }) {
 export function SettingsContent({
   tab, setTab,
   appVersion,
+  isDark,
+  onToggleDark,
   reminders,
   onAddReminder,
   onEditReminder,
@@ -101,7 +123,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent
