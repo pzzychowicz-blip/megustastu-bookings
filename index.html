@@ -10,10 +10,11 @@
          values override under [data-theme="dark"]. A theme flip = one
          data-theme attribute change (see src/hooks/useThemeMode.js) — no React
          re-render. Every JS colour that participates references a var(--…),
-         migrated token-by-token in waves; v14.2.0 migrated the core `S`
-         surface/text/accent set in src/lib/constants.js. Rule: add a token ->
-         define it in BOTH blocks. Colours used at varying opacity (status /
-         table / block chips) become RGB-channel triplets in a later wave. -->
+         migrated token-by-token in waves: v14.2.0 the core `S` set, v14.2.1 the
+         data-token colour sets (STATUS_COLORS / BLOCK_BG / TBL / BTN) — all in
+         src/lib/constants.js; atoms.jsx + components follow. Rule: add a token
+         -> define it in BOTH blocks. Colours used at varying opacity (status /
+         table chips) are RGB-channel triplets composed rgba(var(--…-rgb), a). -->
     <style>
       :root {
         /* App background (6-stop glass gradient) */
@@ -26,6 +27,33 @@
         --text-muted: #5a6474;
         /* Accent */
         --accent: #007aff;
+        /* Status chips — bg + border share a hue (RGB triplet, composed in
+           constants.js as rgba(var(--…-rgb), a)); text is a solid token. */
+        --status-confirmed-rgb: 250, 204, 21;  --status-confirmed-text: #92400e;
+        --status-seated-rgb: 34, 197, 94;      --status-seated-text: #166534;
+        --status-completed-rgb: 148, 163, 184; --status-completed-text: #64748b;
+        --status-cancelled-rgb: 239, 68, 68;   --status-cancelled-text: #991b1b;
+        /* Timeline block fills / status buttons — saturated, white text;
+           theme-invariant (read on light + dark), defined once here. */
+        --block-confirmed: rgba(180, 130, 40, 0.85);
+        --block-seated: rgba(34, 160, 80, 0.85);
+        --block-completed: rgba(140, 140, 150, 0.7);
+        --block-cancelled: rgba(200, 80, 80, 0.8);
+        /* Table badges — bg .8 / border .5 share a hue (triplet); white text. */
+        --tbl-out-rgb: 0, 122, 255;
+        --tbl-ind-rgb: 175, 82, 222;
+        --text-on-accent: #ffffff;
+        /* Buttons — saturated accent fills, white text; theme-invariant. */
+        --btn-tables: rgba(0, 122, 255, 0.75);
+        --btn-edit: rgba(0, 122, 255, 0.7);
+        --btn-del: rgba(220, 60, 60, 0.75);
+        --btn-cancel: rgba(220, 60, 60, 0.75);
+        --btn-clear: rgba(220, 60, 60, 0.7);
+        --btn-reset: rgba(220, 60, 60, 0.7);
+        --btn-today: rgba(0, 122, 255, 0.7);
+        --btn-nav: rgba(120, 130, 150, 0.5);
+        --btn-dismiss: rgba(220, 60, 60, 0.7);
+        --btn-orange: rgba(230, 100, 30, 0.8);
       }
       [data-theme="dark"] {
         --bg-app: linear-gradient(135deg, #15171c 0%, #191c22 20%, #1c1a23 40%, #161c26 60%, #1b1f28 80%, #17191f 100%);
@@ -34,6 +62,13 @@
         --text-primary: #f2f2f7;
         --text-muted: #9a9aa0;
         --accent: #0a84ff;
+        /* Status chip text -> light variants for dark surfaces. Tint RGB and
+           the block/table/button tokens are theme-invariant (inherited from
+           :root); only the chip text needs to flip. */
+        --status-confirmed-text: #fcd34d;
+        --status-seated-text: #86efac;
+        --status-completed-text: #cbd5e1;
+        --status-cancelled-text: #fca5a5;
       }
       html, body { margin: 0; }
       body {
