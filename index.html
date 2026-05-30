@@ -113,6 +113,14 @@
         --tl-popup-scrim: rgba(0, 0, 0, 0.18);
         --cog-bg: rgba(120, 130, 150, 0.4);              /* settings cog button */
         --cog-border: rgba(255, 255, 255, 0.45);
+        /* ── v14.2.4: ListView cards ── */
+        --bg-card-strong: rgba(255, 255, 255, 0.45);     /* default booking card */
+        --bg-card-dim: rgba(255, 255, 255, 0.35);        /* seated/completed/cancelled card */
+        --border-card-plain: rgba(255, 255, 255, 0.4);   /* plain card border */
+        --card-warn-border: rgba(245, 158, 11, 0.5);     /* due-soon card edge */
+        --card-overdue-border: rgba(220, 60, 60, 0.5);   /* overdue card edge */
+        --card-conflict-border: rgba(252, 165, 165, 0.5);/* no-table-assigned card edge */
+        --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.5);
       }
       [data-theme="dark"] {
         --bg-app: linear-gradient(135deg, #15171c 0%, #191c22 20%, #1c1a23 40%, #161c26 60%, #1b1f28 80%, #17191f 100%);
@@ -156,6 +164,12 @@
         --tl-popup-scrim: rgba(0, 0, 0, 0.45);
         --cog-bg: rgba(255, 255, 255, 0.1);
         --cog-border: rgba(255, 255, 255, 0.14);
+        /* ── v14.2.4: ListView cards (dark) ── */
+        --bg-card-strong: rgba(255, 255, 255, 0.06);
+        --bg-card-dim: rgba(255, 255, 255, 0.04);
+        --border-card-plain: rgba(255, 255, 255, 0.1);
+        /* warn/overdue/conflict card edges read on both themes — kept from :root */
+        --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
         --border-sheet: rgba(255, 255, 255, 0.12);
         --border-soft: rgba(255, 255, 255, 0.1);
         --border-input: rgba(255, 255, 255, 0.12);

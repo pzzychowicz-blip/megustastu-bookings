@@ -1966,3 +1966,37 @@ None functional. Visual: the timeline (container, grid, header axis, label colum
 - Append-ordered (newest at bottom).
 - Remaining: **`ListView`** (sorted card list) → final **`App.jsx`** main-screen banner sweep (offline/reconnect/load/overlap/reshuffle/walk-in + new buttons). Then the `.mgt-hover-scale` port.
 
+---
+
+## v14.2.3 → v14.2.4 — Dark-mode wave: ListView (booking card list)
+
+**Date**: 2026-05-30
+**Branch**: `feat/v14.2.4-dark-mode-listview` → PR to `main`
+**Status**: refactor (theming) — **app version 14.2.3 → 14.2.4**
+
+Themes the List view's booking cards. Small, mostly token-reuse — the card surfaces are the only genuinely new tokens; warn/conflict boxes reuse the v14.2.2 banner trios.
+
+### Files updated (3 + 2 docs)
+- `index.html` — 7 `ListView` card tokens in both blocks: `--bg-card-strong` (default card) / `--bg-card-dim` (seated/completed/cancelled card) / `--border-card-plain` / `--card-warn-border` / `--card-overdue-border` / `--card-conflict-border` / `--shadow-card`. Warn/overdue/conflict card *edges* are theme-invariant (read on both) — defined once in `:root`.
+- `src/components/ListView.jsx` — card bg/border/shadow → tokens; the overdue/due-soon `warnEl` box and the `conflictEl` box → the `--danger-*` / `--warn-*` banner trios (bg+border+text together); `SmallTag` text (`#fff`) → `--text-on-accent`.
+- `src/App.jsx` — version bump.
+
+### Design decisions
+- **Card-bg = two new tokens** (`-strong` 0.45 / `-dim` 0.35) because ListView varies card opacity by status (active vs done). Light values byte-identical to the prior literals; dark = `rgba(255,255,255,0.06/0.04)` (faint lift over the dark app bg), matching the Section/soft-surface treatment.
+- **SmallTag fills stay literal** — the four saturated status tags (`#166534` seated-duration / `#0369a1` manual / `#854d0e` locked / `#0d9488` preferred) read on both themes with white text; only their text token flips. Consistent with how block/table fills were handled in 14.2.1/14.2.3.
+- **No new semantic surfaces** — warn/conflict reuse the banner trios already shipped + visually verified in 14.2.2.
+
+### Verification
+- `npm run build` ✅ — main bundle **164.06 kB gz** (flat vs 14.2.3's 164.09).
+- Grep audit: only the 4 intentional saturated `SmallTag` fills remain; all card surfaces/borders/boxes tokenized.
+- Light values byte-identical by construction (`--bg-card-strong` = `rgba(255,255,255,0.45)`, `--bg-card-dim` = `0.35` — the prior literals).
+- **Dark screenshot QA could NOT be captured this session** — the preview screenshot bridge returned empty (dev server was up; the MCP screenshot/eval integration was down). Mitigations: every token reused here was visually verified in 14.2.2 (banner trios, `--text-on-accent`) / matches the Section dark treatment; light is byte-identical. Dark visual sign-off deferred to Patryk on `localhost:5173`.
+
+### Behavioural change
+None functional. Visual: List-view booking cards (surfaces, borders, warn/conflict boxes) render dark in dark mode. Light mode unchanged.
+
+### Notes
+- Append-ordered (newest at bottom).
+- Remaining: final **`App.jsx`** main-screen sweep (header buttons + the offline/reconnect/load/overlap/reshuffle banners + the delete/no-show confirm dialogs' button fills). Then the `.mgt-hover-scale` port.
+- Honesty note: dark screenshot QA was skipped due to preview-tooling failure this session (not a code issue) — see Verification.
+
