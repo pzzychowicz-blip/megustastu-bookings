@@ -55,13 +55,13 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
             <div key={i} style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "10px 14px", borderRadius: 14,
-              background: "rgba(254,226,226,0.65)",
-              border: "2px solid rgba(252,165,165,0.55)",
+              background: "var(--danger-bg)",
+              border: "2px solid var(--danger-border)",
               marginBottom: 8
             }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#991b1b" }}>Blocked</div>
-                <div style={{ fontSize: 13, color: "#991b1b" }}>{label}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--danger-text)" }}>Blocked</div>
+                <div style={{ fontSize: 13, color: "var(--danger-text)" }}>{label}</div>
               </div>
               <button
                 onClick={() => onRemove(bl)}
@@ -142,7 +142,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
             background: "rgba(153,27,27,0.85)",
             border: "1px solid rgba(255,255,255,0.2)",
             borderRadius: 14, padding: "10px 22px", cursor: "pointer",
-            fontSize: 14, fontWeight: 600, color: "#fff", minHeight: 44,
+            fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
             boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"
           }}
         >

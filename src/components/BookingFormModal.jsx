@@ -96,7 +96,7 @@ export function BookingFormModal({
       const showTbl=mt||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
       const showClearManual=isManual&&!mt&&!cleared;
       const leftEls=[
-        <span key="lbl" style={{fontSize:13,color:"#4a5568",fontWeight:600}}>Tables</span>];
+        <span key="lbl" style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600}}>Tables</span>];
       if(showTbl) showTbl.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
       else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize:11,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
       if((changed||cleared)&&!mt&&curTbl) leftEls.push(<span key="prev" style={{fontSize:11,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
@@ -116,7 +116,7 @@ export function BookingFormModal({
                 onClick={function(){onOpenManualAssign(editId);}}>= Assign</button>{prefBtn}</div></div></Section>
       );
     }
-    const leftEls=[<span key="lbl" style={{fontSize:13,color:"#4a5568",fontWeight:600}}>Tables</span>];
+    const leftEls=[<span key="lbl" style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600}}>Tables</span>];
     if(mt) mt.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
     else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize:11,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
     if(mt) leftEls.push(<button
@@ -153,14 +153,14 @@ export function BookingFormModal({
     );});
   }
   const kitchenSection=kitchenLoad?<div
-    style={{padding:"10px 14px",borderRadius:14,border:"2px solid "+(kitchenBusy?"rgba(253,186,116,0.55)":"rgba(255,255,255,0.45)"),background:kitchenBusy?"rgba(255,237,213,0.6)":"rgba(255,255,255,0.35)",marginBottom:14,fontSize:13,color:kitchenBusy?"#9a3412":S.muted}}><div
+    style={{padding:"10px 14px",borderRadius:14,border:"2px solid "+(kitchenBusy?"var(--warn-border)":"var(--border-soft)"),background:kitchenBusy?"var(--warn-bg)":"var(--bg-soft)",marginBottom:14,fontSize:13,color:kitchenBusy?"var(--warn-text)":S.muted}}><div
       style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span><span style={{fontWeight:700}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<span
-        style={{fontWeight:700,color:"#dc2626",fontSize:13,padding:"4px 12px",borderRadius:8,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}}>Kitchen busy</span>:null}</div>{kitchenSugg&&(kitchenSugg.before.length||kitchenSugg.after.length)?<div style={{marginTop:8}}><div style={{fontSize:11,color:S.muted,marginBottom:6}}><span
+        style={{fontWeight:700,color:"var(--text-required)",fontSize:13,padding:"4px 12px",borderRadius:8,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}}>Kitchen busy</span>:null}</div>{kitchenSugg&&(kitchenSugg.before.length||kitchenSugg.after.length)?<div style={{marginTop:8}}><div style={{fontSize:11,color:S.muted,marginBottom:6}}><span
           style={{background:"rgba(220,252,231,0.8)",color:"#166534",padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:600}}>green</span>= tables available  <span
           style={{background:"rgba(254,249,195,0.8)",color:"#854d0e",padding:"2px 6px",borderRadius:6,fontSize:10,fontWeight:600}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight:700,fontSize:12}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight:700,fontSize:12}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
-    kitchenBusy?<div style={{marginTop:6,fontSize:12,color:"#991b1b"}}>No kitchen-friendly alternatives found nearby.</div>:null}</div>:null;
+    kitchenBusy?<div style={{marginTop:6,fontSize:12,color:"var(--danger-text)"}}>No kitchen-friendly alternatives found nearby.</div>:null}</div>:null;
 
-  const quickStatusBtns=editId?<Section><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"#4a5568",fontWeight:600,marginRight:4}}>Status:</span>{["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return (
+  const quickStatusBtns=editId?<Section><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600,marginRight:4}}>Status:</span>{["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return (
         <button
           key={s}
           style={mkBtn({background:BLOCK_BG[s],textTransform:"capitalize",minHeight:40})}
@@ -202,12 +202,12 @@ export function BookingFormModal({
     const srcTime=src.scheduledTime||src.time;
     return (
       <div
-        style={{background:"rgba(220,252,231,0.7)",border:"2px solid rgba(134,239,172,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"#166534",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Return guest — re-booking from "+src.name+" ("+src.date+" at "+srcTime+"). Please set a date."}</div>
+        style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Return guest — re-booking from "+src.name+" ("+src.date+" at "+srcTime+"). Please set a date."}</div>
     );
   })();
 
   const errorEl=error?<div
-    style={{color:"#991b1b",fontSize:13,padding:"10px 14px",background:"rgba(254,226,226,0.7)",borderRadius:14,border:"2px solid rgba(252,165,165,0.55)",marginBottom:14}}>{error}</div>:null;
+    style={{color:"var(--danger-text)",fontSize:13,padding:"10px 14px",background:"var(--danger-bg)",borderRadius:14,border:"2px solid var(--danger-border)",marginBottom:14}}>{error}</div>:null;
 
   const resetDurBtn=form.customDur?<button
     key="rd"
@@ -218,7 +218,7 @@ export function BookingFormModal({
   // ── The form modal itself ──
   return (
     <Overlay onClose={function(){onClose();}}><div style={{textAlign:"center",marginBottom:16}}><div
-        style={{fontSize:16,fontWeight:700,color:"#fff",display:"inline-block",padding:"8px 16px",borderRadius:12,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking")}</div></div>{returnOfBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><input
+        style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:12,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking")}</div></div>{returnOfBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><input
             value={form.name}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
             placeholder="Full name"
@@ -242,15 +242,15 @@ export function BookingFormModal({
             value={form.preference}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{preference:e.target.value});});}}
             style={inp()}><option value="auto">Auto (recommended)</option><option value="indoor">Indoor</option><option value="outdoor">Outdoor</option></select></Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
-              style={{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}}
+              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}}>-</button><span
               style={{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}}>{String(Number(form.size)||2)}</span><button
-              style={{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}}
+              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});}}>+</button></div></Fld><Fld label="Duration"><div style={{display:"flex",alignItems:"center",gap:6}}><button
-              style={{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}}
+              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>-</button><span
               style={{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}}>{dur+" min"}</span><button
-              style={{background:"rgba(235,239,246,0.95)",border:"1px solid rgba(210,218,230,0.8)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"}}
+              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize:13,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section>{kitchenSection}{tablesBtn}{availBanner}{quickStatusBtns}<Section><Fld label="Notes"><textarea
           value={form.notes}
           onChange={function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});}}
@@ -268,7 +268,7 @@ export function BookingFormModal({
             <button
               disabled={!canSave}
               onClick={onSave}
-              style={{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"#fff",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
+              style={{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
           );
         })()}</div></div></Overlay>
   );

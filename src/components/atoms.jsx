@@ -23,29 +23,29 @@ export function mkInp() {
   return {
     width: "100%",
     boxSizing: "border-box",
-    background: "rgba(255,255,255,0.5)",
-    border: "1px solid rgba(255,255,255,0.4)",
+    background: "var(--bg-input)",
+    border: "1px solid var(--border-input)",
     borderRadius: 12,
     padding: "10px 12px",
     fontSize: 16,
     color: S.text,
     fontWeight: 500,
-    boxShadow: "inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"
+    boxShadow: "var(--shadow-input)"
   };
 }
 
 export function mkBtn(extra) {
   return {
-    border: "1px solid rgba(255,255,255,0.3)",
-    background: "rgba(120,130,150,0.55)",
+    border: "1px solid var(--border-glass)",
+    background: "var(--btn-default)",
     borderRadius: 12,
     padding: "8px 14px",
     cursor: "pointer",
     fontSize: 13,
-    color: "#fff",
+    color: "var(--text-on-accent)",
     fontWeight: 600,
     minHeight: 40,
-    boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.25)",
+    boxShadow: "var(--shadow-btn)",
     letterSpacing: "0.01em",
     ...(extra || {})
   };
@@ -70,7 +70,7 @@ export function Overlay({ onClose, children }) {
   if (mob) {
     return (
       <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(240,243,248,0.98)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
           <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -81,10 +81,10 @@ export function Overlay({ onClose, children }) {
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}
+      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ background: "rgba(255,255,255,0.72)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid rgba(255,255,255,0.5)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "0 8px 40px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.8)" }}>
+      <div style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
         {children}
       </div>
     </div>
@@ -95,9 +95,9 @@ export function Overlay({ onClose, children }) {
 export function Fld({ label, req, style, children }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, ...(style || {}) }}>
-      <label style={{ fontSize: 13, color: "#4a5568", fontWeight: 600, letterSpacing: "0.01em" }}>
+      <label style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.01em" }}>
         {label}
-        {req ? <span style={{ color: "#dc2626" }}>*</span> : null}
+        {req ? <span style={{ color: "var(--text-required)" }}>*</span> : null}
       </label>
       {children}
     </div>
@@ -108,12 +108,12 @@ export function Fld({ label, req, style, children }) {
 export function Section({ style, children }) {
   return (
     <div style={{
-      background: "rgba(248,250,253,0.95)",
-      border: "1px solid rgba(210,218,230,0.8)",
+      background: "var(--bg-soft)",
+      border: "1px solid var(--border-soft)",
       borderRadius: 16,
       padding: "14px",
       marginBottom: 14,
-      boxShadow: "0 2px 12px rgba(0,0,0,0.06), inset 0 1px 1px rgba(255,255,255,0.6)",
+      boxShadow: "var(--shadow-soft)",
       ...(style || {})
     }}>
       {children}
@@ -127,7 +127,7 @@ export function SBadge({ status }) {
     <span style={{
       fontSize: 12, padding: "4px 10px", borderRadius: 10,
       background: BLOCK_BG[status] || BLOCK_BG.confirmed,
-      color: "#fff", border: "1px solid rgba(255,255,255,0.2)",
+      color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)",
       fontWeight: 600, textTransform: "capitalize",
       display: "inline-block",
       boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
@@ -174,9 +174,9 @@ export function Toggle({ on, onClick }) {
       onClick={onClick}
       style={{
         width: 48, height: 26, borderRadius: 13,
-        border: "1px solid rgba(255,255,255,0.3)",
+        border: "1px solid var(--border-glass)",
         cursor: "pointer",
-        background: on ? "rgba(0,122,255,0.7)" : "rgba(180,180,190,0.4)",
+        background: on ? "var(--toggle-on)" : "var(--toggle-off)",
         position: "relative", flexShrink: 0,
         boxShadow: "inset 0 1px 2px rgba(0,0,0,0.08)"
       }}
@@ -186,7 +186,7 @@ export function Toggle({ on, onClick }) {
         top: 3,
         left: on ? 24 : 3,
         width: 20, height: 20, borderRadius: 10,
-        background: "#fff",
+        background: "var(--text-on-accent)",
         boxShadow: "0 1px 4px rgba(0,0,0,0.15)"
       }} />
     </button>
@@ -200,12 +200,12 @@ export function Kbd({ k }) {
       display: "inline-block",
       padding: "2px 8px",
       borderRadius: 6,
-      background: "rgba(255,255,255,0.75)",
-      border: "1px solid rgba(180,190,210,0.55)",
+      background: "var(--bg-kbd)",
+      border: "1px solid var(--border-kbd)",
       fontFamily: "-apple-system, 'SF Mono', Menlo, monospace",
       fontSize: 12,
       fontWeight: 600,
-      color: "#1a1d24",
+      color: "var(--text-primary)",
       boxShadow: "0 1px 2px rgba(0,0,0,0.06), inset 0 -1px 0 rgba(0,0,0,0.08)",
       minWidth: 22,
       textAlign: "center",
@@ -222,9 +222,9 @@ export function Kbd({ k }) {
 // suggestions (clickable chips) for nearby alternative slots.
 export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
   const message = msg || "No tables available.";
-  const bgClr = warn ? "rgba(255,237,213,0.7)" : "rgba(254,226,226,0.7)";
-  const brdClr = warn ? "rgba(253,186,116,0.55)" : "rgba(252,165,165,0.55)";
-  const txtClr = warn ? "#9a3412" : "#991b1b";
+  const bgClr = warn ? "var(--warn-bg)" : "var(--danger-bg)";
+  const brdClr = warn ? "var(--warn-border)" : "var(--danger-border)";
+  const txtClr = warn ? "var(--warn-text)" : "var(--danger-text)";
   const hasEarlier = sugg && sugg.earlier && sugg.earlier.length > 0;
   const hasLater = sugg && sugg.later && sugg.later.length > 0;
   const hasSugg = hasEarlier || hasLater;
@@ -240,9 +240,9 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
             style={{
               cursor: "pointer", padding: "3px 8px", borderRadius: 8,
               fontWeight: 600, fontSize: 12,
-              background: "rgba(220,252,231,0.8)",
-              color: "#166534",
-              border: "1px solid rgba(134,239,172,0.5)",
+              background: "var(--suggest-bg)",
+              color: "var(--success-text)",
+              border: "1px solid var(--suggest-border)",
               boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
             }}
           >

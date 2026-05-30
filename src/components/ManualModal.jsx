@@ -107,7 +107,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
   const slotsForConflict = otherSlots.filter((sl) => !swapBusy || sl.status === "seated");
   const conflict = selected.length >= 2 && !canAssign(selected, slotsForConflict, s, e);
   const ok = selected.length > 0 && cap >= needed && !conflict;
-  const summaryColor = conflict ? "#991b1b" : ok ? "#166534" : "#9a3412";
+  const summaryColor = conflict ? "var(--danger-text)" : ok ? "var(--success-text)" : "var(--warn-text)";
   const summaryText = selected.length === 0
     ? "Select tables below."
     : conflict
@@ -117,8 +117,8 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
   const assignLabel = isSwapping ? "Swap & Assign" : "Assign";
   const swapBg = swapBusy ? "rgba(255,237,213,0.6)" : S.bg;
   const swapBrd = "2px solid " + (swapBusy ? "rgba(253,186,116,0.6)" : "rgba(255,255,255,0.5)");
-  const swapTitleClr = swapBusy ? "#9a3412" : S.text;
-  const swapSubClr = swapBusy ? "#c2410c" : S.text;
+  const swapTitleClr = swapBusy ? "var(--warn-text)" : S.text;
+  const swapSubClr = swapBusy ? "var(--warn-text)" : S.text;
 
   // Internal keyboard shortcuts. The deps array intentionally includes
   // `affectedBookings` and `onSave` even though they may change every render
@@ -160,7 +160,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
     <Overlay onClose={onClose}>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
-          fontSize: 16, fontWeight: 700, color: "#fff",
+          fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
           display: "inline-block", padding: "8px 16px", borderRadius: 12,
           background: "rgba(0,122,255,0.75)",
           border: "1px solid rgba(255,255,255,0.2)",
@@ -198,8 +198,8 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
       </div>
       <div style={{
         marginBottom: 14, padding: "12px 14px", borderRadius: 14,
-        background: "rgba(255,255,255,0.35)",
-        border: "2px solid " + (conflict ? "rgba(252,165,165,0.6)" : ok ? "rgba(134,239,172,0.6)" : "rgba(255,255,255,0.5)"),
+        background: "var(--bg-card)",
+        border: "2px solid " + (conflict ? "var(--danger-border)" : ok ? "var(--suggest-border)" : "var(--border-sheet)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: 8, flexWrap: "wrap",
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
@@ -224,14 +224,14 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
       {isSwapping ? (
         <div style={{
           marginTop: 8, padding: "10px 14px", borderRadius: 14,
-          background: "rgba(255,237,213,0.65)",
-          border: "2px solid rgba(253,186,116,0.55)"
+          background: "var(--warn-bg)",
+          border: "2px solid var(--warn-border)"
         }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#9a3412", marginBottom: 4 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--warn-text)", marginBottom: 4 }}>
             Will reassign:
           </div>
           {affectedBookings.map((ab) => (
-            <div key={ab.id} style={{ fontSize: 12, color: "#9a3412" }}>
+            <div key={ab.id} style={{ fontSize: 12, color: "var(--warn-text)" }}>
               {ab.name + " — losing table " + ab.tables.join(", ")}
             </div>
           ))}
@@ -259,7 +259,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
             border: "1px solid rgba(255,255,255,0.2)",
             borderRadius: 14, padding: "10px 20px",
             cursor: ok ? "pointer" : "not-allowed",
-            fontSize: 14, fontWeight: 600, color: "#fff", minHeight: 44,
+            fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
             boxShadow: ok ? "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"
           }}
         >

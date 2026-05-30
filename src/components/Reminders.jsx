@@ -40,8 +40,8 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
 
   return (
     <div style={{
-      background: "rgba(248,250,253,0.9)",
-      border: "1px solid rgba(210,218,230,0.7)",
+      background: "var(--bg-soft)",
+      border: "1px solid var(--border-soft)",
       borderRadius: 12,
       padding: "12px 14px",
       marginBottom: 8,
@@ -50,10 +50,10 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1d24", marginBottom: 2, wordBreak: "break-word" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 2, wordBreak: "break-word" }}>
             {r.text}
           </div>
-          <div style={{ fontSize: 12, color: "#5a6474" }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
             {timesText + "  ·  " + recText}
           </div>
         </div>
@@ -86,11 +86,11 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
     <div style={{
       textAlign: "center",
       padding: "28px 14px",
-      color: "#5a6474",
+      color: "var(--text-muted)",
       fontSize: 13,
-      background: "rgba(248,250,253,0.6)",
+      background: "var(--bg-soft)",
       borderRadius: 12,
-      border: "1px dashed rgba(180,190,210,0.5)"
+      border: "1px dashed var(--border-soft)"
     }}>
       No reminders yet. Click &ldquo;+ New reminder&rdquo; to add one.
     </div>
@@ -111,7 +111,7 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 13, color: "#5a6474" }}>
+        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
           {list.length + " reminder" + (list.length !== 1 ? "s" : "")}
         </div>
         <button

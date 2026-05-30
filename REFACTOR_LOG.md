@@ -1896,3 +1896,39 @@ None functional. Visual: dark-mode status chips now use light text (were dark he
 - If dark status chips read too faint in QA, give `--status-*-rgb` dark overrides (brighter); the tint alpha is fixed in `constants.js`, so theme-varying the RGB is the lever. Easy follow-up.
 - Next: **14.2.2** = `atoms.jsx` token migration (surfaces / inputs / `Overlay` / `Section` + the opaque dialog-sheet dark value).
 
+---
+
+## v14.2.1 → v14.2.2 — Dark-mode wave A (part 2): atoms + the full modal subsystem
+
+**Date**: 2026-05-30
+**Branch**: `feat/v14.2.2-dark-mode-atoms` → PR to `main`
+**Status**: refactor (theming) — **app version 14.2.1 → 14.2.2**
+
+Themes `atoms.jsx` **and** the modal/form subsystem in one PR. The original plan split this as "atoms alone," but a pre-flight measurement killed that: the shared `Overlay` backs **7 modals** whose content carried **~67 hardcoded text-colour literals**. Darkening the sheet without theming the text → dark-hex text on a dark sheet (unreadable). Surfaces and their content are coupled, so they must flip together. Confirmed the scope change with Patryk before proceeding.
+
+### Files updated (13)
+- `index.html` — ~30 new tokens in both blocks: surfaces (`--bg-sheet`, `--bg-sheet-mobile`, `--bg-soft`, `--bg-input`, `--bg-kbd`, `--bg-stepper`, `--bg-tabbar`, `--bg-tab-active`, `--btn-default`), borders (`--border-sheet/-soft/-input/-kbd/-glass`), `--scrim`, `--toggle-on/-off`, semantic text (`--text-secondary/-faint/-required`, `--warn-text`, `--danger-text`, `--success-text`), banner trios (`--warn-*`, `--danger-*`, `--suggest-*`), and shadow tokens (`--shadow-sheet/-soft/-input/-btn`, white-inset highlights dimmed on dark).
+- `src/components/atoms.jsx` — `mkInp`, `mkBtn`, `Overlay` (desktop sheet + mobile sheet + scrim), `Section`, `Fld`, `Toggle`, `Kbd`, `AvailBanner` all tokenized.
+- 10 modal/content files — `Settings.jsx` (incl. the **`TabBar`** track + active-tab, a miss caught in dark screenshot QA), `BookingFormModal.jsx`, `WalkinForm.jsx`, `ManualModal.jsx`, `BlockModal.jsx`, `PrefPickerModal.jsx`, `HistoryPopup.jsx`, `Reminders.jsx`, `Shortcuts.jsx`, `ReminderEditor.jsx` (its **own** custom modal scrim/card, not the shared `Overlay`). Plus `App.jsx`: the two in-`Overlay` confirm-dialog titles (`Kitchen may be busy`, `Reshuffle all bookings?`) + version bump.
+- 13 files, +119 / −78.
+
+### Design decisions
+- **Coupled scope (modal subsystem as one PR).** Per-file QA each modal before push; main-screen surfaces (`TimelineView`, `ListView`) deliberately deferred to their own waves — they're not modal content and don't share `Overlay`.
+- **`bg-sheet` dark = 0.85 (near-opaque).** Honors the CLAUDE.md "popovers use the opaque sheet token" rule — a translucent card over the dark scrim reads muddy. Backdrop blur unchanged (still ≤4 instances; only one `Overlay` mounts at a time).
+- **Semantic text tokens, not per-call hex.** `warn/danger/success/secondary/faint/required` cover every modal's status text; banner bg+border+text move as trios so a danger box stays internally consistent in both themes.
+- **Intentional light islands kept.** The green/yellow kitchen-legend swatches and saturated status/table/button fills (white text) read on both themes — left as fills (`--text-on-accent` for the text). Light mode renders byte-identical.
+
+### Verification
+- `npm run build` ✅ — main bundle **164.07 kB gz** (flat vs 14.2.1's 163.98), `index.html` grew for the token blocks.
+- Grep audit: **zero** `color:"#hex"` literals remain in the 11 atoms/modal files (only saturated-fill backgrounds + intentional legend swatches).
+- **Browser QA on the DEV server** (dark, 1280px): booking form — dark sheet, inputs computed `rgba(118,118,128,0.24)` bg / `rgb(242,242,247)` text (proper contrast); Settings — toggle row + TabBar cohesive after the TabBar fix. **Light-mode regression**: booking form byte-identical (input computed `rgba(255,255,255,0.5)` / `rgb(26,29,36)` / `rgba(255,255,255,0.4)` — exactly the prior literals).
+- Final dark sign-off across every modal is Patryk's.
+
+### Behavioural change
+None functional. Visual: modals, forms, inputs, the Settings tab-strip, and in-modal banners now render dark in dark mode (were light islands at 14.2.1). Light mode unchanged.
+
+### Notes
+- Append-ordered (newest at bottom).
+- **TabBar miss** (Settings tab-strip stayed light) was invisible to the build + grep and only surfaced in a dark screenshot — reinforces visual QA for surface migrations.
+- Remaining dark-mode waves: **`TimelineView`** (the Gantt canvas — biggest remaining light surface; ~10 literals + the grid/row striping), then **`ListView`**, then a final `App.jsx` sweep (main-screen banners: offline/reconnect/load/overlap/reshuffle). Then hover-scale.
+

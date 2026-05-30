@@ -37,9 +37,9 @@ export function TabBar({ tabs, current, onSelect }) {
     <div style={{
       display: "flex", gap: 4, padding: 4,
       borderRadius: 12,
-      background: "rgba(240,243,248,0.8)",
+      background: "var(--bg-tabbar)",
       marginBottom: 16,
-      border: "1px solid rgba(210,218,230,0.6)"
+      border: "1px solid var(--border-soft)"
     }}>
       {tabs.map((t) => {
         const active = t.id === current;
@@ -52,8 +52,8 @@ export function TabBar({ tabs, current, onSelect }) {
               padding: "8px 12px",
               borderRadius: 8,
               border: "none",
-              background: active ? "rgba(255,255,255,0.95)" : "transparent",
-              color: active ? "#007AFF" : "#5a6474",
+              background: active ? "var(--bg-tab-active)" : "transparent",
+              color: active ? "var(--accent)" : "var(--text-muted)",
               fontWeight: active ? 700 : 600,
               fontSize: 13,
               cursor: "pointer",
@@ -86,8 +86,8 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark }) {
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1d24" }}>Dark mode</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: "#8a94a3", marginTop: 2 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Dark mode</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
               Saved on this device. Defaults to your system setting.
             </div>
           </div>
@@ -95,10 +95,10 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark }) {
         </div>
       </Section>
       <div style={{ padding: "10px 12px 12px", textAlign: "center" }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#5a6474", letterSpacing: "0.02em" }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.02em" }}>
           version {appVersion}
         </div>
-        <div style={{ fontSize: 11, fontWeight: 500, color: "#8a94a3", letterSpacing: "0.02em", marginTop: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)", letterSpacing: "0.02em", marginTop: 8 }}>
           © 2026 Patryk Zychowicz — MGT Booking System
         </div>
       </div>

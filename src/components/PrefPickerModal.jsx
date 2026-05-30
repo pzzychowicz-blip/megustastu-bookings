@@ -64,13 +64,13 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
   const capText = prefs.length === 0
     ? "No preference (auto)"
     : "Capacity: " + cap + " / " + needed + " pax" + (cap >= needed ? " ✓" : " — need more");
-  const capColor = prefs.length === 0 ? S.muted : (cap >= needed ? "#166534" : "#9a3412");
+  const capColor = prefs.length === 0 ? S.muted : (cap >= needed ? "var(--success-text)" : "var(--warn-text)");
 
   return (
     <Overlay onClose={onClose}>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
-          fontSize: 16, fontWeight: 700, color: "#fff",
+          fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
           display: "inline-block", padding: "8px 16px", borderRadius: 12,
           background: "#0d9488",
           border: "1px solid rgba(255,255,255,0.2)",
@@ -84,8 +84,8 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       </div>
       <div style={{
         marginBottom: 14, padding: "10px 14px", borderRadius: 14,
-        background: "rgba(255,255,255,0.35)",
-        border: "2px solid " + (capOk ? "rgba(134,239,172,0.6)" : "rgba(255,255,255,0.5)"),
+        background: "var(--bg-card)",
+        border: "2px solid " + (capOk ? "var(--suggest-border)" : "var(--border-sheet)"),
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
       }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: S.text }}>
