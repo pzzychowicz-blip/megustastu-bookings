@@ -62,25 +62,25 @@ export function ListView({
         const warn = warnings[b.id];
         const sc = STATUS_COLORS[b.status];
         const useStatusColor = b.status === "seated" || b.status === "completed" || b.status === "cancelled";
-        const cardBg = useStatusColor ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.45)";
+        const cardBg = useStatusColor ? "var(--bg-card-dim)" : "var(--bg-card-strong)";
         const cardBrd = warn
-          ? (warn.overdue ? "rgba(220,60,60,0.5)" : "rgba(245,158,11,0.5)")
+          ? (warn.overdue ? "var(--card-overdue-border)" : "var(--card-warn-border)")
           : b._conflict
-            ? "rgba(252,165,165,0.5)"
-            : useStatusColor ? sc.border : "rgba(255,255,255,0.4)";
+            ? "var(--card-conflict-border)"
+            : useStatusColor ? sc.border : "var(--border-card-plain)";
         const cardBrdW = warn ? "3px" : useStatusColor ? "3px" : "1px";
 
         const durationTag = b.status === "seated" ? (
-          <SmallTag label={elapsedMin + " min"} style={{ background: "#166534", color: "#fff", border: "none" }} />
+          <SmallTag label={elapsedMin + " min"} style={{ background: "#166534", color: "var(--text-on-accent)", border: "none" }} />
         ) : null;
 
         const warnEl = warn ? (
           <div style={{
             fontSize: 13, fontWeight: 700, marginBottom: 8,
             padding: "6px 10px", borderRadius: 12,
-            background: warn.overdue ? "rgba(254,226,226,0.65)" : "rgba(255,237,213,0.65)",
-            color: warn.overdue ? "#991b1b" : "#9a3412",
-            border: "2px solid " + (warn.overdue ? "rgba(252,165,165,0.55)" : "rgba(253,186,116,0.55)")
+            background: warn.overdue ? "var(--danger-bg)" : "var(--warn-bg)",
+            color: warn.overdue ? "var(--danger-text)" : "var(--warn-text)",
+            border: "2px solid " + (warn.overdue ? "var(--danger-border)" : "var(--warn-border)")
           }}>
             {warn.overdue
               ? "Overdue — next booking (" + warn.next + ") at " + warn.nextTime + " is waiting"
@@ -90,9 +90,9 @@ export function ListView({
 
         const conflictEl = (b._conflict && b.status !== "completed") ? (
           <div style={{
-            fontSize: 13, color: "#991b1b", fontWeight: 700, marginBottom: 8,
-            background: "rgba(254,226,226,0.65)",
-            border: "2px solid rgba(252,165,165,0.55)",
+            fontSize: 13, color: "var(--danger-text)", fontWeight: 700, marginBottom: 8,
+            background: "var(--danger-bg)",
+            border: "2px solid var(--danger-border)",
             borderRadius: 12, padding: "6px 10px"
           }}>
             No table assigned — use manual assignment.
@@ -100,13 +100,13 @@ export function ListView({
         ) : null;
 
         const manualTag = (b._manual && !isLocked(b)) ? (
-          <SmallTag label="manual" style={{ background: "#0369a1", color: "#fff", border: "none" }} />
+          <SmallTag label="manual" style={{ background: "#0369a1", color: "var(--text-on-accent)", border: "none" }} />
         ) : null;
         const lockedTag = b._locked ? (
-          <SmallTag label="locked" style={{ background: "#854d0e", color: "#fff", border: "none" }} />
+          <SmallTag label="locked" style={{ background: "#854d0e", color: "var(--text-on-accent)", border: "none" }} />
         ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (
-          <SmallTag label={"★ " + b.preferredTables.join("+")} style={{ background: "#0d9488", color: "#fff", border: "none" }} />
+          <SmallTag label={"★ " + b.preferredTables.join("+")} style={{ background: "#0d9488", color: "var(--text-on-accent)", border: "none" }} />
         ) : null;
 
         const notesEl = b.notes ? (
@@ -143,7 +143,7 @@ export function ListView({
               border: cardBrdW + " solid " + cardBrd,
               borderRadius: 16, padding: "14px 16px",
               opacity: (b.status === "completed" || b.status === "cancelled") ? 0.75 : 1,
-              boxShadow: "0 2px 12px rgba(0,0,0,0.06), inset 0 1px 1px rgba(255,255,255,0.5)"
+              boxShadow: "var(--shadow-card)"
             }}
           >
             {conflictEl}
