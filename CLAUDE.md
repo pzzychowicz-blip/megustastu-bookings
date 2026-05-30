@@ -351,7 +351,8 @@ Scripts live in `/home/claude/verify/` during a refactor session; re-create from
 
 ## Future work flagged
 
-- **Dark mode / theming port** — shipped: **v14.2.0** mechanism, **v14.2.1** `constants.js` colour sets, **v14.2.2** `atoms.jsx` + modal/form subsystem, **v14.2.3** `TimelineView` (Gantt canvas), **v14.2.4** `ListView` (booking cards). Remaining `var(--…)` wave: final **`App.jsx`** main-screen chrome sweep (header buttons + top-level banners + confirm-dialog button fills). Then the hover-scale port. See `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`.
+- **Dark mode / theming port — COMPLETE** (v14.2.0 mechanism → v14.2.1 `constants.js` → v14.2.2 `atoms.jsx` + modals → v14.2.3 `TimelineView` → v14.2.4 `ListView` → v14.2.5 `App.jsx` chrome). Every in-app surface is themed via `var(--…)` tokens in `index.html`'s `:root` / `[data-theme="dark"]` blocks. See `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`.
+- **`.mgt-hover-scale` hover-lift port** — next planned work, now that dark mode is done; see `MGT_Bookings_hover-scale_PORT_INSTRUCTIONS.md`. Its `--bg-hover-card` token resolves against the full dark palette.
 - **`.mgt-hover-scale` hover-lift port** — planned after dark mode; see `MGT_Bookings_hover-scale_PORT_INSTRUCTIONS.md`.
 - **WhatsApp Cloud API integration (Phase 1b)** — designed, not implemented. See `MGT_WhatsApp_Inbox_Phase1b_Design_Summary.md`. Integration points: the `BookingFormModal` callback surface + a new `InboxPanel` component.
 

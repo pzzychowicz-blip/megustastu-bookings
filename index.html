@@ -121,6 +121,26 @@
         --card-overdue-border: rgba(220, 60, 60, 0.5);   /* overdue card edge */
         --card-conflict-border: rgba(252, 165, 165, 0.5);/* no-table-assigned card edge */
         --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+        /* ── v14.2.5: App.jsx main-screen chrome ── */
+        /* "Booking saved / re-optimised" success banner (amber) */
+        --app-saved-bg: rgba(254, 249, 195, 0.7);   --app-saved-border: rgba(253, 230, 138, 0.55); --app-saved-text: #854d0e;
+        /* Offline banner (amber, stronger) */
+        --app-offline-bg: rgba(254, 243, 199, 0.85); --app-offline-border: rgba(252, 211, 77, 0.7); --app-offline-text: #92400e;
+        /* Reconnected banner (blue) */
+        --app-reconnect-bg: rgba(219, 234, 254, 0.85); --app-reconnect-border: rgba(147, 197, 253, 0.7); --app-reconnect-text: #1e40af;
+        /* Overlap-warning panel container (soft amber) */
+        --app-overlap-bg: rgba(255, 250, 235, 0.55); --app-overlap-border: rgba(253, 186, 116, 0.45);
+        /* Date input (header) */
+        --app-date-bg: rgba(255, 255, 255, 0.45); --app-date-border: rgba(255, 255, 255, 0.4);
+        /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
+        --app-btn-grey: rgba(120, 130, 150, 0.55); --app-btn-grey-strong: rgba(120, 130, 150, 0.75);
+        --app-btn-slate: #64748b;                 /* dialog secondary buttons */
+        --app-btn-slate-dim: #78828c;             /* write-warning dismiss */
+        /* Saturated action fills (white text — read on both themes) */
+        --app-walkin: rgba(22, 101, 52, 0.75);    /* Walk-in button */
+        --app-new: rgba(0, 122, 255, 0.75);       /* + New button */
+        --app-danger-solid: #dc2626;              /* Delete (solid) */
+        --app-warn-solid: #9a3412;                /* No-show / Confirm (solid warn) */
       }
       [data-theme="dark"] {
         --bg-app: linear-gradient(135deg, #15171c 0%, #191c22 20%, #1c1a23 40%, #161c26 60%, #1b1f28 80%, #17191f 100%);
@@ -191,6 +211,16 @@
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
         --shadow-input: inset 0 1px 2px rgba(255, 255, 255, 0.05), 0 1px 3px rgba(0, 0, 0, 0.3);
         --shadow-btn: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        /* ── v14.2.5: App.jsx main-screen chrome (dark) ── */
+        --app-saved-bg: rgba(90, 75, 20, 0.35);    --app-saved-border: rgba(253, 230, 138, 0.35); --app-saved-text: #fde68a;
+        --app-offline-bg: rgba(90, 70, 15, 0.4);   --app-offline-border: rgba(252, 211, 77, 0.45); --app-offline-text: #fcd34d;
+        --app-reconnect-bg: rgba(20, 45, 95, 0.45); --app-reconnect-border: rgba(147, 197, 253, 0.4); --app-reconnect-text: #93c5fd;
+        --app-overlap-bg: rgba(80, 55, 15, 0.3);   --app-overlap-border: rgba(253, 186, 116, 0.35);
+        --app-date-bg: rgba(118, 118, 128, 0.24);  --app-date-border: rgba(255, 255, 255, 0.12);
+        --app-btn-grey: rgba(110, 118, 135, 0.5);  --app-btn-grey-strong: rgba(110, 118, 135, 0.6);
+        --app-btn-slate: rgba(100, 116, 139, 0.7);
+        --app-btn-slate-dim: rgba(120, 130, 140, 0.6);
+        /* walkin / new / danger / warn solids are saturated — read on both; kept from :root */
       }
       html, body { margin: 0; }
       body {

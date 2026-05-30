@@ -2000,3 +2000,36 @@ None functional. Visual: List-view booking cards (surfaces, borders, warn/confli
 - Remaining: final **`App.jsx`** main-screen sweep (header buttons + the offline/reconnect/load/overlap/reshuffle banners + the delete/no-show confirm dialogs' button fills). Then the `.mgt-hover-scale` port.
 - Honesty note: dark screenshot QA was skipped due to preview-tooling failure this session (not a code issue) — see Verification.
 
+---
+
+## v14.2.4 -> v14.2.5 -- Dark-mode wave (FINAL): App.jsx main-screen chrome
+
+**Date**: 2026-05-30
+**Branch**: `feat/v14.2.5-dark-mode-app-chrome` -> PR to `main`
+**Status**: refactor (theming) -- **app version 14.2.4 -> 14.2.5**. **Completes the dark-mode literal migration.**
+
+The last wave: `App.jsx`'s top-level page chrome -- header action buttons, the date input, the status/sync banners (saved / inefficiency / overlap / offline / reconnect / load / write-warning), and the confirm-dialog solid button fills. With this, **every in-app surface is themed**; the only remaining colour literals app-wide are the DevTools console boot-banner (`#60a5fa`/`#9ca3af`, Menlo -- not UI) and intentional white-rims / black-shadows / saturated fills.
+
+### Files updated (3 + REFACTOR_LOG)
+- `index.html` -- `--app-*` token group in both blocks: banner trios (`--app-saved-*`, `--app-offline-*`, `--app-reconnect-*`, `--app-overlap-*`), the header date input (`--app-date-bg`/`-border`), neutral greys (`--app-btn-grey`/`-grey-strong`/`-slate`/`-slate-dim`), and saturated action solids (`--app-walkin`, `--app-new`, `--app-danger-solid`, `--app-warn-solid` -- `:root`-only, white text reads on both).
+- `src/App.jsx` -- header view/walk-in/new/logout buttons, date input, all status banners, overlap rows, and the delete/no-show/confirm/reshuffle dialog fills -> tokens. Reused existing semantic tokens where they fit (`--warn-*`/`--danger-*`/`--suggest-*`/`--success-text`/`BTN.nav`) rather than minting duplicates. Version bump.
+- `CLAUDE.md` -- marked the dark-mode port COMPLETE; promoted hover-scale to next planned work.
+
+### Design decisions
+- **Reuse over mint.** The inefficiency banner, overlap rows, and write-warning already matched the v14.2.2 `--warn-*`/`--danger-*` trios + `--success-text` -- pointed them at those instead of new tokens. Only genuinely-distinct chrome (the amber "saved", blue "reconnect", the offline amber, the date input, the neutral button greys) got new `--app-*` tokens.
+- **Saved-banner amber vs warn amber.** Kept `--app-saved-*` separate from `--warn-*` -- "Booking saved" is a softer pale-yellow (`#854d0e` on `rgba(254,249,195,...)`) distinct from the orange warn.
+- **Console boot banner left literal** -- it's `console.log` styling, not DOM.
+
+### Verification
+- `npm run build` OK -- main bundle **163.96 kB gz** (flat vs 14.2.4's 164.06). Audit: zero colour literals remain in App.jsx UI (the 2 grep hits are `&#8249;`/`&#8250;` HTML entities for the nav arrows -- false positives).
+- **Browser QA on the DEV server** (both themes, tooling recovered this session): **dark** -- full page coherent, no light islands; date input computes `rgba(118,118,128,0.24)` bg / `rgb(242,242,247)` text; now-line accent-blue. **Light regression** -- date input `rgba(255,255,255,0.45)`, `--app-saved-text` `#854d0e`, `--app-reconnect-text` `#1e40af`, `--app-offline-bg` `rgba(254,243,199,0.85)` -- **byte-identical** to prior literals; screenshot matches pre-change.
+
+### Behavioural change
+None functional. Visual: the main-screen chrome renders dark in dark mode. **Dark mode is now complete across the app.** Light mode unchanged.
+
+### Notes
+- Append-ordered (newest at bottom).
+- **Dark-mode port DONE** (v14.2.0 -> v14.2.5). Next: the `.mgt-hover-scale` hover-lift port.
+- This entry was initially omitted from the v14.2.5 commit (the Edit failed on an em-dash match and wasn't re-attempted before commit); added via `--amend` + force-push before merge. Process lesson: confirm the REFACTOR_LOG entry is staged in the per-version diff, not just written.
+- Carried-forward niggle: commits this series use the hostname git identity, not the GitHub email.
+
