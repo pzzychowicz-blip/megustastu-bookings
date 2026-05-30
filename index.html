@@ -91,6 +91,28 @@
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.6);
         --shadow-input: inset 0 1px 2px rgba(255, 255, 255, 0.6), 0 1px 3px rgba(0, 0, 0, 0.06);
         --shadow-btn: 0 1px 4px rgba(0, 0, 0, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+        /* ── v14.2.3: TimelineView (Gantt canvas) ── */
+        --tl-card-bg: rgba(255, 255, 255, 0.4);        /* the timeline container glass card */
+        --tl-card-border: rgba(255, 255, 255, 0.45);
+        --tl-gridline-hour: rgba(120, 130, 155, 0.45);  /* hour ticks (heavier) */
+        --tl-gridline-quarter: rgba(140, 150, 175, 0.3);/* quarter-hour ticks */
+        --tl-row-border: rgba(180, 190, 210, 0.2);      /* between table rows */
+        --tl-header-border: rgba(180, 190, 210, 0.3);   /* under the time-axis strip */
+        --tl-header-strip: rgba(220, 225, 235, 0.45);   /* the label-col + axis header bg */
+        --tl-hour-pill: rgba(90, 100, 120, 0.9);        /* time labels (white text) */
+        --tl-now-pill: rgba(0, 0, 0, 0.9);              /* now-time label */
+        --tl-now-line: rgba(0, 0, 0, 0.6);              /* the vertical now line */
+        --tl-unassigned-border: rgba(220, 60, 60, 0.4); /* dashed unassigned divider */
+        --tl-block-warn: #dc2626;                        /* booking overdue border */
+        --tl-block-warn-soon: #f59e0b;                   /* booking due-soon border */
+        --tl-blocked-a: #991b1b;                          /* table-block stripe colours */
+        --tl-blocked-b: #7f1d1d;
+        --tl-blocked-badge: rgba(153, 27, 27, 0.85);     /* "blocked" label-col badge bg */
+        --tl-blocked-badge-border: rgba(153, 27, 27, 0.5);
+        --tl-popup-bg: #eef1f7;                           /* quick-status popup card */
+        --tl-popup-scrim: rgba(0, 0, 0, 0.18);
+        --cog-bg: rgba(120, 130, 150, 0.4);              /* settings cog button */
+        --cog-border: rgba(255, 255, 255, 0.45);
       }
       [data-theme="dark"] {
         --bg-app: linear-gradient(135deg, #15171c 0%, #191c22 20%, #1c1a23 40%, #161c26 60%, #1b1f28 80%, #17191f 100%);
@@ -116,6 +138,24 @@
         --bg-stepper: rgba(255, 255, 255, 0.1);
         --bg-tabbar: rgba(0, 0, 0, 0.2);
         --bg-tab-active: rgba(255, 255, 255, 0.14);
+        /* ── v14.2.3: TimelineView dark overrides ── */
+        --tl-card-bg: rgba(44, 44, 46, 0.45);
+        --tl-card-border: rgba(255, 255, 255, 0.1);
+        --tl-gridline-hour: rgba(160, 170, 195, 0.22);
+        --tl-gridline-quarter: rgba(150, 160, 185, 0.12);
+        --tl-row-border: rgba(255, 255, 255, 0.07);
+        --tl-header-border: rgba(255, 255, 255, 0.1);
+        --tl-header-strip: rgba(255, 255, 255, 0.06);
+        --tl-hour-pill: rgba(90, 100, 120, 0.85);
+        --tl-now-pill: rgba(10, 132, 255, 0.95);
+        --tl-now-line: rgba(10, 132, 255, 0.85);
+        --tl-unassigned-border: rgba(255, 120, 120, 0.45);
+        /* block warn borders, blocked-stripe + badge, popup are theme-invariant
+           (saturated, white text — read on both); only scrim/card/bg flip */
+        --tl-popup-bg: rgba(44, 44, 46, 0.95);
+        --tl-popup-scrim: rgba(0, 0, 0, 0.45);
+        --cog-bg: rgba(255, 255, 255, 0.1);
+        --cog-border: rgba(255, 255, 255, 0.14);
         --border-sheet: rgba(255, 255, 255, 0.12);
         --border-soft: rgba(255, 255, 255, 0.1);
         --border-input: rgba(255, 255, 255, 0.12);
