@@ -102,7 +102,7 @@ export function TimelineView({
               key={m}
               style={{
                 position: "absolute", top: 0, bottom: 0, left: pct(m),
-                borderLeft: isH ? "2px solid rgba(120,130,155,0.45)" : "0.5px solid rgba(140,150,175,0.3)",
+                borderLeft: isH ? "2px solid var(--tl-gridline-hour)" : "0.5px solid var(--tl-gridline-quarter)",
                 opacity: 1
               }}
             />
@@ -110,7 +110,7 @@ export function TimelineView({
         })}
         <div style={{
           position: "absolute", top: 0, bottom: 0, right: 0,
-          borderLeft: "2px solid rgba(120,130,155,0.45)"
+          borderLeft: "2px solid var(--tl-gridline-hour)"
         }} />
       </div>
     );
@@ -124,7 +124,7 @@ export function TimelineView({
     const warn = warnings[b.id];
     const bgc = BLOCK_BG[b.status] || BLOCK_BG.confirmed;
     const border = warn
-      ? (warn.overdue ? "3px solid #dc2626" : "3px solid #f59e0b")
+      ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
       : "none";
     const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
     const lbl = b.name + " (" + b.size + ")"
@@ -189,7 +189,7 @@ export function TimelineView({
       >
         <span style={{
           flex: 1, padding: "0 8px",
-          fontSize: 11, fontWeight: 700, color: "#fff",
+          fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
         }}>
           {lbl}
@@ -218,12 +218,12 @@ export function TimelineView({
       <div style={{
         position: "absolute", top: 1, height: ROW_H - 4 + "px",
         left, width: w,
-        background: "repeating-linear-gradient(45deg,#991b1b,#991b1b 4px,#7f1d1d 4px,#7f1d1d 8px)",
+        background: "repeating-linear-gradient(45deg,var(--tl-blocked-a),var(--tl-blocked-a) 4px,var(--tl-blocked-b) 4px,var(--tl-blocked-b) 8px)",
         borderRadius: 4, opacity: 0.6,
         display: "flex", alignItems: "center", justifyContent: "center",
         pointerEvents: "none"
       }}>
-        <span style={{ fontSize: 9, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: 1 }}>
+        <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-on-accent)", textTransform: "uppercase", letterSpacing: 1 }}>
           blocked
         </span>
       </div>
@@ -238,7 +238,7 @@ export function TimelineView({
         key={"l" + m}
         style={{
           position: "absolute", top: 0, left: pct(m), bottom: 0,
-          borderLeft: isH ? "2px solid rgba(120,130,155,0.45)" : "0.5px solid rgba(140,150,175,0.3)"
+          borderLeft: isH ? "2px solid var(--tl-gridline-hour)" : "0.5px solid var(--tl-gridline-quarter)"
         }}
       />
     );
@@ -253,9 +253,9 @@ export function TimelineView({
           key={"h" + m}
           style={{
             position: "absolute", top: 3, left: center + "%", transform: "translateX(-50%)",
-            fontSize: 10, fontWeight: 600, color: "#fff",
+            fontSize: 10, fontWeight: 600, color: "var(--text-on-accent)",
             whiteSpace: "nowrap", pointerEvents: "none",
-            background: "rgba(90,100,120,0.9)",
+            background: "var(--tl-hour-pill)",
             padding: "2px 5px", borderRadius: 6, zIndex: 1,
             boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
           }}
@@ -269,9 +269,9 @@ export function TimelineView({
   const labelCol = (
     <div style={{ width: LABEL_W + "px", flexShrink: 0 }}>
       <div style={{
-        height: 24, background: "rgba(220,225,235,0.45)",
+        height: 24, background: "var(--tl-header-strip)",
         borderRadius: "6px 0 0 0",
-        borderBottom: "2px solid rgba(180,190,210,0.3)",
+        borderBottom: "2px solid var(--tl-header-border)",
         boxSizing: "border-box"
       }} />
       {TIMELINE_TABLES.map((tbl) => {
@@ -286,15 +286,15 @@ export function TimelineView({
               height: ROW_H + "px",
               display: "flex", alignItems: "center", justifyContent: "flex-end",
               paddingRight: 6,
-              borderBottom: "2px solid rgba(180,190,210,0.2)",
+              borderBottom: "2px solid var(--tl-row-border)",
               cursor: "pointer", boxSizing: "border-box"
             }}
           >
             <span style={{
               fontSize: 11, fontWeight: 600, padding: "3px 0", borderRadius: 8,
-              background: hasBlock ? "rgba(153,27,27,0.85)" : indoor ? TBL.ind.bg : TBL.out.bg,
-              color: hasBlock ? "#fff" : indoor ? TBL.ind.text : TBL.out.text,
-              border: "1px solid " + (hasBlock ? "rgba(153,27,27,0.5)" : indoor ? TBL.ind.border : TBL.out.border),
+              background: hasBlock ? "var(--tl-blocked-badge)" : indoor ? TBL.ind.bg : TBL.out.bg,
+              color: hasBlock ? "var(--text-on-accent)" : indoor ? TBL.ind.text : TBL.out.text,
+              border: "1px solid " + (hasBlock ? "var(--tl-blocked-badge-border)" : indoor ? TBL.ind.border : TBL.out.border),
               width: 32, textAlign: "center", display: "inline-block",
               boxSizing: "border-box",
               boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
@@ -309,10 +309,10 @@ export function TimelineView({
           height: ROW_H + "px",
           display: "flex", alignItems: "center", justifyContent: "flex-end",
           paddingRight: 6,
-          borderTop: "1px dashed rgba(220,60,60,0.4)",
+          borderTop: "1px dashed var(--tl-unassigned-border)",
           marginTop: 4, boxSizing: "border-box"
         }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "#991b1b" }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: "var(--danger-text)" }}>
             unassigned
           </span>
         </div>
@@ -334,7 +334,7 @@ export function TimelineView({
         key={id}
         style={{
           height: ROW_H + "px", position: "relative",
-          borderBottom: "2px solid rgba(180,190,210,0.2)",
+          borderBottom: "2px solid var(--tl-row-border)",
           boxSizing: "border-box"
         }}
       >
@@ -367,7 +367,7 @@ export function TimelineView({
   const unassignedGrid = unassigned.length > 0 ? (
     <div style={{
       height: ROW_H + "px", position: "relative",
-      borderTop: "1px dashed rgba(220,60,60,0.4)",
+      borderTop: "1px dashed var(--tl-unassigned-border)",
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
@@ -387,8 +387,8 @@ export function TimelineView({
     >
       <div style={{
         position: "absolute", top: 3, left: "50%", transform: "translateX(-50%)",
-        fontSize: 10, fontWeight: 600, color: "#fff",
-        background: "rgba(0,0,0,0.9)",
+        fontSize: 10, fontWeight: 600, color: "var(--text-on-accent)",
+        background: "var(--tl-now-pill)",
         padding: "2px 5px", borderRadius: 6, whiteSpace: "nowrap", zIndex: 11,
         boxShadow: "0 1px 4px rgba(0,0,0,0.15)"
       }}>
@@ -396,7 +396,7 @@ export function TimelineView({
       </div>
       <div style={{
         position: "absolute", top: 11, bottom: 0, left: "50%", transform: "translateX(-50%)",
-        width: 2, background: "rgba(0,0,0,0.6)"
+        width: 2, background: "var(--tl-now-line)"
       }} />
     </div>
   ) : null;
@@ -411,8 +411,8 @@ export function TimelineView({
       <div style={{ width: gridW + "px", minWidth: "100%", position: "relative" }}>
         <div style={{
           position: "relative",
-          borderBottom: "2px solid rgba(180,190,210,0.3)",
-          background: "rgba(220,225,235,0.45)",
+          borderBottom: "2px solid var(--tl-header-border)",
+          background: "var(--tl-header-strip)",
           borderRadius: "0 6px 0 0",
           height: 24, overflow: "visible", boxSizing: "border-box"
         }}>
@@ -463,7 +463,7 @@ export function TimelineView({
       </button>
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
-        style={mkBtn({ minHeight: 32, padding: "4px 10px", fontSize: 11, background: zoom === 1 ? "#64748b" : BTN.nav })}
+        style={mkBtn({ minHeight: 32, padding: "4px 10px", fontSize: 11, background: zoom === 1 ? "var(--btn-default)" : BTN.nav })}
       >
         {zoom === 1 ? "1x" : zoom + "x → 1x"}
       </button>
@@ -510,7 +510,7 @@ export function TimelineView({
         style={{
           fontSize: 11, padding: "3px 8px", borderRadius: 8,
           background: BLOCK_BG[s] || "#999",
-          color: "#fff",
+          color: "var(--text-on-accent)",
           border: "1px solid rgba(255,255,255,0.2)",
           fontWeight: 600, textTransform: "capitalize",
           boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
@@ -521,17 +521,17 @@ export function TimelineView({
     );
   });
   legendEls.push(
-    <span key="in" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: TBL.ind.bg, color: "#fff", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="in" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
       indoor
     </span>
   );
   legendEls.push(
-    <span key="out" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: TBL.out.bg, color: "#fff", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="out" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
       outdoor
     </span>
   );
   legendEls.push(
-    <span key="blocked" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: "rgba(153,27,27,0.85)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="blocked" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
       blocked
     </span>
   );
@@ -543,13 +543,13 @@ export function TimelineView({
       style={{
         position: "fixed", inset: 0, zIndex: 300,
         display: "flex", alignItems: "center", justifyContent: "center",
-        background: "rgba(0,0,0,0.18)"
+        background: "var(--tl-popup-scrim)"
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#eef1f7", borderRadius: 20,
+          background: "var(--tl-popup-bg)", borderRadius: 20,
           border: "1px solid " + S.border,
           boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
           padding: "20px 24px",
@@ -568,7 +568,7 @@ export function TimelineView({
                 style={{
                   background: BLOCK_BG[st], border: "none",
                   borderRadius: 12, padding: "10px 18px",
-                  fontSize: 14, fontWeight: 700, color: "#fff",
+                  fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
                   cursor: "pointer", textTransform: "capitalize",
                   minHeight: 44, flex: "1 1 auto"
                 }}
@@ -588,12 +588,12 @@ export function TimelineView({
   // ── Final assembly ───────────────────────────────────────────────────────
   return (
     <div style={{
-      background: "rgba(255,255,255,0.4)",
+      background: "var(--tl-card-bg)",
       backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
       borderRadius: 20,
-      border: "1px solid rgba(255,255,255,0.45)",
+      border: "1px solid var(--tl-card-border)",
       padding: "10px 12px",
-      boxShadow: "0 2px 16px rgba(0,0,0,0.06), inset 0 1px 1px rgba(255,255,255,0.6)"
+      boxShadow: "var(--shadow-soft)"
     }}>
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -617,8 +617,8 @@ export function TimelineView({
           onClick={onOpenSettings}
           title="Settings & keyboard shortcuts"
           style={{
-            background: "rgba(120,130,150,0.4)",
-            border: "1px solid rgba(255,255,255,0.45)",
+            background: "var(--cog-bg)",
+            border: "1px solid var(--cog-border)",
             borderRadius: 10, width: 34, height: 34,
             cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",

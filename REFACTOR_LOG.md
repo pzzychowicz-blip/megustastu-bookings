@@ -1932,3 +1932,37 @@ None functional. Visual: modals, forms, inputs, the Settings tab-strip, and in-m
 - **TabBar miss** (Settings tab-strip stayed light) was invisible to the build + grep and only surfaced in a dark screenshot — reinforces visual QA for surface migrations.
 - Remaining dark-mode waves: **`TimelineView`** (the Gantt canvas — biggest remaining light surface; ~10 literals + the grid/row striping), then **`ListView`**, then a final `App.jsx` sweep (main-screen banners: offline/reconnect/load/overlap/reshuffle). Then hover-scale.
 
+---
+
+## v14.2.2 → v14.2.3 — Dark-mode wave: TimelineView (the Gantt canvas)
+
+**Date**: 2026-05-30
+**Branch**: `feat/v14.2.3-dark-mode-timeline` → PR to `main`
+**Status**: refactor (theming) — **app version 14.2.2 → 14.2.3**
+
+Themes the timeline — the **largest remaining light surface**. After this, the main screen's primary view is dark; only `ListView` + the `App.jsx` top-level banners remain.
+
+### Files updated (3)
+- `index.html` — ~22 `--tl-*` tokens in both blocks: container card (`--tl-card-bg`/`-border`), gridlines (`--tl-gridline-hour`/`-quarter`), row/header borders, the header/label strip (`--tl-header-strip`), hour + now pills (`--tl-hour-pill`/`--tl-now-pill`/`--tl-now-line`), the unassigned divider, block warn borders, the table-block stripe + "blocked" badge, the quick-status popup (`--tl-popup-bg`/`-scrim`), and the settings cog (`--cog-bg`/`-border`).
+- `src/components/TimelineView.jsx` — ~40 literals → tokens across GridLines, Block, BlockBar, header lines/labels, label column, grid rows, now-line, zoom/legend, the quick-status popup (its **own** fixed overlay, like ReminderEditor), the container card + cog.
+- `src/App.jsx` — version bump.
+
+### Design decisions
+- **Now-line flips to accent in dark.** Light = black pill/line (`rgba(0,0,0,0.9)`); dark = the iOS accent blue (`--tl-now-pill`/`-line` → `rgba(10,132,255,…)`) — a pure-black line vanishes on the dark canvas, so the "current time" marker reads as accent instead.
+- **Theme-invariant where saturated.** Booking block fills (`BLOCK_BG`), table badges (`TBL`), warn/overdue block borders (`#dc2626`/`#f59e0b`), the red table-block stripe, and the "blocked" badge all read on both themes — kept as-is; only their text uses `--text-on-accent`. White rims (`rgba(255,255,255,0.2)`) and black drop-shadows stay literal (intentional on saturated surfaces).
+- **Quick-status popup** mirrors the modal-subsystem treatment (near-opaque card + scrim), since it's a separate fixed overlay, not an `Overlay` consumer.
+- **`#999` legend fallback left as-is** — defensive `BLOCK_BG[s] || "#999"` that never fires (all 4 statuses always present); grey reads on both themes.
+
+### Verification
+- `npm run build` ✅ — main bundle **164.08 kB gz** (flat vs 14.2.2's 164.03).
+- **Browser QA on the DEV server** (`preview_eval` + screenshots): **dark** — container computes `rgba(44,44,46,0.45)` (`--tl-card-bg` dark), gridlines/badges/blocks/legend all legible, body text `rgb(242,242,247)`. **Light regression** — container computes `rgba(255,255,255,0.4)`, `--tl-header-strip` `rgba(220,225,235,0.45)`, `--tl-gridline-hour` `rgba(120,130,155,0.45)` — **byte-identical** to the prior literals; screenshot matches pre-change.
+- Audit: zero non-token colour literals remain except the `#999` dead fallback + intentional white-rim/black-shadow values.
+- Final dark sign-off is Patryk's.
+
+### Behavioural change
+None functional. Visual: the timeline (container, grid, header axis, label column, now-line, quick-status popup) renders dark in dark mode; now-line is accent-blue in dark for visibility. Light mode unchanged.
+
+### Notes
+- Append-ordered (newest at bottom).
+- Remaining: **`ListView`** (sorted card list) → final **`App.jsx`** main-screen banner sweep (offline/reconnect/load/overlap/reshuffle/walk-in + new buttons). Then the `.mgt-hover-scale` port.
+
