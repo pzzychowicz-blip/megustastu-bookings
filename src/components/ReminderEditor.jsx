@@ -85,7 +85,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
     <div
       style={{
         position: "fixed", inset: 0,
-        background: "rgba(0,0,0,0.25)",
+        background: "var(--scrim)",
         backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
         display: "flex", alignItems: "center", justifyContent: "center",
         zIndex: 250, padding: 12
@@ -93,10 +93,10 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
       <div style={{
-        background: "rgba(255,255,255,0.85)",
+        background: "var(--bg-sheet)",
         backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
         borderRadius: 20,
-        border: "1px solid rgba(255,255,255,0.5)",
+        border: "1px solid var(--border-sheet)",
         padding: "22px",
         width: "100%", maxWidth: 520, maxHeight: "90dvh",
         overflowY: "auto", boxSizing: "border-box",
@@ -106,7 +106,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             centered wrapper + pill-shaped inner with blue background. */}
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <div style={{
-            fontSize: 16, fontWeight: 700, color: "#fff",
+            fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
             display: "inline-block", padding: "8px 16px", borderRadius: 12,
             background: "rgba(0,122,255,0.75)",
             border: "1px solid rgba(255,255,255,0.2)",
@@ -206,23 +206,23 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         <div style={{
           display: "flex", alignItems: "center", gap: 10, marginBottom: 14,
           padding: "10px 12px",
-          background: "rgba(248,250,253,0.7)",
+          background: "var(--bg-soft)",
           borderRadius: 12,
-          border: "1px solid rgba(210,218,230,0.6)"
+          border: "1px solid var(--border-soft)"
         }}>
           <Toggle on={draft.active} onClick={toggleActive} />
-          <span style={{ fontSize: 13, color: "#1a1d24", fontWeight: 600 }}>
+          <span style={{ fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>
             {draft.active ? "Active" : "Inactive"}
           </span>
         </div>
 
         {err ? (
           <div style={{
-            color: "#991b1b", fontSize: 13,
+            color: "var(--danger-text)", fontSize: 13,
             padding: "8px 12px",
-            background: "rgba(254,226,226,0.7)",
+            background: "var(--danger-bg)",
             borderRadius: 12,
-            border: "1px solid rgba(252,165,165,0.55)",
+            border: "1px solid var(--danger-border)",
             marginBottom: 12
           }}>
             {err}
@@ -245,7 +245,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               borderRadius: 14,
               padding: "10px 22px",
               cursor: err ? "not-allowed" : "pointer",
-              fontSize: 14, fontWeight: 600, color: "#fff", minHeight: 40,
+              fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 40,
               boxShadow: err ? "none" : "0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)"
             }}
           >

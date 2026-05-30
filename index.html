@@ -54,6 +54,43 @@
         --btn-nav: rgba(120, 130, 150, 0.5);
         --btn-dismiss: rgba(220, 60, 60, 0.7);
         --btn-orange: rgba(230, 100, 30, 0.8);
+        /* ── v14.2.2: atoms / modal surfaces, borders, semantic text, banners ── */
+        /* Surfaces */
+        --bg-sheet: rgba(255, 255, 255, 0.72);         /* Overlay desktop dialog card */
+        --bg-sheet-mobile: rgba(240, 243, 248, 0.98);  /* Overlay mobile full-screen sheet */
+        --bg-soft: rgba(248, 250, 253, 0.95);          /* Section panel */
+        --bg-input: rgba(255, 255, 255, 0.5);          /* text inputs / selects */
+        --bg-kbd: rgba(255, 255, 255, 0.75);           /* keycap */
+        --btn-default: rgba(120, 130, 150, 0.55);      /* mkBtn default grey fill */
+        --bg-stepper: rgba(235, 239, 246, 0.95);       /* +/- stepper buttons (form) */
+        --bg-tabbar: rgba(240, 243, 248, 0.8);         /* Settings tab-strip track */
+        --bg-tab-active: rgba(255, 255, 255, 0.95);    /* lifted active tab */
+        /* Borders */
+        --border-sheet: rgba(255, 255, 255, 0.5);
+        --border-soft: rgba(210, 218, 230, 0.8);
+        --border-input: rgba(255, 255, 255, 0.4);
+        --border-kbd: rgba(180, 190, 210, 0.55);
+        --border-glass: rgba(255, 255, 255, 0.3);      /* white rim on filled btns / Toggle */
+        /* Scrim + toggle */
+        --scrim: rgba(0, 0, 0, 0.25);                  /* modal backdrop */
+        --toggle-on: rgba(0, 122, 255, 0.7);
+        --toggle-off: rgba(180, 180, 190, 0.4);
+        /* Semantic text (on the sheet, or on the matching banner below) */
+        --text-secondary: #4a5568;
+        --text-faint: #8a94a3;
+        --text-required: #dc2626;
+        --warn-text: #9a3412;
+        --danger-text: #991b1b;
+        --success-text: #166534;
+        /* Banners (warn / danger / suggestion) — bg + border + text flip together */
+        --warn-bg: rgba(255, 237, 213, 0.7);    --warn-border: rgba(253, 186, 116, 0.55);
+        --danger-bg: rgba(254, 226, 226, 0.7);  --danger-border: rgba(252, 165, 165, 0.55);
+        --suggest-bg: rgba(220, 252, 231, 0.8); --suggest-border: rgba(134, 239, 172, 0.5);
+        /* Shadows carrying white inset highlights (dimmed on dark) */
+        --shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.8);
+        --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+        --shadow-input: inset 0 1px 2px rgba(255, 255, 255, 0.6), 0 1px 3px rgba(0, 0, 0, 0.06);
+        --shadow-btn: 0 1px 4px rgba(0, 0, 0, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.25);
       }
       [data-theme="dark"] {
         --bg-app: linear-gradient(135deg, #15171c 0%, #191c22 20%, #1c1a23 40%, #161c26 60%, #1b1f28 80%, #17191f 100%);
@@ -69,6 +106,37 @@
         --status-seated-text: #86efac;
         --status-completed-text: #cbd5e1;
         --status-cancelled-text: #fca5a5;
+        /* ── v14.2.2: atoms / modal dark overrides ── */
+        --bg-sheet: rgba(44, 44, 46, 0.85);
+        --bg-sheet-mobile: rgba(28, 28, 30, 0.98);
+        --bg-soft: rgba(255, 255, 255, 0.05);
+        --bg-input: rgba(118, 118, 128, 0.24);
+        --bg-kbd: rgba(255, 255, 255, 0.1);
+        --btn-default: rgba(110, 118, 135, 0.5);
+        --bg-stepper: rgba(255, 255, 255, 0.1);
+        --bg-tabbar: rgba(0, 0, 0, 0.2);
+        --bg-tab-active: rgba(255, 255, 255, 0.14);
+        --border-sheet: rgba(255, 255, 255, 0.12);
+        --border-soft: rgba(255, 255, 255, 0.1);
+        --border-input: rgba(255, 255, 255, 0.12);
+        --border-kbd: rgba(255, 255, 255, 0.15);
+        --border-glass: rgba(255, 255, 255, 0.14);
+        --scrim: rgba(0, 0, 0, 0.5);
+        --toggle-on: rgba(10, 132, 255, 0.85);
+        --toggle-off: rgba(120, 120, 128, 0.5);
+        --text-secondary: #c7c7cc;
+        --text-faint: #8a8a8e;
+        --text-required: #ff6b6b;
+        --warn-text: #fdba74;
+        --danger-text: #fca5a5;
+        --success-text: #86efac;
+        --warn-bg: rgba(120, 70, 20, 0.3);    --warn-border: rgba(253, 186, 116, 0.4);
+        --danger-bg: rgba(120, 30, 30, 0.32); --danger-border: rgba(252, 165, 165, 0.4);
+        --suggest-bg: rgba(34, 90, 50, 0.45); --suggest-border: rgba(134, 239, 172, 0.35);
+        --shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.07);
+        --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+        --shadow-input: inset 0 1px 2px rgba(255, 255, 255, 0.05), 0 1px 3px rgba(0, 0, 0, 0.3);
+        --shadow-btn: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.1);
       }
       html, body { margin: 0; }
       body {

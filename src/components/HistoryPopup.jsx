@@ -66,7 +66,7 @@ export function HistoryPopup({ booking, onClose }) {
             >
               <span style={{ fontWeight: 600, color: S.text }}>{dateStr + " " + timeStr}</span>
               {" — "}
-              <span style={{ color: "#0369a1", fontWeight: 600 }}>{h.by || "staff"}</span>
+              <span style={{ color: "var(--accent)", fontWeight: 600 }}>{h.by || "staff"}</span>
               <div style={{ marginTop: 2, color: S.text }}>{h.action}</div>
             </div>
           );

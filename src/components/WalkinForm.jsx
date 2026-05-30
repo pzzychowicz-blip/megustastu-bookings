@@ -123,7 +123,7 @@ export function WalkinForm({
   const wSel = wf.tables || [];
   const wCap = getCapOf(wSel);
   const wOk = wSel.length > 0 && wCap >= wSize;
-  const wSummaryColor = wOk ? "#166534" : "#9a3412";
+  const wSummaryColor = wOk ? "var(--success-text)" : "var(--warn-text)";
   const wSummaryText = wSel.length === 0
     ? "Select tables below."
     : "Capacity: " + wCap + (wCap >= wSize ? " (fits " + wSize + " pax)" : " — need " + wSize + " pax");
@@ -177,10 +177,10 @@ export function WalkinForm({
     <div style={{
       padding: "10px 14px",
       borderRadius: 14,
-      border: "2px solid " + (wKitchenBusy ? "rgba(253,186,116,0.55)" : "rgba(255,255,255,0.45)"),
-      background: wKitchenBusy ? "rgba(255,237,213,0.6)" : "rgba(255,255,255,0.35)",
+      border: "2px solid " + (wKitchenBusy ? "var(--warn-border)" : "var(--border-soft)"),
+      background: wKitchenBusy ? "var(--warn-bg)" : "var(--bg-soft)",
       marginBottom: 14, fontSize: 13,
-      color: wKitchenBusy ? "#9a3412" : S.muted
+      color: wKitchenBusy ? "var(--warn-text)" : S.muted
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span>
@@ -190,7 +190,7 @@ export function WalkinForm({
         </span>
         {wKitchenBusy ? (
           <span style={{
-            fontWeight: 700, color: "#dc2626", fontSize: 13,
+            fontWeight: 700, color: "var(--text-required)", fontSize: 13,
             padding: "4px 12px", borderRadius: 8,
             border: "1.5px solid rgba(220,38,38,0.4)",
             flexShrink: 0
@@ -235,7 +235,7 @@ export function WalkinForm({
           ) : null}
         </div>
       ) : (wKitchenBusy ? (
-        <div style={{ marginTop: 6, fontSize: 12, color: "#991b1b" }}>
+        <div style={{ marginTop: 6, fontSize: 12, color: "var(--danger-text)" }}>
           No kitchen-friendly alternatives found nearby.
         </div>
       ) : null)}
@@ -245,8 +245,8 @@ export function WalkinForm({
   // ── Stepper button style (size + duration +/-) ──
   // Repeated ~6× across the form — extracted as a const to avoid duplication.
   const stepperBtnStyle = {
-    background: "rgba(235,239,246,0.95)",
-    border: "1px solid rgba(210,218,230,0.8)",
+    background: "var(--bg-stepper)",
+    border: "1px solid var(--border-soft)",
     borderRadius: 12, width: 42, height: 42, fontSize: 22,
     cursor: "pointer", color: S.text, fontWeight: 600,
     display: "flex", alignItems: "center", justifyContent: "center",
@@ -263,7 +263,7 @@ export function WalkinForm({
     <Overlay onClose={onClose}>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
-          fontSize: 16, fontWeight: 700, color: "#fff",
+          fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
           display: "inline-block", padding: "8px 16px", borderRadius: 12,
           background: "rgba(22,101,52,0.75)",
           border: "1px solid rgba(255,255,255,0.2)",
@@ -380,8 +380,8 @@ export function WalkinForm({
 
       <div style={{
         marginBottom: 14, padding: "12px 14px", borderRadius: 14,
-        background: "rgba(255,255,255,0.35)",
-        border: "2px solid " + (wOk ? "rgba(134,239,172,0.6)" : "rgba(255,255,255,0.5)"),
+        background: "var(--bg-card)",
+        border: "2px solid " + (wOk ? "var(--suggest-border)" : "var(--border-sheet)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: 8, flexWrap: "wrap",
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
@@ -416,11 +416,11 @@ export function WalkinForm({
 
       {error ? (
         <div style={{
-          color: "#991b1b", fontSize: 13,
+          color: "var(--danger-text)", fontSize: 13,
           padding: "10px 14px",
-          background: "rgba(254,226,226,0.7)",
+          background: "var(--danger-bg)",
           borderRadius: 14,
-          border: "2px solid rgba(252,165,165,0.55)",
+          border: "2px solid var(--danger-border)",
           marginBottom: 14
         }}>
           {error}
@@ -444,7 +444,7 @@ export function WalkinForm({
             border: "1px solid rgba(255,255,255,0.2)",
             borderRadius: 14, padding: "10px 22px",
             cursor: wOk ? "pointer" : "not-allowed",
-            fontSize: 14, fontWeight: 600, color: "#fff", minHeight: 44,
+            fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
             boxShadow: wOk
               ? "0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)"
               : "none"
