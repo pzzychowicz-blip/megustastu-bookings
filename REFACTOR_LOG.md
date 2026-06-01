@@ -2066,3 +2066,36 @@ None functional. Visual: hovering a header control lifts it 8% with an opaque ca
 - Append-ordered (newest at bottom).
 - **Wave 1 of 3.** Next: v14.3.1 (ListView cards + TimelineView controls + blocks w/ Fix 3 + Settings tabs), then v14.3.2 (Overlay Fix 4 + Toggle + all modal buttons/inputs).
 
+---
+
+## v14.3.0 -> v14.3.1 -- Hover-lift port (wave 2/3): list cards, timeline (Fix 3), Settings tabs
+
+**Date**: 2026-06-01
+**Branch**: `feat/v14.3.1-hover-scale-cards` -> PR to `main`
+**Status**: feature (UI affordance) -- **app version 14.3.0 -> 14.3.1**. Second of 3 waves.
+
+Extends `.mgt-hover-scale` from the header chrome to the two main canvases + the Settings tab bar. The notable piece is **Fix 3**: the timeline booking blocks now lift, and the horizontal scroller is padded so lifted edge blocks don't clip -- with a matching pad on the label column so rows stay aligned.
+
+### Files updated (3 + REFACTOR_LOG + CLAUDE.md)
+- `src/components/ListView.jsx` -- `className="mgt-hover-scale"` on the booking **card** `<div>`, the 3 action buttons (`= Tables` / `Edit` / `Delete`), and the `> status` buttons. Cards/buttons keep their inline bg + 16px radius (Fix 2: inline wins) -- they gain scale + their existing shadow.
+- `src/components/TimelineView.jsx` -- class on the 7 control buttons (Follow, zoom `-`/reset/`+`, Optimizer, Reshuffle, cog) and the booking **`Block`** `<div>` (keeps its status colour + 10px radius). **Fix 3:** the grid scroller (`overflowX:auto/overflowY:hidden`) gets `padding:8` so a scaled block at the first/last minute or top/bottom row doesn't clip; `labelCol` gets a matching `paddingTop:8` so its 24px header + ROW_H rows stay aligned with the grid.
+- `src/components/Settings.jsx` -- class on the `TabBar` tab buttons. (Their inline `background:transparent`/`boxShadow:none` for the inactive state win over the hover rule, so inactive tabs lift via scale while the active tab lifts with its white card -- bleed is negligible in a 3-tab flex bar.)
+- `CLAUDE.md` -- hover-affordance rollout status -> wave 2 shipped.
+
+### Design decisions
+- **Pad the scroller, not the inner grid.** The grid is laid out by absolute `pct()` math against the inner div's width -- padding the inner div would shift every gridline/block. Padding the *scroller* (outside the inner div) leaves the math intact and only insets the whole grid ~8px from the label column (cosmetically fine).
+- **Mirror the pad on `labelCol`.** With the scroller's `paddingTop:8`, the grid content starts 8px down; `labelCol` gets the same `paddingTop:8` so the two columns' rows line up. Verified in-browser: header-top delta and row-1-top delta are both **0 px**.
+- **Blocks/cards keep their colour (Fix 2).** Every surface that already sets an inline `background` keeps it on hover (inline beats the class), so colour-coded blocks/cards/buttons don't flash to the white hover card -- they only scale.
+- **Now-line / follow-now unaffected.** The scroll math reads `gridW` (unchanged); the 8px left pad shifts the now-line by ~8px, imperceptible.
+
+### Verification
+- `npm run build` OK -- main bundle **164.03 kB gz** (flat vs 14.3.0's 163.99).
+- **Browser QA on the DEV server**: timeline view = 18 tagged elements (8 header + 6 visible controls + 4 blocks), a block carries the class and computes the hover transition; scroller `padding:8px`, `labelCol` `paddingTop:8px`, **row alignment delta = 0** (header + first row). List view = 29 tagged (8 header + 3 cards + 18 card buttons); a card keeps `rgba(255,255,255,0.45)` bg + `16px` radius and has the transition. Screenshots of both views -- no layout regression, labels aligned with rows, no clipping.
+
+### Behavioural change
+None functional. Visual: list cards + timeline blocks + their buttons + the timeline controls + Settings tabs lift 8% on hover. Disabled controls stay flat. No neighbour reflow; timeline rows stay aligned after the Fix-3 pad.
+
+### Notes
+- Append-ordered (newest at bottom).
+- **Wave 2 of 3.** Next: v14.3.2 -- Overlay Fix 4 (`overflow:visible` + `footer` inner-scroller) + the `Toggle` atom + all modal buttons/inputs (field-only).
+
