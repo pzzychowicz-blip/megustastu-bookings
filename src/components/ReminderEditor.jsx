@@ -122,6 +122,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             onChange={(e) => updText(e.target.value)}
             rows={2}
             placeholder="e.g. Place order to Coca Cola today"
+            className="mgt-hover-scale"
             style={{ ...mkInp(), resize: "vertical" }}
           />
         </Fld>
@@ -134,11 +135,13 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                   type="time"
                   value={t}
                   onChange={(e) => updTime(i, e.target.value)}
+                  className="mgt-hover-scale"
                   style={{ ...mkInp(), flex: 1 }}
                 />
                 {draft.times.length > 1 ? (
                   <button
                     onClick={() => removeTime(i)}
+                    className="mgt-hover-scale"
                     style={mkBtn({ minHeight: 40, minWidth: 40, padding: "0", fontSize: 18, background: BTN.del, lineHeight: 1 })}
                   >
                     ×
@@ -148,6 +151,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             ))}
             <button
               onClick={addTime}
+              className="mgt-hover-scale"
               style={mkBtn({ minHeight: 36, padding: "6px 12px", fontSize: 12, background: BTN.nav })}
             >
               + Add time
@@ -159,12 +163,14 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           <div style={{ display: "flex", gap: 6 }}>
             <button
               onClick={() => setType("once")}
+              className="mgt-hover-scale"
               style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "once" ? S.accent : "rgba(120,130,150,0.45)" })}
             >
               One-off
             </button>
             <button
               onClick={() => setType("weekly")}
+              className="mgt-hover-scale"
               style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "weekly" ? S.accent : "rgba(120,130,150,0.45)" })}
             >
               Weekly
@@ -179,6 +185,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               value={rec.date || ""}
               min={todayStr}
               onChange={(e) => setDate(e.target.value)}
+              className="mgt-hover-scale"
               style={mkInp()}
             />
           </Fld>
@@ -193,6 +200,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                   <button
                     key={d.i}
                     onClick={() => toggleDay(d.i)}
+                    className="mgt-hover-scale"
                     style={mkBtn({ flex: 1, minWidth: 48, minHeight: 40, padding: "8px 6px", fontSize: 12, background: sel ? S.accent : "rgba(120,130,150,0.45)" })}
                   >
                     {d.s}
@@ -232,6 +240,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button
             onClick={onCancel}
+            className="mgt-hover-scale"
             style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.cancel })}
           >
             Cancel
@@ -239,6 +248,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           <button
             onClick={() => { if (!err) onSave(); }}
             disabled={!!err}
+            className="mgt-hover-scale"
             style={{
               background: err ? "rgba(180,180,190,0.4)" : "rgba(22,101,52,0.8)",
               border: "1px solid rgba(255,255,255,0.2)",

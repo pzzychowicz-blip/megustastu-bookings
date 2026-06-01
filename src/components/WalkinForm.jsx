@@ -130,6 +130,7 @@ export function WalkinForm({
   const wClearBtn = wSel.length > 0 ? (
     <button
       key="clr"
+      className="mgt-hover-scale"
       style={mkBtn({ fontSize: 12, padding: "6px 12px", background: BTN.clear })}
       onClick={() => setDraft({ ...wf, tables: [] })}
     >
@@ -289,12 +290,14 @@ export function WalkinForm({
               onChange={(e) => setDraft({ ...wf, tables: [], time: e.target.value })}
               min="13:00"
               max="22:00"
+              className="mgt-hover-scale"
               style={mkInp()}
             />
           </Fld>
           <Fld label="Number of guests">
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <button
+                className="mgt-hover-scale"
                 style={stepperBtnStyle}
                 onPointerDown={(e) => {
                   e.preventDefault();
@@ -309,6 +312,7 @@ export function WalkinForm({
               </button>
               <span style={stepperValueStyle}>{String(wSize)}</span>
               <button
+                className="mgt-hover-scale"
                 style={stepperBtnStyle}
                 onPointerDown={(e) => {
                   e.preventDefault();
@@ -326,6 +330,7 @@ export function WalkinForm({
           <Fld label="Duration">
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <button
+                className="mgt-hover-scale"
                 style={stepperBtnStyle}
                 onPointerDown={(e) => {
                   e.preventDefault();
@@ -337,6 +342,7 @@ export function WalkinForm({
               </button>
               <span style={stepperValueStyle}>{wDur + " min"}</span>
               <button
+                className="mgt-hover-scale"
                 style={stepperBtnStyle}
                 onPointerDown={(e) => {
                   e.preventDefault();
@@ -351,6 +357,7 @@ export function WalkinForm({
               </span>
               {wf.customDur ? (
                 <button
+                  className="mgt-hover-scale"
                   style={mkBtn({ fontSize: 12, background: BTN.reset })}
                   onPointerDown={(e) => {
                     e.preventDefault();
@@ -368,6 +375,7 @@ export function WalkinForm({
               onChange={(e) => setDraft({ ...wf, notes: e.target.value })}
               rows={2}
               placeholder="Special requests..."
+              className="mgt-hover-scale"
               style={{ ...mkInp(), resize: "vertical" }}
             />
           </Fld>
@@ -431,6 +439,7 @@ export function WalkinForm({
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
         <button
+          className="mgt-hover-scale"
           style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
           onClick={onClose}
         >
@@ -439,6 +448,7 @@ export function WalkinForm({
         <button
           onClick={onSave}
           disabled={!wOk}
+          className="mgt-hover-scale"
           style={{
             background: wOk ? "rgba(22,101,52,0.8)" : "rgba(180,180,190,0.4)",
             border: "1px solid rgba(255,255,255,0.2)",
