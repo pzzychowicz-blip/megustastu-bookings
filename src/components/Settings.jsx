@@ -46,6 +46,7 @@ export function TabBar({ tabs, current, onSelect }) {
         return (
           <button
             key={t.id}
+            className="mgt-hover-scale"
             onClick={() => onSelect(t.id)}
             style={{
               flex: 1,

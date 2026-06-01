@@ -207,7 +207,8 @@ function saveBookings(next, isSilent) {
 - Shared `.mgt-hover-scale` utility: `scale(1.08)`, `120ms ease`, `border-radius:12px`, opaque theme-aware `--bg-hover-card`, the `:hover:not(:disabled)` guard. Magnitude/contract must match Scheduling exactly. **The rule + token shipped v14.3.0** (`index.html` `<style>`; `--bg-hover-card` = `#ffffff` light / `rgb(50,50,53)` dark in both theme blocks; reuses `--shadow-soft`).
 - Opt-in per element via `className="mgt-hover-scale"`. Because `mkInp`/`mkBtn` return style objects, put the class **directly on the call-site element**, not via a prop.
 - Scroll containers (esp. `TimelineView`) must be padded so lifted edge cells don't clip; the `Overlay` desktop card uses `overflow: visible` + an inner scroller for tall bodies.
-- **Rollout status:** v14.3.0 = main-screen header chrome (view toggle / Walk-in / + New / Log out / date nav / date input / Today). Pending: v14.3.1 (ListView cards + TimelineView controls & blocks w/ the Fix-3 scroll-pad + Settings tabs), v14.3.2 (Overlay Fix 4 + `Toggle` atom + all modal buttons/inputs).
+- **Rollout status:** v14.3.0 = header chrome (view toggle / Walk-in / + New / Log out / date nav / date input / Today). v14.3.1 = ListView cards + action buttons, TimelineView controls + booking blocks (w/ the **Fix-3** scroller `padding:8` + `labelCol` `paddingTop:8` row-alignment mirror), Settings tabs. Pending: v14.3.2 (Overlay **Fix 4** = `overflow:visible` + `footer` inner-scroller; the `Toggle` atom; all modal buttons/inputs, field-only).
+- **Fix-3 timeline note:** pad the *scroller* (not the inner grid — the grid is `pct()`-positioned against the inner width, so padding it shifts every block). `labelCol` mirrors the scroller's `paddingTop` so rows stay aligned (verified: row-top delta 0).
 
 ---
 
@@ -353,7 +354,7 @@ Scripts live in `/home/claude/verify/` during a refactor session; re-create from
 ## Future work flagged
 
 - **Dark mode / theming port — COMPLETE** (v14.2.0 mechanism → v14.2.1 `constants.js` → v14.2.2 `atoms.jsx` + modals → v14.2.3 `TimelineView` → v14.2.4 `ListView` → v14.2.5 `App.jsx` chrome). Every in-app surface is themed via `var(--…)` tokens in `index.html`'s `:root` / `[data-theme="dark"]` blocks. See `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`.
-- **`.mgt-hover-scale` hover-lift port — IN PROGRESS** (3 waves; spec `MGT_Bookings_hover-scale_PORT_INSTRUCTIONS.md`). v14.3.0 shipped the CSS rule + `--bg-hover-card` token + header chrome. Remaining: v14.3.1 (ListView cards + TimelineView controls/blocks w/ Fix 3 + Settings tabs), v14.3.2 (Overlay Fix 4 + `Toggle` + all modal buttons/inputs). See the "Hover affordance" UI rule above.
+- **`.mgt-hover-scale` hover-lift port — IN PROGRESS** (3 waves; spec `MGT_Bookings_hover-scale_PORT_INSTRUCTIONS.md`). v14.3.0 = CSS rule + `--bg-hover-card` token + header chrome; v14.3.1 = ListView cards + TimelineView controls/blocks (Fix 3) + Settings tabs. Remaining: v14.3.2 (Overlay Fix 4 + `Toggle` + all modal buttons/inputs). See the "Hover affordance" UI rule above.
 - **WhatsApp Cloud API integration (Phase 1b)** — designed, not implemented. See `MGT_WhatsApp_Inbox_Phase1b_Design_Summary.md`. Integration points: the `BookingFormModal` callback surface + a new `InboxPanel` component.
 
 ---

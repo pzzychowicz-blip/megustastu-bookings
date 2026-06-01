@@ -171,6 +171,7 @@ export function TimelineView({
 
     return (
       <div
+        className="mgt-hover-scale"
         onClick={handleClick}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
@@ -267,7 +268,9 @@ export function TimelineView({
 
   // ── Labels column (left) — sticky table IDs + optional "unassigned" row ──
   const labelCol = (
-    <div style={{ width: LABEL_W + "px", flexShrink: 0 }}>
+    // v14.3.1 (Fix 3): paddingTop mirrors the grid scroller's padding so the
+    // 24px header + ROW_H rows line up with the grid column after the pad.
+    <div style={{ width: LABEL_W + "px", flexShrink: 0, paddingTop: 8 }}>
       <div style={{
         height: 24, background: "var(--tl-header-strip)",
         borderRadius: "6px 0 0 0",
@@ -406,7 +409,10 @@ export function TimelineView({
     <div
       ref={scrollRef}
       onScroll={onGridScroll}
-      style={{ flex: 1, overflowX: "auto", overflowY: "hidden" }}
+      // v14.3.1 (Fix 3): pad the scroller so a hover-scaled block at the grid
+      // edges (first/last minute, top/bottom row) doesn't clip on any side.
+      // labelCol gets a matching paddingTop so its rows stay aligned with the grid.
+      style={{ flex: 1, overflowX: "auto", overflowY: "hidden", padding: 8 }}
     >
       <div style={{ width: gridW + "px", minWidth: "100%", position: "relative" }}>
         <div style={{
@@ -441,6 +447,7 @@ export function TimelineView({
           setFollowNow(false);
         }
       }}
+      className="mgt-hover-scale"
       style={mkBtn({
         minHeight: 32, padding: "4px 10px", fontSize: 11,
         background: followNow ? "rgba(0,0,0,0.6)" : "rgba(120,130,150,0.5)"
@@ -457,18 +464,21 @@ export function TimelineView({
       {followBtn}
       <button
         onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
+        className="mgt-hover-scale"
         style={mkBtn({ minHeight: 32, minWidth: 32, padding: "4px 10px", fontSize: 16, background: BTN.nav })}
       >
         -
       </button>
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
+        className="mgt-hover-scale"
         style={mkBtn({ minHeight: 32, padding: "4px 10px", fontSize: 11, background: zoom === 1 ? "var(--btn-default)" : BTN.nav })}
       >
         {zoom === 1 ? "1x" : zoom + "x → 1x"}
       </button>
       <button
         onClick={() => setZoom((z) => Math.min(5, z + 0.5))}
+        className="mgt-hover-scale"
         style={mkBtn({ minHeight: 32, minWidth: 32, padding: "4px 10px", fontSize: 16, background: BTN.nav })}
       >
         +
@@ -483,6 +493,7 @@ export function TimelineView({
     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
       <button
         onClick={() => setAutoOptimizer(!autoOptimizer)}
+        className="mgt-hover-scale"
         style={mkBtn({
           minHeight: 32, padding: "4px 12px", fontSize: 11,
           background: autoOptimizer ? "rgba(22,101,52,0.75)" : "rgba(120,130,150,0.55)"
@@ -493,6 +504,7 @@ export function TimelineView({
       {!autoOptimizer ? (
         <button
           onClick={onReshuffle}
+          className="mgt-hover-scale"
           style={mkBtn({ minHeight: 32, padding: "4px 12px", fontSize: 11, background: BTN.orange })}
         >
           Reshuffle
@@ -616,6 +628,7 @@ export function TimelineView({
         <button
           onClick={onOpenSettings}
           title="Settings & keyboard shortcuts"
+          className="mgt-hover-scale"
           style={{
             background: "var(--cog-bg)",
             border: "1px solid var(--cog-border)",

@@ -128,6 +128,7 @@ export function ListView({
           .map((s) => (
             <button
               key={s}
+              className="mgt-hover-scale"
               style={mkBtn({ background: BLOCK_BG[s], textTransform: "capitalize" })}
               onClick={() => onStatus(b.id, s)}
             >
@@ -138,6 +139,7 @@ export function ListView({
         return (
           <div
             key={b.id}
+            className="mgt-hover-scale"
             style={{
               background: cardBg,
               border: cardBrdW + " solid " + cardBrd,
@@ -169,9 +171,9 @@ export function ListView({
             </div>
             {notesEl}
             <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-              <button style={mkBtn({ background: BTN.tables })} onClick={() => onManual(b.id)}>= Tables</button>
-              <button style={mkBtn({ background: BTN.edit })} onClick={() => onEdit(b)}>Edit</button>
-              <button style={mkBtn({ background: BTN.del })} onClick={() => onDelete(b.id)}>Delete</button>
+              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables })} onClick={() => onManual(b.id)}>= Tables</button>
+              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.edit })} onClick={() => onEdit(b)}>Edit</button>
+              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.del })} onClick={() => onDelete(b.id)}>Delete</button>
               {statusBtns}
             </div>
           </div>
