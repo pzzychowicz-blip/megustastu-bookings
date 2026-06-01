@@ -2099,3 +2099,38 @@ None functional. Visual: list cards + timeline blocks + their buttons + the time
 - Append-ordered (newest at bottom).
 - **Wave 2 of 3.** Next: v14.3.2 -- Overlay Fix 4 (`overflow:visible` + `footer` inner-scroller) + the `Toggle` atom + all modal buttons/inputs (field-only).
 
+---
+
+## v14.3.1 -> v14.3.2 -- Hover-lift port (wave 3/3, FINAL): modals, toggles, inputs
+
+**Date**: 2026-06-01
+**Branch**: `feat/v14.3.2-hover-scale-modals` -> PR to `main`
+**Status**: feature (UI affordance) -- **app version 14.3.1 -> 14.3.2**. **Completes the `.mgt-hover-scale` port.**
+
+The final wave: the `Toggle` atom + every modal's buttons, steppers, table cells, and inputs (field-only). With this, every interactive surface across the app lifts 8% on hover.
+
+### Files updated (11 + REFACTOR_LOG + CLAUDE.md)
+- `src/components/atoms.jsx` -- `Toggle` button gets the class (one change covers every toggle: dark-mode, swap-busy, reminder active, etc.).
+- `src/components/BookingFormModal.jsx` -- 6 inputs (name/phone/date/time/preference/notes), 4 +/- steppers, and all buttons (Assign ×2, Preferred, Clear ×3, status, History, Book Again, Reset, Cancel, Save).
+- `src/components/WalkinForm.jsx` -- time + notes inputs, 4 steppers, Reset, Clear, Cancel, Seat.
+- `src/components/ManualModal.jsx`, `PrefPickerModal.jsx`, `BlockModal.jsx`, `ReminderEditor.jsx`, `Reminders.jsx`, `HistoryPopup.jsx`, `LoginScreen.jsx` -- their buttons + inputs.
+- `src/components/TableGrid.jsx` -- the table cells, **conditionally** (`className={blocked ? undefined : "mgt-hover-scale"}`) since blocked cells use `cursor:not-allowed` but are NOT `disabled`, so the `:not(:disabled)` guard wouldn't stop them (Fix 1).
+- `src/App.jsx` -- the confirm-dialog buttons (delete / cancel / no-show / kitchen / reshuffle / reminder-del / Settings Close) + the ineff/overlap/write-warning banner buttons.
+
+### Design decisions
+- **Fix 4 (Overlay `overflow:visible` + inner scroller) was EVALUATED and intentionally SKIPPED.** CSS `overflow` clips at the **padding box**, and the desktop `Overlay` already has **24px padding** -- so a hover-scaled control has ~24px of breathing room on every side before clipping. Since every modal control uses `mkBtn`/`mkInp` (inline `background` + `boxShadow` + `borderRadius`), the hover rule's bg/shadow/radius are overridden by the inline styles (Fix 2) and the lift reduces to **`transform: scale(1.08)` only** (~2-5px growth) -- comfortably inside 24px. The doc's inner-scroller (`padding:"4px 16px"`) would *reduce* vertical room to 4px and clip the footer Save button. **Empirically verified** on the (scrolling) booking form: a full-width 500px textarea scaled 1.08 has **19px** clip margin each side; the bottom Save button has **21px** below -- all un-clipped. So the existing padding is sufficient and the Overlay is left unchanged.
+- **Scale-only is the intended outcome here.** Per Fix 2, surfaces with an inline `background` keep their colour on hover; Bookings styles everything via `mkBtn`/`mkInp`, so `--bg-hover-card` is effectively a fallback for bare elements (none currently). The unified cue is the 8% lift.
+- **Disabled controls stay flat** via the `:hover:not(:disabled)` guard -- exercised here by Save (BookingForm/Walkin/Manual/ReminderEditor `disabled` when invalid) and Login (`disabled` while loading). Blocked TableGrid cells (not `disabled`) get the class withheld instead.
+
+### Verification
+- `npm run build` OK -- main bundle **164.10 kB gz** (flat vs 14.3.1's 164.03).
+- **Browser QA on the DEV server**: the New-booking form renders correctly, **all 6 inputs + 14 total controls tagged**, Save enabled/disabled honoured, the `Overlay` sheet keeps `overflow:auto` (unchanged). Class counts per file match intent (atoms 1, BookingForm 22, Walkin 10, ReminderEditor 10, BlockModal 7, App.jsx 24, Manual/Pref/Reminders 3, Login 3, History/TableGrid/Settings 1). Screenshot of the form -- no layout regression.
+
+### Behavioural change
+None functional. Visual: every modal control + toggle + table cell + input lifts 8% on hover (desktop/trackpad; no effect on touch). Disabled/blocked controls stay flat. No neighbour reflow.
+
+### Notes
+- Append-ordered (newest at bottom).
+- **`.mgt-hover-scale` port COMPLETE** (v14.3.0 rule+token+header -> v14.3.1 cards/timeline/tabs -> v14.3.2 modals/toggles/inputs). One hover identity shared with MGT Scheduling.
+- **Deviation flagged:** Fix 4 skipped (see Design decisions) -- the 24px Overlay padding already prevents clipping; the doc's inner-scroller would have been counterproductive. Footer-anchoring (a separate UX nicety) was therefore not added; flag for a future pass if desired.
+

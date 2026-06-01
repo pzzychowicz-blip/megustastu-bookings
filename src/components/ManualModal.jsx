@@ -214,6 +214,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
         </div>
         {selected.length > 0 ? (
           <button
+            className="mgt-hover-scale"
             style={mkBtn({ fontSize: 12, padding: "6px 12px", background: BTN.clear })}
             onClick={() => setSelected([])}
           >
@@ -246,6 +247,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
       />
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
         <button
+          className="mgt-hover-scale"
           style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
           onClick={onClose}
         >
@@ -254,6 +256,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
         <button
           disabled={!ok}
           onClick={() => { if (ok) onSave(selected, true, isSwapping ? affectedBookings : null); }}
+          className="mgt-hover-scale"
           style={{
             background: ok ? (isSwapping ? BTN.orange : S.accent) : "rgba(180,180,190,0.4)",
             border: "1px solid rgba(255,255,255,0.2)",

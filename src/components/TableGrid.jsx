@@ -67,6 +67,7 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
                 <button
                   key={t.id}
                   onClick={() => toggle(t.id)}
+                  className={blocked ? undefined : "mgt-hover-scale"}
                   style={{
                     width: 64, height: 52, padding: 0, borderRadius: 12,
                     border: brd, background: bg, color: clr,

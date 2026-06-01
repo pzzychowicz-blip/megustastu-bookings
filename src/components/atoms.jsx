@@ -172,6 +172,7 @@ export function Toggle({ on, onClick }) {
   return (
     <button
       onClick={onClick}
+      className="mgt-hover-scale"
       style={{
         width: 48, height: 26, borderRadius: 13,
         border: "1px solid var(--border-glass)",

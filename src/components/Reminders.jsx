@@ -62,12 +62,14 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
       <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
         <button
           onClick={() => onEdit(r)}
+          className="mgt-hover-scale"
           style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: BTN.edit })}
         >
           Edit
         </button>
         <button
           onClick={() => onDelete(r.id)}
+          className="mgt-hover-scale"
           style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: BTN.del })}
         >
           Delete
@@ -116,6 +118,7 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
         </div>
         <button
           onClick={onAdd}
+          className="mgt-hover-scale"
           style={mkBtn({ minHeight: 36, padding: "6px 14px", background: "rgba(0,122,255,0.75)" })}
         >
           + New reminder

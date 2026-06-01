@@ -108,6 +108,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
               return (
                 <button
                   key={t.id}
+                  className="mgt-hover-scale"
                   onClick={() => togglePref(t.id)}
                   style={{
                     width: 64, height: 48, padding: 0, borderRadius: 12,
@@ -138,6 +139,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
         {prefs.length > 0 ? (
           <button
+            className="mgt-hover-scale"
             style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.clear })}
             onClick={() => onChange([])}
           >
@@ -145,6 +147,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
           </button>
         ) : null}
         <button
+          className="mgt-hover-scale"
           style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "#64748b" })}
           onClick={onClose}
         >

@@ -81,6 +81,7 @@ export function BookingFormModal({
     const prefs=form.preferredTables||[];
     const hasPref=prefs.length>0;
     const prefBtn=<button
+      className="mgt-hover-scale"
       style={mkBtn({background:hasPref?"#0d9488":"#64748b",fontSize:12,padding:"6px 10px"})}
       onClick={function(){onOpenPrefPicker();}}>{hasPref?"★ "+prefs.join("+"):"★ Preferred"}</button>;
     if(editId){
@@ -102,16 +103,19 @@ export function BookingFormModal({
       if((changed||cleared)&&!mt&&curTbl) leftEls.push(<span key="prev" style={{fontSize:11,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
       if(mt) leftEls.push(<button
         key="clrmt"
+        className="mgt-hover-scale"
         style={mkBtn({fontSize:12,background:BTN.clear})}
         onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>);
       if(showClearManual) leftEls.push(<button
         key="clrman"
+        className="mgt-hover-scale"
         style={mkBtn({fontSize:12,background:BTN.clear})}
         onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});onClearSwap();}}>Clear</button>);
       return (
         <Section><div
             style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><div
               style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flex:1,minWidth:0}}>{leftEls}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
+                className="mgt-hover-scale"
                 style={mkBtn({background:BTN.tables})}
                 onClick={function(){onOpenManualAssign(editId);}}>= Assign</button>{prefBtn}</div></div></Section>
       );
@@ -121,12 +125,14 @@ export function BookingFormModal({
     else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize:11,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
     if(mt) leftEls.push(<button
       key="clrmt"
+      className="mgt-hover-scale"
       style={mkBtn({fontSize:12,background:BTN.clear})}
       onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>);
     return (
       <Section><div
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><div
             style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flex:1,minWidth:0}}>{leftEls}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
+              className="mgt-hover-scale"
               style={mkBtn({background:BTN.tables})}
               onClick={function(){onOpenManualAssign("__new__");}}>= Assign</button>{prefBtn}</div></div></Section>
     );
@@ -163,6 +169,7 @@ export function BookingFormModal({
   const quickStatusBtns=editId?<Section><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600,marginRight:4}}>Status:</span>{["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return (
         <button
           key={s}
+          className="mgt-hover-scale"
           style={mkBtn({background:BLOCK_BG[s],textTransform:"capitalize",minHeight:40})}
           onClick={function(){if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}>{"> "+s}</button>
       );})}</div></Section>:null;
@@ -174,6 +181,7 @@ export function BookingFormModal({
     return (
       <button
         onClick={function(){onOpenHistory();}}
+        className="mgt-hover-scale"
         style={mkBtn({fontSize:12,background:"#64748b",padding:"8px 16px",minHeight:36})}>{"History ("+cur.history.length+")"}</button>
     );
   })();
@@ -189,6 +197,7 @@ export function BookingFormModal({
     return (
       <button
         onClick={function(){onBookAgain(cur);}}
+        className="mgt-hover-scale"
         style={mkBtn({fontSize:12,background:"rgba(22,101,52,0.8)",padding:"8px 16px",minHeight:36})}>Book Again</button>
     );
   })();
@@ -211,6 +220,7 @@ export function BookingFormModal({
 
   const resetDurBtn=form.customDur?<button
     key="rd"
+    className="mgt-hover-scale"
     style={mkBtn({fontSize:12,background:BTN.reset})}
     onPointerDown={function(){setForm(function(f){return Object.assign({},f,{customDur:null});})}}>Reset</button>:null;
   const endTime=form.time?toTime(toMins(form.time)+dur):"--";
@@ -222,42 +232,53 @@ export function BookingFormModal({
             value={form.name}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
             placeholder="Full name"
+            className="mgt-hover-scale"
             style={inp()} /></Fld><Fld label="Phone number"><input
             type="tel"
             value={form.phone}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{phone:e.target.value});});}}
             onFocus={function(e){const el=e.target;if(!el.value) setForm(function(f){return Object.assign({},f,{phone:"+"});});setTimeout(function(){el.selectionStart=el.selectionEnd=el.value.length;},0);}}
             placeholder="+34 600 000 000"
+            className="mgt-hover-scale"
             style={inp()} /></Fld></div></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date"><input
             type="date"
             value={form.date}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}
+            className="mgt-hover-scale"
             style={inp()} /></Fld><Fld label="Time"><input
             type="time"
             value={form.time}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});}}
             min="13:00"
             max="22:00"
+            className="mgt-hover-scale"
             style={inp()} /></Fld><Fld label="Seating preference"><select
             value={form.preference}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{preference:e.target.value});});}}
+            className="mgt-hover-scale"
             style={inp()}><option value="auto">Auto (recommended)</option><option value="indoor">Indoor</option><option value="outdoor">Outdoor</option></select></Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
+              className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}}>-</button><span
               style={{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}}>{String(Number(form.size)||2)}</span><button
+              className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});}}>+</button></div></Fld><Fld label="Duration"><div style={{display:"flex",alignItems:"center",gap:6}}><button
+              className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>-</button><span
               style={{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}}>{dur+" min"}</span><button
+              className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize:13,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section>{kitchenSection}{tablesBtn}{availBanner}{quickStatusBtns}<Section><Fld label="Notes"><textarea
           value={form.notes}
           onChange={function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});}}
           rows={2}
           placeholder="Allergies, special requests..."
+          className="mgt-hover-scale"
           style={Object.assign({},inp(),{resize:"vertical"})} /></Fld></Section>{errorEl}<div
       style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:18,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}</div><div style={{display:"flex",gap:8}}><button
+          className="mgt-hover-scale"
           style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
           onClick={function(){onClose();}}>Cancel</button>{(function(){
           // v14 p1 (Issue 3): Save is disabled when date is empty. Prevents the
@@ -268,6 +289,7 @@ export function BookingFormModal({
             <button
               disabled={!canSave}
               onClick={onSave}
+              className="mgt-hover-scale"
               style={{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
           );
         })()}</div></div></Overlay>

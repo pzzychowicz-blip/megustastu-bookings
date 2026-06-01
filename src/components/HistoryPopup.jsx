@@ -76,6 +76,7 @@ export function HistoryPopup({ booking, onClose }) {
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
         <button
+          className="mgt-hover-scale"
           style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "#64748b" })}
           onClick={onClose}
         >

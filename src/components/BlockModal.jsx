@@ -65,6 +65,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               </div>
               <button
                 onClick={() => onRemove(bl)}
+                className="mgt-hover-scale"
                 style={mkBtn({ background: BTN.del, fontSize: 12 })}
               >
                 Unblock
@@ -74,12 +75,14 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
         })}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
           <button
+            className="mgt-hover-scale"
             style={mkBtn({ minHeight: 40, padding: "8px 16px", background: "#64748b" })}
             onClick={() => setMode("add")}
           >
             + Add block
           </button>
           <button
+            className="mgt-hover-scale"
             style={mkBtn({ minHeight: 40, padding: "8px 16px", background: BTN.cancel })}
             onClick={onClose}
           >
@@ -114,6 +117,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               onChange={(e) => setFrom(e.target.value)}
               min={OPEN + ":00"}
               max={GRID_CLOSE + ":00"}
+              className="mgt-hover-scale"
               style={mkInp()}
             />
           </Fld>
@@ -124,6 +128,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               onChange={(e) => setTo(e.target.value)}
               min={OPEN + ":00"}
               max={GRID_CLOSE + ":00"}
+              className="mgt-hover-scale"
               style={mkInp()}
             />
           </Fld>
@@ -131,6 +136,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
       </Section>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
         <button
+          className="mgt-hover-scale"
           style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
           onClick={onClose}
         >
@@ -138,6 +144,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
         </button>
         <button
           onClick={handleSave}
+          className="mgt-hover-scale"
           style={{
             background: "rgba(153,27,27,0.85)",
             border: "1px solid rgba(255,255,255,0.2)",

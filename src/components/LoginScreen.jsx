@@ -84,6 +84,7 @@ export function LoginScreen() {
             onChange={(e) => setEmail(e.target.value)}
             onKeyDown={handleKey}
             placeholder="Email"
+            className="mgt-hover-scale"
             style={mkInp()}
           />
           <input
@@ -92,6 +93,7 @@ export function LoginScreen() {
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={handleKey}
             placeholder="Password"
+            className="mgt-hover-scale"
             style={mkInp()}
           />
           {error ? (
@@ -108,6 +110,7 @@ export function LoginScreen() {
           <button
             onClick={handleLogin}
             disabled={loading}
+            className="mgt-hover-scale"
             style={{
               ...mkBtn({ fontSize: 15, minHeight: 44, padding: "12px" }),
               background: "rgba(0,122,255,0.75)",
