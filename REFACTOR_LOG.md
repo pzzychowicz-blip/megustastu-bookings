@@ -2033,3 +2033,36 @@ None functional. Visual: the main-screen chrome renders dark in dark mode. **Dar
 - This entry was initially omitted from the v14.2.5 commit (the Edit failed on an em-dash match and wasn't re-attempted before commit); added via `--amend` + force-push before merge. Process lesson: confirm the REFACTOR_LOG entry is staged in the per-version diff, not just written.
 - Carried-forward niggle: commits this series use the hostname git identity, not the GitHub email.
 
+---
+
+## v14.2.5 -> v14.3.0 -- Hover-lift port (wave 1/3): CSS rule + token + App.jsx chrome
+
+**Date**: 2026-06-01
+**Branch**: `feat/v14.3.0-hover-scale` -> PR to `main`
+**Status**: feature (UI affordance) -- **app version 14.2.5 -> 14.3.0**. First of 3 waves porting `.mgt-hover-scale` from MGT Scheduling.
+
+Ports the shared **hover-lift affordance** so both MGT apps feel like one product. Primary interactive surfaces lift `scale(1.08)` on hover and gain an opaque card bg + soft shadow + 12px corners, paint-only (`transform`, no reflow), opt-in per element via `className="mgt-hover-scale"`. Spec: `MGT_Bookings_hover-scale_PORT_INSTRUCTIONS.md`. **Wave 1 = foundation + the main-screen header chrome only** (no modal/Overlay/timeline changes yet -- those are waves 2-3).
+
+### Files updated (2 + REFACTOR_LOG + CLAUDE.md)
+- `index.html` -- the `.mgt-hover-scale` rule (verbatim from Scheduling: `transition` of transform/bg/shadow/radius at 120ms; `:hover:not(:disabled)` -> `scale(1.08)` + `var(--bg-hover-card)` + `var(--shadow-soft)` + 12px + `z-index:2`). New `--bg-hover-card` token in BOTH blocks: `:root` `#ffffff`, `[data-theme="dark"]` `rgb(50,50,53)`. Reuses the existing `--shadow-soft`.
+- `src/App.jsx` -- `className="mgt-hover-scale"` on the 8 header-chrome controls: the timeline/list view-toggle buttons, Walk-in, + New, Log out, the `<`/`>` date-nav buttons, the date `<input>`, and Today. Version bump. (No style objects changed -- the class rides alongside the existing `mkBtn(...)`/inline `style`, since `mkBtn`/`mkInp` return style objects with no className passthrough.)
+- `CLAUDE.md` -- "Hover affordance" section: marked the rule shipped + wave-1 scope; "Future work" bullet updated to in-progress.
+
+### Design decisions
+- **Class on the call-site element, not the atom.** `mkBtn`/`mkInp` return style objects (Bookings divergence from Scheduling) -- there is no prop to forward a className through, so the class goes directly on each `<button>`/`<input>`.
+- **Header-first rollout.** The header sits in a flex row with a visible-overflow parent, so nothing clips -- the safe place to land the rule before the timeline scroller (Fix 3, wave 2) and Overlay (Fix 4, wave 3).
+- **Opaque hover card on purpose.** `--bg-hover-card` is fully opaque (Fix 2) so background-less surfaces don't read washy when scaled; surfaces with their own inline bg/radius keep them (inline wins at equal specificity).
+- **Token, not literal.** `--bg-hover-card` defined in both theme blocks per the add-a-token-define-it-in-both rule; `--shadow-soft` reused rather than minting a new shadow.
+
+### Verification
+- `npm run build` OK -- main bundle **163.99 kB gz** (flat vs 14.2.5's 163.96).
+- **Browser QA on the DEV server** (preview bridge up this session): the `.mgt-hover-scale:hover:not(:disabled)` rule is present verbatim; `--bg-hover-card` resolves to `#ffffff` (light) / `rgb(50,50,53)` (dark); exactly **8** elements carry the class (Timeline, List, Walk-in, + New, Log out, `<`, `>`, date input); a tagged button computes `transition-property: transform, background-color, box-shadow, border-radius` at `0.12s` with base `transform: none`. Header screenshot -- no layout regression.
+- Env note: the DEV checkout's `scheduler@0.27.0` was missing its `cjs/` dir (corrupt npm-cache tarball) and blocked `vite`; repaired with `npm cache verify` + clean reinstall. Not a code issue; `node_modules` is git-ignored, so no repo impact.
+
+### Behavioural change
+None functional. Visual: hovering a header control lifts it 8% with an opaque card bg + soft shadow (desktop/trackpad cue; no effect on touch). Disabled controls stay flat (`:not(:disabled)` guard). No neighbour reflow.
+
+### Notes
+- Append-ordered (newest at bottom).
+- **Wave 1 of 3.** Next: v14.3.1 (ListView cards + TimelineView controls + blocks w/ Fix 3 + Settings tabs), then v14.3.2 (Overlay Fix 4 + Toggle + all modal buttons/inputs).
+
