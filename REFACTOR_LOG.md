@@ -2134,3 +2134,53 @@ None functional. Visual: every modal control + toggle + table cell + input lifts
 - **`.mgt-hover-scale` port COMPLETE** (v14.3.0 rule+token+header -> v14.3.1 cards/timeline/tabs -> v14.3.2 modals/toggles/inputs). One hover identity shared with MGT Scheduling.
 - **Deviation flagged:** Fix 4 skipped (see Design decisions) -- the 24px Overlay padding already prevents clipping; the doc's inner-scroller would have been counterproductive. Footer-anchoring (a separate UX nicety) was therefore not added; flag for a future pass if desired.
 
+---
+
+## v14.3.2 -> v14.4.0 -- List shortcuts · editable opening hours · hover-scale fixes · login dark mode
+
+**Date**: 2026-06-01
+**Branch**: `feat/v14.4.0-list-shortcuts-hours` -> PR to `main`
+**Status**: feature -- **app version 14.3.2 -> 14.4.0** (minor: user-visible features). Eight staff-requested items bundled into one version (per owner's call; deviates from one-version-per-branch).
+
+### The eight items
+1. **Walk-in cannot seat at a blocked table** -- *already enforced*, no code change. `WalkinForm` feeds `getBlockSlots(tableBlocks, wDate)` into `wBusy`; blocked tables render red "busy" in `TableGrid` and `wToggle` returns early on them. Verified, not modified.
+2. **List-view per-card shortcuts** -- new keyboard-driven selection model. `↑`/`↓` move a focus ring through the day's bookings; `A`->Tables, `E`->Edit, `S`->Seated, `C`->Completed, `⇧C`->Cancel, `D`->Delete act on the focused card. `D` deletes only while a card is focused; with nothing focused it still jumps to Today.
+3. **List-view Cancel + Delete right-aligned** (in that order) -- pulled out of the action row into a `marginLeft:auto` group.
+4. **`N` -> new reminder** while the Settings Reminders tab is open.
+5. **Editable opening hours** (Settings -> General) -- Firebase-shared, the app's first `settings` node.
+6. **Timeline table labels** got `.mgt-hover-scale` (clickable, were missing the lift).
+7. **Kitchen-busy / availability hour chips** got `.mgt-hover-scale` (3 spots).
+8. **Login screen dark mode** -- the last surface still on hardcoded light literals (renders pre-auth).
+
+### Files changed (10 src + REFACTOR_LOG + CLAUDE.md)
+- **`src/hooks/useOperatingHours.js`** (NEW) -- subscribes to Firebase `settings/operatingHours`, pushes hours into `constants.js` via `setOperatingHours()`, holds React state to drive the repaint, exposes guarded `saveOperatingHours`. Loaded-ref write-guard (no empty-array guard -- it's a small object).
+- **`src/lib/constants.js`** -- `OPEN`/`CLOSE`/`GRID_CLOSE`/`QUARTER_HOURS` now mutable `let` exports + `setOperatingHours(open, close)` (lives here because only the owning module may reassign its exports). Live ESM bindings -> all importers see updates with no signature changes.
+- **`src/App.jsx`** -- import + call `useOperatingHours`; `selectedListId` state + `useEffect` clearing it on `viewDate` change; `listDaySorted` (same comparator as ListView, via imported `statusOrder`); kbRef gains `listDay`/`selectedListId`/`setSelectedListId`/`openEdit`/`updateStatus`/`openNewReminder`; keyboard handler gains the List-view block (item 2) and the Reminders-tab `N` (item 4); ListView mount gains `selectedId`/`onSelect`; SettingsContent mount gains `openHour`/`closeHour`/`onSaveHours`; version bump.
+- **`src/components/ListView.jsx`** -- Cancel + Delete right-aligned group (item 3); `selectedId`/`onSelect` props, accent focus ring (`box-shadow 0 0 0 3px var(--accent)`, kept alongside the semantic border so warn/conflict signals survive) + click-to-select.
+- **`src/components/Settings.jsx`** -- `HourStepper` helper + Opening-hours `Section` in `GeneralTabContent`; props threaded through `SettingsContent`. Stepper bounds: open 8-21 & < close; close (open+1)-23 (disabled at bounds; `sanitizeHours` is the backstop).
+- **`src/components/Shortcuts.jsx`** -- new "List view" cheatsheet section + `N` row under Settings.
+- **`src/components/TimelineView.jsx`** -- `.mgt-hover-scale` on the table-label badge `<span>` (item 6).
+- **`src/components/WalkinForm.jsx`** -- `.mgt-hover-scale` on kitchen time chips (item 7); `OPEN`/`CLOSE` added to the constants import; time `min`/`max` derived from them.
+- **`src/components/BookingFormModal.jsx`** -- `.mgt-hover-scale` on kitchen time chips (item 7); time `min`/`max` derived from `OPEN`/`CLOSE` (already imported).
+- **`src/components/atoms.jsx`** -- `.mgt-hover-scale` on `AvailBanner` suggestion chips (item 7).
+
+### Design decisions
+- **Opening hours via live module bindings, not prop-drilling.** `OPEN`/`CLOSE`/`GRID_CLOSE`/`QUARTER_HOURS` become reassignable `let`s; `setOperatingHours` (same module) is the only writer. ESM live bindings mean `booking-logic.js`'s pure functions (`getBlockSlots`, `findTimes`, `pct`) need **zero** signature changes -- they read updated values automatically. `useOperatingHours` also sets React state so a re-render repaints the timeline/forms (a module mutation alone wouldn't). Builds clean under Rollup (`export let` reassignment is spec-compliant).
+- **First Firebase `settings` node.** Hours are restaurant-wide, so they belong in Firebase (shared), unlike per-device theme (stays in `localStorage`). CLAUDE.md's "no settings node" rule revised accordingly.
+- **List selection lives in BookingApp** (not ListView) because the global keydown handler is centralized there via `kbRef`. `listDaySorted` mirrors ListView's exact sort so the focus ring and the keyboard target never drift. Focus ring is a `box-shadow` accent ring **added to** (not replacing) the semantic border, so overdue/warn/conflict borders stay visible.
+- **`D` precedence:** the List block sits before the global shortcuts; `D` deletes only when a card is focused, otherwise falls through to "jump to today". `⇧C` (cancel) is checked before plain `C` (complete) via `e.shiftKey`.
+- **Form time `min`/`max` pad to two digits** (`String(OPEN).padStart(2,"0")`) because hours can now be single-digit (e.g. open 8 -> `08:00`).
+
+### Verification
+- `npm run build` OK -- main bundle **165.24 kB gz** (+1.14 vs 14.3.2's 164.10), covering the new hook + List/hours logic. Pre-existing 500 kB chunk-size warning unchanged.
+- Item 1 confirmed by code-trace + live (blocked table is red "busy" and unclickable in the Walk-in grid).
+- Live QA on the DEV server (see PR notes): ↑/↓ focus ring; A/E/S/C/⇧C/D on the focused card; Cancel+Delete right-aligned & wrap; `N` opens the new-reminder editor on the Reminders tab; editing Open/Close repaints the timeline range + form limits live and persists across reload (Firebase); timeline labels + kitchen chips lift on hover in both themes; login card dark-themed (no grey wash).
+
+### Behavioural change
+New: List-view keyboard selection + shortcuts; editable opening hours (affects booking window + timeline range app-wide); `N` reminder shortcut. Visual: Cancel/Delete re-positioned in list cards; timeline labels + kitchen chips + login screen now correct on hover / in dark mode. No change to the optimizer, persistence guards, or existing data shapes (the new `settings/operatingHours` node is additive).
+
+### Notes
+- Append-ordered (newest at bottom).
+- **Deviation:** eight items in one version (owner's call) rather than one-version-per-branch.
+- **New architecture fact:** `settings/operatingHours` is the first Firebase `settings` node; theme stays per-device in `localStorage`. Don't capture the `OPEN`/`CLOSE` live bindings into a module-scope local (breaks live update) -- read at call/render time.
+

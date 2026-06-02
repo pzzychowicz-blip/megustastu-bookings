@@ -293,7 +293,7 @@ export function TimelineView({
               cursor: "pointer", boxSizing: "border-box"
             }}
           >
-            <span style={{
+            <span className="mgt-hover-scale" style={{
               fontSize: 11, fontWeight: 600, padding: "3px 0", borderRadius: 8,
               background: hasBlock ? "var(--tl-blocked-badge)" : indoor ? TBL.ind.bg : TBL.out.bg,
               color: hasBlock ? "var(--text-on-accent)" : indoor ? TBL.ind.text : TBL.out.text,

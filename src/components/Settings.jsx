@@ -70,12 +70,52 @@ export function TabBar({ tabs, current, onSelect }) {
   );
 }
 
-// ── General tab — version line + visible copyright credit ───────────────────
-// Reserved for future app-level toggles (default view, sound preference,
-// etc.). The version string arrives as a prop from App.jsx — sourced from
-// __APP_SIGNATURE__.version, so a single edit there propagates to both the
-// console boot banner and this label.
-export function GeneralTabContent({ appVersion, isDark, onToggleDark }) {
+// ── General tab — dark-mode toggle · opening-hours editor · version line ────
+// The version string arrives as a prop from App.jsx (sourced from
+// __APP_SIGNATURE__.version). Opening hours (v14.4.0) are Firebase-shared and
+// arrive as openHour/closeHour with an onSaveHours(open, close) writer.
+
+// Hour stepper (whole hours only — the service window is on the hour). Each tap
+// commits a new {open, close} pair via onSaveHours; the component is fully
+// controlled by props (the Firebase echo re-renders it). Disabled at the bounds
+// (open 8–21 and < close; close (open+1)–23) so an invalid window can't be set.
+const HOUR_STEP_BTN = {
+  background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
+  borderRadius: 10, width: 38, height: 38, fontSize: 20, fontWeight: 600,
+  color: "var(--text-primary)",
+  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+  boxShadow: "var(--shadow-input)"
+};
+function HourStepper({ label, value, onDec, onInc, disableDec, disableInc }) {
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button
+          onClick={onDec} disabled={disableDec}
+          className={disableDec ? undefined : "mgt-hover-scale"}
+          style={{ ...HOUR_STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}
+        >
+          −
+        </button>
+        <span style={{ minWidth: 58, textAlign: "center", fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
+          {String(value).padStart(2, "0") + ":00"}
+        </span>
+        <button
+          onClick={onInc} disabled={disableInc}
+          className={disableInc ? undefined : "mgt-hover-scale"}
+          style={{ ...HOUR_STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, closeHour, onSaveHours = () => {} }) {
+  const oh = typeof openHour === "number" ? openHour : 13;
+  const ch = typeof closeHour === "number" ? closeHour : 22;
   return (
     <div>
       {/* v14.2.0: Dark-mode toggle. Per-device (localStorage) — flips
@@ -93,6 +133,26 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark }) {
             </div>
           </div>
           <Toggle on={isDark} onClick={onToggleDark} />
+        </div>
+      </Section>
+      {/* v14.4.0: Opening-hours editor — Firebase-shared (settings/operatingHours).
+          Sets the booking window (form time min/max) and the timeline grid range. */}
+      <Section style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Opening hours</div>
+        <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2, marginBottom: 12 }}>
+          Shared across all devices. Sets the booking window and the timeline range.
+        </div>
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+          <HourStepper
+            label="Open" value={oh}
+            disableDec={oh <= 8} disableInc={oh >= ch - 1}
+            onDec={() => onSaveHours(oh - 1, ch)} onInc={() => onSaveHours(oh + 1, ch)}
+          />
+          <HourStepper
+            label="Close" value={ch}
+            disableDec={ch <= oh + 1} disableInc={ch >= 23}
+            onDec={() => onSaveHours(oh, ch - 1)} onInc={() => onSaveHours(oh, ch + 1)}
+          />
         </div>
       </Section>
       <div style={{ padding: "10px 12px 12px", textAlign: "center" }}>
@@ -116,6 +176,9 @@ export function SettingsContent({
   appVersion,
   isDark,
   onToggleDark,
+  openHour,
+  closeHour,
+  onSaveHours,
   reminders,
   onAddReminder,
   onEditReminder,
@@ -124,7 +187,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} openHour={openHour} closeHour={closeHour} onSaveHours={onSaveHours} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent

@@ -62,6 +62,15 @@ const SHORTCUT_SECTIONS = [
     { keys: ["O"],       label: "Toggle Optimizer (today)" },
     { keys: ["R"],       label: "Reshuffle (today, optimizer OFF)" },
   ]},
+  { title: "List view", rows: [
+    { keys: ["↑", "↓"], label: "Select previous / next booking" },
+    { keys: ["A"],       label: "Assign tables" },
+    { keys: ["E"],       label: "Edit booking" },
+    { keys: ["S"],       label: "Mark seated" },
+    { keys: ["C"],       label: "Mark completed" },
+    { keys: ["⇧C"], label: "Cancel booking" },
+    { keys: ["D"],       label: "Delete booking" },
+  ]},
   { title: "Edit / New Booking", rows: [
     { keys: ["A"],       label: "Manual table assignment" },
     { keys: ["P"],       label: "Preferred tables" },
@@ -78,6 +87,7 @@ const SHORTCUT_SECTIONS = [
   ]},
   { title: "Settings", rows: [
     { keys: ["\u2190", "\u2192"], label: "Switch between tabs" },
+    { keys: ["N"],       label: "New reminder (Reminders tab)" },
   ]},
   { title: "Universal", rows: [
     { keys: ["Esc"],     label: "Close current window" },

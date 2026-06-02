@@ -27,7 +27,8 @@ import { SmallTag, SBadge, TBadge, mkBtn } from "./atoms";
 
 export function ListView({
   bookings, date, onEdit, onStatus, onDelete, onManual,
-  nowMins = 0, warnings = {}
+  nowMins = 0, warnings = {},
+  selectedId = null, onSelect = () => {}
 }) {
   const day = bookings
     .filter((b) => b.date === date)
@@ -123,7 +124,9 @@ export function ListView({
           <span style={{ fontSize: 13, color: S.text, marginLeft: 4 }}>{b.phone}</span>
         ) : null;
 
-        const statusBtns = ["confirmed", "seated", "completed", "cancelled"]
+        // v14.4.0: Cancel + Delete are pulled into a right-aligned group (Cancel
+        // then Delete); the remaining status changers stay in the left group.
+        const statusBtns = ["confirmed", "seated", "completed"]
           .filter((s) => s !== b.status)
           .map((s) => (
             <button
@@ -135,17 +138,32 @@ export function ListView({
               {"> " + s}
             </button>
           ));
+        const cancelBtn = b.status !== "cancelled" ? (
+          <button
+            key="cancelled"
+            className="mgt-hover-scale"
+            style={mkBtn({ background: BLOCK_BG.cancelled, textTransform: "capitalize" })}
+            onClick={() => onStatus(b.id, "cancelled")}
+          >
+            {"> cancelled"}
+          </button>
+        ) : null;
 
         return (
           <div
             key={b.id}
             className="mgt-hover-scale"
+            onClick={() => onSelect(b.id)}
             style={{
               background: cardBg,
               border: cardBrdW + " solid " + cardBrd,
               borderRadius: 16, padding: "14px 16px",
               opacity: (b.status === "completed" || b.status === "cancelled") ? 0.75 : 1,
-              boxShadow: "var(--shadow-card)"
+              // v14.4.0: accent ring marks the keyboard-focused card (List shortcuts).
+              boxShadow: b.id === selectedId
+                ? "0 0 0 3px var(--accent), var(--shadow-card)"
+                : "var(--shadow-card)",
+              cursor: "pointer"
             }}
           >
             {conflictEl}
@@ -170,11 +188,14 @@ export function ListView({
               {phonEl}
             </div>
             {notesEl}
-            <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
               <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables })} onClick={() => onManual(b.id)}>= Tables</button>
               <button className="mgt-hover-scale" style={mkBtn({ background: BTN.edit })} onClick={() => onEdit(b)}>Edit</button>
-              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.del })} onClick={() => onDelete(b.id)}>Delete</button>
               {statusBtns}
+              <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center" }}>
+                {cancelBtn}
+                <button className="mgt-hover-scale" style={mkBtn({ background: BTN.del })} onClick={() => onDelete(b.id)}>Delete</button>
+              </div>
             </div>
           </div>
         );

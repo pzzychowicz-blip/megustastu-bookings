@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, KITCHEN_TABLE_LIMIT } from "../lib/constants";
+import { S, BTN, KITCHEN_TABLE_LIMIT, OPEN, CLOSE } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy,
@@ -159,6 +159,7 @@ export function WalkinForm({
     return arr.map((r) => (
       <span
         key={r.timeStr}
+        className="mgt-hover-scale"
         onClick={() => setDraft({ ...wf, tables: [], time: r.timeStr })}
         style={{
           cursor: "pointer", padding: "3px 8px", borderRadius: 6,
@@ -288,8 +289,8 @@ export function WalkinForm({
               type="time"
               value={wTime}
               onChange={(e) => setDraft({ ...wf, tables: [], time: e.target.value })}
-              min="13:00"
-              max="22:00"
+              min={String(OPEN).padStart(2, "0") + ":00"}
+              max={String(CLOSE).padStart(2, "0") + ":00"}
               className="mgt-hover-scale"
               style={mkInp()}
             />

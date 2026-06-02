@@ -30,7 +30,7 @@ import {
 import {
   getDur, toMins, genId,
   histEntry, diffBooking,
-  isLocked, isActive,
+  isLocked, isActive, statusOrder,
   getBlockSlots, canAssign,
   getKitchenLoad,
   applyOpt,
@@ -122,6 +122,14 @@ import { useThemeMode } from "./hooks/useThemeMode";
 // sourced from D3 hooks below; hook signature unchanged.
 import { usePersistence } from "./hooks/usePersistence";
 
+// ── v14.4.0: Operating-hours subsystem (Settings → General) ───────────────
+// `useOperatingHours` owns the editable service window, persisted to Firebase
+// (settings/operatingHours — the app's FIRST settings node, shared across
+// devices) and pushed into constants.js's live OPEN/CLOSE/GRID_CLOSE bindings so
+// the timeline grid + form time limits track it. Returns {operatingHours,
+// saveOperatingHours}.
+import { useOperatingHours } from "./hooks/useOperatingHours";
+
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
 // `useReminders` owns reminders + reminderFires state, editor + delete-confirm
 // state, write-guards, both Firebase listeners, the prune and 30s-tick effects,
@@ -162,7 +170,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.3.2",
+  version:"14.4.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -393,6 +401,9 @@ function BookingApp(){
   },[]);
 
   const [view, setView] = useState("timeline");
+  // v14.4.0: List-view keyboard focus — the booking the A/E/D/S/C/Delete
+  // shortcuts act on. ↑/↓ move it; click a card to set it. Null = nothing focused.
+  const [selectedListId, setSelectedListId] = useState(null);
   const [timelineZoom, setTimelineZoom] = useState(1);
   const timelineScrollRef=useRef(0);
   const [followNow, setFollowNow] = useState(false);
@@ -449,6 +460,12 @@ function BookingApp(){
     loadBannerShown, reconnectShown,
     firstLoadCount,
   } = usePersistence({ autoOptimizer, nowMins });
+  // ── v14.4.0: Operating hours (Firebase settings/operatingHours, shared) ──
+  // The hook pushes hours into constants.js's live OPEN/CLOSE/GRID_CLOSE on each
+  // snapshot; `operatingHours` state here drives the re-render that repaints the
+  // timeline + form time limits. `saveOperatingHours` is wired to the Settings
+  // General-tab editor below.
+  const { operatingHours, saveOperatingHours } = useOperatingHours();
   // ── Reminders hook ──────────────────────────────────────────────────────────
   // Owns all reminder state, savers, listeners, handlers, and the
   // reminderBanners JSX. nowMins drives banner re-evaluation; setWriteWarning
@@ -494,6 +511,18 @@ function BookingApp(){
 
   const dayCount=bookings.filter(function(b){return b.date===viewDate&&b.status!=="cancelled";}).length;
   const inefficient=bookings.length>0&&checkInefficent(bookings,viewDate);
+
+  // v14.4.0: the day's bookings in the SAME order ListView renders them
+  // (status group, then time). Drives ↑/↓ keyboard navigation of selectedListId
+  // and resolves which booking the List shortcuts act on. Kept identical to
+  // ListView's internal sort so the focus ring and the keyboard target match.
+  const listDaySorted=bookings
+    .filter(function(b){return b.date===viewDate;})
+    .sort(function(a,b){const sa=statusOrder(a.status),sb=statusOrder(b.status);if(sa!==sb) return sa-sb;return a.time.localeCompare(b.time);});
+  // Clear the List focus when the day changes — the focused booking won't be
+  // on the new day. (A status change that drops a booking from view just leaves
+  // selectedListId pointing at a missing id → shortcuts no-op until it's re-set.)
+  useEffect(function(){setSelectedListId(null);},[viewDate]);
 
   // Overlap warnings: seated bookings whose live end is within 15 min of next booking on same table
   const overlapWarnings=(function(){
@@ -816,6 +845,11 @@ function BookingApp(){
     confirmKitchen:confirmKitchen,setConfirmKitchen:setConfirmKitchen,
     blockTarget:blockTarget,setBlockTarget:setBlockTarget,
     bookings:bookings,
+    // v14.4.0: List-view selection + the handlers its A/E/S/C/Delete shortcuts call.
+    listDay:listDaySorted,selectedListId:selectedListId,setSelectedListId:setSelectedListId,
+    openEdit:openEdit,updateStatus:updateStatus,
+    // v14.4.0: N → new reminder while the Settings Reminders tab is open.
+    openNewReminder:openNewReminder,
     openNew:openNew,openWalkin:openWalkin,
     save:save,doSave:doSave,saveWalkin:saveWalkin,doSaveWalkin:doSaveWalkin,
     forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain
@@ -895,6 +929,8 @@ function BookingApp(){
           K.setSettingsTab(TABS[newIdx]);
           return;
         }
+        // v14.4.0: N → new reminder when the Reminders tab is active.
+        if((k==="n"||k==="N")&&K.settingsTab==="reminders"){e.preventDefault();K.openNewReminder();return;}
       }
       // ── Edit Booking modal shortcuts ──
       // Only fire when Edit is the TOP layer (no popup on top of it).
@@ -958,6 +994,31 @@ function BookingApp(){
       // ── Global shortcuts: suppressed while any modal is open ──
       const anyModal=K.showForm||K.showWalkin||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.reminderEditor||K.confirmReminderDel;
       if(anyModal) return;
+      // ── v14.4.0: List-view per-card shortcuts (act on the focused booking) ──
+      // ↑/↓ move the focus ring; A/E/S/C/Shift+C/Delete act on it. Placed before
+      // the global letter shortcuts so Delete wins over "jump to today" ONLY while
+      // a card is focused — with nothing focused, D still jumps to today. ←/→
+      // fall through to the global day-nav below.
+      if(K.view==="list"){
+        const list=K.listDay||[];
+        if(k==="ArrowDown"||k==="ArrowUp"){
+          e.preventDefault();
+          if(!list.length) return;
+          const idx=list.findIndex(function(b){return b.id===K.selectedListId;});
+          const ni=idx<0?(k==="ArrowDown"?0:list.length-1):(k==="ArrowDown"?Math.min(list.length-1,idx+1):Math.max(0,idx-1));
+          K.setSelectedListId(list[ni].id);
+          return;
+        }
+        const sel=K.selectedListId?list.find(function(b){return b.id===K.selectedListId;}):null;
+        if(sel){
+          if(k==="a"||k==="A"){e.preventDefault();K.setManualTarget(sel.id);return;}
+          if(k==="e"||k==="E"){e.preventDefault();K.openEdit(sel);return;}
+          if(k==="s"||k==="S"){e.preventDefault();K.updateStatus(sel.id,"seated");return;}
+          if((k==="c"||k==="C")&&e.shiftKey){e.preventDefault();K.updateStatus(sel.id,"cancelled");return;}
+          if(k==="c"||k==="C"){e.preventDefault();K.updateStatus(sel.id,"completed");return;}
+          if(k==="d"||k==="D"){e.preventDefault();K.setConfirmDel(sel.id);return;}
+        }
+      }
       if(k==="?"){e.preventDefault();K.setShowSettings(true);return;}
       if(k==="t"||k==="T"){e.preventDefault();K.setView("timeline");return;}
       if(k==="l"||k==="L"){e.preventDefault();K.setView("list");return;}
@@ -1167,7 +1228,9 @@ function BookingApp(){
     onDelete={function(id){setConfirmDel(id);}}
     onManual={function(id){setManualTarget(id);}}
     nowMins={nowMins}
-    warnings={overlapWarnings} />;
+    warnings={overlapWarnings}
+    selectedId={selectedListId}
+    onSelect={setSelectedListId} />;
 
 
   const delModal=confirmDel?<Overlay onClose={function(){setConfirmDel(null);}}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div><div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
@@ -1293,6 +1356,9 @@ function BookingApp(){
             appVersion={__APP_SIGNATURE__.version}
             isDark={isDark}
             onToggleDark={onToggleDark}
+            openHour={operatingHours.open}
+            closeHour={operatingHours.close}
+            onSaveHours={saveOperatingHours}
             tab={settingsTab}
             setTab={setSettingsTab}
             reminders={reminders}
