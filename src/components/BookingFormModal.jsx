@@ -154,6 +154,7 @@ export function BookingFormModal({
     return arr.map(function(r){return (
       <span
         key={r.timeStr}
+        className="mgt-hover-scale"
         onClick={function(){setForm(function(f){return Object.assign({},f,{time:r.timeStr});});}}
         style={{cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:600,fontSize:12,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?"#166534":"#854d0e",border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>{r.timeStr}</span>
     );});
@@ -249,8 +250,8 @@ export function BookingFormModal({
             type="time"
             value={form.time}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});}}
-            min="13:00"
-            max="22:00"
+            min={String(OPEN).padStart(2, "0") + ":00"}
+            max={String(CLOSE).padStart(2, "0") + ":00"}
             className="mgt-hover-scale"
             style={inp()} /></Fld><Fld label="Seating preference"><select
             value={form.preference}

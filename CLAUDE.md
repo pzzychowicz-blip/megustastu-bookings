@@ -35,7 +35,8 @@ src/
 │   ├── useAutoOptimizer.js          optimizer thermostat + daily reset
 │   ├── useWalkin.js                 walk-in state + handlers
 │   ├── useWinW.js                   viewport-width hook
-│   └── useThemeMode.js              dark-mode resolver (localStorage pref → isDark; writes data-theme)
+│   ├── useThemeMode.js              dark-mode resolver (localStorage pref → isDark; writes data-theme)
+│   └── useOperatingHours.js         editable open/close hours → constants.js live bindings; Firebase settings/operatingHours node (v14.4.0)
 ├── components/
 │   ├── BookingFormModal.jsx         booking form (controlled component)
 │   ├── TimelineView.jsx             Gantt-style timeline (horizontal scroller)
@@ -163,9 +164,12 @@ function saveBookings(next, isSilent) {
 
 **Auto-effects** (anything that writes Firebase without direct user action) must pass `isSilent=true` to suppress the user-facing banner on refusal.
 
-**Persisted collections:** `bookings`, `tableBlocks`, `reminders`, `reminderFires`. There is **no** Firebase `settings` node — per-device preferences (e.g. theme) use `localStorage`, not Firebase.
+**Persisted collections:** `bookings`, `tableBlocks`, `reminders`, `reminderFires`, plus the `settings/operatingHours` object (open/close hours — the **first** Firebase `settings` node, added v14.4.0; restaurant-wide config so it's **shared** across devices, unlike per-device prefs). Per-device preferences (e.g. **theme**) still use `localStorage`, NOT Firebase — only restaurant-wide config belongs in the `settings` node. The `operatingHours` write-guard is the loaded-ref half only (it's a small object, so the empty-array guard doesn't apply); see `useOperatingHours.js`.
 
 **Single central save path:** route every mutation of a collection through one helper (e.g. `bookingsAfterAction`) so future conflict-detection / re-derivation has one hook point.
+
+### Operating hours — live module bindings (v14.4.0)
+`OPEN` / `CLOSE` / `GRID_CLOSE` / `QUARTER_HOURS` in `constants.js` are **mutable `let` exports** (not `var`/`const`) reassigned **only** by `setOperatingHours(open, close)` — defined in the same module, because only the owning module may reassign its own exports. They're **live ESM bindings**, so reassigning them updates every importer (incl. `booking-logic.js`'s pure functions — `getBlockSlots`, `findTimes`, `pct`) with **no signature changes**. `useOperatingHours` (Firebase `settings/operatingHours`) calls the setter on each snapshot **and** sets a React state so BookingApp re-renders — that repaint is what makes the timeline/forms read the new values. `GRID_CLOSE = close + 1`. The forms' time `min`/`max` derive from `OPEN`/`CLOSE` (`String(OPEN).padStart(2,"0")+":00"` — pad because hours can be single-digit now). **Don't capture these into a module-scope local** (breaks the live binding) — read them at call/render time.
 
 ### Optimizer cutoffs
 - 15:00 auto-cutoff for today's bookings — `autoOptimizer` flips off.
@@ -198,7 +202,7 @@ function saveBookings(next, isSilent) {
 ### Theming / dark mode (mechanism shipped v14.2.0 — ported from Scheduling; see `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`)
 - Light + dark via CSS custom properties: `:root` (light) + `[data-theme="dark"]` overrides in `index.html`; `<html data-theme="…">` set via `document.documentElement.dataset.theme`. A theme flip is **one DOM attribute change — zero React re-render** of the tree.
 - **Hook:** `useThemeMode(explicitPref) → isDark` (`src/hooks/useThemeMode.js`) writes `data-theme` and follows the OS live when pref is `undefined` — the shared Scheduling contract, unchanged. A no-flash inline script in `index.html` paints the theme before React mounts (the hook alone runs too late).
-- **Persistence is per-device `localStorage["mgt-theme"]`** (`"dark"|"light"|`absent), NOT Firebase (Bookings has no settings node). `readThemePref()` (module scope in `App.jsx`) feeds the hook; the Settings General-tab `Toggle` (`onToggleDark`) writes the key. The no-flash script reads the SAME key — **keep the value convention in sync across all three.**
+- **Persistence is per-device `localStorage["mgt-theme"]`** (`"dark"|"light"|`absent), NOT Firebase (theme is per-device by design; the `settings/operatingHours` node added v14.4.0 is restaurant-wide config only). `readThemePref()` (module scope in `App.jsx`) feeds the hook; the Settings General-tab `Toggle` (`onToggleDark`) writes the key. The no-flash script reads the SAME key — **keep the value convention in sync across all three.**
 - **No rgba/hex literals in JS — every colour references `var(--…)`.** Migrated token-by-token in waves. **v14.2.0:** core `S` set + app background (`--bg-app`). **v14.2.1:** `constants.js` colour sets — `STATUS_COLORS` + `TBL` as **RGB-channel triplets** composed `rgba(var(--…-rgb), a)`; `BLOCK_BG` + `BTN` direct tokens (theme-invariant saturated fills; only status-chip **text** flips). **v14.2.2:** `atoms.jsx` + the full **modal/form subsystem** (every `Overlay` modal, `Section`, inputs, steppers, `Toggle`, `Kbd`, the Settings `TabBar`, in-modal banners) — surfaces + their text flip together (coupling: the shared `Overlay` backs 7 modals, so a dark sheet needs dark-themed content). **Still literal** (pending waves): `TimelineView`, `ListView`, and the main-screen banners in `App.jsx` (offline/reconnect/load/overlap/reshuffle) — so the **timeline/list canvas is still light in dark mode** until those land; modals/forms are done.
 - **Token families** (index.html): surfaces `--bg-sheet`/`-sheet-mobile`/`-soft`/`-input`/`-stepper`/`-tabbar`/`-tab-active`/`-card`; borders `--border-sheet`/`-soft`/`-input`/`-kbd`/`-glass`; `--scrim`; semantic text `--text-primary`/`-secondary`/`-muted`/`-faint`/`-required`/`-on-accent` + `--warn-text`/`--danger-text`/`--success-text`; banner trios `--warn-*`/`--danger-*`/`--suggest-*` (bg+border+text move together); shadows `--shadow-sheet`/`-soft`/`-input`/`-btn`. **Dialog sheets use the near-opaque `--bg-sheet`** (dark = 0.85), per the opaque-popover rule. `ReminderEditor` has its **own** modal (not `Overlay`) — theme its scrim/card directly.
 - The PDF/print path stays light regardless of in-app theme (currently no in-app PDF/export exists; keep it light if one is added).
@@ -354,8 +358,9 @@ Scripts live in `/home/claude/verify/` during a refactor session; re-create from
 
 ## Future work flagged
 
-- **Dark mode / theming port — COMPLETE** (v14.2.0 mechanism → v14.2.1 `constants.js` → v14.2.2 `atoms.jsx` + modals → v14.2.3 `TimelineView` → v14.2.4 `ListView` → v14.2.5 `App.jsx` chrome). Every in-app surface is themed via `var(--…)` tokens in `index.html`'s `:root` / `[data-theme="dark"]` blocks. See `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`.
-- **`.mgt-hover-scale` hover-lift port — COMPLETE** (v14.3.0 rule+token+header → v14.3.1 cards/timeline/tabs → v14.3.2 modals/toggles/inputs). Every interactive surface lifts 8% on hover; one identity shared with MGT Scheduling. See the "Hover affordance" UI rule above. Note: Fix 4 (Overlay inner-scroller) was deliberately skipped — the existing 24px padding suffices; footer-anchoring remains an optional future enhancement.
+- **Dark mode / theming port — COMPLETE** (v14.2.0 mechanism → v14.2.1 `constants.js` → v14.2.2 `atoms.jsx` + modals → v14.2.3 `TimelineView` → v14.2.4 `ListView` → v14.2.5 `App.jsx` chrome; **v14.4.0** themed the **login screen** — the last literal surface, which renders pre-auth so it was missed). Every in-app surface is themed via `var(--…)` tokens in `index.html`'s `:root` / `[data-theme="dark"]` blocks. See `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`.
+- **`.mgt-hover-scale` hover-lift port — COMPLETE** (v14.3.0 rule+token+header → v14.3.1 cards/timeline/tabs → v14.3.2 modals/toggles/inputs; **v14.4.0** closed two stragglers — timeline table-label badges + kitchen-busy / availability hour chips). Every interactive surface lifts 8% on hover; one identity shared with MGT Scheduling. See the "Hover affordance" UI rule above. Note: Fix 4 (Overlay inner-scroller) was deliberately skipped — the existing 24px padding suffices; footer-anchoring remains an optional future enhancement.
+- **v14.4.0 features:** editable **opening hours** (Settings → General; Firebase-shared `settings/operatingHours`; see Critical patterns → "Operating hours — live module bindings"), the **List-view keyboard model** (↑/↓ focus a card; `A`/`E`/`S`/`C`/`⇧C`/`D` act on it — see `Shortcuts.jsx`), and `N` → new reminder while the Reminders tab is open.
 - **WhatsApp Cloud API integration (Phase 1b)** — designed, not implemented. See `MGT_WhatsApp_Inbox_Phase1b_Design_Summary.md`. Integration points: the `BookingFormModal` callback surface + a new `InboxPanel` component.
 
 ---

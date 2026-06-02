@@ -237,6 +237,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
         {arr.map((t) => (
           <span
             key={t}
+            className="mgt-hover-scale"
             onClick={() => onTapTime(t)}
             style={{
               cursor: "pointer", padding: "3px 8px", borderRadius: 8,

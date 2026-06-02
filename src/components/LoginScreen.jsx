@@ -63,13 +63,13 @@ export function LoginScreen() {
       color: S.text
     }}>
       <div style={{
-        background: "rgba(255,255,255,0.55)",
+        background: "var(--bg-sheet)",
         backdropFilter: "blur(40px)", WebkitBackdropFilter: "blur(40px)",
         borderRadius: 20,
-        border: "1px solid rgba(255,255,255,0.5)",
+        border: "1px solid var(--border-sheet)",
         padding: "32px 28px",
         width: "100%", maxWidth: 360,
-        boxShadow: "0 8px 40px rgba(0,0,0,0.10), inset 0 1px 1px rgba(255,255,255,0.8)"
+        boxShadow: "var(--shadow-sheet)"
       }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: S.text, marginBottom: 4 }}>
           Me Gustas T&uacute;
@@ -98,11 +98,11 @@ export function LoginScreen() {
           />
           {error ? (
             <div style={{
-              color: "#991b1b", fontSize: 13,
+              color: "var(--danger-text)", fontSize: 13,
               padding: "8px 12px",
-              background: "rgba(254,226,226,0.7)",
+              background: "var(--danger-bg)",
               borderRadius: 12,
-              border: "2px solid rgba(252,165,165,0.55)"
+              border: "2px solid var(--danger-border)"
             }}>
               {error}
             </div>

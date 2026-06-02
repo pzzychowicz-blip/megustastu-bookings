@@ -28,9 +28,21 @@ export var VALID_COMBOS=[
   {ids:["1A","1B","7","2","3","4","5A","5B","6"],cap:26},{ids:["1A","1B","7","2","3","4","5A","5B"],cap:23},{ids:["1A","1B","7","2","3","4","5B","6"],cap:23},
 ];
 export var CLUSTERS={"1A":["1A","1B"],"1B":["1A","1B"],"7":["7"],"2":["2","3","4"],"3":["2","3","4"],"4":["2","3","4"],"5A":["5A","5B","6"],"5B":["5A","5B","6"],"6":["5A","5B","6"],"i1":["i1"],"i2":["i2","i3","i4"],"i3":["i2","i3","i4"],"i4":["i2","i3","i4"]};
-export var OPEN=13,CLOSE=22,GRID_CLOSE=23;
+// v14.4.0: OPEN/CLOSE/GRID_CLOSE + QUARTER_HOURS are runtime-editable (Settings
+// → General → Opening hours), persisted to Firebase (settings/operatingHours) and
+// shared across devices. `let` (not `var`) so setOperatingHours can reassign them:
+// these are live ESM bindings, so reassigning HERE updates every importer —
+// including booking-logic's pure functions — with NO signature changes. A React
+// re-render after the setter runs repaints the timeline/forms. GRID_CLOSE (the
+// timeline's right edge) stays one hour past close. Only this module may reassign
+// its own exports, so the setter lives here.
+export let OPEN=13,CLOSE=22,GRID_CLOSE=23;
 export var KITCHEN_TABLE_LIMIT=3;
-export var QUARTER_HOURS=Array.from({length:(GRID_CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
+export let QUARTER_HOURS=Array.from({length:(GRID_CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
+export function setOperatingHours(open,close){
+  OPEN=open;CLOSE=close;GRID_CLOSE=Math.min(24,close+1);
+  QUARTER_HOURS=Array.from({length:(GRID_CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
+}
 export var ROW_H=44,LABEL_W=58;
 export var STATUS_COLORS={confirmed:{bg:"rgba(var(--status-confirmed-rgb),0.15)",text:"var(--status-confirmed-text)",border:"rgba(var(--status-confirmed-rgb),0.35)"},seated:{bg:"rgba(var(--status-seated-rgb),0.15)",text:"var(--status-seated-text)",border:"rgba(var(--status-seated-rgb),0.35)"},completed:{bg:"rgba(var(--status-completed-rgb),0.12)",text:"var(--status-completed-text)",border:"rgba(var(--status-completed-rgb),0.3)"},cancelled:{bg:"rgba(var(--status-cancelled-rgb),0.12)",text:"var(--status-cancelled-text)",border:"rgba(var(--status-cancelled-rgb),0.3)"}};
 export var BLOCK_BG={confirmed:"var(--block-confirmed)",seated:"var(--block-seated)",completed:"var(--block-completed)",cancelled:"var(--block-cancelled)"};
