@@ -180,10 +180,10 @@ const __APP_SIGNATURE__={
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 
-// v14.6.0: provisional keyboard shortcut for the Summary panel toggle. Patryk
-// will finalize the binding — change this one constant AND the matching "G" row
-// in Shortcuts.jsx to rebind.
-const SUMMARY_KEY="g";
+// v14.6.0: keyboard shortcut for the Summary panel toggle — "S" for Summary.
+// NB: in List view with a booking focused, S marks it Seated (that check runs
+// first); everywhere else S toggles the Summary. Rebind here + the Shortcuts row.
+const SUMMARY_KEY="s";
 
 // ── v14.2.0: Dark-mode preference reader ──────────────────────────────────
 // Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
@@ -522,7 +522,6 @@ function BookingApp(){
   // is unavailable at the moment of the write.
   function getUser(){return (auth.currentUser&&auth.currentUser.email)||"staff";}
 
-  const dayCount=bookings.filter(function(b){return b.date===viewDate&&b.status!=="cancelled";}).length;
   const inefficient=bookings.length>0&&checkInefficent(bookings,viewDate);
 
   // v14.4.0: the day's bookings in the SAME order ListView renders them
@@ -1254,6 +1253,7 @@ function BookingApp(){
     bookings={bookings}
     date={viewDate}
     splitHour={dayShifts.split}
+    shiftsEnabled={dayShifts.enabled}
     open={summaryOpen}
     onToggle={function(){setSummaryOpen(function(o){return !o;});}} />;
 
@@ -1320,7 +1320,7 @@ function BookingApp(){
               style={{fontSize:14,padding:"8px 10px",borderRadius:12,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center"}}>{viewDate!==new Date().toISOString().slice(0,10)?<button
               onClick={function(){setViewDate(new Date().toISOString().slice(0,10));}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button>:null}<span style={{fontSize:13,color:S.text}}>{dayCount+" booking"+(dayCount!==1?"s":"")}</span></div></div>{summaryPanel}{!isOnline?<div
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button>:null}</div></div>{summaryPanel}{!isOnline?<div
           style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>⚠ Working offline — your changes are saved locally and will sync when the connection returns. Keep this tab open.</div>:null}{reconnectShown?<div
           style={{background:"var(--app-reconnect-bg)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>✓ Reconnected — changes synced.</div>:null}{loadBannerShown?<div
           style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."}</div>:null}{writeWarning?<div
@@ -1387,6 +1387,7 @@ function BookingApp(){
             closeHour={operatingHours.close}
             onSaveHours={saveOperatingHours}
             splitHour={dayShifts.split}
+            shiftsEnabled={dayShifts.enabled}
             onSaveShifts={saveDayShifts}
             tab={settingsTab}
             setTab={setSettingsTab}

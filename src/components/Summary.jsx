@@ -25,9 +25,10 @@ function hh(n){ return String(((n % 24) + 24) % 24).padStart(2, "0") + ":00"; }
 function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
 function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
 
-export function Summary({ bookings, date, splitHour, open, onToggle }) {
+export function Summary({ bookings, date, splitHour, shiftsEnabled, open, onToggle }) {
   const s = daySummary(bookings, date, splitHour);
   const hasData = s.totalBookings > 0;
+  const showShifts = shiftsEnabled !== false; // Shifts toggle (Settings → General → Shifts)
   const maxHourCovers = s.hours.reduce(function(m, h){ return Math.max(m, h.covers); }, 0) || 1;
 
   return (
@@ -63,10 +64,12 @@ export function Summary({ bookings, date, splitHour, open, onToggle }) {
         <div style={{ padding: "2px 14px 14px" }}>
           {hasData ? (
             <div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                <ShiftChip label={"Afternoon " + hh(OPEN) + "–" + hh(splitHour)} covers={s.afternoon.covers} count={s.afternoon.count} />
-                <ShiftChip label={"Evening " + hh(splitHour) + "–" + hh(CLOSE)} covers={s.evening.covers} count={s.evening.count} />
-              </div>
+              {showShifts ? (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                  <ShiftChip label={"Afternoon " + hh(OPEN) + "–" + hh(splitHour)} covers={s.afternoon.covers} count={s.afternoon.count} />
+                  <ShiftChip label={"Evening " + hh(splitHour) + "–" + hh(CLOSE)} covers={s.evening.covers} count={s.evening.count} />
+                </div>
+              ) : null}
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {s.hours.map(function(h){
                   return (

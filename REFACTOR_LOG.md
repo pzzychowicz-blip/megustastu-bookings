@@ -2298,6 +2298,12 @@ New Summary panel (collapsed by default) + a new editable Shifts setting. No cha
 
 ### Notes
 - Append-ordered (newest at bottom).
-- **`g` is a provisional shortcut** -- Patryk finalizes the key (one constant in `App.jsx` + the Shortcuts row).
 - **Shift model is single-split-hour** -- the chosen default; expandable to independent ranges later.
+
+### Review refinements (pre-merge, PR #15 live QA)
+Same version (14.6.0), folded into the open PR after live testing on the DEV server:
+- **Removed the duplicate booking count** from the date-nav row (the `dayCount` span + its now-unused declaration) -- the Summary headline already shows it.
+- **Shortcut `g` -> `s`** ("S" for Summary; `SUMMARY_KEY` + the Shortcuts "S" row). NB: in List view with a booking focused, `S` still marks it Seated (that check runs first); everywhere else `S` toggles the Summary.
+- **Shifts on/off toggle.** `settings/dayShifts` gains an `enabled` flag (default true); `saveDayShifts` now takes a partial `{split?, enabled?}` and merges. A `Toggle` in Settings -> General -> Shifts switches it; when off, the split stepper hides and the Summary drops its per-shift chips (the hourly breakdown stays).
+- Build after refinements: **166.90 kB gz**, 58 modules. Live-verified via the Preview bridge (authed session): date-nav count gone; `s` expands the panel (shift chips + hourly bars); the Shifts toggle renders in Settings.
 
