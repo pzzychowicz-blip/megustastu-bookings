@@ -2307,3 +2307,41 @@ Same version (14.6.0), folded into the open PR after live testing on the DEV ser
 - **Shifts on/off toggle.** `settings/dayShifts` gains an `enabled` flag (default true); `saveDayShifts` now takes a partial `{split?, enabled?}` and merges. A `Toggle` in Settings -> General -> Shifts switches it; when off, the split stepper hides and the Summary drops its per-shift chips (the hourly breakdown stays).
 - Build after refinements: **166.90 kB gz**, 58 modules. Live-verified via the Preview bridge (authed session): date-nav count gone; `s` expands the panel (shift chips + hourly bars); the Shifts toggle renders in Settings.
 
+---
+
+## v14.6.0 -> v14.7.0 -- Week View popover
+
+**Date**: 2026-06-02
+**Branch**: `feat/v14.7.0-week-view` -> PR to `main`
+**Status**: feature -- **app version 14.6.0 -> 14.7.0** (minor: new popover). Step 4 (final) of the post-14.4.0 roadmap.
+
+### What
+A **Week** button in the Summary panel opens a 7-day (Mon–Sun) at-a-glance popover: each day shows its **covers + bookings** with a relative bar; today + the selected `viewDate` are highlighted; ‹ › navigate weeks ("This week" returns to today). Tap a day to jump to it (sets `viewDate`, closes).
+
+### Files changed (4 src [1 new] + REFACTOR_LOG + CLAUDE.md)
+- **`src/components/WeekView.jsx`** (NEW) -- `Overlay` popover (inherits the v14.4.1 pinned-footer slot for the nav/close row). Internal `ref` state for the displayed week (starts at `viewDate`); per-day counts reuse `daySummary` (splitHour irrelevant for totals). **All-UTC date math** (see gotcha).
+- **`src/components/Summary.jsx`** -- header restructured into separate buttons (headline toggle + a "Week" button + chevron) so we never nest a `<button>` in a `<button>`; new `onOpenWeek` prop.
+- **`src/components/Shortcuts.jsx`** -- "K" row (provisional) under Navigation.
+- **`src/App.jsx`** -- `showWeek` state; `WeekView` mount (`onPick` = setViewDate + close); Summary `onOpenWeek`; `showWeek` added to `anyModal` + the Escape chain; `kbRef` gains `showWeek`/`setShowWeek`; module-scope `WEEK_KEY="k"` (provisional -- `w` is taken by Walk-in) + a handler branch; version bump.
+
+### Design decisions
+- **Opened from the Summary**, per the roadmap -- the Week button lives in the Summary header, integrating the day/week surfaces.
+- **Reuses `daySummary`** for per-day totals (DRY; 7 cheap calls per render) rather than a new helper.
+- **Provisional `k` shortcut** -- `w` (the natural mnemonic) is already Walk-in, so `k` is a placeholder for Patryk to finalize (one constant + the Shortcuts row), same pattern as the Summary `s` key.
+
+### Gotcha fixed in live QA -- timezone
+First cut built dates with `new Date(str + "T00:00:00")` (LOCAL) but formatted with `toISOString()` (UTC); in a UTC+ timezone the whole week slid back a day (started Sunday) and the per-day booking lookups misaligned (every day showed 0 covers). Fix: **all-UTC** -- `new Date("YYYY-MM-DD")` (UTC midnight) + `getUTCDay`/`getUTCDate`/`setUTCDate` + `toISOString`, matching the app's existing date-string convention. The production build never catches this (runtime + TZ-dependent); the Preview bridge did.
+
+### Verification
+- `npm run build` OK -- main bundle **167.84 kB gz** (+0.94 vs 14.6.0's 166.90), **59 modules** (+1: `WeekView.jsx`).
+- **Live-verified via the Preview bridge** (authed): Week button opens the popover; for `viewDate` 2026-06-02 it shows the correct **Jun 1–7** week with **Tue 2 · today** highlighted at **10 covers / 3 bookings** (aligned with the Summary), Mon 1 = 12/6; tapping Mon jumped `viewDate` to 2026-06-01, closed the popover, and the Summary updated to 12 covers / 6 bookings.
+
+### Behavioural change
+New Week View popover + a "Week" button in the Summary header + a provisional `k` shortcut. No change to the optimizer, persistence, booking data shape, or any `settings` node -- read-only aggregation.
+
+### Notes
+- Append-ordered (newest at bottom).
+- **`k` is provisional** -- Patryk finalizes the key (`WEEK_KEY` in `App.jsx` + the Shortcuts "K" row); `w` is taken by Walk-in.
+- **Date code is all-UTC** -- keep it that way (mixing local `getDate()` with UTC `toISOString()` shifts dates in UTC+ zones).
+- Completes the post-14.4.0 roadmap (v14.4.1 footers -> 14.5.0 24h hours -> 14.6.0 Summary/Shifts -> 14.7.0 Week View).
+

@@ -19,13 +19,14 @@
 // v14.6.0.
 
 import { daySummary } from "../lib/booking-logic";
-import { OPEN, CLOSE } from "../lib/constants";
+import { OPEN, CLOSE, BTN } from "../lib/constants";
+import { mkBtn } from "./atoms";
 
 function hh(n){ return String(((n % 24) + 24) % 24).padStart(2, "0") + ":00"; }
 function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
 function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
 
-export function Summary({ bookings, date, splitHour, shiftsEnabled, open, onToggle }) {
+export function Summary({ bookings, date, splitHour, shiftsEnabled, open, onToggle, onOpenWeek }) {
   const s = daySummary(bookings, date, splitHour);
   const hasData = s.totalBookings > 0;
   const showShifts = shiftsEnabled !== false; // Shifts toggle (Settings → General → Shifts)
@@ -40,24 +41,40 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, open, onTogg
       boxShadow: "var(--shadow-soft)",
       overflow: "hidden"
     }}>
-      {/* Collapsed headline — click (or the `g` shortcut) toggles the body. */}
-      <button
-        onClick={onToggle}
-        aria-expanded={open}
-        style={{
-          width: "100%", boxSizing: "border-box",
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-          padding: "10px 14px",
-          background: "transparent", border: "none", cursor: "pointer", textAlign: "left"
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+      {/* Header — the headline toggles the body (click or the `s` shortcut); the
+          Week button opens the week-at-a-glance popover. Separate buttons so we
+          never nest a <button> inside a <button>. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px" }}>
+        <button
+          onClick={onToggle}
+          aria-expanded={open}
+          style={{
+            flex: 1, minWidth: 0, boxSizing: "border-box", padding: 0,
+            display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap",
+            background: "transparent", border: "none", cursor: "pointer", textAlign: "left"
+          }}
+        >
           <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>Summary</span>
           <span style={{ fontSize: 14, fontWeight: 700, color: "var(--accent)" }}>{coversLabel(s.totalCovers)}</span>
           <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>{bookingsLabel(s.totalBookings)}</span>
-        </div>
-        <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, flexShrink: 0 }}>{open ? "▲" : "▼"}</span>
-      </button>
+        </button>
+        {onOpenWeek ? (
+          <button
+            onClick={onOpenWeek}
+            className="mgt-hover-scale"
+            style={mkBtn({ minHeight: 30, padding: "4px 12px", fontSize: 11, background: BTN.nav })}
+          >
+            Week
+          </button>
+        ) : null}
+        <button
+          onClick={onToggle}
+          aria-label={open ? "Collapse summary" : "Expand summary"}
+          style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 11, color: "var(--text-muted)", fontWeight: 700, flexShrink: 0, padding: "4px 2px" }}
+        >
+          {open ? "▲" : "▼"}
+        </button>
+      </div>
 
       {/* Expanded body — shift chips + hourly bars. */}
       {open ? (
