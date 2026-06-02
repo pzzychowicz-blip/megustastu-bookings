@@ -170,7 +170,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.4.0",
+  version:"14.4.1",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1233,13 +1233,13 @@ function BookingApp(){
     onSelect={setSelectedListId} />;
 
 
-  const delModal=confirmDel?<Overlay onClose={function(){setConfirmDel(null);}}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div><div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
+  const delModal=confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
         style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
         onClick={function(){setConfirmDel(null);}}>Cancel</button><button
         onClick={function(){delBooking(confirmDel);}}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div></Overlay>:null;
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null;
 
   const manualModal=manualBooking?<ManualModal
     booking={manualBooking}
@@ -1326,7 +1326,7 @@ function BookingApp(){
           blocks={tableBlocks}
           onSave={addBlock}
           onRemove={removeBlock}
-          onClose={function(){setBlockTarget(null);}} />:null}{confirmCancel?<Overlay onClose={function(){setConfirmCancel(null);}}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Cancel booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+          onClose={function(){setBlockTarget(null);}} />:null}{confirmCancel?<Overlay onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmCancel(null);}}>Back</button><button
@@ -1335,23 +1335,26 @@ function BookingApp(){
               style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>No show</button><button
               onClick={function(){doCancelBooking(confirmCancel,false);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Cancel booking</button></div></Overlay>:null}{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</div><div style={{fontSize:14,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Cancel booking</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Cancel booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Confirm</button></div></Overlay>:null}{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Confirm</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</div><div style={{fontSize:14,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
               onClick={function(){setConfirmReshuffle(false);forceReshuffle();}}
               className="mgt-hover-scale"
-              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div></Overlay>:null}{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
+              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
-        showSettings?<Overlay onClose={function(){setShowSettings(false);setSettingsTab("general");}}><div style={{textAlign:"center",marginBottom:14}}><div
+        showSettings?<Overlay onClose={function(){setShowSettings(false);setSettingsTab("general");}} footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
+              className="mgt-hover-scale"
+              style={mkBtn({minHeight:40,padding:"8px 18px",background:"var(--app-btn-slate)"})}
+              onClick={function(){setShowSettings(false);setSettingsTab("general");}}>Close</button></div>}><div style={{textAlign:"center",marginBottom:14}}><div
               style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"var(--app-btn-grey-strong)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Settings</div></div><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
             isDark={isDark}
@@ -1365,19 +1368,16 @@ function BookingApp(){
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
             onDeleteReminder={deleteReminder}
-            onToggleReminder={toggleReminderActive} /><div style={{display:"flex",justifyContent:"flex-end",marginTop:18}}><button
-              className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"8px 18px",background:"var(--app-btn-slate)"})}
-              onClick={function(){setShowSettings(false);setSettingsTab("general");}}>Close</button></div></Overlay>:null}{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
+            onToggleReminder={toggleReminderActive} /></Overlay>:null}{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
         // window.confirm which is blocked in sandboxed preview environments).
         // Renders on top of Settings in DOM order so it visually covers the list.
-        confirmReminderDel?<Overlay onClose={function(){setConfirmReminderDel(null);}}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete reminder?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+        confirmReminderDel?<Overlay onClose={function(){setConfirmReminderDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
               onClick={function(){doDeleteReminder(confirmReminderDel);}}
               className="mgt-hover-scale"
-              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div></Overlay>:null}{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
+              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete reminder?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
         reminderEditor?<ReminderEditor
           draft={reminderEditor.draft}
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}

@@ -156,8 +156,37 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
     return () => window.removeEventListener("keydown", handler);
   }, [swapBusy, selected, ok, isSwapping, affectedBookings, onSave]);
 
+  // v14.4.1: assign/cancel row pinned via Overlay's `footer` slot (marginTop
+  // dropped — the footer region's borderTop+padding separates it now).
+  const footerEl=(
+    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+      <button
+        className="mgt-hover-scale"
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
+        onClick={onClose}
+      >
+        Cancel
+      </button>
+      <button
+        disabled={!ok}
+        onClick={() => { if (ok) onSave(selected, true, isSwapping ? affectedBookings : null); }}
+        className="mgt-hover-scale"
+        style={{
+          background: ok ? (isSwapping ? BTN.orange : S.accent) : "rgba(180,180,190,0.4)",
+          border: "1px solid rgba(255,255,255,0.2)",
+          borderRadius: 14, padding: "10px 20px",
+          cursor: ok ? "pointer" : "not-allowed",
+          fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
+          boxShadow: ok ? "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"
+        }}
+      >
+        {assignLabel}
+      </button>
+    </div>
+  );
+
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} footer={footerEl}>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
           fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
@@ -245,30 +274,6 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
         seatedBusy={seatedBusy}
         swapBusy={swapBusy}
       />
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
-        <button
-          className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
-          onClick={onClose}
-        >
-          Cancel
-        </button>
-        <button
-          disabled={!ok}
-          onClick={() => { if (ok) onSave(selected, true, isSwapping ? affectedBookings : null); }}
-          className="mgt-hover-scale"
-          style={{
-            background: ok ? (isSwapping ? BTN.orange : S.accent) : "rgba(180,180,190,0.4)",
-            border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: 14, padding: "10px 20px",
-            cursor: ok ? "pointer" : "not-allowed",
-            fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
-            boxShadow: ok ? "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"
-          }}
-        >
-          {assignLabel}
-        </button>
-      </div>
     </Overlay>
   );
 }

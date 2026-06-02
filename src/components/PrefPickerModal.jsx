@@ -66,8 +66,30 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
     : "Capacity: " + cap + " / " + needed + " pax" + (cap >= needed ? " ✓" : " — need more");
   const capColor = prefs.length === 0 ? S.muted : (cap >= needed ? "var(--success-text)" : "var(--warn-text)");
 
+  // v14.4.1: clear/done row pinned via Overlay's `footer` slot.
+  const footerEl=(
+    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+      {prefs.length > 0 ? (
+        <button
+          className="mgt-hover-scale"
+          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.clear })}
+          onClick={() => onChange([])}
+        >
+          Clear
+        </button>
+      ) : null}
+      <button
+        className="mgt-hover-scale"
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "#64748b" })}
+        onClick={onClose}
+      >
+        Done
+      </button>
+    </div>
+  );
+
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} footer={footerEl}>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
           fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
@@ -136,24 +158,6 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
           </div>
         </div>
       ))}
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
-        {prefs.length > 0 ? (
-          <button
-            className="mgt-hover-scale"
-            style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.clear })}
-            onClick={() => onChange([])}
-          >
-            Clear
-          </button>
-        ) : null}
-        <button
-          className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "#64748b" })}
-          onClick={onClose}
-        >
-          Done
-        </button>
-      </div>
     </Overlay>
   );
 }

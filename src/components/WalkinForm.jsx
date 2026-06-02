@@ -261,8 +261,54 @@ export function WalkinForm({
     fontSize: 15, fontWeight: 700, color: S.text
   };
 
+  // v14.4.1: action row + error pinned via Overlay's `footer` slot (marginTop
+  // dropped — the footer region's borderTop+padding separates it now). The
+  // kitchen-busy suggestion panel (wKitchenSection) stays in the scrolling body.
+  const footerEl=(
+    <>
+      {error ? (
+        <div style={{
+          color: "var(--danger-text)", fontSize: 13,
+          padding: "10px 14px",
+          background: "var(--danger-bg)",
+          borderRadius: 14,
+          border: "2px solid var(--danger-border)",
+          marginBottom: 14
+        }}>
+          {error}
+        </div>
+      ) : null}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button
+          className="mgt-hover-scale"
+          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
+          onClick={onClose}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onSave}
+          disabled={!wOk}
+          className="mgt-hover-scale"
+          style={{
+            background: wOk ? "rgba(22,101,52,0.8)" : "rgba(180,180,190,0.4)",
+            border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: 14, padding: "10px 22px",
+            cursor: wOk ? "pointer" : "not-allowed",
+            fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
+            boxShadow: wOk
+              ? "0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)"
+              : "none"
+          }}
+        >
+          Seat
+        </button>
+      </div>
+    </>
+  );
+
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} footer={footerEl}>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
           fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
@@ -423,47 +469,7 @@ export function WalkinForm({
         />
       ) : null}
 
-      {error ? (
-        <div style={{
-          color: "var(--danger-text)", fontSize: 13,
-          padding: "10px 14px",
-          background: "var(--danger-bg)",
-          borderRadius: 14,
-          border: "2px solid var(--danger-border)",
-          marginBottom: 14
-        }}>
-          {error}
-        </div>
-      ) : null}
-
       {wKitchenSection}
-
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
-        <button
-          className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
-          onClick={onClose}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onSave}
-          disabled={!wOk}
-          className="mgt-hover-scale"
-          style={{
-            background: wOk ? "rgba(22,101,52,0.8)" : "rgba(180,180,190,0.4)",
-            border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: 14, padding: "10px 22px",
-            cursor: wOk ? "pointer" : "not-allowed",
-            fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
-            boxShadow: wOk
-              ? "0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)"
-              : "none"
-          }}
-        >
-          Seat
-        </button>
-      </div>
     </Overlay>
   );
 }

@@ -226,9 +226,35 @@ export function BookingFormModal({
     onPointerDown={function(){setForm(function(f){return Object.assign({},f,{customDur:null});})}}>Reset</button>:null;
   const endTime=form.time?toTime(toMins(form.time)+dur):"--";
 
+  // v14.4.1: action row pinned to the modal bottom via Overlay's `footer` slot.
+  // errorEl rides above the buttons so a save/availability error stays visible
+  // without scrolling. marginTop dropped — the footer region's borderTop+padding
+  // provides the separation now.
+  const footerEl=(
+    <>
+      {errorEl}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}</div><div style={{display:"flex",gap:8}}><button
+        className="mgt-hover-scale"
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
+        onClick={function(){onClose();}}>Cancel</button>{(function(){
+        // v14 p1 (Issue 3): Save is disabled when date is empty. Prevents the
+        // dd.mm.yyyy placeholder state from being submitted (esp. via Book Again
+        // where we intentionally clear the date to force staff to pick one).
+        const canSave=!!form.date;
+        return (
+          <button
+            disabled={!canSave}
+            onClick={onSave}
+            className="mgt-hover-scale"
+            style={{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
+        );
+      })()}</div></div>
+    </>
+  );
+
   // ── The form modal itself ──
   return (
-    <Overlay onClose={function(){onClose();}}><div style={{textAlign:"center",marginBottom:16}}><div
+    <Overlay onClose={function(){onClose();}} footer={footerEl}><div style={{textAlign:"center",marginBottom:16}}><div
         style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:12,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking")}</div></div>{returnOfBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><input
             value={form.name}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
@@ -277,22 +303,6 @@ export function BookingFormModal({
           rows={2}
           placeholder="Allergies, special requests..."
           className="mgt-hover-scale"
-          style={Object.assign({},inp(),{resize:"vertical"})} /></Fld></Section>{errorEl}<div
-      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:18,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}</div><div style={{display:"flex",gap:8}}><button
-          className="mgt-hover-scale"
-          style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
-          onClick={function(){onClose();}}>Cancel</button>{(function(){
-          // v14 p1 (Issue 3): Save is disabled when date is empty. Prevents the
-          // dd.mm.yyyy placeholder state from being submitted (esp. via Book Again
-          // where we intentionally clear the date to force staff to pick one).
-          const canSave=!!form.date;
-          return (
-            <button
-              disabled={!canSave}
-              onClick={onSave}
-              className="mgt-hover-scale"
-              style={{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
-          );
-        })()}</div></div></Overlay>
+          style={Object.assign({},inp(),{resize:"vertical"})} /></Fld></Section></Overlay>
   );
 }
