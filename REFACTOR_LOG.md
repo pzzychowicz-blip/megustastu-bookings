@@ -2263,3 +2263,41 @@ Opening-hours range widened (06:00-01:00 selectable in Settings). A past-midnigh
 - Append-ordered (newest at bottom).
 - **No post-midnight booking starts** -- enforced by the close <= 25 cap + the `findTimes` `m < 24*60` guard + the form `max="23:59"`. Raising the ceiling later (true midnight-crossing) would need wrap-aware `toMins`.
 
+---
+
+## v14.5.0 -> v14.6.0 -- Day Summary panel + editable Shifts
+
+**Date**: 2026-06-02
+**Branch**: `feat/v14.6.0-summary-shifts` -> PR to `main`
+**Status**: feature -- **app version 14.5.0 -> 14.6.0** (minor: new user-facing panel). Step 3 of the post-14.4.0 roadmap.
+
+### What
+A collapsible **Summary** panel sits between the date-nav row and the day view: total **covers** (guests = sum of `size`) for the selected date, broken down by hour and by two **Shifts** (Afternoon / Evening). The shift split is one editable hour in Settings -> General -> Shifts, Firebase-shared (the app's 2nd `settings` node).
+
+### Files changed (6 src [2 new] + REFACTOR_LOG + CLAUDE.md)
+- **`src/hooks/useDayShifts.js`** (NEW) -- Firebase `settings/dayShifts = {split}` (default 17), shared across devices. Mirrors `useOperatingHours`: loaded-ref write-guard, `sanitizeSplit` clamps to `[OPEN+1, CLOSE-1]` so both shifts stay non-empty. Returns `{dayShifts, saveDayShifts}`.
+- **`src/components/Summary.jsx`** (NEW) -- controlled collapsible panel. Collapsed = headline (`N covers · M bookings` + chevron); expanded = two shift chips (Afternoon `OPEN..split`, Evening `split..CLOSE`) + an hourly cover breakdown with mini bars. Themed via `var(--…)`. The wide toggle header intentionally skips `.mgt-hover-scale` (an 8% lift on a ~1000px bar reads as a big jump -- same call as the timeline scroller).
+- **`src/lib/booking-logic.js`** -- `daySummary(bookings, date, splitHour)`: non-cancelled covers = sum of `size`, hourly buckets, Afternoon/Evening totals by start hour vs split. Pure; reuses `toMins`.
+- **`src/components/Settings.jsx`** -- "Shifts" `Section` in `GeneralTabContent` (one `HourStepper` for the split + a derived-range caption `Afternoon HH:00–HH:00 · Evening …`); `splitHour`/`onSaveShifts` threaded through `SettingsContent`.
+- **`src/components/Shortcuts.jsx`** -- "G" row in the Navigation cheatsheet (marked provisional).
+- **`src/App.jsx`** -- mount `useDayShifts`; `summaryOpen` state; `summaryPanel` rendered between the date-nav and the banners; `splitHour`/`onSaveShifts` passed to the Settings mount; module-scope `SUMMARY_KEY="g"` + a handler branch toggling the panel + `setSummaryOpen` on `kbRef`; version bump.
+
+### Design decisions
+- **Single split-hour shift model** (owner-approved default). Afternoon = `OPEN..split`, Evening = `split..CLOSE` -- two contiguous shifts from ONE control, so gaps/overlaps are impossible and it matches the requested example (13:00–17:00 / 17:00–00:00). Independent per-shift ranges (or >2 shifts) can come later.
+- **Covers include completed bookings** (still covers served); only `cancelled` is excluded, matching the header's `dayCount`.
+- **Panel state lives in BookingApp** (not Summary) so the global `g` shortcut can toggle it via `kbRef` -- same pattern as List-view selection. Provisional key, one-constant rebind (`SUMMARY_KEY` + the Shortcuts row).
+- **2nd Firebase `settings` node.** `settings/dayShifts` joins `settings/operatingHours`; both restaurant-wide -> Firebase (theme stays per-device in `localStorage`).
+
+### Verification
+- `npm run build` OK -- main bundle **166.85 kB gz** (+1.27 vs 14.5.0's 165.58), **58 modules** (+2: `useDayShifts.js`, `Summary.jsx`).
+- `daySummary` algorithm unit-checked in Node (inline copy, since `booking-logic.js`'s extensionless `./constants` import doesn't resolve under raw Node): 5 bookings (one cancelled) -> 15 covers, 4 bookings, hours {13: 6/2, 20: 9/2}, afternoon 6/2, evening 9/2 (split 17). Correct.
+- **Pending (for PR / owner):** live QA on DEV -- panel sits between date-nav and content, aligned; covers/hour + shift totals match a hand count; edit the split in Settings -> the caption + the panel's Afternoon/Evening totals shift; reload / 2nd device sees the same split (Firebase-shared); `g` toggles the panel; navigating days updates it. (Authed UI is behind the Firebase login.)
+
+### Behavioural change
+New Summary panel (collapsed by default) + a new editable Shifts setting. No change to the optimizer, persistence guards, booking data shape, or existing nodes -- `settings/dayShifts` is additive.
+
+### Notes
+- Append-ordered (newest at bottom).
+- **`g` is a provisional shortcut** -- Patryk finalizes the key (one constant in `App.jsx` + the Shortcuts row).
+- **Shift model is single-split-hour** -- the chosen default; expandable to independent ranges later.
+

@@ -406,3 +406,34 @@ export function comboCapBest(ids){
   }
   return ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);
 }
+
+// ── Day summary (v14.6.0) ─────────────────────────────────────────────────────
+// Covers (guests) for one date, broken down by hour and by the two editable
+// shifts. Covers = Σ booking.size over NON-cancelled bookings (cancelled excluded
+// to match the header's dayCount; completed kept — they're still covers served).
+// Each booking is bucketed by its START hour. Shift split: Afternoon = start hour
+// < splitHour, Evening = start hour >= splitHour. Pure; reuses toMins.
+export function daySummary(bookings,date,splitHour){
+  var day=(bookings||[]).filter(function(b){return b&&b.date===date&&b.status!=="cancelled";});
+  var byHour={};
+  var totalCovers=0;
+  var aCovers=0,aCount=0,eCovers=0,eCount=0;
+  day.forEach(function(b){
+    var size=Number(b.size)||2;
+    var h=Math.floor(toMins(b.time)/60);
+    totalCovers+=size;
+    if(!byHour[h]) byHour[h]={covers:0,count:0};
+    byHour[h].covers+=size;byHour[h].count+=1;
+    if(h<splitHour){aCovers+=size;aCount+=1;}else{eCovers+=size;eCount+=1;}
+  });
+  var hours=Object.keys(byHour).map(Number).sort(function(a,b){return a-b;}).map(function(h){
+    return {hour:h,covers:byHour[h].covers,count:byHour[h].count};
+  });
+  return {
+    totalCovers:totalCovers,
+    totalBookings:day.length,
+    hours:hours,
+    afternoon:{covers:aCovers,count:aCount},
+    evening:{covers:eCovers,count:eCount}
+  };
+}

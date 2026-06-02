@@ -75,6 +75,7 @@ import { ReminderEditor }          from "./components/ReminderEditor";
 // consumer.
 import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
+import { Summary }      from "./components/Summary";
 
 // ── Phase B5 (v15-refactor): Final modal & screen extraction ──────────────
 // LoginScreen (the unauthenticated entry screen), WalkinForm (the walk-in
@@ -129,6 +130,7 @@ import { usePersistence } from "./hooks/usePersistence";
 // the timeline grid + form time limits track it. Returns {operatingHours,
 // saveOperatingHours}.
 import { useOperatingHours } from "./hooks/useOperatingHours";
+import { useDayShifts } from "./hooks/useDayShifts";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
 // `useReminders` owns reminders + reminderFires state, editor + delete-confirm
@@ -170,13 +172,18 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.5.0",
+  version:"14.6.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
   license:"Proprietary — All rights reserved. See LICENSE.",
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
+
+// v14.6.0: provisional keyboard shortcut for the Summary panel toggle. Patryk
+// will finalize the binding — change this one constant AND the matching "G" row
+// in Shortcuts.jsx to rebind.
+const SUMMARY_KEY="g";
 
 // ── v14.2.0: Dark-mode preference reader ──────────────────────────────────
 // Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
@@ -427,6 +434,8 @@ function BookingApp(){
   // v14 preview 3: Settings / keyboard-shortcuts modal. Toggled by the cog
   // icon in TimelineView's legend row and by the `?` keyboard shortcut.
   const [showSettings, setShowSettings] = useState(false);
+  // v14.6.0: Summary panel expand/collapse (toggled by click or the g shortcut).
+  const [summaryOpen, setSummaryOpen] = useState(false);
   // Settings tab state — which tab is active in the Settings modal.
   // Resets to 'general' on modal close so reopens start fresh. Belongs to
   // the Settings subsystem; lived inside the reminder state block pre-D2
@@ -466,6 +475,10 @@ function BookingApp(){
   // timeline + form time limits. `saveOperatingHours` is wired to the Settings
   // General-tab editor below.
   const { operatingHours, saveOperatingHours } = useOperatingHours();
+  // ── v14.6.0: Day shifts (Firebase settings/dayShifts, shared) ────────────
+  // The Afternoon/Evening split hour for the Summary panel — the app's 2nd
+  // Firebase settings node. saveDayShifts is wired to the Settings General tab.
+  const { dayShifts, saveDayShifts } = useDayShifts();
   // ── Reminders hook ──────────────────────────────────────────────────────────
   // Owns all reminder state, savers, listeners, handlers, and the
   // reminderBanners JSX. nowMins drives banner re-evaluation; setWriteWarning
@@ -851,6 +864,8 @@ function BookingApp(){
     // v14.4.0: N → new reminder while the Settings Reminders tab is open.
     openNewReminder:openNewReminder,
     openNew:openNew,openWalkin:openWalkin,
+    // v14.6.0: Summary panel toggle (the g shortcut).
+    setSummaryOpen:setSummaryOpen,
     save:save,doSave:doSave,saveWalkin:saveWalkin,doSaveWalkin:doSaveWalkin,
     forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain
   };
@@ -1025,6 +1040,8 @@ function BookingApp(){
       if(k==="d"||k==="D"){e.preventDefault();K.setViewDate(new Date().toISOString().slice(0,10));return;}
       if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
+      // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
+      if(k===SUMMARY_KEY||k===SUMMARY_KEY.toUpperCase()){e.preventDefault();K.setSummaryOpen(function(o){return !o;});return;}
       if(k==="ArrowLeft"){e.preventDefault();const d1=new Date(K.viewDate);d1.setDate(d1.getDate()-1);K.setViewDate(d1.toISOString().slice(0,10));return;}
       if(k==="ArrowRight"){e.preventDefault();const d2=new Date(K.viewDate);d2.setDate(d2.getDate()+1);K.setViewDate(d2.toISOString().slice(0,10));return;}
       // ── Timeline-only shortcuts ──
@@ -1233,6 +1250,13 @@ function BookingApp(){
     onSelect={setSelectedListId} />;
 
 
+  const summaryPanel=<Summary
+    bookings={bookings}
+    date={viewDate}
+    splitHour={dayShifts.split}
+    open={summaryOpen}
+    onToggle={function(){setSummaryOpen(function(o){return !o;});}} />;
+
   const delModal=confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
         style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
@@ -1296,7 +1320,7 @@ function BookingApp(){
               style={{fontSize:14,padding:"8px 10px",borderRadius:12,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center"}}>{viewDate!==new Date().toISOString().slice(0,10)?<button
               onClick={function(){setViewDate(new Date().toISOString().slice(0,10));}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button>:null}<span style={{fontSize:13,color:S.text}}>{dayCount+" booking"+(dayCount!==1?"s":"")}</span></div></div>{!isOnline?<div
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button>:null}<span style={{fontSize:13,color:S.text}}>{dayCount+" booking"+(dayCount!==1?"s":"")}</span></div></div>{summaryPanel}{!isOnline?<div
           style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>⚠ Working offline — your changes are saved locally and will sync when the connection returns. Keep this tab open.</div>:null}{reconnectShown?<div
           style={{background:"var(--app-reconnect-bg)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>✓ Reconnected — changes synced.</div>:null}{loadBannerShown?<div
           style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."}</div>:null}{writeWarning?<div
@@ -1362,6 +1386,8 @@ function BookingApp(){
             openHour={operatingHours.open}
             closeHour={operatingHours.close}
             onSaveHours={saveOperatingHours}
+            splitHour={dayShifts.split}
+            onSaveShifts={saveDayShifts}
             tab={settingsTab}
             setTab={setSettingsTab}
             reminders={reminders}
