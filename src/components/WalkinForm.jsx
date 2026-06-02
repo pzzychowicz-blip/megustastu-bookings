@@ -336,7 +336,7 @@ export function WalkinForm({
               value={wTime}
               onChange={(e) => setDraft({ ...wf, tables: [], time: e.target.value })}
               min={String(OPEN).padStart(2, "0") + ":00"}
-              max={String(CLOSE).padStart(2, "0") + ":00"}
+              max={CLOSE >= 24 ? "23:59" : String(CLOSE).padStart(2, "0") + ":00"}
               className="mgt-hover-scale"
               style={mkInp()}
             />

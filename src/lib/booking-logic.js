@@ -112,6 +112,7 @@ export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noRes
   var times=Array.from({length:(CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
   var aroundM=around||0;
   var valid=times.filter(function(m){
+    if(m>=24*60) return false; // v14.5.0: never suggest a post-midnight start (24h-hours is extend-window only)
     if(m+dur>CLOSE*60) return false;
     if(m===aroundM) return false;
     return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId,null,noReshuffle);
@@ -143,6 +144,7 @@ export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excl
   if(blocks) exSl=exSl.concat(getBlockSlots(blocks,date));
   times.forEach(function(m){
     if(m===aroundM) return;
+    if(m>=24*60) return; // v14.5.0: never suggest a post-midnight start (24h-hours is extend-window only)
     if(m+dur>CLOSE*60) return;
     var load=getKitchenLoad(bookings,date,toTime(m),dur,excludeId);
     if(load.starts+1>=KITCHEN_TABLE_LIMIT) return;

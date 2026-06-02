@@ -277,7 +277,7 @@ export function BookingFormModal({
             value={form.time}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});}}
             min={String(OPEN).padStart(2, "0") + ":00"}
-            max={String(CLOSE).padStart(2, "0") + ":00"}
+            max={CLOSE >= 24 ? "23:59" : String(CLOSE).padStart(2, "0") + ":00"}
             className="mgt-hover-scale"
             style={inp()} /></Fld><Fld label="Seating preference"><select
             value={form.preference}
