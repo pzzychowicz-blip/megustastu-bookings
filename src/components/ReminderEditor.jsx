@@ -97,11 +97,14 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
         borderRadius: 20,
         border: "1px solid var(--border-sheet)",
-        padding: "22px",
         width: "100%", maxWidth: 520, maxHeight: "90dvh",
-        overflowY: "auto", boxSizing: "border-box",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+        boxSizing: "border-box",
         boxShadow: "0 8px 40px rgba(0,0,0,0.15), inset 0 1px 1px rgba(255,255,255,0.8)"
       }}>
+        {/* v14.4.1: body scrolls, action footer (err + buttons) pinned to the
+            bottom — mirrors Overlay's `footer` slot (this modal predates it). */}
+        <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "22px", boxSizing: "border-box" }}>
         {/* v14 p7: header matches New booking / Edit booking pattern —
             centered wrapper + pill-shaped inner with blue background. */}
         <div style={{ textAlign: "center", marginBottom: 16 }}>
@@ -223,7 +226,8 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             {draft.active ? "Active" : "Inactive"}
           </span>
         </div>
-
+        </div>
+        <div style={{ flexShrink: 0, padding: "16px 22px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
         {err ? (
           <div style={{
             color: "var(--danger-text)", fontSize: 13,
@@ -261,6 +265,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           >
             Save
           </button>
+        </div>
         </div>
       </div>
     </div>

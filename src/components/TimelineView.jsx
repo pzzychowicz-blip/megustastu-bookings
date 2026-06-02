@@ -232,7 +232,12 @@ export function TimelineView({
   }
 
   // ── Header lines + labels (drawn once at top of grid column) ─────────────
-  const headerLines = QUARTER_HOURS.concat([GRID_CLOSE * 60]).map((m) => {
+  // v14.4.1: map over QUARTER_HOURS only (NOT concat([GRID_CLOSE*60])). The
+  // right-edge line is now drawn separately as a `right:0` div in the header
+  // strip below — matching the grid rows' GridLines convention so the rightmost
+  // header line aligns with the body's (the old left:pct(100%) line sat ~2px to
+  // the right of the body's right:0 line).
+  const headerLines = QUARTER_HOURS.map((m) => {
     const isH = m % 60 === 0;
     return (
       <div
@@ -423,6 +428,7 @@ export function TimelineView({
           height: 24, overflow: "visible", boxSizing: "border-box"
         }}>
           {headerLines}
+          <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, borderLeft: "2px solid var(--tl-gridline-hour)" }} />
           {headerLabels}
         </div>
         {gridRows}

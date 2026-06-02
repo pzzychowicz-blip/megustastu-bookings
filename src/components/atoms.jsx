@@ -52,7 +52,14 @@ export function mkBtn(extra) {
 }
 
 // ── Modal overlay (mobile = full-screen sheet, desktop = centered card) ──────
-export function Overlay({ onClose, children }) {
+// Optional `footer` (v14.4.1): when provided, the action buttons render PINNED
+// to the modal bottom while `children` scroll above them — so Save/Cancel stay
+// reachable on tall forms without scrolling to the end. When omitted, behaviour
+// is byte-identical to before (one scroll region), keeping back-compat for
+// read-only popups (e.g. HistoryPopup) that have no action row.
+// Blur budget unchanged: exactly one card renders (ternary), so a footer modal
+// is still scrim blur(8px) + card blur(20px) = 2 instances (≤4 rule holds).
+export function Overlay({ onClose, children, footer }) {
   const mob = typeof window !== "undefined" && window.innerWidth < 600;
   const lockRef = useRef(false);
 
@@ -68,6 +75,20 @@ export function Overlay({ onClose, children }) {
   }, [mob]);
 
   if (mob) {
+    // Footer pinned to the viewport bottom; body scrolls between top and footer.
+    // (minHeight:0 lets the flex body actually scroll instead of growing the column.)
+    if (footer) {
+      return (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", boxSizing: "border-box" }}>
+            {children}
+          </div>
+          <div style={{ flexShrink: 0, padding: "12px 18px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: "1px solid var(--border-sheet)", background: "var(--bg-sheet-mobile)", boxSizing: "border-box" }}>
+            {footer}
+          </div>
+        </div>
+      );
+    }
     return (
       <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
@@ -79,14 +100,28 @@ export function Overlay({ onClose, children }) {
     );
   }
 
+  // Desktop centered card. With a footer, the card is a flex column: body
+  // scrolls (minHeight:0), footer stays pinned. Without, the whole card scrolls
+  // (exactly as before).
   return (
     <div
       style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
-        {children}
-      </div>
+      {footer ? (
+        <div style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+          <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
+            {children}
+          </div>
+          <div style={{ flexShrink: 0, padding: "16px 24px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
+            {footer}
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }

@@ -2184,3 +2184,44 @@ New: List-view keyboard selection + shortcuts; editable opening hours (affects b
 - **Deviation:** eight items in one version (owner's call) rather than one-version-per-branch.
 - **New architecture fact:** `settings/operatingHours` is the first Firebase `settings` node; theme stays per-device in `localStorage`. Don't capture the `OPEN`/`CLOSE` live bindings into a module-scope local (breaks live update) -- read at call/render time.
 
+---
+
+## v14.4.0 -> v14.4.1 -- Pinned modal footers · timeline right-edge alignment · stale-doc fix
+
+**Date**: 2026-06-02
+**Branch**: `claude/admiring-solomon-91ecfb` -> PR to `main`
+**Status**: patch -- **app version 14.4.0 -> 14.4.1** (UX polish + bug fix + docs). Three small items bundled on one branch (per owner's call): footer-anchoring, the rightmost-grid-line fix, and the stale CLAUDE.md theming line. First PR of the post-14.4.0 roadmap.
+
+### The three items
+1. **Footer-anchoring across all action modals.** The `Overlay` atom gains an optional `footer` slot; action buttons render pinned to the modal bottom while the body scrolls above -- so Save/Cancel stays reachable on tall forms without scrolling to the end.
+2. **Timeline rightmost grid-line alignment.** The hour-header's right-edge line and the grid body's right-edge line sat ~2px apart; now they coincide.
+3. **Stale CLAUDE.md theming line fixed.** The Theming section still claimed `TimelineView`/`ListView`/App.jsx banners were "still literal ... canvas still light in dark mode" -- stale since dark mode completed in v14.2.3-v14.2.5.
+
+### Files changed (9 src + REFACTOR_LOG + CLAUDE.md)
+- **`src/components/atoms.jsx`** -- `Overlay` gains an optional `footer` prop. Desktop: the card becomes a flex column (`maxHeight:90dvh`, `overflow:hidden`) with a `flex:1 minHeight:0 overflowY:auto` body + a `flexShrink:0` footer region (`borderTop`); without `footer`, behaviour is byte-identical to before. Mobile: footer pinned as a sticky bottom bar with safe-area padding, body scrolls above. Blur budget unchanged (one card renders -> scrim blur(8) + card blur(20) = 2).
+- **`src/components/BookingFormModal.jsx`** -- action row + `errorEl` moved into a `footerEl` const passed via `footer`; errorEl now rides above the buttons (stays visible on a save error). `marginTop:18` dropped (footer borderTop separates).
+- **`src/components/WalkinForm.jsx`** -- error + Seat/Cancel row -> `footer`; the kitchen-busy suggestion panel stays in the scrolling body.
+- **`src/components/ManualModal.jsx`**, **`src/components/PrefPickerModal.jsx`** -- assign/clear/done rows -> `footer`.
+- **`src/components/BlockModal.jsx`** -- both render paths (view-list + add-inputs) get their own footer const.
+- **`src/App.jsx`** -- the 6 inline `Overlay` dialogs (delete / cancel / kitchen-busy / reshuffle / Settings / reminder-delete) pass their button rows via `footer`; version bump.
+- **`src/components/ReminderEditor.jsx`** -- has its own z-250 modal (not `Overlay`); restructured to the same scroll-body + pinned-footer shape (err + buttons in the footer).
+- **`src/components/TimelineView.jsx`** -- alignment fix: `headerLines` maps over `QUARTER_HOURS` only (dropped `.concat([GRID_CLOSE*60])`); the right-edge line is now a separate `right:0` border div in the header strip, matching the grid rows' `GridLines` convention.
+
+### Design decisions
+- **Footer-anchoring centralized in the `Overlay` atom** (one `footer` slot, opt-in) rather than per-modal hacks. Read-only popups (HistoryPopup) omit it and keep the original single-scroll path.
+- **errorEl moved into the footer** for the two big forms so an availability/validation error stays pinned above Save instead of scrolling out of view.
+- **Alignment root cause:** the header drew its rightmost line via `left: pct(GRID_CLOSE*60)` (= `left:100%`, border at [100%, 100%+2px]); the grid rows draw theirs via `right:0` (border at [100%-2px, 100%]). Unifying both on `right:0` removes the offset; all other lines already shared `pct(m)`.
+
+### Verification
+- `npm run build` OK -- main bundle **165.51 kB gz** (+0.27 vs 14.4.0's 165.24), 56 modules. Pre-existing 500 kB chunk-size warning unchanged. The clean build validates all the footer JSX surgery parses.
+- Alignment fix: code-trace confirms header and body both draw the rightmost line at `right:0` now.
+- **Pending (for PR / owner):** live QA on the DEV server -- booking + walk-in forms: footer pinned, body scrolls, Save reachable without scrolling (desktop + mobile <600); confirm dialogs render with the divider footer; timeline rightmost line coincides header<->body at 1x and a high zoom. (Authed UI is behind the Firebase login.)
+
+### Behavioural change
+Modal action buttons (Save/Cancel and equivalents) are now pinned to the modal bottom across all action modals; on tall forms the body scrolls beneath them, with a `borderTop` divider above the actions. Timeline rightmost grid-line now aligns with its header line. No logic, persistence, or data-shape changes.
+
+### Notes
+- Append-ordered (newest at bottom).
+- **Deviation:** three items on one branch (owner's call).
+- `Overlay`'s `footer` slot is now the canonical pattern for any future modal action row.
+
