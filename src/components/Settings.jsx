@@ -99,7 +99,7 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc }) {
           −
         </button>
         <span style={{ minWidth: 58, textAlign: "center", fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
-          {String(value).padStart(2, "0") + ":00"}
+          {String(value % 24).padStart(2, "0") + ":00"}
         </span>
         <button
           onClick={onInc} disabled={disableInc}
@@ -145,12 +145,12 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, 
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
           <HourStepper
             label="Open" value={oh}
-            disableDec={oh <= 8} disableInc={oh >= ch - 1}
+            disableDec={oh <= 6} disableInc={oh >= ch - 1}
             onDec={() => onSaveHours(oh - 1, ch)} onInc={() => onSaveHours(oh + 1, ch)}
           />
           <HourStepper
             label="Close" value={ch}
-            disableDec={ch <= oh + 1} disableInc={ch >= 23}
+            disableDec={ch <= oh + 1} disableInc={ch >= 25}
             onDec={() => onSaveHours(oh, ch - 1)} onInc={() => onSaveHours(oh, ch + 1)}
           />
         </div>

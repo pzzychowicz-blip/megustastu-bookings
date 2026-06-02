@@ -266,7 +266,7 @@ export function TimelineView({
             boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
           }}
         >
-          {String(Math.floor(m / 60)).padStart(2, "0") + ":00"}
+          {String(Math.floor(m / 60) % 24).padStart(2, "0") + ":00"}
         </span>
       );
     });

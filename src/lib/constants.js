@@ -34,13 +34,15 @@ export var CLUSTERS={"1A":["1A","1B"],"1B":["1A","1B"],"7":["7"],"2":["2","3","4
 // these are live ESM bindings, so reassigning HERE updates every importer —
 // including booking-logic's pure functions — with NO signature changes. A React
 // re-render after the setter runs repaints the timeline/forms. GRID_CLOSE (the
-// timeline's right edge) stays one hour past close. Only this module may reassign
-// its own exports, so the setter lives here.
+// timeline's right edge) stays one hour past close — v14.5.0: no longer clamped
+// to 24, so a past-midnight close (24 = 00:00, 25 = 01:00) extends the grid past
+// midnight (GRID_CLOSE up to 26). Only this module may reassign its own exports,
+// so the setter lives here.
 export let OPEN=13,CLOSE=22,GRID_CLOSE=23;
 export var KITCHEN_TABLE_LIMIT=3;
 export let QUARTER_HOURS=Array.from({length:(GRID_CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
 export function setOperatingHours(open,close){
-  OPEN=open;CLOSE=close;GRID_CLOSE=Math.min(24,close+1);
+  OPEN=open;CLOSE=close;GRID_CLOSE=close+1;
   QUARTER_HOURS=Array.from({length:(GRID_CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
 }
 export var ROW_H=44,LABEL_W=58;

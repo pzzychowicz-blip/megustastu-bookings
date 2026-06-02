@@ -23,15 +23,18 @@ import { db } from "../firebase";
 import { OPEN, CLOSE, setOperatingHours } from "../lib/constants";
 
 // Clamp to sane bounds and keep open < close. Mirrors the Settings editor limits.
-// open in [8..21], close in [open+1..23]. Defensive against malformed Firebase
-// data (missing / NaN / inverted), since this drives the whole time axis.
+// v14.5.0: open in [6..22], close in [open+1..25] — close may run past midnight
+// (24 = 00:00, 25 = 01:00); capped at 25 so the latest 90-min booking still
+// starts ≤ 23:30 (no post-midnight starts → no core-scheduling change). Defensive
+// against malformed Firebase data (missing / NaN / inverted), since this drives
+// the whole time axis.
 function sanitizeHours(open, close){
   let o = Math.round(Number(open));
   let c = Math.round(Number(close));
   if(!Number.isFinite(o)) o = 13;
   if(!Number.isFinite(c)) c = 22;
-  o = Math.max(8, Math.min(21, o));
-  c = Math.max(o + 1, Math.min(23, c));
+  o = Math.max(6, Math.min(22, o));
+  c = Math.max(o + 1, Math.min(25, c));
   return { open: o, close: c };
 }
 

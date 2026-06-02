@@ -69,7 +69,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           </span>
         </div>
         {existing.map((bl, i) => {
-          const label = bl.allDay ? OPEN + ":00 – " + GRID_CLOSE + ":00" : bl.from + " – " + bl.to;
+          const label = bl.allDay ? String(OPEN).padStart(2, "0") + ":00 – " + String(GRID_CLOSE % 24).padStart(2, "0") + ":00" : bl.from + " – " + bl.to;
           return (
             <div key={i} style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -143,8 +143,8 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               type="time"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              min={OPEN + ":00"}
-              max={GRID_CLOSE + ":00"}
+              min={String(OPEN).padStart(2, "0") + ":00"}
+              max={GRID_CLOSE >= 24 ? "23:59" : String(GRID_CLOSE).padStart(2, "0") + ":00"}
               className="mgt-hover-scale"
               style={mkInp()}
             />
@@ -154,8 +154,8 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               type="time"
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              min={OPEN + ":00"}
-              max={GRID_CLOSE + ":00"}
+              min={String(OPEN).padStart(2, "0") + ":00"}
+              max={GRID_CLOSE >= 24 ? "23:59" : String(GRID_CLOSE).padStart(2, "0") + ":00"}
               className="mgt-hover-scale"
               style={mkInp()}
             />

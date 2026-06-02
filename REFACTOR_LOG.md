@@ -2225,3 +2225,41 @@ Modal action buttons (Save/Cancel and equivalents) are now pinned to the modal b
 - **Deviation:** three items on one branch (owner's call).
 - `Overlay`'s `footer` slot is now the canonical pattern for any future modal action row.
 
+---
+
+## v14.4.1 -> v14.5.0 -- 24-hour opening hours (extend-window)
+
+**Date**: 2026-06-02
+**Branch**: `feat/v14.5.0-24h-hours` -> PR to `main`
+**Status**: feature -- **app version 14.4.1 -> 14.5.0** (minor: user-visible range expansion). Step 2 of the post-14.4.0 roadmap.
+
+### What
+Open can now be set as early as **06:00** and close as late as **01:00**. A late booking (e.g. 23:30 + 90 min) shows its tail past midnight on the timeline; **no booking may START after midnight** ("extend-window only"). Capping close at 01:00 keeps every 90-min start <= 23:30, so the optimizer / booking math is **unchanged** -- this is a bounds + display change.
+
+### Files changed (9 src + REFACTOR_LOG + CLAUDE.md)
+- **`src/hooks/useOperatingHours.js`** -- `sanitizeHours` bounds widened: open `[8..21]`->`[6..22]`, close `[open+1..23]`->`[open+1..25]` (24 = 00:00, 25 = 01:00).
+- **`src/lib/constants.js`** -- `setOperatingHours`: `GRID_CLOSE = close + 1` (dropped `Math.min(24, ...)`), so close 25 -> GRID_CLOSE 26 and the grid extends past midnight. Comment updated.
+- **`src/components/Settings.jsx`** -- HourStepper readout wraps `% 24` (24->"00:00", 25->"01:00"); stepper bounds updated (open `disableDec` <= 6, close `disableInc` >= 25).
+- **`src/components/TimelineView.jsx`** -- header hour label wraps `Math.floor(m/60) % 24`.
+- **`src/App.jsx`** -- header subtitle padded + `% 24` (e.g. `06:00 - 01:00`); version bump.
+- **`src/components/BookingFormModal.jsx`**, **`src/components/WalkinForm.jsx`** -- time-input `max` caps at `"23:59"` when `CLOSE >= 24` (a native `<input type=time>` rejects "24:00"+).
+- **`src/components/BlockModal.jsx`** -- From/To `min` padded, `max` caps at `"23:59"` when `GRID_CLOSE >= 24`; all-day block label wraps `% 24`.
+- **`src/lib/booking-logic.js`** -- defensive `if (m >= 24*60)` guard in `findTimes` + `findKitchenFriendlyTimes` so a short custom duration can't suggest a post-midnight start. No-op for close <= 23.
+
+### Design decisions
+- **Extend-window, not true midnight-crossing** (owner's call). Bookings stay keyed/positioned by minutes-from-midnight; their `time` stays pre-midnight, so `toMins`/`pct`/the optimizer need no change. Close capped at 01:00 (25) -- a higher ceiling (02:00 = 26) would let a 90-min start land past midnight and require wrap-aware time handling, deliberately deferred.
+- **Live ESM bindings carry the change for free.** Only `setOperatingHours` changed in `constants.js`; `booking-logic.js`'s pure functions read the updated `GRID_CLOSE`/`CLOSE` automatically (verified: Node import -> `setOperatingHours(6,25)` gives OPEN 6, CLOSE 25, GRID_CLOSE 26, QUARTER_HOURS 80 entries).
+- **Display wraps via `% 24`** wherever an hour is rendered (Settings stepper, timeline label, app subtitle, block label); inputs cap at "23:59" because the native time picker can't express >= 24:00.
+
+### Verification
+- `npm run build` OK -- main bundle **165.58 kB gz** (+0.07 vs 14.4.1's 165.51), 56 modules.
+- Node unit-check of the setter (above): GRID_CLOSE no longer clamped; QUARTER_HOURS recomputed (40 -> 80 for 6-26).
+- **Pending (for PR / owner):** live QA on DEV -- set close 01:00 in Settings -> header reads `01:00`, timeline extends past midnight with `00:00`/`01:00` labels, a 23:30/90-min booking's bar runs to 01:00; open floor reaches 06:00; the booking/walk-in time picker won't accept >= 00:00. (Authed UI is behind the Firebase login.)
+
+### Behavioural change
+Opening-hours range widened (06:00-01:00 selectable in Settings). A past-midnight close extends the timeline grid and shows late bookings' tails. No change to the optimizer, persistence guards, booking data shape, or the `settings/operatingHours` schema (`{open, close}` -- close may now be 23-25).
+
+### Notes
+- Append-ordered (newest at bottom).
+- **No post-midnight booking starts** -- enforced by the close <= 25 cap + the `findTimes` `m < 24*60` guard + the form `max="23:59"`. Raising the ceiling later (true midnight-crossing) would need wrap-aware `toMins`.
+
