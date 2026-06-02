@@ -52,6 +52,7 @@ const SHORTCUT_SECTIONS = [
     { keys: ["←", "→"],  label: "Previous / next day" },
     { keys: ["N"],       label: "New booking" },
     { keys: ["W"],       label: "Walk-in" },
+    { keys: ["S"],       label: "Toggle Summary panel" },
     { keys: ["?"],       label: "Show this help" },
   ]},
   { title: "Timeline", rows: [

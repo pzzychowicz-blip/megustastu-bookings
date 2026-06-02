@@ -113,9 +113,12 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, closeHour, onSaveHours = () => {} }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, closeHour, onSaveHours = () => {}, splitHour, shiftsEnabled, onSaveShifts = () => {} }) {
   const oh = typeof openHour === "number" ? openHour : 13;
   const ch = typeof closeHour === "number" ? closeHour : 22;
+  const sp = typeof splitHour === "number" ? splitHour : 17;
+  const se = shiftsEnabled !== false;
+  const hhLabel = (n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00";
   return (
     <div>
       {/* v14.2.0: Dark-mode toggle. Per-device (localStorage) — flips
@@ -155,6 +158,31 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, 
           />
         </div>
       </Section>
+      {/* v14.6.0: Shifts — on/off toggle + the Afternoon/Evening split hour for
+          the day Summary. Firebase-shared (settings/dayShifts). */}
+      <Section style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Shifts</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Split the day Summary into Afternoon / Evening. Shared across all devices.
+            </div>
+          </div>
+          <Toggle on={se} onClick={() => onSaveShifts({ enabled: !se })} />
+        </div>
+        {se ? (
+          <div style={{ marginTop: 14 }}>
+            <HourStepper
+              label="Afternoon / Evening split" value={sp}
+              disableDec={sp <= oh + 1} disableInc={sp >= ch - 1}
+              onDec={() => onSaveShifts({ split: sp - 1 })} onInc={() => onSaveShifts({ split: sp + 1 })}
+            />
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 10 }}>
+              Afternoon {hhLabel(oh)}–{hhLabel(sp)} · Evening {hhLabel(sp)}–{hhLabel(ch)}
+            </div>
+          </div>
+        ) : null}
+      </Section>
       <div style={{ padding: "10px 12px 12px", textAlign: "center" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.02em" }}>
           version {appVersion}
@@ -179,6 +207,9 @@ export function SettingsContent({
   openHour,
   closeHour,
   onSaveHours,
+  splitHour,
+  shiftsEnabled,
+  onSaveShifts,
   reminders,
   onAddReminder,
   onEditReminder,
@@ -187,7 +218,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} openHour={openHour} closeHour={closeHour} onSaveHours={onSaveHours} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} openHour={openHour} closeHour={closeHour} onSaveHours={onSaveHours} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent

@@ -36,11 +36,13 @@ src/
 │   ├── useWalkin.js                 walk-in state + handlers
 │   ├── useWinW.js                   viewport-width hook
 │   ├── useThemeMode.js              dark-mode resolver (localStorage pref → isDark; writes data-theme)
-│   └── useOperatingHours.js         editable open/close hours → constants.js live bindings; Firebase settings/operatingHours node (v14.4.0; 24h range / past-midnight close v14.5.0)
+│   ├── useOperatingHours.js         editable open/close hours → constants.js live bindings; Firebase settings/operatingHours node (v14.4.0; 24h range / past-midnight close v14.5.0)
+│   └── useDayShifts.js              editable Afternoon/Evening split hour → Firebase settings/dayShifts (v14.6.0; 2nd settings node)
 ├── components/
 │   ├── BookingFormModal.jsx         booking form (controlled component)
 │   ├── TimelineView.jsx             Gantt-style timeline (horizontal scroller)
 │   ├── ListView.jsx                 sorted card list
+│   ├── Summary.jsx                  collapsible day-summary panel — covers by hour + shift (v14.6.0)
 │   ├── WalkinForm.jsx               walk-in entry form
 │   ├── ManualModal.jsx              manual table-assign UI
 │   ├── PrefPickerModal.jsx          preferred-tables picker
@@ -54,7 +56,7 @@ src/
 │   ├── TableGrid.jsx                13-table picker (used by Manual/Block modals)
 │   └── atoms.jsx                    Overlay (+ pinned-footer slot), Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn
 └── lib/
-    ├── booking-logic.js             pure functions (optimizer, sanitisation, derivations)
+    ├── booking-logic.js             pure functions (optimizer, sanitisation, derivations, daySummary)
     ├── constants.js                 tables, capacities, colours, S/BTN style tokens (S now var(--…)-backed for theming)
     └── reminders.js                 reminder helpers (validate, fire-window, prune)
 ```
@@ -164,7 +166,7 @@ function saveBookings(next, isSilent) {
 
 **Auto-effects** (anything that writes Firebase without direct user action) must pass `isSilent=true` to suppress the user-facing banner on refusal.
 
-**Persisted collections:** `bookings`, `tableBlocks`, `reminders`, `reminderFires`, plus the `settings/operatingHours` object (open/close hours — the **first** Firebase `settings` node, added v14.4.0; restaurant-wide config so it's **shared** across devices, unlike per-device prefs). Per-device preferences (e.g. **theme**) still use `localStorage`, NOT Firebase — only restaurant-wide config belongs in the `settings` node. The `operatingHours` write-guard is the loaded-ref half only (it's a small object, so the empty-array guard doesn't apply); see `useOperatingHours.js`.
+**Persisted collections:** `bookings`, `tableBlocks`, `reminders`, `reminderFires`, plus two `settings` objects: `settings/operatingHours` (open/close hours — the **first** `settings` node, v14.4.0) and `settings/dayShifts` (`{split, enabled}` — the Afternoon/Evening split hour + on/off flag for the Summary panel — the **second** node, v14.6.0). Both are restaurant-wide config so they're **shared** across devices, unlike per-device prefs. Per-device preferences (e.g. **theme**) still use `localStorage`, NOT Firebase — only restaurant-wide config belongs in a `settings` node. The `operatingHours` + `dayShifts` write-guards are the loaded-ref half only (small objects, so the empty-array guard doesn't apply); see `useOperatingHours.js` / `useDayShifts.js`.
 
 **Single central save path:** route every mutation of a collection through one helper (e.g. `bookingsAfterAction`) so future conflict-detection / re-derivation has one hook point.
 
@@ -362,6 +364,7 @@ Scripts live in `/home/claude/verify/` during a refactor session; re-create from
 - **`.mgt-hover-scale` hover-lift port — COMPLETE** (v14.3.0 rule+token+header → v14.3.1 cards/timeline/tabs → v14.3.2 modals/toggles/inputs; **v14.4.0** closed two stragglers — timeline table-label badges + kitchen-busy / availability hour chips). Every interactive surface lifts 8% on hover; one identity shared with MGT Scheduling. See the "Hover affordance" UI rule above. Note: Fix 4 (Overlay inner-scroller) was deliberately skipped — the existing 24px padding suffices. **Footer-anchoring shipped in v14.4.1** via an optional pinned-`footer` slot on `Overlay` (all action modals + `ReminderEditor`), so Save/Cancel stays reachable on tall modals without scrolling.
 - **v14.4.0 features:** editable **opening hours** (Settings → General; Firebase-shared `settings/operatingHours`; see Critical patterns → "Operating hours — live module bindings"), the **List-view keyboard model** (↑/↓ focus a card; `A`/`E`/`S`/`C`/`⇧C`/`D` act on it — see `Shortcuts.jsx`), and `N` → new reminder while the Reminders tab is open.
 - **v14.5.0:** opening-hours range extended to **24h** — open from 06:00, close up to **01:00**. A past-midnight close shows late bookings' tails on the timeline (extend-window only — no booking *starts* after midnight, so the scheduler is untouched). See Critical patterns → "Operating hours — live module bindings".
+- **v14.6.0:** the **Summary panel** (`Summary.jsx`, collapsible, slotted between the date-nav row and the day view) — total **covers** (Σ `size`) for the selected `viewDate`, broken down by hour and by two **Shifts** (Settings → General; Firebase-shared `settings/dayShifts` — a single editable Afternoon/Evening split hour **+ an on/off toggle**, the 2nd settings node — `settings/dayShifts = {split, enabled}`). Aggregation is `daySummary` in `booking-logic.js`. **`S`** (for Summary) toggles the panel (`SUMMARY_KEY` in `App.jsx` + the Shortcuts "S" row; NB in List view with a card focused, `S` = Seated takes precedence).
 - **WhatsApp Cloud API integration (Phase 1b)** — designed, not implemented. See `MGT_WhatsApp_Inbox_Phase1b_Design_Summary.md`. Integration points: the `BookingFormModal` callback surface + a new `InboxPanel` component.
 
 ---
