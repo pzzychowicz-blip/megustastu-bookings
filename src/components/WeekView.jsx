@@ -11,7 +11,7 @@
 //
 // v14.7.0.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Overlay, mkBtn } from "./atoms";
 import { daySummary } from "../lib/booking-logic";
 import { BTN } from "../lib/constants";
@@ -47,6 +47,8 @@ function rangeLabel(days){
 
 export function WeekView({ bookings, viewDate, onPick, onClose }){
   const [ref, setRef] = useState(viewDate);
+  // Keyboard focus row (0 = Mon … 6 = Sun). Starts on the day you came from.
+  const [focusIdx, setFocusIdx] = useState(function(){ const d = new Date(viewDate); return (d.getUTCDay() + 6) % 7; });
   const today = new Date().toISOString().slice(0, 10);
   const days = weekDates(ref);
   const rows = days.map(function(d){
@@ -60,6 +62,26 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
     x.setUTCDate(x.getUTCDate() + delta * 7);
     setRef(x.toISOString().slice(0, 10));
   }
+
+  // Keyboard nav while the popover is open. The global handler suppresses these
+  // (showWeek is in anyModal; its Enter falls through to a bare return), so
+  // WeekView owns them: ←/→ = prev/next week, ↑/↓ = move the day focus, T = this
+  // week, Enter = open the focused day. (Esc / backdrop close stays with the
+  // shared Overlay + global handler.)
+  useEffect(function(){
+    function onKey(e){
+      if(e.ctrlKey || e.metaKey || e.altKey) return;
+      const k = e.key;
+      if(k === "ArrowLeft"){ e.preventDefault(); shiftWeek(-1); }
+      else if(k === "ArrowRight"){ e.preventDefault(); shiftWeek(1); }
+      else if(k === "ArrowUp"){ e.preventDefault(); setFocusIdx(function(f){ return (f + 6) % 7; }); }
+      else if(k === "ArrowDown"){ e.preventDefault(); setFocusIdx(function(f){ return (f + 1) % 7; }); }
+      else if(k === "t" || k === "T"){ e.preventDefault(); setRef(today); }
+      else if(k === "Enter"){ e.preventDefault(); onPick(days[focusIdx]); }
+    }
+    window.addEventListener("keydown", onKey);
+    return function(){ window.removeEventListener("keydown", onKey); };
+  }, [ref, focusIdx]);
 
   const footer = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -84,6 +106,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
         {rows.map(function(r, i){
           const isToday = r.date === today;
           const isSel = r.date === viewDate;
+          const isFocused = i === focusIdx;
           const dnum = Number(r.date.slice(8, 10));
           return (
             <button
@@ -95,8 +118,8 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                 padding: "10px 12px", borderRadius: 12, cursor: "pointer",
                 width: "100%", boxSizing: "border-box", textAlign: "left",
                 background: "var(--bg-input)",
-                border: "1px solid " + (isSel ? "var(--accent)" : "var(--border-input)"),
-                boxShadow: isSel ? "0 0 0 2px var(--accent)" : "none"
+                border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
+                boxShadow: isFocused ? "0 0 0 2px var(--accent)" : "none"
               }}
             >
               <div style={{ minWidth: 56, flexShrink: 0 }}>
@@ -113,6 +136,9 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
             </button>
           );
         })}
+      </div>
+      <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-faint)", textAlign: "center" }}>
+        ↑↓ day · ←→ week · T this week · Enter open
       </div>
     </Overlay>
   );

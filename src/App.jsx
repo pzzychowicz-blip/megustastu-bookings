@@ -185,9 +185,9 @@ if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 // NB: in List view with a booking focused, S marks it Seated (that check runs
 // first); everywhere else S toggles the Summary. Rebind here + the Shortcuts row.
 const SUMMARY_KEY="s";
-// v14.7.0: provisional shortcut to open the Week View popover. "w" is already
-// taken (Walk-in), so this is a placeholder "k" — Patryk picks the final key
-// (change here + the matching "K" row in Shortcuts.jsx).
+// v14.7.0: shortcut to open the Week View popover. "K" — confirmed by Patryk
+// ("w" was taken by Walk-in). Change here + the Shortcuts "K" row to rebind.
+// In-popover nav (←/→ week, ↑/↓ day, T this-week, Enter open) lives in WeekView.
 const WEEK_KEY="k";
 
 // ── v14.2.0: Dark-mode preference reader ──────────────────────────────────

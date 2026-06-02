@@ -2341,7 +2341,12 @@ New Week View popover + a "Week" button in the Summary header + a provisional `k
 
 ### Notes
 - Append-ordered (newest at bottom).
-- **`k` is provisional** -- Patryk finalizes the key (`WEEK_KEY` in `App.jsx` + the Shortcuts "K" row); `w` is taken by Walk-in.
+- **`k` confirmed** by Patryk (`w` was taken by Walk-in). `WEEK_KEY` in `App.jsx` + the Shortcuts "K" row.
 - **Date code is all-UTC** -- keep it that way (mixing local `getDate()` with UTC `toISOString()` shifts dates in UTC+ zones).
 - Completes the post-14.4.0 roadmap (v14.4.1 footers -> 14.5.0 24h hours -> 14.6.0 Summary/Shifts -> 14.7.0 Week View).
+
+### Review refinements (pre-merge, PR #16 live QA) -- still v14.7.0
+- **In-popover keyboard nav** (Patryk request): `←`/`→` = prev/next week, `↑`/`↓` = move the day focus (Mon–Sun), `T` = this week, `Enter` = open the focused day. Owned by a `WeekView` keydown effect -- the global handler suppresses these while `showWeek` is in `anyModal`, and its `Enter` falls through to a bare `return`, so no collision. A focus ring tracks the focused row (starts on `viewDate`'s day); a hint line documents the keys; the Shortcuts cheatsheet gains a "Week view" section. `k` label de-provisionalised.
+- **Dropped an `onMouseEnter` focus-sync** -- it snapped the keyboard focus to a parked cursor on re-render (caught in live QA). Focus is now purely keyboard-driven (clicking still picks a day).
+- Build: **168.12 kB gz**, 59 modules. Live-verified: ↑/↓ move focus predictably (Tue→Wed→Thu), ←/→ change weeks (Jun 1–7 ↔ Jun 8–14), T returns to this week, Enter jumps `viewDate` + closes.
 
