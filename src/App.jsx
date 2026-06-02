@@ -76,6 +76,7 @@ import { ReminderEditor }          from "./components/ReminderEditor";
 import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
+import { WeekView }     from "./components/WeekView";
 
 // ── Phase B5 (v15-refactor): Final modal & screen extraction ──────────────
 // LoginScreen (the unauthenticated entry screen), WalkinForm (the walk-in
@@ -172,7 +173,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.6.0",
+  version:"14.7.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -184,6 +185,10 @@ if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 // NB: in List view with a booking focused, S marks it Seated (that check runs
 // first); everywhere else S toggles the Summary. Rebind here + the Shortcuts row.
 const SUMMARY_KEY="s";
+// v14.7.0: shortcut to open the Week View popover. "K" — confirmed by Patryk
+// ("w" was taken by Walk-in). Change here + the Shortcuts "K" row to rebind.
+// In-popover nav (←/→ week, ↑/↓ day, T this-week, Enter open) lives in WeekView.
+const WEEK_KEY="k";
 
 // ── v14.2.0: Dark-mode preference reader ──────────────────────────────────
 // Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
@@ -436,6 +441,8 @@ function BookingApp(){
   const [showSettings, setShowSettings] = useState(false);
   // v14.6.0: Summary panel expand/collapse (toggled by click or the g shortcut).
   const [summaryOpen, setSummaryOpen] = useState(false);
+  // v14.7.0: Week View popover (opened from the Summary panel's Week button).
+  const [showWeek, setShowWeek] = useState(false);
   // Settings tab state — which tab is active in the Settings modal.
   // Resets to 'general' on modal close so reopens start fresh. Belongs to
   // the Settings subsystem; lived inside the reminder state block pre-D2
@@ -865,6 +872,7 @@ function BookingApp(){
     openNew:openNew,openWalkin:openWalkin,
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
+    showWeek:showWeek,setShowWeek:setShowWeek,
     save:save,doSave:doSave,saveWalkin:saveWalkin,doSaveWalkin:doSaveWalkin,
     forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain
   };
@@ -891,6 +899,7 @@ function BookingApp(){
         if(K.blockTarget){e.preventDefault();K.setBlockTarget(null);return;}
         if(K.manualTarget){e.preventDefault();K.setManualTarget(null);return;}
         if(K.showWalkin){e.preventDefault();K.setShowWalkin(false);return;}
+        if(K.showWeek){e.preventDefault();K.setShowWeek(false);return;}
         if(K.showForm){e.preventDefault();K.setShowForm(false);return;}
         return;
       }
@@ -1006,7 +1015,7 @@ function BookingApp(){
         }
       }
       // ── Global shortcuts: suppressed while any modal is open ──
-      const anyModal=K.showForm||K.showWalkin||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.reminderEditor||K.confirmReminderDel;
+      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.reminderEditor||K.confirmReminderDel;
       if(anyModal) return;
       // ── v14.4.0: List-view per-card shortcuts (act on the focused booking) ──
       // ↑/↓ move the focus ring; A/E/S/C/Shift+C/Delete act on it. Placed before
@@ -1041,6 +1050,7 @@ function BookingApp(){
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
       // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
       if(k===SUMMARY_KEY||k===SUMMARY_KEY.toUpperCase()){e.preventDefault();K.setSummaryOpen(function(o){return !o;});return;}
+      if(k===WEEK_KEY||k===WEEK_KEY.toUpperCase()){e.preventDefault();K.setShowWeek(true);return;}
       if(k==="ArrowLeft"){e.preventDefault();const d1=new Date(K.viewDate);d1.setDate(d1.getDate()-1);K.setViewDate(d1.toISOString().slice(0,10));return;}
       if(k==="ArrowRight"){e.preventDefault();const d2=new Date(K.viewDate);d2.setDate(d2.getDate()+1);K.setViewDate(d2.toISOString().slice(0,10));return;}
       // ── Timeline-only shortcuts ──
@@ -1255,7 +1265,8 @@ function BookingApp(){
     splitHour={dayShifts.split}
     shiftsEnabled={dayShifts.enabled}
     open={summaryOpen}
-    onToggle={function(){setSummaryOpen(function(o){return !o;});}} />;
+    onToggle={function(){setSummaryOpen(function(o){return !o;});}}
+    onOpenWeek={function(){setShowWeek(true);}} />;
 
   const delModal=confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
@@ -1284,6 +1295,12 @@ function BookingApp(){
     isMobile={isMobile}
     onSave={saveWalkin}
     onClose={function(){setShowWalkin(false);}} />:null;
+
+  const weekModal=showWeek?<WeekView
+    bookings={bookings}
+    viewDate={viewDate}
+    onPick={function(d){setViewDate(d);setShowWeek(false);}}
+    onClose={function(){setShowWeek(false);}} />:null;
 
   return (
     <div
@@ -1344,7 +1361,7 @@ function BookingApp(){
               onOpenPrefPicker={function(){setShowPrefPicker(true);}}
               onOpenManualAssign={function(target){setManualTarget(target);}}
               onOpenHistory={function(){setShowHistory(true);}}
-              onRequestCancel={function(id){setConfirmCancel(id);}} />:null}{delModal}{manualModal}{walkinModal}{prefPickerModal}{blockTarget?<BlockModal
+              onRequestCancel={function(id){setConfirmCancel(id);}} />:null}{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}
