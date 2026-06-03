@@ -418,6 +418,7 @@ export function daySummary(bookings,date,splitHour){
   var byHour={};
   var totalCovers=0;
   var aCovers=0,aCount=0,eCovers=0,eCount=0;
+  var seatedCount=0,seatedCovers=0,upcomingCount=0; // v14.8.0: live status-bar tallies
   day.forEach(function(b){
     var size=Number(b.size)||2;
     var h=Math.floor(toMins(b.time)/60);
@@ -425,6 +426,7 @@ export function daySummary(bookings,date,splitHour){
     if(!byHour[h]) byHour[h]={covers:0,count:0};
     byHour[h].covers+=size;byHour[h].count+=1;
     if(h<splitHour){aCovers+=size;aCount+=1;}else{eCovers+=size;eCount+=1;}
+    if(b.status==="seated"){seatedCount+=1;seatedCovers+=size;}else if(b.status==="confirmed"){upcomingCount+=1;}
   });
   var hours=Object.keys(byHour).map(Number).sort(function(a,b){return a-b;}).map(function(h){
     return {hour:h,covers:byHour[h].covers,count:byHour[h].count};
@@ -434,6 +436,8 @@ export function daySummary(bookings,date,splitHour){
     totalBookings:day.length,
     hours:hours,
     afternoon:{covers:aCovers,count:aCount},
-    evening:{covers:eCovers,count:eCount}
+    evening:{covers:eCovers,count:eCount},
+    seated:{count:seatedCount,covers:seatedCovers}, // v14.8.0 — live occupancy
+    upcoming:{count:upcomingCount}                  // v14.8.0 — confirmed (not yet seated)
   };
 }

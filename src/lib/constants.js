@@ -10,6 +10,9 @@
 export var INDOOR=[{id:"i1",capacity:2},{id:"i2",capacity:2},{id:"i3",capacity:2},{id:"i4",capacity:2}];
 export var OUTDOOR=[{id:"1A",capacity:2},{id:"1B",capacity:2},{id:"2",capacity:2},{id:"3",capacity:2},{id:"4",capacity:2},{id:"5A",capacity:2},{id:"5B",capacity:2},{id:"6",capacity:2},{id:"7",capacity:4}];
 export var ALL_TABLES=OUTDOOR.concat(INDOOR);
+// v14.8.0: total restaurant capacity (Σ table capacities = 28). Denominator for the
+// Summary status bar's live "seats filled" reading. Derived so it tracks layout changes.
+export var TOTAL_SEATS=ALL_TABLES.reduce(function(a,t){return a+t.capacity;},0);
 export var TIMELINE_TABLES=OUTDOOR.concat(INDOOR);
 export var VALID_COMBOS=[
   {ids:["1A","1B"],cap:6},

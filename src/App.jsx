@@ -173,7 +173,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.7.0",
+  version:"14.8.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1264,6 +1264,7 @@ function BookingApp(){
     date={viewDate}
     splitHour={dayShifts.split}
     shiftsEnabled={dayShifts.enabled}
+    isToday={viewDate===new Date().toISOString().slice(0,10)}
     open={summaryOpen}
     onToggle={function(){setSummaryOpen(function(o){return !o;});}}
     onOpenWeek={function(){setShowWeek(true);}} />;
@@ -1321,7 +1322,7 @@ function BookingApp(){
               onClick={function(){signOut(auth);}}
               className="mgt-hover-scale"
               style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button></div></div><div
-          style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
+          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);setViewDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
@@ -1337,7 +1338,7 @@ function BookingApp(){
               style={{fontSize:14,padding:"8px 10px",borderRadius:12,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center"}}>{viewDate!==new Date().toISOString().slice(0,10)?<button
               onClick={function(){setViewDate(new Date().toISOString().slice(0,10));}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button>:null}</div></div>{summaryPanel}{!isOnline?<div
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button>:null}</div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0}}>{summaryPanel}</div></div>{!isOnline?<div
           style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>⚠ Working offline — your changes are saved locally and will sync when the connection returns. Keep this tab open.</div>:null}{reconnectShown?<div
           style={{background:"var(--app-reconnect-bg)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>✓ Reconnected — changes synced.</div>:null}{loadBannerShown?<div
           style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."}</div>:null}{writeWarning?<div

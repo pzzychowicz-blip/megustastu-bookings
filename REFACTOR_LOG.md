@@ -2350,3 +2350,39 @@ New Week View popover + a "Week" button in the Summary header + a provisional `k
 - **Dropped an `onMouseEnter` focus-sync** -- it snapped the keyboard focus to a parked cursor on re-render (caught in live QA). Focus is now purely keyboard-driven (clicking still picks a day).
 - Build: **168.12 kB gz**, 59 modules. Live-verified: ↑/↓ move focus predictably (Tue→Wed→Thu), ←/→ change weeks (Jun 1–7 ↔ Jun 8–14), T returns to this week, Enter jumps `viewDate` + closes.
 
+---
+
+## v14.7.0 -> v14.8.0 -- Summary panel into the date-nav row + live status bar
+
+**Date**: 2026-06-03
+**Branch**: `feat/v14.8.0-summary-statusbar` -> PR to `main`
+**Status**: feature -- **app version 14.7.0 -> 14.8.0** (minor: relocated panel + new live status line).
+
+### What
+Two changes to the Summary panel:
+1. **Relocated into the date-nav row.** The Summary headline now lives inline to the **right of the date controls** (and to the right of the **Today** button when it's visible -- "begins behind" it in flex order), filling the remaining row width. When expanded it **grows downward** from that spot (body below the headline), pushing the main view down; the date controls pin to the top (row `alignItems:flex-start`). On mobile it wraps to its own full-width line. Previously it was a full-width card below the row.
+2. **Live status bar** (right-aligned in the headline, **today only**): `N seated · N upcoming · X/28 seats filled` -- a glance-and-go read of current busy-ness. `seated` = bookings in `seated` status; `upcoming` = `confirmed`; `X/28` = Σ seated party-sizes over total capacity (`TOTAL_SEATS`, derived from `ALL_TABLES` = 28). Shown only when `viewDate` is today (occupancy is a "right now" concept); other dates keep the plain `Summary · covers · bookings` headline.
+
+### Files changed (4 src + REFACTOR_LOG + CLAUDE.md)
+- **`src/lib/constants.js`** -- new `TOTAL_SEATS` export (Σ table capacities = 28; derived so it tracks layout changes).
+- **`src/lib/booking-logic.js`** -- `daySummary` now also tallies `seated:{count,covers}` and `upcoming:{count}` in its existing single pass. Backward-compatible (WeekView reads only `totalCovers`/`totalBookings`).
+- **`src/components/Summary.jsx`** -- new `isToday` prop; header restructured into a `flex:1` toggle + a right-aligned cluster (status bar + Week + chevron) that wraps gracefully on narrow widths; root `marginBottom` dropped (the row owns the gap now). Root gains a **collapsed-only `.mgt-hover-scale`** lift (`className={open ? undefined : "mgt-hover-scale"}`) so the bar matches the date controls beside it; suppressed when expanded (an 8% scale on the tall open panel reads as a jump). Inline bg/radius/shadow win over the rule, so only `transform:scale(1.08)` applies (verified live: `rootBg` unchanged).
+- **`src/App.jsx`** -- date-nav row `alignItems` center -> flex-start; `summaryPanel` moved from below the row to a `flex:1` wrapper inside the row (after the Today-button container); `isToday` wired; version bump.
+
+### Design decisions
+- **Single-component relocation, not a split** -- `<Summary>` stays one component in one DOM location (the `flex:1` row child) and simply grows taller when expanded, which naturally yields the "body drops below, right of the date controls" layout from the mockups. No portal / absolute positioning.
+- **"Seats filled" = seated occupancy** (not seated+upcoming) -- bounded by capacity (≤ 28), reads as live fullness; seated+upcoming covers could exceed 28 on a high-turn day and look broken. Owner-confirmed.
+- **Status bar today-only** -- owner-confirmed; seated/occupancy is meaningless on past/future dates.
+
+### Verification
+- `npm run build` OK -- main bundle **168.48 kB gz** (+0.36 vs 14.7.0's 168.12), **59 modules** (no new files).
+- **Live-verified via the Preview bridge** (authed, DEV): collapsed bar sits in the row, status bar right-aligned reading `0 seated · 2 upcoming · 0/28 seats filled` for today's 2 confirmed bookings; expand grows the panel downward (hourly bars) with the date controls pinned top-left; navigating to 04.06.2026 surfaced the **Today** button with the Summary beginning to its right and the **status bar correctly hidden**; mobile (375px) wraps the Summary full-width with the status cluster intact.
+
+### Behavioural change
+Summary moved into the date-nav row + a today-only live status bar. No change to the optimizer, persistence, booking data shape, shifts, or any `settings` node -- read-only aggregation + layout.
+
+### Notes
+- Append-ordered (newest at bottom).
+- `daySummary` is the shared aggregator (Summary headline/body + status bar + WeekView) -- one pass, now carries the status tallies too.
+- Per the flow: branch off fresh `main` (v14.7.0, PR #16 merged); commit/push only when Patryk asks.
+

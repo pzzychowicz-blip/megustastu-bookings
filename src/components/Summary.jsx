@@ -12,44 +12,47 @@
 // keyboard shortcut can toggle it too). Collapsed = a one-line headline;
 // expanded = per-shift chips + an hourly cover breakdown.
 //
-// Note: the wide toggle header intentionally skips `.mgt-hover-scale` — an 8%
-// lift on a full-width (≤1000px) bar reads as a large jump; the timeline
-// scroller skips it for the same reason.
+// Note: the panel lifts via `.mgt-hover-scale` only when COLLAPSED — a compact
+// bar in the date-nav row, consistent with the date controls beside it. When
+// expanded it's a tall content panel, so the lift is suppressed (an 8% scale on
+// a large surface reads as a jarring jump — the timeline scroller skips it too).
 //
 // v14.6.0.
 
 import { daySummary } from "../lib/booking-logic";
-import { OPEN, CLOSE, BTN } from "../lib/constants";
+import { OPEN, CLOSE, BTN, TOTAL_SEATS } from "../lib/constants";
 import { mkBtn } from "./atoms";
 
 function hh(n){ return String(((n % 24) + 24) % 24).padStart(2, "0") + ":00"; }
 function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
 function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
 
-export function Summary({ bookings, date, splitHour, shiftsEnabled, open, onToggle, onOpenWeek }) {
+export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, onToggle, onOpenWeek }) {
   const s = daySummary(bookings, date, splitHour);
   const hasData = s.totalBookings > 0;
   const showShifts = shiftsEnabled !== false; // Shifts toggle (Settings → General → Shifts)
   const maxHourCovers = s.hours.reduce(function(m, h){ return Math.max(m, h.covers); }, 0) || 1;
 
   return (
-    <div style={{
-      background: "var(--bg-soft)",
-      border: "1px solid var(--border-soft)",
-      borderRadius: 14,
-      marginBottom: 12,
-      boxShadow: "var(--shadow-soft)",
-      overflow: "hidden"
-    }}>
+    <div
+      className={open ? undefined : "mgt-hover-scale"}
+      style={{
+        background: "var(--bg-soft)",
+        border: "1px solid var(--border-soft)",
+        borderRadius: 14,
+        boxShadow: "var(--shadow-soft)",
+        overflow: "hidden"
+      }}
+    >
       {/* Header — the headline toggles the body (click or the `s` shortcut); the
           Week button opens the week-at-a-glance popover. Separate buttons so we
           never nest a <button> inside a <button>. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", flexWrap: "wrap" }}>
         <button
           onClick={onToggle}
           aria-expanded={open}
           style={{
-            flex: 1, minWidth: 0, boxSizing: "border-box", padding: 0,
+            flex: "1 1 200px", minWidth: 0, boxSizing: "border-box", padding: 0,
             display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap",
             background: "transparent", border: "none", cursor: "pointer", textAlign: "left"
           }}
@@ -58,22 +61,35 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, open, onTogg
           <span style={{ fontSize: 14, fontWeight: 700, color: "var(--accent)" }}>{coversLabel(s.totalCovers)}</span>
           <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>{bookingsLabel(s.totalBookings)}</span>
         </button>
-        {onOpenWeek ? (
+        {/* Right cluster — the live status bar (today only) + Week + chevron, right-aligned
+            via marginLeft:auto; wraps below the headline as a unit on narrow widths. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {isToday ? (
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+              <span style={{ fontWeight: 700, color: "var(--status-seated-text)" }}>{s.seated.count}</span> seated
+              <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
+              <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{s.upcoming.count}</span> upcoming
+              <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
+              <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{s.seated.covers}/{TOTAL_SEATS}</span> seats filled
+            </div>
+          ) : null}
+          {onOpenWeek ? (
+            <button
+              onClick={onOpenWeek}
+              className="mgt-hover-scale"
+              style={mkBtn({ minHeight: 30, padding: "4px 12px", fontSize: 11, background: BTN.nav })}
+            >
+              Week
+            </button>
+          ) : null}
           <button
-            onClick={onOpenWeek}
-            className="mgt-hover-scale"
-            style={mkBtn({ minHeight: 30, padding: "4px 12px", fontSize: 11, background: BTN.nav })}
+            onClick={onToggle}
+            aria-label={open ? "Collapse summary" : "Expand summary"}
+            style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 11, color: "var(--text-muted)", fontWeight: 700, flexShrink: 0, padding: "4px 2px" }}
           >
-            Week
+            {open ? "▲" : "▼"}
           </button>
-        ) : null}
-        <button
-          onClick={onToggle}
-          aria-label={open ? "Collapse summary" : "Expand summary"}
-          style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 11, color: "var(--text-muted)", fontWeight: 700, flexShrink: 0, padding: "4px 2px" }}
-        >
-          {open ? "▲" : "▼"}
-        </button>
+        </div>
       </div>
 
       {/* Expanded body — shift chips + hourly bars. */}
