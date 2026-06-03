@@ -42,7 +42,7 @@ src/
 │   ├── BookingFormModal.jsx         booking form (controlled component)
 │   ├── TimelineView.jsx             Gantt-style timeline (horizontal scroller)
 │   ├── ListView.jsx                 sorted card list
-│   ├── Summary.jsx                  collapsible day-summary panel — covers by hour + shift (v14.6.0)
+│   ├── Summary.jsx                  day-summary panel — covers by hour + shift; lives IN the date-nav row (flex:1, grows downward when expanded) + today-only live status bar (seated·upcoming·seats-filled) (v14.6.0; relocated + status bar v14.8.0)
 │   ├── WeekView.jsx                 week-at-a-glance popover — per-day covers/bookings, tap to jump (v14.7.0)
 │   ├── WalkinForm.jsx               walk-in entry form
 │   ├── ManualModal.jsx              manual table-assign UI
@@ -58,7 +58,7 @@ src/
 │   └── atoms.jsx                    Overlay (+ pinned-footer slot), Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn
 └── lib/
     ├── booking-logic.js             pure functions (optimizer, sanitisation, derivations, daySummary)
-    ├── constants.js                 tables, capacities, colours, S/BTN style tokens (S now var(--…)-backed for theming)
+    ├── constants.js                 tables, capacities, TOTAL_SEATS (Σ caps = 28), colours, S/BTN style tokens (S now var(--…)-backed for theming)
     └── reminders.js                 reminder helpers (validate, fire-window, prune)
 ```
 
@@ -367,6 +367,7 @@ Scripts live in `/home/claude/verify/` during a refactor session; re-create from
 - **v14.5.0:** opening-hours range extended to **24h** — open from 06:00, close up to **01:00**. A past-midnight close shows late bookings' tails on the timeline (extend-window only — no booking *starts* after midnight, so the scheduler is untouched). See Critical patterns → "Operating hours — live module bindings".
 - **v14.6.0:** the **Summary panel** (`Summary.jsx`, collapsible, slotted between the date-nav row and the day view) — total **covers** (Σ `size`) for the selected `viewDate`, broken down by hour and by two **Shifts** (Settings → General; Firebase-shared `settings/dayShifts` — a single editable Afternoon/Evening split hour **+ an on/off toggle**, the 2nd settings node — `settings/dayShifts = {split, enabled}`). Aggregation is `daySummary` in `booking-logic.js`. **`S`** (for Summary) toggles the panel (`SUMMARY_KEY` in `App.jsx` + the Shortcuts "S" row; NB in List view with a card focused, `S` = Seated takes precedence).
 - **v14.7.0:** the **Week View** (`WeekView.jsx`, an `Overlay` popover opened from the Summary panel's **Week** button) — a 7-day (Mon–Sun) at-a-glance of per-day **covers + bookings**, today/selected highlighted, ‹ › week nav; tap a day to jump to it (sets `viewDate`, closes). Counts reuse `daySummary`. **`k`** opens it (confirmed; `w` was taken by Walk-in — `WEEK_KEY` in `App.jsx` + the Shortcuts "K" row). In-popover keyboard nav: **←/→** week, **↑/↓** day focus, **T** this week, **Enter** opens the focused day (a `WeekView` keydown effect; no `onMouseEnter` focus-sync — keyboard-driven). **Date math is all-UTC** (`new Date("YYYY-MM-DD")` + `getUTC*`/`setUTC*` + `toISOString`) to match the app's date-string convention — mixing local `getDate()` with UTC `toISOString()` shifts the week a day in UTC+ zones (caught in live QA).
+- **v14.8.0:** the **Summary panel moved into the date-nav row** — `Summary.jsx` is now a `flex:1` child to the right of the date controls (and to the right of the **Today** button when visible — "begins behind" it in flex order). The row uses `alignItems:flex-start`, so the panel **grows downward** when expanded (body below the headline, date controls pinned top-left) and **wraps full-width on mobile**. Plus a **today-only live status bar**, right-aligned in the headline: `N seated · N upcoming · X/28 seats filled`. `seated`=seated status, `upcoming`=confirmed, `X`=Σ seated party-sizes, `/28`=**`TOTAL_SEATS`** (new `constants.js` export = Σ table caps). Status tallies (`seated`/`upcoming`) added to `daySummary`; the status bar renders only when `viewDate` is today (occupancy is a "right now" read). Single-component relocation (no split/portal). The collapsed bar gains a `.mgt-hover-scale` lift gated to `!open` (`className={open ? undefined : "mgt-hover-scale"}`) — matches the date controls beside it; suppressed when expanded so the tall open panel doesn't scale.
 - **WhatsApp Cloud API integration (Phase 1b)** — designed, not implemented. See `MGT_WhatsApp_Inbox_Phase1b_Design_Summary.md`. Integration points: the `BookingFormModal` callback surface + a new `InboxPanel` component.
 
 ---
