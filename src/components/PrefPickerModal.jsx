@@ -101,7 +101,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
           Preferred table
         </div>
       </div>
-      <div style={{ fontSize: 13, color: S.text, marginBottom: 14 }}>
+      <div style={{ fontSize: 13, color: S.text, marginBottom: 14, textAlign: "center" }}>
         Soft hint — optimizer tries this first, falls back if unavailable.
       </div>
       <div style={{
@@ -119,10 +119,10 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       </div>
       {TABLE_GROUPS.map((grp) => (
         <div key={grp.name} style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: grp.color, marginBottom: 4 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: grp.color, marginBottom: 4, textAlign: "center" }}>
             {grp.name}
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
             {grp.tables.map((t) => {
               const isPref = prefs.includes(t.id);
               const indoor = isIn(t.id);
@@ -133,7 +133,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                   className="mgt-hover-scale"
                   onClick={() => togglePref(t.id)}
                   style={{
-                    width: 64, height: 48, padding: 0, borderRadius: 12,
+                    width: 64, height: 52, padding: 0, borderRadius: 12,
                     border: "2px solid " + (isPref ? "#0d9488" : tc.bg),
                     background: isPref ? "rgba(13,148,136,0.8)" : "rgba(255,255,255,0.4)",
                     color: isPref ? "#fff" : S.text,
@@ -148,7 +148,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                   <span>{t.id}</span>
                   <span style={{
                     fontSize: 10, fontWeight: 500,
-                    color: isPref ? "rgba(255,255,255,0.8)" : S.muted
+                    color: isPref ? "rgba(255,255,255,0.8)" : S.text
                   }}>
                     {"cap " + t.cap}
                   </span>

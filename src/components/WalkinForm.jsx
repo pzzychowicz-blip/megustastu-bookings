@@ -429,7 +429,9 @@ export function WalkinForm({
         </div>
       </Section>
 
-      <div style={{ fontSize: 13, color: S.text, marginBottom: 14 }}>
+      {wKitchenSection}
+
+      <div style={{ fontSize: 13, color: S.text, marginBottom: 14, textAlign: "center" }}>
         Tap tables to select / deselect.
       </div>
 
@@ -468,8 +470,6 @@ export function WalkinForm({
           onTapTime={(t) => setDraft({ ...wf, tables: [], time: t })}
         />
       ) : null}
-
-      {wKitchenSection}
     </Overlay>
   );
 }
