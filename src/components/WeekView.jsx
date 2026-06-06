@@ -1,30 +1,40 @@
 // src/components/WeekView.jsx
-// Week-at-a-glance popover, opened from the Summary panel. Shows the 7 days
-// (Mon–Sun, European convention) of the week containing a reference date, each
-// with its booking count and cover count (Σ size over non-cancelled). Tap a day
-// to jump to it (sets viewDate + closes). ‹ › navigate weeks without committing
-// until a day is tapped; "This week" returns to today's week.
+// "More" at-a-glance popover, opened from the Summary panel's More button (or
+// the `M` shortcut). Two modes, switchable via a Week/Month segmented control
+// or the W / M keys:
+//
+//   • Week  — the 7 days (Mon–Sun, European convention) of the week containing
+//             the reference date, each as a row with a cover bar + booking count.
+//   • Month — a Mon-start calendar grid of the reference month; each in-month
+//             day cell shows its cover count with a busyness tint. (v14.9.0)
+//
+// Tap a day to jump to it (sets viewDate + closes). The footer ‹ › navigate the
+// period (week or month) without committing; "This week" / "This month" returns
+// to today's period. Per-day counts reuse `daySummary` (splitHour is irrelevant
+// for the totals, so 0 is passed).
+//
+// Date math is ALL-UTC: a "YYYY-MM-DD" string parses as UTC midnight and
+// toISOString is UTC, so day-of-week + ±day/week/month math stays consistent.
+// (Mixing local getDate() with UTC toISOString shifted the whole week back a day
+// in UTC+ timezones — the bug the v14.7.0 live preview caught.)
 //
 // Uses the shared Overlay (with the v14.4.1 pinned-footer slot) for the
-// scrim/card + the nav/close footer. Per-day counts reuse `daySummary`
-// (splitHour is irrelevant for the totals, so 0 is passed).
+// scrim/card + the nav/close footer.
 //
-// v14.7.0.
+// v14.7.0 (week) · v14.9.0 (month view + W/M switch).
 
 import { useState, useEffect } from "react";
 import { Overlay, mkBtn } from "./atoms";
 import { daySummary } from "../lib/booking-logic";
 import { BTN } from "../lib/constants";
 
-const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
+const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONF = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 // 7 ISO date strings (Mon→Sun) for the week containing `dateStr`.
 function weekDates(dateStr){
-  // All-UTC arithmetic: a "YYYY-MM-DD" string parses as UTC midnight and
-  // toISOString is UTC, so the day-of-week + ±day math stays consistent.
-  // (Mixing local getDate() with UTC toISOString shifted the whole week back a
-  // day in UTC+ timezones — that was the bug the live preview caught.)
   const d = new Date(dateStr);
   const dow = (d.getUTCDay() + 6) % 7; // 0 = Mon … 6 = Sun
   const monday = new Date(d);
@@ -37,58 +47,133 @@ function weekDates(dateStr){
   }
   return out;
 }
-function rangeLabel(days){
+
+// Mon-start calendar matrix (4–6 weeks) for the month containing `dateStr`.
+// Each cell: { date, inMonth }. Leading/trailing cells spill into the adjacent
+// month so every row is a full Mon→Sun week.
+function monthGrid(dateStr){
+  const d = new Date(dateStr);
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth();
+  const first = new Date(Date.UTC(year, month, 1));
+  const lead = (first.getUTCDay() + 6) % 7; // Mon-start offset of the 1st
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const numWeeks = Math.ceil((lead + daysInMonth) / 7);
+  const cur = new Date(first);
+  cur.setUTCDate(first.getUTCDate() - lead); // Monday on/before the 1st
+  const weeks = [];
+  for(let w = 0; w < numWeeks; w++){
+    const week = [];
+    for(let i = 0; i < 7; i++){
+      week.push({ date: cur.toISOString().slice(0, 10), inMonth: cur.getUTCMonth() === month });
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    weeks.push(week);
+  }
+  return weeks;
+}
+
+function weekRangeLabel(days){
   const a = new Date(days[0]);
   const b = new Date(days[6]);
   const aL = MON[a.getUTCMonth()] + " " + a.getUTCDate();
   const bL = (a.getUTCMonth() === b.getUTCMonth() ? "" : MON[b.getUTCMonth()] + " ") + b.getUTCDate();
   return aL + " – " + bL + ", " + b.getUTCFullYear();
 }
+function monthLabel(dateStr){
+  const d = new Date(dateStr);
+  return MONF[d.getUTCMonth()] + " " + d.getUTCFullYear();
+}
+function sameMonth(a, b){
+  const x = new Date(a), y = new Date(b);
+  return x.getUTCMonth() === y.getUTCMonth() && x.getUTCFullYear() === y.getUTCFullYear();
+}
+function addDays(dateStr, n){
+  const d = new Date(dateStr);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
 
 export function WeekView({ bookings, viewDate, onPick, onClose }){
-  const [ref, setRef] = useState(viewDate);
-  // Keyboard focus row (0 = Mon … 6 = Sun). Starts on the day you came from.
-  const [focusIdx, setFocusIdx] = useState(function(){ const d = new Date(viewDate); return (d.getUTCDay() + 6) % 7; });
+  const [mode, setMode] = useState("week");   // "week" | "month"
+  const [ref, setRef] = useState(viewDate);    // a date inside the displayed period
+  const [focus, setFocus] = useState(viewDate); // keyboard-highlighted day
   const today = new Date().toISOString().slice(0, 10);
-  const days = weekDates(ref);
-  const rows = days.map(function(d){
-    const sum = daySummary(bookings, d, 0); // splitHour irrelevant for totals
-    return { date: d, covers: sum.totalCovers, bookings: sum.totalBookings };
-  });
-  const maxCovers = rows.reduce(function(m, r){ return Math.max(m, r.covers); }, 0) || 1;
+  const isWeek = mode === "week";
 
-  function shiftWeek(delta){
-    const x = new Date(ref);
-    x.setUTCDate(x.getUTCDate() + delta * 7);
-    setRef(x.toISOString().slice(0, 10));
+  // ── Period navigation (keep `ref` + `focus` in sync) ──
+  function goWeek(delta){ setRef(addDays(ref, delta * 7)); setFocus(addDays(focus, delta * 7)); }
+  function goMonth(delta){
+    const f = new Date(focus);
+    const target = new Date(Date.UTC(f.getUTCFullYear(), f.getUTCMonth() + delta, 1));
+    const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+    const day = Math.min(f.getUTCDate(), last);
+    const nf = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), day)).toISOString().slice(0, 10);
+    setFocus(nf); setRef(nf);
   }
+  function focusWithinWeek(dir){
+    const wd = weekDates(ref);
+    let idx = wd.indexOf(focus);
+    if(idx === -1) idx = (new Date(focus).getUTCDay() + 6) % 7;
+    setFocus(wd[(idx + dir + 7) % 7]);
+  }
+  function moveFocus(dd){ // month-mode 2D move; the displayed month follows
+    const nf = addDays(focus, dd);
+    setFocus(nf);
+    if(!sameMonth(nf, ref)) setRef(nf);
+  }
+  function switchMode(m){ setMode(m); setRef(focus); } // re-centre the period on the focused day
+  function goToday(){ setRef(today); setFocus(today); }
 
-  // Keyboard nav while the popover is open. The global handler suppresses these
-  // (showWeek is in anyModal; its Enter falls through to a bare return), so
-  // WeekView owns them: ←/→ = prev/next week, ↑/↓ = move the day focus, T = this
-  // week, Enter = open the focused day. (Esc / backdrop close stays with the
-  // shared Overlay + global handler.)
+  // Keyboard nav while the popover is open. The global handler suppresses keys
+  // (showWeek is in anyModal, so it returns early), so WeekView owns them:
+  // W/M switch view · ←/→ period · ↑/↓ (and ←/→ in month) move the day focus ·
+  // T this period · Enter open the focused day. (Esc / backdrop close stays with
+  // the shared Overlay + global handler.)
   useEffect(function(){
     function onKey(e){
       if(e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key;
-      if(k === "ArrowLeft"){ e.preventDefault(); shiftWeek(-1); }
-      else if(k === "ArrowRight"){ e.preventDefault(); shiftWeek(1); }
-      else if(k === "ArrowUp"){ e.preventDefault(); setFocusIdx(function(f){ return (f + 6) % 7; }); }
-      else if(k === "ArrowDown"){ e.preventDefault(); setFocusIdx(function(f){ return (f + 1) % 7; }); }
-      else if(k === "t" || k === "T"){ e.preventDefault(); setRef(today); }
-      else if(k === "Enter"){ e.preventDefault(); onPick(days[focusIdx]); }
+      if(k === "w" || k === "W"){ e.preventDefault(); switchMode("week"); }
+      else if(k === "m" || k === "M"){ e.preventDefault(); switchMode("month"); }
+      else if(k === "t" || k === "T"){ e.preventDefault(); goToday(); }
+      else if(k === "Enter"){ e.preventDefault(); onPick(focus); }
+      else if(k === "ArrowLeft"){ e.preventDefault(); isWeek ? goWeek(-1) : moveFocus(-1); }
+      else if(k === "ArrowRight"){ e.preventDefault(); isWeek ? goWeek(1) : moveFocus(1); }
+      else if(k === "ArrowUp"){ e.preventDefault(); isWeek ? focusWithinWeek(-1) : moveFocus(-7); }
+      else if(k === "ArrowDown"){ e.preventDefault(); isWeek ? focusWithinWeek(1) : moveFocus(7); }
     }
     window.addEventListener("keydown", onKey);
     return function(){ window.removeEventListener("keydown", onKey); };
-  }, [ref, focusIdx]);
+  }, [mode, ref, focus]);
 
+  // ── Header: Week/Month segmented control + period label ──
+  function modeBtn(m, label){
+    const active = mode === m;
+    return (
+      <button
+        onClick={function(){ switchMode(m); }}
+        className="mgt-hover-scale"
+        style={{
+          border: "none", borderRadius: 9, padding: "6px 18px", cursor: "pointer",
+          fontSize: 13, fontWeight: 700, minHeight: 32,
+          background: active ? "rgba(0,122,255,0.85)" : "transparent",
+          color: active ? "var(--text-on-accent)" : "var(--text-secondary)",
+          boxShadow: active ? "0 1px 3px rgba(0,0,0,0.15), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"
+        }}
+      >
+        {label}
+      </button>
+    );
+  }
+
+  // ── Footer (mode-aware nav) ──
   const footer = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <button onClick={function(){ shiftWeek(-1); }} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: 18, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8249;" }} />
-        <button onClick={function(){ setRef(today); }} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "6px 14px", background: BTN.today })}>This week</button>
-        <button onClick={function(){ shiftWeek(1); }} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: 18, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8250;" }} />
+        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: 18, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8249;" }} />
+        <button onClick={goToday} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "6px 14px", background: BTN.today })}>{isWeek ? "This week" : "This month"}</button>
+        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: 18, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8250;" }} />
       </div>
       <button onClick={onClose} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })}>Close</button>
     </div>
@@ -97,16 +182,39 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   return (
     <Overlay onClose={onClose} footer={footer}>
       <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)", display: "inline-block", padding: "8px 16px", borderRadius: 12, background: "rgba(0,122,255,0.75)", border: "1px solid rgba(255,255,255,0.2)", boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)" }}>
-          Week
+        <div style={{ display: "inline-flex", gap: 2, padding: 3, borderRadius: 12, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+          {modeBtn("week", "Week")}
+          {modeBtn("month", "Month")}
         </div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginTop: 8 }}>{rangeLabel(days)}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginTop: 8 }}>
+          {isWeek ? weekRangeLabel(weekDates(ref)) : monthLabel(ref)}
+        </div>
       </div>
+
+      {isWeek ? weekBody() : monthBody()}
+
+      <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-faint)", textAlign: "center" }}>
+        {isWeek
+          ? "W/M view · ↑↓ day · ←→ week · T today · Enter open"
+          : "W/M view · ↑↓←→ day · ‹ › month · T today · Enter open"}
+      </div>
+    </Overlay>
+  );
+
+  // ── Week body: 7 rows with a cover bar ──
+  function weekBody(){
+    const days = weekDates(ref);
+    const rows = days.map(function(d){
+      const sum = daySummary(bookings, d, 0);
+      return { date: d, covers: sum.totalCovers, bookings: sum.totalBookings };
+    });
+    const maxCovers = rows.reduce(function(m, r){ return Math.max(m, r.covers); }, 0) || 1;
+    return (
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {rows.map(function(r, i){
           const isToday = r.date === today;
           const isSel = r.date === viewDate;
-          const isFocused = i === focusIdx;
+          const isFocused = r.date === focus;
           const dnum = Number(r.date.slice(8, 10));
           return (
             <button
@@ -137,9 +245,65 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
           );
         })}
       </div>
-      <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-faint)", textAlign: "center" }}>
-        ↑↓ day · ←→ week · T this week · Enter open
+    );
+  }
+
+  // ── Month body: Mon-start calendar grid, busyness tint per in-month day ──
+  function monthBody(){
+    const weeks = monthGrid(ref);
+    let maxCovers = 1;
+    const data = {};
+    weeks.forEach(function(wk){ wk.forEach(function(c){
+      const sum = daySummary(bookings, c.date, 0);
+      data[c.date] = { covers: sum.totalCovers, bookings: sum.totalBookings };
+      if(c.inMonth) maxCovers = Math.max(maxCovers, sum.totalCovers);
+    }); });
+    return (
+      <div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
+          {WDS.map(function(w){ return (
+            <div key={w} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--text-muted)" }}>{w}</div>
+          ); })}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {weeks.map(function(wk, wi){ return (
+            <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+              {wk.map(function(c){
+                const cov = data[c.date].covers;
+                const isToday = c.date === today;
+                const isSel = c.date === viewDate;
+                const isFocused = c.date === focus;
+                const dnum = Number(c.date.slice(8, 10));
+                const intensity = c.inMonth ? cov / maxCovers : 0;
+                return (
+                  <button
+                    key={c.date}
+                    onClick={function(){ onPick(c.date); }}
+                    className="mgt-hover-scale"
+                    style={{
+                      position: "relative", overflow: "hidden",
+                      minHeight: 54, padding: "6px 4px 5px", borderRadius: 10, cursor: "pointer",
+                      boxSizing: "border-box", textAlign: "center",
+                      background: "var(--bg-input)",
+                      opacity: c.inMonth ? 1 : 0.4,
+                      border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
+                      boxShadow: isFocused ? "0 0 0 2px var(--accent)" : "none"
+                    }}
+                  >
+                    <div style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: intensity * 0.3, pointerEvents: "none" }} />
+                    <div style={{ position: "relative" }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: isToday ? "var(--accent)" : "var(--text-primary)" }}>{dnum}</div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: cov ? "var(--text-secondary)" : "var(--text-faint)", marginTop: 1 }}>
+                        {c.inMonth ? cov : ""}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ); })}
+        </div>
       </div>
-    </Overlay>
-  );
+    );
+  }
 }

@@ -45,8 +45,8 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, ope
       }}
     >
       {/* Header — the headline toggles the body (click or the `s` shortcut); the
-          Week button opens the week-at-a-glance popover. Separate buttons so we
-          never nest a <button> inside a <button>. */}
+          More button opens the at-a-glance popover (Week / Month — see WeekView).
+          Separate buttons so we never nest a <button> inside a <button>. */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", flexWrap: "wrap" }}>
         <button
           onClick={onToggle}
@@ -57,7 +57,6 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, ope
             background: "transparent", border: "none", cursor: "pointer", textAlign: "left"
           }}
         >
-          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>Summary</span>
           <span style={{ fontSize: 14, fontWeight: 700, color: "var(--accent)" }}>{coversLabel(s.totalCovers)}</span>
           <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>{bookingsLabel(s.totalBookings)}</span>
         </button>
@@ -79,7 +78,7 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, ope
               className="mgt-hover-scale"
               style={mkBtn({ minHeight: 30, padding: "4px 12px", fontSize: 11, background: BTN.nav })}
             >
-              Week
+              More
             </button>
           ) : null}
           <button
