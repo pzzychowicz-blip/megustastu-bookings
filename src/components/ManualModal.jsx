@@ -222,7 +222,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
           }}
         />
       </div>
-      <div style={{ fontSize: 13, color: S.text, marginBottom: 14 }}>
+      <div style={{ fontSize: 13, color: S.text, marginBottom: 14, textAlign: "center" }}>
         Tap tables to select / deselect.
       </div>
       <div style={{

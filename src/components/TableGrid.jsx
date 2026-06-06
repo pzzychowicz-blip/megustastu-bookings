@@ -41,15 +41,15 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
     <div>
       {TABLE_GROUPS.map((grp) => (
         <div key={grp.name} style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: grp.color, marginBottom: 2 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: grp.color, marginBottom: 2, textAlign: "center" }}>
             {grp.name}
           </div>
           {grp.note ? (
-            <div style={{ fontSize: 12, color: S.text, marginBottom: 6, fontStyle: "italic" }}>
+            <div style={{ fontSize: 12, color: S.text, marginBottom: 6, fontStyle: "italic", textAlign: "center" }}>
               {grp.note}
             </div>
           ) : null}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
             {grp.tables.map((t) => {
               const blocked = isBlocked(t.id);
               const isSel = selected.includes(t.id);

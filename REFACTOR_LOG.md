@@ -2386,3 +2386,36 @@ Summary moved into the date-nav row + a today-only live status bar. No change to
 - `daySummary` is the shared aggregator (Summary headline/body + status bar + WeekView) -- one pass, now carries the status tallies too.
 - Per the flow: branch off fresh `main` (v14.7.0, PR #16 merged); commit/push only when Patryk asks.
 
+## v14.8.0 -> v14.8.1 -- Table-picker polish: dark-mode chip readability · walk-in warning placement · centered chips
+
+**Date**: 2026-06-06
+**Branch**: `feat/v14.8.1-table-picker-polish` -> PR to `main`
+**Status**: UI-only -- **app version 14.8.0 -> 14.8.1** (patch: visual polish, no behavioural change).
+
+### What
+Three table-selection-picker fixes (driven by a dark-mode screenshot of the Preferred-table modal) + a new workflow rule:
+1. **Preferred-chip dark-mode readability.** The "cap N" sub-label used `S.muted` (`var(--text-muted)` = `#9a9aa0` in dark) -- nearly invisible on the dark chip. Switched to `S.text`, matching `TableGrid`'s free-chip sub-label (readable in both themes). Chip height 48 -> 52 to exactly match `TableGrid`. Selected chips stay **teal** (the modal's "soft preference" identity -- owner-confirmed, NOT the orange hard-assign colour).
+2. **Walk-in warning placement.** The "Starting at this time: …" kitchen-load banner (`wKitchenSection`) moved from the bottom of the form (below the grid) to **directly under the Time / guests `Section`**, above the "Tap tables…" hint -- so the constraint is visible before the host picks tables. Render-position move only; the const definition is unchanged.
+3. **Centered chips + labels.** The picker group labels, the "Tap tables…" / "Soft hint" line, and the chip rows now center (`textAlign:center` + `justifyContent:center`) across Walk-in, Manual, and Preferred. Summary/capacity cards left as-is.
+
+### Files changed (4 src + REFACTOR_LOG + CLAUDE.md)
+- **`src/components/PrefPickerModal.jsx`** -- cap sub-label `S.muted` -> `S.text`; chip height 48 -> 52; group label + chip row + "Soft hint" line centered.
+- **`src/components/TableGrid.jsx`** -- group label + optional note + chip row centered (covers Walk-in + Manual).
+- **`src/components/WalkinForm.jsx`** -- `{wKitchenSection}` relocated below the Time/guests `Section`; "Tap tables…" hint centered.
+- **`src/components/ManualModal.jsx`** -- "Tap tables…" hint centered.
+- **`src/App.jsx`** -- version bump 14.8.0 -> 14.8.1.
+
+### Workflow rule added (CLAUDE.md)
+- **LOCKED:** every coding session on this app sets up **both** a localhost dev server (`npm run dev`, DEV Firebase) **and** the Preview bridge at the start -- not just for visual changes -- so changes can always be verified live.
+
+### Verification
+- `npm run build` OK -- main bundle **168.50 kB gz** (+0.02 vs 14.8.0's 168.48), **59 modules** (no new files).
+- Live (Preview bridge, DEV): dark-mode Preferred chips read "cap N"; walk-in warning under the time section; chips centered in all three pickers; light-mode regression check clean.
+
+### Behavioural change
+None -- pure presentational (colour token, render order, alignment) + version bump. No change to optimizer, persistence, booking shape, or any `settings` node.
+
+### Notes
+- Append-ordered (newest at bottom).
+- Walk-in + Manual share `TableGrid`; Preferred renders its own chips in `PrefPickerModal` -- both touched for the readability + centering fixes.
+
