@@ -173,7 +173,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"14.8.1",
+  version:"14.9.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -185,10 +185,11 @@ if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 // NB: in List view with a booking focused, S marks it Seated (that check runs
 // first); everywhere else S toggles the Summary. Rebind here + the Shortcuts row.
 const SUMMARY_KEY="s";
-// v14.7.0: shortcut to open the Week View popover. "K" — confirmed by Patryk
-// ("w" was taken by Walk-in). Change here + the Shortcuts "K" row to rebind.
-// In-popover nav (←/→ week, ↑/↓ day, T this-week, Enter open) lives in WeekView.
-const WEEK_KEY="k";
+// v14.7.0: shortcut to open the at-a-glance popover (now Week / Month — see
+// WeekView). v14.9.0: rebound "K" → "M" to match the renamed "More" button.
+// In-popover nav (W/M switch view, ←/→ period, ↑/↓ day, T this-period, Enter
+// open) lives in WeekView. Change here + the Shortcuts "M" row to rebind.
+const WEEK_KEY="m";
 
 // ── v14.2.0: Dark-mode preference reader ──────────────────────────────────
 // Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit

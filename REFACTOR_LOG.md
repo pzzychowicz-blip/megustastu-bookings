@@ -2419,3 +2419,40 @@ None -- pure presentational (colour token, render order, alignment) + version bu
 - Append-ordered (newest at bottom).
 - Walk-in + Manual share `TableGrid`; Preferred renders its own chips in `PrefPickerModal` -- both touched for the readability + centering fixes.
 
+## v14.8.1 -> v14.9.0 -- "More" popover gains a Month view (calendar grid) + Summary label drop + M shortcut
+
+**Date**: 2026-06-06
+**Branch**: `feat/v14.9.0-month-view` -> PR to `main`
+**Status**: feature -- **app version 14.8.1 -> 14.9.0** (minor: new Month view + rename/rebind).
+
+### What
+1. **"Summary" label dropped.** The collapsed Summary headline no longer prints the word "Summary" -- it starts straight at `N covers · N bookings` (+ the today-only status bar). The panel is unmistakable in its date-nav slot.
+2. **"Week" button -> "More"; shortcut K -> M.** The Summary button that opens the at-a-glance popover is renamed **More** (it now offers Week **and** Month). The global open shortcut moved **K -> M** (`WEEK_KEY`), matching the new label.
+3. **Month view added to the popover** (`WeekView`). A Week/Month **segmented control** (+ `W` / `M` keys) switches between:
+   - **Week** -- the existing 7-row Mon–Sun list with cover bars.
+   - **Month** -- a Mon-start **calendar grid** of the reference month; each in-month day cell shows its **cover count** with a busyness **tint** (`var(--accent)` at `intensity*0.3`, scaled to the month's max). Today = accent number + ring; selected (`viewDate`) = accent border; trailing/leading days faded. Tap a day to jump (sets `viewDate` + closes), same as Week.
+   - In-popover keys: **W/M** switch view · **←/→** prev/next period (in Month, ←/→ move the day focus by ±1, auto-following into the adjacent month) · **↑/↓** move day focus (week: within the week; month: ±7) · **T** today's period (this week / this month) · **Enter** open the focused day.
+
+### Files changed (4 src + REFACTOR_LOG + CLAUDE.md)
+- **`src/components/WeekView.jsx`** -- rewritten: `mode` (week|month) + `ref` + `focus` (date) state; Week/Month segmented control; `monthGrid()` (all-UTC Mon-start matrix, 4–6 weeks); `monthBody()` calendar grid with per-cell `daySummary` + busyness tint; mode-aware footer (`This week`/`This month`, ‹ › = week/month) + keyboard. `daySummary` is still the only data source.
+- **`src/components/Summary.jsx`** -- removed the `Summary` `<span>`; "Week" button -> "More".
+- **`src/components/Shortcuts.jsx`** -- Navigation "K -> M" row ("Open More (Week / Month)"); the "Week view" section -> "More popover (Week / Month)" with W/M + mode-aware rows.
+- **`src/App.jsx`** -- `WEEK_KEY` "k" -> "m" (handler reads the const, no other change); version bump 14.8.1 -> 14.9.0.
+
+### Design decisions
+- **One component, two modes -- not a new file.** `WeekView` keeps its name/exports (the "More" popover); Month is a render branch + a few helpers, so the Summary wiring (`onOpenWeek`) and the `weekModal` mount are untouched.
+- **Calendar grid for Month** (owner-confirmed over a 30-row list) -- glanceable and visually distinct from the Week list. Covers shown per cell; busyness via an accent tint scaled to the month's max in-month covers.
+- **Focus is a date, not an index** -- unifies week/month keyboard nav; the displayed period (`ref`) follows the focus across week/month boundaries.
+- **All-UTC date math** retained (the v14.7.0 timezone lesson) -- `monthGrid` uses `Date.UTC` + `getUTC*`/`toISOString` throughout.
+
+### Verification
+- `npm run build` OK -- main bundle **169.47 kB gz** (+0.97 vs 14.8.1's 168.50), **59 modules** (no new files).
+- **Live-verified (Preview bridge, DEV)** in **both themes**: `M` opens the popover (renamed **More**); "Summary" word gone; Week/Month segmented control + `W`/`M` switch; Month grid renders covers + tint, today focused; `ArrowUp` from Jun 6 follows into **May 2026** (focus 30); `T` returns to June (focus today); `W` re-centres the week on the focused day; `Enter` picks the focused day (set `viewDate` 2026-06-07, closed). Light-mode month grid reads cleanly.
+
+### Behavioural change
+New Month view + rename/rebind. No change to the optimizer, persistence, booking shape, shifts, or any `settings` node -- read-only aggregation (`daySummary`) + a `viewDate` jump on pick, exactly as the Week view already did.
+
+### Notes
+- Append-ordered (newest at bottom).
+- `daySummary` remains THE shared day aggregator (Summary + status bar + Week + Month). The Month grid calls it per visible cell (≤42×); cheap at current data volume.
+

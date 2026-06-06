@@ -53,7 +53,7 @@ const SHORTCUT_SECTIONS = [
     { keys: ["N"],       label: "New booking" },
     { keys: ["W"],       label: "Walk-in" },
     { keys: ["S"],       label: "Toggle Summary panel" },
-    { keys: ["K"],       label: "Open Week view" },
+    { keys: ["M"],       label: "Open More (Week / Month)" },
     { keys: ["?"],       label: "Show this help" },
   ]},
   { title: "Timeline", rows: [
@@ -73,10 +73,11 @@ const SHORTCUT_SECTIONS = [
     { keys: ["⇧C"], label: "Cancel booking" },
     { keys: ["D"],       label: "Delete booking" },
   ]},
-  { title: "Week view", rows: [
-    { keys: ["↑", "↓"], label: "Previous / next day" },
-    { keys: ["←", "→"], label: "Previous / next week" },
-    { keys: ["T"],       label: "This week (today)" },
+  { title: "More popover (Week / Month)", rows: [
+    { keys: ["W", "M"], label: "Week / Month view" },
+    { keys: ["↑", "↓"], label: "Move day focus" },
+    { keys: ["←", "→"], label: "Prev / next (week, or day in Month)" },
+    { keys: ["T"],       label: "This week / month (today)" },
     { keys: ["Enter"],   label: "Open the focused day" },
   ]},
   { title: "Edit / New Booking", rows: [
