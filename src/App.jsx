@@ -132,6 +132,7 @@ import { usePersistence } from "./hooks/usePersistence";
 // saveOperatingHours}.
 import { useOperatingHours } from "./hooks/useOperatingHours";
 import { useDayShifts } from "./hooks/useDayShifts";
+import { useOptimizerSettings } from "./hooks/useOptimizerSettings";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
 // `useReminders` owns reminders + reminderFires state, editor + delete-confirm
@@ -464,7 +465,11 @@ function BookingApp(){
   // keyboard 'o' shortcut (via kbRef) and TimelineView's legend toggle (via
   // direct prop) both write to it. Phase D3 (v14.1.10). See
   // ./hooks/useAutoOptimizer.js.
-  const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins });
+  // v15.0.0: editable optimizer settings (Firebase settings/optimizer, shared) —
+  // the daily cutoff hour + the master auto-switch. Mounted BEFORE useAutoOptimizer
+  // so its values feed the thermostat. See ./hooks/useOptimizerSettings.js.
+  const { optimizerSettings, saveOptimizerSettings } = useOptimizerSettings();
+  const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins, cutoffMins: optimizerSettings.cutoff*60, autoSwitch: optimizerSettings.autoSwitch });
   // ── Persistence hook ────────────────────────────────────────────────────────
   // Owns bookings/tableBlocks state, Firebase listeners, savers, and the
   // auto-extend effect. Auto-extend needs autoOptimizer + nowMins which are
@@ -1408,6 +1413,9 @@ function BookingApp(){
             splitHour={dayShifts.split}
             shiftsEnabled={dayShifts.enabled}
             onSaveShifts={saveDayShifts}
+            optimizerCutoff={optimizerSettings.cutoff}
+            optimizerAutoSwitch={optimizerSettings.autoSwitch}
+            onSaveOptimizer={saveOptimizerSettings}
             tab={settingsTab}
             setTab={setSettingsTab}
             reminders={reminders}

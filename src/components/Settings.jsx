@@ -113,11 +113,13 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, closeHour, onSaveHours = () => {}, splitHour, shiftsEnabled, onSaveShifts = () => {} }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, closeHour, onSaveHours = () => {}, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {} }) {
   const oh = typeof openHour === "number" ? openHour : 13;
   const ch = typeof closeHour === "number" ? closeHour : 22;
   const sp = typeof splitHour === "number" ? splitHour : 17;
   const se = shiftsEnabled !== false;
+  const oc = typeof optimizerCutoff === "number" ? optimizerCutoff : 15;
+  const oas = optimizerAutoSwitch !== false;
   const hhLabel = (n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00";
   return (
     <div>
@@ -183,6 +185,37 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, 
           </div>
         ) : null}
       </Section>
+      {/* v15.0.0: Auto-optimizer — the master auto-switch + the editable daily
+          cutoff hour. Firebase-shared (settings/optimizer). When the switch is
+          off the optimizer is fully manual (no cutoff auto-off, no overnight
+          auto-on); it then only changes via the timeline toggle or the "o" key. */}
+      <Section style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Auto-optimizer</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Automatically stops reshuffling at a daily cutoff and resumes overnight. Shared across all devices.
+            </div>
+          </div>
+          <Toggle on={oas} onClick={() => onSaveOptimizer({ autoSwitch: !oas })} />
+        </div>
+        {oas ? (
+          <div style={{ marginTop: 14 }}>
+            <HourStepper
+              label="Daily cutoff" value={oc}
+              disableDec={oc <= oh + 1} disableInc={oc >= ch}
+              onDec={() => onSaveOptimizer({ cutoff: oc - 1 })} onInc={() => onSaveOptimizer({ cutoff: oc + 1 })}
+            />
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 10 }}>
+              Optimizer stops reshuffling today's bookings at {hhLabel(oc)}; resumes at the start of the next day.
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 12 }}>
+            Manual only — the optimizer changes only when you toggle it (timeline control or the “o” key).
+          </div>
+        )}
+      </Section>
       <div style={{ padding: "10px 12px 12px", textAlign: "center" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.02em" }}>
           version {appVersion}
@@ -210,6 +243,9 @@ export function SettingsContent({
   splitHour,
   shiftsEnabled,
   onSaveShifts,
+  optimizerCutoff,
+  optimizerAutoSwitch,
+  onSaveOptimizer,
   reminders,
   onAddReminder,
   onEditReminder,
@@ -218,7 +254,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} openHour={openHour} closeHour={closeHour} onSaveHours={onSaveHours} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} openHour={openHour} closeHour={closeHour} onSaveHours={onSaveHours} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent
