@@ -7,13 +7,76 @@
 // lines 59–88. No semantic changes — `var` retained for now; modernisation
 // happens in Phase C.
 
-export var INDOOR=[{id:"i1",capacity:2},{id:"i2",capacity:2},{id:"i3",capacity:2},{id:"i4",capacity:2}];
-export var OUTDOOR=[{id:"1A",capacity:2},{id:"1B",capacity:2},{id:"2",capacity:2},{id:"3",capacity:2},{id:"4",capacity:2},{id:"5A",capacity:2},{id:"5B",capacity:2},{id:"6",capacity:2},{id:"7",capacity:4}];
-export var ALL_TABLES=OUTDOOR.concat(INDOOR);
-// v14.8.0: total restaurant capacity (Σ table capacities = 28). Denominator for the
-// Summary status bar's live "seats filled" reading. Derived so it tracks layout changes.
-export var TOTAL_SEATS=ALL_TABLES.reduce(function(a,t){return a+t.capacity;},0);
-export var TIMELINE_TABLES=OUTDOOR.concat(INDOOR);
+// v15.0.0: the physical table layout is now runtime-configurable (Settings →
+// Layout; Firebase settings/layout, shared). DEFAULT_LAYOUT = the historical MGT
+// 13-table layout — an absent/empty Firebase node falls back to this, so an
+// untouched install is byte-identical to pre-v15. Each table: {id, capacity, zone}
+// where zone ∈ {"indoor","outdoor"}. (Phase 4 extends the config with join-groups
+// + combo caps; v15.0.0 keeps VALID_COMBOS/CLUSTERS fixed below.) `kitchenLimit`
+// is the max simultaneous kitchen starts (was the hard-coded KITCHEN_TABLE_LIMIT).
+export var DEFAULT_LAYOUT={
+  tables:[
+    {id:"1A",capacity:2,zone:"outdoor"},{id:"1B",capacity:2,zone:"outdoor"},
+    {id:"2",capacity:2,zone:"outdoor"},{id:"3",capacity:2,zone:"outdoor"},{id:"4",capacity:2,zone:"outdoor"},
+    {id:"5A",capacity:2,zone:"outdoor"},{id:"5B",capacity:2,zone:"outdoor"},{id:"6",capacity:2,zone:"outdoor"},
+    {id:"7",capacity:4,zone:"outdoor"},
+    {id:"i1",capacity:2,zone:"indoor"},{id:"i2",capacity:2,zone:"indoor"},{id:"i3",capacity:2,zone:"indoor"},{id:"i4",capacity:2,zone:"indoor"}
+  ],
+  kitchenLimit:3
+};
+
+// The physical-cluster grouping for the table pickers. v15.0.0: the structure
+// (which tables cluster + the combo-hint notes + zone colour) stays fixed here;
+// each chip's `cap` is pulled LIVE from the layout config (so a capacity edit
+// reflects in the picker). Phase 4 will derive the structure from join-groups.
+var TABLE_GROUP_STRUCT=[
+  {name:"Tables: 1A / 1B / 7",color:"#78716c",note:"1A+1B = 6 · table 7 = 4 standalone",ids:["1A","1B","7"]},
+  {name:"Tables: 2 / 3 / 4",color:"#78716c",note:"2+3 = 5 · 3+4 = 4 · 2+3+4 = 8",ids:["2","3","4"]},
+  {name:"Tables: 5A / 5B / 6",color:"#78716c",note:"5A+5B = 5 · 5B+6 = 5 · 5A+5B+6 = 8",ids:["5A","5B","6"]},
+  {name:"Tables: i2 / i3 / i4",color:"#7c3aed",note:"i2+i3 = 6 · i3+i4 = 6 · i2+i3+i4 = 8",ids:["i2","i3","i4"]},
+  {name:"Table: i1",color:"#7c3aed",note:"Standalone cap 2 · all 4 indoor = 10",ids:["i1"]},
+];
+
+// ── Layout-derived live bindings (reassigned ONLY by setLayout, below) ─────────
+// `let` exports so setLayout can reassign them as live ESM bindings — every
+// importer (incl. booking-logic's pure functions) sees the new layout with NO
+// signature changes, exactly like the OPEN/CLOSE hours bindings. Seeded from
+// DEFAULT_LAYOUT at import so module-eval-time reads are valid.
+export let INDOOR=[];
+export let OUTDOOR=[];
+export let ALL_TABLES=[];
+// v14.8.0: total restaurant capacity (Σ table capacities; 28 for the default
+// layout). Denominator for the Summary status bar's "seats filled" reading.
+export let TOTAL_SEATS=0;
+export let TIMELINE_TABLES=[];
+// id → "indoor"|"outdoor" — replaces the old isIn(id)=id.startsWith("i") heuristic
+// so zoning is data-driven (booking-logic's isIn reads this).
+export let ZONE_OF={};
+
+// Derive the table pickers' grouping from a config (live caps, fixed structure).
+function buildTableGroups(cfg){
+  var capOf={};(cfg.tables||[]).forEach(function(t){capOf[t.id]=t.capacity;});
+  return TABLE_GROUP_STRUCT.map(function(g){
+    return {name:g.name,color:g.color,note:g.note,tables:g.ids.map(function(id){return {id:id,cap:capOf[id]!=null?capOf[id]:2};})};
+  });
+}
+
+// Reassign the layout-derived bindings from a config. Called by useLayout on each
+// Firebase snapshot, and once at module load (bottom of file) to seed from
+// DEFAULT_LAYOUT. Only this module may reassign its own exports, so the setter
+// lives here. Note: ZONE keeps OUTDOOR-before-INDOOR ordering to preserve the
+// timeline row order (and ALL_TABLES order) of the original hard-coded layout.
+export function setLayout(cfg){
+  var tables=(cfg&&Array.isArray(cfg.tables)&&cfg.tables.length)?cfg.tables:DEFAULT_LAYOUT.tables;
+  OUTDOOR=tables.filter(function(t){return t.zone!=="indoor";}).map(function(t){return {id:t.id,capacity:t.capacity};});
+  INDOOR=tables.filter(function(t){return t.zone==="indoor";}).map(function(t){return {id:t.id,capacity:t.capacity};});
+  ALL_TABLES=OUTDOOR.concat(INDOOR);
+  TIMELINE_TABLES=OUTDOOR.concat(INDOOR);
+  TOTAL_SEATS=ALL_TABLES.reduce(function(a,t){return a+t.capacity;},0);
+  ZONE_OF={};tables.forEach(function(t){ZONE_OF[t.id]=t.zone==="indoor"?"indoor":"outdoor";});
+  KITCHEN_TABLE_LIMIT=(cfg&&Number.isFinite(Number(cfg.kitchenLimit)))?Number(cfg.kitchenLimit):3;
+  TABLE_GROUPS=buildTableGroups({tables:tables});
+}
 export var VALID_COMBOS=[
   {ids:["1A","1B"],cap:6},
   {ids:["2","3"],cap:5},{ids:["3","4"],cap:4},{ids:["2","3","4"],cap:8},
@@ -60,7 +123,9 @@ export var DEFAULT_WEEK_HOURS={0:DEFAULT_DAY,1:DEFAULT_DAY,2:DEFAULT_DAY,3:DEFAU
 var WEEK_HOURS={0:DEFAULT_DAY,1:DEFAULT_DAY,2:DEFAULT_DAY,3:DEFAULT_DAY,4:DEFAULT_DAY,5:DEFAULT_DAY,6:DEFAULT_DAY};
 
 export let OPEN=13,CLOSE=22,GRID_CLOSE=23;
-export var KITCHEN_TABLE_LIMIT=3;
+// v15.0.0: layout-derived (cfg.kitchenLimit) — reassigned by setLayout, seeded
+// from DEFAULT_LAYOUT at module load. `let` so the live binding can update.
+export let KITCHEN_TABLE_LIMIT=3;
 export let QUARTER_HOURS=Array.from({length:(GRID_CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
 
 // Weekday (0=Sun..6=Sat) for a "YYYY-MM-DD" string — all-UTC to match the app's
@@ -121,18 +186,13 @@ export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,1
 export var BTN={tables:"var(--btn-tables)",edit:"var(--btn-edit)",del:"var(--btn-del)",cancel:"var(--btn-cancel)",clear:"var(--btn-clear)",reset:"var(--btn-reset)",today:"var(--btn-today)",nav:"var(--btn-nav)",dismiss:"var(--btn-dismiss)",orange:"var(--btn-orange)"};
 
 // ── Table groupings for UI pickers ────────────────────────────────────────────
-// Phase B2 addition: TABLE_GROUPS was previously defined inline in App.jsx
-// alongside the original TableGrid component. With TableGrid extracted to
-// ./components/, and a second consumer remaining in App.jsx (the inline
-// "Preferred tables" picker in the new-booking form), the array is shared
-// from here. Used by:
-//   • src/components/TableGrid.jsx — the assignment grid
-//   • src/App.jsx                  — the "Preferred tables" picker
-// `tables[].cap` is the standalone capacity for the visual chip label.
-export var TABLE_GROUPS=[
-  {name:"Tables: 1A / 1B / 7",color:"#78716c",note:"1A+1B = 6 · table 7 = 4 standalone",tables:[{id:"1A",cap:2},{id:"1B",cap:2},{id:"7",cap:4}]},
-  {name:"Tables: 2 / 3 / 4",color:"#78716c",note:"2+3 = 5 · 3+4 = 4 · 2+3+4 = 8",tables:[{id:"2",cap:2},{id:"3",cap:2},{id:"4",cap:2}]},
-  {name:"Tables: 5A / 5B / 6",color:"#78716c",note:"5A+5B = 5 · 5B+6 = 5 · 5A+5B+6 = 8",tables:[{id:"5A",cap:2},{id:"5B",cap:2},{id:"6",cap:2}]},
-  {name:"Tables: i2 / i3 / i4",color:"#7c3aed",note:"i2+i3 = 6 · i3+i4 = 6 · i2+i3+i4 = 8",tables:[{id:"i2",cap:2},{id:"i3",cap:2},{id:"i4",cap:2}]},
-  {name:"Table: i1",color:"#7c3aed",note:"Standalone cap 2 · all 4 indoor = 10",tables:[{id:"i1",cap:2}]},
-];
+// Phase B2: shared from here (consumed by TableGrid + App.jsx's Preferred picker).
+// v15.0.0: now a layout-derived live `let` binding (set by setLayout from
+// TABLE_GROUP_STRUCT + the config's live caps). `tables[].cap` is the standalone
+// capacity for the visual chip label.
+export let TABLE_GROUPS=[];
+
+// ── Seed all layout-derived bindings from DEFAULT_LAYOUT at module load ────────
+// Runs AFTER every `let` binding above is declared (TDZ-safe). useLayout replaces
+// these on the first Firebase snapshot; until then the default layout is in force.
+setLayout(DEFAULT_LAYOUT);

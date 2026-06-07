@@ -26,6 +26,7 @@
 
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
+import { LayoutTabContent } from "./LayoutSettings";
 import { Toggle, Section } from "./atoms";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
@@ -312,6 +313,8 @@ export function SettingsContent({
   optimizerCutoff,
   optimizerAutoSwitch,
   onSaveOptimizer,
+  layout,
+  onSaveLayout,
   reminders,
   onAddReminder,
   onEditReminder,
@@ -321,6 +324,8 @@ export function SettingsContent({
   let content;
   if (tab === "general") {
     content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} />;
+  } else if (tab === "layout") {
+    content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent
@@ -339,6 +344,7 @@ export function SettingsContent({
       <TabBar
         tabs={[
           { id: "general",   label: "General" },
+          { id: "layout",    label: "Layout" },
           { id: "reminders", label: "Reminders" },
           { id: "shortcuts", label: "Shortcuts" },
         ]}

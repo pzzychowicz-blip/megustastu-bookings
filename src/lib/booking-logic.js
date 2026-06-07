@@ -21,7 +21,8 @@ import {
   OPEN,
   GRID_CLOSE,
   KITCHEN_TABLE_LIMIT,
-  hoursFor
+  hoursFor,
+  ZONE_OF
 } from "./constants";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
@@ -38,7 +39,11 @@ export function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.pus
 export function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var vals=Object.values(arr);return vals.map(sanitize).filter(Boolean);}return arr.map(sanitize).filter(Boolean);}
 
 // ── Table classification ──────────────────────────────────────────────────────
-export function isIn(id){return id.startsWith("i");}
+// v15.0.0: indoor classification is data-driven via the layout config's zones
+// (ZONE_OF), not the legacy id.startsWith("i") convention — so a re-zoned or
+// arbitrarily-named table is classified correctly. Falls back to the "i" prefix
+// only if the id is somehow absent from the map (defensive).
+export function isIn(id){return ZONE_OF[id]?ZONE_OF[id]==="indoor":String(id).startsWith("i");}
 export function isAllIn(ids){return ids.every(isIn);}
 export function isAllOut(ids){return ids.every(function(id){return !isIn(id);});}
 export function isMixedLarge(ids){if(!ids.some(isIn)||!ids.some(function(id){return !isIn(id);})) return false;return ids.includes("1A")&&ids.includes("1B")&&ids.includes("7");}

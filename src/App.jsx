@@ -24,7 +24,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM, hoursFor, weekRange
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR
 } from "./lib/constants";
 
 import {
@@ -133,6 +133,7 @@ import { usePersistence } from "./hooks/usePersistence";
 import { useOperatingHours } from "./hooks/useOperatingHours";
 import { useDayShifts } from "./hooks/useDayShifts";
 import { useOptimizerSettings } from "./hooks/useOptimizerSettings";
+import { useLayout } from "./hooks/useLayout";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
 // `useReminders` owns reminders + reminderFires state, editor + delete-confirm
@@ -492,6 +493,12 @@ function BookingApp(){
   // The Afternoon/Evening split hour for the Summary panel — the app's 2nd
   // Firebase settings node. saveDayShifts is wired to the Settings General tab.
   const { dayShifts, saveDayShifts } = useDayShifts();
+  // ── v15.0.0: Restaurant layout (Firebase settings/layout, shared) ──────────
+  // Owns the editable table layout (id/capacity/zone) + kitchen limit; pushes it
+  // into constants.js's live ALL_TABLES/INDOOR/OUTDOOR/TOTAL_SEATS/ZONE_OF/
+  // TABLE_GROUPS bindings on each snapshot. saveLayout is wired to the Settings
+  // Layout tab. See ./hooks/useLayout.js.
+  const { layout, saveLayout } = useLayout();
   // ── Reminders hook ──────────────────────────────────────────────────────────
   // Owns all reminder state, savers, listeners, handlers, and the
   // reminderBanners JSX. nowMins drives banner re-evaluation; setWriteWarning
@@ -1316,7 +1323,7 @@ function BookingApp(){
   return (
     <div
       style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>Me Gustas Tú</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{"4 indoor  9 outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>Me Gustas Tú</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
               <button
                 key={v}
                 className="mgt-hover-scale"
@@ -1421,6 +1428,8 @@ function BookingApp(){
             optimizerCutoff={optimizerSettings.cutoff}
             optimizerAutoSwitch={optimizerSettings.autoSwitch}
             onSaveOptimizer={saveOptimizerSettings}
+            layout={layout}
+            onSaveLayout={saveLayout}
             tab={settingsTab}
             setTab={setSettingsTab}
             reminders={reminders}
