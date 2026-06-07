@@ -70,15 +70,16 @@ export function TabBar({ tabs, current, onSelect }) {
   );
 }
 
-// ── General tab — dark-mode toggle · opening-hours editor · version line ────
+// ── General tab — dark-mode · per-weekday hours · shifts · optimizer · version ──
 // The version string arrives as a prop from App.jsx (sourced from
-// __APP_SIGNATURE__.version). Opening hours (v14.4.0) are Firebase-shared and
-// arrive as openHour/closeHour with an onSaveHours(open, close) writer.
+// __APP_SIGNATURE__.version). v15.0.0: opening hours are PER-WEEKDAY — they arrive
+// as `weekHours` (keys 0–6) with onSaveDayHours(weekdayKey, patch) / onSaveAllDays
+// writers, edited via the DayHoursRow list below. `weekRange` ({minOpen,maxClose})
+// bounds the single global shift split + optimizer cutoff steppers.
 
-// Hour stepper (whole hours only — the service window is on the hour). Each tap
-// commits a new {open, close} pair via onSaveHours; the component is fully
-// controlled by props (the Firebase echo re-renders it). Disabled at the bounds
-// (open 8–21 and < close; close (open+1)–23) so an invalid window can't be set.
+// Whole-hour stepper — still used for the Afternoon/Evening split + the optimizer
+// cutoff (both single global hours). Fully controlled by props (the Firebase echo
+// re-renders it); disabled at the bounds so an invalid value can't be set.
 const HOUR_STEP_BTN = {
   background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
   borderRadius: 10, width: 38, height: 38, fontSize: 20, fontWeight: 600,
@@ -113,9 +114,75 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, closeHour, onSaveHours = () => {}, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {} }) {
-  const oh = typeof openHour === "number" ? openHour : 13;
-  const ch = typeof closeHour === "number" ? closeHour : 22;
+// v15.0.0: compact stepper for the per-weekday hours editor (no label row, so 7
+// rows stay scannable). Same disabled / hover-scale contract as HourStepper.
+const MINI_STEP_BTN = {
+  background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
+  borderRadius: 8, width: 30, height: 30, fontSize: 17, fontWeight: 600,
+  color: "var(--text-primary)",
+  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+  boxShadow: "var(--shadow-input)"
+};
+function MiniStepper({ value, onDec, onInc, disableDec, disableInc }) {
+  const fmt = (n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
+        style={{ ...MINI_STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
+      <span style={{ minWidth: 46, textAlign: "center", fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{fmt(value)}</span>
+      <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
+        style={{ ...MINI_STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
+    </div>
+  );
+}
+
+// One weekday row in the Opening-hours editor: label · Open/Closed pill · (when
+// open) compact open–close steppers · "copy → all" action (always shown, so a
+// closed day can also be copied across the week). Fully controlled — each change
+// calls onChange(patch); the Firebase echo re-renders. Bounds mirror sanitizeDay
+// (open 6–22, close (open+1)–25).
+function DayHoursRow({ label, day, onChange, onCopyAll }) {
+  const closed = day && day.closed === true;
+  const o = day && Number.isFinite(day.open) ? day.open : 13;
+  const c = day && Number.isFinite(day.close) ? day.close : 22;
+  const pill = {
+    border: "1px solid var(--border-soft)", borderRadius: 8, padding: "4px 10px",
+    fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+    boxShadow: "var(--shadow-input)"
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
+      <span style={{ width: 40, fontSize: 13, fontWeight: 700, color: "var(--text-primary)", flexShrink: 0 }}>{label}</span>
+      <button onClick={() => onChange({ closed: !closed })} className="mgt-hover-scale"
+        style={{ ...pill, background: closed ? "var(--bg-stepper)" : "rgba(52,199,89,0.16)", color: closed ? "var(--text-muted)" : "var(--success-text)" }}>
+        {closed ? "Closed" : "Open"}
+      </button>
+      {closed ? (
+        <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>No service this day</span>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <MiniStepper value={o} disableDec={o <= 6} disableInc={o >= c - 1}
+            onDec={() => onChange({ open: o - 1 })} onInc={() => onChange({ open: o + 1 })} />
+          <span style={{ color: "var(--text-faint)", fontWeight: 700 }}>–</span>
+          <MiniStepper value={c} disableDec={c <= o + 1} disableInc={c >= 25}
+            onDec={() => onChange({ close: c - 1 })} onInc={() => onChange({ close: c + 1 })} />
+        </div>
+      )}
+      <button onClick={onCopyAll} className="mgt-hover-scale" title="Copy this day's hours to all days"
+        style={{ ...pill, marginLeft: "auto", background: "var(--bg-stepper)", color: "var(--accent)", fontWeight: 600 }}>
+        copy → all
+      </button>
+    </div>
+  );
+}
+
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {} }) {
+  // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
+  // stepper bounds use the STABLE week range (min-open … max-close across open days),
+  // never a single day's hours.
+  const wr = weekRange && typeof weekRange === "object" ? weekRange : { minOpen: 13, maxClose: 22 };
+  const wrMin = wr.minOpen, wrMax = wr.maxClose;
+  const wh = weekHours && typeof weekHours === "object" ? weekHours : {};
   const sp = typeof splitHour === "number" ? splitHour : 17;
   const se = shiftsEnabled !== false;
   const oc = typeof optimizerCutoff === "number" ? optimizerCutoff : 15;
@@ -140,25 +207,23 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, 
           <Toggle on={isDark} onClick={onToggleDark} />
         </div>
       </Section>
-      {/* v14.4.0: Opening-hours editor — Firebase-shared (settings/operatingHours).
-          Sets the booking window (form time min/max) and the timeline grid range. */}
+      {/* v14.4.0 / v15.0.0: Per-weekday opening-hours editor — Firebase-shared
+          (settings/operatingHours). Each day sets its own booking window + timeline
+          range, or is marked Closed. "copy → all" pushes one day's config to all 7.
+          Displayed Mon→Sun; stored by JS weekday index (0=Sun). */}
       <Section style={{ marginBottom: 18 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Opening hours</div>
-        <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2, marginBottom: 12 }}>
-          Shared across all devices. Sets the booking window and the timeline range.
+        <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2, marginBottom: 4 }}>
+          Per day of the week. Shared across all devices. Sets the booking window and the timeline range.
         </div>
-        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-          <HourStepper
-            label="Open" value={oh}
-            disableDec={oh <= 6} disableInc={oh >= ch - 1}
-            onDec={() => onSaveHours(oh - 1, ch)} onInc={() => onSaveHours(oh + 1, ch)}
-          />
-          <HourStepper
-            label="Close" value={ch}
-            disableDec={ch <= oh + 1} disableInc={ch >= 25}
-            onDec={() => onSaveHours(oh, ch - 1)} onInc={() => onSaveHours(oh, ch + 1)}
-          />
-        </div>
+        {[[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [0, "Sun"]].map(function (entry) {
+          const idx = entry[0], lbl = entry[1];
+          return (
+            <DayHoursRow key={idx} label={lbl} day={wh[idx]}
+              onChange={(patch) => onSaveDayHours(idx, patch)}
+              onCopyAll={() => onSaveAllDays(wh[idx])} />
+          );
+        })}
       </Section>
       {/* v14.6.0: Shifts — on/off toggle + the Afternoon/Evening split hour for
           the day Summary. Firebase-shared (settings/dayShifts). */}
@@ -176,11 +241,11 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, 
           <div style={{ marginTop: 14 }}>
             <HourStepper
               label="Afternoon / Evening split" value={sp}
-              disableDec={sp <= oh + 1} disableInc={sp >= ch - 1}
+              disableDec={sp <= wrMin + 1} disableInc={sp >= wrMax - 1}
               onDec={() => onSaveShifts({ split: sp - 1 })} onInc={() => onSaveShifts({ split: sp + 1 })}
             />
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 10 }}>
-              Afternoon {hhLabel(oh)}–{hhLabel(sp)} · Evening {hhLabel(sp)}–{hhLabel(ch)}
+              Afternoon {hhLabel(wrMin)}–{hhLabel(sp)} · Evening {hhLabel(sp)}–{hhLabel(wrMax)}
             </div>
           </div>
         ) : null}
@@ -203,7 +268,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, openHour, 
           <div style={{ marginTop: 14 }}>
             <HourStepper
               label="Daily cutoff" value={oc}
-              disableDec={oc <= oh + 1} disableInc={oc >= ch}
+              disableDec={oc <= wrMin + 1} disableInc={oc >= wrMax}
               onDec={() => onSaveOptimizer({ cutoff: oc - 1 })} onInc={() => onSaveOptimizer({ cutoff: oc + 1 })}
             />
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 10 }}>
@@ -237,9 +302,10 @@ export function SettingsContent({
   appVersion,
   isDark,
   onToggleDark,
-  openHour,
-  closeHour,
-  onSaveHours,
+  weekHours,
+  onSaveDayHours,
+  onSaveAllDays,
+  weekRange,
   splitHour,
   shiftsEnabled,
   onSaveShifts,
@@ -254,7 +320,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} openHour={openHour} closeHour={closeHour} onSaveHours={onSaveHours} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent

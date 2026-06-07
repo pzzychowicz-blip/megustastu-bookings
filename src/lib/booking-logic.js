@@ -19,9 +19,9 @@ import {
   VALID_COMBOS,
   CLUSTERS,
   OPEN,
-  CLOSE,
   GRID_CLOSE,
-  KITCHEN_TABLE_LIMIT
+  KITCHEN_TABLE_LIMIT,
+  hoursFor
 } from "./constants";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
@@ -49,9 +49,12 @@ export function isActive(b){return b.status!=="cancelled"&&b.status!=="completed
 
 // ── Slot/busy/assignment checks ───────────────────────────────────────────────
 export function getBlockSlots(blocks,date){
+  // v15.0.0: an all-day block spans the BLOCK'S date's hours, not the active
+  // view-day's — hoursFor(date) keeps it correct when date ≠ viewDate.
+  var h=hoursFor(date);
   return blocks.filter(function(bl){return bl.date===date;}).map(function(bl){
-    var s=bl.allDay?OPEN*60:toMins(bl.from);
-    var e=bl.allDay?GRID_CLOSE*60:toMins(bl.to);
+    var s=bl.allDay?h.open*60:toMins(bl.from);
+    var e=bl.allDay?h.gridClose*60:toMins(bl.to);
     return {tables:[bl.tableId],s:s,e:e};
   });
 }
@@ -109,11 +112,13 @@ export function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTab
   return assigned.tables;
 }
 export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle){
-  var times=Array.from({length:(CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
+  var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
+  if(h.closed) return []; // closed day → no valid times
+  var times=Array.from({length:(h.close-h.open)*4},function(_,i){return h.open*60+i*15;});
   var aroundM=around||0;
   var valid=times.filter(function(m){
     if(m>=24*60) return false; // v14.5.0: never suggest a post-midnight start (24h-hours is extend-window only)
-    if(m+dur>CLOSE*60) return false;
+    if(m+dur>h.close*60) return false;
     if(m===aroundM) return false;
     return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId,null,noReshuffle);
   });
@@ -137,7 +142,9 @@ export function getKitchenLoad(bookings,date,time,dur,excludeId){
   return {tables:tblCount,guests:guests,starts:starting.length};
 }
 export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excludeId,blocks){
-  var times=Array.from({length:(CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
+  var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
+  if(h.closed) return {before:[],after:[]}; // closed day → no times to suggest
+  var times=Array.from({length:(h.close-h.open)*4},function(_,i){return h.open*60+i*15;});
   var aroundM=toMins(around);
   var results=[];
   var exSl=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});
@@ -145,7 +152,7 @@ export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excl
   times.forEach(function(m){
     if(m===aroundM) return;
     if(m>=24*60) return; // v14.5.0: never suggest a post-midnight start (24h-hours is extend-window only)
-    if(m+dur>CLOSE*60) return;
+    if(m+dur>h.close*60) return;
     var load=getKitchenLoad(bookings,date,toTime(m),dur,excludeId);
     if(load.starts+1>=KITCHEN_TABLE_LIMIT) return;
     var hasTables=!!findBest(size,pref,m,m+dur,exSl)||(pref==="auto"?!!findBestAny(size,m,m+dur,exSl):false);

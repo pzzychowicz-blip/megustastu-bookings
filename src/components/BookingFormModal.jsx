@@ -33,7 +33,7 @@
 //     ordering as today, no z-index changes)
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
-import { OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, hoursFor } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
@@ -56,14 +56,18 @@ export function BookingFormModal({
   const formCols=isMobile?"1fr":"1fr 1fr";
   const auto=getDur(Number(form.size));
   const dur=form.customDur||auto;
+  // v15.0.0: per-weekday hours for THIS booking's date (which may differ from the
+  // viewed day) — drives the time min/max + a closed-day notice.
+  const fh=hoursFor(form.date);
 
   // ── Real-time availability check (trial optimization) ──
   // Pre-E1's showForm guard is dropped — this component is only mounted when
   // the parent has showForm=true.
   const formAvail=(function(){
     if(!form.time) return null;
+    if(fh.closed) return null; // closed day → no availability to compute
     const sm=toMins(form.time);
-    if(sm<OPEN*60||sm>CLOSE*60) return null;
+    if(sm<fh.open*60||sm>fh.close*60) return null;
     const size=Number(form.size)||2;
     const d=form.customDur||getDur(size);
     const mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
@@ -142,6 +146,9 @@ export function BookingFormModal({
     msg={"No tables available"+(form.preference!=="auto"?" ("+form.preference+" preference)":"")+"."}
     sugg={formAvail.sugg}
     onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />:null;
+  // v15.0.0: closed-day notice — the chosen date falls on a weekday marked Closed
+  // (Settings → General → Opening hours). doSave blocks the write; this explains why.
+  const closedBanner=fh.closed?<div style={{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:600,color:"var(--warn-text)",textAlign:"center"}}>{"Closed on "+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."}</div>:null;
 
   // Pre-E1's showForm guard is dropped — component is only mounted when showForm=true.
   const kitchenLoad=form.time?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
@@ -255,7 +262,7 @@ export function BookingFormModal({
   // ── The form modal itself ──
   return (
     <Overlay onClose={function(){onClose();}} footer={footerEl}><div style={{textAlign:"center",marginBottom:16}}><div
-        style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:12,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking")}</div></div>{returnOfBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><input
+        style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:12,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking")}</div></div>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><input
             value={form.name}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
             placeholder="Full name"
@@ -276,8 +283,8 @@ export function BookingFormModal({
             type="time"
             value={form.time}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});}}
-            min={String(OPEN).padStart(2, "0") + ":00"}
-            max={CLOSE >= 24 ? "23:59" : String(CLOSE).padStart(2, "0") + ":00"}
+            min={String(fh.open).padStart(2, "0") + ":00"}
+            max={fh.close >= 24 ? "23:59" : String(fh.close).padStart(2, "0") + ":00"}
             className="mgt-hover-scale"
             style={inp()} /></Fld><Fld label="Seating preference"><select
             value={form.preference}

@@ -24,7 +24,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM, hoursFor, weekRange
 } from "./lib/constants";
 
 import {
@@ -124,12 +124,12 @@ import { useThemeMode } from "./hooks/useThemeMode";
 // sourced from D3 hooks below; hook signature unchanged.
 import { usePersistence } from "./hooks/usePersistence";
 
-// ── v14.4.0: Operating-hours subsystem (Settings → General) ───────────────
-// `useOperatingHours` owns the editable service window, persisted to Firebase
-// (settings/operatingHours — the app's FIRST settings node, shared across
-// devices) and pushed into constants.js's live OPEN/CLOSE/GRID_CLOSE bindings so
-// the timeline grid + form time limits track it. Returns {operatingHours,
-// saveOperatingHours}.
+// ── v14.4.0 / v15.0.0: Operating-hours subsystem (Settings → General) ───────────
+// `useOperatingHours(viewDate)` owns the editable PER-WEEKDAY schedule, persisted
+// to Firebase (settings/operatingHours — the app's FIRST settings node, shared
+// across devices) and applies the ACTIVE view-day's hours to constants.js's live
+// OPEN/CLOSE/GRID_CLOSE bindings so the timeline grid + form time limits track the
+// viewed day. Returns {weekHours, saveDayHours, saveAllDays}.
 import { useOperatingHours } from "./hooks/useOperatingHours";
 import { useDayShifts } from "./hooks/useDayShifts";
 import { useOptimizerSettings } from "./hooks/useOptimizerSettings";
@@ -482,12 +482,12 @@ function BookingApp(){
     loadBannerShown, reconnectShown,
     firstLoadCount,
   } = usePersistence({ autoOptimizer, nowMins });
-  // ── v14.4.0: Operating hours (Firebase settings/operatingHours, shared) ──
-  // The hook pushes hours into constants.js's live OPEN/CLOSE/GRID_CLOSE on each
-  // snapshot; `operatingHours` state here drives the re-render that repaints the
-  // timeline + form time limits. `saveOperatingHours` is wired to the Settings
-  // General-tab editor below.
-  const { operatingHours, saveOperatingHours } = useOperatingHours();
+  // ── v14.4.0 / v15.0.0: Operating hours (Firebase settings/operatingHours, shared) ──
+  // Now PER-WEEKDAY. The hook applies the ACTIVE view-day's hours to constants.js's
+  // live OPEN/CLOSE/GRID_CLOSE on each render (keyed to viewDate); `weekHours` drives
+  // the re-render that repaints the timeline + form time limits. saveDayHours /
+  // saveAllDays are wired to the Settings General-tab 7-day editor below.
+  const { weekHours, saveDayHours, saveAllDays } = useOperatingHours(viewDate);
   // ── v14.6.0: Day shifts (Firebase settings/dayShifts, shared) ────────────
   // The Afternoon/Evening split hour for the Summary panel — the app's 2nd
   // Firebase settings node. saveDayShifts is wired to the Settings General tab.
@@ -641,7 +641,11 @@ function BookingApp(){
       if(!f.date){setError("Please set a date.");return;}
       if(!f.time){setError("Please set a time.");return;}
       const sm=toMins(f.time);
-      if(sm<OPEN*60||sm>CLOSE*60){setError("Bookings accepted between "+OPEN+":00 and "+CLOSE+":00.");return;}
+      // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
+      // viewed day, and block a closed day outright.
+      const fh=hoursFor(f.date);
+      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
+      if(sm<fh.open*60||sm>fh.close*60){setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
       const size=Number(f.size)||2;
       const dur=f.customDur||getDur(size);
       const cleanPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";
@@ -1312,7 +1316,7 @@ function BookingApp(){
   return (
     <div
       style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>Me Gustas Tú</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{"4 indoor  9 outdoor  "+String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00"}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>Me Gustas Tú</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{"4 indoor  9 outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
               <button
                 key={v}
                 className="mgt-hover-scale"
@@ -1407,9 +1411,10 @@ function BookingApp(){
             appVersion={__APP_SIGNATURE__.version}
             isDark={isDark}
             onToggleDark={onToggleDark}
-            openHour={operatingHours.open}
-            closeHour={operatingHours.close}
-            onSaveHours={saveOperatingHours}
+            weekHours={weekHours}
+            onSaveDayHours={saveDayHours}
+            onSaveAllDays={saveAllDays}
+            weekRange={weekRange()}
             splitHour={dayShifts.split}
             shiftsEnabled={dayShifts.enabled}
             onSaveShifts={saveDayShifts}

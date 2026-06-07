@@ -20,16 +20,20 @@
 import { useState, useRef, useEffect } from "react";
 import { ref, onValue, set } from "firebase/database";
 import { db } from "../firebase";
-import { OPEN, CLOSE } from "../lib/constants";
+import { weekRange } from "../lib/constants";
 
-// Clamp the cutoff inside the service window and coerce `autoSwitch` to a
-// boolean (default true). Reads OPEN/CLOSE at call time (live module bindings).
+// Clamp the cutoff inside the service window and coerce `autoSwitch` to a boolean
+// (default true). v15.0.0: like the shift split, the cutoff is a single global
+// value, so it's clamped against the STABLE week range (min-open … max-close
+// across the open weekdays) — NOT the volatile active-day OPEN/CLOSE bindings,
+// which would silently rewrite it based on whichever day is being viewed.
 // Defensive against malformed Firebase data.
 function sanitizeOptimizer(raw){
   const src = raw && typeof raw === "object" ? raw : {};
+  const wr = weekRange();
   let c = Math.round(Number(src.cutoff));
   if(!Number.isFinite(c)) c = 15;
-  c = Math.max(OPEN + 1, Math.min(CLOSE, c));
+  c = Math.max(wr.minOpen + 1, Math.min(wr.maxClose, c));
   return { cutoff: c, autoSwitch: src.autoSwitch !== false };
 }
 

@@ -39,7 +39,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG,
-  S, TBL, BTN, TIMELINE_TABLES
+  S, TBL, BTN, TIMELINE_TABLES, hoursFor
 } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { mkBtn } from "./atoms";
@@ -620,6 +620,17 @@ export function TimelineView({
         {optBtns || <div />}
         {zoomBtns}
       </div>
+      {/* v15.0.0: per-weekday hours — a "Closed" notice over the (still-dimensioned)
+          grid when the viewed day is marked closed in Settings → Opening hours. */}
+      {hoursFor(date).closed ? (
+        <div style={{
+          background: "var(--warn-bg)", border: "1px solid var(--warn-border)",
+          borderRadius: 12, padding: "8px 14px", marginBottom: 8,
+          fontSize: 13, fontWeight: 700, color: "var(--warn-text)", textAlign: "center"
+        }}>
+          Closed this day — no bookings or walk-ins. Adjust in Settings → Opening hours.
+        </div>
+      ) : null}
       <div style={{ display: "flex" }}>
         {labelCol}
         {gridCol}
