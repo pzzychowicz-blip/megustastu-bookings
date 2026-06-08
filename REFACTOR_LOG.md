@@ -2456,3 +2456,50 @@ New Month view + rename/rebind. No change to the optimizer, persistence, booking
 - Append-ordered (newest at bottom).
 - `daySummary` remains THE shared day aggregator (Summary + status bar + Week + Month). The Month grid calls it per visible cell (≤42×); cheap at current data volume.
 
+---
+
+## v14.9.0 -> v15.0.0 -- Configurable layout: per-weekday hours, editable optimizer, table/combo config (detect-and-apply)
+
+**Date**: 2026-06-08
+**Branch**: `feat/v15.0.0-configurable-layout` -> PR to `main`
+**Status**: feature -- **app version 14.9.0 -> 15.0.0** (foundational, user-visible capability). Developed as **6 phased commits on one branch**, merged as a single comprehensive version.
+
+### What
+The restaurant's operating hours, optimizer behaviour, and physical table/combo layout -- all previously hard-coded -- become **editable, Firebase-shared config**, with a zero-regression guarantee: an untouched install derives byte-for-byte today's behaviour. Six phases:
+
+1. **(1/6) Optimizer config.** New node `settings/optimizer = {cutoff, autoSwitch}` + hook `useOptimizerSettings`. `useAutoOptimizer({nowMins, cutoffMins, autoSwitch})` -- the three hard-coded `15*60` cutoffs are now editable; `autoSwitch:false` = fully manual (no daily auto-off/auto-on). Settings -> General: cutoff stepper + auto-switch toggle.
+2. **(2/6) Per-weekday hours + closed days.** `settings/operatingHours` reshaped `{open,close}` -> `{days:{0..6}}` (legacy flat migrates as 7-day-uniform). `constants.js`: `WEEK_HOURS` + `hoursFor(date)->{open,close,gridClose,closed}` + `setActiveDayHours(date)` + `weekRange()`; the live `OPEN/CLOSE/GRID_CLOSE/QUARTER_HOURS` bindings hold the **active view-day's** hours, applied per render by `useOperatingHours(viewDate)`. `getBlockSlots/findTimes/findKitchenFriendlyTimes` read `hoursFor(date)` (no signature change) and short-circuit closed days. Closed-day surfaces: timeline banner, form notice + `doSave` block, walk-in block. Settings -> General: 7 weekday rows + "copy -> all". **Shifts fix:** `useDayShifts` + `useOptimizerSettings` clamp the global split/cutoff against `weekRange()`, not the volatile active-day bindings; `Summary` hides the shift chips when the split is outside the viewed day's window.
+3. **(3/6) Configurable table layout.** New node `settings/layout = {tables:[{id,capacity,zone}], kitchenLimit}` + hook `useLayout`. `constants.js`: `DEFAULT_LAYOUT` + `setLayout(cfg)` reassigns the now-LIVE `let` bindings `ALL_TABLES/INDOOR/OUTDOOR/TIMELINE_TABLES/TOTAL_SEATS/KITCHEN_TABLE_LIMIT/ZONE_OF/TABLE_GROUPS` (seeded at module bottom, TDZ-safe). `isIn(id)` -> `ZONE_OF[id]==="indoor"`. New **Settings -> Layout tab** (`LayoutSettings.jsx`): per-table capacity + zone editor + kitchen-limit; header counts derived.
+4. **(4/6) Combos derived from config + Settings polish.** `DEFAULT_LAYOUT` gains `joinGroups`/`comboCaps`/`megaCombos`; `VALID_COMBOS` + `CLUSTERS` are now **live bindings derived by `buildLayout(cfg)`** (shared `contiguousRuns()`/`comboKey()` helpers). `buildLayout(DEFAULT_LAYOUT)` reproduces the prior 40 combos (ordered) + CLUSTERS **byte-for-byte** (the linchpin). `useLayout.sanitizeLayout` round-trips the combo fields (filtered to live ids; Phase-3 nodes migrate). `LayoutSettings`: collapsible **Combos** editor (per-join-group cap overrides + cross-group read-back). **Settings polish:** new `Collapsible` atom -> Opening hours + Tables collapsed by default; optimizer cutoff range widened to the **full day 00:00-24:00** (decoupled from operating hours; 24:00 shown distinctly). **Fix:** Settings <-/-> tab cycle now includes the Layout tab.
+5. **(5/6) Optimizer detect-and-apply.** `IS_MGT_LAYOUT` (live binding) = current layout's signature (tables+caps+zones+combos) === `DEFAULT_LAYOUT`'s, recomputed by `setLayout`. The MGT-tuned heuristics in `booking-logic.js` gate behind it: `_comboPri`/`_indoorPri` -> 0; `isMixedLarge` -> generic "declared cross-zone combo"; `findBest` -> smallest-fitting-single + best combo (no table-7 special-case); `optimise` -> skips the table-7 swap -- all only when **not** MGT. The MGT branches are byte-for-byte the originals. `BookingFormModal` preference dropdown hides a zone with zero tables.
+6. **(6/6) Polish/verify.** Version bump (here), this entry, `CLAUDE.md` updates, full verification.
+
+### Firebase: now **4 `settings` nodes** (all restaurant-wide, shared -- not per-device)
+`settings/operatingHours` (#1, reshaped to per-weekday) · `settings/dayShifts` (#2) · `settings/optimizer` (#3, new) · `settings/layout` (#4, new). Per-device prefs (theme) stay in `localStorage`.
+
+### Files changed
+- **New hooks**: `src/hooks/useOptimizerSettings.js`, `src/hooks/useLayout.js`. **Reshaped**: `src/hooks/useOperatingHours.js` (per-weekday), `src/hooks/useAutoOptimizer.js` (cutoff/auto-switch params), `src/hooks/useDayShifts.js` (clamp to weekRange).
+- **New component**: `src/components/LayoutSettings.jsx` (Layout tab: tables + combos editor). **Modified**: `src/components/Settings.jsx` (Layout tab, optimizer controls, collapsible sections, cutoff range), `src/components/atoms.jsx` (`Collapsible`), `src/components/Summary.jsx` (shift-chip guard), `src/components/BookingFormModal.jsx` (zone-aware preference), `src/components/TimelineView.jsx` (closed-day banner).
+- **`src/lib/constants.js`**: `DEFAULT_LAYOUT` (+ combo config), live layout bindings + `setLayout`/`buildLayout`/`comboKey`/`contiguousRuns`/`ZONE_OF`/`IS_MGT_LAYOUT`, per-weekday `WEEK_HOURS`/`hoursFor`/`setActiveDayHours`/`weekRange`.
+- **`src/lib/booking-logic.js`**: `isIn` via `ZONE_OF`; date-carrying finders read `hoursFor(date)`; optimizer heuristics gated by `IS_MGT_LAYOUT`.
+- **`src/App.jsx`**: mount `useOptimizerSettings`/`useLayout`; thread props to `SettingsContent`; `useOperatingHours(viewDate)`; closed-day block; dynamic header counts; Settings tab-cycle includes "layout"; version 14.9.0 -> 15.0.0.
+
+### Design decisions
+- **Live-binding spine** (reused from v14.4.0 operating-hours): `let` exports in `constants.js` reassigned ONLY by in-module setters; hooks call the setter per Firebase snapshot + set React state to repaint. Now three subsystems (hours, layout, + the optimizer detect flag) ride it. **Never capture these into module-scope locals.** Editing them under HMR needs a full preview reload (the binding seed doesn't re-propagate).
+- **Detect-and-apply (not generalize-everything):** keep MGT's hand-tuned optimizer; run it only when the layout signature matches, else a generic capacity path. Since `DEFAULT === MGT`, an untouched install is always MGT.
+- **Hybrid combos:** declare join-groups -> auto-generate contiguous-run combos (cap = Σ members unless overridden) + explicit cross-group mega combos. `buildLayout(DEFAULT_LAYOUT)` deep-equals the historical arrays = the zero-regression gate.
+- **Deferred (out of v1):** the heavier Layout-tab editors -- editing/adding cross-group (mega) combos, the join-group structure editor, and add/remove/rename tables (with the stored-booking-orphan safety warning). The high-value 90% (capacity, zone, combo cap, kitchen limit) ships; the rest is read-only/config-only for now.
+
+### Verification
+- `npm run build` OK -- main bundle **174.66 kB gz** (+5.19 vs 14.9.0's 169.47), **62 modules** (3 new hooks/components across the phases).
+- **Node verification suite** (`/tmp` scripts; constants.js + booking-logic.js are pure, run under a Node resolve-hook loader): (a) deep-equal -- `buildLayout(DEFAULT_LAYOUT)` reproduces the 40 ordered combos + CLUSTERS exactly; (b) mutation -- cap overrides/edits, table removal, new groups/mega-combos all flow correctly; (c) optimizer baseline diff -- a battery of `findBest`/`findBestAny`/`findAllOptions`/`optimise` cases under DEFAULT is **byte-for-byte identical** before/after the Phase-5 gating; (d) generic path -- `IS_MGT_LAYOUT` flips on any layout change, generic `findBest`/`optimise` return sane assignments without crashing.
+- **Live-verified (Preview bridge, DEV)** across phases, both themes: collapsible Opening hours/Tables; cutoff steppable 00:00..24:00 (24:00 distinct; auto-off side effects observed); Layout tab combos editor (auto-cap edit round-trip + mega read-back); Settings <-/-> visits Layout; booking-form preference shows both zones (MGT); timeline/app load clean.
+
+### Behavioural change
+None for an untouched (default = MGT) install -- hours/optimizer/layout/combos all derive today's exact values; the optimizer output is byte-identical. New capability only when staff edit the config. No change to booking shape or the persistence write-guards (the new nodes follow the same loaded-ref guard).
+
+### Notes
+- Append-ordered (newest at bottom).
+- 4 `settings` nodes now; all share the loaded-ref write-guard (small objects -> no empty-array guard except `useLayout`, which refuses an empty-`tables` config).
+- Combos/clusters joined the live-binding spine; `IS_MGT_LAYOUT` is recomputed alongside them in `setLayout`.
+
