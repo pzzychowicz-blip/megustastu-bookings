@@ -88,6 +88,12 @@ export let ZONE_OF={};
 // setLayout; consumed live by booking-logic (comboCap / findBest / canAssign / …).
 export let VALID_COMBOS=[];
 export let CLUSTERS={};
+// v15.0.0 Phase 5: detect-and-apply flag. True when the live layout matches the
+// canonical MGT signature (tables + caps + zones + combos === DEFAULT_LAYOUT's).
+// The optimizer (booking-logic) runs MGT's hand-tuned heuristics only when true;
+// otherwise a generic capacity-based fallback. Recomputed by setLayout on every
+// layout change, so an untouched install always takes the MGT path (zero regression).
+export let IS_MGT_LAYOUT=true;
 
 // Derive the table pickers' grouping from a config (live caps, fixed structure).
 function buildTableGroups(cfg){
@@ -173,15 +179,28 @@ export function buildLayout(cfg){
   };
 }
 
+// Canonical, order-independent fingerprint of a derived layout: tables
+// (id:cap:zone) + combos (sortedIds:cap), each sorted. Two layouts with the same
+// signature are interchangeable for the optimizer's hand-tuned heuristics.
+function layoutSignature(L){
+  var t=L.ALL_TABLES.map(function(x){return x.id+":"+x.capacity+":"+(L.ZONE_OF[x.id]||"outdoor");}).sort().join(",");
+  var c=L.VALID_COMBOS.map(function(x){return comboKey(x.ids)+":"+x.cap;}).sort().join(",");
+  return t+"|"+c;
+}
+// The MGT fingerprint, computed once from DEFAULT_LAYOUT (buildLayout + comboKey
+// are hoisted; DEFAULT_LAYOUT is assigned above) — the detect-and-apply reference.
+var MGT_SIGNATURE=layoutSignature(buildLayout(DEFAULT_LAYOUT));
+
 // Reassign the layout-derived bindings from a config. Called by useLayout on each
 // Firebase snapshot, and once at module load (bottom of file) to seed from
 // DEFAULT_LAYOUT. Only this module may reassign its own exports, so the setter
-// lives here.
+// lives here. Also recomputes IS_MGT_LAYOUT (signature vs MGT) for the optimizer.
 export function setLayout(cfg){
   var L=buildLayout(cfg);
   OUTDOOR=L.OUTDOOR;INDOOR=L.INDOOR;ALL_TABLES=L.ALL_TABLES;TIMELINE_TABLES=L.TIMELINE_TABLES;
   TOTAL_SEATS=L.TOTAL_SEATS;ZONE_OF=L.ZONE_OF;KITCHEN_TABLE_LIMIT=L.KITCHEN_TABLE_LIMIT;
   TABLE_GROUPS=L.TABLE_GROUPS;VALID_COMBOS=L.VALID_COMBOS;CLUSTERS=L.CLUSTERS;
+  IS_MGT_LAYOUT=(layoutSignature(L)===MGT_SIGNATURE);
 }
 // v14.4.0 / v15.0.0: OPEN/CLOSE/GRID_CLOSE + QUARTER_HOURS are runtime-editable
 // (Settings → General → Opening hours), persisted to Firebase (settings/operatingHours)

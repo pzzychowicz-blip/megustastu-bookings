@@ -22,7 +22,8 @@ import {
   GRID_CLOSE,
   KITCHEN_TABLE_LIMIT,
   hoursFor,
-  ZONE_OF
+  ZONE_OF,
+  IS_MGT_LAYOUT
 } from "./constants";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
@@ -46,7 +47,15 @@ export function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var 
 export function isIn(id){return ZONE_OF[id]?ZONE_OF[id]==="indoor":String(id).startsWith("i");}
 export function isAllIn(ids){return ids.every(isIn);}
 export function isAllOut(ids){return ids.every(function(id){return !isIn(id);});}
-export function isMixedLarge(ids){if(!ids.some(isIn)||!ids.some(function(id){return !isIn(id);})) return false;return ids.includes("1A")&&ids.includes("1B")&&ids.includes("7");}
+// v15.0.0 Phase 5: a "mixed-large" combo spans both zones. MGT keeps its bespoke
+// 1A&1B&7 rule; a generic layout treats any cross-zone set that is a DECLARED
+// combo (in VALID_COMBOS) as allowed.
+export function isMixedLarge(ids){
+  if(!ids.some(isIn)||!ids.some(function(id){return !isIn(id);})) return false;
+  if(IS_MGT_LAYOUT) return ids.includes("1A")&&ids.includes("1B")&&ids.includes("7");
+  var k=ids.slice().sort().join("|");
+  return VALID_COMBOS.some(function(c){return c.ids.slice().sort().join("|")===k;});
+}
 export function comboOk(ids,pref){var mixed=!isAllIn(ids)&&!isAllOut(ids);if(mixed&&pref!=="auto") return false;if(mixed&&!isMixedLarge(ids)) return false;if(pref==="indoor") return isAllIn(ids);if(pref==="outdoor") return isAllOut(ids);return true;}
 export function comboCap(ids){var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});return c?c.cap:ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
 export function isLocked(b){return b&&(b._locked===true||b.status==="seated");}
@@ -74,14 +83,25 @@ export function canAssign(ids,slots,s,e){
 }
 
 // ── Combo prioritisation (internal) ───────────────────────────────────────────
-function _indoorPri(c){if(c.ids.indexOf("i4")>=0) return 2;if(c.ids.indexOf("i1")>=0) return 1;return 0;}
+// v15.0.0 Phase 5: _indoorPri + _comboPri encode MGT's hand-tuned table priorities
+// (magic ids i4/i1, the size-banded combo rankings). They short-circuit to 0 (no
+// preference) for a non-MGT layout — the optimizer then ranks combos purely by
+// _comboLoc (zone grouping, layout-agnostic) + capacity/length. _comboLoc stays on.
+function _indoorPri(c){if(!IS_MGT_LAYOUT) return 0;if(c.ids.indexOf("i4")>=0) return 2;if(c.ids.indexOf("i1")>=0) return 1;return 0;}
 function _comboLoc(c){if(isAllOut(c.ids)) return 0;if(isAllIn(c.ids)) return 1;return 2;}
-function _comboPri(c,size){var k=c.ids.slice().sort().join("|");if(k==="1A|1B"&&size>=4&&size<=6) return -10;if(k==="2|3"&&size===4) return -5;if(size>=7&&size<=8){if(k==="2|3|4") return -10;if(k==="5A|5B|6") return -9;}if(size>=9&&size<=12){if(k==="1A|1B|7|i4") return -10;if(k==="1A|1B|7|i1") return -9;if(k==="1A|1B|7|i2"||k==="1A|1B|7|i3") return -7;}if(size>=13&&size<=16){if(c.ids.every(function(id){return ["2","3","4","5A","5B","6"].indexOf(id)>=0;})) return -10;}if(size>=17&&size<=20){if(k==="2|3|4|5A|5B|6|i4") return -10;if(k==="2|3|4|5A|5B|6|i1") return -9;if(k==="2|3|4|5A|5B|6|7") return -8;}if(k==="i1|i2|i3|i4") return 100;return 0;}
+function _comboPri(c,size){if(!IS_MGT_LAYOUT) return 0;var k=c.ids.slice().sort().join("|");if(k==="1A|1B"&&size>=4&&size<=6) return -10;if(k==="2|3"&&size===4) return -5;if(size>=7&&size<=8){if(k==="2|3|4") return -10;if(k==="5A|5B|6") return -9;}if(size>=9&&size<=12){if(k==="1A|1B|7|i4") return -10;if(k==="1A|1B|7|i1") return -9;if(k==="1A|1B|7|i2"||k==="1A|1B|7|i3") return -7;}if(size>=13&&size<=16){if(c.ids.every(function(id){return ["2","3","4","5A","5B","6"].indexOf(id)>=0;})) return -10;}if(size>=17&&size<=20){if(k==="2|3|4|5A|5B|6|i4") return -10;if(k==="2|3|4|5A|5B|6|i1") return -9;if(k==="2|3|4|5A|5B|6|7") return -8;}if(k==="i1|i2|i3|i4") return 100;return 0;}
 
 // ── Best-table finders ────────────────────────────────────────────────────────
 export function findBest(size,pref,s,e,slots){
   var sg=ALL_TABLES.filter(function(t){return t.capacity>=size&&comboOk([t.id],pref)&&canAssign([t.id],slots,s,e);});
   var co=VALID_COMBOS.filter(function(c){return c.cap>=size&&comboOk(c.ids,pref)&&canAssign(c.ids,slots,s,e);}).sort(function(a,b){var pa=_comboPri(a,size),pb=_comboPri(b,size);if(pa!==pb) return pa-pb;var la=_comboLoc(a),lb=_comboLoc(b);if(la!==lb) return la-lb;if(la===2){var ia=_indoorPri(a),ib=_indoorPri(b);if(ia!==ib) return ib-ia;}return a.cap-b.cap||a.ids.length-b.ids.length;});
+  // v15.0.0 Phase 5: generic (non-MGT) path — no table-7 special-casing. Prefer the
+  // smallest-capacity single that fits (least wasted seats), else the best combo.
+  if(!IS_MGT_LAYOUT){
+    if(sg.length) return [sg.slice().sort(function(a,b){return a.capacity-b.capacity;})[0].id];
+    if(co.length) return co[0].ids;
+    return null;
+  }
   if(size<=2){var n7=sg.filter(function(t){return t.id!=="7";});if(size===1){if(pref==="indoor"||pref==="auto"){var ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}if(pref==="outdoor"||pref==="auto"){var out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}}else{if(pref==="outdoor"||pref==="auto"){var out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}if(pref==="indoor"||pref==="auto"){var ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}}if(n7.length) return [n7[0].id];if(sg.length) return [sg[0].id];if(co.length) return co[0].ids;return null;}
   if(size<=4){if(canAssign(["7"],slots,s,e)&&comboOk(["7"],pref)) return ["7"];if(co.length) return co[0].ids;if(sg.length) return [sg[0].id];return null;}
   if(co.length) return co[0].ids;
@@ -196,7 +216,8 @@ export function optimise(bookings,date,blocks){
   // First pass
   var assigned=_runGreedy(day,baseSlots);
   // Table 7 swap: if a size-4 has table 7 and an overlapping size-3 exists, give 7 to the 3 and let greedy re-assign everyone else
-  var t7fours=day.filter(function(b){return !isLocked(b)&&assigned[b.id]&&assigned[b.id].length===1&&assigned[b.id][0]==="7"&&b.size===4;});
+  // v15.0.0 Phase 5: the table-7 swap is MGT-specific (magic id "7"); skip it generically.
+  var t7fours=IS_MGT_LAYOUT?day.filter(function(b){return !isLocked(b)&&assigned[b.id]&&assigned[b.id].length===1&&assigned[b.id][0]==="7"&&b.size===4;}):[];
   if(t7fours.length){t7fours.forEach(function(fb){var fs=toMins(fb.time),fe=fs+(fb.duration||90);var three=day.find(function(b){return !isLocked(b)&&b.size===3&&b.id!==fb.id&&overlaps(fs,fe,toMins(b.time),toMins(b.time)+(b.duration||90))&&(!assigned[b.id]||assigned[b.id][0]!=="7");});if(!three) return;var lockedSlots=baseSlots.slice();day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)});});var ts=toMins(three.time),te=ts+(three.duration||90);if(!canAssign(["7"],lockedSlots,ts,te)) return;var trialSlots=lockedSlots.slice();trialSlots.push({tables:["7"],s:ts,e:te});var trialAssigned={};trialAssigned[three.id]=["7"];var others=day.filter(function(b){return b.id!==three.id&&!isLocked(b);}).sort(function(a,b){return b.size-a.size||toMins(a.time)-toMins(b.time);});others.forEach(function(b){var bs=toMins(b.time),be=bs+(b.duration||90);var tables;if(b.preferredTables&&b.preferredTables.length>0){var pt=b.preferredTables;if(comboCap(pt)>=(b.size||2)&&canAssign(pt,trialSlots,bs,be)) tables=pt;}if(!tables){tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}trialAssigned[b.id]=tables||null;if(tables) trialSlots.push({tables:tables,s:bs,e:be});});day.forEach(function(b){if(isLocked(b)) trialAssigned[b.id]=b.tables;});var curUn=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];}).length;var tryUn=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;if(tryUn<=curUn) assigned=trialAssigned;});}
   // Preference retry: if any non-auto booking got wrong area, force-fix it
   var prefMismatch=day.filter(function(b){if(isLocked(b)||!assigned[b.id]||b.preference==="auto") return false;var tbl=assigned[b.id];if(b.preference==="indoor") return !isAllIn(tbl);if(b.preference==="outdoor") return !isAllOut(tbl);return false;});
