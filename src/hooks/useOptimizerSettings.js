@@ -8,7 +8,9 @@
 // localStorage (same rule as operating hours / day shifts; see CLAUDE.md).
 //
 // Model: `{ cutoff, autoSwitch }`.
-//   • cutoff     — hour (e.g. 15 = 15:00) at which today's optimizer flips OFF.
+//   • cutoff     — hour (0–24) at which today's optimizer flips OFF. A single
+//                  GLOBAL switch-off time, independent of opening hours. Endpoints
+//                  are meaningful: 0 = off all day; 24 = on all day (never reached).
 //   • autoSwitch — when false, NO automatic transitions fire (fully manual: the
 //                  optimizer only changes via the `o` shortcut / timeline toggle).
 // Consumed by useAutoOptimizer, whose two daily-reset effects read these.
@@ -20,20 +22,18 @@
 import { useState, useRef, useEffect } from "react";
 import { ref, onValue, set } from "firebase/database";
 import { db } from "../firebase";
-import { weekRange } from "../lib/constants";
 
-// Clamp the cutoff inside the service window and coerce `autoSwitch` to a boolean
-// (default true). v15.0.0: like the shift split, the cutoff is a single global
-// value, so it's clamped against the STABLE week range (min-open … max-close
-// across the open weekdays) — NOT the volatile active-day OPEN/CLOSE bindings,
-// which would silently rewrite it based on whichever day is being viewed.
-// Defensive against malformed Firebase data.
+// Clamp the cutoff to the full day and coerce `autoSwitch` to a boolean (default
+// true). v15.0.0 (cutoff range): the cutoff is a single GLOBAL switch-off hour and
+// is deliberately INDEPENDENT of opening hours — staff pick whatever time of day
+// they want the optimizer to stop. So it's clamped to 0–24 (00:00–24:00) and is
+// NOT tied to weekRange (unlike the shift split), which would otherwise silently
+// rewrite it whenever opening hours change. Defensive against malformed data.
 function sanitizeOptimizer(raw){
   const src = raw && typeof raw === "object" ? raw : {};
-  const wr = weekRange();
   let c = Math.round(Number(src.cutoff));
   if(!Number.isFinite(c)) c = 15;
-  c = Math.max(wr.minOpen + 1, Math.min(wr.maxClose, c));
+  c = Math.max(0, Math.min(24, c));
   return { cutoff: c, autoSwitch: src.autoSwitch !== false };
 }
 

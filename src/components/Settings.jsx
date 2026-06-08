@@ -27,7 +27,7 @@
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
-import { Toggle, Section } from "./atoms";
+import { Toggle, Section, Collapsible } from "./atoms";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
 // Reusable enough for future modals to import; lives here for now because
@@ -88,7 +88,11 @@ const HOUR_STEP_BTN = {
   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   boxShadow: "var(--shadow-input)"
 };
-function HourStepper({ label, value, onDec, onInc, disableDec, disableInc }) {
+// `fmt` (v15.0.0): optional value→label formatter. Defaults to the modulo-24
+// clock label; the optimizer cutoff passes its own so it can show "24:00" (the
+// full-day endpoint) distinctly from "00:00".
+function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }) {
+  const display = fmt ? fmt(value) : String(value % 24).padStart(2, "0") + ":00";
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
@@ -101,7 +105,7 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc }) {
           −
         </button>
         <span style={{ minWidth: 58, textAlign: "center", fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
-          {String(value % 24).padStart(2, "0") + ":00"}
+          {display}
         </span>
         <button
           onClick={onInc} disabled={disableInc}
@@ -189,6 +193,29 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
   const oc = typeof optimizerCutoff === "number" ? optimizerCutoff : 15;
   const oas = optimizerAutoSwitch !== false;
   const hhLabel = (n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00";
+  // v15.0.0 (cutoff range): the optimizer cutoff is a single GLOBAL switch-off
+  // hour, independent of opening hours — selectable across the whole day
+  // (00:00–24:00). Its own formatter shows 24 as "24:00" (the full-day endpoint),
+  // distinct from "00:00". Endpoints are meaningful: 0 = off all day, 24 = on all day.
+  const cutoffLabel = (n) => String(n).padStart(2, "0") + ":00";
+  const cutoffNote =
+    oc >= 24 ? "Optimizer keeps reshuffling all day, then resets at the start of the next day."
+    : oc <= 0 ? "Optimizer stays off all day; resume it manually (timeline control or the “o” key)."
+    : "Optimizer stops reshuffling today's bookings at " + cutoffLabel(oc) + "; resumes at the start of the next day.";
+  // Compact collapsed summary for the Opening-hours disclosure: a shared window if
+  // every open day matches, else "Varies", plus a count of closed days.
+  const dayCfgs = [0, 1, 2, 3, 4, 5, 6].map((d) => wh[d]);
+  const openCfgs = dayCfgs.filter((d) => d && d.closed !== true);
+  const closedCount = 7 - openCfgs.length;
+  let hoursSummary;
+  if (openCfgs.length === 0) {
+    hoursSummary = "All closed";
+  } else {
+    const o0 = Number.isFinite(openCfgs[0].open) ? openCfgs[0].open : 13;
+    const c0 = Number.isFinite(openCfgs[0].close) ? openCfgs[0].close : 22;
+    const uniform = openCfgs.every((d) => (Number.isFinite(d.open) ? d.open : 13) === o0 && (Number.isFinite(d.close) ? d.close : 22) === c0);
+    hoursSummary = (uniform ? hhLabel(o0) + "–" + hhLabel(c0) : "Varies") + (closedCount > 0 ? " · " + closedCount + " closed" : "");
+  }
   return (
     <div>
       {/* v14.2.0: Dark-mode toggle. Per-device (localStorage) — flips
@@ -212,11 +239,11 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           (settings/operatingHours). Each day sets its own booking window + timeline
           range, or is marked Closed. "copy → all" pushes one day's config to all 7.
           Displayed Mon→Sun; stored by JS weekday index (0=Sun). */}
-      <Section style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Opening hours</div>
-        <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2, marginBottom: 4 }}>
-          Per day of the week. Shared across all devices. Sets the booking window and the timeline range.
-        </div>
+      <Collapsible
+        title="Opening hours"
+        subtitle="Per day of the week. Shared across all devices. Sets the booking window and the timeline range."
+        summary={hoursSummary}
+      >
         {[[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [0, "Sun"]].map(function (entry) {
           const idx = entry[0], lbl = entry[1];
           return (
@@ -225,7 +252,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
               onCopyAll={() => onSaveAllDays(wh[idx])} />
           );
         })}
-      </Section>
+      </Collapsible>
       {/* v14.6.0: Shifts — on/off toggle + the Afternoon/Evening split hour for
           the day Summary. Firebase-shared (settings/dayShifts). */}
       <Section style={{ marginBottom: 18 }}>
@@ -268,12 +295,12 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
         {oas ? (
           <div style={{ marginTop: 14 }}>
             <HourStepper
-              label="Daily cutoff" value={oc}
-              disableDec={oc <= wrMin + 1} disableInc={oc >= wrMax}
+              label="Daily cutoff" value={oc} fmt={cutoffLabel}
+              disableDec={oc <= 0} disableInc={oc >= 24}
               onDec={() => onSaveOptimizer({ cutoff: oc - 1 })} onInc={() => onSaveOptimizer({ cutoff: oc + 1 })}
             />
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 10 }}>
-              Optimizer stops reshuffling today's bookings at {hhLabel(oc)}; resumes at the start of the next day.
+              {cutoffNote}
             </div>
           </div>
         ) : (

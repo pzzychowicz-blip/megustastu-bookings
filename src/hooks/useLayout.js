@@ -25,6 +25,12 @@ import { DEFAULT_LAYOUT, setLayout } from "../lib/constants";
 // Validate + clamp a layout config. Drops malformed/duplicate tables; coerces
 // capacity (1–20) and zone ("indoor"|"outdoor"); falls back to DEFAULT_LAYOUT
 // when nothing usable remains. Defensive against malformed Firebase data.
+//
+// v15.0.0 Phase 4: also carries the combo config — joinGroups / comboCaps /
+// megaCombos. When a field is absent (e.g. a Phase-3 node that predates combos),
+// it seeds from DEFAULT_LAYOUT so the node migrates to MGT's combos on first save.
+// Every combo reference is filtered to the CURRENT table ids, so stored config
+// never points at a removed table (buildLayout also self-heals at derive time).
 function sanitizeLayout(val){
   if(!val || typeof val !== "object" || !Array.isArray(val.tables)) return DEFAULT_LAYOUT;
   const seen = {};
@@ -41,10 +47,41 @@ function sanitizeLayout(val){
     tables.push({ id: id, capacity: cap, zone: zone });
   });
   if(!tables.length) return DEFAULT_LAYOUT;
+  const idSet = {}; tables.forEach(function(t){ idSet[t.id] = true; });
+
   let kitchenLimit = Math.round(Number(val.kitchenLimit));
   if(!Number.isFinite(kitchenLimit)) kitchenLimit = 3;
   kitchenLimit = Math.max(1, Math.min(20, kitchenLimit));
-  return { tables: tables, kitchenLimit: kitchenLimit };
+
+  // joinGroups: arrays of existing ids; empty groups dropped.
+  const rawGroups = Array.isArray(val.joinGroups) ? val.joinGroups : DEFAULT_LAYOUT.joinGroups;
+  const joinGroups = (rawGroups || [])
+    .map(function(g){ return (Array.isArray(g) ? g : []).map(String).filter(function(id){ return idSet[id]; }); })
+    .filter(function(g){ return g.length > 0; });
+
+  // comboCaps: numeric overrides (1–60); keys whose ids all still exist are kept.
+  const rawCaps = (val.comboCaps && typeof val.comboCaps === "object") ? val.comboCaps : DEFAULT_LAYOUT.comboCaps;
+  const comboCaps = {};
+  Object.keys(rawCaps || {}).forEach(function(k){
+    if(String(k).split("|").every(function(id){ return idSet[id]; })){
+      const c = Math.round(Number(rawCaps[k]));
+      if(Number.isFinite(c)) comboCaps[k] = Math.max(1, Math.min(60, c));
+    }
+  });
+
+  // megaCombos: {ids,cap}; need ≥2 existing ids, cap clamped 1–60.
+  const rawMega = Array.isArray(val.megaCombos) ? val.megaCombos : DEFAULT_LAYOUT.megaCombos;
+  const megaCombos = [];
+  (rawMega || []).forEach(function(mc){
+    if(!mc || !Array.isArray(mc.ids)) return;
+    const ids = mc.ids.map(String).filter(function(id){ return idSet[id]; });
+    if(ids.length < 2 || ids.length !== mc.ids.length) return;
+    let c = Math.round(Number(mc.cap));
+    if(!Number.isFinite(c)) c = ids.length * 2;
+    megaCombos.push({ ids: ids, cap: Math.max(1, Math.min(60, c)) });
+  });
+
+  return { tables: tables, joinGroups: joinGroups, comboCaps: comboCaps, megaCombos: megaCombos, kitchenLimit: kitchenLimit };
 }
 
 export function useLayout(){

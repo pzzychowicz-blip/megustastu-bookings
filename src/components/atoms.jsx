@@ -11,7 +11,7 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BLOCK_BG, TBL, S } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 
@@ -153,6 +153,53 @@ export function Section({ style, children }) {
     }}>
       {children}
     </div>
+  );
+}
+
+// ── Collapsible disclosure section (card header + expandable body) ────────────
+// v15.0.0: a Section whose title row is a tap-to-toggle disclosure. Used to keep
+// long Settings lists (opening hours, tables) compact — collapsed by default
+// (`defaultOpen`), with an optional one-line `summary` shown on the right while
+// collapsed so the section stays scannable without expanding. The `subtitle` only
+// shows when open, keeping the collapsed header a single line. Uncontrolled (owns
+// its open state) — settings disclosures don't need the state lifted to a parent.
+//
+// No `.mgt-hover-scale` on the header: it's a full-width row and the Settings
+// modal card is overflow:hidden, so a 1.08 scale would clip at the card edge.
+// The rotating chevron + pointer cursor carry the affordance instead.
+export function Collapsible({ title, subtitle, summary, defaultOpen = false, children, style }) {
+  const [open, setOpen] = useState(defaultOpen === true);
+  return (
+    <Section style={{ marginBottom: 18, ...(style || {}) }}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: 12, background: "transparent", border: "none", padding: 0, margin: 0,
+          cursor: "pointer", textAlign: "left", color: "inherit"
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{title}</div>
+          {open && subtitle ? (
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>{subtitle}</div>
+          ) : null}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {!open && summary ? (
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
+          ) : null}
+          <span style={{
+            fontSize: 18, fontWeight: 700, color: "var(--text-muted)", lineHeight: 1,
+            display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 0.18s ease"
+          }}>›</span>
+        </div>
+      </button>
+      {open ? <div style={{ marginTop: 12 }}>{children}</div> : null}
+    </Section>
   );
 }
 

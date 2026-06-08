@@ -5,7 +5,8 @@
 // next config; the Firebase echo re-renders. v15.0.0 ships capacity + zone editing
 // of the existing tables; add/remove tables + join-groups/combos arrive in Phase 4.
 
-import { Section } from "./atoms";
+import { Section, Collapsible } from "./atoms";
+import { contiguousRuns, comboKey } from "../lib/constants";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 const STEP_BTN = {
@@ -62,14 +63,29 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {} }) {
     onSaveLayout({ ...layout, tables: tables.map((t) => (t.id === id ? { ...t, ...patch } : t)) });
   }
 
+  // v15.0.0 Phase 4: combo config (derived into VALID_COMBOS by buildLayout). The
+  // editor exposes the within-group ("auto") combo seat counts — the part a venue
+  // actually tunes ("2+3 really seats 5"). An override writes comboCaps[key]; the
+  // optimizer picks it up live. Cross-group "mega" combos are shown read-only.
+  const capOf = {};
+  tables.forEach((t) => { capOf[t.id] = Number(t.capacity) || 0; });
+  const joinGroups = (layout && Array.isArray(layout.joinGroups)) ? layout.joinGroups : [];
+  const comboCaps = (layout && layout.comboCaps && typeof layout.comboCaps === "object") ? layout.comboCaps : {};
+  const mega = (layout && Array.isArray(layout.megaCombos)) ? layout.megaCombos : [];
+  const autoCount = joinGroups.reduce((a, g) => a + contiguousRuns(g).length, 0);
+
+  function setComboCap(key, cap) {
+    onSaveLayout({ ...layout, comboCaps: { ...comboCaps, [key]: cap } });
+  }
+
   return (
     <div>
-      <Section style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Tables</div>
-        <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-          Each table's capacity and zone. Shared across all devices.
-        </div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginTop: 4, marginBottom: 2 }}>
+      <Collapsible
+        title="Tables"
+        subtitle="Each table's capacity and zone. Shared across all devices."
+        summary={tables.length + " tables · " + totalSeats + " seats"}
+      >
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 2 }}>
           {outdoorCount} outdoor · {indoorCount} indoor · {totalSeats} seats total
         </div>
         {tables.map((t) => (
@@ -77,7 +93,62 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {} }) {
             onCap={(c) => updateTable(t.id, { capacity: c })}
             onZone={(z) => updateTable(t.id, { zone: z })} />
         ))}
-      </Section>
+      </Collapsible>
+      <Collapsible
+        title="Combos"
+        subtitle="Joined tables for larger parties. Edit a combo's seat count; the optimizer uses these caps."
+        summary={(autoCount + mega.length) + " combos"}
+      >
+        {joinGroups.map(function (group, gi) {
+          const runs = contiguousRuns(group);
+          if (!runs.length) return null;
+          return (
+            <div key={gi} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 2 }}>
+                {group.join(" · ")}
+              </div>
+              {runs.map(function (run) {
+                const key = comboKey(run);
+                const sum = run.reduce(function (a, id) { return a + (capOf[id] || 0); }, 0);
+                const overridden = comboCaps[key] != null;
+                const cap = overridden ? comboCaps[key] : sum;
+                return (
+                  <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 0", borderTop: "1px solid var(--border-soft)" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{run.join(" + ")}</span>
+                    {overridden && cap !== sum ? (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)" }}>sum {sum}</span>
+                    ) : null}
+                    <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>seats</span>
+                      <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 60}
+                        onDec={function () { setComboCap(key, cap - 1); }} onInc={function () { setComboCap(key, cap + 1); }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+        {mega.length ? (
+          <div style={{ marginTop: 8, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 6 }}>
+              Cross-group combos · {mega.length}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {mega.map(function (mc, i) {
+                return (
+                  <span key={i} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)", background: "var(--bg-stepper)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "3px 8px" }}>
+                    {mc.ids.join("+")} · {mc.cap}
+                  </span>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)", marginTop: 8 }}>
+              Editing cross-group combos and join-groups (and adding/removing tables) is set in config — UI for these arrives in a later update.
+            </div>
+          </div>
+        ) : null}
+      </Collapsible>
       <Section style={{ marginBottom: 8 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={{ textAlign: "left" }}>

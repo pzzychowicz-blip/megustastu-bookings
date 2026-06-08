@@ -963,7 +963,7 @@ function BookingApp(){
       if(K.showSettings&&!K.reminderEditor&&!K.confirmReminderDel){
         if(k==="ArrowLeft"||k==="ArrowRight"){
           e.preventDefault();
-          const TABS=["general","reminders","shortcuts"];
+          const TABS=["general","layout","reminders","shortcuts"];
           let curIdx=TABS.indexOf(K.settingsTab);if(curIdx<0) curIdx=0;
           const newIdx=k==="ArrowLeft"?(curIdx-1+TABS.length)%TABS.length:(curIdx+1)%TABS.length;
           K.setSettingsTab(TABS[newIdx]);

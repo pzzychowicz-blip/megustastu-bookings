@@ -11,9 +11,21 @@
 // Layout; Firebase settings/layout, shared). DEFAULT_LAYOUT = the historical MGT
 // 13-table layout — an absent/empty Firebase node falls back to this, so an
 // untouched install is byte-identical to pre-v15. Each table: {id, capacity, zone}
-// where zone ∈ {"indoor","outdoor"}. (Phase 4 extends the config with join-groups
-// + combo caps; v15.0.0 keeps VALID_COMBOS/CLUSTERS fixed below.) `kitchenLimit`
-// is the max simultaneous kitchen starts (was the hard-coded KITCHEN_TABLE_LIMIT).
+// where zone ∈ {"indoor","outdoor"}. `kitchenLimit` is the max simultaneous
+// kitchen starts (was the hard-coded KITCHEN_TABLE_LIMIT).
+//
+// v15.0.0 Phase 4: the combo system is now DERIVED from this config too (was the
+// hard-coded VALID_COMBOS/CLUSTERS below). Three combo fields drive buildLayout():
+//   • joinGroups — ordered physical "runs" of adjacent tables. Every contiguous
+//     sub-run of ≥2 auto-generates a combo (cap = Σ member caps unless overridden).
+//     A table not in any ≥2 group is standalone. (7 and i1 are standalone here.)
+//   • comboCaps  — per-auto-combo seat-count overrides, key = comboKey(run ids)
+//     (sorted, "|"-joined). Only combos whose real seat count ≠ the member sum need
+//     an entry (e.g. 1A+1B seats 6, not 4; but 3+4 = 4 = sum, so it's omitted).
+//   • megaCombos — explicit cross-group big-party combos that pairwise adjacency
+//     can't generate (each {ids, cap}). Appended to the auto combos in order.
+// buildLayout(DEFAULT_LAYOUT) reproduces the pre-Phase-4 VALID_COMBOS (40, ordered)
+// + CLUSTERS exactly — the zero-regression linchpin (see /tmp verify script).
 export var DEFAULT_LAYOUT={
   tables:[
     {id:"1A",capacity:2,zone:"outdoor"},{id:"1B",capacity:2,zone:"outdoor"},
@@ -21,6 +33,24 @@ export var DEFAULT_LAYOUT={
     {id:"5A",capacity:2,zone:"outdoor"},{id:"5B",capacity:2,zone:"outdoor"},{id:"6",capacity:2,zone:"outdoor"},
     {id:"7",capacity:4,zone:"outdoor"},
     {id:"i1",capacity:2,zone:"indoor"},{id:"i2",capacity:2,zone:"indoor"},{id:"i3",capacity:2,zone:"indoor"},{id:"i4",capacity:2,zone:"indoor"}
+  ],
+  // Ordered physical runs (singletons 7 / i1 are omitted → standalone clusters).
+  joinGroups:[["1A","1B"],["2","3","4"],["5A","5B","6"],["i2","i3","i4"]],
+  // Auto-combo seat overrides (key = sorted ids joined by "|"). "3|4" is omitted
+  // because its real cap (4) equals the member sum.
+  comboCaps:{"1A|1B":6,"2|3":5,"2|3|4":8,"5A|5B":5,"5B|6":5,"5A|5B|6":8,"i2|i3":6,"i3|i4":6,"i2|i3|i4":8},
+  // Explicit cross-group big-party combos (order preserved in VALID_COMBOS).
+  megaCombos:[
+    {ids:["i1","i2","i3","i4"],cap:10},
+    {ids:["1A","1B","7","i1"],cap:11},{ids:["1A","1B","7","i2"],cap:10},{ids:["1A","1B","7","i3"],cap:10},{ids:["1A","1B","7","i4"],cap:11},
+    {ids:["1A","1B","7","i1","i2"],cap:12},{ids:["1A","1B","7","i1","i3"],cap:12},{ids:["1A","1B","7","i1","i4"],cap:12},{ids:["1A","1B","7","i2","i3"],cap:12},{ids:["1A","1B","7","i3","i4"],cap:12},
+    {ids:["1A","1B","7","i1","i2","i3"],cap:14},{ids:["1A","1B","7","i1","i2","i4"],cap:14},{ids:["1A","1B","7","i1","i3","i4"],cap:14},{ids:["1A","1B","7","i2","i3","i4"],cap:14},
+    {ids:["1A","1B","7","i1","i2","i3","i4"],cap:16},
+    {ids:["1A","1B","7","2","3"],cap:15},{ids:["1A","1B","7","3","4"],cap:14},{ids:["1A","1B","7","2","3","4"],cap:18},
+    {ids:["1A","1B","7","5A","5B"],cap:15},{ids:["1A","1B","7","5B","6"],cap:15},{ids:["1A","1B","7","5A","5B","6"],cap:18},
+    {ids:["2","3","4","5A","5B","6"],cap:16},{ids:["2","3","4","5A","5B"],cap:13},{ids:["2","3","4","5B","6"],cap:13},{ids:["2","3","4","5A","5B","6","7"],cap:20},
+    {ids:["2","3","4","5A","5B","6","i1"],cap:20},{ids:["2","3","4","5A","5B","6","i4"],cap:20},
+    {ids:["1A","1B","7","2","3","4","5A","5B","6"],cap:26},{ids:["1A","1B","7","2","3","4","5A","5B"],cap:23},{ids:["1A","1B","7","2","3","4","5B","6"],cap:23}
   ],
   kitchenLimit:3
 };
@@ -52,6 +82,12 @@ export let TIMELINE_TABLES=[];
 // id → "indoor"|"outdoor" — replaces the old isIn(id)=id.startsWith("i") heuristic
 // so zoning is data-driven (booking-logic's isIn reads this).
 export let ZONE_OF={};
+// v15.0.0 Phase 4: combos + physical clusters are now DERIVED (was hard-coded).
+// VALID_COMBOS = [{ids,cap}] (within-run auto combos then megaCombos, in order);
+// CLUSTERS = id → its full ≥2 physical run (standalone → [id]). Reassigned by
+// setLayout; consumed live by booking-logic (comboCap / findBest / canAssign / …).
+export let VALID_COMBOS=[];
+export let CLUSTERS={};
 
 // Derive the table pickers' grouping from a config (live caps, fixed structure).
 function buildTableGroups(cfg){
@@ -61,39 +97,92 @@ function buildTableGroups(cfg){
   });
 }
 
+// Canonical combo key: sorted ids joined by "|". MUST match booking-logic's
+// comboCap / comboCapBest matching (ids.slice().sort().join("|")) so override
+// lookups and combo identity agree across the module boundary.
+export function comboKey(ids){return ids.slice().sort().join("|");}
+
+// Every contiguous sub-run of length ≥2 within an ordered group, by length then
+// start position. The auto-combo generator — shared by buildLayout and the Layout
+// editor (LayoutSettings) so both enumerate combos identically. The L-then-start
+// order is what reproduces the historical VALID_COMBOS order (2+3, 3+4, 2+3+4, …).
+export function contiguousRuns(group){
+  var runs=[];
+  if(!Array.isArray(group)) return runs;
+  for(var L=2;L<=group.length;L++){
+    for(var start=0;start+L<=group.length;start++){
+      runs.push(group.slice(start,start+L));
+    }
+  }
+  return runs;
+}
+
+// Pure derivation: a layout config → every value the app reads at runtime,
+// INCLUDING the combos + clusters (Phase 4). setLayout() assigns the result to the
+// live bindings; the deep-equal verify calls this directly. buildLayout(DEFAULT_LAYOUT)
+// reproduces the pre-Phase-4 hard-coded VALID_COMBOS (40, ordered) + CLUSTERS exactly.
+// Combo fields fall back to DEFAULT_LAYOUT's when absent (e.g. a Phase-3 node that
+// only has tables+kitchenLimit), so an upgrade-in-place stays MGT-correct.
+export function buildLayout(cfg){
+  cfg=(cfg&&typeof cfg==="object")?cfg:DEFAULT_LAYOUT;
+  var tables=(Array.isArray(cfg.tables)&&cfg.tables.length)?cfg.tables:DEFAULT_LAYOUT.tables;
+  // ZONE keeps OUTDOOR-before-INDOOR ordering to preserve the timeline row order
+  // (and ALL_TABLES order) of the original hard-coded layout.
+  var outdoor=tables.filter(function(t){return t.zone!=="indoor";}).map(function(t){return {id:t.id,capacity:t.capacity};});
+  var indoor=tables.filter(function(t){return t.zone==="indoor";}).map(function(t){return {id:t.id,capacity:t.capacity};});
+  var allTables=outdoor.concat(indoor);
+  var zoneOf={};tables.forEach(function(t){zoneOf[t.id]=t.zone==="indoor"?"indoor":"outdoor";});
+  var capOf={};tables.forEach(function(t){capOf[t.id]=t.capacity;});
+  var idSet={};tables.forEach(function(t){idSet[t.id]=true;});
+  // Combo config — fall back to DEFAULT's when a field is absent/malformed.
+  var joinGroups=Array.isArray(cfg.joinGroups)?cfg.joinGroups:DEFAULT_LAYOUT.joinGroups;
+  var comboCaps=(cfg.comboCaps&&typeof cfg.comboCaps==="object")?cfg.comboCaps:DEFAULT_LAYOUT.comboCaps;
+  var megaCombos=Array.isArray(cfg.megaCombos)?cfg.megaCombos:DEFAULT_LAYOUT.megaCombos;
+  // Normalize each run to existing ids only (a removed table drops out of its run).
+  var groups=(joinGroups||[]).map(function(g){return (Array.isArray(g)?g:[]).filter(function(id){return idSet[id];});}).filter(function(g){return g.length>0;});
+  var combos=[];
+  // Within-run auto combos: every contiguous sub-run of length L≥2, by L then start
+  // — this order reproduces the historical VALID_COMBOS layout (e.g. 2+3, 3+4, 2+3+4).
+  groups.forEach(function(g){
+    contiguousRuns(g).forEach(function(run){
+      var key=comboKey(run);
+      var cap=(comboCaps&&comboCaps[key]!=null)?comboCaps[key]:run.reduce(function(a,id){return a+(capOf[id]||0);},0);
+      combos.push({ids:run,cap:cap});
+    });
+  });
+  // Explicit cross-group mega combos, in order — kept only if every member exists.
+  (megaCombos||[]).forEach(function(mc){
+    if(!mc||!Array.isArray(mc.ids)||mc.ids.length<2) return;
+    if(!mc.ids.every(function(id){return idSet[id];})) return;
+    var cap=Number.isFinite(Number(mc.cap))?Number(mc.cap):mc.ids.reduce(function(a,id){return a+(capOf[id]||0);},0);
+    combos.push({ids:mc.ids.slice(),cap:cap});
+  });
+  // Clusters: each table → its full ≥2 physical run, or [id] when standalone.
+  var clusters={};
+  tables.forEach(function(t){
+    var grp=groups.find(function(g){return g.length>=2&&g.indexOf(t.id)>=0;});
+    clusters[t.id]=grp?grp.slice():[t.id];
+  });
+  var kitchenLimit=Number.isFinite(Number(cfg.kitchenLimit))?Number(cfg.kitchenLimit):3;
+  return {
+    OUTDOOR:outdoor,INDOOR:indoor,ALL_TABLES:allTables,TIMELINE_TABLES:allTables,
+    TOTAL_SEATS:allTables.reduce(function(a,t){return a+t.capacity;},0),
+    ZONE_OF:zoneOf,KITCHEN_TABLE_LIMIT:kitchenLimit,
+    TABLE_GROUPS:buildTableGroups({tables:tables}),
+    VALID_COMBOS:combos,CLUSTERS:clusters
+  };
+}
+
 // Reassign the layout-derived bindings from a config. Called by useLayout on each
 // Firebase snapshot, and once at module load (bottom of file) to seed from
 // DEFAULT_LAYOUT. Only this module may reassign its own exports, so the setter
-// lives here. Note: ZONE keeps OUTDOOR-before-INDOOR ordering to preserve the
-// timeline row order (and ALL_TABLES order) of the original hard-coded layout.
+// lives here.
 export function setLayout(cfg){
-  var tables=(cfg&&Array.isArray(cfg.tables)&&cfg.tables.length)?cfg.tables:DEFAULT_LAYOUT.tables;
-  OUTDOOR=tables.filter(function(t){return t.zone!=="indoor";}).map(function(t){return {id:t.id,capacity:t.capacity};});
-  INDOOR=tables.filter(function(t){return t.zone==="indoor";}).map(function(t){return {id:t.id,capacity:t.capacity};});
-  ALL_TABLES=OUTDOOR.concat(INDOOR);
-  TIMELINE_TABLES=OUTDOOR.concat(INDOOR);
-  TOTAL_SEATS=ALL_TABLES.reduce(function(a,t){return a+t.capacity;},0);
-  ZONE_OF={};tables.forEach(function(t){ZONE_OF[t.id]=t.zone==="indoor"?"indoor":"outdoor";});
-  KITCHEN_TABLE_LIMIT=(cfg&&Number.isFinite(Number(cfg.kitchenLimit)))?Number(cfg.kitchenLimit):3;
-  TABLE_GROUPS=buildTableGroups({tables:tables});
+  var L=buildLayout(cfg);
+  OUTDOOR=L.OUTDOOR;INDOOR=L.INDOOR;ALL_TABLES=L.ALL_TABLES;TIMELINE_TABLES=L.TIMELINE_TABLES;
+  TOTAL_SEATS=L.TOTAL_SEATS;ZONE_OF=L.ZONE_OF;KITCHEN_TABLE_LIMIT=L.KITCHEN_TABLE_LIMIT;
+  TABLE_GROUPS=L.TABLE_GROUPS;VALID_COMBOS=L.VALID_COMBOS;CLUSTERS=L.CLUSTERS;
 }
-export var VALID_COMBOS=[
-  {ids:["1A","1B"],cap:6},
-  {ids:["2","3"],cap:5},{ids:["3","4"],cap:4},{ids:["2","3","4"],cap:8},
-  {ids:["5A","5B"],cap:5},{ids:["5B","6"],cap:5},{ids:["5A","5B","6"],cap:8},
-  {ids:["i2","i3"],cap:6},{ids:["i3","i4"],cap:6},{ids:["i2","i3","i4"],cap:8},
-  {ids:["i1","i2","i3","i4"],cap:10},
-  {ids:["1A","1B","7","i1"],cap:11},{ids:["1A","1B","7","i2"],cap:10},{ids:["1A","1B","7","i3"],cap:10},{ids:["1A","1B","7","i4"],cap:11},
-  {ids:["1A","1B","7","i1","i2"],cap:12},{ids:["1A","1B","7","i1","i3"],cap:12},{ids:["1A","1B","7","i1","i4"],cap:12},{ids:["1A","1B","7","i2","i3"],cap:12},{ids:["1A","1B","7","i3","i4"],cap:12},
-  {ids:["1A","1B","7","i1","i2","i3"],cap:14},{ids:["1A","1B","7","i1","i2","i4"],cap:14},{ids:["1A","1B","7","i1","i3","i4"],cap:14},{ids:["1A","1B","7","i2","i3","i4"],cap:14},
-  {ids:["1A","1B","7","i1","i2","i3","i4"],cap:16},
-  {ids:["1A","1B","7","2","3"],cap:15},{ids:["1A","1B","7","3","4"],cap:14},{ids:["1A","1B","7","2","3","4"],cap:18},
-  {ids:["1A","1B","7","5A","5B"],cap:15},{ids:["1A","1B","7","5B","6"],cap:15},{ids:["1A","1B","7","5A","5B","6"],cap:18},
-  {ids:["2","3","4","5A","5B","6"],cap:16},{ids:["2","3","4","5A","5B"],cap:13},{ids:["2","3","4","5B","6"],cap:13},{ids:["2","3","4","5A","5B","6","7"],cap:20},
-  {ids:["2","3","4","5A","5B","6","i1"],cap:20},{ids:["2","3","4","5A","5B","6","i4"],cap:20},
-  {ids:["1A","1B","7","2","3","4","5A","5B","6"],cap:26},{ids:["1A","1B","7","2","3","4","5A","5B"],cap:23},{ids:["1A","1B","7","2","3","4","5B","6"],cap:23},
-];
-export var CLUSTERS={"1A":["1A","1B"],"1B":["1A","1B"],"7":["7"],"2":["2","3","4"],"3":["2","3","4"],"4":["2","3","4"],"5A":["5A","5B","6"],"5B":["5A","5B","6"],"6":["5A","5B","6"],"i1":["i1"],"i2":["i2","i3","i4"],"i3":["i2","i3","i4"],"i4":["i2","i3","i4"]};
 // v14.4.0 / v15.0.0: OPEN/CLOSE/GRID_CLOSE + QUARTER_HOURS are runtime-editable
 // (Settings → General → Opening hours), persisted to Firebase (settings/operatingHours)
 // and shared across devices. `let` (not `var`) so the setters below can reassign
