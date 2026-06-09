@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, KITCHEN_TABLE_LIMIT, OPEN, CLOSE } from "../lib/constants";
+import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy,
@@ -62,6 +62,9 @@ export function WalkinForm({
   const wTime = wf.time || nowTime();
   const wDur = wf.customDur || getDur(wSize);
   const wDate = new Date().toISOString().slice(0, 10);
+  // v15.0.0: walk-ins are always for TODAY, so the time bounds + closed notice
+  // read today's per-weekday hours (not the viewed day's).
+  const th = hoursFor(wDate);
   const wS = toMins(wTime);
   const wE = wS + wDur;
 
@@ -335,8 +338,8 @@ export function WalkinForm({
               type="time"
               value={wTime}
               onChange={(e) => setDraft({ ...wf, tables: [], time: e.target.value })}
-              min={String(OPEN).padStart(2, "0") + ":00"}
-              max={CLOSE >= 24 ? "23:59" : String(CLOSE).padStart(2, "0") + ":00"}
+              min={String(th.open).padStart(2, "0") + ":00"}
+              max={th.close >= 24 ? "23:59" : String(th.close).padStart(2, "0") + ":00"}
               className="mgt-hover-scale"
               style={mkInp()}
             />

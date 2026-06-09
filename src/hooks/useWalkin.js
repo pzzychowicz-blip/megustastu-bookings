@@ -47,7 +47,7 @@
 // declared further down BookingApp's body.
 
 import { useState } from "react";
-import { KITCHEN_TABLE_LIMIT } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, hoursFor } from "../lib/constants";
 import {
   getDur, genId, histEntry, nowTime, getKitchenLoad
 } from "../lib/booking-logic";
@@ -91,6 +91,8 @@ export function useWalkin({
     const wf=walkinForm;
     const t=wf.time||nowTime();const size=Number(wf.size)||2;const dur=wf.customDur||getDur(size);
     const wDate=new Date().toISOString().slice(0,10);
+    // v15.0.0: per-weekday hours — block a walk-in when today is marked Closed.
+    if(hoursFor(wDate).closed){setWalkinError("Closed today — walk-ins can't be added. Open today in Settings → Opening hours if this is wrong.");return;}
     const load=getKitchenLoad(bookings,wDate,t,dur,null);
     if(load.starts+1>=KITCHEN_TABLE_LIMIT&&!confirmKitchen){
       setConfirmKitchen("walkin");return;

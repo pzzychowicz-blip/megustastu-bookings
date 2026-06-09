@@ -20,7 +20,7 @@
 // v14.6.0.
 
 import { daySummary } from "../lib/booking-logic";
-import { OPEN, CLOSE, BTN, TOTAL_SEATS } from "../lib/constants";
+import { BTN, TOTAL_SEATS, hoursFor } from "../lib/constants";
 import { mkBtn } from "./atoms";
 
 function hh(n){ return String(((n % 24) + 24) % 24).padStart(2, "0") + ":00"; }
@@ -30,7 +30,13 @@ function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
 export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, onToggle, onOpenWeek }) {
   const s = daySummary(bookings, date, splitHour);
   const hasData = s.totalBookings > 0;
-  const showShifts = shiftsEnabled !== false; // Shifts toggle (Settings → General → Shifts)
+  // v15.0.0: per-weekday hours. The Afternoon/Evening split is ONE global value, so
+  // on a day whose window excludes it (or a closed day) the two shift chips are
+  // meaningless — hide them and show only the hourly bars. Read hoursFor(date) so
+  // this is correct for the viewed day regardless of the live active-day binding.
+  const dh = hoursFor(date);
+  const splitInWindow = !dh.closed && splitHour > dh.open && splitHour < dh.close;
+  const showShifts = shiftsEnabled !== false && splitInWindow; // Shifts toggle (Settings → General → Shifts)
   const maxHourCovers = s.hours.reduce(function(m, h){ return Math.max(m, h.covers); }, 0) || 1;
 
   return (
@@ -98,8 +104,8 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, ope
             <div>
               {showShifts ? (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                  <ShiftChip label={"Afternoon " + hh(OPEN) + "–" + hh(splitHour)} covers={s.afternoon.covers} count={s.afternoon.count} />
-                  <ShiftChip label={"Evening " + hh(splitHour) + "–" + hh(CLOSE)} covers={s.evening.covers} count={s.evening.count} />
+                  <ShiftChip label={"Afternoon " + hh(dh.open) + "–" + hh(splitHour)} covers={s.afternoon.covers} count={s.afternoon.count} />
+                  <ShiftChip label={"Evening " + hh(splitHour) + "–" + hh(dh.close)} covers={s.evening.covers} count={s.evening.count} />
                 </div>
               ) : null}
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>

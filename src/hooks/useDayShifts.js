@@ -18,17 +18,21 @@
 import { useState, useRef, useEffect } from "react";
 import { ref, onValue, set } from "firebase/database";
 import { db } from "../firebase";
-import { OPEN, CLOSE } from "../lib/constants";
+import { weekRange } from "../lib/constants";
 
 // Clamp split strictly inside the service window so BOTH shifts stay non-empty;
-// coerce `enabled` to a boolean (default true). Reads OPEN/CLOSE at call time
-// (live module bindings useOperatingHours may have updated). Defensive against
-// malformed Firebase data.
+// coerce `enabled` to a boolean (default true). v15.0.0: the split is ONE global
+// value, so it's clamped against the STABLE week range (min-open … max-close
+// across the open weekdays) — NOT the volatile active-day OPEN/CLOSE bindings,
+// which would silently rewrite the split based on whichever day is being viewed
+// when this runs (a write-merge hazard). The Summary hides the shift chips on a
+// day whose window excludes the split. Defensive against malformed Firebase data.
 function sanitizeShifts(raw){
   const src = raw && typeof raw === "object" ? raw : {};
+  const wr = weekRange();
   let s = Math.round(Number(src.split));
   if(!Number.isFinite(s)) s = 17;
-  s = Math.max(OPEN + 1, Math.min(CLOSE - 1, s));
+  s = Math.max(wr.minOpen + 1, Math.min(wr.maxClose - 1, s));
   return { split: s, enabled: src.enabled !== false };
 }
 
