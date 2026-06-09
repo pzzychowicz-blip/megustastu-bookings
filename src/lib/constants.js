@@ -55,10 +55,13 @@ export var DEFAULT_LAYOUT={
   kitchenLimit:3
 };
 
-// The physical-cluster grouping for the table pickers. v15.0.0: the structure
-// (which tables cluster + the combo-hint notes + zone colour) stays fixed here;
-// each chip's `cap` is pulled LIVE from the layout config (so a capacity edit
-// reflects in the picker). Phase 4 will derive the structure from join-groups.
+// The physical-cluster grouping for the table pickers — the CURATED MGT layout.
+// v15.0.0: used ONLY when IS_MGT_LAYOUT (detect-and-apply, same gate as the
+// optimizer). It encodes MGT-specific curation a generic rule can't reproduce:
+// standalone table 7 is shown alongside the 1A/1B run, i1 sits on its own, and
+// the notes mention mega-combo hints ("all 4 indoor = 10"). Each chip's `cap` is
+// pulled LIVE from the layout config. Any layout edit flips IS_MGT_LAYOUT false →
+// buildGenericTableGroups (below) derives the picker grouping from join-groups.
 var TABLE_GROUP_STRUCT=[
   {name:"Tables: 1A / 1B / 7",color:"#78716c",note:"1A+1B = 6 · table 7 = 4 standalone",ids:["1A","1B","7"]},
   {name:"Tables: 2 / 3 / 4",color:"#78716c",note:"2+3 = 5 · 3+4 = 4 · 2+3+4 = 8",ids:["2","3","4"]},
@@ -95,12 +98,51 @@ export let CLUSTERS={};
 // layout change, so an untouched install always takes the MGT path (zero regression).
 export let IS_MGT_LAYOUT=true;
 
-// Derive the table pickers' grouping from a config (live caps, fixed structure).
+// MGT picker grouping (live caps, curated structure). Used only on the MGT path.
 function buildTableGroups(cfg){
   var capOf={};(cfg.tables||[]).forEach(function(t){capOf[t.id]=t.capacity;});
   return TABLE_GROUP_STRUCT.map(function(g){
     return {name:g.name,color:g.color,note:g.note,tables:g.ids.map(function(id){return {id:id,cap:capOf[id]!=null?capOf[id]:2};})};
   });
+}
+
+// Generic picker grouping for a CUSTOM layout (the !IS_MGT_LAYOUT path). One
+// section per join-group (its within-run auto-combo caps become the hint note),
+// then standalone tables collected per zone. Same colour convention as the MGT
+// struct (outdoor stone / indoor violet) and the same {name,color,note,tables}
+// shape the pickers consume. Combo notes use the SAME cap rule as buildLayout
+// (comboCaps override else Σ member caps) so picker hints match the optimizer.
+function buildGenericTableGroups(cfg){
+  var tables=(Array.isArray(cfg.tables)&&cfg.tables.length)?cfg.tables:DEFAULT_LAYOUT.tables;
+  var capOf={};tables.forEach(function(t){capOf[t.id]=t.capacity;});
+  var zoneOf={};tables.forEach(function(t){zoneOf[t.id]=t.zone==="indoor"?"indoor":"outdoor";});
+  var idSet={};tables.forEach(function(t){idSet[t.id]=true;});
+  var comboCaps=(cfg.comboCaps&&typeof cfg.comboCaps==="object")?cfg.comboCaps:{};
+  var rawGroups=Array.isArray(cfg.joinGroups)?cfg.joinGroups:[];
+  var groups=rawGroups.map(function(g){return (Array.isArray(g)?g:[]).filter(function(id){return idSet[id];});}).filter(function(g){return g.length>0;});
+  var grouped={};groups.forEach(function(g){g.forEach(function(id){grouped[id]=true;});});
+  var out=[];
+  groups.forEach(function(g){
+    var indoor=g.every(function(id){return zoneOf[id]==="indoor";});
+    var note=contiguousRuns(g).map(function(run){
+      var key=comboKey(run);
+      var cap=(comboCaps[key]!=null)?comboCaps[key]:run.reduce(function(a,id){return a+(capOf[id]||0);},0);
+      return run.join("+")+" = "+cap;
+    }).join(" · ");
+    out.push({name:"Tables: "+g.join(" / "),color:indoor?"#7c3aed":"#78716c",note:note||null,
+      tables:g.map(function(id){return {id:id,cap:capOf[id]};})});
+  });
+  // Standalone tables (in no join-group), split by zone for sensible colouring.
+  ["outdoor","indoor"].forEach(function(zone){
+    var stand=tables.filter(function(t){return !grouped[t.id]&&zoneOf[t.id]===zone;});
+    if(!stand.length) return;
+    out.push({
+      name:stand.length>1?("Standalone ("+zone+")"):("Table: "+stand[0].id),
+      color:zone==="indoor"?"#7c3aed":"#78716c",note:null,
+      tables:stand.map(function(t){return {id:t.id,cap:t.capacity};})
+    });
+  });
+  return out;
 }
 
 // Canonical combo key: sorted ids joined by "|". MUST match booking-logic's
@@ -174,7 +216,10 @@ export function buildLayout(cfg){
     OUTDOOR:outdoor,INDOOR:indoor,ALL_TABLES:allTables,TIMELINE_TABLES:allTables,
     TOTAL_SEATS:allTables.reduce(function(a,t){return a+t.capacity;},0),
     ZONE_OF:zoneOf,KITCHEN_TABLE_LIMIT:kitchenLimit,
-    TABLE_GROUPS:buildTableGroups({tables:tables}),
+    // Generic picker grouping; setLayout swaps in the curated MGT struct when the
+    // signature matches (detect-and-apply). The deep-equal verify only checks the
+    // LIVE binding (set by setLayout), so this generic default is fine here.
+    TABLE_GROUPS:buildGenericTableGroups({tables:tables,joinGroups:joinGroups,comboCaps:comboCaps}),
     VALID_COMBOS:combos,CLUSTERS:clusters
   };
 }
@@ -199,8 +244,11 @@ export function setLayout(cfg){
   var L=buildLayout(cfg);
   OUTDOOR=L.OUTDOOR;INDOOR=L.INDOOR;ALL_TABLES=L.ALL_TABLES;TIMELINE_TABLES=L.TIMELINE_TABLES;
   TOTAL_SEATS=L.TOTAL_SEATS;ZONE_OF=L.ZONE_OF;KITCHEN_TABLE_LIMIT=L.KITCHEN_TABLE_LIMIT;
-  TABLE_GROUPS=L.TABLE_GROUPS;VALID_COMBOS=L.VALID_COMBOS;CLUSTERS=L.CLUSTERS;
+  VALID_COMBOS=L.VALID_COMBOS;CLUSTERS=L.CLUSTERS;
   IS_MGT_LAYOUT=(layoutSignature(L)===MGT_SIGNATURE);
+  // Picker grouping: curated MGT struct on the MGT path (built from the resolved
+  // tables so caps stay live), else the generic join-group derivation.
+  TABLE_GROUPS=IS_MGT_LAYOUT?buildTableGroups({tables:L.ALL_TABLES}):L.TABLE_GROUPS;
 }
 // v14.4.0 / v15.0.0: OPEN/CLOSE/GRID_CLOSE + QUARTER_HOURS are runtime-editable
 // (Settings → General → Opening hours), persisted to Firebase (settings/operatingHours)

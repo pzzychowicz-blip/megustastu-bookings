@@ -342,6 +342,7 @@ export function SettingsContent({
   onSaveOptimizer,
   layout,
   onSaveLayout,
+  bookings,
   reminders,
   onAddReminder,
   onEditReminder,
@@ -352,7 +353,7 @@ export function SettingsContent({
   if (tab === "general") {
     content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} />;
   } else if (tab === "layout") {
-    content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} />;
+    content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent

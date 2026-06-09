@@ -1430,6 +1430,7 @@ function BookingApp(){
             onSaveOptimizer={saveOptimizerSettings}
             layout={layout}
             onSaveLayout={saveLayout}
+            bookings={bookings}
             tab={settingsTab}
             setTab={setSettingsTab}
             reminders={reminders}

@@ -15,7 +15,8 @@
 // Write-guard mirrors usePersistence: a `loaded` ref refuses writes until the
 // initial read completes, AND a layout with no tables is refused (the layout
 // equivalent of the empty-array guard) so a malformed write can't wipe the tables.
-// v15.0.0 ships the capacity/zone editor; add/remove + combos arrive in Phase 4.
+// v15.0.0 ships the full editor: tables (add/remove/rename, capacity, zone),
+// join-groups, auto-combo caps, and cross-group combos — all via LayoutTabContent.
 
 import { useState, useRef, useEffect } from "react";
 import { ref, onValue, set } from "firebase/database";
@@ -53,10 +54,19 @@ function sanitizeLayout(val){
   if(!Number.isFinite(kitchenLimit)) kitchenLimit = 3;
   kitchenLimit = Math.max(1, Math.min(20, kitchenLimit));
 
-  // joinGroups: arrays of existing ids; empty groups dropped.
+  // joinGroups: arrays of existing ids; empty groups dropped. A table may belong
+  // to only ONE group (CLUSTERS uses .find = first match), so an id already claimed
+  // by an earlier group — or repeated within a group — is filtered out (first-wins).
   const rawGroups = Array.isArray(val.joinGroups) ? val.joinGroups : DEFAULT_LAYOUT.joinGroups;
+  const usedInGroup = {};
   const joinGroups = (rawGroups || [])
-    .map(function(g){ return (Array.isArray(g) ? g : []).map(String).filter(function(id){ return idSet[id]; }); })
+    .map(function(g){
+      return (Array.isArray(g) ? g : []).map(String).filter(function(id){
+        if(!idSet[id] || usedInGroup[id]) return false;
+        usedInGroup[id] = true;
+        return true;
+      });
+    })
     .filter(function(g){ return g.length > 0; });
 
   // comboCaps: numeric overrides (1–60); keys whose ids all still exist are kept.
