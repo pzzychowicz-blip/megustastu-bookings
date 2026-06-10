@@ -2514,3 +2514,24 @@ The 3 deferred editors landed on the same branch, completing the Layout tab so t
 
 **Behavioural change:** still none for an untouched (default = MGT) install -- the editors only change behaviour when staff edit the config; the MGT picker/optimizer paths are byte-for-byte the originals behind `IS_MGT_LAYOUT`.
 
+## v15.0.0 -> v15.0.1 -- Layout-editor polish: the 4 deferred review nits + .gitignore
+
+**Date**: 2026-06-10
+**Branch**: `feat/v15.0.1-layout-editor-polish` -> PR to `main`
+**Status**: refactor/polish patch -- **app version 15.0.0 -> 15.0.1**. Applies the 4 minor findings the v15.0.0 xhigh code review flagged but didn't block on, plus the long-deferred `.claude/` gitignore.
+
+### What
+1. **Lazy generic `TABLE_GROUPS`** (`src/lib/constants.js`). `buildLayout` no longer eagerly computes `buildGenericTableGroups(...)` (which `setLayout` discarded on the MGT path every Firebase snapshot). Its return now carries a `makeTableGroups()` closure; `setLayout` calls it only on the `!IS_MGT_LAYOUT` branch.
+2. **Single auto-combo cap rule** (`src/lib/constants.js`). `buildGenericTableGroups` no longer re-implements the "comboCaps override else Σ member caps" rule -- `buildLayout` records `runCapByKey[comboKey(run)]` while generating the auto combos, and the generic picker notes read from it. One rule, computed once; the function's signature changed to take buildLayout's already-normalized inputs (`tables, groups, runCapByKey, capOf, zoneOf`) -- it has exactly one caller (the closure).
+3. **`orphanCount` memoised per row** (`src/components/LayoutSettings.jsx`). The rename-orphan warning JSX called `orphanCount(t.id)` 3x per render (each call re-filters all bookings); now computed once per row (`renameOrph`).
+4. **Rename-collision feedback** (`src/components/LayoutSettings.jsx`). Renaming a table to an existing id (or one containing `|`) used to just silently disable the ✓; now the same inline messages the Add form shows ("A table "X" already exists." / "A table id can't contain '|'.") render under the row.
+5. **`.gitignore`**: added `.claude/` (session-local launch.json + worktrees; verified nothing tracked under it).
+
+### Verification
+- **Node suite green** (the `/tmp/verify-phase4` rig, repointed; `groups.mjs` updated for the lazy field -> `makeTableGroups()`): deep-equal linchpin (`buildLayout(DEFAULT_LAYOUT)` = 40 ordered combos + CLUSTERS, live `TABLE_GROUPS` length 5); mutation battery; generic-grouping test (the comboCaps override `A+B = 5` flows into the picker note via `runCapByKey` -- proving the single rule); **optimizer baseline diff byte-for-byte identical**.
+- `npm run build` OK -- main bundle **177.56 kB gz** (-0.04 vs 15.0.0's 177.60).
+- **Live (Preview bridge, DEV, dark theme):** rename 1A->"1B" shows "already exists" + ✓ disabled; "1|X" shows the `|` message + ✓ disabled; valid rename with a real future booking shows the orphan warning (via the new single-call `renameOrph`) with ✓ enabled (cancelled, nothing saved); cap nudge on table 7 (4->5) exercised the **generic `setLayout` branch live** (lazy `makeTableGroups()` ran, TOTAL_SEATS 29, zero console errors), then reverted (28, `IS_MGT_LAYOUT` restored via the order-independent signature).
+
+### Behavioural change
+Only #4 (the new rename-collision/`|` messages -- pure feedback addition). Everything else is None: identical derived values, identical optimizer output, identical picker groups.
+
