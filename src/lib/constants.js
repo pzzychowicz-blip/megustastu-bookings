@@ -110,24 +110,17 @@ function buildTableGroups(cfg){
 // section per join-group (its within-run auto-combo caps become the hint note),
 // then standalone tables collected per zone. Same colour convention as the MGT
 // struct (outdoor stone / indoor violet) and the same {name,color,note,tables}
-// shape the pickers consume. Combo notes use the SAME cap rule as buildLayout
-// (comboCaps override else Σ member caps) so picker hints match the optimizer.
-function buildGenericTableGroups(cfg){
-  var tables=(Array.isArray(cfg.tables)&&cfg.tables.length)?cfg.tables:DEFAULT_LAYOUT.tables;
-  var capOf={};tables.forEach(function(t){capOf[t.id]=t.capacity;});
-  var zoneOf={};tables.forEach(function(t){zoneOf[t.id]=t.zone==="indoor"?"indoor":"outdoor";});
-  var idSet={};tables.forEach(function(t){idSet[t.id]=true;});
-  var comboCaps=(cfg.comboCaps&&typeof cfg.comboCaps==="object")?cfg.comboCaps:{};
-  var rawGroups=Array.isArray(cfg.joinGroups)?cfg.joinGroups:[];
-  var groups=rawGroups.map(function(g){return (Array.isArray(g)?g:[]).filter(function(id){return idSet[id];});}).filter(function(g){return g.length>0;});
+// shape the pickers consume. v15.0.1: takes buildLayout's already-normalized
+// tables/groups + the runCapByKey it recorded while generating the auto combos,
+// so the picker hints read the SAME caps the optimizer got (one cap rule, not
+// a re-implementation of it).
+function buildGenericTableGroups(tables,groups,runCapByKey,capOf,zoneOf){
   var grouped={};groups.forEach(function(g){g.forEach(function(id){grouped[id]=true;});});
   var out=[];
   groups.forEach(function(g){
     var indoor=g.every(function(id){return zoneOf[id]==="indoor";});
     var note=contiguousRuns(g).map(function(run){
-      var key=comboKey(run);
-      var cap=(comboCaps[key]!=null)?comboCaps[key]:run.reduce(function(a,id){return a+(capOf[id]||0);},0);
-      return run.join("+")+" = "+cap;
+      return run.join("+")+" = "+runCapByKey[comboKey(run)];
     }).join(" · ");
     out.push({name:"Tables: "+g.join(" / "),color:indoor?"#7c3aed":"#78716c",note:note||null,
       tables:g.map(function(id){return {id:id,cap:capOf[id]};})});
@@ -191,10 +184,14 @@ export function buildLayout(cfg){
   var combos=[];
   // Within-run auto combos: every contiguous sub-run of length L≥2, by L then start
   // — this order reproduces the historical VALID_COMBOS layout (e.g. 2+3, 3+4, 2+3+4).
+  // Each run's cap is also recorded (runCapByKey) so the generic picker notes can
+  // reuse it — the comboCaps-override-else-Σ rule lives HERE and only here (v15.0.1).
+  var runCapByKey={};
   groups.forEach(function(g){
     contiguousRuns(g).forEach(function(run){
       var key=comboKey(run);
       var cap=(comboCaps&&comboCaps[key]!=null)?comboCaps[key]:run.reduce(function(a,id){return a+(capOf[id]||0);},0);
+      runCapByKey[key]=cap;
       combos.push({ids:run,cap:cap});
     });
   });
@@ -216,10 +213,10 @@ export function buildLayout(cfg){
     OUTDOOR:outdoor,INDOOR:indoor,ALL_TABLES:allTables,TIMELINE_TABLES:allTables,
     TOTAL_SEATS:allTables.reduce(function(a,t){return a+t.capacity;},0),
     ZONE_OF:zoneOf,KITCHEN_TABLE_LIMIT:kitchenLimit,
-    // Generic picker grouping; setLayout swaps in the curated MGT struct when the
-    // signature matches (detect-and-apply). The deep-equal verify only checks the
-    // LIVE binding (set by setLayout), so this generic default is fine here.
-    TABLE_GROUPS:buildGenericTableGroups({tables:tables,joinGroups:joinGroups,comboCaps:comboCaps}),
+    // Generic picker grouping, LAZY (v15.0.1): setLayout only needs it on the
+    // !IS_MGT_LAYOUT path (the MGT path swaps in the curated struct), so defer
+    // the work instead of computing-and-discarding it on every MGT snapshot.
+    makeTableGroups:function(){return buildGenericTableGroups(tables,groups,runCapByKey,capOf,zoneOf);},
     VALID_COMBOS:combos,CLUSTERS:clusters
   };
 }
@@ -247,8 +244,9 @@ export function setLayout(cfg){
   VALID_COMBOS=L.VALID_COMBOS;CLUSTERS=L.CLUSTERS;
   IS_MGT_LAYOUT=(layoutSignature(L)===MGT_SIGNATURE);
   // Picker grouping: curated MGT struct on the MGT path (built from the resolved
-  // tables so caps stay live), else the generic join-group derivation.
-  TABLE_GROUPS=IS_MGT_LAYOUT?buildTableGroups({tables:L.ALL_TABLES}):L.TABLE_GROUPS;
+  // tables so caps stay live), else the generic join-group derivation (lazy —
+  // only built when actually needed).
+  TABLE_GROUPS=IS_MGT_LAYOUT?buildTableGroups({tables:L.ALL_TABLES}):L.makeTableGroups();
 }
 // v14.4.0 / v15.0.0: OPEN/CLOSE/GRID_CLOSE + QUARTER_HOURS are runtime-editable
 // (Settings → General → Opening hours), persisted to Firebase (settings/operatingHours)

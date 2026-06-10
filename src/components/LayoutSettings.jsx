@@ -259,6 +259,8 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           const editing = editId === t.id;
           const confirming = pendingRemove === t.id;
           const orph = confirming ? orphanCount(t.id) : 0;
+          // Computed once per row (orphanCount re-filters all bookings) — v15.0.1.
+          const renameOrph = editing && editTrim !== t.id && editValid ? orphanCount(t.id) : 0;
           return (
             <div key={t.id} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -298,10 +300,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   </>
                 )}
               </div>
-              {editing && editTrim !== t.id && editValid && orphanCount(t.id) > 0 ? (
+              {editing && renameOrph > 0 ? (
                 <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warn-text)", marginTop: 4 }}>
-                  {orphanCount(t.id)} upcoming booking{orphanCount(t.id) === 1 ? " still references" : "s still reference"} “{t.id}” — they won’t follow the rename.
+                  {renameOrph} upcoming booking{renameOrph === 1 ? " still references" : "s still reference"} “{t.id}” — they won’t follow the rename.
                 </div>
+              ) : null}
+              {/* Why the ✓ is disabled — mirrors the Add form's messages (v15.0.1). */}
+              {editing && editTrim && editTrim.indexOf("|") >= 0 ? (
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warn-text)", marginTop: 4 }}>A table id can’t contain “|”.</div>
+              ) : editing && editTrim && editTrim !== t.id && idSet[editTrim] ? (
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warn-text)", marginTop: 4 }}>A table “{editTrim}” already exists.</div>
               ) : null}
               {confirming ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6, padding: "6px 8px", borderRadius: 8, background: "var(--warn-bg)", border: "1px solid var(--warn-border)" }}>
