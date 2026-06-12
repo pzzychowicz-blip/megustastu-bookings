@@ -175,7 +175,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"15.0.1",
+  version:"15.1.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -419,6 +419,10 @@ function BookingApp(){
   // v14.4.0: List-view keyboard focus — the booking the A/E/D/S/C/Delete
   // shortcuts act on. ↑/↓ move it; click a card to set it. Null = nothing focused.
   const [selectedListId, setSelectedListId] = useState(null);
+  // v15.1.0: List-view "Completed & cancelled" disclosure. Lives HERE (not in
+  // ListView) so listDaySorted can exclude the hidden cards while collapsed —
+  // keeps ↑/↓ focus and the per-card shortcuts in lockstep with what's visible.
+  const [showFinished, setShowFinished] = useState(false);
   const [timelineZoom, setTimelineZoom] = useState(1);
   const timelineScrollRef=useRef(0);
   const [followNow, setFollowNow] = useState(false);
@@ -548,13 +552,26 @@ function BookingApp(){
   // (status group, then time). Drives ↑/↓ keyboard navigation of selectedListId
   // and resolves which booking the List shortcuts act on. Kept identical to
   // ListView's internal sort so the focus ring and the keyboard target match.
+  // v15.1.0: completed/cancelled cards are excluded while the "Completed &
+  // cancelled" disclosure is collapsed — hidden cards must not be keyboard targets.
   const listDaySorted=bookings
-    .filter(function(b){return b.date===viewDate;})
+    .filter(function(b){return b.date===viewDate&&(showFinished||(b.status!=="completed"&&b.status!=="cancelled"));})
     .sort(function(a,b){const sa=statusOrder(a.status),sb=statusOrder(b.status);if(sa!==sb) return sa-sb;return a.time.localeCompare(b.time);});
   // Clear the List focus when the day changes — the focused booking won't be
   // on the new day. (A status change that drops a booking from view just leaves
   // selectedListId pointing at a missing id → shortcuts no-op until it's re-set.)
-  useEffect(function(){setSelectedListId(null);},[viewDate]);
+  // v15.1.0: also re-collapse the finished disclosure on day change.
+  useEffect(function(){setSelectedListId(null);setShowFinished(false);},[viewDate]);
+  // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
+  // finished card holds the keyboard focus, drop the focus — the card is about
+  // to disappear and the shortcuts must not act on an invisible booking.
+  function toggleShowFinished(next){
+    if(!next&&selectedListId){
+      const sel=bookings.find(function(b){return b.id===selectedListId;});
+      if(sel&&(sel.status==="completed"||sel.status==="cancelled")) setSelectedListId(null);
+    }
+    setShowFinished(next);
+  }
 
   // Overlap warnings: seated bookings whose live end is within 15 min of next booking on same table
   const overlapWarnings=(function(){
@@ -1273,7 +1290,9 @@ function BookingApp(){
     nowMins={nowMins}
     warnings={overlapWarnings}
     selectedId={selectedListId}
-    onSelect={setSelectedListId} />;
+    onSelect={setSelectedListId}
+    showFinished={showFinished}
+    onToggleFinished={toggleShowFinished} />;
 
 
   const summaryPanel=<Summary

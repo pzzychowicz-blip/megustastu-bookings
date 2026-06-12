@@ -20,15 +20,23 @@
 // inline `liveDur` / `elapsedMin` calculations stay here — they have
 // different semantics from TimelineView's `liveBarDur` (end-time pinned to
 // plan vs live bar width) and aren't shared.
+//
+// v15.1.0: completed + cancelled cards moved behind a controlled Collapsible
+// ("Completed & cancelled"), collapsed by default for a cleaner day view.
+// The open state (`showFinished`) lives in BookingApp — NOT here — so the
+// List keyboard model (↑/↓ over listDaySorted + per-card shortcuts) can
+// exclude the hidden cards while the disclosure is closed. The card JSX is
+// unchanged, just hoisted into renderCard() so both groups share it.
 
 import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder } from "../lib/booking-logic";
-import { SmallTag, SBadge, TBadge, mkBtn } from "./atoms";
+import { SmallTag, SBadge, TBadge, mkBtn, Collapsible } from "./atoms";
 
 export function ListView({
   bookings, date, onEdit, onStatus, onDelete, onManual,
   nowMins = 0, warnings = {},
-  selectedId = null, onSelect = () => {}
+  selectedId = null, onSelect = () => {},
+  showFinished = false, onToggleFinished = () => {}
 }) {
   const day = bookings
     .filter((b) => b.date === date)
@@ -47,9 +55,12 @@ export function ListView({
     );
   }
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {day.map((b) => {
+  // statusOrder already sorts completed/cancelled last, so splitting here
+  // preserves the exact visual order the inline list had.
+  const active = day.filter((b) => b.status !== "completed" && b.status !== "cancelled");
+  const finished = day.filter((b) => b.status === "completed" || b.status === "cancelled");
+
+  function renderCard(b) {
         // v14 p1 (Issue 2 fix): end-time label is pinned to the scheduled plan
         // (time + duration) while the guest is within plan; once they overstay,
         // syncLiveDurations bumps b.duration to elapsed and the label starts
@@ -199,7 +210,24 @@ export function ListView({
             </div>
           </div>
         );
-      })}
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {active.map(renderCard)}
+      {finished.length > 0 ? (
+        <Collapsible
+          title="Completed & cancelled"
+          summary={finished.length + (finished.length === 1 ? " booking" : " bookings")}
+          open={showFinished}
+          onToggle={onToggleFinished}
+          style={{ marginBottom: 0 }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {finished.map(renderCard)}
+          </div>
+        </Collapsible>
+      ) : null}
     </div>
   );
 }
