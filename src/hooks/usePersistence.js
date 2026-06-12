@@ -21,7 +21,23 @@
 import { useState, useRef, useEffect } from "react";
 import { ref, onValue, set } from "firebase/database";
 import { db } from "../firebase";
-import { sanitizeAll, toMins, bookingsAfterAction } from "../lib/booking-logic";
+import { sanitizeAll, toMins, bookingsAfterAction, histEntry } from "../lib/booking-logic";
+import { hoursFor } from "../lib/constants";
+
+// v15.1.0: has `dateStr`'s closing moment already passed? Used by the
+// auto-extend effect (to skip) and the auto-complete effect (to trigger).
+// A booking's closing moment is its OWN date's per-weekday close (hoursFor —
+// may be 24/25, i.e. past midnight), expressed in minutes since that date's
+// midnight. "Now" on the same axis is dayDiff*1440 + nowMins (all-UTC date
+// strings, the app's date convention). Returns the close-in-minutes when it
+// has passed, else null (also null for future dates). hoursFor is called at
+// run time per the constants.js live-binding rule.
+function pastCloseMins(dateStr, todayStr, nowMins){
+  const dayDiff=Math.round((Date.parse(todayStr)-Date.parse(dateStr))/86400000);
+  if(dayDiff<0) return null; // future date — its close can't have passed
+  const closeMins=hoursFor(dateStr).close*60;
+  return (dayDiff*1440+nowMins)>=closeMins?closeMins:null;
+}
 
 export function usePersistence({ autoOptimizer, nowMins }){
   const [bookings, setBookings] = useState([]);
@@ -155,6 +171,10 @@ export function usePersistence({ autoOptimizer, nowMins }){
     let needsUpdate=false;
     const updated=bookings.map(function(b){
       if(b.date!==today||b.status!=="seated") return b;
+      // v15.1.0: a seated booking past its date's close belongs to the
+      // auto-complete effect below — skip it here so the same 15s tick
+      // doesn't extend it and then immediately complete it (one write, not two).
+      if(pastCloseMins(b.date,today,nowMins)!==null) return b;
       const elapsed=nowMins-toMins(b.time);
       if(elapsed>b.duration){needsUpdate=true;return Object.assign({},b,{duration:elapsed,customDur:elapsed});}
       return b;
@@ -165,6 +185,38 @@ export function usePersistence({ autoOptimizer, nowMins }){
     if(key===lastExtend.current) return;
     lastExtend.current=key;
     saveBookings(bookingsAfterAction(updated,today,tableBlocks,null,false,autoOptimizer),true); // silent — non-interactive auto-extend
+  },[nowMins,tableBlocks,autoOptimizer,bookings]);
+
+  // v15.1.0: Auto-complete after closing time — any booking still `seated`
+  // once its own date's closing moment has passed flips to `completed`
+  // automatically. Mirrors the manual updateStatus("completed") path in
+  // App.jsx: the duration is frozen at the close moment (auto-extend grew it
+  // live while seated, so close is the natural cap) and the audit trail
+  // records the flip as "auto" so HistoryPopup shows it wasn't a staff tap.
+  // Same contract as the auto-extend effect above: pure pass first, write
+  // only when something actually flips, route through bookingsAfterAction,
+  // isSilent=true. No loop: the post-write snapshot echo re-runs this effect
+  // but the flipped bookings are no longer seated. Past-midnight closes
+  // (close = 24/25) are handled by pastCloseMins: yesterday's seated party
+  // completes only when that day's 00:00/01:00 close actually passes — never
+  // at the midnight date rollover itself.
+  useEffect(function(){
+    if(!bookingsLoaded.current) return; // no work to do until initial read lands
+    const today=new Date().toISOString().slice(0,10);
+    let needsUpdate=false;
+    const updated=bookings.map(function(b){
+      if(b.status!=="seated") return b;
+      const closeMins=pastCloseMins(b.date,today,nowMins);
+      if(closeMins===null) return b;
+      needsUpdate=true;
+      const dur=Math.max(15,closeMins-toMins(b.time));
+      return Object.assign({},b,{
+        status:"completed",duration:dur,customDur:dur,
+        history:(b.history||[]).concat([histEntry("status → completed (auto, after closing)","auto")])
+      });
+    });
+    if(!needsUpdate) return;
+    saveBookings(bookingsAfterAction(updated,today,tableBlocks,null,false,autoOptimizer),true); // silent — non-interactive auto-complete
   },[nowMins,tableBlocks,autoOptimizer,bookings]);
 
   return {

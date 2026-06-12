@@ -164,17 +164,26 @@ export function Section({ style, children }) {
 // shows when open, keeping the collapsed header a single line. Uncontrolled (owns
 // its open state) — settings disclosures don't need the state lifted to a parent.
 //
+// v15.1.0: optional CONTROLLED mode — pass a boolean `open` + `onToggle` and the
+// parent owns the state (the internal useState is ignored). Needed by ListView's
+// "Completed & cancelled" disclosure, whose open state must live in BookingApp so
+// the List keyboard model (↑/↓ over listDaySorted) can exclude hidden cards.
+// Omitting `open` keeps the original uncontrolled behaviour (all Settings call
+// sites unchanged).
+//
 // No `.mgt-hover-scale` on the header: it's a full-width row and the Settings
 // modal card is overflow:hidden, so a 1.08 scale would clip at the card edge.
 // The rotating chevron + pointer cursor carry the affordance instead.
-export function Collapsible({ title, subtitle, summary, defaultOpen = false, children, style }) {
-  const [open, setOpen] = useState(defaultOpen === true);
+export function Collapsible({ title, subtitle, summary, defaultOpen = false, open: openProp, onToggle, children, style }) {
+  const [openState, setOpen] = useState(defaultOpen === true);
+  const controlled = typeof openProp === "boolean";
+  const open = controlled ? openProp : openState;
   return (
     <Section style={{ marginBottom: 18, ...(style || {}) }}>
       <button
         type="button"
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => { if (controlled) { if (onToggle) onToggle(!open); } else { setOpen((o) => !o); } }}
         style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
           gap: 12, background: "transparent", border: "none", padding: 0, margin: 0,

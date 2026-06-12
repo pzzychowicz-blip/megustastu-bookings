@@ -243,18 +243,27 @@
          paint-only (transform) so hovering never reflows neighbours, and uses
          box-shadow (NOT blur) so it doesn't count against the ≤4 backdrop-
          filter:blur() limit. Contract (scale 1.08 / 120ms / 12px / the
-         :hover:not(:disabled) guard / token --bg-hover-card) MUST match
-         Scheduling exactly — improve it in one app, port the change to both. */
+         :hover:not(:disabled) guard / token --bg-hover-card / the
+         hover-capability media guard) MUST match Scheduling exactly —
+         improve it in one app, port the change to both.
+         v15.1.0: the :hover rule is wrapped in @media (hover:hover) and
+         (pointer:fine). iOS Safari makes :hover STICKY after a tap, so on
+         touch devices the last-tapped element stayed scaled 1.08 — full-width
+         form inputs (Date/Time in the booking form) visibly overflowed their
+         Section. Touch devices get no hover lift at all now; mouse/trackpad
+         behaviour is unchanged. */
       .mgt-hover-scale {
         transition: transform 120ms ease, background-color 120ms ease, box-shadow 120ms ease, border-radius 120ms ease;
       }
-      .mgt-hover-scale:hover:not(:disabled) {
-        transform: scale(1.08);
-        background-color: var(--bg-hover-card);
-        box-shadow: var(--shadow-soft);
-        border-radius: 12px;
-        position: relative;
-        z-index: 2;
+      @media (hover: hover) and (pointer: fine) {
+        .mgt-hover-scale:hover:not(:disabled) {
+          transform: scale(1.08);
+          background-color: var(--bg-hover-card);
+          box-shadow: var(--shadow-soft);
+          border-radius: 12px;
+          position: relative;
+          z-index: 2;
+        }
       }
     </style>
   </head>
