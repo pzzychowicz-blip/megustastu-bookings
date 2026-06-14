@@ -2556,3 +2556,30 @@ Only #4 (the new rename-collision/`|` messages -- pure feedback addition). Every
 ### Behavioural change
 1 and 2 are deliberate user-facing changes. 3 removes hover lifts on touch devices only (they were never functional there -- just the stuck-scale bug).
 
+---
+
+## v15.1.0 -> v15.1.1 -- Walk-in showed an overstaying seated table as available (half-open boundary bug)
+
+**Date**: 2026-06-14
+**Branch**: `feat/v15.1.1-walkin-seated-overstay-availability` -> PR to `main`
+**Status**: bug-fix patch -- **app version 15.1.0 -> 15.1.1**.
+
+### Symptom
+A booking is `seated` and the guests are still at the table past their planned end (e.g. a 90-min booking now at 98 min). Opening **Walk-in** showed that table as **available** -- it must not, someone is physically sitting there.
+
+### Root cause
+A half-open-interval boundary collision. `syncLiveDurations` (booking-logic.js) extends an overstaying seated booking to `duration = elapsed = now - start`, so its live end = **exactly now**. The Walk-in form defaults its time to `nowTime()` (so the query starts at `now`), and availability uses `getBusy` -> `overlaps(s1,e1,s2,e2) = s1<e2 && e1>s2`. For the overstayer `slot.e = now = queryStart`, so `queryStart < slot.e` -> `now < now` -> **false** -> the table read free while the guest was still seated.
+
+### Fix
+New pure helper **`occupancyEnd(b, nowM)`** in `src/lib/booking-logic.js`: for a still-`seated` booking whose end has reached/passed `nowM` (overstay), return `nowM + 1` so a query at `now` overlaps it; otherwise return the natural end. Only `seated` bookings extend (a no-show `confirmed` past its time stays free). Applied at the two slot-construction sites that read `liveBookings` durations: the Walk-in availability array `wOther` (WalkinForm.jsx -- feeds both the table-grid busy guard and the auto best-fit / "No tables available" banner; `nowMins` threaded as a new prop) and the booking-form manual-assign validity guard (App.jsx, `ex` before `canAssign`).
+
+**Keyed on `nowMins`, NOT the query window.** The first implementation passed `(b, qStart, qEnd)` and stretched to `qEnd` when `e <= qStart` -- live testing caught that this **over-blocked**: a walk-in whose time was set into the future read a long-finished seated table as busy (because `e <= qStart` holds for any past end). Re-keying on the real current minute fixes the reported now-boundary while leaving future queries free (the guest is expected to have left by then). `syncLiveDurations` was deliberately left untouched (it feeds the optimizer and is persisted via `bookingsAfterAction`; baking a grace there would pollute stored data and drift the optimizer) -- this mirrors the existing transient-stretch pattern in `reassignBooking`.
+
+### Verification
+- `npm run build` OK -- main bundle **178.00 kB gz** (+0.05 vs 15.1.0's 177.95), 62 modules (no new files).
+- **Node unit suite** (verbatim `toMins`/`overlaps`/`getBusy`/`occupancyEnd`): overstayer -> `now+1`; `getBusy` BEFORE the fix reads the overstayer's table free at the now window / AFTER reads it busy; seated-within-plan unchanged (busy during window, free for a future query past its end); confirmed no-show past its time stays free; and the regression the live run caught -- an overstayer does **not** block a future walk-in time. All green.
+- **Live (Preview bridge, DEV):** wiring confirmed, zero console errors; with the corrected helper a walk-in time inside a seated booking's window reads busy and one past its end reads free (no over-block). A genuine "now >= seated end" overstayer could not be staged live because the real clock preceded the 13:00 opening hours (nothing can be both seated and past-end before opening, and the booking-form save path enforces opening hours) -- that exact case is covered by the node suite's BEFORE/AFTER `getBusy` assertions.
+
+### Behavioural change
+Bug fix: a still-seated (overstaying) table now correctly reads busy in Walk-in (and in the booking-form manual-assign guard) for a now query; no other behaviour changes.
+

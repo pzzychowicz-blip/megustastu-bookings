@@ -73,6 +73,22 @@ export function getBlockSlots(blocks,date){
   });
 }
 export function getBusy(slots,s,e){var busy=new Set();slots.forEach(function(sl){if(!overlaps(s,e,sl.s,sl.e)) return;sl.tables.forEach(function(id){busy.add(id);});});return busy;}
+// v15.1.1: occupancy end-minute of booking `b` for availability checks, given
+// the real current minute `nowM`. A still-`seated` guest physically holds the
+// table THROUGH now even once their live end has reached the present minute
+// (overstay): syncLiveDurations sets a seated overstayer's end to exactly `now`,
+// and getBusy's half-open overlap (s1<e2) then reads the slot as FREE for a
+// walk-in starting at that same minute. For an overstaying seated booking
+// (e<=nowM) we extend the end to nowM+1 so a query at `now` reads busy.
+// Deliberately keyed on `nowM`, NOT the query window: a FUTURE query (a walk-in
+// time set past now) must still see the table free — the guest is expected to
+// have left by then. Non-overstaying seated bookings (e>nowM) and any non-seated
+// booking are returned unchanged (a no-show `confirmed` past its time stays free).
+export function occupancyEnd(b,nowM){
+  var e=toMins(b.time)+(b.duration||90);
+  if(b.status==="seated"&&e<=nowM) return nowM+1;
+  return e;
+}
 export function canAssign(ids,slots,s,e){
   var busy=getBusy(slots,s,e);
   if(ids.some(function(id){return busy.has(id);})) return false;
