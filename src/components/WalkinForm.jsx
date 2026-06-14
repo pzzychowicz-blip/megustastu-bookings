@@ -38,7 +38,7 @@
 import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor } from "../lib/constants";
 import {
   toMins, toTime, getDur,
-  getBlockSlots, getBusy,
+  getBlockSlots, getBusy, occupancyEnd,
   findBest, findBestAny,
   optimizerActiveFor, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes,
@@ -51,7 +51,7 @@ export function WalkinForm({
   draft, setDraft,
   error,
   liveBookings, bookings, tableBlocks, autoOptimizer,
-  walkinNum, isMobile,
+  walkinNum, isMobile, nowMins = 0,
   onSave, onClose
 }) {
   const wf = draft;
@@ -76,7 +76,11 @@ export function WalkinForm({
     .map((b) => ({
       tables: b.tables || [],
       s: toMins(b.time),
-      e: toMins(b.time) + (b.duration || 90)
+      // v15.1.1: a still-seated guest holds the table NOW even when overstaying
+      // (their live end == now); occupancyEnd extends it to nowMins+1 so getBusy/
+      // findBest don't offer an occupied table to a walk-in starting now. Keyed on
+      // nowMins (not wS) so a future-dated walk-in time stays free. See booking-logic.
+      e: occupancyEnd(b, nowMins)
     }))
     .concat(getBlockSlots(tableBlocks, wDate));
   const wBusy = getBusy(wOther, wS, wE);

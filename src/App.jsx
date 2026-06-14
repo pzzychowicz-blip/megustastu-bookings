@@ -34,7 +34,7 @@ import {
   getBlockSlots, canAssign,
   getKitchenLoad,
   applyOpt,
-  optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction,
+  optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
   checkInefficent,
   nowTime
 } from "./lib/booking-logic";
@@ -175,7 +175,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"15.1.0",
+  version:"15.1.1",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -674,7 +674,7 @@ function BookingApp(){
       const dur=f.customDur||getDur(size);
       const cleanPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";
       const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
-      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
+      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
       if(editId){
         const orig=bookings.find(function(b){return b.id===editId;});
         const origPt=(orig&&Array.isArray(orig.preferredTables))?orig.preferredTables.slice().sort().join(","):"";
@@ -1330,6 +1330,7 @@ function BookingApp(){
     autoOptimizer={autoOptimizer}
     walkinNum={getNextWalkinNum()}
     isMobile={isMobile}
+    nowMins={nowMins}
     onSave={saveWalkin}
     onClose={function(){setShowWalkin(false);}} />:null;
 
