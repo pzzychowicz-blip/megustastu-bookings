@@ -175,7 +175,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"15.3.0",
+  version:"15.4.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -748,7 +748,8 @@ function BookingApp(){
           const editedInFin=fin.find(function(b){return b.id===editId;});
           if(editedInFin&&(!editedInFin.tables||!editedInFin.tables.length)){setError("No tables available at this time — see suggestions below.");return;}
         }
-        saveBookings(fin);if(needsR||swapAffected||f.status==="completed"||seatingNow) flash();setShowForm(false);setViewDate(f.date);
+        if(!saveBookings(fin)){setError("Syncing the latest data — please tap Save again in a moment.");return;}
+        if(needsR||swapAffected||f.status==="completed"||seatingNow) flash();setShowForm(false);setViewDate(f.date);
       } else {
         const newId=genId();
         // v14: Book Again flow. When f.returnOf is set, the new booking links
@@ -783,7 +784,8 @@ function BookingApp(){
           const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
           if(kicked.length>0){setError("Not enough capacity — adding this booking would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");return;}
         }
-        saveBookings(fin);flash();setShowForm(false);setViewDate(f.date);
+        if(!saveBookings(fin)){setError("Syncing the latest data — please tap Save again in a moment.");return;}
+        flash();setShowForm(false);setViewDate(f.date);
       }
     }catch(err){setError("Error: "+err.message);}
   }
@@ -798,7 +800,7 @@ function BookingApp(){
     setConfirmKitchen(null);doSave();
   }
 
-  function forceReshuffle(){saveBookings(function(b){return applyOpt(b,viewDate,tableBlocks);});flash();}
+  function forceReshuffle(){if(saveBookings(function(b){return applyOpt(b,viewDate,tableBlocks);})) flash();}
   // Reassign a single booking to a different set of tables without touching any
   // other booking. Used by the overlap warning's Reassign button when Optimizer
   // is OFF and staff need a quick escape hatch for a booking about to be crowded
@@ -848,14 +850,14 @@ function BookingApp(){
     if(curKey===newKey){setError("No alternative tables available for "+target.name+" at "+target.time+".");return;}
     const prevTables=(target.tables||[]).join("+")||"none";
     const user=getUser();
-    saveBookings(function(prev){return prev.map(function(b){
+    const ok=saveBookings(function(prev){return prev.map(function(b){
       if(b.id!==id) return b;
       return Object.assign({},b,{tables:tables,_manual:false,_conflict:false,history:(b.history||[]).concat([histEntry("reassigned "+prevTables+" → "+tables.join("+"),user)])});
     });});
     setError("");
-    flash();
+    if(ok) flash();
   }
-  function delBooking(id){saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);flash();}
+  function delBooking(id){const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);if(ok) flash();}
 
   // v14 preview 3: Global keyboard shortcuts. Uses a ref to capture the latest
   // state and action callbacks on every render so the window-level keydown
@@ -1120,7 +1122,7 @@ function BookingApp(){
     if(status==="cancelled"){setConfirmCancel(id);return;}
     const user=getUser();
     const nowM=nowMins;
-    saveBookings(function(b){
+    const ok=saveBookings(function(b){
       const target=b.find(function(x){return x.id===id;});
       const d=target?target.date:viewDate;
       // v14: detect confirmed → seated transition (for any prior non-seated status).
@@ -1158,16 +1160,16 @@ function BookingApp(){
       const optState=(status==="seated")?false:autoOptimizer;
       return bookingsAfterAction(updated,d,tableBlocks,null,false,optState);
     });
-    if(status==="completed"||status==="seated") flash();
+    if(ok&&(status==="completed"||status==="seated")) flash();
   }
   function doCancelBooking(id,noShow){
     const user=getUser();
-    saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
-    setConfirmCancel(null);flash();
+    const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
+    setConfirmCancel(null);if(ok) flash();
   }
   function manualAssign(bookingId,tables,locked,affected){
     const user=getUser();
-    saveBookings(function(b){
+    const ok=saveBookings(function(b){
       const updated=b.map(function(x){
         if(x.id===bookingId) return Object.assign({},x,{tables:tables,_conflict:false,_manual:true,_locked:locked===true,history:(x.history||[]).concat([histEntry("tables manually assigned: "+tables.join(", "),user)])});
         // If swapping, strip taken tables from affected bookings and unlock them for re-optimization
@@ -1185,21 +1187,21 @@ function BookingApp(){
       return updated;
     });
     setManualTarget(null);
-    if(affected&&affected.length>0) flash();
+    if(ok&&affected&&affected.length>0) flash();
   }
 
   function addBlock(block){
     const next=tableBlocks.concat([block]);
     saveBlocks(next);
-    saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
-    flash();
+    const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
+    if(ok) flash();
     setBlockTarget(null);
   }
   function removeBlock(block){
     const next=tableBlocks.filter(function(bl){return !(bl.tableId===block.tableId&&bl.date===block.date&&bl.allDay===block.allDay&&bl.from===block.from&&bl.to===block.to);});
     saveBlocks(next);
-    saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
-    flash();
+    const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
+    if(ok) flash();
     if(next.filter(function(bl){return bl.tableId===block.tableId&&bl.date===block.date;}).length===0) setBlockTarget(null);
   }
 

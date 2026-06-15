@@ -2632,3 +2632,28 @@ Optimistic **compare-and-swap** enforced by the server, so even a stale write th
 ### Behavioural change
 Client: a `bookings` write now co-writes a revision counter; functionally identical when in-sync. Once the Security Rule is applied (manual), stale/old-version `bookings` writes are rejected server-side. Until then the v15.2.0 client gate is the active protection.
 
+---
+
+## v15.3.0 -> v15.4.0 -- Fix false "saved" banner + auto-retry blocked saves
+
+**Date**: 2026-06-15
+**Branch**: `feat/v15.4.0-save-feedback-autoretry` -> PR to `main`
+**Status**: bug fix + UX -- **app version 15.3.0 -> 15.4.0**.
+
+### Bug
+When the resync gate refused a write, the app showed the red "couldn't save" banner **and** the green "Booking saved." banner together. Root cause: the success banner (`reshuffledBanner`, driven by `flash()`) was fired **unconditionally** by every action handler right after `saveBookings(...)`, which returned nothing — so a refused write was still "confirmed." In `doSave` it also closed the form, losing the edit.
+
+### Design review (concern #2)
+Traced exactly when the gate blocks: `staleRef` is set **only** on a >90s heartbeat gap (device **sleep**) — a plain internet outage keeps the event loop alive, so it does **not** block (offline writes queue + sync on reconnect). The only residual risk is the v15.3.0 rule rejecting an offline device's queued writes on reconnect *if another device edited concurrently*. User chose **auto-retry** (one device at a time).
+
+### Changes
+- **`usePersistence.js`:** `saveBookings`/`saveBlocks` now **return a boolean** (`true` dispatched / `false` blocked by the stale gate). The stale-block branch **dropped its red `setWriteWarning`** — it's now a transient state (the amber `resyncing` banner + auto-retry). Red `writeWarning` is reserved for hard failures (not-loaded, empty-array, retry-exhausted). New **auto-retry queue** `pendingRetriesRef`: a blocked or server-rejected **function-form, non-silent** write is parked as its updater `fn` and replayed on freshly-resynced data inside `resync()`'s `.then` (after `clearStale()`), capped at `MAX_RETRIES`=3 → then one red error. Value-form / silent writes (auto-extend, auto-complete) never queue (they recompute next tick). `saveBookings` gained an internal `tryN` arg.
+- **`App.jsx`:** the ~7 quick-action handlers gate `flash()` on the save result (`const ok = saveBookings(fn); if (ok && …) flash();`). `doSave` (new/edit booking) is the deliberate exception — high-stakes, so on a block it keeps the form open + an in-form "Syncing the latest data — please tap Save again in a moment." message (no silent background save → no lost/duplicated booking).
+
+### Verification
+- `npm run build` OK -- main bundle **179.76 kB gz** (+0.17 vs 15.3.0's 179.59).
+- **Live (Preview bridge, DEV; temp `STALE_GAP_MS` + a busy-wait freeze to force the gate):** (1) a blocked "> seated" showed **no** false "Booking saved." and **no** red banner (only `[SAFE] … queued for resync + retry`), then **auto-applied on its own** (booking → Seated) after resync — no re-tap. (2) Normal (non-blocked) actions flash "Booking saved." once and persist; a new booking is created exactly once (no duplicate). (3) `doSave` under a forced block keeps the form open with the "tap Save again" message and creates nothing. Retry **cap** is code-inspected (a forced-perpetual-failure can't be staged live — once resync resets the heartbeat, the replay simply succeeds). Test data restored; temp threshold reverted; zero console errors. **Gotcha noted:** `STALE_GAP_MS` must stay ≫ the 10s heartbeat interval (90s), else every heartbeat false-trips the gate (hit while testing at 4s).
+
+### Behavioural change
+A refused write is no longer mis-reported as saved. Blocked/rejected quick edits now retry themselves on fresh data instead of erroring; new-booking saves keep the form open and ask for a re-tap. Normal operation is unchanged.
+
