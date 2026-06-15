@@ -2610,3 +2610,25 @@ Auto-effects refused while stale just retry next tick once the gate clears (self
 ### Behavioural change
 New protective behaviour: writes are briefly paused (with a banner) after a device wakes from sleep until fresh server data is pulled. No change to normal foreground operation. Phase 2 will add the server-side compare-and-swap backstop.
 
+---
+
+## v15.2.0 -> v15.3.0 -- Firebase stale-overwrite protection: server-side revision backstop (Phase 2 of 2)
+
+**Date**: 2026-06-15
+**Branch**: `feat/v15.3.0-firebase-revision-backstop` -> PR to `main`
+**Status**: data-integrity feature -- **app version 15.2.0 -> 15.3.0**. Phase 2 (final) of the stale-overwrite effort. The client app ships here; the PROD **Security Rule** is a manual console step (runbook in `database.rules.README.md`).
+
+### What
+Optimistic **compare-and-swap** enforced by the server, so even a stale write that slips the v15.2.0 client gate is rejected by Firebase itself. Scope: `bookings` only (the critical data); `tableBlocks`/reminders/settings keep the client gate.
+- **Client (`usePersistence.js`):** `saveBookings`'s persist now writes via an atomic multi-path **`update(ref(db), {bookings: computed, bookingsRev: base+1})`** instead of `set(bookings)`. A sibling integer **`bookingsRev`** is tracked by `bookingsRevRef` (its own `onValue`; refreshed inside `resync()`; advanced optimistically on write so back-to-back local writes chain). A rejected `update` -> `.catch` -> `markStale()` (resync re-anchors the rev to the server's value; the auto-effect retries next tick). The `bookings` array shape is **unchanged** -- protection rides on the sibling counter, so `sanitizeAll` + the empty-array/loaded guards are untouched.
+- **Rules (`database.rules.json`, new + version-controlled):** two `.validate`s on top of the existing `auth != null` gate -- `bookings` requires the write to set `bookingsRev === serverRev+1` (or 1 if absent); `bookingsRev` may only increment by 1. A stale base (e.g. an 18:00 laptop writing rev 19 when the server is at 130) -> `19 ≠ 131` -> **rejected**. An old app version doing a plain `bookings` `set()` (no rev bump) is likewise rejected. Migration: first write with no `bookingsRev` -> sets 1.
+- **`database.rules.README.md` (new):** the deploy runbook -- ship app + refresh every device FIRST (pre-v15.3.0 plain-`set` writes are rejected once the rule is live), test on DEV, then PROD; rollback = repaste the old auth-only rules.
+
+### Verification
+- `npm run build` OK -- main bundle **179.59 kB gz** (+0.74 vs 15.2.0's 178.85).
+- **Live (Preview bridge, DEV):** via a temporary DEV-only read helper (removed before commit): `bookingsRev` was **null** pre-write, then **incremented monotonically** on each save (null -> 2 across a seat action, 2 -> 4 across the un-seat) with **zero `[SAFE]` warnings / no false rejections**; normal writes succeed and persist. The per-action +2 is the known React-StrictMode updater-doubling artifact (DEV only -- `persist()` runs inside the `setBookings` updater; the prod build invokes it once -> +1), each doubled write still chaining rev+1, so it is benign with the rev logic. Test booking restored to its original Confirmed/18:30 state. **Server-side REJECTION enforcement is validated when the rule is applied to the DEV console** (Patryk's runbook step) -- it can't be exercised from the client alone; the `.catch` -> `markStale`/`resync` handler reuses the v15.2.0-verified path.
+- **No console errors** after a clean reload on 15.3.0.
+
+### Behavioural change
+Client: a `bookings` write now co-writes a revision counter; functionally identical when in-sync. Once the Security Rule is applied (manual), stale/old-version `bookings` writes are rejected server-side. Until then the v15.2.0 client gate is the active protection.
+

@@ -19,7 +19,7 @@
 // prop and the seam disappears.
 
 import { useState, useRef, useEffect } from "react";
-import { ref, onValue, set, get } from "firebase/database";
+import { ref, onValue, set, get, update } from "firebase/database";
 import { db } from "../firebase";
 import { sanitizeAll, toMins, bookingsAfterAction, histEntry } from "../lib/booking-logic";
 import { hoursFor } from "../lib/constants";
@@ -83,6 +83,14 @@ export function usePersistence({ autoOptimizer, nowMins }){
   const isConnectedRef=useRef(false);
   const resyncInFlightRef=useRef(false);
   const [resyncing, setResyncing] = useState(false);
+  // v15.3.0: server-side revision backstop. `bookings` writes go through an atomic
+  // multi-path update that co-bumps a sibling `bookingsRev` integer; a Firebase
+  // Security Rule (database.rules.json) rejects the write unless the new rev is
+  // exactly serverRev+1 — i.e. our base matched the server (we weren't stale). This
+  // is the compare-and-swap that catches any stale write that slips the client gate.
+  // The ref tracks the last rev we've seen (from the onValue below or a resync), and
+  // we advance it optimistically on write so back-to-back local writes chain cleanly.
+  const bookingsRevRef=useRef(0);
   function clearStale(){
     staleRef.current=false;
     lastBeatRef.current=Date.now();
@@ -95,13 +103,15 @@ export function usePersistence({ autoOptimizer, nowMins }){
   function resync(){
     if(resyncInFlightRef.current||!isConnectedRef.current) return;
     resyncInFlightRef.current=true;
-    Promise.all([get(ref(db,"bookings")),get(ref(db,"tableBlocks"))]).then(function(snaps){
+    Promise.all([get(ref(db,"bookings")),get(ref(db,"tableBlocks")),get(ref(db,"bookingsRev"))]).then(function(snaps){
       const bVal=snaps[0].val();const bArr=bVal?sanitizeAll(bVal):[];
       setBookings(bArr);
       if(firstLoadCount.current===null) firstLoadCount.current=bArr.length;
       const tVal=snaps[1].val();
       if(tVal){const a=Array.isArray(tVal)?tVal:Object.values(tVal);setTableBlocks(a.filter(Boolean));}
       else setTableBlocks([]);
+      const rv=snaps[2].val(); // v15.3.0: re-anchor the rev base to the server's current value
+      bookingsRevRef.current=typeof rv==="number"?rv:0;
       clearStale();
     }).catch(function(){
       // Still offline / read failed — stay stale (writes stay blocked, the safe
@@ -146,7 +156,18 @@ export function usePersistence({ autoOptimizer, nowMins }){
         if(!isSilent) setWriteWarning("Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.");
         return;
       }
-      set(ref(db,"bookings"),computed).catch(function(){});
+      // v15.3.0: atomic compare-and-swap — write `bookings` + bump `bookingsRev`
+      // together in one multi-path update. The server rule rejects it unless the
+      // new rev is exactly serverRev+1, so a stale base (e.g. a write that slipped
+      // the client gate) is refused server-side. Advance the ref optimistically so
+      // legitimate back-to-back writes chain; a rejection resyncs (which re-anchors
+      // the ref to the true server rev) and the auto-effect retries next tick.
+      const base=bookingsRevRef.current||0;
+      bookingsRevRef.current=base+1;
+      update(ref(db),{bookings:computed,bookingsRev:base+1}).catch(function(){
+        console.warn("[SAFE] bookings write rejected by server (possible stale revision) — resyncing.");
+        markStale();
+      });
     }
     if(typeof next==="function"){
       setBookings(function(prev){const computed=next(prev);persist(computed);return computed;});
@@ -200,6 +221,16 @@ export function usePersistence({ autoOptimizer, nowMins }){
       else setTableBlocks([]);
       blocksLoaded.current=true;
       clearStale(); // v15.2.0: a live server snapshot proves the local data is current
+    });
+    return unsub;
+  },[]);
+  // v15.3.0: track the server's bookings revision. Updates on every change —
+  // including another device's write — so our next local write bumps from the
+  // current value (multi-device CAS stays consistent). Read-only; never writes.
+  useEffect(function(){
+    const unsub=onValue(ref(db,"bookingsRev"),function(snap){
+      const v=snap.val();
+      bookingsRevRef.current=typeof v==="number"?v:0;
     });
     return unsub;
   },[]);
