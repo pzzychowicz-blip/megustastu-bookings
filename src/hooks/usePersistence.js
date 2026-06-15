@@ -31,6 +31,11 @@ import { hoursFor } from "../lib/constants";
 // "Freshness / resync gate" block below.
 const STALE_GAP_MS = 90000;
 
+// v15.4.0: how many times a blocked/rejected user write is auto-replayed on
+// freshly-resynced data before giving up and surfacing a red error. ~3 covers
+// the realistic stale-wake / concurrent-reject cases without looping forever.
+const MAX_RETRIES = 3;
+
 // v15.1.0: has `dateStr`'s closing moment already passed? Used by the
 // auto-extend effect (to skip) and the auto-complete effect (to trigger).
 // A booking's closing moment is its OWN date's per-weekday close (hoursFor —
@@ -91,6 +96,13 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // The ref tracks the last rev we've seen (from the onValue below or a resync), and
   // we advance it optimistically on write so back-to-back local writes chain cleanly.
   const bookingsRevRef=useRef(0);
+  // v15.4.0: auto-retry queue. A user write blocked by the stale gate, or rejected
+  // by the server rule, is parked here as its original updater function and replayed
+  // on freshly-resynced data after resync() completes (capped at MAX_RETRIES). Only
+  // FUNCTION-form, non-silent writes queue — they're pure transforms of `prev`, so
+  // re-running them on fresh data is safe. Value-form / silent writes (the auto
+  // effects) never queue; replaying a precomputed stale array would re-write stale data.
+  const pendingRetriesRef=useRef([]);
   function clearStale(){
     staleRef.current=false;
     lastBeatRef.current=Date.now();
@@ -113,6 +125,15 @@ export function usePersistence({ autoOptimizer, nowMins }){
       const rv=snaps[2].val(); // v15.3.0: re-anchor the rev base to the server's current value
       bookingsRevRef.current=typeof rv==="number"?rv:0;
       clearStale();
+      // v15.4.0: replay any writes that were blocked/rejected, now on fresh data.
+      // Drain into a local copy first so re-queued (still-failing) items land in the
+      // fresh array, not the one we're iterating. Each replay carries its try count;
+      // past the cap we surface a single red error instead of looping forever.
+      const queue=pendingRetriesRef.current;pendingRetriesRef.current=[];
+      queue.forEach(function(item){
+        if(item.tries<MAX_RETRIES) saveBookings(item.fn,false,item.tries+1);
+        else setWriteWarning("Couldn't save a change after several attempts — please re-check and try again.");
+      });
     }).catch(function(){
       // Still offline / read failed — stay stale (writes stay blocked, the safe
       // direction); the reconnect handler retries resync() when the socket returns.
@@ -134,38 +155,47 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // If `isSilent` is false/omitted (default = user action), refusals also surface a red banner.
   // This keeps harmless mount-time effect calls quiet (auto-extend passes isSilent=true)
   // while still alerting on real user-blocked saves.
-  function saveBookings(next,isSilent){
-    // v15.2.0: staleness gate FIRST — refuse the WHOLE op (no setState, no write)
-    // when the local snapshot may be stale, so a frozen tab's auto-write never
-    // lands locally OR on the server. resync() then replaces local state with the
-    // server's current data; the blocked auto-effect recomputes next tick.
+  // Returns TRUE if the write was dispatched (or will be, optimistically), FALSE if
+  // it was blocked by the stale gate. Callers gate their success UI (the "saved"
+  // flash / closing the form) on the result so a refused write is never shown as
+  // saved. `tryN` (internal) tracks auto-retry attempts; callers omit it.
+  function saveBookings(next,isSilent,tryN){
+    tryN=tryN||0;
+    // v15.2.0/v15.4.0: staleness gate FIRST — refuse the WHOLE op (no setState, no
+    // write) when the local snapshot may be stale, so a frozen tab's auto-write never
+    // lands locally OR on the server. This is NO LONGER a red error: a user write is
+    // PARKED for auto-replay on freshly-resynced data (resync() drains the queue), so
+    // the staff see only the amber "Syncing…" banner, then the change applies itself.
     if(Date.now()-lastBeatRef.current>STALE_GAP_MS) markStale();
     if(staleRef.current){
-      console.warn("[SAFE] Refused to write bookings — local data may be stale; resyncing to server first.");
-      if(!isSilent) setWriteWarning("Syncing the latest data — your change wasn't saved. Please try again in a moment.");
-      return;
+      console.warn("[SAFE] bookings write held — local data may be stale; queued for resync + retry.");
+      if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN});
+      markStale();
+      return false;
     }
+    let dispatched=true;
     function persist(computed){
       if(!bookingsLoaded.current){
         console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
         if(!isSilent) setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
-        return;
+        dispatched=false;return;
       }
       if(Array.isArray(computed)&&computed.length===0&&firstLoadCount.current!==null&&firstLoadCount.current>0){
         console.warn("[SAFE] Refused to write empty bookings array — Firebase had "+firstLoadCount.current+" entries on load. This is a safety check against accidental wipe.");
         if(!isSilent) setWriteWarning("Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.");
-        return;
+        dispatched=false;return;
       }
       // v15.3.0: atomic compare-and-swap — write `bookings` + bump `bookingsRev`
       // together in one multi-path update. The server rule rejects it unless the
       // new rev is exactly serverRev+1, so a stale base (e.g. a write that slipped
       // the client gate) is refused server-side. Advance the ref optimistically so
       // legitimate back-to-back writes chain; a rejection resyncs (which re-anchors
-      // the ref to the true server rev) and the auto-effect retries next tick.
+      // the ref to the true server rev) and replays the write (v15.4.0).
       const base=bookingsRevRef.current||0;
       bookingsRevRef.current=base+1;
       update(ref(db),{bookings:computed,bookingsRev:base+1}).catch(function(){
-        console.warn("[SAFE] bookings write rejected by server (possible stale revision) — resyncing.");
+        console.warn("[SAFE] bookings write rejected by server (possible stale revision) — resyncing + retry.");
+        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN});
         markStale();
       });
     }
@@ -174,14 +204,18 @@ export function usePersistence({ autoOptimizer, nowMins }){
     } else {
       setBookings(next);persist(next);
     }
+    return dispatched;
   }
+  // Returns TRUE if dispatched, FALSE if blocked by the stale gate (so callers can
+  // gate their success UI). tableBlocks are not on the bookings auto-retry queue
+  // (rare, low-stakes); on a stale-block the caller simply re-does the action.
   function saveBlocks(next,isSilent){
-    // v15.2.0: same staleness gate as saveBookings (see there).
+    // v15.2.0/v15.4.0: same staleness gate as saveBookings — held, not errored.
     if(Date.now()-lastBeatRef.current>STALE_GAP_MS) markStale();
     if(staleRef.current){
-      console.warn("[SAFE] Refused to write tableBlocks — local data may be stale; resyncing to server first.");
-      if(!isSilent) setWriteWarning("Syncing the latest data — your change wasn't saved. Please try again in a moment.");
-      return;
+      console.warn("[SAFE] tableBlocks write held — local data may be stale; resyncing first.");
+      markStale();
+      return false;
     }
     function persist(computed){
       if(!blocksLoaded.current){
@@ -195,6 +229,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
     } else {
       setTableBlocks(next);persist(next);
     }
+    return true;
   }
   // Firebase real-time listeners — read only, never write back.
   // The `bookingsLoaded.current=true` line MUST run on every callback, including
