@@ -2583,3 +2583,30 @@ New pure helper **`occupancyEnd(b, nowM)`** in `src/lib/booking-logic.js`: for a
 ### Behavioural change
 Bug fix: a still-seated (overstaying) table now correctly reads busy in Walk-in (and in the booking-form manual-assign guard) for a now query; no other behaviour changes.
 
+---
+
+## v15.1.1 -> v15.2.0 -- Firebase stale-overwrite protection: client resync / freshness gate (Phase 1 of 2)
+
+**Date**: 2026-06-15
+**Branch**: `feat/v15.2.0-firebase-resync-gate` -> PR to `main`
+**Status**: data-integrity feature -- **app version 15.1.1 -> 15.2.0**. Phase 1 of a 2-phase effort; Phase 2 (server-side revision backstop, v15.3.0) follows after this merges.
+
+### Incident
+A laptop left asleep with the app tab open from ~18:00 **overwrote a full night of tablet bookings** when it woke at ~01:30. Root cause: a sleeping tab freezes the JS event loop holding its last snapshot, and the Firebase socket drops. On wake, the frozen 15s clock interval fires the auto-extend / auto-complete effects against the **stale in-memory `bookings`**, which call `saveBookings` -> `set()` *before* the reconnect's fresh `onValue` arrives (the synchronous stale write wins the race vs the async re-sync). The two existing guards (`bookingsLoaded`, empty-array) don't catch it -- the data loaded at 18:00 and is non-empty. Freshness was the missing dimension.
+
+### Fix (all in `usePersistence.js`, + a banner in `App.jsx`)
+A **third write-guard dimension: staleness**, keyed on a **heartbeat gap checked at write time** (race-free vs interval-firing order on wake):
+- A 10s heartbeat bumps `lastBeatRef`; a gap `> STALE_GAP_MS` (90s) == the loop was frozen. 90s sits above the 10s foreground beat and a backgrounded tab's ~60s timer throttle, so normal use never trips it; only a real sleep does.
+- `saveBookings`/`saveBlocks` check the gap **first** (before any `setState`) -> `markStale()` + refuse the whole op (so the stale write lands neither locally nor on the server). `markStale` sets `staleRef`, shows a `resyncing` banner ("⟳ Syncing the latest data…"), and runs `resync()`.
+- `resync()` force-pulls the server's current `bookings`+`tableBlocks` via `get()`, replaces local state, then lifts the gate. Gated on `isConnectedRef` -- an offline `get()` can resolve from the stale cache and must not clear the gate. The gate also clears on any live `onValue` snapshot (fast path).
+- Proactive triggers (gap-gated): the heartbeat itself, and `focus`/`pageshow`/`visibilitychange` resume events. Brief network blips keep the loop alive (gap small), so offline editing + Firebase's offline write queue are untouched.
+
+Auto-effects refused while stale just retry next tick once the gate clears (self-healing); a user write during the ~1-2s resync window gets the banner and succeeds on retry, now layered on fresh data instead of overwriting it.
+
+### Verification
+- `npm run build` OK -- main bundle **178.85 kB gz** (+0.85 vs 15.1.1's 178.00).
+- **Live (Preview bridge, DEV, 225-booking DB):** (1) normal load is clean -- no spurious banner, no console errors. (2) **Gate trips:** with `STALE_GAP_MS` temporarily set to 1ms, clicking "> seated" on a confirmed booking was **refused** -- the booking stayed Confirmed (no local optimistic change, nothing written), the `[SAFE] Refused to write bookings — local data may be stale` warning fired, and the "Syncing…" banner showed. (3) **No false-trip / self-heal:** threshold restored to 90000 + reload -> the same seat write **succeeded** (booking -> Seated, zero `[SAFE]` warnings, no banner). Test booking restored to its original Confirmed/18:30 state afterward.
+
+### Behavioural change
+New protective behaviour: writes are briefly paused (with a banner) after a device wakes from sleep until fresh server data is pulled. No change to normal foreground operation. Phase 2 will add the server-side compare-and-swap backstop.
+

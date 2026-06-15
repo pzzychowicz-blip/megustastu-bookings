@@ -175,7 +175,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"15.1.1",
+  version:"15.2.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -484,7 +484,7 @@ function BookingApp(){
     bookings, tableBlocks,
     saveBookings, saveBlocks,
     isOnline, writeWarning, setWriteWarning,
-    loadBannerShown, reconnectShown,
+    loadBannerShown, reconnectShown, resyncing,
     firstLoadCount,
   } = usePersistence({ autoOptimizer, nowMins });
   // ── v14.4.0 / v15.0.0: Operating hours (Firebase settings/operatingHours, shared) ──
@@ -1377,7 +1377,8 @@ function BookingApp(){
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button>:null}</div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0}}>{summaryPanel}</div></div>{!isOnline?<div
           style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>⚠ Working offline — your changes are saved locally and will sync when the connection returns. Keep this tab open.</div>:null}{reconnectShown?<div
-          style={{background:"var(--app-reconnect-bg)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>✓ Reconnected — changes synced.</div>:null}{loadBannerShown?<div
+          style={{background:"var(--app-reconnect-bg)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>✓ Reconnected — changes synced.</div>:null}{resyncing?<div
+          style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>⟳ Syncing the latest data — this device may have been asleep. Writes are paused for a moment.</div>:null}{loadBannerShown?<div
           style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."}</div>:null}{writeWarning?<div
           style={{background:"var(--danger-bg)",border:"2px solid var(--danger-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--danger-text)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>{"⚠ "+writeWarning}</span><button
             className="mgt-hover-scale"
