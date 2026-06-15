@@ -19,10 +19,17 @@
 // prop and the seam disappears.
 
 import { useState, useRef, useEffect } from "react";
-import { ref, onValue, set } from "firebase/database";
+import { ref, onValue, set, get } from "firebase/database";
 import { db } from "../firebase";
 import { sanitizeAll, toMins, bookingsAfterAction, histEntry } from "../lib/booking-logic";
 import { hoursFor } from "../lib/constants";
+
+// v15.2.0: heartbeat-gap threshold for the freshness/resync gate. A foreground
+// tab ticks the heartbeat every 10s; a backgrounded tab's timers throttle to
+// ~60s. 90s is above both, so normal operation never trips it — but any real
+// OS sleep / lid-close (minutes-to-hours of a frozen event loop) does. See the
+// "Freshness / resync gate" block below.
+const STALE_GAP_MS = 90000;
 
 // v15.1.0: has `dateStr`'s closing moment already passed? Used by the
 // auto-extend effect (to skip) and the auto-complete effect (to trigger).
@@ -62,6 +69,53 @@ export function usePersistence({ autoOptimizer, nowMins }){
   const [isOnline, setIsOnline] = useState(true);
   const [reconnectShown, setReconnectShown] = useState(false);
   const hasConnectedRef=useRef(false);
+  // ── v15.2.0: Freshness / resync gate ────────────────────────────────────────
+  // A THIRD write-guard dimension after "loaded" and "non-empty": STALENESS.
+  // A tab that was asleep/frozen holds an old snapshot; on wake the clock tick
+  // fires the auto-extend / auto-complete effects, which would write that stale
+  // snapshot over fresher server data. (The incident: a laptop left asleep from
+  // ~18:00 overwrote a night of tablet bookings when it woke at ~01:30.) We
+  // detect the freeze via a heartbeat whose gap is checked AT WRITE TIME — which
+  // is race-free regardless of whether the clock interval or the heartbeat fires
+  // first on wake — refuse writes while stale, and force a fresh server re-read.
+  const staleRef=useRef(false);
+  const lastBeatRef=useRef(Date.now()); // bumped each heartbeat; a large gap == the event loop was frozen (sleep)
+  const isConnectedRef=useRef(false);
+  const resyncInFlightRef=useRef(false);
+  const [resyncing, setResyncing] = useState(false);
+  function clearStale(){
+    staleRef.current=false;
+    lastBeatRef.current=Date.now();
+    resyncInFlightRef.current=false;
+    setResyncing(false);
+  }
+  // Force-pull the server's current bookings + tableBlocks, replace local state,
+  // then lift the gate. Runs ONLY when connected: an offline get() can resolve
+  // from the stale local cache, which must never be allowed to clear the gate.
+  function resync(){
+    if(resyncInFlightRef.current||!isConnectedRef.current) return;
+    resyncInFlightRef.current=true;
+    Promise.all([get(ref(db,"bookings")),get(ref(db,"tableBlocks"))]).then(function(snaps){
+      const bVal=snaps[0].val();const bArr=bVal?sanitizeAll(bVal):[];
+      setBookings(bArr);
+      if(firstLoadCount.current===null) firstLoadCount.current=bArr.length;
+      const tVal=snaps[1].val();
+      if(tVal){const a=Array.isArray(tVal)?tVal:Object.values(tVal);setTableBlocks(a.filter(Boolean));}
+      else setTableBlocks([]);
+      clearStale();
+    }).catch(function(){
+      // Still offline / read failed — stay stale (writes stay blocked, the safe
+      // direction); the reconnect handler retries resync() when the socket returns.
+      resyncInFlightRef.current=false;
+    });
+  }
+  // Flag the local snapshot as possibly-stale and kick a resync (if connected;
+  // otherwise the .info/connected reconnect handler runs it). Idempotent + cheap.
+  function markStale(){
+    staleRef.current=true;
+    setResyncing(true);
+    resync();
+  }
   // Firebase save helpers — write-on-action only (prevents multi-device data corruption).
   // GUARDED: will refuse to write until Firebase has sent us the initial snapshot.
   // GUARDED: will refuse to overwrite non-empty Firebase with an empty in-memory array
@@ -71,6 +125,16 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // This keeps harmless mount-time effect calls quiet (auto-extend passes isSilent=true)
   // while still alerting on real user-blocked saves.
   function saveBookings(next,isSilent){
+    // v15.2.0: staleness gate FIRST — refuse the WHOLE op (no setState, no write)
+    // when the local snapshot may be stale, so a frozen tab's auto-write never
+    // lands locally OR on the server. resync() then replaces local state with the
+    // server's current data; the blocked auto-effect recomputes next tick.
+    if(Date.now()-lastBeatRef.current>STALE_GAP_MS) markStale();
+    if(staleRef.current){
+      console.warn("[SAFE] Refused to write bookings — local data may be stale; resyncing to server first.");
+      if(!isSilent) setWriteWarning("Syncing the latest data — your change wasn't saved. Please try again in a moment.");
+      return;
+    }
     function persist(computed){
       if(!bookingsLoaded.current){
         console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
@@ -91,6 +155,13 @@ export function usePersistence({ autoOptimizer, nowMins }){
     }
   }
   function saveBlocks(next,isSilent){
+    // v15.2.0: same staleness gate as saveBookings (see there).
+    if(Date.now()-lastBeatRef.current>STALE_GAP_MS) markStale();
+    if(staleRef.current){
+      console.warn("[SAFE] Refused to write tableBlocks — local data may be stale; resyncing to server first.");
+      if(!isSilent) setWriteWarning("Syncing the latest data — your change wasn't saved. Please try again in a moment.");
+      return;
+    }
     function persist(computed){
       if(!blocksLoaded.current){
         console.warn("[SAFE] Refused to write tableBlocks — initial read has not completed yet.");
@@ -118,6 +189,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
         setLoadBannerShown(true);
       }
       bookingsLoaded.current=true;
+      clearStale(); // v15.2.0: a live server snapshot proves the local data is current
     });
     return unsub;
   },[]);
@@ -127,6 +199,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       if(val){const arr=Array.isArray(val)?val:Object.values(val);setTableBlocks(arr.filter(Boolean));}
       else setTableBlocks([]);
       blocksLoaded.current=true;
+      clearStale(); // v15.2.0: a live server snapshot proves the local data is current
     });
     return unsub;
   },[]);
@@ -142,7 +215,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
   useEffect(function(){
     const unsub=onValue(ref(db,".info/connected"),function(snap){
       const connected=snap.val()===true;
+      isConnectedRef.current=connected; // v15.2.0: gates resync()'s server read
       if(connected){
+        // v15.2.0: if we went stale while offline (a resume/heartbeat fired
+        // markStale but resync couldn't read), run it now the socket is back.
+        if(staleRef.current) resync();
         if(!hasConnectedRef.current){
           // First successful connection on boot — silent.
           hasConnectedRef.current=true;
@@ -158,6 +235,31 @@ export function usePersistence({ autoOptimizer, nowMins }){
       }
     });
     return unsub;
+  },[]);
+  // v15.2.0: heartbeat + resume detection driving the freshness gate.
+  // The heartbeat bumps lastBeatRef every 10s; a gap >STALE_GAP_MS means the
+  // event loop was frozen (OS sleep / lid close) → the local snapshot is stale.
+  // The resume listeners (focus/pageshow/visibility) catch the wake a beat
+  // sooner; both are gap-gated so a quick tab-switch with a live socket (data
+  // still fresh) doesn't needlessly resync. Network-only blips keep the loop
+  // alive (gap small) so offline editing + the offline queue are untouched.
+  useEffect(function(){
+    const t=setInterval(function(){
+      const gap=Date.now()-lastBeatRef.current;
+      lastBeatRef.current=Date.now();
+      if(gap>STALE_GAP_MS) markStale();
+    },10000);
+    function onResume(){ if(Date.now()-lastBeatRef.current>STALE_GAP_MS) markStale(); }
+    function onVis(){ if(document.visibilityState==="visible") onResume(); }
+    window.addEventListener("focus",onResume);
+    window.addEventListener("pageshow",onResume);
+    document.addEventListener("visibilitychange",onVis);
+    return function(){
+      clearInterval(t);
+      window.removeEventListener("focus",onResume);
+      window.removeEventListener("pageshow",onResume);
+      document.removeEventListener("visibilitychange",onVis);
+    };
   },[]);
   // Auto-extend seated bookings that exceed their stored duration.
   // IMPORTANT: computes the update in a pure pass first and only calls saveBookings
@@ -223,7 +325,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
     bookings, tableBlocks,
     saveBookings, saveBlocks,
     isOnline, writeWarning, setWriteWarning,
-    loadBannerShown, reconnectShown,
+    loadBannerShown, reconnectShown, resyncing,
     // firstLoadCount is exposed as a ref because the load-banner JSX in
     // BookingApp reads .current to show the booking count from the first
     // successful Firebase load. It must remain a ref (not state) so
