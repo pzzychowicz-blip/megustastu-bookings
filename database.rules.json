@@ -4,10 +4,9 @@
     ".write": "auth != null",
 
     "bookings": {
-      ".validate": "newData.parent().child('bookingsRev').val() === (data.parent().child('bookingsRev').exists() ? data.parent().child('bookingsRev').val() + 1 : 1)"
-    },
-    "bookingsRev": {
-      ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)"
+      "$bid": {
+        ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber() && (!data.exists() || newData.child('updatedAt').val() > data.child('updatedAt').val()))"
+      }
     }
   }
 }

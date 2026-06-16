@@ -51,6 +51,14 @@ function pastCloseMins(dateStr, todayStr, nowMins){
   return (dayDiff*1440+nowMins)>=closeMins?closeMins:null;
 }
 
+// v15.5.0: content signature of a booking EXCLUDING its `updatedAt` stamp, so the
+// write-diff only flags bookings whose actual fields changed (not ones that merely
+// carry a fresher server stamp). Booking objects are plain JSON values and unchanged
+// ones are Object.assign({},b) copies (identical key order), so a stringify compare
+// is stable here. `bookingChanged` is the diff predicate the per-node write uses.
+function contentKey(b){const c=Object.assign({},b);delete c.updatedAt;return JSON.stringify(c);}
+function bookingChanged(a,b){return contentKey(a)!==contentKey(b);}
+
 export function usePersistence({ autoOptimizer, nowMins }){
   const [bookings, setBookings] = useState([]);
   const [tableBlocks, setTableBlocks] = useState([]);
@@ -88,14 +96,25 @@ export function usePersistence({ autoOptimizer, nowMins }){
   const isConnectedRef=useRef(false);
   const resyncInFlightRef=useRef(false);
   const [resyncing, setResyncing] = useState(false);
-  // v15.3.0: server-side revision backstop. `bookings` writes go through an atomic
-  // multi-path update that co-bumps a sibling `bookingsRev` integer; a Firebase
-  // Security Rule (database.rules.json) rejects the write unless the new rev is
-  // exactly serverRev+1 — i.e. our base matched the server (we weren't stale). This
-  // is the compare-and-swap that catches any stale write that slips the client gate.
-  // The ref tracks the last rev we've seen (from the onValue below or a resync), and
-  // we advance it optimistically on write so back-to-back local writes chain cleanly.
-  const bookingsRevRef=useRef(0);
+  // ── v15.5.0: per-booking-node write model ───────────────────────────────────
+  // `bookings` is stored as a keyed object /bookings/{id} (one child per booking),
+  // not a single array. A write diffs the previous vs next array and pushes a
+  // multi-path update of ONLY the changed children — so two devices editing
+  // DIFFERENT bookings (even offline) write disjoint paths and Firebase merges
+  // them with no conflict, which the old whole-array CAS could not do. This
+  // replaces the v15.3.0 global `bookingsRev` compare-and-swap.
+  //
+  // Conflict protection is now per-booking: each child carries an `updatedAt`
+  // stamp and a per-$id Security Rule rejects a write whose stamp is not strictly
+  // greater than the server's (an out-of-order / stale same-booking write). The
+  // stamp is monotonic-per-device AND always above the booking's last-seen server
+  // value, so it survives clock skew between devices and StrictMode's double-write.
+  const lastStampRef=useRef(0); // highest updatedAt this device has issued (monotonic)
+  // True while the local snapshot is still the LEGACY single-array shape (migration
+  // to keyed children not yet echoed). Per-child writes are held until it clears, so
+  // a string-keyed child is never mixed into the integer-indexed array.
+  const arrayShapeRef=useRef(false);
+  const migratedRef=useRef(false); // guards the one-time array→keyed migration write
   // v15.4.0: auto-retry queue. A user write blocked by the stale gate, or rejected
   // by the server rule, is parked here as its original updater function and replayed
   // on freshly-resynced data after resync() completes (capped at MAX_RETRIES). Only
@@ -115,15 +134,15 @@ export function usePersistence({ autoOptimizer, nowMins }){
   function resync(){
     if(resyncInFlightRef.current||!isConnectedRef.current) return;
     resyncInFlightRef.current=true;
-    Promise.all([get(ref(db,"bookings")),get(ref(db,"tableBlocks")),get(ref(db,"bookingsRev"))]).then(function(snaps){
-      const bVal=snaps[0].val();const bArr=bVal?sanitizeAll(bVal):[];
+    Promise.all([get(ref(db,"bookings")),get(ref(db,"tableBlocks"))]).then(function(snaps){
+      const bVal=snaps[0].val();
+      arrayShapeRef.current=Array.isArray(bVal); // v15.5.0: keep the migration/shape gate fresh
+      const bArr=bVal?sanitizeAll(bVal):[];
       setBookings(bArr);
       if(firstLoadCount.current===null) firstLoadCount.current=bArr.length;
       const tVal=snaps[1].val();
       if(tVal){const a=Array.isArray(tVal)?tVal:Object.values(tVal);setTableBlocks(a.filter(Boolean));}
       else setTableBlocks([]);
-      const rv=snaps[2].val(); // v15.3.0: re-anchor the rev base to the server's current value
-      bookingsRevRef.current=typeof rv==="number"?rv:0;
       clearStale();
       // v15.4.0: replay any writes that were blocked/rejected, now on fresh data.
       // Drain into a local copy first so re-queued (still-failing) items land in the
@@ -174,7 +193,35 @@ export function usePersistence({ autoOptimizer, nowMins }){
       return false;
     }
     let dispatched=true;
-    function persist(computed){
+    // v15.5.0: stamp a booking for a child write — a monotonic `updatedAt` that is
+    // (a) strictly above this device's last issued stamp (survives StrictMode's
+    // double-invoke: the 2nd write gets a higher stamp, so the rule accepts it
+    // rather than rejecting an equal one), and (b) strictly above the booking's
+    // own last-seen server value (survives cross-device clock skew: a behind-clock
+    // device still writes a stamp the server will accept). Returns a copy — never
+    // mutates React state; the real value lands back via the onValue echo.
+    function stampForWrite(b,old){
+      const t=Math.max(Date.now(),(old&&Number(old.updatedAt)||0)+1,lastStampRef.current+1);
+      lastStampRef.current=t;
+      return Object.assign({},b,{updatedAt:t});
+    }
+    // Diff prev vs computed → a multi-path patch of ONLY changed children
+    // ({id: stampedBooking}) plus deletions ({id: null}). Empty patch ⇒ no write.
+    function buildPatch(prev,computed){
+      const prevById={};
+      (prev||[]).forEach(function(b){ if(b&&b.id!=null) prevById[b.id]=b; });
+      const seen={};
+      const patch={};
+      computed.forEach(function(b){
+        if(!b||b.id==null) return;
+        seen[b.id]=true;
+        const old=prevById[b.id];
+        if(!old||bookingChanged(old,b)) patch[b.id]=stampForWrite(b,old);
+      });
+      Object.keys(prevById).forEach(function(id){ if(!seen[id]) patch[id]=null; });
+      return patch;
+    }
+    function persist(prev,computed){
       if(!bookingsLoaded.current){
         console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
         if(!isSilent) setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
@@ -185,25 +232,37 @@ export function usePersistence({ autoOptimizer, nowMins }){
         if(!isSilent) setWriteWarning("Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.");
         dispatched=false;return;
       }
-      // v15.3.0: atomic compare-and-swap — write `bookings` + bump `bookingsRev`
-      // together in one multi-path update. The server rule rejects it unless the
-      // new rev is exactly serverRev+1, so a stale base (e.g. a write that slipped
-      // the client gate) is refused server-side. Advance the ref optimistically so
-      // legitimate back-to-back writes chain; a rejection resyncs (which re-anchors
-      // the ref to the true server rev) and replays the write (v15.4.0).
-      const base=bookingsRevRef.current||0;
-      bookingsRevRef.current=base+1;
-      update(ref(db),{bookings:computed,bookingsRev:base+1}).catch(function(){
-        console.warn("[SAFE] bookings write rejected by server (possible stale revision) — resyncing + retry.");
+      // v15.5.0: still on the legacy single-array shape (migration not yet echoed) —
+      // hold the write so a string-keyed child is never mixed into the integer array.
+      // Treated like the stale gate: queue the user write + kick a resync; once the
+      // keyed shape lands (arrayShapeRef clears) the queued retry succeeds.
+      if(arrayShapeRef.current){
+        console.warn("[SAFE] bookings write held — legacy array shape, migration to per-booking nodes pending.");
+        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN});
+        markStale();
+        dispatched=false;return;
+      }
+      // v15.5.0: per-node multi-path write. Only changed/added children are set and
+      // removed ones nulled, so concurrent edits to OTHER bookings (other paths) merge
+      // server-side instead of racing on a single array node. A rejection (a stale
+      // per-booking stamp on one of the children fails the rule → the whole atomic
+      // update is refused) → resync + replay the function on fresh data (v15.4.0).
+      const patch=buildPatch(prev,computed);
+      if(!Object.keys(patch).length) return; // nothing actually changed — skip the write
+      update(ref(db,"bookings"),patch).catch(function(){
+        console.warn("[SAFE] bookings write rejected by server (stale per-booking revision) — resyncing + retry.");
         if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN});
         markStale();
       });
     }
-    if(typeof next==="function"){
-      setBookings(function(prev){const computed=next(prev);persist(computed);return computed;});
-    } else {
-      setBookings(next);persist(next);
-    }
+    // Always run through the functional updater so persist() has `prev` (the live
+    // in-memory snapshot, reflecting other devices' echoes) to diff against — for
+    // BOTH the function form (user actions) and the value form (auto-effects).
+    setBookings(function(prev){
+      const computed=(typeof next==="function")?next(prev):next;
+      persist(prev,computed);
+      return computed;
+    });
     return dispatched;
   }
   // Returns TRUE if dispatched, FALSE if blocked by the stale gate (so callers can
@@ -238,6 +297,12 @@ export function usePersistence({ autoOptimizer, nowMins }){
   useEffect(function(){
     const unsub=onValue(ref(db,"bookings"),function(snap){
       const val=snap.val();
+      // v15.5.0: Firebase returns an ARRAY only when the node has sequential
+      // integer keys — exactly what the pre-v15.5.0 whole-array writes produced.
+      // A keyed /bookings/{id} object (the new shape) comes back as a plain object.
+      // This flag gates per-child writes until migration has converted the node.
+      const isArrayShape=Array.isArray(val);
+      arrayShapeRef.current=isArrayShape;
       const arr=val?sanitizeAll(val):[];
       setBookings(arr);
       if(firstLoadCount.current===null){
@@ -246,6 +311,17 @@ export function usePersistence({ autoOptimizer, nowMins }){
       }
       bookingsLoaded.current=true;
       clearStale(); // v15.2.0: a live server snapshot proves the local data is current
+      // v15.5.0: one-time lazy migration legacy-array → per-booking child nodes.
+      // Write the keyed object once; the echo comes back as an object so isArrayShape
+      // flips false and this never re-fires. Gated on connected (an offline set()
+      // would queue unverifiably) and migratedRef (a single attempt per session).
+      if(isArrayShape&&arr.length>0&&!migratedRef.current&&isConnectedRef.current){
+        migratedRef.current=true;
+        const keyed={};
+        const now=Date.now();
+        arr.forEach(function(b){ keyed[b.id]=Object.assign({},b,{updatedAt:Math.max(now,Number(b.updatedAt)||0)+1}); });
+        set(ref(db,"bookings"),keyed).catch(function(){ migratedRef.current=false; });
+      }
     });
     return unsub;
   },[]);
@@ -259,16 +335,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
     });
     return unsub;
   },[]);
-  // v15.3.0: track the server's bookings revision. Updates on every change —
-  // including another device's write — so our next local write bumps from the
-  // current value (multi-device CAS stays consistent). Read-only; never writes.
-  useEffect(function(){
-    const unsub=onValue(ref(db,"bookingsRev"),function(snap){
-      const v=snap.val();
-      bookingsRevRef.current=typeof v==="number"?v:0;
-    });
-    return unsub;
-  },[]);
+  // v15.5.0: the v15.3.0 `bookingsRev` listener was removed — the global revision
+  // counter is replaced by per-booking `updatedAt` stamps (see the write-model note
+  // above). The legacy `bookingsRev` node, if present, is now ignored (harmless).
   // Auto-hide the first-load banner after 6 seconds
   useEffect(function(){
     if(!loadBannerShown) return;
