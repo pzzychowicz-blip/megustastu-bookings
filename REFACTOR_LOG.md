@@ -2802,3 +2802,53 @@ A sync that merges an offline same-table double-booking now self-heals: the over
 automatically (full reshuffle when the optimiser is on; relocate-only-the-newer when off) with a
 brief banner, instead of lingering until the next manual edit.
 
+## v15.6.1 -> v15.6.2 -- Fix: post-sync reconcile went dead ~6 s after page load
+
+**Date**: 2026-06-16
+**Branch**: `fix/v15.6.2-reconcile-loaded-gate` -> PR to `main`
+**Status**: bug fix -- **app version 15.6.1 -> 15.6.2**.
+
+### Problem (reported, PROD)
+Patryk added bookings on a tablet (offline) and his computer (online) concurrently. After sync the
+bookings **overlapped on the same table and stayed overlapped** — until he **refreshed the page**,
+at which point the v15.6.1 reconcile reshuffled them. So v15.6.1 worked, but only on reload, never
+on the live sync.
+
+### Root cause
+The v15.6.1 reconciliation `useEffect` (App.jsx) gated on `if(resyncing||!loadBannerShown) return;`.
+`loadBannerShown` is **not** a persistent "loaded" flag — it's the "Firebase connected — N bookings
+loaded" banner, which **auto-hides after 6 seconds** (`usePersistence.js` L369-373). So the effect
+only ran during the first ~6 s after a page load: reload → reconciles (within the window); a live
+multi-device sync arriving >6 s after load → `!loadBannerShown` true → effect returns immediately →
+overlap never resolved. (This also retroactively explains the v15.6.1 DEV observation that a live
+injection only reconciled after a reload — misattributed to the stale gate at the time.)
+
+### Fix (`src/App.jsx`, one effect)
+- Gate changed `!loadBannerShown` -> `firstLoadCount.current===null` — the real, permanent loaded
+  signal (a ref exposed from `usePersistence`, `null` until the first `onValue`, then set to the
+  load count and never reset).
+- `loadBannerShown` dropped from the dep array (now `[bookings, tableBlocks, autoOptimizer, resyncing]`).
+  `firstLoadCount` is a ref (no dep needed) and is already non-null by the time `bookings` first
+  changes (both set in the same `onValue` callback), so the effect re-runs on every later snapshot.
+- Version bump 15.6.1 -> 15.6.2.
+
+No change to the reconcile algorithm, `findConflicts`, `usePersistence`, security rules, or the
+Firebase shape. On a live snapshot the `onValue` callback runs `clearStale()` (refreshing
+`lastBeatRef`) before the effect, so the silent reconcile write isn't held; post-sleep is covered
+by `resync()` clearing stale + flipping `resyncing` false, which re-triggers the effect on fresh data.
+
+### Verification
+- `npm run build` OK -- main bundle **180.53 kB gz** (unchanged from 15.6.1).
+- **Live (Preview bridge, DEV) — reproduced the exact bug:** loaded the app, waited **>6 s** so the
+  load banner was gone (`loadBannerGone:true`), then injected an overlapping pair both on `[6]`
+  straight into `/bookings/{id}` via the authenticated page **WITHOUT reloading** → within ~2 s the
+  reconcile fired (A->`1A`, B->`1B`), `updatedAt` bumped, **stable / no loop** on re-read. Confirmed
+  app version `15.6.2`. Test bookings removed from DEV. (Under the old code this same no-reload
+  injection did nothing.)
+- Logic test from v15.6.1 still valid (`booking-logic.js` untouched).
+
+### Behavioural change
+The post-sync conflict reconciliation now actually runs on live multi-device syncs (not just within
+6 s of a page load) — an offline same-table double-booking is resolved automatically without a
+manual refresh.
+

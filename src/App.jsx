@@ -175,7 +175,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"15.6.1",
+  version:"15.6.2",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -623,7 +623,7 @@ function BookingApp(){
   // Silent write (auto-effect, no red refusal banner); gated on !resyncing so it
   // waits out the post-sleep stale window and re-runs once fresh data arrives.
   useEffect(function(){
-    if(resyncing||!loadBannerShown) return;
+    if(resyncing||firstLoadCount.current===null) return;
     const today=new Date().toISOString().slice(0,10);
     const dates=Array.from(new Set(bookings.filter(function(b){return b.date>=today&&(b.tables||[]).length>0;}).map(function(b){return b.date;})));
     const dirty=dates.filter(function(d){return !verifyClean(bookings,d);});
@@ -647,7 +647,7 @@ function BookingApp(){
       return next;
     },true);
     if(ok&&changed) flashSyncFix();
-  },[bookings,tableBlocks,autoOptimizer,resyncing,loadBannerShown]);
+  },[bookings,tableBlocks,autoOptimizer,resyncing]);
   function openNew(){setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
   function openEdit(b){setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
