@@ -128,6 +128,23 @@ export function usePersistence({ autoOptimizer, nowMins }){
     resyncInFlightRef.current=false;
     setResyncing(false);
   }
+  // v15.6.0: replay any held/blocked user writes (function-form, non-silent) on top of
+  // the freshest local data, then persist them. Empties the queue, so whichever of
+  // resync() or the live onValue fires first re-applies the change — the other sees an
+  // empty queue (no double-apply). This is what keeps an OPTIMISTICALLY-SHOWN held
+  // change from being wiped by a fresh server snapshot before it has been re-applied +
+  // persisted. MUST run only AFTER clearStale() — otherwise saveBookings re-holds on
+  // the still-set stale gate. Each replay carries its try count; past the cap we
+  // surface a single red error instead of looping forever (v15.4.0 contract).
+  function drainPending(){
+    const queue=pendingRetriesRef.current;
+    if(!queue.length) return;
+    pendingRetriesRef.current=[];
+    queue.forEach(function(item){
+      if(item.tries<MAX_RETRIES) saveBookings(item.fn,false,item.tries+1);
+      else setWriteWarning("Couldn't save a change after several attempts — please re-check and try again.");
+    });
+  }
   // Force-pull the server's current bookings + tableBlocks, replace local state,
   // then lift the gate. Runs ONLY when connected: an offline get() can resolve
   // from the stale local cache, which must never be allowed to clear the gate.
@@ -144,15 +161,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
       if(tVal){const a=Array.isArray(tVal)?tVal:Object.values(tVal);setTableBlocks(a.filter(Boolean));}
       else setTableBlocks([]);
       clearStale();
-      // v15.4.0: replay any writes that were blocked/rejected, now on fresh data.
-      // Drain into a local copy first so re-queued (still-failing) items land in the
-      // fresh array, not the one we're iterating. Each replay carries its try count;
-      // past the cap we surface a single red error instead of looping forever.
-      const queue=pendingRetriesRef.current;pendingRetriesRef.current=[];
-      queue.forEach(function(item){
-        if(item.tries<MAX_RETRIES) saveBookings(item.fn,false,item.tries+1);
-        else setWriteWarning("Couldn't save a change after several attempts — please re-check and try again.");
-      });
+      // v15.4.0/v15.6.0: replay any held/blocked writes, now on fresh data (flicker-
+      // free — batched with the setBookings above into one commit).
+      drainPending();
     }).catch(function(){
       // Still offline / read failed — stay stale (writes stay blocked, the safe
       // direction); the reconnect handler retries resync() when the socket returns.
@@ -180,15 +191,24 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // saved. `tryN` (internal) tracks auto-retry attempts; callers omit it.
   function saveBookings(next,isSilent,tryN){
     tryN=tryN||0;
-    // v15.2.0/v15.4.0: staleness gate FIRST — refuse the WHOLE op (no setState, no
-    // write) when the local snapshot may be stale, so a frozen tab's auto-write never
-    // lands locally OR on the server. This is NO LONGER a red error: a user write is
-    // PARKED for auto-replay on freshly-resynced data (resync() drains the queue), so
-    // the staff see only the amber "Syncing…" banner, then the change applies itself.
+    // v15.2.0/v15.4.0: staleness gate FIRST — hold the SERVER write when the local
+    // snapshot may be stale, so a frozen tab's stale data never lands on the server.
+    // This is NOT a red error: a user write is PARKED for auto-replay on freshly-
+    // resynced data (resync() drains the queue), and (v15.6.0) shown optimistically.
     if(Date.now()-lastBeatRef.current>STALE_GAP_MS) markStale();
     if(staleRef.current){
-      console.warn("[SAFE] bookings write held — local data may be stale; queued for resync + retry.");
-      if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN});
+      console.warn("[SAFE] bookings write held — local data may be stale; queued for resync + retry, shown optimistically.");
+      if(typeof next==="function"&&!isSilent){
+        pendingRetriesRef.current.push({fn:next,tries:tryN});
+        // v15.6.0: optimistic show. Apply the user's change to LOCAL state NOW so it's
+        // visible immediately — previously a held write stayed invisible until resync
+        // finished (1–2s+), which read as "my tap did nothing / didn't save". We still
+        // do NOT write the stale snapshot to the server: the real persist happens when
+        // resync() replays this queued function on FRESH data (and reconciles it into
+        // the fresh-data state set, flicker-free). Value-form (doSave) + silent (auto-
+        // effect) writes don't reach this branch, so they keep their existing behaviour.
+        setBookings(next);
+      }
       markStale();
       return false;
     }
@@ -322,6 +342,13 @@ export function usePersistence({ autoOptimizer, nowMins }){
         arr.forEach(function(b){ keyed[b.id]=Object.assign({},b,{updatedAt:Math.max(now,Number(b.updatedAt)||0)+1}); });
         set(ref(db,"bookings"),keyed).catch(function(){ migratedRef.current=false; });
       }
+      // v15.6.0: re-apply + persist any held user changes on top of this fresh snapshot
+      // (after clearStale, so they don't re-hold). Without this, a live snapshot that
+      // arrives during stale-recovery would wipe an optimistically-shown held change
+      // before resync() got a chance to replay it. Batched with setBookings(arr) above
+      // into one commit, so the change never visibly flickers. No-op when nothing is
+      // queued (the normal case).
+      drainPending();
     });
     return unsub;
   },[]);
