@@ -389,6 +389,17 @@ export function verifyClean(bookings,date){
   for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){var a=day[i],b=day[j];var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;if(!overlaps(as,ae,bs,be)) continue;if(!canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)) return false;}}
   return true;
 }
+// v15.6.1: the ids version of verifyClean's pair-scan — returns every booking
+// involved in a same-table overlap on `date` (active, assigned-tables only).
+// Used by App.jsx's post-sync reconciliation to pick which booking to relocate
+// when the optimiser is OFF. Mirrors verifyClean's loop exactly; collects ids
+// instead of short-circuiting to a boolean.
+export function findConflicts(bookings,date){
+  var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&(b.tables||[]).length>0;});
+  var hit={};
+  for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){var a=day[i],b=day[j];var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;if(!overlaps(as,ae,bs,be)) continue;if(!canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)){hit[a.id]=true;hit[b.id]=true;}}}
+  return Object.keys(hit);
+}
 export function checkInefficent(bookings,date){
   var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&!isLocked(b);});
   return day.some(function(b){var oth=day.filter(function(x){return x.id!==b.id;}).map(function(x){return {tables:x.tables,s:toMins(x.time),e:toMins(x.time)+x.duration};});var best=findBest(b.size,b.preference,toMins(b.time),toMins(b.time)+b.duration,oth);return best&&best.length<(b.tables||[]).length;});

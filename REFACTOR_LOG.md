@@ -2738,3 +2738,67 @@ Post-sleep quick edits now appear in the UI instantly (with a reassuring "saved 
 banner) instead of staying invisible until sync. No change to the persistence/safety path, to
 genuine-offline behaviour, or to the booking form.
 
+## v15.6.0 -> v15.6.1 -- Post-sync conflict reconciliation (offline multi-device same-table overlap)
+
+**Date**: 2026-06-16
+**Branch**: `fix/v15.6.1-post-sync-conflict-reconcile` -> PR to `main`
+**Status**: bug fix -- **app version 15.6.0 -> 15.6.1**.
+
+### Problem (reported)
+Two+ devices adding bookings **offline** to a table that was free at creation time (e.g. table 6)
+merge (v15.5.0 per-node) into BOTH bookings preserved — but neither device's optimiser saw the
+other, so once synced they **overlap on the same table**. The overlap persisted on screen until a
+later add/edit happened to re-run the optimiser for that date. Root cause: the sync path
+(`onValue` / `resync()` in `usePersistence.js`) stores the merged snapshot **verbatim**
+(`sanitizeAll -> setBookings`) with **no optimiser pass** — `bookingsAfterAction` only ran on
+direct user actions + the auto-extend/auto-complete effects. (The existing `overlapWarnings` in
+App.jsx is a *seated-table turn-time* warning for today's view only — it never detected two future
+bookings double-assigned to a table.)
+
+### Fix (`booking-logic.js` + `App.jsx` only)
+- **`findConflicts(bookings, date)`** — new pure export beside `verifyClean`, same pair-scan
+  (`overlaps` + `canAssign`); returns the ids of every booking in a same-table overlap on `date`.
+- **Reconciliation `useEffect`** in `BookingApp` (sibling to the optimiser/banner machinery; deps
+  `[bookings, tableBlocks, autoOptimizer, resyncing, loadBannerShown]`). Reacts to settled
+  snapshots: collects distinct active dates `>= today` with assigned tables, filters to the ones
+  failing `verifyClean`, and resolves only those via one silent function-form `saveBookings`:
+  - **Optimiser active for the date** (`optimizerActiveFor` — always true for future dates; true
+    for today before the cutoff) -> full reshuffle `bookingsAfterAction(next, d, blocks, null, false, autoOptimizer)`.
+  - **Optimiser OFF** (today after the 15:00 cutoff / manual mode) -> relocate ONLY the newest
+    non-locked conflicting booking (sorted by `updatedAt` desc, id tiebreaker -> deterministic
+    across devices) via the `forceReassign` path, leaving manual arrangements intact; loop
+    (cap 20) until clean.
+  - A `changed` flag gates the banner so a pathological locked-only overlap (can't move) shows no
+    false "resolved" notice.
+- **Transient banner** `syncFixBanner` ("Resolved a table conflict after syncing.", 4s via
+  `flashSyncFix`), rendered in the banner stack with the `--app-saved-*` token.
+
+**Why it's safe / converges:** gated on `!verifyClean` per date so clean syncs write nothing;
+optimiser/relocate output is clean -> the next pass is a no-op (also breaks any Firebase echo
+loop). Cross-device double-writes settle via the v15.5.0 per-`$id` `updatedAt` CAS. `_locked`
+bookings (manual assigns, walk-ins) are never moved. An unplaceable booking (full restaurant)
+gets `tables:[]`+`_conflict` -> drops out of the overlap set -> loop terminates. Gated on
+`!resyncing` so it waits out the post-sleep stale window and re-runs on fresh data; the write is
+`isSilent` (auto-effect, no red refusal banner). No `usePersistence`, security-rule, or Firebase-
+shape change -> **rolling deploy**, no migration.
+
+### Verification
+- `npm run build` OK -- main bundle **180.51 kB gz** (+0.40 vs 15.6.0's 180.11).
+- **Pure logic (Node, esbuild-bundled):** 17/17 assertions — future/ON full-reshuffle resolves;
+  today+OFF relocates only the newer (older keeps table 6); locked pair untouched + loop bails
+  immediately; full-restaurant terminates (no infinite loop, `verifyClean` true after); clean data
+  is a no-op (`findConflicts` empty).
+- **Live (Preview bridge, DEV; injected overlapping pairs straight into `/bookings/{id}` via the
+  authenticated page, then removed):** (1) future-date pair both on `[6]` -> reconcile reshuffled
+  to `1A`/`1B`, `updatedAt` bumped to real timestamps (write happened), **stable** after 2s (no
+  loop); (2) today+OFF pair on `[6]` -> **older kept `[6]` (stamp untouched), newer moved to `1A`
+  (stamp bumped)** — exactly the chosen relocate-newest behaviour; timeline screenshot confirmed.
+  No console errors / no `[SAFE]` refusals. (Note: while the gate was tripped on the long-open
+  tab, the silent reconcile write was correctly HELD until a fresh reload — confirming the
+  freshness-gate interaction.) All test bookings removed from DEV after.
+
+### Behavioural change
+A sync that merges an offline same-table double-booking now self-heals: the overlap is resolved
+automatically (full reshuffle when the optimiser is on; relocate-only-the-newer when off) with a
+brief banner, instead of lingering until the next manual edit.
+
