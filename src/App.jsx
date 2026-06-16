@@ -35,7 +35,7 @@ import {
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
-  checkInefficent,
+  checkInefficent, verifyClean, findConflicts,
   nowTime
 } from "./lib/booking-logic";
 
@@ -175,7 +175,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"15.6.0",
+  version:"15.6.1",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -436,6 +436,9 @@ function BookingApp(){
   const [confirmReshuffle, setConfirmReshuffle] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(null);
   const [reshuffled, setReshuffled] = useState(false);
+  // v15.6.1: transient banner shown when the post-sync reconciliation resolves
+  // a same-table overlap that arrived via an offline multi-device merge.
+  const [syncFix, setSyncFix] = useState(false);
   const [manualTarget, setManualTarget] = useState(null);
   const [dismissedIneff, setDismissedIneff] = useState(null);
   const formRef=useRef(EMPTY_FORM);
@@ -601,6 +604,50 @@ function BookingApp(){
   })();
 
   function flash(){setReshuffled(true);setTimeout(function(){setReshuffled(false);},3000);}
+  function flashSyncFix(){setSyncFix(true);setTimeout(function(){setSyncFix(false);},4000);}
+
+  // v15.6.1 — Post-sync conflict reconciliation.
+  // Two devices adding bookings OFFLINE to a table that was free at creation
+  // time merge (v15.5.0 per-node) into BOTH bookings on the same table — but
+  // neither device's optimiser saw the other, so they overlap once synced. The
+  // sync path (onValue/resync) stores merged data verbatim with no optimiser
+  // pass, so the overlap persisted until a later edit happened to re-run it.
+  // Here we react to settled snapshots: detect overlapping dates via verifyClean
+  // and resolve only those. When the optimiser is active for the date → full
+  // reshuffle; when OFF (manual mode) → relocate ONLY the newest non-locked
+  // conflicting booking (forceReassign), leaving manual arrangements intact.
+  // Self-stabilising: optimiser/relocate output is clean → next pass is a no-op
+  // (also breaks any Firebase echo loop). Cross-device double-writes settle via
+  // the v15.5.0 per-$id updatedAt CAS; the "newest" pick is deterministic
+  // (updatedAt desc, id tiebreaker) so every device chooses the same booking.
+  // Silent write (auto-effect, no red refusal banner); gated on !resyncing so it
+  // waits out the post-sleep stale window and re-runs once fresh data arrives.
+  useEffect(function(){
+    if(resyncing||!loadBannerShown) return;
+    const today=new Date().toISOString().slice(0,10);
+    const dates=Array.from(new Set(bookings.filter(function(b){return b.date>=today&&(b.tables||[]).length>0;}).map(function(b){return b.date;})));
+    const dirty=dates.filter(function(d){return !verifyClean(bookings,d);});
+    if(!dirty.length) return;
+    let changed=false;
+    const ok=saveBookings(function(prev){
+      let next=prev;
+      dirty.forEach(function(d){
+        if(optimizerActiveFor(d,autoOptimizer)){
+          next=bookingsAfterAction(next,d,tableBlocks,null,false,autoOptimizer);changed=true;
+        }else{
+          let guard=0;
+          while(!verifyClean(next,d)&&guard++<20){
+            const ids=findConflicts(next,d);
+            const movable=next.filter(function(b){return ids.indexOf(b.id)>=0&&!isLocked(b);}).sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0)||(a.id<b.id?1:-1);});
+            if(!movable.length) break; // only locked overlaps — leave as-is
+            next=bookingsAfterAction(next,d,tableBlocks,movable[0].id,true,autoOptimizer);changed=true;
+          }
+        }
+      });
+      return next;
+    },true);
+    if(ok&&changed) flashSyncFix();
+  },[bookings,tableBlocks,autoOptimizer,resyncing,loadBannerShown]);
   function openNew(){setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
   function openEdit(b){setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
@@ -1228,6 +1275,9 @@ function BookingApp(){
 
   const reshuffledBanner=reshuffled?<div
     style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>:null;
+  // v15.6.1: post-sync conflict reconciliation result (offline multi-device merge).
+  const syncFixBanner=syncFix?<div
+    style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>Resolved a table conflict after syncing.</div>:null;
   const ineffBanner=(!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer))?<div
     style={{background:"var(--warn-bg)",border:"2px solid var(--warn-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--warn-text)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>Tables could be reshuffled for better efficiency.</span><div style={{display:"flex",gap:6}}><button
         onClick={function(){setDismissedIneff(viewDate);}}
@@ -1385,7 +1435,7 @@ function BookingApp(){
           style={{background:"var(--danger-bg)",border:"2px solid var(--danger-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--danger-text)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>{"⚠ "+writeWarning}</span><button
             className="mgt-hover-scale"
             style={mkBtn({fontSize:12,background:"var(--app-btn-slate-dim)",minHeight:32,padding:"4px 12px"})}
-            onClick={function(){setWriteWarning(null);}}>Dismiss</button></div>:null}{reshuffledBanner}{ineffBanner}{overlapBanner}{reminderBanners}{mainView}{showForm?<BookingFormModal
+            onClick={function(){setWriteWarning(null);}}>Dismiss</button></div>:null}{reshuffledBanner}{syncFixBanner}{ineffBanner}{overlapBanner}{reminderBanners}{mainView}{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
