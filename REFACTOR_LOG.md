@@ -2683,3 +2683,58 @@ The v15.2.0-15.4.0 stack hardened the *whole-array* write, but the array shape i
 ### Behavioural change
 None in normal single-device use (same array-shaped UI, same actions). New protective behaviour: two+ devices editing different bookings concurrently (incl. offline) no longer lose either write -- they merge at the Firebase path level. Same-booking concurrent edits resolve by newest stamp (rejected writer resyncs + replays). Requires the hard-cutover rule swap to be fully active server-side.
 
+---
+
+## v15.5.0 -> v15.6.0 -- Optimistic visibility for held (post-sleep) changes
+
+**Date**: 2026-06-16
+**Branch**: `feat/v15.6.0-optimistic-offline-changes` -> PR to `main`
+**Status**: UX fix -- **app version 15.5.0 -> 15.6.0**.
+
+### Problem (reported)
+When a quick action (status change, cancel, delete, reassign, reshuffle) is made on a device
+that **woke from sleep** (routine on a screen-locking tablet), the v15.2.0 freshness gate HELD
+the write: `saveBookings` returned `false` **before** `setBookings`, so the change was queued
+but **invisible** until `resync()` finished (1-2s+). Staff saw their tap do nothing and assumed
+it hadn't saved. (Genuine network-outage writes were already optimistic + had a clear banner;
+only the post-sleep *stale-gate* path skipped the local update.)
+
+### Fix (all in `usePersistence.js`, + one banner reword in `App.jsx`)
+- **Optimistic show.** In the stale-gate hold path, when queueing a held user write (the
+  existing `typeof next==="function" && !isSilent` condition — which already selects exactly
+  the quick actions and excludes value-form `doSave` + silent auto-effects), now ALSO call
+  `setBookings(next)` so the change is visible **immediately**. We still do NOT write the stale
+  snapshot to the server — the actual persist happens when `resync()` replays the queued
+  function on FRESH data (data-safety guarantee of v15.2.0/15.3.0/15.5.0 fully intact).
+- **Flicker-free reconcile.** Extracted a `drainPending()` helper (the v15.4.0 retry-drain) and
+  call it from BOTH `resync()` AND the live `bookings` `onValue` (after `clearStale`). Either
+  one re-applies + persists the held change on the fresh snapshot and empties the queue (the
+  other sees it empty), so a fresh server snapshot arriving during recovery never wipes the
+  optimistically-shown change before it's re-applied. Batched with the snapshot's `setBookings`
+  into one commit — no flicker.
+- **Banner reword.** The `resyncing` banner's "Writes are paused for a moment." -> "Your changes
+  are saved and will finish syncing in a moment." (the change is now shown, so "paused" was
+  misleading + alarming).
+
+`doSave` (new/edit booking) is unchanged — it passes a value (array), not a function, so it
+never reaches the optimistic-hold branch and keeps its deliberate v15.4.0 "keep the form open +
+tap Save again" behaviour (high-stakes, user-chosen scope).
+
+### Verification
+- `npm run build` OK -- main bundle **180.11 kB gz** (+0.06 vs 15.5.0's 180.05).
+- **Live (Preview bridge, DEV; temp `STALE_GAP_MS=2000` + a busy-wait freeze to force the gate;
+  temp DEV-gated `window.__fb` read helper; both reverted/removed before commit):** drove the
+  **List-view "> Seated"** quick-action (the real function-form `updateStatus` path — NOT the
+  booking form's status buttons, which only set the draft + commit via value-form `doSave`) on a
+  confirmed booking *Carol* under a tripped gate: (1) the **resyncing banner showed** (gate
+  tripped) AND Carol flipped to **Seated immediately** (optimistic — previously invisible);
+  (2) after resync the held write **persisted** to the server (history recorded `seated early…`,
+  then auto-completed as a past-date booking) — proving `drainPending` reconciles + persists on
+  fresh data; (3) no console errors. Carol restored to her pre-test state; temp threshold + helper
+  reverted (`git diff` of `firebase.js` + `STALE_GAP_MS` clean).
+
+### Behavioural change
+Post-sleep quick edits now appear in the UI instantly (with a reassuring "saved & syncing"
+banner) instead of staying invisible until sync. No change to the persistence/safety path, to
+genuine-offline behaviour, or to the booking form.
+
