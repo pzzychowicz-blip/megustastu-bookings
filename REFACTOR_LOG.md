@@ -2852,3 +2852,67 @@ The post-sync conflict reconciliation now actually runs on live multi-device syn
 6 s of a page load) — an offline same-table double-booking is resolved automatically without a
 manual refresh.
 
+---
+
+## v15.6.2 -> v15.7.0 -- `doSave` joins optimistic-show + auto-retry (removes the new/edit-save exception)
+
+**Date**: 2026-06-19
+**Branch**: `feat/v15.7.0-dosave-optimistic-retry` -> PR to `main`
+**Status**: feature / behavioural change -- **app version 15.6.2 -> 15.7.0**.
+**Files**: `src/App.jsx` (`doSave` only) · `CLAUDE.md` · `REFACTOR_LOG.md`.
+
+### Problem
+The multi-device save-recovery arc (v15.2.0–v15.6.2) gave **quick actions** two behaviours when the
+post-sleep freshness gate holds a write: optimistic show (v15.6.0) + auto-retry on fresh data
+(v15.4.0). **`doSave` (new/edit booking) was deliberately excluded** — v15.4.0 kept it on the "keep
+the form open + tap Save again" path, judging a new booking too high-stakes for silent background
+retry (risk of a lost or duplicated booking). The result was an inconsistency: a stale-gate hold made
+a quick action self-heal but made a new/edit save bounce the form back with
+`"Syncing the latest data — please tap Save again in a moment."`
+
+### Root cause of the exclusion
+The optimistic-show + retry branches in `saveBookings` (`usePersistence.js`) all gate on
+`typeof next==="function"`. `doSave` passed a precomputed **array** (`fin`) via `saveBookings(fin)`
+(value form), so it never qualified — by design.
+
+### Fix
+Convert `doSave`'s two `saveBookings(fin)` calls (edit path + new-booking path) from the **value
+form** to the **function form** `saveBookings(buildNext)`. No `usePersistence.js` change — `doSave`
+simply opts into the machinery that already exists. Pattern (both paths):
+1. **Capture intent once** against current `bookings` (unchanged): `genId()`/the `nb` object (new),
+   or the derived edit fields/flags from `orig`+`f` (`needsR`, `seatedShift`, `saveTime`/`saveDur`/…,
+   `optStateForSave`, etc.) for edit.
+2. **`buildNext(prev)`** — a pure transform that re-applies the captured intent to fresh `prev`
+   (the same `.map`/`Object.assign`/`bookingsAfterAction` bodies as before, reading `prev` not the
+   closed-over `bookings`). Preserves any concurrent edit to OTHER bookings (they live in `prev`).
+3. **Validate once** against current data: `const fin=buildNext(bookings)` feeds the existing
+   capacity/displacement/no-table guards, which still `setError` and block the form pre-dispatch.
+4. **Dispatch**: `const ok=saveBookings(buildNext);` close the form; flash gated on `ok`. The
+   `"tap Save again"` `setError` branches removed.
+
+### Why safe (the v15.4.0 concerns)
+- **No duplicate:** `genId()` once → stable id; the retry queue only replays writes that never landed
+  (held) or were atomically rejected — fresh `prev` can't contain the new id. New-path `applyBase`
+  also `filter`s out `newId` before `concat` (belt-and-braces).
+- **No lost booking:** held/rejected writes queue + replay (cap `MAX_RETRIES`=3 → single red error),
+  identical to quick actions.
+- **Capacity guard intact:** synchronous validation against current data still blocks pre-dispatch.
+
+### Verification
+- `npm run build` OK -- main bundle **180.54 kB gz** (+0.01 from 15.6.2; effectively flat).
+- **Live (Preview bridge, DEV Firebase), app version `15.7.0` confirmed:**
+  - **Happy path:** created a new booking (auto-assigned 1A, form closed, flash, persisted); edited it
+    (time 13:00 → 19:00, `needsR` reshuffle) — booking relocated on the timeline, History 1→3,
+    persisted. Proves `buildNext` is a correct pure transform (the normal path dispatches through it).
+  - **Hold path (one-shot `window.__forceStaleN` test hook, since removed):** armed the gate, saved a
+    new booking → **form closed, booking shown optimistically**, then the resync replay **persisted
+    it**. Direct server read of `/bookings` confirmed **exactly one** node ("TEST HOLD path", 15:00,
+    1A, `updatedAt` stamped) — **no duplicate**.
+  - Test bookings deleted from DEV (via the List-view Delete flow); server back to 225 bookings, zero
+    `TEST` entries. Temp test hook removed from `usePersistence.js` (grep-clean) and rebuilt.
+
+### Behavioural change
+A new/edit booking save refused by the post-sleep stale gate no longer bounces the form back with
+"tap Save again"; it shows the booking immediately, closes the form, and auto-retries on fresh data —
+parity with quick actions. (Reverses the v15.4.0 keep-form-open design for `doSave`.)
+
