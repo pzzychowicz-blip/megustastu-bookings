@@ -175,7 +175,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"15.6.2",
+  version:"15.7.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -770,21 +770,33 @@ function BookingApp(){
         // must also move to the new duration so the ghost bar anchors at the true
         // scheduled end (e.g. 20:15 + 105 = 22:00), not at the stale 21:45.
         const saveOrigDurFinal=seatedShift?seatedShift.newDuration:saveOrigDur;
-        const upd=bookings.map(function(b){
-          if(b.id===editId){
-            let h=(b.history||[]).concat([editHist]);
-            if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
-            const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
-            return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
-          }
-          if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
-          return b;
-        });
         // v14: when seating, force no-reshuffle of other bookings (same rule as
         // updateStatus). The seated-shift must not trigger cascading table moves.
         const optStateForSave=seatingNow?false:autoOptimizer;
-        let fin=bookingsAfterAction(upd,f.date,tableBlocks,editId,needsR&&!mt.length,optStateForSave);
-        if(wasSeatedLocked&&needsR&&!mt.length&&!clearM){fin=fin.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
+        // v15.7.0: build the next state as a PURE transform of `prev` (the live
+        // in-memory snapshot at write time) rather than a precomputed array. This
+        // opts the edit save into the function-form path in saveBookings, so a
+        // stale-gate hold now shows the change optimistically + auto-retries on
+        // fresh data (parity with quick actions), instead of bouncing the form back
+        // with "tap Save again". The captured edit fields (computed once from `orig`)
+        // are applied to whichever version of the booking is in fresh `prev`, so a
+        // concurrent edit to OTHER bookings (which live in `prev`) is preserved.
+        function buildNext(prev){
+          const upd=prev.map(function(b){
+            if(b.id===editId){
+              let h=(b.history||[]).concat([editHist]);
+              if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
+              const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
+              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+            }
+            if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
+            return b;
+          });
+          let out=bookingsAfterAction(upd,f.date,tableBlocks,editId,needsR&&!mt.length,optStateForSave);
+          if(wasSeatedLocked&&needsR&&!mt.length&&!clearM){out=out.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
+          return out;
+        }
+        const fin=buildNext(bookings);
         if(!mt.length&&needsR&&!prefOnly){
           const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
           const displaced=fin.filter(function(b){return b.id!==editId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
@@ -795,8 +807,14 @@ function BookingApp(){
           const editedInFin=fin.find(function(b){return b.id===editId;});
           if(editedInFin&&(!editedInFin.tables||!editedInFin.tables.length)){setError("No tables available at this time — see suggestions below.");return;}
         }
-        if(!saveBookings(fin)){setError("Syncing the latest data — please tap Save again in a moment.");return;}
-        if(needsR||swapAffected||f.status==="completed"||seatingNow) flash();setShowForm(false);setViewDate(f.date);
+        // v15.7.0: dispatch the function form. ok===true → saved now; ok===false →
+        // held by the stale gate but shown optimistically + queued for auto-retry on
+        // fresh data (the resyncing banner informs the user). Either way the form's
+        // job is done, so close it. Flash only on a real save (never claim "saved"
+        // for a not-yet-persisted write — matches quick-action honesty).
+        const ok=saveBookings(buildNext);
+        if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash();
+        setShowForm(false);setViewDate(f.date);
       } else {
         const newId=genId();
         // v14: Book Again flow. When f.returnOf is set, the new booking links
@@ -812,17 +830,27 @@ function BookingApp(){
         const createHist=source?histEntry("created via Book Again (from "+source.name+" on "+source.date+" at "+sourceSchedTime+")",getUser()):histEntry("created",getUser());
         // v14 p1: scheduledTime=f.time on creation (new bookings always start confirmed).
         const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,history:[createHist]};
-        let base=bookings;
-        if(swapAffected){base=bookings.map(function(b){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}return b;});}
-        // If this is a Book Again creation, append a back-reference entry to the
-        // source booking's history (purely informational — no status/table change).
-        if(source){
-          base=base.map(function(b){
-            if(b.id!==returnOfId) return b;
-            return Object.assign({},b,{history:(b.history||[]).concat([histEntry("Book Again → new booking on "+f.date+" at "+f.time,getUser())])});
-          });
+        // v15.7.0: build the next state as a PURE transform of `prev` (see the edit
+        // path above) so the new-booking save joins the optimistic-show + auto-retry
+        // path. `newId`/`nb` are computed once (stable id) → a held/rejected write
+        // replayed on fresh data can never duplicate the booking (the defensive
+        // filter below also drops any stray match before re-adding it).
+        function applyBase(prev){
+          let base=prev.filter(function(b){return b.id!==newId;});
+          if(swapAffected){base=base.map(function(b){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}return b;});}
+          // If this is a Book Again creation, append a back-reference entry to the
+          // source booking's history (purely informational — no status/table change).
+          if(source){
+            base=base.map(function(b){
+              if(b.id!==returnOfId) return b;
+              return Object.assign({},b,{history:(b.history||[]).concat([histEntry("Book Again → new booking on "+f.date+" at "+f.time,getUser())])});
+            });
+          }
+          return base;
         }
-        const fin=bookingsAfterAction(base.concat([nb]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);
+        function buildNext(prev){return bookingsAfterAction(applyBase(prev).concat([nb]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);}
+        const base=applyBase(bookings);
+        const fin=buildNext(bookings);
         if(!mt.length){
           const ne=fin.find(function(b){return b.id===newId;});
           if(!ne||(ne.tables||[]).length===0){setError("Could not assign a table — try manual assignment.");return;}
@@ -831,8 +859,11 @@ function BookingApp(){
           const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
           if(kicked.length>0){setError("Not enough capacity — adding this booking would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");return;}
         }
-        if(!saveBookings(fin)){setError("Syncing the latest data — please tap Save again in a moment.");return;}
-        flash();setShowForm(false);setViewDate(f.date);
+        // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
+        // show + auto-retry; flash only on a real save.
+        const ok=saveBookings(buildNext);
+        if(ok) flash();
+        setShowForm(false);setViewDate(f.date);
       }
     }catch(err){setError("Error: "+err.message);}
   }
