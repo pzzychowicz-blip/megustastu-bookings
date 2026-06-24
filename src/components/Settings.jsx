@@ -27,7 +27,7 @@
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
-import { Toggle, Section, Collapsible } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal } from "./atoms";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
 // Reusable enough for future modals to import; lives here for now because
@@ -265,7 +265,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           </div>
           <Toggle on={se} onClick={() => onSaveShifts({ enabled: !se })} />
         </div>
-        {se ? (
+        <Reveal show={se}>{se ? (
           <div style={{ marginTop: 14 }}>
             <HourStepper
               label="Afternoon / Evening split" value={sp}
@@ -276,7 +276,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
               Afternoon {hhLabel(wrMin)}–{hhLabel(sp)} · Evening {hhLabel(sp)}–{hhLabel(wrMax)}
             </div>
           </div>
-        ) : null}
+        ) : null}</Reveal>
       </Section>
       {/* v15.0.0: Auto-optimizer — the master auto-switch + the editable daily
           cutoff hour. Firebase-shared (settings/optimizer). When the switch is
@@ -292,7 +292,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           </div>
           <Toggle on={oas} onClick={() => onSaveOptimizer({ autoSwitch: !oas })} />
         </div>
-        {oas ? (
+        <AutoHeight>{oas ? (
           <div style={{ marginTop: 14 }}>
             <HourStepper
               label="Daily cutoff" value={oc} fmt={cutoffLabel}
@@ -307,7 +307,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 12 }}>
             Manual only — the optimizer changes only when you toggle it (timeline control or the “o” key).
           </div>
-        )}
+        )}</AutoHeight>
       </Section>
       <div style={{ padding: "10px 12px 12px", textAlign: "center" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.02em" }}>
@@ -379,7 +379,11 @@ export function SettingsContent({
         current={tab}
         onSelect={setTab}
       />
-      {content}
+      {/* v15.8.0: tab body eases its height (AutoHeight) + crossfades on switch
+          (key+mgt-fade-in) — the modal card follows the eased height. */}
+      <AutoHeight>
+        <div key={tab} className="mgt-fade-in">{content}</div>
+      </AutoHeight>
     </div>
   );
 }

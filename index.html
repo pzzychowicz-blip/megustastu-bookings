@@ -265,6 +265,76 @@
           z-index: 2;
         }
       }
+      /* v15.8.0: floating status toasts (Reconnected / Syncing / Loaded /
+         Reshuffled / Sync-fix) live in an absolute layer over the mainView
+         toolbar gap so they never reflow the grid. Symmetric float-in / float-out
+         — the `Toast` atom (atoms.jsx) keeps the node mounted through the out
+         animation, then unmounts. */
+      @keyframes mgt-toast-in {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes mgt-toast-out {
+        from { opacity: 1; transform: translateY(0); }
+        to   { opacity: 0; transform: translateY(-6px); }
+      }
+      .mgt-toast-in  { animation: mgt-toast-in 220ms cubic-bezier(.4, 0, .2, 1) both; }
+      .mgt-toast-out { animation: mgt-toast-out 200ms cubic-bezier(.4, 0, .2, 1) both; }
+
+      /* v15.8.0 animation pass. Modal open/close (symmetric, linear) — desktop:
+         scrim fade + card fade/scale; mobile: slide-up/down sheet. Driven by the
+         <ModalPresence> wrapper (atoms.jsx) toggling the *-in / *-out class. */
+      @keyframes mgt-scrim-in  { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes mgt-scrim-out { from { opacity: 1; } to { opacity: 0; } }
+      @keyframes mgt-card-in   { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+      @keyframes mgt-card-out  { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px) scale(.97); } }
+      @keyframes mgt-sheet-in  { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      @keyframes mgt-sheet-out { from { transform: translateY(0); } to { transform: translateY(100%); } }
+      .mgt-scrim-in  { animation: mgt-scrim-in  180ms linear both; }
+      .mgt-scrim-out { animation: mgt-scrim-out 180ms linear both; }
+      .mgt-card-in   { animation: mgt-card-in   180ms linear both; }
+      .mgt-card-out  { animation: mgt-card-out  180ms linear both; }
+      .mgt-sheet-in  { animation: mgt-sheet-in  200ms linear both; }
+      .mgt-sheet-out { animation: mgt-sheet-out 200ms linear both; }
+
+      /* Slide in (L→R) / slide out (→L) — Reshuffle + Today buttons (via Presence). */
+      @keyframes mgt-slide-in  { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+      @keyframes mgt-slide-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-12px); } }
+      .mgt-slide-in  { animation: mgt-slide-in  180ms linear both; display: inline-flex; }
+      .mgt-slide-out { animation: mgt-slide-out 180ms linear both; display: inline-flex; }
+
+      /* Press feedback (ease-out, v15.8.0 cont.4) — Follow / − / 1× / + AND utility
+         buttons (Clear / Reset / Done). Uses brightness (not transform) so it never
+         fights `.mgt-hover-scale`'s hover transform. */
+      .mgt-press { transition: filter 160ms ease-out, background-color 160ms ease-out; }
+      .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
+
+      /* v15.8.0 animation pass #2. */
+      /* Confirmed→Seated: the seated colour is revealed right→left (the confirmed
+         overlay is clipped away from its right edge). */
+      @keyframes mgt-wipe-rtl { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 100% 0 0); } }
+      .mgt-wipe-rtl { animation: mgt-wipe-rtl 380ms ease-out both; }
+      /* Seated→Completed: the old (seated) colour overlay fades out, revealing completed. */
+      @keyframes mgt-fade-overlay { from { opacity: 1; } to { opacity: 0; } }
+      .mgt-fade-overlay { animation: mgt-fade-overlay 360ms ease-out both; }
+      /* Timeline↔List view switch — incoming view slides in (direction by switch). */
+      @keyframes mgt-view-in-right { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+      @keyframes mgt-view-in-left  { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+      .mgt-view-in-right { animation: mgt-view-in-right 220ms ease-out both; }
+      .mgt-view-in-left  { animation: mgt-view-in-left  220ms ease-out both; }
+      /* Settings tab-content crossfade on switch. */
+      @keyframes mgt-fade-in { from { opacity: 0; } to { opacity: 1; } }
+      .mgt-fade-in { animation: mgt-fade-in 180ms ease-out both; }
+
+      /* Accessibility + weak-hardware opt-out: collapse every animation/transition
+         to ~instant when the OS requests reduced motion. */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.001ms !important;
+          animation-delay: 0ms !important;
+          transition-duration: 0.001ms !important;
+        }
+      }
     </style>
   </head>
   <body>

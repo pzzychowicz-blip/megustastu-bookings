@@ -11,7 +11,7 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BLOCK_BG, TBL, S } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 
@@ -62,6 +62,13 @@ export function mkBtn(extra) {
 export function Overlay({ onClose, children, footer }) {
   const mob = typeof window !== "undefined" && window.innerWidth < 600;
   const lockRef = useRef(false);
+  // v15.8.0: symmetric open/close animation. `leaving` comes from the wrapping
+  // <ModalPresence> (default false when there's no provider → enter-only). Mobile
+  // = slide-up/down sheet; desktop = scrim fade + card fade/scale. See index.html.
+  const { leaving } = usePresence();
+  const sheetCls = leaving ? "mgt-sheet-out" : "mgt-sheet-in";
+  const scrimCls = leaving ? "mgt-scrim-out" : "mgt-scrim-in";
+  const cardCls = leaving ? "mgt-card-out" : "mgt-card-in";
 
   useEffect(() => {
     if (!mob) return;
@@ -79,7 +86,7 @@ export function Overlay({ onClose, children, footer }) {
     // (minHeight:0 lets the flex body actually scroll instead of growing the column.)
     if (footer) {
       return (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
+        <div className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
           <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -90,7 +97,7 @@ export function Overlay({ onClose, children, footer }) {
       );
     }
     return (
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
+      <div className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
           <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))", boxSizing: "border-box" }}>
             {children}
@@ -105,11 +112,12 @@ export function Overlay({ onClose, children, footer }) {
   // (exactly as before).
   return (
     <div
+      className={scrimCls}
       style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {footer ? (
-        <div style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -118,7 +126,7 @@ export function Overlay({ onClose, children, footer }) {
           </div>
         </div>
       ) : (
-        <div style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           {children}
         </div>
       )}
@@ -207,8 +215,221 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
           }}>›</span>
         </div>
       </button>
-      {open ? <div style={{ marginTop: 12 }}>{children}</div> : null}
+      {/* v15.8.0: body eases open/closed via Reveal (the Summary effect) — used
+          by the ListView "Completed & cancelled" fold and every Settings section. */}
+      <Reveal show={open}><div style={{ marginTop: 12 }}>{children}</div></Reveal>
     </Section>
+  );
+}
+
+// ── Reveal — graceful height animation for show/hide content (v15.8.0) ────────
+// Wraps in-flow content (banners, the Summary body) so it eases open/closed
+// instead of snapping — the fix for the grid "jumping" when a notification
+// appears/disappears. Pass `show` (boolean) + children; on show→false the
+// content stays mounted, collapses (grid-template-rows 1fr→0fr + fade), then
+// unmounts after the transition. The last truthy `children` is cached so the
+// exit collapse still animates even when the source expression becomes null
+// (e.g. the final reminder clears → reminderBanners → null).
+//
+// The `grid-template-rows: 0fr↔1fr` technique animates to natural height with
+// NO magic max-height number (the reminders stack can be several rows tall).
+// Needs iOS Safari 16+ — the app already relies on dvh/backdrop-filter, so
+// that floor is safe. `overflow:hidden` + `minHeight:0` on the inner track let
+// the row truly collapse to zero (incl. each child's own marginBottom).
+export function Reveal({ show, children, style }) {
+  const last = useRef(null);
+  if (children) last.current = children;
+  const [mounted, setMounted] = useState(show === true);
+  const [open, setOpen] = useState(show === true);
+  // v15.8.0 cont.4: `revealed` lets the inner track go overflow:visible once OPEN and
+  // settled, so a `.mgt-hover-scale` child (e.g. the List "Completed & cancelled"
+  // finished cards) isn't clipped at rest. It stays hidden during the open/close
+  // ease so the collapse still clips cleanly. (Timeout-driven — more robust across
+  // browsers than transitionend on grid-template-rows.)
+  const [revealed, setRevealed] = useState(show === true);
+  useEffect(function () {
+    if (show) {
+      setMounted(true);
+      // Double rAF: ensure the 0fr→1fr change lands in a separate frame from
+      // the mount so the transition actually fires (a single frame can batch).
+      let r2 = 0;
+      const r1 = requestAnimationFrame(function () { r2 = requestAnimationFrame(function () { setOpen(true); }); });
+      const tv = setTimeout(function () { setRevealed(true); }, 320);
+      return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); clearTimeout(tv); };
+    }
+    setOpen(false);
+    setRevealed(false);   // clip immediately so the collapse hides cleanly
+    const t = setTimeout(function () { setMounted(false); }, 300);
+    return function () { clearTimeout(t); };
+  }, [show]);
+  if (!mounted) return null;
+  return (
+    <div style={{
+      display: "grid",
+      gridTemplateRows: open ? "1fr" : "0fr",
+      opacity: open ? 1 : 0,
+      transition: "grid-template-rows 280ms cubic-bezier(.4,0,.2,1), opacity 220ms ease",
+      ...(style || {})
+    }}>
+      <div style={{ overflow: revealed ? "visible" : "hidden", minHeight: 0 }}>{children || last.current}</div>
+    </div>
+  );
+}
+
+// ── AutoHeight — eases its height when its content changes (v15.8.0) ──────────
+// For content-REPLACE cases (Settings tab swap, the ManualModal selection box,
+// form sections) where there's no clean show/hide to drive a Reveal. A
+// ResizeObserver measures the inner content and the wrapper transitions `height`
+// to match. Because the Overlay card is auto-height, easing this inner height
+// makes the whole modal card ease too — no card-height/scroll juggling needed.
+// `overflow` is `visible` AT REST and `hidden` ONLY while the height transition runs
+// (v15.8.0 cont.4 — supersedes cont.3's "always hidden"): clipping at rest cut off any
+// `.mgt-hover-scale` lift inside (ReminderEditor edit sections, Settings bodies, the
+// form/Manual/Walkin/Pref/Week bodies). Mirrors the SlideView pattern — the growth is
+// still clipped + revealed by the eased height (no first-frame pop), but a settled
+// AutoHeight no longer clips its children. `linear` opts the easing to linear.
+export function AutoHeight({ children, style, linear }) {
+  const inner = useRef(null);
+  const hRef = useRef(null);
+  const [h, setH] = useState(null);             // null = auto until first measure
+  const [animating, setAnimating] = useState(false);
+  useLayoutEffect(function () {
+    const el = inner.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    function measure() {
+      const next = el.offsetHeight;
+      const prev = hRef.current;
+      // Only a CHANGE from a known prior height animates → clip while it runs.
+      // The first (null→number) measure must not clip the rest state.
+      if (prev != null && next !== prev) setAnimating(true);
+      hRef.current = next;
+      setH(next);
+    }
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return function () { ro.disconnect(); };
+  }, []);
+  return (
+    <div
+      onTransitionEnd={function (e) { if (e.propertyName === "height") setAnimating(false); }}
+      style={{ height: h == null ? "auto" : h, overflow: animating ? "hidden" : "visible", transition: "height 280ms " + (linear ? "linear" : "ease"), ...(style || {}) }}
+    >
+      <div ref={inner}>{children}</div>
+    </div>
+  );
+}
+
+// ── SlideView — slide-in wrapper that only clips while animating (v15.8.0) ─────
+// Wraps the main view (timeline/list). The parent keys it (`key={slideKey}`) so a
+// nav/view change remounts it and replays the slide (`dir` = mgt-view-in-left /
+// -right). `overflow:hidden` ONLY while the slide runs (so the 28px translateX
+// doesn't cause a transient scrollbar), then `visible` so card hover-lifts aren't
+// clipped at rest (the v15.8.0-cont.3 regression fix).
+export function SlideView({ dir, children }) {
+  const [animating, setAnimating] = useState(true);
+  return (
+    <div
+      className={animating ? dir : undefined}
+      onAnimationEnd={function () { setAnimating(false); }}
+      style={{ overflow: animating ? "hidden" : "visible" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ── useFlip — animate list reorder (FLIP) (v15.8.0) ───────────────────────────
+// Returns a ref for the list container; on `deps` change it measures each
+// `[data-flip-id]` child's top, and for any that moved, plays a Web-Animations
+// translateY(from→0) — so a re-sorted card eases to its new spot instead of
+// jumping. WAAPI leaves no inline styles, so it never fights `.mgt-hover-scale`.
+export function useFlip(deps) {
+  const ref = useRef(null);
+  const prevTops = useRef(new Map());
+  useLayoutEffect(function () {
+    const container = ref.current;
+    if (!container) return;
+    const next = new Map();
+    container.querySelectorAll("[data-flip-id]").forEach(function (el) {
+      const id = el.getAttribute("data-flip-id");
+      const top = el.getBoundingClientRect().top;
+      next.set(id, top);
+      const prev = prevTops.current.get(id);
+      if (prev != null && prev !== top && typeof el.animate === "function") {
+        el.animate(
+          [{ transform: "translateY(" + (prev - top) + "px)" }, { transform: "translateY(0)" }],
+          { duration: 320, easing: "ease" }
+        );
+      }
+    });
+    prevTops.current = next;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return ref;
+}
+
+// ── Presence — generic enter/exit animation primitive (v15.8.0) ───────────────
+// The shared "delayed-unmount so the exit can animate" pattern (also used by
+// Reveal). On `show`→false the node stays mounted, swaps to `outClass`, and
+// unmounts after `outMs`; the last truthy children are cached so the
+// out-animation still has content if the source expression goes null. Drives
+// the status toasts (float in/out) and the slide-in/out buttons.
+//   Presence({ show, inClass, outClass, outMs, children, style, tag })
+// `usePresenceLifecycle` is the bare state machine, reused by ModalPresence
+// (which provides a context instead of rendering a wrapper element).
+function usePresenceLifecycle(show, outMs) {
+  const [render, setRender] = useState(show === true);
+  const [leaving, setLeaving] = useState(false);
+  useEffect(function () {
+    if (show) { setRender(true); setLeaving(false); return undefined; }
+    if (!render) return undefined;          // never shown → nothing to animate out
+    setLeaving(true);
+    const t = setTimeout(function () { setRender(false); setLeaving(false); }, outMs);
+    return function () { clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `render` read as a closure snapshot
+  }, [show]);
+  return [render, leaving];
+}
+
+export function Presence({ show, inClass, outClass, outMs = 200, children, style, tag = "div" }) {
+  const last = useRef(null);
+  if (children) last.current = children;
+  const [render, leaving] = usePresenceLifecycle(show, outMs);
+  if (!render) return null;
+  const Tag = tag;
+  return <Tag className={leaving ? outClass : inClass} style={style}>{children || last.current}</Tag>;
+}
+
+// Thin alias: a floating status toast = Presence with the toast keyframes.
+// `style` lets the one-at-a-time slot pass `gridArea` so leaving + entering
+// toasts overlap in the same grid cell (crossfade in place, never stack).
+export function Toast({ show, children, style }) {
+  return (
+    <Presence show={show} inClass="mgt-toast-in" outClass="mgt-toast-out" outMs={210} style={style}>
+      {children}
+    </Presence>
+  );
+}
+
+// ── ModalPresence — exit animation for Overlay-based modals (v15.8.0) ──────────
+// Wraps a modal mount (`<ModalPresence show={cond}>{cond?<Modal/>:null}</…>`).
+// Keeps the modal mounted for `outMs` after close and exposes `{leaving}` via
+// PresenceContext — `Overlay` (and ReminderEditor) read it to swap their scrim/
+// card/sheet to the *-out keyframe before unmounting. No wrapper element is
+// rendered, so the modal's own fixed/overlay positioning is untouched.
+export const PresenceContext = createContext({ leaving: false });
+export function usePresence() { return useContext(PresenceContext); }
+
+export function ModalPresence({ show, children, outMs = 200 }) {
+  const last = useRef(null);
+  if (children) last.current = children;
+  const [render, leaving] = usePresenceLifecycle(show, outMs);
+  if (!render) return null;
+  return (
+    <PresenceContext.Provider value={{ leaving: leaving }}>
+      {children || last.current}
+    </PresenceContext.Provider>
   );
 }
 
@@ -270,7 +491,8 @@ export function Toggle({ on, onClick }) {
         cursor: "pointer",
         background: on ? "var(--toggle-on)" : "var(--toggle-off)",
         position: "relative", flexShrink: 0,
-        boxShadow: "inset 0 1px 2px rgba(0,0,0,0.08)"
+        boxShadow: "inset 0 1px 2px rgba(0,0,0,0.08)",
+        transition: "background-color 160ms linear"   // v15.8.0: track colour eases
       }}
     >
       <div style={{
@@ -279,7 +501,8 @@ export function Toggle({ on, onClick }) {
         left: on ? 24 : 3,
         width: 20, height: 20, borderRadius: 10,
         background: "var(--text-on-accent)",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.15)"
+        boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
+        transition: "left 160ms linear"               // v15.8.0: knob slides
       }} />
     </button>
   );

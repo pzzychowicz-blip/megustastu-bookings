@@ -44,7 +44,7 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   comboCapBest, nowTime
 } from "../lib/booking-logic";
-import { Overlay, Section, Fld, AvailBanner, mkInp, mkBtn } from "./atoms";
+import { Overlay, Section, Fld, AvailBanner, mkInp, mkBtn, AutoHeight, Reveal } from "./atoms";
 import { TableGrid } from "./TableGrid";
 
 export function WalkinForm({
@@ -137,7 +137,7 @@ export function WalkinForm({
   const wClearBtn = wSel.length > 0 ? (
     <button
       key="clr"
-      className="mgt-hover-scale"
+      className="mgt-hover-scale mgt-press"
       style={mkBtn({ fontSize: 12, padding: "6px 12px", background: BTN.clear })}
       onClick={() => setDraft({ ...wf, tables: [] })}
     >
@@ -182,6 +182,47 @@ export function WalkinForm({
     ));
   }
 
+  const wKitchenSugBlock = (wKitchenSugg && (wKitchenSugg.before.length || wKitchenSugg.after.length)) ? (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 11, color: S.muted, marginBottom: 6 }}>
+        <span style={{
+          background: "rgba(220,252,231,0.8)", color: "#166534",
+          padding: "2px 6px", borderRadius: 6, fontSize: 10, fontWeight: 600
+        }}>
+          green
+        </span>
+        {" = tables available  "}
+        <span style={{
+          background: "rgba(254,249,195,0.8)", color: "#854d0e",
+          padding: "2px 6px", borderRadius: 6, fontSize: 10, fontWeight: 600
+        }}>
+          yellow
+        </span>
+        {" = kitchen ok, tables tight"}
+      </div>
+      {wKitchenSugg.before.length ? (
+        <div style={{ marginBottom: 4 }}>
+          <span style={{ fontWeight: 700, fontSize: 12 }}>Before: </span>
+          <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+            {wRenderKT(wKitchenSugg.before)}
+          </span>
+        </div>
+      ) : null}
+      {wKitchenSugg.after.length ? (
+        <div>
+          <span style={{ fontWeight: 700, fontSize: 12 }}>After: </span>
+          <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+            {wRenderKT(wKitchenSugg.after)}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  ) : (wKitchenBusy ? (
+    <div style={{ marginTop: 6, fontSize: 12, color: "var(--danger-text)" }}>
+      No kitchen-friendly alternatives found nearby.
+    </div>
+  ) : null);
+
   const wKitchenSection = (
     <div style={{
       padding: "10px 14px",
@@ -208,46 +249,9 @@ export function WalkinForm({
           </span>
         ) : null}
       </div>
-      {wKitchenSugg && (wKitchenSugg.before.length || wKitchenSugg.after.length) ? (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 11, color: S.muted, marginBottom: 6 }}>
-            <span style={{
-              background: "rgba(220,252,231,0.8)", color: "#166534",
-              padding: "2px 6px", borderRadius: 6, fontSize: 10, fontWeight: 600
-            }}>
-              green
-            </span>
-            {" = tables available  "}
-            <span style={{
-              background: "rgba(254,249,195,0.8)", color: "#854d0e",
-              padding: "2px 6px", borderRadius: 6, fontSize: 10, fontWeight: 600
-            }}>
-              yellow
-            </span>
-            {" = kitchen ok, tables tight"}
-          </div>
-          {wKitchenSugg.before.length ? (
-            <div style={{ marginBottom: 4 }}>
-              <span style={{ fontWeight: 700, fontSize: 12 }}>Before: </span>
-              <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
-                {wRenderKT(wKitchenSugg.before)}
-              </span>
-            </div>
-          ) : null}
-          {wKitchenSugg.after.length ? (
-            <div>
-              <span style={{ fontWeight: 700, fontSize: 12 }}>After: </span>
-              <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
-                {wRenderKT(wKitchenSugg.after)}
-              </span>
-            </div>
-          ) : null}
-        </div>
-      ) : (wKitchenBusy ? (
-        <div style={{ marginTop: 6, fontSize: 12, color: "var(--danger-text)" }}>
-          No kitchen-friendly alternatives found nearby.
-        </div>
-      ) : null)}
+      {/* v15.8.0 cont.4: the suggestion sub-panel eases in/out via Reveal — the same
+          effect as the Summary panel. */}
+      <Reveal show={!!wKitchenSugBlock}>{wKitchenSugBlock}</Reveal>
     </div>
   );
 
@@ -316,6 +320,7 @@ export function WalkinForm({
 
   return (
     <Overlay onClose={onClose} footer={footerEl}>
+      <AutoHeight>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
           fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
@@ -411,7 +416,7 @@ export function WalkinForm({
               </span>
               {wf.customDur ? (
                 <button
-                  className="mgt-hover-scale"
+                  className="mgt-hover-scale mgt-press"
                   style={mkBtn({ fontSize: 12, background: BTN.reset })}
                   onPointerDown={(e) => {
                     e.preventDefault();
@@ -477,6 +482,7 @@ export function WalkinForm({
           onTapTime={(t) => setDraft({ ...wf, tables: [], time: t })}
         />
       ) : null}
+      </AutoHeight>
     </Overlay>
   );
 }

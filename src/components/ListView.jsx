@@ -28,9 +28,16 @@
 // exclude the hidden cards while the disclosure is closed. The card JSX is
 // unchanged, just hoisted into renderCard() so both groups share it.
 
+import { useEffect, useState } from "react";
 import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder } from "../lib/booking-logic";
-import { SmallTag, SBadge, TBadge, mkBtn, Collapsible } from "./atoms";
+import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
+
+// v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
+// that changes status plays a colour wipe of its OLD status colour. Keyed by id,
+// expires by timestamp; single list on screen so module scope is safe.
+let __listPrev = null;
+const __listAnims = {};
 
 export function ListView({
   bookings, date, onEdit, onStatus, onDelete, onManual,
@@ -59,6 +66,31 @@ export function ListView({
   // preserves the exact visual order the inline list had.
   const active = day.filter((b) => b.status !== "completed" && b.status !== "cancelled");
   const finished = day.filter((b) => b.status === "completed" || b.status === "cancelled");
+
+  // v15.8.0: detect status changes → stamp a wipe of the OLD colour; FLIP the
+  // active list so a re-sorted card eases to its new position instead of jumping.
+  const [, bumpAnim] = useState(0);
+  useEffect(function () {
+    const prev = __listPrev;
+    const now = Date.now();
+    if (prev) {
+      let changed = false;
+      day.forEach(function (b) {
+        const p = prev[b.id];
+        if (p && p !== b.status) { __listAnims[b.id] = { from: p, until: now + 700 }; changed = true; }
+      });
+      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 720); }
+    }
+    const m = {};
+    day.forEach(function (b) { m[b.id] = b.status; });
+    __listPrev = m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookings]);
+  function listAnimFrom(id) {
+    const a = __listAnims[id];
+    return a && a.until > Date.now() ? a.from : null;
+  }
+  const flipRef = useFlip([active.map(function (b) { return b.id; }).join(",")]);
 
   function renderCard(b) {
         // v14 p1 (Issue 2 fix): end-time label is pinned to the scheduled plan
@@ -160,15 +192,18 @@ export function ListView({
           </button>
         ) : null;
 
+        const animFrom = listAnimFrom(b.id);
         return (
           <div
             key={b.id}
+            data-flip-id={b.id}
             className="mgt-hover-scale"
             onClick={() => onSelect(b.id)}
             style={{
               background: cardBg,
               border: cardBrdW + " solid " + cardBrd,
               borderRadius: 16, padding: "14px 16px",
+              position: "relative",
               opacity: (b.status === "completed" || b.status === "cancelled") ? 0.75 : 1,
               // v14.4.0: accent ring marks the keyboard-focused card (List shortcuts).
               boxShadow: b.id === selectedId
@@ -177,6 +212,16 @@ export function ListView({
               cursor: "pointer"
             }}
           >
+            {/* v15.8.0 cont.4: status-change colour wipe — fills the NEW (clicked)
+                status colour (green Seated, red Cancelled, …) sweeping right→left.
+                `animFrom` is only the trigger flag; the colour is the new status. */}
+            {animFrom ? (
+              <div className="mgt-wipe-rtl" style={{
+                position: "absolute", inset: 0, borderRadius: 16, pointerEvents: "none", zIndex: 0,
+                background: BLOCK_BG[b.status] || "transparent", opacity: 0.5
+              }} />
+            ) : null}
+            <div style={{ position: "relative", zIndex: 1 }}>
             {conflictEl}
             {warnEl}
             <div style={{
@@ -208,13 +253,16 @@ export function ListView({
                 <button className="mgt-hover-scale" style={mkBtn({ background: BTN.del })} onClick={() => onDelete(b.id)}>Delete</button>
               </div>
             </div>
+            </div>
           </div>
         );
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {active.map(renderCard)}
+      <div ref={flipRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {active.map(renderCard)}
+      </div>
       {finished.length > 0 ? (
         <Collapsible
           title="Completed & cancelled"

@@ -46,7 +46,7 @@ import { validateReminderDraft } from "./lib/reminders";
 // First component file in the codebase using JSX syntax. App.jsx now also
 // uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
 // compatibility no longer applies — both files share a single style.
-import { Overlay, mkBtn } from "./components/atoms";
+import { Overlay, mkBtn, Reveal, Toast, Presence, ModalPresence, SlideView } from "./components/atoms";
 
 
 // ── Phase B2 (v15-refactor): secondary modals ─────────────────────────────
@@ -175,7 +175,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"15.7.0",
+  version:"15.8.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -416,6 +416,14 @@ function BookingApp(){
   },[]);
 
   const [view, setView] = useState("timeline");
+  // v15.8.0: main-view slide. `slide.k` keys the SlideView wrapper (a bump remounts
+  // it → replays the slide); `slide.dir` picks direction. Set by view-toggle + date
+  // nav (‹/›/date-input/Today). mgt-view-in-left = enters from left (→ "left to
+  // right"); mgt-view-in-right = enters from right (→ "right to left").
+  const [slide, setSlide] = useState({ k: 0, dir: "mgt-view-in-left" });
+  function bumpSlide(dir){ setSlide(function(s){ return { k: s.k + 1, dir: dir }; }); }
+  // Navigate to a date with a slide whose direction matches forward/back.
+  function goToDate(next){ if(next!==viewDate){ bumpSlide(next > viewDate ? "mgt-view-in-left" : "mgt-view-in-right"); } setViewDate(next); }
   // v14.4.0: List-view keyboard focus — the booking the A/E/D/S/C/Delete
   // shortcuts act on. ↑/↓ move it; click a card to set it. Null = nothing focused.
   const [selectedListId, setSelectedListId] = useState(null);
@@ -988,7 +996,9 @@ function BookingApp(){
     setSummaryOpen:setSummaryOpen,
     showWeek:showWeek,setShowWeek:setShowWeek,
     save:save,doSave:doSave,saveWalkin:saveWalkin,doSaveWalkin:doSaveWalkin,
-    forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain
+    forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain,
+    // v15.8.0 cont.4: keyboard nav routes through the same slide path as the buttons.
+    goToDate:goToDate,bumpSlide:bumpSlide
   };
   useEffect(function(){
     function isTyping(el){if(!el) return false;const t=el.tagName;return t==="INPUT"||t==="TEXTAREA"||t==="SELECT"||el.isContentEditable;}
@@ -1157,16 +1167,16 @@ function BookingApp(){
         }
       }
       if(k==="?"){e.preventDefault();K.setShowSettings(true);return;}
-      if(k==="t"||k==="T"){e.preventDefault();K.setView("timeline");return;}
-      if(k==="l"||k==="L"){e.preventDefault();K.setView("list");return;}
-      if(k==="d"||k==="D"){e.preventDefault();K.setViewDate(new Date().toISOString().slice(0,10));return;}
+      if(k==="t"||k==="T"){e.preventDefault();if(K.view!=="timeline"){K.bumpSlide("mgt-view-in-left");}K.setView("timeline");return;}
+      if(k==="l"||k==="L"){e.preventDefault();if(K.view!=="list"){K.bumpSlide("mgt-view-in-right");}K.setView("list");return;}
+      if(k==="d"||k==="D"){e.preventDefault();K.goToDate(new Date().toISOString().slice(0,10));return;}
       if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
       // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
       if(k===SUMMARY_KEY||k===SUMMARY_KEY.toUpperCase()){e.preventDefault();K.setSummaryOpen(function(o){return !o;});return;}
       if(k===WEEK_KEY||k===WEEK_KEY.toUpperCase()){e.preventDefault();K.setShowWeek(true);return;}
-      if(k==="ArrowLeft"){e.preventDefault();const d1=new Date(K.viewDate);d1.setDate(d1.getDate()-1);K.setViewDate(d1.toISOString().slice(0,10));return;}
-      if(k==="ArrowRight"){e.preventDefault();const d2=new Date(K.viewDate);d2.setDate(d2.getDate()+1);K.setViewDate(d2.toISOString().slice(0,10));return;}
+      if(k==="ArrowLeft"){e.preventDefault();const d1=new Date(K.viewDate);d1.setDate(d1.getDate()-1);K.goToDate(d1.toISOString().slice(0,10));return;}
+      if(k==="ArrowRight"){e.preventDefault();const d2=new Date(K.viewDate);d2.setDate(d2.getDate()+1);K.goToDate(d2.toISOString().slice(0,10));return;}
       // ── Timeline-only shortcuts ──
       if(K.view==="timeline"){
         const today=new Date().toISOString().slice(0,10);
@@ -1291,25 +1301,72 @@ function BookingApp(){
     return found;
   })();
 
-  const prefPickerModal=showPrefPicker?<PrefPickerModal
+  // v15.8.0: every modal is wrapped in <ModalPresence> so Overlay animates its
+  // close (not just its open) — see atoms.jsx. The inner `cond?<X/>:null` guard
+  // stays so ModalPresence renders cached children while leaving.
+  const prefPickerModal=<ModalPresence show={showPrefPicker}>{showPrefPicker?<PrefPickerModal
     selected={form.preferredTables||[]}
     partySize={form.size}
     onChange={function(next){setForm(function(f){return Object.assign({},f,{preferredTables:next});});}}
-    onClose={function(){setShowPrefPicker(false);}} />:null;
+    onClose={function(){setShowPrefPicker(false);}} />:null}</ModalPresence>;
 
-  const historyPopup=(showHistory&&editId)?(function(){const cur=bookings.find(function(b){return b.id===editId;});return cur?<HistoryPopup booking={cur} onClose={function(){setShowHistory(false);}} />:null;})():null;
+  const historyPopup=<ModalPresence show={!!(showHistory&&editId)}>{(showHistory&&editId)?(function(){const cur=bookings.find(function(b){return b.id===editId;});return cur?<HistoryPopup booking={cur} onClose={function(){setShowHistory(false);}} />:null;})():null}</ModalPresence>;
 
 
   // reminderBanners is returned by useReminders (Phase D2) and rendered
   // alongside the other top banners further down. Derivation + JSX live
   // in ./hooks/useReminders.jsx.
 
-  const reshuffledBanner=reshuffled?<div
-    style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>:null;
-  // v15.6.1: post-sync conflict reconciliation result (offline multi-device merge).
-  const syncFixBanner=syncFix?<div
-    style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>Resolved a table conflict after syncing.</div>:null;
-  const ineffBanner=(!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer))?<div
+  // ── Notification banners (v15.8.0) ──────────────────────────────────────────
+  // Two families so the grid stops "jumping" when a banner appears/disappears:
+  //  • TRANSIENT status toasts (reconnect / syncing / loaded / reshuffled /
+  //    sync-fix) float in a fixed bottom layer (floatingToasts, below) — they
+  //    never reflow the grid. Slide-up+fade via .mgt-toast; they auto-hide via
+  //    their own state, and a floating toast vanishing moves nothing.
+  //  • PERSISTENT/actionable banners (offline / write-error / inefficiency /
+  //    overlap / reminders) stay in flow but ease open/closed via the Reveal
+  //    atom (graceful height animation). See CLAUDE.md "Notification layout".
+  const toastShadow="0 6px 20px rgba(0,0,0,0.18)";
+  // v15.8.0: the 5 status toasts share ONE slot — only the highest-priority
+  // active one is shown (order below), so they never stack vertically. When the
+  // top one changes, the old floats out as the new floats in; they overlap in
+  // the same grid cell (gridArea 1/1) so the swap is a crossfade in place.
+  const statusToasts=[
+    {key:"resync",on:resyncing,node:<div
+      style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.</div>},
+    {key:"reconnect",on:reconnectShown,node:<div
+      style={{background:"var(--app-reconnect-bg)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:toastShadow}}>✓ Reconnected — changes synced.</div>},
+    {key:"syncfix",on:syncFix,node:<div
+      style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
+    {key:"reshuffled",on:reshuffled,node:<div
+      style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>},
+    {key:"load",on:loadBannerShown,node:<div
+      style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>{"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."}</div>},
+  ];
+  const topToastKey=(statusToasts.find(function(t){return t.on;})||{}).key;
+  // Floating layer — absolutely positioned over the TOP-CENTRE of mainView so the
+  // toast lands in the empty gap of the timeline toolbar (between the
+  // Optimizer/Reshuffle group on the left and the Follow/zoom group on the right)
+  // — more at-a-glance, and it tracks mainView's position. Anchored to a relative
+  // wrapper around mainView at the render site; works in both views. ALWAYS
+  // mounted (each Toast self-manages its in/out lifecycle, so the container must
+  // outlive a toast's out-animation) — empty + pointerEvents:none when idle, so it
+  // never blocks the toolbar/grid taps. z<modal (1000) / <quick-status popup (300).
+  // Inner = a 1-cell grid so leaving+entering toasts overlap (crossfade in place).
+  const floatingToasts=<div
+    style={{position:"absolute",top:0,left:0,right:0,zIndex:60,display:"flex",justifyContent:"center",alignItems:"flex-start",padding:"7px 12px 0",pointerEvents:"none"}}><div
+    style={{width:"100%",maxWidth:360,display:"grid",justifyItems:"center",textAlign:"center"}}>{statusToasts.map(function(t){return <Toast key={t.key} show={t.key===topToastKey} style={{gridArea:"1 / 1",width:"100%"}}>{t.node}</Toast>;})}</div></div>;
+
+  // In-flow persistent banners (wrapped in <Reveal> at the render site).
+  const offlineBanner=!isOnline?<div
+    style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>⚠ Working offline — your changes are saved locally and will sync when the connection returns. Keep this tab open.</div>:null;
+  const writeWarningBanner=writeWarning?<div
+    style={{background:"var(--danger-bg)",border:"2px solid var(--danger-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--danger-text)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>{"⚠ "+writeWarning}</span><button
+            className="mgt-hover-scale"
+            style={mkBtn({fontSize:12,background:"var(--app-btn-slate-dim)",minHeight:32,padding:"4px 12px"})}
+            onClick={function(){setWriteWarning(null);}}>Dismiss</button></div>:null;
+  const ineffShow=!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer);
+  const ineffBanner=ineffShow?<div
     style={{background:"var(--warn-bg)",border:"2px solid var(--warn-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--warn-text)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>Tables could be reshuffled for better efficiency.</span><div style={{display:"flex",gap:6}}><button
         onClick={function(){setDismissedIneff(viewDate);}}
         className="mgt-hover-scale"
@@ -1388,22 +1445,22 @@ function BookingApp(){
     onToggle={function(){setSummaryOpen(function(o){return !o;});}}
     onOpenWeek={function(){setShowWeek(true);}} />;
 
-  const delModal=confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
+  const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
         style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
         onClick={function(){setConfirmDel(null);}}>Cancel</button><button
         onClick={function(){delBooking(confirmDel);}}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null;
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
 
-  const manualModal=manualBooking?<ManualModal
+  const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
     booking={manualBooking}
     bookings={manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings}
     blocks={tableBlocks}
     onSave={function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{manualAssign(manualBooking.id,tables,locked,affected);}}}
-    onClose={function(){setManualTarget(null);}} />:null;
+    onClose={function(){setManualTarget(null);}} />:null}</ModalPresence>;
 
-  const walkinModal=showWalkin?<WalkinForm
+  const walkinModal=<ModalPresence show={showWalkin}>{showWalkin?<WalkinForm
     draft={walkinForm}
     setDraft={setWalkinForm}
     error={walkinError}
@@ -1415,13 +1472,13 @@ function BookingApp(){
     isMobile={isMobile}
     nowMins={nowMins}
     onSave={saveWalkin}
-    onClose={function(){setShowWalkin(false);}} />:null;
+    onClose={function(){setShowWalkin(false);}} />:null}</ModalPresence>;
 
-  const weekModal=showWeek?<WeekView
+  const weekModal=<ModalPresence show={showWeek}>{showWeek?<WeekView
     bookings={bookings}
     viewDate={viewDate}
     onPick={function(d){setViewDate(d);setShowWeek(false);}}
-    onClose={function(){setShowWeek(false);}} />:null;
+    onClose={function(){setShowWeek(false);}} />:null}</ModalPresence>;
 
   return (
     <div
@@ -1430,7 +1487,7 @@ function BookingApp(){
               <button
                 key={v}
                 className="mgt-hover-scale"
-                onClick={function(){setView(v);}}
+                onClick={function(){if(v!==view){bumpSlide(v==="list"?"mgt-view-in-right":"mgt-view-in-left");}setView(v);}}
                 style={mkBtn({background:view===v?S.accent:"var(--app-btn-grey)",textTransform:"capitalize",minHeight:40})}>{v}</button>
             );})}<button
               onClick={openWalkin}
@@ -1443,30 +1500,22 @@ function BookingApp(){
               className="mgt-hover-scale"
               style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button></div></div><div
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
-              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);setViewDate(d.toISOString().slice(0,10));}}
+              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
               dangerouslySetInnerHTML={{__html:"&#8249;"}} /><button
-              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);setViewDate(d.toISOString().slice(0,10));}}
+              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
               dangerouslySetInnerHTML={{__html:"&#8250;"}} /><input
               type="date"
               value={viewDate}
-              onChange={function(e){setViewDate(e.target.value);}}
+              onChange={function(e){goToDate(e.target.value);}}
               className="mgt-hover-scale"
-              style={{fontSize:14,padding:"8px 10px",borderRadius:12,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center"}}>{viewDate!==new Date().toISOString().slice(0,10)?<button
-              onClick={function(){setViewDate(new Date().toISOString().slice(0,10));}}
+              style={{fontSize:14,padding:"8px 10px",borderRadius:12,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center"}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
+              onClick={function(){goToDate(new Date().toISOString().slice(0,10));}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button>:null}</div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0}}>{summaryPanel}</div></div>{!isOnline?<div
-          style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>⚠ Working offline — your changes are saved locally and will sync when the connection returns. Keep this tab open.</div>:null}{reconnectShown?<div
-          style={{background:"var(--app-reconnect-bg)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>✓ Reconnected — changes synced.</div>:null}{resyncing?<div
-          style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>⟳ Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.</div>:null}{loadBannerShown?<div
-          style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."}</div>:null}{writeWarning?<div
-          style={{background:"var(--danger-bg)",border:"2px solid var(--danger-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--danger-text)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>{"⚠ "+writeWarning}</span><button
-            className="mgt-hover-scale"
-            style={mkBtn({fontSize:12,background:"var(--app-btn-slate-dim)",minHeight:32,padding:"4px 12px"})}
-            onClick={function(){setWriteWarning(null);}}>Dismiss</button></div>:null}{reshuffledBanner}{syncFixBanner}{ineffBanner}{overlapBanner}{reminderBanners}{mainView}{showForm?<BookingFormModal
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
@@ -1483,13 +1532,13 @@ function BookingApp(){
               onOpenPrefPicker={function(){setShowPrefPicker(true);}}
               onOpenManualAssign={function(target){setManualTarget(target);}}
               onOpenHistory={function(){setShowHistory(true);}}
-              onRequestCancel={function(id){setConfirmCancel(id);}} />:null}{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{blockTarget?<BlockModal
+              onRequestCancel={function(id){setConfirmCancel(id);}} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}<ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}
           onSave={addBlock}
           onRemove={removeBlock}
-          onClose={function(){setBlockTarget(null);}} />:null}{confirmCancel?<Overlay onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+          onClose={function(){setBlockTarget(null);}} />:null}</ModalPresence><ModalPresence show={!!confirmCancel}>{confirmCancel?<Overlay onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmCancel(null);}}>Back</button><button
@@ -1498,19 +1547,19 @@ function BookingApp(){
               style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>No show</button><button
               onClick={function(){doCancelBooking(confirmCancel,false);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Cancel booking</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Cancel booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Cancel booking</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Cancel booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Confirm</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</div><div style={{fontSize:14,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Confirm</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</div><div style={{fontSize:14,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
               onClick={function(){setConfirmReshuffle(false);forceReshuffle();}}
               className="mgt-hover-scale"
-              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
+              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
@@ -1541,7 +1590,7 @@ function BookingApp(){
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
             onDeleteReminder={deleteReminder}
-            onToggleReminder={toggleReminderActive} /></Overlay>:null}{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
+            onToggleReminder={toggleReminderActive} /></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
         // window.confirm which is blocked in sandboxed preview environments).
         // Renders on top of Settings in DOM order so it visually covers the list.
         confirmReminderDel?<Overlay onClose={function(){setConfirmReminderDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
@@ -1550,13 +1599,13 @@ function BookingApp(){
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
               onClick={function(){doDeleteReminder(confirmReminderDel);}}
               className="mgt-hover-scale"
-              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete reminder?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
+              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete reminder?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
         reminderEditor?<ReminderEditor
           draft={reminderEditor.draft}
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
           onSave={saveReminderFromEditor}
           onCancel={function(){setReminderEditor(null);}}
-          isNew={reminderEditor.id==="new"} />:null}{historyPopup}</div></div>
+          isNew={reminderEditor.id==="new"} />:null}</ModalPresence>{historyPopup}</div></div>
   );
 }
 
