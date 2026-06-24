@@ -264,6 +264,13 @@
           position: relative;
           z-index: 2;
         }
+        /* v15.8.1: the seated timeline "ghost" (original-duration dashed outline)
+           lifts in lockstep with its booking cell. The ghost is rendered immediately
+           BEFORE its block (TimelineView gridRows), so :has() scales the ghost whose
+           next-sibling block is hovered — one ghost per booking-per-row, no over-match.
+           Same hover-capability guard as .mgt-hover-scale (no sticky-hover on touch);
+           the ghost's own inline `transition: transform 120ms` eases it. */
+        .mgt-tlghost:has(+ .mgt-hover-scale:hover) { transform: scale(1.08); }
       }
       /* v15.8.0: floating status toasts (Reconnected / Syncing / Loaded /
          Reshuffled / Sync-fix) live in an absolute layer over the mainView
