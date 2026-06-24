@@ -35,7 +35,7 @@
 //     idle — fixes the previous "Follow"/"Follow" duplicate that relied on
 //     colour alone to convey state.
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG,
@@ -148,7 +148,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, onEdit, 
         border: border || "1px solid rgba(255,255,255,0.2)",
         WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
         boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
-        transition: "left 320ms ease, width 320ms ease"   // v15.8.0: reposition eases (seated-shift / reshuffle)
+        // v15.8.0: reposition eases (seated-shift / reshuffle). v15.8.1: `transform`
+        // re-added so the .mgt-hover-scale lift eases again — the inline transition had
+        // been overriding the class's `transform 120ms`, making the hover scale instant.
+        // The seated ghost outline mirrors this exact transition so the two lift together.
+        transition: "left 320ms ease, width 320ms ease, transform 120ms ease"
       }}
     >
       {animOverlay}
@@ -186,6 +190,7 @@ export function TimelineView({
   onOpenSettings = () => {}
 }) {
   const scrollRef = useRef(null);
+  const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
   const [quickStatus, setQuickStatus] = useState(null);
   const isToday = date === new Date().toISOString().slice(0, 10);
   const totalMins = (GRID_CLOSE - OPEN) * 60;
@@ -195,19 +200,43 @@ export function TimelineView({
   // When followNow is on (today only), keep the current minute ~30 min from
   // the left edge. Otherwise restore the last known scroll position from the
   // ref — this lets the user navigate away and back without losing context.
+  //
+  // v15.8.1: centre the now-line, in LOCKSTEP with the grid's `width` transition.
+  // Both Follow (zoom 1×→4×) and the +/- zoom buttons ease the grid width over
+  // ~340ms (the v15.8.0 zoom transition). Pinning scrollLeft to a target computed
+  // from the FINAL width fights the still-transitioning width — the scroll clamps,
+  // jumps, and corrects, so the grid visibly jitters back and forth (the reported
+  // bug). `centerNow` instead takes a FRACTION and re-derives scrollLeft from the
+  // grid's CURRENT (live, mid-transition) width each frame, so the scroll and the
+  // width animate together and the now-line stays put — the zoom eases smoothly
+  // around it with no fighting. Runs for a short window (covers the transition) then
+  // stops. On a mount / 15s tick the width is already final, so each frame writes
+  // the same value (idempotent — no visible motion). prefers-reduced-motion zeroes
+  // the width transition, so the grid is final immediately and this stays instant.
+  function centerNow(fraction) {
+    cancelAnimationFrame(followRafRef.current);
+    const start = performance.now();
+    function step() {
+      const el = scrollRef.current;
+      if (!el) return;
+      el.scrollLeft = fraction * el.scrollWidth;
+      if (performance.now() - start < 500) {
+        followRafRef.current = requestAnimationFrame(step);
+      }
+    }
+    step();
+  }
   useEffect(() => {
-    if (!scrollRef.current) return;
+    if (!scrollRef.current) return undefined;
     if (followNow && isToday && nowMins >= OPEN * 60 && nowMins <= GRID_CLOSE * 60) {
       const targetMins = Math.max(OPEN * 60, nowMins - 30);
-      const scrollPos = ((targetMins - OPEN * 60) / totalMins) * gridW;
-      // v15.8.0 cont.4: ease the re-centre instead of hard-jumping. The 15s nowMins
-      // tick is far longer than the smooth scroll, so successive centres never fight;
-      // browsers honour prefers-reduced-motion for programmatic smooth scroll.
-      scrollRef.current.scrollTo({ left: scrollPos, behavior: "smooth" });
-      if (scrollPosRef) scrollPosRef.current = scrollPos;
+      const fraction = (targetMins - OPEN * 60) / totalMins;
+      centerNow(fraction);
+      if (scrollPosRef) scrollPosRef.current = fraction * gridW;
     } else if (scrollPosRef && scrollPosRef.current > 0) {
       scrollRef.current.scrollLeft = scrollPosRef.current;
     }
+    return () => cancelAnimationFrame(followRafRef.current);
   }, [followNow, isToday, nowMins, gridW]);
 
   function onGridScroll() {
@@ -435,25 +464,43 @@ export function TimelineView({
       >
         <GridLines />
         {tblBlocks.map((bl, i) => <BlockBar key={"blk" + i} bl={bl} />)}
-        {rows.filter((b) => b.status === "seated").map((b) => {
-          const origD = b.originalDuration || b.duration;
-          const sm = toMins(b.time) - OPEN * 60;
-          const gLeft = pct(OPEN * 60 + sm);
-          const gW = Math.max((origD / totalMins) * 100, 0.5) + "%";
+        {/* v15.8.1: render each seated booking's dashed "ghost" (original-duration
+            outline) IMMEDIATELY BEFORE its block, so the ghost mirrors EVERY cell
+            effect: (1) reposition — same left/width + transform transition; (2) vertical
+            reassign — FLIP on the PRIMARY cell only (distinct `__ghost` id namespace so
+            it never collides with the block's data-flip-id={b.id}); (3) hover-lift — the
+            ghost paints under its block but, being its immediate preceding sibling, is
+            scaled by the `.mgt-tlghost:has(+ .mgt-hover-scale:hover)` rule (index.html)
+            so it lifts in lockstep with the block. */}
+        {rows.map((b) => {
+          let ghost = null;
+          if (b.status === "seated") {
+            const origD = b.originalDuration || b.duration;
+            const sm = toMins(b.time) - OPEN * 60;
+            const gLeft = pct(OPEN * 60 + sm);
+            const gW = Math.max((origD / totalMins) * 100, 0.5) + "%";
+            ghost = (
+              <div
+                className="mgt-tlghost"
+                data-flip-id={(b.tables || [])[0] === id ? b.id + "__ghost" : undefined}
+                style={{
+                  position: "absolute", top: 3, height: (ROW_H - 8) + "px",
+                  left: gLeft, width: gW,
+                  background: "transparent", borderRadius: 10,
+                  border: "2px dashed " + BLOCK_BG.seated,
+                  boxSizing: "border-box", pointerEvents: "none",
+                  transition: "left 320ms ease, width 320ms ease, transform 120ms ease"
+                }}
+              />
+            );
+          }
           return (
-            <div
-              key={"ghost_" + b.id}
-              style={{
-                position: "absolute", top: 3, height: (ROW_H - 8) + "px",
-                left: gLeft, width: gW,
-                background: "transparent", borderRadius: 10,
-                border: "2px dashed " + BLOCK_BG.seated,
-                boxSizing: "border-box", pointerEvents: "none"
-              }}
-            />
+            <Fragment key={b.id}>
+              {ghost}
+              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
+            </Fragment>
           );
         })}
-        {rows.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
       </div>
     );
   });
@@ -510,7 +557,7 @@ export function TimelineView({
           the new scale. Blocks/gridlines are %-positioned against this width, so
           they re-scale with it for free. (The one layout-bound animation — see
           REFACTOR_LOG perf note; the global prefers-reduced-motion guard zeroes it.) */}
-      <div ref={flipRef} style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width 220ms ease-in-out" }}>
+      <div ref={flipRef} style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width 340ms ease-in-out" }}>
         <div style={{
           position: "relative",
           borderBottom: "2px solid var(--tl-header-border)",

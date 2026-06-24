@@ -3186,3 +3186,51 @@ Files: `TimelineView.jsx` (primary-cell `flipId`), `BookingFormModal.jsx` + `Wal
 (`.mgt-press` → ease-out). Build OK (183.13 kB gz). No console errors; no persistence/rule change → rolling
 deploy.
 
+## v15.8.0 -> v15.8.1 -- Two timeline animation fixes (follow now-centre · seated ghost outline)
+
+**Scope**: two small CSS-animation fixes left over from the v15.8.0 passes — `TimelineView.jsx` + `index.html`
+(plus the version bump). Behavioural change: animation polish only. No persistence / Firebase-shape /
+security-rule change → rolling deploy.
+
+1. **Follow now-centring is correct again (was landing near the start).** Two coupled regressions from v15.8.0's
+   animation pass: it (a) made the follow auto-centre `scrollTo({behavior:"smooth"})` and (b) added a `width`
+   transition to the timeline grid for the zoom ease. Clicking **Follow** bumps zoom 1×→4×, so the grid width
+   eases over ~220ms — while it's mid-transition the scroller's scrollable range is still tiny, so a one-shot
+   scroll (instant OR smooth) computes the final now-line target but **clamps to the not-yet-grown range** and
+   lands near the start (observed `scrollLeft≈495` instead of `≈3200`). Separately, a smooth scroll on a fresh
+   mount (a view switch / date nav remounts TimelineView via the `SlideView key={slide.k}` bump, scroller at
+   `scrollLeft=0`) visibly travelled from the grid's beginning. Fix: **`centerNow(pos)`** — drop the smooth
+   scroll and re-assert the target each frame (rAF) until the grid has grown enough for it to stick (cap 500ms),
+   so the now-line slides into place as the grid expands. On a mount and on the 15s `nowMins` tick the width is
+   already final, so it sticks on the first frame → no scroll-from-start travel, no loop. The earlier
+   `firstFollowRef` approach (instant-on-mount, smooth-otherwise) was abandoned — smooth still clamped against
+   the growing width, so it never reached the now-line. `prefers-reduced-motion` zeroes the width transition →
+   the grid is final immediately → effectively instant.
+   **Follow-up (lockstep):** re-asserting the *final* target while the grid width was still easing made the grid
+   visibly **jitter back and forth** when zooming with +/- while following (scroll clamps, jumps, corrects).
+   Fixed by making `centerNow` take a **fraction** and re-derive `scrollLeft = fraction × el.scrollWidth` from
+   the grid's CURRENT (live, mid-transition) width each frame — so the scroll and the width animate together and
+   the now-line stays put while the zoom eases smoothly around it (verified: now-line screen-x moves monotonically
+   with **0 direction reversals** on zoom in AND out). Idempotent on a settled grid (mount / 15s tick).
+2. **The seated "ghost" (green dashed original-duration outline) now follows EVERY animation/effect its booking
+   cell does.** It previously had none of them, so it snapped while the block eased. Reviewed the cell's effects
+   and made the ghost consistent:
+   - **Reposition** (`left`/`width`) + **hover-lift** (`transform`): the ghost's inline transition is now
+     `left 320ms, width 320ms, transform 120ms` — identical to the block.
+   - **Vertical reassign** (FLIP): a distinct `data-flip-id={b.id+"__ghost"}` on the booking's **primary cell
+     only** (anti-collision, mirrors the cont.4b block rule; the `__ghost` namespace never clashes with the
+     block's `data-flip-id={b.id}`) so `useFlip` eases it row→row in sync. WAAPI FLIP animates `transform` only,
+     so it doesn't fight the `left/width` CSS transition.
+   - **Hover-lift** (`scale(1.08)`): each ghost is now rendered **immediately before its block** (gridRows
+     restructured to one `<Fragment>` per booking), so a pure-CSS `.mgt-tlghost:has(+ .mgt-hover-scale:hover)`
+     rule (index.html, under the same `@media (hover:hover)` guard) scales the ghost when its next-sibling block
+     is hovered — one ghost per booking-per-row, no over-match, no per-hover React re-render. The ghost still
+     paints under its block (DOM order preserved), so the dashed tail shows beyond the block as before.
+   - **Side fix:** restored the block's own hover **ease** — the v15.8.0 inline `transition: left/width` had been
+     overriding `.mgt-hover-scale`'s `transform 120ms`, making every timeline block's hover lift snap instantly;
+     re-adding `transform 120ms` to the inline transition eases it again (and keeps block+ghost in lockstep).
+   - `:has()` needs Safari 15.4+/iOS 15.4+ — the app already requires iOS Safari 16+ (see the `Reveal` atom), so
+     it's safe. The global `prefers-reduced-motion` guard zeroes all of it.
+
+Verified live in DEV. Build OK.
+
