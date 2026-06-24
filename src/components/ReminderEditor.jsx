@@ -20,7 +20,7 @@
 
 import { S, BTN } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
-import { Fld, Toggle, mkBtn, mkInp } from "./atoms";
+import { Fld, Toggle, mkBtn, mkInp, usePresence, AutoHeight } from "./atoms";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
 // recurrence.days. Sun is at the end (index 0).
@@ -33,6 +33,8 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
   const err = validateReminderDraft(draft);
   const rec = draft.recurrence || {};
   const todayStr = new Date().toISOString().slice(0, 10);
+  // v15.8.0: symmetric open/close animation via the wrapping <ModalPresence>.
+  const { leaving } = usePresence();
 
   // ── Field updaters ──────────────────────────────────────────────────────
   // Each one returns a new draft via spread; never mutates the existing one.
@@ -83,6 +85,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
 
   return (
     <div
+      className={leaving ? "mgt-scrim-out" : "mgt-scrim-in"}
       style={{
         position: "fixed", inset: 0,
         background: "var(--scrim)",
@@ -92,7 +95,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
-      <div style={{
+      <div className={leaving ? "mgt-card-out" : "mgt-card-in"} style={{
         background: "var(--bg-sheet)",
         backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
         borderRadius: 20,
@@ -105,6 +108,8 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         {/* v14.4.1: body scrolls, action footer (err + buttons) pinned to the
             bottom — mirrors Overlay's `footer` slot (this modal predates it). */}
         <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "22px", boxSizing: "border-box" }}>
+        {/* v15.8.0: AutoHeight (linear) eases the body when Recurrence flips once↔weekly. */}
+        <AutoHeight linear>
         {/* v14 p7: header matches New booking / Edit booking pattern —
             centered wrapper + pill-shaped inner with blue background. */}
         <div style={{ textAlign: "center", marginBottom: 16 }}>
@@ -226,6 +231,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             {draft.active ? "Active" : "Inactive"}
           </span>
         </div>
+        </AutoHeight>
         </div>
         <div style={{ flexShrink: 0, padding: "16px 22px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
         {err ? (

@@ -24,7 +24,7 @@
 // v14.7.0 (week) · v14.9.0 (month view + W/M switch).
 
 import { useState, useEffect } from "react";
-import { Overlay, mkBtn } from "./atoms";
+import { Overlay, mkBtn, AutoHeight } from "./atoms";
 import { daySummary } from "../lib/booking-logic";
 import { BTN } from "../lib/constants";
 
@@ -191,7 +191,8 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
         </div>
       </div>
 
-      {isWeek ? weekBody() : monthBody()}
+      {/* v15.8.0: AutoHeight (linear) eases the height when switching Week↔Month. */}
+      <AutoHeight linear>{isWeek ? weekBody() : monthBody()}</AutoHeight>
 
       <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-faint)", textAlign: "center" }}>
         {isWeek

@@ -21,7 +21,7 @@
 
 import { daySummary } from "../lib/booking-logic";
 import { BTN, TOTAL_SEATS, hoursFor } from "../lib/constants";
-import { mkBtn } from "./atoms";
+import { mkBtn, Reveal } from "./atoms";
 
 function hh(n){ return String(((n % 24) + 24) % 24).padStart(2, "0") + ":00"; }
 function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
@@ -97,8 +97,10 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, ope
         </div>
       </div>
 
-      {/* Expanded body — shift chips + hourly bars. */}
-      {open ? (
+      {/* Expanded body — shift chips + hourly bars. Wrapped in Reveal (v15.8.0)
+          so the panel eases open/closed instead of snapping the column below
+          it (the outer panel is overflow:hidden, so the collapse won't spill). */}
+      <Reveal show={open}>
         <div style={{ padding: "2px 14px 14px" }}>
           {hasData ? (
             <div>
@@ -130,7 +132,7 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, ope
             <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "4px 0 2px" }}>No bookings for this day.</div>
           )}
         </div>
-      ) : null}
+      </Reveal>
     </div>
   );
 }

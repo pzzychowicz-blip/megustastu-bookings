@@ -42,8 +42,137 @@ import {
   S, TBL, BTN, TIMELINE_TABLES, hoursFor
 } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
-import { mkBtn } from "./atoms";
+import { mkBtn, Presence, useFlip } from "./atoms";
 import { CogIcon } from "./Settings";
+
+// v15.8.0: module-level status-change animation state (survives the inline Block
+// remount + any TimelineView remount during the save flow). Single timeline, so
+// module scope is safe; entries are keyed by booking id and expire by timestamp.
+let __prevStatus = null;
+const __statusAnims = {};
+
+// ── TimelineBlock — one booking block (v15.8.0: hoisted to module scope) ───────
+// Previously an inline component inside TimelineView, which made React remount it
+// every render (new function identity) — so its DOM node was recreated each time,
+// breaking CSS position transitions and per-instance long-press refs. As a stable
+// module-level component the node persists, so `transition: left/width` eases a
+// reposition (seated-shift / reshuffle) and the wipe/fill overlays + long-press
+// work reliably. Former closures are now props.
+function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, onEdit, onManual, setQuickStatus }) {
+  const d = liveBarDur(b, nowMins);
+  const sm = toMins(b.time) - OPEN * 60;
+  const left = pct(OPEN * 60 + sm);
+  const w = Math.max((d / totalMins) * 100, 0.5) + "%";
+  const warn = warnings[b.id];
+  const bgc = BLOCK_BG[b.status] || BLOCK_BG.confirmed;
+  const border = warn
+    ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
+    : "none";
+  const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
+  const lbl = b.name + " (" + b.size + ")"
+    + (isLocked(b) ? " [L]" : "")
+    + (hasPrefT ? " ★" : "")
+    + (warn && warn.overdue ? " !!" : "");
+
+  // Per-instance refs for long-press detection.
+  const pressTimer = useRef(null);
+  const didLong = useRef(false);
+  const touchStartPos = useRef(null);
+
+  // v15.8.0: status-change overlay. `anim` ('wipe' Confirmed→Seated / 'fill'
+  // Seated→Completed) is detected at the TimelineView level and passed in; the
+  // overlay of the OLD colour animates away (keyframe on mount), revealing the new
+  // status colour underneath. wipe = right-to-left clip; fill = fade-out.
+  const animOverlay = anim ? (
+    <div
+      className={anim === "wipe" ? "mgt-wipe-rtl" : "mgt-fade-overlay"}
+      style={{
+        position: "absolute", inset: 0, borderRadius: 10, pointerEvents: "none",
+        background: anim === "wipe" ? BLOCK_BG.confirmed : BLOCK_BG.seated
+      }}
+    />
+  ) : null;
+
+  function onTouchStart(e) {
+    didLong.current = false;
+    const t = e.touches[0];
+    touchStartPos.current = { x: t.clientX, y: t.clientY };
+    const el = e.currentTarget;
+    pressTimer.current = setTimeout(() => {
+      didLong.current = true;
+      const rect = el.getBoundingClientRect();
+      setQuickStatus({ booking: b, x: rect.left, y: rect.top, w: rect.width, h: rect.height });
+    }, 400);
+  }
+  function onTouchMove(e) {
+    if (!touchStartPos.current) return;
+    const t = e.touches[0];
+    const dx = Math.abs(t.clientX - touchStartPos.current.x);
+    const dy = Math.abs(t.clientY - touchStartPos.current.y);
+    if (dx > 8 || dy > 8) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  }
+  function onTouchEnd(e) {
+    clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+    if (didLong.current) e.preventDefault();
+  }
+  // v15.8.0: right-click opens the same quick-action menu as long-press/tap.
+  function onCtx(e) {
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setQuickStatus({ booking: b, x: rect.left, y: rect.top, w: rect.width, h: rect.height });
+  }
+  function handleClick() {
+    if (didLong.current) return;
+    onEdit(b);
+  }
+
+  return (
+    <div
+      className="mgt-hover-scale"
+      data-flip-id={flipId || undefined}
+      onClick={handleClick}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onContextMenu={onCtx}
+      style={{
+        position: "absolute", top: 3, height: ROW_H - 8 + "px",
+        left, width: w,
+        background: bgc, borderRadius: 10, overflow: "hidden",
+        display: "flex", alignItems: "center", boxSizing: "border-box",
+        cursor: "pointer",
+        border: border || "1px solid rgba(255,255,255,0.2)",
+        WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
+        boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
+        transition: "left 320ms ease, width 320ms ease"   // v15.8.0: reposition eases (seated-shift / reshuffle)
+      }}
+    >
+      {animOverlay}
+      <span style={{
+        flex: 1, padding: "0 8px", position: "relative",
+        fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+      }}>
+        {lbl}
+      </span>
+      <span
+        onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
+        style={{
+          padding: "0 6px", fontSize: 13, cursor: "pointer", position: "relative",
+          color: "rgba(255,255,255,0.7)",
+          borderLeft: "1px solid rgba(255,255,255,0.3)",
+          height: "100%", display: "flex", alignItems: "center", minWidth: 28
+        }}
+      >
+        =
+      </span>
+    </div>
+  );
+}
 
 export function TimelineView({
   bookings, date, onEdit, onManual, onStatus,
@@ -71,7 +200,10 @@ export function TimelineView({
     if (followNow && isToday && nowMins >= OPEN * 60 && nowMins <= GRID_CLOSE * 60) {
       const targetMins = Math.max(OPEN * 60, nowMins - 30);
       const scrollPos = ((targetMins - OPEN * 60) / totalMins) * gridW;
-      scrollRef.current.scrollLeft = scrollPos;
+      // v15.8.0 cont.4: ease the re-centre instead of hard-jumping. The 15s nowMins
+      // tick is far longer than the smooth scroll, so successive centres never fight;
+      // browsers honour prefers-reduced-motion for programmatic smooth scroll.
+      scrollRef.current.scrollTo({ left: scrollPos, behavior: "smooth" });
       if (scrollPosRef) scrollPosRef.current = scrollPos;
     } else if (scrollPosRef && scrollPosRef.current > 0) {
       scrollRef.current.scrollLeft = scrollPosRef.current;
@@ -90,6 +222,50 @@ export function TimelineView({
   const unassigned = day.filter((b) =>
     b.status !== "completed" && (!(b.tables || []).length || b._conflict)
   );
+
+  // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
+  // CSS left/width transition can't cover — the block re-parents into a new row) eases
+  // into place. Keyed on the assignment signature ONLY, so it fires on a table change —
+  // never on the 15s width/nowMins tick or a horizontal time-shift (those stay pure
+  // CSS). useFlip matches by data-flip-id (translateY only), so a re-parented block
+  // still eases from its old row to the new one.
+  // cont.4 fix: a booking on N tables renders N cells — tagging every cell with the
+  // same b.id made useFlip's id→top map collide (last cell wins), so on EVERY change
+  // (open/date/view switch, add/edit) the booking spuriously animated. So only the
+  // booking's PRIMARY cell (its first table, or the unassigned cell when it has none)
+  // carries data-flip-id — one element per id, no collision, animates only a real move.
+  const assignSig = day.map((b) => b.id + "@" + (b.tables || []).join("-")).join(",");
+  const flipRef = useFlip([assignSig]);
+
+  // ── Status-change animations (v15.8.0) ──────────────────────────────────
+  // Detection uses MODULE-level maps (__prevStatus / __statusAnims) so a stamp
+  // survives the inline `Block` remounting AND any TimelineView re-render/remount
+  // during the multi-commit save flow. On a confirmed→seated / seated→completed
+  // transition we stamp `id → {type, until}` and pass `anim` to that Block for
+  // ~700ms; the Block plays a keyframe overlay (fires on mount). bumpAnim forces
+  // the render that first shows it + a timeout forces one render to clear it.
+  const [, bumpAnim] = useState(0);
+  useEffect(function () {
+    const prev = __prevStatus;
+    const now = Date.now();
+    if (prev) {
+      let changed = false;
+      day.forEach(function (b) {
+        const p = prev[b.id];
+        if (p === "confirmed" && b.status === "seated") { __statusAnims[b.id] = { type: "wipe", until: now + 700 }; changed = true; }
+        else if (p === "seated" && b.status === "completed") { __statusAnims[b.id] = { type: "fill", until: now + 700 }; changed = true; }
+      });
+      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 720); }
+    }
+    const m = {};
+    day.forEach(function (b) { m[b.id] = b.status; });
+    __prevStatus = m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the bookings array
+  }, [bookings]);
+  function statusAnimOf(id) {
+    const a = __statusAnims[id];
+    return a && a.until > Date.now() ? a.type : null;
+  }
 
   // ── Sub-components (close over parent state — must stay inline) ─────────
   function GridLines() {
@@ -116,99 +292,10 @@ export function TimelineView({
     );
   }
 
-  function Block({ b }) {
-    const d = liveBarDur(b, nowMins);
-    const sm = toMins(b.time) - OPEN * 60;
-    const left = pct(OPEN * 60 + sm);
-    const w = Math.max((d / totalMins) * 100, 0.5) + "%";
-    const warn = warnings[b.id];
-    const bgc = BLOCK_BG[b.status] || BLOCK_BG.confirmed;
-    const border = warn
-      ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
-      : "none";
-    const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
-    const lbl = b.name + " (" + b.size + ")"
-      + (isLocked(b) ? " [L]" : "")
-      + (hasPrefT ? " ★" : "")
-      + (warn && warn.overdue ? " !!" : "");
-
-    // Per-instance refs for long-press detection.
-    const pressTimer = useRef(null);
-    const didLong = useRef(false);
-    const touchStartPos = useRef(null);
-
-    function onTouchStart(e) {
-      didLong.current = false;
-      const t = e.touches[0];
-      touchStartPos.current = { x: t.clientX, y: t.clientY };
-      const el = e.currentTarget;
-      pressTimer.current = setTimeout(() => {
-        didLong.current = true;
-        const rect = el.getBoundingClientRect();
-        setQuickStatus({ booking: b, x: rect.left, y: rect.top, w: rect.width, h: rect.height });
-      }, 400);
-    }
-    function onTouchMove(e) {
-      if (!touchStartPos.current) return;
-      const t = e.touches[0];
-      const dx = Math.abs(t.clientX - touchStartPos.current.x);
-      const dy = Math.abs(t.clientY - touchStartPos.current.y);
-      if (dx > 8 || dy > 8) {
-        clearTimeout(pressTimer.current);
-        pressTimer.current = null;
-      }
-    }
-    function onTouchEnd(e) {
-      clearTimeout(pressTimer.current);
-      pressTimer.current = null;
-      if (didLong.current) e.preventDefault();
-    }
-    function onCtx(e) { e.preventDefault(); }
-    function handleClick() {
-      if (didLong.current) return;
-      onEdit(b);
-    }
-
-    return (
-      <div
-        className="mgt-hover-scale"
-        onClick={handleClick}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onContextMenu={onCtx}
-        style={{
-          position: "absolute", top: 3, height: ROW_H - 8 + "px",
-          left, width: w,
-          background: bgc, borderRadius: 10, overflow: "hidden",
-          display: "flex", alignItems: "center", boxSizing: "border-box",
-          cursor: "pointer",
-          border: border || "1px solid rgba(255,255,255,0.2)",
-          WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
-          boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"
-        }}
-      >
-        <span style={{
-          flex: 1, padding: "0 8px",
-          fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
-        }}>
-          {lbl}
-        </span>
-        <span
-          onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
-          style={{
-            padding: "0 6px", fontSize: 13, cursor: "pointer",
-            color: "rgba(255,255,255,0.7)",
-            borderLeft: "1px solid rgba(255,255,255,0.3)",
-            height: "100%", display: "flex", alignItems: "center", minWidth: 28
-          }}
-        >
-          =
-        </span>
-      </div>
-    );
-  }
+  // Block is HOISTED to module scope (top of file) so its DOM node persists
+  // across TimelineView re-renders — that's what lets the left/width reposition
+  // transition + the status wipe/fill overlays + long-press refs work. Rendered
+  // below as <TimelineBlock …> with its former closure values passed as props.
 
   function BlockBar({ bl }) {
     const bS = bl.allDay ? OPEN * 60 : toMins(bl.from);
@@ -366,7 +453,7 @@ export function TimelineView({
             />
           );
         })}
-        {rows.map((b) => <Block key={b.id} b={b} />)}
+        {rows.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
       </div>
     );
   });
@@ -379,7 +466,7 @@ export function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <Block key={b.id} b={b} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
     </div>
   ) : null;
 
@@ -419,7 +506,11 @@ export function TimelineView({
       // labelCol gets a matching paddingTop so its rows stay aligned with the grid.
       style={{ flex: 1, overflowX: "auto", overflowY: "hidden", padding: 8 }}
     >
-      <div style={{ width: gridW + "px", minWidth: "100%", position: "relative" }}>
+      {/* v15.8.0: width transitions so a zoom change (+/− / 1× / Follow) eases to
+          the new scale. Blocks/gridlines are %-positioned against this width, so
+          they re-scale with it for free. (The one layout-bound animation — see
+          REFACTOR_LOG perf note; the global prefers-reduced-motion guard zeroes it.) */}
+      <div ref={flipRef} style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width 220ms ease-in-out" }}>
         <div style={{
           position: "relative",
           borderBottom: "2px solid var(--tl-header-border)",
@@ -453,7 +544,7 @@ export function TimelineView({
           setFollowNow(false);
         }
       }}
-      className="mgt-hover-scale"
+      className="mgt-hover-scale mgt-press"
       style={mkBtn({
         minHeight: 32, padding: "4px 10px", fontSize: 11,
         background: followNow ? "rgba(0,0,0,0.6)" : "rgba(120,130,150,0.5)"
@@ -470,21 +561,21 @@ export function TimelineView({
       {followBtn}
       <button
         onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
-        className="mgt-hover-scale"
+        className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 32, minWidth: 32, padding: "4px 10px", fontSize: 16, background: BTN.nav })}
       >
         -
       </button>
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
-        className="mgt-hover-scale"
+        className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 32, padding: "4px 10px", fontSize: 11, background: zoom === 1 ? "var(--btn-default)" : BTN.nav })}
       >
         {zoom === 1 ? "1x" : zoom + "x → 1x"}
       </button>
       <button
         onClick={() => setZoom((z) => Math.min(5, z + 0.5))}
-        className="mgt-hover-scale"
+        className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 32, minWidth: 32, padding: "4px 10px", fontSize: 16, background: BTN.nav })}
       >
         +
@@ -507,7 +598,8 @@ export function TimelineView({
       >
         {"Optimizer: " + (autoOptimizer ? "ON" : "OFF")}
       </button>
-      {!autoOptimizer ? (
+      {/* v15.8.0: slides in L→R when Optimizer is toggled OFF, slides out →L when ON. */}
+      <Presence show={!autoOptimizer} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span">
         <button
           onClick={onReshuffle}
           className="mgt-hover-scale"
@@ -515,7 +607,7 @@ export function TimelineView({
         >
           Reshuffle
         </button>
-      ) : null}
+      </Presence>
     </div>
   ) : null;
 
@@ -558,6 +650,7 @@ export function TimelineView({
   const quickPopup = quickStatus ? (
     <div
       onClick={() => setQuickStatus(null)}
+      className="mgt-scrim-in"
       style={{
         position: "fixed", inset: 0, zIndex: 300,
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -566,6 +659,7 @@ export function TimelineView({
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="mgt-card-in"
         style={{
           background: "var(--tl-popup-bg)", borderRadius: 20,
           border: "1px solid " + S.border,

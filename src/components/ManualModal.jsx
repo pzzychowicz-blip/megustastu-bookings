@@ -33,7 +33,7 @@ import { S, BTN } from "../lib/constants";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest
 } from "../lib/booking-logic";
-import { Overlay, Toggle, mkBtn } from "./atoms";
+import { Overlay, Toggle, mkBtn, AutoHeight, Reveal } from "./atoms";
 import { TableGrid } from "./TableGrid";
 
 export function ManualModal({ booking, bookings, onSave, onClose, titleText, blocks = [] }) {
@@ -187,6 +187,9 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
 
   return (
     <Overlay onClose={onClose} footer={footerEl}>
+      {/* v15.8.0: body eases its height (AutoHeight) so the Selected/Capacity box,
+          Clear button and swap-warning grow/shrink smoothly instead of jumping. */}
+      <AutoHeight>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
           fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
@@ -205,7 +208,8 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
         marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "10px 14px", borderRadius: 14,
         background: swapBg, border: swapBrd,
-        boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
+        boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+        transition: "background-color 160ms linear, border-color 160ms linear"
       }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: swapTitleClr }}>Swap busy</div>
@@ -243,7 +247,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
         </div>
         {selected.length > 0 ? (
           <button
-            className="mgt-hover-scale"
+            className="mgt-hover-scale mgt-press"
             style={mkBtn({ fontSize: 12, padding: "6px 12px", background: BTN.clear })}
             onClick={() => setSelected([])}
           >
@@ -251,7 +255,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
           </button>
         ) : null}
       </div>
-      {isSwapping ? (
+      <Reveal show={isSwapping}>{isSwapping ? (
         <div style={{
           marginTop: 8, padding: "10px 14px", borderRadius: 14,
           background: "var(--warn-bg)",
@@ -266,7 +270,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
             </div>
           ))}
         </div>
-      ) : null}
+      ) : null}</Reveal>
       <TableGrid
         selected={selected}
         toggle={toggle}
@@ -274,6 +278,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
         seatedBusy={seatedBusy}
         swapBusy={swapBusy}
       />
+      </AutoHeight>
     </Overlay>
   );
 }

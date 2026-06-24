@@ -36,7 +36,7 @@
 
 import { S, BTN, TBL, TABLE_GROUPS } from "../lib/constants";
 import { isIn, comboCap } from "../lib/booking-logic";
-import { Overlay, mkBtn } from "./atoms";
+import { Overlay, mkBtn, AutoHeight } from "./atoms";
 
 export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
   const prefs = selected || [];
@@ -71,7 +71,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
       {prefs.length > 0 ? (
         <button
-          className="mgt-hover-scale"
+          className="mgt-hover-scale mgt-press"
           style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.clear })}
           onClick={() => onChange([])}
         >
@@ -79,7 +79,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
         </button>
       ) : null}
       <button
-        className="mgt-hover-scale"
+        className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "#64748b" })}
         onClick={onClose}
       >
@@ -90,6 +90,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
 
   return (
     <Overlay onClose={onClose} footer={footerEl}>
+      <AutoHeight>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
           fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
@@ -158,6 +159,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
           </div>
         </div>
       ))}
+      </AutoHeight>
     </Overlay>
   );
 }

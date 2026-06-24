@@ -2916,3 +2916,273 @@ A new/edit booking save refused by the post-sleep stale gate no longer bounces t
 "tap Save again"; it shows the booking immediately, closes the form, and auto-retries on fresh data —
 parity with quick actions. (Reverses the v15.4.0 keep-form-open design for `doSave`.)
 
+---
+
+## v15.7.0 -> v15.8.0 -- Notification layout: float transient toasts + animate in-flow banners (stop the grid "jumping")
+
+**Date**: 2026-06-22
+**Branch**: `feat/v15.8.0-notification-layout` -> PR to `main`
+**Status**: UX feature / user-visible -- **app version 15.7.0 -> 15.8.0**. Pure client (no
+Firebase/persistence/security-rule/shape change) -> **rolling deploy**.
+**Files**: `src/components/atoms.jsx` (new `Reveal`/`Toast`/`Presence`/`ModalPresence`/`usePresence`
+atoms + animated `Overlay`) · `index.html` (toast + modal/slide keyframes, `.mgt-press`,
+reduced-motion guard) · `src/App.jsx` (banner split + one-at-a-time `floatingToasts` + ~13
+`ModalPresence` wraps + Today slide + Summary flex-basis + version bump) · `src/components/Summary.jsx`
+(body wrapped in `Reveal`) · `src/components/TimelineView.jsx` (Reshuffle slide, `.mgt-press`, grid
+`width` transition, quick-status popup classes) · `src/components/ReminderEditor.jsx` (own modal
+enter/exit) · `CLAUDE.md` · `REFACTOR_LOG.md`.
+
+### Problem
+Every notification banner rendered **in normal document flow**, stacked between the date-nav/Summary
+row and `mainView` (the timeline/list grid), each with `marginBottom:10`. Appearing/disappearing
+shoved the whole grid vertically — a jarring "jump". The auto-hiding status banners were worst (they
+pop in *and* out → two jumps each). Patryk wanted at-a-glance visibility kept (incl. reminders) but
+the jumping gone. The Summary panel's expand/collapse (in the date-nav row) caused the same jump.
+
+### Fix — two families
+- **Transient status toasts → floating layer in the mainView toolbar gap (zero reflow).**
+  `reconnect` / `resyncing` / `loadBannerShown` / `reshuffled` / `syncFix` move into a new
+  `floatingToasts` element: `position:absolute`, `top:0`, horizontally-centred (`maxWidth:360`,
+  `textAlign:center`), `z-index:60` (< modal 1000 / quick-status popup 300), `pointerEvents:none`
+  (never blocks the toolbar/grid taps — the toasts carry no controls; the dismissible write-error
+  stays in flow). Anchored to a `position:relative` wrapper around `{mainView}` at the render site so
+  it lands **in the empty gap of the timeline toolbar** (between the Optimizer/Reshuffle group on the
+  left and the Follow/zoom group on the right) — chosen by Patryk as more at-a-glance than a bottom
+  toast. Anchoring to mainView means it tracks position automatically (the in-flow Reveal banners
+  pushing mainView down is handled for free) and works in both views (List view → floats top-centre
+  over the list). Each toast is wrapped in a new **`Toast` presence atom** (`atoms.jsx`) →
+  **symmetric float-in / float-out**: mounts with `.mgt-toast-in` (slide-up 8px + fade, 220ms) and,
+  on its `show`→false, stays mounted to play `.mgt-toast-out` (fade + drift-up 6px, 200ms) before
+  unmounting (the parent would otherwise drop the node instantly). Both keyframes in `index.html`. The
+  container is therefore **always mounted** (each Toast self-manages its lifecycle, so the container
+  must outlive a toast's out-animation) — empty + pointerEvents:none when idle. Their show/auto-hide
+  state is unchanged.
+- **Persistent/actionable banners → animated in-flow via new `Reveal` atom.** `offline` /
+  `writeWarning` / `ineff` / `overlap` / `reminders` stay in flow but each is wrapped in
+  `<Reveal show={cond}>{bannerOrNull}</Reveal>`. `Reveal` (in `atoms.jsx`) eases height via the
+  `grid-template-rows: 0fr↔1fr` technique (+ opacity), with delayed unmount (300ms) so the **exit**
+  collapses gracefully, and caches the last truthy `children` so the collapse still animates when the
+  source expression goes `null` (e.g. the final reminder clears → `reminderBanners` → null). No magic
+  max-height number (the reminders stack can be several rows tall). Needs iOS Safari 16+ (app already
+  relies on dvh/backdrop-filter).
+- **Summary panel** (`Summary.jsx`) reuses the same `Reveal` for its expand/collapse body, and the
+  flex wrapper holding `summaryPanel` (`App.jsx`) gained `transition: flex-basis 260ms ease` so the
+  mobile-breakpoint width change eases too. (Layout-driven width shifts — e.g. the Today button
+  mounting — aren't a specified-value change and don't CSS-transition; the dominant height
+  expand/collapse is fully animated, which is what read as jumpy.)
+
+App.jsx banner consts were refactored to *inner-JSX + a separate boolean* (e.g. `ineffShow`,
+`overlapEntries.length>0`, `!!reminderBanners`) so the `Reveal show=` gate is clean.
+
+### Verification
+- `npm run build` OK -- main bundle **181.00 kB gz** (+0.47 from 15.7.0's 180.54).
+- **Live (Preview bridge, DEV Firebase), app version `15.8.0` confirmed:**
+  - **Floating toasts, no grid jump:** page reload → "Firebase connected — 225 bookings loaded."
+    floated centred **in the timeline toolbar gap** (between Optimizer/Reshuffle and Follow/zoom),
+    vertically aligned with the button row, grid in its exact prior position (no shift). Toggling this
+    client's DEV Firebase connection (`goOffline`/`goOnline`) fired the floating "✓ Reconnected" toast
+    in the same gap — grid unmoved. In List view (no toolbar) the toast floats top-centre over the
+    list (verified centred via `getBoundingClientRect`: left 263 + w 360 ⇒ centre ≈ viewport 442).
+  - **Symmetric float-out:** polled the load toast's class through its lifecycle — `mgt-toast-in`
+    (showing) → `mgt-toast-out` (auto-hide) → unmounts ~200 ms later. Confirms the exit animates
+    (node stays mounted through the out-animation) instead of vanishing instantly.
+  - **In-flow `Reveal` lifecycle:** `goOffline` → the amber "Working offline" banner eased the grid
+    down; `goOnline` → it collapsed and the grid eased back up to its original position (exercises the
+    null-children exit fallback). Verified desktop + mobile.
+  - **Summary panel:** expand → body + column eased open (chevron flipped, "No bookings for this day"
+    shown); collapse → eased shut, grid returned. No snap.
+  - No runtime errors (only stale mid-edit HMR messages in the buffer). No Firebase test data written.
+
+### Behavioural change
+Status notifications now float in the timeline toolbar gap (top-centre over mainView) and never move
+the grid; the persistent banners and the Summary panel ease open/closed instead of snapping.
+At-a-glance visibility (incl. reminders) retained.
+
+### Follow-up (same v15.8.0 branch) — animation pass
+Five more animation asks, all on the same unmerged branch (version stays 15.8.0):
+1. **One status toast at a time.** The 5 status toasts no longer stack vertically in the gap — only the
+   highest-priority active one shows (order: resyncing → reconnect → syncFix → reshuffled → load). Built
+   as a `statusToasts` array in `App.jsx` with each rendered `<Toast show={key===topKey} style={{gridArea:
+   "1/1"}}>`; the `floatingToasts` inner wrapper became a 1-cell **grid** so the leaving + entering toasts
+   overlap (crossfade in place) instead of stacking. Actionable in-flow banners + offline are unchanged.
+2. **Modal open/close (symmetric, linear).** Baked into the shared **`Overlay`** atom — it reads
+   `usePresence().leaving` and swaps scrim/card (desktop) or sheet (mobile) to the `*-out` keyframe.
+   Every modal mount (~13 sites in `App.jsx`: form/walk-in/manual/week/pref/block/history + the inline
+   confirm dialogs + Settings) is wrapped in **`<ModalPresence show={cond}>{cond?<X/>:null}</ModalPresence>`**
+   (delayed unmount + cached children). `ReminderEditor` (own z=250 modal) + the timeline quick-status
+   popup get the classes directly (quick-status = enter-only, since selecting a status closes instantly).
+3. **Reshuffle + Today slide.** Wrapped in the generic **`Presence`** atom (new keyframes
+   `mgt-slide-in`/`-out`, translateX ∓12px + fade): Reshuffle (`TimelineView` optBtns) slides in L→R when
+   Optimizer→OFF, out →L when ON; Today (`App.jsx`) same on date change.
+4. **Follow / − / 1× / + ease-in-out.** New `.mgt-press` class (ease-in-out `filter:brightness` on
+   `:active` — brightness not transform, so it never fights `.mgt-hover-scale`'s hover transform) on all
+   four. Plus a `transition: width 220ms ease-in-out` on the timeline grid container (`gridW`,
+   TimelineView.jsx:422) so **any** zoom change (incl. the **1×/reset** button → zoom 1, and Follow → zoom
+   4) eases the grid to its new scale; blocks/gridlines are `pct()`-positioned, so they re-scale for free.
+5. **Reduced-motion / weak-hardware guard.** A global `@media (prefers-reduced-motion: reduce)` in
+   `index.html` collapses every animation + transition to ~instant.
+
+**Shared primitive:** the "delayed-unmount + cached children" pattern (already in `Reveal`/`Toast`) was
+generalised into **`Presence`** (wrapper + in/out class) + **`ModalPresence`** (context provider, no
+wrapper) + **`PresenceContext`/`usePresence`** in `atoms.jsx`; `Toast` is now a thin `Presence` alias.
+
+**Performance opinion (as requested):** the toast float-in/out, modal fade/scale/slide, button slide,
+and `.mgt-press` brightness all animate **only `opacity`/`transform`/`filter`** — GPU-composited, no
+layout, negligible on weak tablets; no new `backdrop-filter` (blur budget untouched). The **one** with
+real cost is the grid **`width`** transition (§4): width changes force a timeline layout pass (~13 rows ×
+blocks + gridlines) every frame for 220 ms — the only animation that could drop frames on a weak tablet.
+`transform:scaleX` can't substitute (it would stretch the block text). Mitigated by the short 220 ms +
+the reduced-motion guard. **Recommendation:** ship, but test on the real tablet; if it stutters, remove
+the one `width` transition (TimelineView.jsx:422) to revert §4 to press-only — everything else is safe.
+
+**Verification (live, DEV):** build OK (181.63 kB gz). Confirmed via DOM-class polling: Reshuffle
+`mgt-slide-in`→`-out`→unmount on Optimizer toggle; Today same on date nav; New-booking modal
+`mgt-card-in` on open, `mgt-scrim-out`+`mgt-card-out`→0 overlays on Cancel; status slot is `display:grid`
+showing exactly **1** toast (✓ Reconnected) after a `goOffline`/`goOnline`; the grid `width` eased up
+(1728→1783→2016 px on +) and down (2016→1740→900 px on the "3.5x → 1x" reset); `.mgt-press` present on
+Follow/−/1×/+. (Reduced-motion guard is standard CSS, not force-testable via the preview bridge.)
+
+### Follow-up #2 (same v15.8.0 branch) — status transitions, modal resize, view slide, toggles
+Six more asks; confirmed decisions: cancelled = colour-only (no fade-out), "selection window" = the
+ManualModal Selected/Capacity box, "window size change" = any modal eases on content-height change.
+1. **Timeline block status animation.** A `Block` is an inline component (it **remounts every render**),
+   so instance-based detection / CSS transitions can't work. Detection lives at **module scope**
+   (`__prevStatus` / `__statusAnims` in `TimelineView.jsx`) so a stamp survives the Block remount AND any
+   TimelineView re-render during the multi-commit save flow; an effect (dep `[bookings]`) diffs prev→current
+   status and stamps `id→{type,until}` for ~700ms, passing `anim` to that Block. The Block renders an
+   **overlay of the OLD colour that animates away** (keyframes fire on mount): Confirmed→Seated = a
+   right-to-left `clip-path` wipe (`mgt-wipe-rtl`, old=confirmed colour); Seated→Completed = a fade-out
+   (`mgt-fade-overlay`, old=seated colour) revealing the new colour underneath. Cancelled = unchanged
+   (filtered off the timeline). **Gotcha learned:** the form's status chips only `setForm` the *draft* —
+   the booking (and timeline) changes on **Save**; and a component-`useRef` for this resets because Block
+   remounts → module-scope state was required.
+2 + 3. **Modals ease on content-height change** via new **`AutoHeight`** atom (`atoms.jsx`,
+   ResizeObserver → `height` transition, `overflow:hidden` only while animating so settled hover-lifts
+   aren't clipped). Because the Overlay card is auto-height, easing the inner content eases the card.
+   Applied to: Settings tab body (+ `mgt-fade-in` crossfade keyed by tab), ManualModal body (the
+   Selected/Capacity box + Clear + swap-warning no longer jump — point 3), BookingFormModal & WalkinForm
+   bodies. The ManualModal swap-warning is additionally wrapped in `Reveal`.
+4. **Toggles + Swap-busy.** The shared `Toggle` atom got `transition: left/background-color 160ms linear`
+   (knob slide + track colour) → animates **every** toggle app-wide; the ManualModal Swap-busy box also
+   eases its amber bg/border.
+5. **ListView "Completed & cancelled"** — the shared `Collapsible` body is now `<Reveal>` (the Summary
+   effect), so the fold AND all Settings sections ease open/closed.
+6. **Timeline↔List view slide** — `mainView` wrapped in `<div key={view}>` with a directional class:
+   Timeline→List slides in from the right (`mgt-view-in-right`), List→Timeline from the left
+   (`mgt-view-in-left`); `overflow:hidden` prevents a transient horizontal scrollbar.
+
+New keyframes: `mgt-wipe-rtl`, `mgt-fade-overlay`, `mgt-view-in-right/left`, `mgt-fade-in`. New atom:
+`AutoHeight`. **Perf:** wipe/fade/slide/view = transform/clip/opacity (GPU-cheap); `AutoHeight` height
+transitions are layout-bound but fire only on modal content changes (transient) → fine; all covered by
+the `prefers-reduced-motion` guard.
+
+**Verification (live, DEV):** build OK (182.22 kB gz). View slide: List=`mgt-view-in-right`,
+Timeline=`mgt-view-in-left`. Settings tab switch: `AutoHeight` height transition + `mgt-fade-in` present.
+Toggle knob `left 160ms linear` on all toggles. List fold: `Reveal` grid-rows wrapper (`1fr` open).
+Status fill (Seated→Completed via Save): overlay rendered + **persisted the full ~720ms window** (the
+module-scope stamp fixed an earlier remount-reset where it flashed ~35ms); the wipe shares the identical
+path. NB: several DEV test bookings were left seated/completed by this testing (sandbox data).
+
+### Follow-up #3 (same v15.8.0 branch) — animation fixes & refinements
+Eight fixes/refinements. Confirmed: status-change = wipe **and** ease-the-reposition in BOTH views.
+1. **Regression fix:** the view-slide wrapper's `overflow:hidden` clipped ListView card hover-lifts.
+   New **`SlideView`** atom is `overflow:hidden` ONLY while the slide animation runs (`onAnimationEnd` →
+   `visible`); keyed remount replays it. (Also serves point 5.)
+2. **Settings sub-sections** Shifts (`Reveal`) + Auto-optimizer (`AutoHeight`) now ease instead of
+   popping — same as the Collapsible/Layout-Tables sections.
+3 + 8. **`AutoHeight` made genuinely smooth:** switched from `overflow:visible`-at-rest (which let growing
+   content paint for one frame before the height eased → the "jump") to **`overflow:hidden` always**
+   (matches `Reveal`). Applied to the modals still missing it: **ReminderEditor, WeekView, PrefPickerModal**
+   bodies (the "Selected:…" box now resizes smoothly everywhere it appears).
+4. **`linear`** prop added to `AutoHeight`; used for ReminderEditor (Recurrence once↔weekly) + WeekView
+   (Week↔Month).
+5. **Date `‹`/`›` (and date-input / Today) slide** the main view: unified through `SlideView` keyed on a
+   `slide.k` counter + `slide.dir`; `›`/later-date → `mgt-view-in-left`, `‹`/earlier → `mgt-view-in-right`;
+   the Timeline↔List toggle keeps its directions. Works in both views (wraps `mainView`).
+6. **Right-click a timeline block** → opens the quick-status menu (`onCtx` now calls `setQuickStatus`).
+7. **Status change wipes + eases the reposition, both views.** **Timeline:** the inline `Block`
+   (remounted every render → no CSS position transition) was **hoisted to module scope as `TimelineBlock`**
+   (former closures passed as props) so its node persists; a `transition: left/width 320ms` now eases a
+   seated-shift/reshuffle move, and the wipe/fill overlays + long-press refs work reliably (also fixes the
+   latent "long-press breaks on mid-press re-render" bug). **List:** new **`useFlip`** hook (WAAPI
+   translateY, leaves no inline styles → never fights hover-scale) eases the card to its new sorted spot,
+   plus a status colour-wipe overlay (OLD status colour, `mgt-wipe-rtl`) on the card.
+
+New atoms: `SlideView`, `useFlip`; `AutoHeight` overflow/linear. New module-level `TimelineBlock`.
+
+**Verification (live, DEV):** build OK (182.78 kB gz). SlideView overflow `visible` at rest (lift fix);
+`‹`=`mgt-view-in-right` / `›`=`mgt-view-in-left` in both views; RMB opens the quick popup (z=300, status
+buttons); Settings has the Shifts `Reveal` + 2 `AutoHeight` wrappers (`overflow:hidden`); WeekView "More"
+has the **linear** AutoHeight; **Timeline blocks carry `transition: left/width 320ms`, tap-to-edit still
+works after the Block hoist**; **List: changing a card's status fired 1 wipe overlay + 1 running FLIP
+reorder animation**. (DEV sandbox bookings left in mixed statuses by testing.)
+
+### Follow-up #4 (same v15.8.0 branch) — animation consistency: overflow clip, follow scroll, status fill, reassign ease, keyboard parity
+Six refinements surfaced in live use. Confirmed: status fill = the **clicked (new)** colour; reassign =
+ease the **vertical** move only (leave horizontal unchanged).
+1. **Hover-lift clipping fixed app-wide.** `Reveal` + `AutoHeight` forced `overflow:hidden` **at rest**
+   (AutoHeight's "always hidden" from #3 is **superseded**), clipping any `.mgt-hover-scale` lift inside
+   (ReminderEditor edit sections, the List "Completed & cancelled" finished cards, Settings bodies, the
+   form/Manual/Walkin/Pref/Week bodies). Both now clip **only while the height transition runs**, `visible`
+   at rest — `AutoHeight` via an `animating` flag set on a measured height change + cleared on
+   `onTransitionEnd`; `Reveal` via a `revealed` flag (timeout-gated, more robust than `transitionend` on
+   `grid-template-rows`) so the inner track is `visible` only when open **and** settled, `hidden` during the
+   open/close ease so the collapse still clips.
+2. **Follow auto-centre eases** instead of hard-jumping: the follow branch of TimelineView's scroll effect
+   now uses `scrollTo({ left, behavior:"smooth" })` (restore-on-nav stays instant). The 15s `nowMins` tick
+   is far longer than the scroll, so successive centres never fight; browsers honour `prefers-reduced-motion`.
+3. **Status-change fill uses the clicked (new) colour.** **List:** the card wipe overlay colour moved from
+   `BLOCK_BG[animFrom]` (old) → `BLOCK_BG[b.status]` (new — green Seated, red Cancelled…); `animFrom` stays
+   the trigger flag. **Edit Booking:** the Status section gets a `mgt-wipe-rtl` flash of the clicked status
+   colour on a status-button click (local `statusFlash` state, re-keyed so the keyframe replays, cleared
+   after 700ms; pure feedback — the click still only sets the form draft).
+4. **Reassign eases the vertical (cross-row) move.** A manual table change re-parents a block into a
+   different table row — a vertical jump the existing `left/width` CSS transition can't cover. Added a
+   `useFlip` ref (translateY-only, matches by `data-flip-id`) around the timeline grid-rows container +
+   `data-flip-id={b.id}` on `TimelineBlock`, **keyed on an assignment signature**
+   (`day.map(b=>b.id+"@"+(b.tables||[]).join("-")).join(",")`) so it fires ONLY on a table change — never on
+   the 15s width/`nowMins` tick or a horizontal time-shift (those stay pure CSS, unchanged).
+5 + 6. **Keyboard-shortcut animation parity.** The slide paths lived in the button `onClick`s, so
+   `‹`/`›`/Today/view-toggle keys skipped them. Exposed `goToDate`/`bumpSlide` on `kbRef.current`; the
+   Arrow-left/right, `d` (Today) and `t`/`l` (view-toggle) handlers now route through them (matching the
+   buttons' directions). Audit confirms the rest already animate regardless of trigger (modals via
+   `ModalPresence`, Optimizer/Reshuffle via `Presence`, Summary via `Reveal`, zoom-grid via the CSS `width`
+   transition, status wipes via module-level detection); `.mgt-press` stays a pointer-only affordance.
+
+Files: `atoms.jsx` (Reveal/AutoHeight overflow-at-rest), `TimelineView.jsx` (follow smooth scroll, FLIP-Y +
+`data-flip-id`), `ListView.jsx` (wipe colour), `BookingFormModal.jsx` (Status-section wipe), `App.jsx`
+(kbRef `goToDate`/`bumpSlide` + key handlers). No new keyframes (reuses `mgt-wipe-rtl`); no security-rule /
+persistence change → rolling deploy.
+
+**Verification (live, DEV):** build OK (183.05 kB gz, +0.27). AutoHeight wrapper `overflow:visible` at rest
+(New form body); Reveal inner `overflow:visible` when open+settled / `hidden` when collapsed. Keyboard
+`ArrowRight`→`mgt-view-in-left`, `ArrowLeft`→`mgt-view-in-right`, `l`→list/right, `t`→timeline/left,
+`d`→Today/right (all slide like the buttons). Form Status `> seated` → green `mgt-wipe-rtl` flash (cleared);
+List `> seated` → card wipe in the **new** green. Follow toggled → grid smooth-scrolled 0→245 (no jump).
+Timeline blocks carry `data-flip-id`; no console errors. (Reassign vertical-ease wired + error-free; flagged
+for a manual table-reassign tap-test on the device. DEV sandbox bookings left in mixed statuses.)
+
+### Follow-up #4b (same v15.8.0 branch) — three fixes after live use
+1. **Timeline FLIP no longer fires on every view open / date-switch / add / edit.** Root cause: a booking
+   that occupies N tables renders **N cells**, each previously tagged with the same `data-flip-id={b.id}` —
+   so `useFlip`'s id→top map **collided** (last cell wins), and on any change the multi-table booking
+   spuriously animated (the two cells' differing tops looked like a "move"). Fix: only the booking's
+   **PRIMARY cell** carries `data-flip-id` — its first table's row (`(b.tables||[])[0]===id`), or the
+   unassigned cell when it has no tables (`(b.tables||[]).length?null:b.id`). One element per id → no
+   collision → animates only a genuine reassignment. (Verified live: 13 flip elements → **10, all unique
+   ids, zero duplicates**.)
+2. **Form sub-sections ease like Summary.** The kitchen **"Starting at this time"** suggestion sub-panel
+   (BookingFormModal + WalkinForm) and the booking-form **availability banner** are now wrapped in `Reveal`
+   (the Summary effect: grid-rows + opacity ease) so they fade/slide in-out instead of popping. (Extracted
+   `kitchenSugBlock` / `wKitchenSugBlock` consts so the conditional content persists across the show→hide
+   for the exit animation.) (Verified: edit form shows the kitchen section inside an open `Reveal`.)
+3. **Utility buttons get press feedback.** `.mgt-press` changed from `ease-in-out` → **`ease-out`** (per
+   request) and applied to **Clear / Reset / Done** everywhere (BookingFormModal ×4, ManualModal, WalkinForm
+   ×2, PrefPickerModal ×2) so they share the zoom buttons' brightness-press affordance. (Verified live: the
+   Walk-in Clear button carries `mgt-press` with `ease-out` timing.)
+
+Files: `TimelineView.jsx` (primary-cell `flipId`), `BookingFormModal.jsx` + `WalkinForm.jsx` (kitchen/avail
+`Reveal` + `mgt-press` on Clear/Reset), `ManualModal.jsx` + `PrefPickerModal.jsx` (`mgt-press`), `index.html`
+(`.mgt-press` → ease-out). Build OK (183.13 kB gz). No console errors; no persistence/rule change → rolling
+deploy.
+
