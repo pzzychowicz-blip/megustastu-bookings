@@ -164,10 +164,15 @@ export function WaSimulator({ ctx, onClose }) {
               <textarea className="mgt-hover-scale" value={custText} onChange={(e) => setCustText(e.target.value)} rows={2} style={Object.assign({}, mkInp(), { resize: "vertical" })} placeholder={custConv && custConv.language === "en" ? "Type as the customer…" : "Escribe como el cliente…"} />
             </Fld>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {/* ✨ Suggest needs the local harness's /dev/customer-reply (Gemini,
+                  key server-side) — only available in the dev server. Online,
+                  type the customer's message manually and Send. */}
+              {import.meta.env.DEV ? (
               <button className="mgt-hover-scale" disabled={suggesting} onClick={suggestReply} style={mkBtn({ minHeight: 38, padding: "8px 12px", background: "var(--wa-sim-accent)" })}>{suggesting ? "✨ Thinking…" : "✨ Suggest reply"}</button>
+              ) : null}
               <button className="mgt-hover-scale" onClick={sendAsCustomer} style={mkBtn({ minHeight: 38, padding: "8px 14px", background: S.accent })}>Send as customer</button>
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Arrives as a real inbound (window resets, unread). ✨ asks Gemini (via the local harness) to write the customer's next message — edit before sending.</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Arrives as a real inbound (window resets, unread).{import.meta.env.DEV ? " ✨ asks Gemini (via the local harness) to write the customer's next message — edit before sending." : ""}</div>
           </div>
         )}
       </Section>

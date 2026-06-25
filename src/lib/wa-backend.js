@@ -34,7 +34,11 @@ export function setBackendEnabled(on) {
 }
 
 // Liveness + mode report from the harness (null when it isn't running).
+// Hard no-op off the dev server: the harness only exists at :3999 on the local
+// machine, so in a deployed sandbox this would just throw ERR_CONNECTION_REFUSED
+// into the console on every panel open. Online the simulator runs client-side.
 export async function backendHealth() {
+  if (!import.meta.env.DEV) return null;
   try {
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), 1500);
