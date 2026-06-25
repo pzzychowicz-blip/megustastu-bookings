@@ -21,12 +21,19 @@
 // accept. That asymmetry is the point: backend mode tests the real pipeline.
 
 import { auth } from "../firebase";
+import { WA_SANDBOX } from "./waSandbox";
 
-export const WA_BACKEND_URL = "http://localhost:3999";
+// Where the real pipeline lives:
+//   · DEV (dev server)     → the local harness on :3999
+//   · deployed sandbox     → same-origin ("") so /api/* hits the Vercel functions
+export const WA_BACKEND_URL = import.meta.env.DEV ? "http://localhost:3999" : "";
 const FLAG_KEY = "mgt-wa-backend";
 
+// Backend mode is available wherever the sandbox surfaces are (dev server OR a
+// deployed sandbox build) — online it routes through the staff-auth sim endpoint
+// (see backendInbound), so no public-webhook exposure.
 export function backendEnabled() {
-  if (!import.meta.env.DEV) return false;
+  if (!WA_SANDBOX) return false;
   try { return localStorage.getItem(FLAG_KEY) === "1"; } catch (e) { return false; }
 }
 export function setBackendEnabled(on) {
@@ -99,4 +106,32 @@ export async function postFakeWebhook({ phone, text, name, agoMs = 0 }) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
   return data;
+}
+
+// Online sim inbound: POST one simulated message to the STAFF-AUTH endpoint
+// /api/wa-sim-inbound (same-origin on Vercel). Unlike postFakeWebhook this needs
+// no HMAC/WA_ALLOW_UNSIGNED — the staff Firebase ID token is the gate. The
+// server runs the real pipeline incl. live Gemini parsing.
+export async function postSimInbound({ phone, text, name, agoMs = 0 }) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("not signed in");
+  const idToken = await user.getIdToken();
+  const res = await fetch(WA_BACKEND_URL + "/api/wa-sim-inbound", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
+    body: JSON.stringify({ phone, text, name, agoMs }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+
+// Route a simulated inbound through the real pipeline when backend mode is ON:
+//   · DEV    → the local harness's unsigned /api/wa-inbound (Meta-shaped payload)
+//   · online → the staff-auth /api/wa-sim-inbound (no public-webhook exposure)
+// Either way the server parses with Gemini and the draft lands via onValue.
+export function backendInbound({ phone, text, name, windowAgeMs = 0 }) {
+  return import.meta.env.DEV
+    ? postFakeWebhook({ phone, text, name, agoMs: windowAgeMs })
+    : postSimInbound({ phone, text, name, agoMs: windowAgeMs });
 }

@@ -30,7 +30,7 @@
 // production will (see src/lib/wa-backend.js).
 
 import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, WA_MAX_TEXT_LEN } from "./whatsapp";
-import { backendEnabled, postFakeWebhook } from "./wa-backend";
+import { backendEnabled, backendInbound } from "./wa-backend";
 
 function genMsgId() { return "sim" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
@@ -43,10 +43,11 @@ function genMsgId() { return "sim" + Date.now().toString(36) + Math.random().toS
 //   phoneKeyOverride,    // force a synthetic phoneKey (rare; e.g. a 2nd thread per number)
 // }
 export function simulateInbound(params, ctx) {
-  // Backend mode: hand the message to the real local pipeline and stop.
+  // Backend mode: hand the message to the real pipeline (DEV harness or the
+  // online staff-auth sim endpoint) and stop — the server parses with Gemini.
   if (backendEnabled()) {
-    postFakeWebhook({ phone: params.phone, text: params.text || "", agoMs: params.windowAgeMs || 0 })
-      .catch(function (e) { console.warn("[waSim] backend webhook post failed:", e.message); });
+    backendInbound({ phone: params.phone, text: params.text || "", name: params.parse && params.parse.name, windowAgeMs: params.windowAgeMs || 0 })
+      .catch(function (e) { console.warn("[waSim] backend inbound post failed:", e.message); });
     return normalizePhone(params.phone);
   }
   const { conversations } = ctx;

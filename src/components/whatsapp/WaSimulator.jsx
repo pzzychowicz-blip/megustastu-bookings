@@ -19,6 +19,7 @@ import { sortConversations } from "../../lib/whatsapp";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
 import { simulateInbound } from "../../lib/wa-sim";
 import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL } from "../../lib/wa-backend";
+import { WA_SANDBOX } from "../../lib/waSandbox";
 
 export function WaSimulator({ ctx, onClose }) {
   const [status, setStatus] = useState("Ready.");
@@ -127,25 +128,30 @@ export function WaSimulator({ ctx, onClose }) {
       </div>
       <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>Injects mock inbound messages into the DEV Firebase inbox. Never shown in production.</div>
 
-      {/* Backend mode targets the LOCAL harness (:3999), which only exists in the
-          dev server — hide it in a deployed sandbox so the toggle can't mislead.
-          Online the panel runs in client-side sim mode (writes DEV Firebase). */}
-      {import.meta.env.DEV ? (
+      {/* Backend mode = route through the REAL pipeline (server-side Gemini).
+          DEV → the local harness (:3999); deployed sandbox → the staff-auth
+          /api/wa-sim-inbound (same origin). Shown wherever WA_SANDBOX is, hidden
+          only in a real prod build. */}
+      {WA_SANDBOX ? (
       <Section>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)" }}>Backend mode (local Phase-1b pipeline)</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)" }}>{import.meta.env.DEV ? "Backend mode (local Phase-1b pipeline)" : "Live pipeline (server Gemini)"}</div>
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
               {backendOn
-                ? (health
-                  ? "Harness alive on " + WA_BACKEND_URL + " — llm=" + health.llm + " · send=" + health.send + " · db " + (health.db === "configured" ? "✓" : "✗ not configured")
-                  : "⚠ Harness NOT reachable — run `npm run wa:backend` first.")
-                : "OFF — scenarios write Firebase client-side (original simulator)."}
+                ? (import.meta.env.DEV
+                  ? (health
+                    ? "Harness alive on " + WA_BACKEND_URL + " — llm=" + health.llm + " · send=" + health.send + " · db " + (health.db === "configured" ? "✓" : "✗ not configured")
+                    : "⚠ Harness NOT reachable — run `npm run wa:backend` first.")
+                  : "ON — messages run server-side via /api/wa-sim-inbound (staff-auth) with live Gemini parsing.")
+                : "OFF — scenarios write Firebase client-side (canned parses, no Gemini)."}
             </div>
           </div>
           <Toggle on={backendOn} onClick={toggleBackend} />
         </div>
-        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>ON: scenarios POST a Meta-shaped webhook to /api/wa-inbound (server parses — pre-baked drafts/links don't apply) and replies go through /api/wa-send.</div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{import.meta.env.DEV
+          ? "ON: scenarios POST a Meta-shaped webhook to /api/wa-inbound (server parses — pre-baked drafts/links don't apply) and replies go through /api/wa-send."
+          : "ON: scenarios POST to /api/wa-sim-inbound (staff-auth — no public webhook); the server re-parses with Gemini, so pre-baked drafts/links don't apply. Needs WA_LLM_MODE=live + GEMINI_API_KEY on Vercel."}</div>
       </Section>
       ) : null}
 
