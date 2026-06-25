@@ -60,6 +60,9 @@ export default async function handler(req, res) {
   try {
     await verifyStaffToken(idToken);
   } catch (e) {
+    // Distinguish a server MISCONFIG (no service account → can't verify ANY
+    // token) from a genuinely bad token, so the deploy issue is obvious.
+    if (e && e.code === "NO_SERVICE_ACCOUNT") { res.status(503).json({ error: e.message }); return; }
     res.status(401).json({ error: "invalid token" });
     return;
   }

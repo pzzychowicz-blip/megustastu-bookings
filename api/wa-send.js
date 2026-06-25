@@ -58,6 +58,9 @@ export default async function handler(req, res) {
   try {
     staff = await verifyStaffToken(idToken);
   } catch (e) {
+    // A missing service account can't verify ANY token — surface it as a server
+    // misconfig (503) rather than a misleading "invalid token".
+    if (e && e.code === "NO_SERVICE_ACCOUNT") { res.status(503).json({ error: e.message }); return; }
     res.status(401).json({ error: "invalid token" });
     return;
   }
