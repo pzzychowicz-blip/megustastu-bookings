@@ -44,6 +44,7 @@ import {
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { mkBtn, Presence, useFlip } from "./atoms";
 import { CogIcon } from "./Settings";
+import { WA_SANDBOX } from "../lib/waSandbox";
 
 // v15.8.0: module-level status-change animation state (survives the inline Block
 // remount + any TimelineView remount during the save flow). Single timeline, so
@@ -187,7 +188,11 @@ export function TimelineView({
   autoOptimizer = true,
   setAutoOptimizer = () => {},
   onReshuffle = () => {},
-  onOpenSettings = () => {}
+  onOpenSettings = () => {},
+  // WhatsApp sandbox: opener for the simulator panel. Renders a 🧪 icon button
+  // left of the settings cog ONLY when WA_SANDBOX (dev server or a deployed
+  // sandbox build) and the prop is passed — real prod builds never show it.
+  onOpenSim = null
 }) {
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
@@ -783,23 +788,44 @@ export function TimelineView({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", flex: "1 1 auto", minWidth: 0 }}>
           {legendEls}
         </div>
-        <button
-          onClick={onOpenSettings}
-          title="Settings & keyboard shortcuts"
-          className="mgt-hover-scale"
-          style={{
-            background: "var(--cog-bg)",
-            border: "1px solid var(--cog-border)",
-            borderRadius: 10, width: 34, height: 34,
-            cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0, padding: 0,
-            color: S.text,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
-          }}
-        >
-          <CogIcon />
-        </button>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          {WA_SANDBOX && onOpenSim ? (
+            <button
+              onClick={onOpenSim}
+              title="WhatsApp simulator (sandbox only)"
+              className="mgt-hover-scale"
+              style={{
+                background: "var(--cog-bg)",
+                border: "1px solid var(--cog-border)",
+                borderRadius: 10, width: 34, height: 34,
+                cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0, padding: 0,
+                fontSize: 16, lineHeight: 1,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
+              }}
+            >
+              🧪
+            </button>
+          ) : null}
+          <button
+            onClick={onOpenSettings}
+            title="Settings & keyboard shortcuts"
+            className="mgt-hover-scale"
+            style={{
+              background: "var(--cog-bg)",
+              border: "1px solid var(--cog-border)",
+              borderRadius: 10, width: 34, height: 34,
+              cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0, padding: 0,
+              color: S.text,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
+            }}
+          >
+            <CogIcon />
+          </button>
+        </div>
       </div>
       <div style={{ marginTop: 6, fontSize: 11, color: S.muted }}>
         tap booking to edit  ·  = assign  ·  hold to change status  ·  tap table label to block
