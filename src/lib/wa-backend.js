@@ -162,3 +162,20 @@ export async function suggestCustomerReply({ language, history }) {
   if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
   return data;
 }
+
+// 🎲 Generate scenario — Gemini invents `count` varied inbound messages and the
+// server injects each as a fresh conversation (live parse). Staff-auth, same
+// endpoint DEV (via harness) and online. Returns { generated, samples }.
+export async function generateScenario({ hint, count } = {}) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("not signed in");
+  const idToken = await user.getIdToken();
+  const res = await fetch(WA_BACKEND_URL + "/api/wa-sim-generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
+    body: JSON.stringify({ hint: hint || "", count: count || 1 }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}

@@ -1076,7 +1076,7 @@ function BookingApp(){
     // WhatsApp sandbox: inbox open flag (suppresses global shortcuts) + the I
     // shortcut opener. confirmArchive/confirmDeleteConv/showSim feed anyModal.
     showInbox:showInbox,setShowInbox:setShowInbox,
-    confirmArchive:confirmArchive,confirmDeleteConv:confirmDeleteConv,showSim:showSim,
+    confirmArchive:confirmArchive,confirmDeleteConv:confirmDeleteConv,showSim:showSim,setShowSim:setShowSim,
     save:save,doSave:doSave,saveWalkin:saveWalkin,doSaveWalkin:doSaveWalkin,
     forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain,
     // v15.8.0 cont.4: keyboard nav routes through the same slide path as the buttons.
@@ -1256,6 +1256,8 @@ function BookingApp(){
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
       // WhatsApp sandbox: I → open the inbox ("w" was taken by Walk-in).
       if(k==="i"||k==="I"){e.preventDefault();K.setShowInbox(true);return;}
+      // WhatsApp sandbox: X → open the 🧪 simulator (sandbox builds only).
+      if((k==="x"||k==="X")&&WA_SANDBOX){e.preventDefault();K.setShowSim(true);return;}
       // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
       if(k===SUMMARY_KEY||k===SUMMARY_KEY.toUpperCase()){e.preventDefault();K.setSummaryOpen(function(o){return !o;});return;}
       if(k===WEEK_KEY||k===WEEK_KEY.toUpperCase()){e.preventDefault();K.setShowWeek(true);return;}

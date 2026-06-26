@@ -19,10 +19,8 @@
 // exactly like production. Also routable under the local harness
 // (scripts/wa-backend-dev.mjs) for DEV testing with a real DEV id token.
 
-import { verifyStaffToken, getConversation, readOperatingHours } from "./_lib/rtdb.js";
-import { processInbound, applyParse } from "./_lib/inbound-core.js";
-import { parseMessage, mockParse } from "./_lib/gemini.js";
-import { normalizePhone } from "../src/lib/whatsapp.js";
+import { verifyStaffToken } from "./_lib/rtdb.js";
+import { injectSimInbound } from "./_lib/inbound-core.js";
 
 // Run `promise` after the response is sent (same hook as api/wa-inbound): on
 // Vercel via the request-context waitUntil, on the local harness the long-lived
@@ -72,30 +70,9 @@ export default async function handler(req, res) {
   const text = body && typeof body.text === "string" ? body.text : "";
   if (!phone || !text.trim()) { res.status(400).json({ error: "phone and text are required" }); return; }
   const agoMs = Number(body.agoMs) || 0;
-  const ts = Date.now() - agoMs;
 
   try {
-    // Draft-aware parse context: a PENDING draft becomes the merge base so a
-    // follow-up message updates it (mirrors api/wa-inbound's getConversation).
-    const conv = await getConversation(normalizePhone(phone));
-    const existingDraft = conv && conv.draftStatus === "parsed" ? conv.draftData : null;
-    const r = await processInbound({
-      phone, text, ts,
-      wamid: "sim." + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-      profileName: (body && body.name) || null,
-      parse: null,                       // Gemini runs in phase B, after the response
-      langHint: mockParse(text).language, // free regex lang for the auto-ack
-      preloadedConv: conv,
-    });
-
-    // Phase B: live Gemini parse → draft patch, after the response. The client
-    // sees the draft appear through its normal onValue listener.
-    scheduleAfterResponse((async () => {
-      const hours = await readOperatingHours();
-      const parse = await parseMessage(text, { hours, existingDraft });
-      await applyParse(r.phoneKey, parse, ts);
-    })());
-
+    const r = await injectSimInbound({ phone, text, name: body && body.name, agoMs }, scheduleAfterResponse);
     res.status(200).json({ ok: true, phoneKey: r.phoneKey, skipped: r.skipped });
   } catch (e) {
     console.error("[wa-sim-inbound] failed:", e && e.message);

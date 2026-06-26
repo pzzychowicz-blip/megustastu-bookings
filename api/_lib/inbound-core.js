@@ -28,8 +28,9 @@
 // path; we additionally skip the whole upsert when the message already exists.
 
 import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN } from "../../src/lib/whatsapp.js";
-import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey } from "./rtdb.js";
+import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours } from "./rtdb.js";
 import { sendText } from "./meta.js";
+import { parseMessage, mockParse } from "./gemini.js";
 
 // draftPatchFromParse(parse, ts) — the conversation fields a draft-intent
 // parse sets. Shared by processInbound (when called with a parse — the
@@ -164,4 +165,32 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   }
 
   return { phoneKey, skipped: false };
+}
+
+// injectSimInbound({ phone, text, name, agoMs }, afterResponse) — the SANDBOX
+// inbound flow shared by api/wa-sim-inbound (online Sim panel) and
+// api/wa-sim-generate (Gemini-invented scenarios). Mirrors api/wa-inbound for a
+// single message: store fast (processInbound, parse=null + auto-ack), then parse
+// with Gemini AFTER the response via `afterResponse` (the endpoint's Vercel
+// waitUntil / harness shim) so the draft lands through the client's onValue.
+// `afterResponse(promise)` schedules post-response work; returns the
+// processInbound result ({ phoneKey, skipped }).
+export async function injectSimInbound({ phone, text, name, agoMs = 0 }, afterResponse) {
+  const ts = Date.now() - (Number(agoMs) || 0);
+  const conv = await getConversation(normalizePhone(phone));
+  const existingDraft = conv && conv.draftStatus === "parsed" ? conv.draftData : null;
+  const r = await processInbound({
+    phone, text, ts,
+    wamid: "sim." + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    profileName: name || null,
+    parse: null,
+    langHint: mockParse(text).language,
+    preloadedConv: conv,
+  });
+  afterResponse((async () => {
+    const hours = await readOperatingHours();
+    const parse = await parseMessage(text, { hours, existingDraft });
+    await applyParse(r.phoneKey, parse, ts);
+  })());
+  return r;
 }

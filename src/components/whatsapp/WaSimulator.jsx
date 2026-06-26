@@ -18,7 +18,7 @@ import { S, BTN } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
 import { simulateInbound } from "../../lib/wa-sim";
-import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL, suggestCustomerReply } from "../../lib/wa-backend";
+import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL, suggestCustomerReply, generateScenario } from "../../lib/wa-backend";
 import { WA_SANDBOX } from "../../lib/waSandbox";
 
 export function WaSimulator({ ctx, onClose }) {
@@ -53,6 +53,9 @@ export function WaSimulator({ ctx, onClose }) {
   const [custKey, setCustKey] = useState("");
   const [custText, setCustText] = useState("");
   const [suggesting, setSuggesting] = useState(false);
+  // 🎲 Generate scenario (Gemini invents a varied message + injects it)
+  const [genHint, setGenHint] = useState("");
+  const [genBusy, setGenBusy] = useState(false);
   const custList = sortConversations(ctx.conversations || [], false)
     .concat(sortConversations(ctx.conversations || [], true));
   const effectiveKey = custKey && custList.some((c) => c.phoneKey === custKey)
@@ -87,6 +90,21 @@ export function WaSimulator({ ctx, onClose }) {
     }
   }
 
+  async function runGenerate(count) {
+    if (genBusy) return;
+    setGenBusy(true);
+    setStatus(count > 1 ? "🎲 Inventing " + count + " scenarios with Gemini…" : "🎲 Inventing a scenario with Gemini…");
+    try {
+      const data = await generateScenario({ hint: genHint, count });
+      const n = data.generated || 0;
+      const eg = data.samples && data.samples[0] ? " — e.g. “" + String(data.samples[0].text).slice(0, 48) + "…”" : "";
+      setStatus("🎲 Generated " + n + " scenario" + (n === 1 ? "" : "s") + eg);
+    } catch (e) {
+      setStatus("⚠ Generate failed: " + e.message + (import.meta.env.DEV ? " (is the harness running? npm run wa:backend)" : ""));
+    } finally {
+      setGenBusy(false);
+    }
+  }
   function runScenario(s) { s.run(ctx); setStatus("Sent" + (backendOn ? " via backend" : "") + " → " + s.label); }
   function sendCustom() {
     const parse = {
@@ -148,6 +166,16 @@ export function WaSimulator({ ctx, onClose }) {
           : "ON: scenarios POST to /api/wa-sim-inbound (staff-auth — no public webhook); the server re-parses with Gemini, so pre-baked drafts/links don't apply. Needs WA_LLM_MODE=live + GEMINI_API_KEY on Vercel."}</div>
       </Section>
       ) : null}
+
+      <Section>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 6 }}>🎲 Generate scenario (Gemini)</div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8 }}>Gemini invents a fresh, varied customer message (new sender) and runs it through the live pipeline — variety beyond the canned scenarios. Optional steer below; leave blank to surprise.</div>
+        <input className="mgt-hover-scale" value={genHint} onChange={(e) => setGenHint(e.target.value)} placeholder="Optional steer — e.g. birthday for 10, running late, cancel…" style={Object.assign({}, mkInp(), { marginBottom: 8 })} />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(1)} style={mkBtn({ minHeight: 38, padding: "8px 14px", background: "var(--wa-sim-accent)" })}>{genBusy ? "🎲 Thinking…" : "🎲 Generate"}</button>
+          <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(3)} style={mkBtn({ minHeight: 38, padding: "8px 12px", background: S.accent })}>Generate 3</button>
+        </div>
+      </Section>
 
       <Section>
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 8 }}>Reply as customer</div>

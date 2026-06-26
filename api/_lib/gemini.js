@@ -260,3 +260,61 @@ export async function generateCustomerReply(history, language) {
     clearTimeout(timer);
   }
 }
+
+// generateScenarioMessage({ hint }) → one INVENTED, realistic inbound customer
+// message for variety beyond the 60 canned scenarios: { message, language, name }.
+// Gemini randomly picks a situation across a wide range (new booking of varying
+// size/date/time, cancel, modify, running late, a question, a special request,
+// occasionally smalltalk/wrong-number), mostly Spanish + some English, informal
+// with typos. `hint` optionally steers it. A random diversity seed + temperature
+// 1.1 keep repeated calls different. Powers the Sim "🎲 Generate scenario".
+const SCENARIO_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    message: { type: "STRING", description: "the customer's WhatsApp message text" },
+    language: { type: "STRING", enum: ["es", "en"] },
+    name: { type: "STRING", nullable: true, description: "the sender's first name if they give one, else null" },
+  },
+  required: ["message", "language"],
+};
+export async function generateScenarioMessage({ hint } = {}) {
+  const key = env("GEMINI_API_KEY", null);
+  if (!key) { const e = new Error("GEMINI_API_KEY not set"); e.status = 400; throw e; }
+  const model = env("GEMINI_MODEL", "gemini-3.1-flash-lite");
+  const seed = Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
+  const prompt = [
+    "Invent ONE realistic inbound WhatsApp message from a (potential) customer to a small restaurant in the Canary Islands. It is test data for a booking system — make it varied and natural.",
+    "Randomly pick the SITUATION from a WIDE range (do NOT default to a plain new booking):",
+    "- a new booking: party size 1-20, for today / tomorrow / a named weekday / a date, lunch or dinner, sometimes a vague time;",
+    "- a cancellation; a change to an existing booking (size/time/date); running late;",
+    "- a question (opening hours, menu, parking, terrace, dog-friendly, allergies, high chair);",
+    "- a special request (birthday, wheelchair access, allergy, big group);",
+    "- occasionally: smalltalk / thanks, a wrong number, or spam.",
+    "Style: MOSTLY Spanish, sometimes English. Informal WhatsApp tone — lowercase, typos, sometimes no greeting, an emoji now and then. Keep it to 1-2 short sentences.",
+    "Only include a name if the customer naturally states it.",
+    "Diversity seed (meaningless — just use it to make this DIFFERENT from other generations): " + seed,
+    "Tester's optional steer: " + (hint && String(hint).trim() ? JSON.stringify(String(hint).trim()) : "none — surprise me"),
+  ].join("\n");
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  try {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json", responseSchema: SCENARIO_SCHEMA, temperature: 1.1, maxOutputTokens: 2000 },
+      }),
+      signal: ac.signal,
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error((data.error && data.error.message) || ("Gemini error " + r.status)); e.status = 502; throw e; }
+    const jsonText = data.candidates && data.candidates[0] && data.candidates[0].content
+      && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
+    if (!jsonText) { const e = new Error("Gemini returned no text"); e.status = 502; throw e; }
+    const out = JSON.parse(jsonText);
+    return { message: String(out.message || "").trim(), language: out.language === "en" ? "en" : "es", name: out.name || null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
