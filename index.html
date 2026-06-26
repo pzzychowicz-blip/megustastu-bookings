@@ -372,6 +372,22 @@
       @keyframes mgt-fade-in { from { opacity: 0; } to { opacity: 1; } }
       .mgt-fade-in { animation: mgt-fade-in 180ms ease-out both; }
 
+      /* WhatsApp module (animation parity, post-port): a new chat bubble eases
+         in (fade + small rise). Applied to the NEWEST bubble only — see
+         MessageBubble.jsx — so opening a thread doesn't cascade-animate history. */
+      @keyframes mgt-bubble-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+      .mgt-bubble-in { animation: mgt-bubble-in 200ms cubic-bezier(.4, 0, .2, 1) both; }
+      /* Parsing/typing indicator (WA inbox): a sweeping highlight across a muted
+         track while the inbound message is being parsed (Gemini round-trip). The
+         reduced-motion guard below stops the sweep. */
+      @keyframes mgt-shimmer { from { background-position: -160px 0; } to { background-position: 160px 0; } }
+      .mgt-shimmer {
+        background-image: linear-gradient(90deg, transparent 0%, var(--wa-shimmer, rgba(0,122,255,0.18)) 50%, transparent 100%);
+        background-size: 160px 100%;
+        background-repeat: no-repeat;
+        animation: mgt-shimmer 1100ms ease-in-out infinite;
+      }
+
       /* Accessibility + weak-hardware opt-out: collapse every animation/transition
          to ~instant when the OS requests reduced motion. */
       @media (prefers-reduced-motion: reduce) {

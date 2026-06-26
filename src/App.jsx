@@ -891,6 +891,9 @@ function BookingApp(){
         // job is done, so close it. Flash only on a real save (never claim "saved"
         // for a not-yet-persisted write — matches quick-action honesty).
         const ok=saveBookings(buildNext);
+        // WhatsApp sandbox: if this edit came from a modify request's "Apply
+        // changes", auto-mark that request handled — but only on a real save.
+        wa.completeModifyApply(editId, ok);
         if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash();
         setShowForm(false);setViewDate(f.date);
       } else {
@@ -1697,7 +1700,7 @@ function BookingApp(){
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
           onSave={saveReminderFromEditor}
           onCancel={function(){setReminderEditor(null);}}
-          isNew={reminderEditor.id==="new"} />:null}</ModalPresence>{showInbox?<InboxPanel
+          isNew={reminderEditor.id==="new"} />:null}</ModalPresence><ModalPresence show={showInbox}>{showInbox?<InboxPanel
           conversations={wa.conversations}
           messages={wa.messagesMap}
           templates={wa.templates}
@@ -1715,7 +1718,9 @@ function BookingApp(){
           onCancelLinkedBooking={wa.handleCancelLinkedBooking}
           onOpenLinkedBooking={wa.handleOpenLinkedBooking}
           onDismissAcceptedBadge={wa.handleDismissAcceptedBadge}
-          onMarkIntentHandled={wa.handleMarkIntentHandled} />:null}{confirmArchive?(function(){
+          onMarkIntentHandled={wa.handleMarkIntentHandled}
+          onResend={wa.handleResend}
+          onApplyModify={wa.handleApplyModify} />:null}</ModalPresence>{confirmArchive?(function(){
           const conv=wa.conversations.find(function(c){return c.phoneKey===confirmArchive;});
           const bk=conv&&conv.acceptedBookingId?bookings.find(function(b){return b.id===conv.acceptedBookingId;}):null;
           return <Overlay onClose={function(){setConfirmArchive(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
@@ -1732,7 +1737,7 @@ function BookingApp(){
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
               style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<WaSimulator
-          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,upsertConversation:wa.upsertConversation,appendMessage:wa.appendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData}}
+          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.appendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
           onClose={function(){setShowSim(false);}} />:null):null}{historyPopup}</div></div>
   );
 }

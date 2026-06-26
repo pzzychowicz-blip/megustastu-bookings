@@ -126,6 +126,25 @@ export function formatWindow(expiresAt) {
   return { label: "Window: " + m + "m left", expired: false };
 }
 
+// clampConfidence(stated, draft) — the confidence ceiling rule (decided
+// 2026-06-26). HIGH is allowed ONLY when every crucial field (size, date, time)
+// is present AND there is no ambiguity. Count "issues" = missing crucial fields
+// + (1 if an ambiguity note is present): 0 → high · 1 → medium · 2+ → low. The
+// LLM's own stated confidence is the ceiling's upper bound (so a complete draft
+// the model still flagged low/medium isn't bumped up). Single source of truth,
+// applied wherever a draft is finalized (mergeDraft here, the server's
+// draftPatchFromParse, and the client simulator's draftData build).
+export function clampConfidence(stated, draft) {
+  const d = draft || {};
+  const missing = [d.size, d.date, d.time].filter((v) => v === null || v === undefined || v === "").length;
+  const hasAmbiguity = !!(d.ambiguity && String(d.ambiguity).trim());
+  const issues = missing + (hasAmbiguity ? 1 : 0);
+  const ceiling = issues >= 2 ? "low" : issues === 1 ? "medium" : "high";
+  const rank = { low: 0, medium: 1, high: 2 };
+  const s = rank[stated] != null ? rank[stated] : 2; // unknown stated → let the ceiling govern
+  return ["low", "medium", "high"][Math.min(s, rank[ceiling])];
+}
+
 // mergeDraft — the mechanical draft-update rule, shared by the server MOCK
 // parser (api/_lib/gemini.js) and the client-mode simulator (wa-sim.js) so
 // every test mode exercises the same flow the LIVE path gets semantically from
@@ -160,8 +179,8 @@ export function mergeDraft(oldDraft, newParse) {
     language: pick(newParse.language, oldDraft.language),
   };
   const filled = [merged.size, merged.date, merged.time].filter((v) => v !== null && v !== undefined && v !== "").length;
-  merged.confidence = filled === 3 ? "high" : filled === 2 ? "medium" : "low";
   merged.ambiguity = newParse.ambiguity || (filled === 3 ? null : oldDraft.ambiguity || null);
+  merged.confidence = clampConfidence(newParse.confidence, merged);
   return merged;
 }
 

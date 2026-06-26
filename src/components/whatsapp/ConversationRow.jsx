@@ -6,7 +6,7 @@
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, formatPhone, formatRelativeTime } from "../../lib/whatsapp";
 
-export function ConversationRow({ conv, active, onClick, bookings }) {
+export function ConversationRow({ conv, active, onClick, bookings, flipId }) {
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
   const displayName = match ? match.name : (conv.phone || conv.phoneKey);
   const phoneLine = match ? formatPhone(conv.phone || conv.phoneKey) : null;
@@ -14,8 +14,11 @@ export function ConversationRow({ conv, active, onClick, bookings }) {
   const hasAccepted = conv.draftStatus === "accepted";
   const intent = (conv.draftData && conv.draftData.intent) || null;
 
+  // Parsing/typing tag (sandbox inbound path) takes visual priority — the
+  // message is mid-parse, so the intent/draft tag isn't known yet.
   let tagEl = null;
-  if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: 12, marginLeft: 6, color: "var(--danger-text)", fontWeight: 700 }}>⚠</span>;
+  if (conv.parsing) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: 10, fontWeight: 700, marginLeft: 6, padding: "1px 7px", borderRadius: 6, color: "var(--accent)", border: "1px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
+  else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: 12, marginLeft: 6, color: "var(--danger-text)", fontWeight: 700 }}>⚠</span>;
   else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: 12, marginLeft: 6, color: "var(--warn-text)", fontWeight: 700 }}>✎</span>;
   else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ fontSize: 12, marginLeft: 6 }}>📋</span>;
   else if (hasAccepted) tagEl = <span title="Booking confirmed" style={{ fontSize: 12, marginLeft: 6, color: "var(--success-text)", fontWeight: 700 }}>✓</span>;
@@ -36,6 +39,7 @@ export function ConversationRow({ conv, active, onClick, bookings }) {
   return (
     <div
       ref={rowRef}
+      data-flip-id={flipId}
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}

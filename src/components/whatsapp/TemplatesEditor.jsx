@@ -5,7 +5,7 @@
 // stay reachable on tall lists.
 
 import { useState } from "react";
-import { Overlay, Fld, mkInp, mkBtn } from "../atoms";
+import { Overlay, Fld, mkInp, mkBtn, AutoHeight } from "../atoms";
 import { S, BTN } from "../../lib/constants";
 
 export function TemplatesEditor({ templates, onSave, onClose }) {
@@ -62,6 +62,7 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
     <Overlay onClose={onClose} footer={editing ? editFooter : listFooter}>
       <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4, color: "var(--text-primary)" }}>Quick-reply templates</div>
       <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>Used as one-tap chips in the reply composer.</div>
+      <AutoHeight>
       {editing ? (
         <div style={{ padding: "14px", borderRadius: 12, background: "var(--wa-row-active-bg)", border: "1px solid var(--wa-row-active-border)" }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 10 }}>{editing === "__new__" ? "New template" : "Edit template"}</div>
@@ -75,9 +76,10 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
       ) : (
         <div>
           {rows}
-          <button onClick={openNew} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 14px", background: S.accent })}>+ Add template</button>
+          <button onClick={openNew} className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 40, padding: "8px 14px", background: S.accent })}>+ Add template</button>
         </div>
       )}
+      </AutoHeight>
     </Overlay>
   );
 }

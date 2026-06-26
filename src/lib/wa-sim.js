@@ -29,10 +29,14 @@
 // phoneKeyOverride params are ignored on that path — the server decides, like
 // production will (see src/lib/wa-backend.js).
 
-import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, WA_MAX_TEXT_LEN } from "./whatsapp";
+import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, clampConfidence, WA_MAX_TEXT_LEN } from "./whatsapp";
 import { backendEnabled, backendInbound } from "./wa-backend";
 
 function genMsgId() { return "sim" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+// Simulated LLM parse latency (client mode) — how long the "parsing…" indicator
+// shows before the draft is revealed. Mirrors the real backend's async round-trip.
+const WA_SIM_PARSE_MS = 1100;
 
 // simulateInbound(params, ctx) — inject one inbound message.
 // params: {
@@ -81,6 +85,9 @@ export function simulateInbound(params, ctx) {
       confidence: parse.confidence || "high",
       ambiguity: parse.ambiguity || null,
     };
+    // Confidence ceiling (see clampConfidence) — a draft missing the party size
+    // (or any crucial field / with ambiguity) can never read "high confidence".
+    draftData.confidence = clampConfidence(draftData.confidence, draftData);
   }
 
   // Keyed write: compute the merged conversation object from the ctx snapshot
@@ -102,25 +109,38 @@ export function simulateInbound(params, ctx) {
     autoAckSent: true,
     _waSim: true,
   };
+  if (params.acceptedBookingId !== undefined) patch.acceptedBookingId = params.acceptedBookingId;
+
   // A draft intent sets/UPDATES the draft; question/other leave any existing
   // draft (or linked booking) untouched so we don't clobber an accepted thread.
   // Draft-aware merge (client-mode mirror of the backend rule): when a PENDING
   // draft exists, the new parse merges into it via the shared mergeDraft —
   // follow-up details fill gaps, corrections overwrite, confidence recomputed.
-  if (isDraftIntent) {
-    patch.draftStatus = "parsed";
-    // draftUpdatedAt: the intent-banner re-show gate (intentBannerVisible) —
-    // stamped ONLY here, where a parse sets/updates the draft. question/other
-    // (and parse-less appends) leave it, so "thank you" can't re-raise a
-    // handled banner. Mirrors the server's draftPatchFromParse.
-    patch.draftUpdatedAt = ts;
-    patch.draftData = ex && ex.draftStatus === "parsed" && ex.draftData
-      ? mergeDraft(ex.draftData, draftData)
-      : draftData;
-  }
-  if (params.acceptedBookingId !== undefined) patch.acceptedBookingId = params.acceptedBookingId;
-  ctx.upsertConversation(phoneKey, Object.assign({}, base, patch));
+  // draftUpdatedAt: the intent-banner re-show gate (intentBannerVisible) —
+  // stamped ONLY where a parse sets/updates the draft, so "thank you" can't
+  // re-raise a handled banner. Mirrors the server's draftPatchFromParse.
+  const draftPatch = isDraftIntent ? {
+    draftStatus: "parsed",
+    draftUpdatedAt: ts,
+    draftData: ex && ex.draftStatus === "parsed" && ex.draftData ? mergeDraft(ex.draftData, draftData) : draftData,
+  } : null;
 
+  // Two-phase (only for a draft intent, and only when a patcher is available):
+  // show the inbound + a "parsing…" indicator first, then reveal the draft after
+  // a simulated LLM round-trip — so the parsing UX is visible in client mode
+  // (the real backend is genuinely async). Without patchConversation, fall back
+  // to the original single write.
+  if (draftPatch && ctx.patchConversation) {
+    ctx.upsertConversation(phoneKey, Object.assign({}, base, patch, { parsing: true }));
+    ctx.appendMessage(phoneKey, inboundMsg);
+    if (autoAckMsg) ctx.appendMessage(phoneKey, autoAckMsg);
+    setTimeout(function () {
+      ctx.patchConversation(phoneKey, Object.assign({ parsing: null }, draftPatch));
+    }, WA_SIM_PARSE_MS);
+    return phoneKey;
+  }
+
+  ctx.upsertConversation(phoneKey, Object.assign({}, base, patch, draftPatch || {}));
   ctx.appendMessage(phoneKey, inboundMsg);
   if (autoAckMsg) ctx.appendMessage(phoneKey, autoAckMsg);
 

@@ -55,6 +55,15 @@ export function useWhatsApp({
   // draftSourceRef: phoneKey whose draft is being accepted. Set by
   // handleAcceptDraft, consumed by completeDraftAccept after the booking saves.
   const draftSourceRef = useRef(null);
+  // modifyApplyRef: {phoneKey, bookingId} set by handleApplyModify, consumed by
+  // completeModifyApply after doSave's edit succeeds — so applying a customer's
+  // requested changes auto-marks the modify request handled ONLY on a real save.
+  const modifyApplyRef = useRef(null);
+  // Sandbox-only: when set, the NEXT mock send resolves to "failed" instead of
+  // "delivered" so the failed-bubble + Retry path is demonstrable (the mock send
+  // otherwise never fails). Flipped by simFailNextSend() from the simulator;
+  // consumed once. Backend mode is unaffected (the server owns message creation).
+  const failNextSendRef = useRef(false);
   // Live mirrors of the two collection states. Savers compute the next value
   // from THESE (not from a setState updater) so the Firebase `set()` runs ONCE,
   // outside React's updater — under <StrictMode> updaters are double-invoked, and
@@ -239,10 +248,22 @@ export function useWhatsApp({
       if (c.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
       return patch;
     });
+    // Mock provider round-trip. A one-shot simulated failure (simFailNextSend)
+    // resolves to "failed" so the failed-bubble + Retry affordance is testable.
+    const willFail = failNextSendRef.current;
+    failNextSendRef.current = false;
     setTimeout(() => {
-      patchMessage(phoneKey, msgId, { status: "delivered" });
+      patchMessage(phoneKey, msgId, { status: willFail ? "failed" : "delivered" });
     }, 800);
   }
+  // handleResend: retry a failed mock send — flip the bubble back to "sending"
+  // then "delivered" (a retry succeeds). Client mock path only; in backend mode
+  // the server owns message lifecycle, so resend isn't wired there.
+  function handleResend(phoneKey, msgId) {
+    patchMessage(phoneKey, msgId, { status: "sending" });
+    setTimeout(() => { patchMessage(phoneKey, msgId, { status: "delivered" }); }, 800);
+  }
+  function simFailNextSend() { failNextSendRef.current = true; }
 
   // handleAcceptDraft: close inbox, pre-fill the booking form from the draft,
   // flag draftSourceRef so doSave flips the conversation on success, and set
@@ -371,6 +392,43 @@ export function useWhatsApp({
     setShowInbox(false); setShowForm(true); setViewDate(booking.date || new Date().toISOString().slice(0, 10));
   }
 
+  // handleApplyModify: a customer "modify" request — open the LINKED booking in
+  // the edit form, pre-filled with the parsed requested changes (date/time/size
+  // from draftData, falling back to the booking's current values). Mirrors
+  // handleOpenLinkedBooking but overlays the parse, so the staff reviews + taps
+  // Save (the optimizer/conflict checks then run with a confirmation step). The
+  // intent banner stays until "Mark as handled" — applying isn't auto-handling.
+  function handleApplyModify(conv) {
+    if (!conv || !conv.acceptedBookingId) return;
+    const booking = bookings.find((b) => b.id === conv.acceptedBookingId);
+    if (!booking) return;
+    const d = conv.draftData || {};
+    const date = d.date || booking.date || "";
+    const time = d.time || booking.time || "13:00";
+    const size = d.size != null ? d.size : (booking.size || 2);
+    setForm(Object.assign({}, EMPTY_FORM, {
+      name: booking.name || "", phone: booking.phone || "+", date, time, size,
+      preference: booking.preference || "auto", notes: booking.notes || "", status: booking.status || "confirmed",
+      customDur: booking.customDur || null, manualTables: [], preferredTables: Array.isArray(booking.preferredTables) ? booking.preferredTables.slice() : [], returnOf: null,
+    }));
+    setEditId(booking.id); setError(""); setSwapAffected(null);
+    modifyApplyRef.current = { phoneKey: conv.phoneKey, bookingId: booking.id };
+    setReturnToInboxKey(conv.phoneKey);
+    setShowInbox(false); setShowForm(true); setViewDate(date);
+  }
+  // completeModifyApply(bookingId, ok): called from doSave's edit-success path.
+  // When this edit was started via "Apply changes" (modifyApplyRef matches) AND
+  // the write actually saved (ok), mark the modify request handled — so applying
+  // the change resolves the banner without a second click. A held/failed write
+  // (ok===false) does NOT auto-handle (we never claim handled for an unpersisted
+  // change); the ref clears either way so a later unrelated edit can't re-fire.
+  function completeModifyApply(bookingId, ok) {
+    const r = modifyApplyRef.current;
+    if (!r || r.bookingId !== bookingId) return;
+    modifyApplyRef.current = null;
+    if (ok) handleMarkIntentHandled(r.phoneKey);
+  }
+
   // Dev-only hard reset for the simulator: wipe BOTH WA nodes directly (bypasses
   // the empty-array guard on purpose — this is an explicit "clear the sandbox"
   // action, not an accidental effect write). Never wired outside the DEV-gated
@@ -393,10 +451,11 @@ export function useWhatsApp({
     // draft seam (doSave calls completeDraftAccept, then linkBookingByPhone)
     draftSourceRef, completeDraftAccept, linkBookingByPhone,
     // handlers
-    handleSendReply, handleAcceptDraft, handleDismissDraft, handleMarkRead,
+    handleSendReply, handleResend, simFailNextSend,
+    handleAcceptDraft, handleDismissDraft, handleMarkRead,
     handleDismissAcceptedBadge, handleMarkIntentHandled, autoHandleCancelIntent,
     handleArchive, doArchive, handleUnarchive,
     handleDeleteConversation, doDeleteConversation,
-    handleCancelLinkedBooking, handleOpenLinkedBooking,
+    handleCancelLinkedBooking, handleOpenLinkedBooking, handleApplyModify, completeModifyApply,
   };
 }

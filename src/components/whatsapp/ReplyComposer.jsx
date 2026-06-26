@@ -15,7 +15,8 @@ function TemplateChips({ templates, convLang, onInsert }) {
       {/* Padding gives the .mgt-hover-scale chips room to scale without being
           clipped by overflow-x:auto (which also clips the y axis); the matching
           negative margin keeps the composer's height/layout unchanged. */}
-      <div style={{ flex: 1, overflowX: "auto", display: "flex", gap: 6, padding: "8px 8px", margin: "-8px 0" }}>
+      {/* keyed by outLang → the chip set crossfades when toggling EN⇄ES */}
+      <div key={outLang} className="mgt-fade-in" style={{ flex: 1, overflowX: "auto", display: "flex", gap: 6, padding: "8px 8px", margin: "-8px 0" }}>
         {templates.map((t) => (
           <button
             key={t.id}
@@ -73,7 +74,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
         <button
           onClick={send}
           disabled={!canSend}
-          className="mgt-hover-scale"
+          className="mgt-hover-scale mgt-press"
           style={{ background: canSend ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 12, padding: "10px 18px", cursor: canSend ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 700, color: "var(--text-on-accent)", minHeight: 44, boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)" }}
         >Send</button>
       </div>

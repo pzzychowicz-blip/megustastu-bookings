@@ -148,6 +148,7 @@ export default async function handler(req, res) {
               // regex detection is free and good enough for a two-line ack.
               langHint: isText ? mockParse(text).language : null,
               preloadedConv: conv,
+              willParse: isText, // flag "analyzing…" only for messages we'll parse
             });
             if (r.skipped) results.skipped++;
             else {
@@ -198,8 +199,10 @@ export default async function handler(req, res) {
           await applyParse(job.phoneKey, parse, job.ts);
         } catch (e) {
           // Parse failure = message stays draft-less (the designed failure
-          // mode); never affects the already-sent response.
+          // mode); never affects the already-sent response. Still clear the
+          // "analyzing…" indicator so it can't get stuck on.
           console.error("[wa-inbound] async parse failed:", e.message);
+          try { await applyParse(job.phoneKey, null, job.ts); } catch (_) {}
         }
       }
     })());

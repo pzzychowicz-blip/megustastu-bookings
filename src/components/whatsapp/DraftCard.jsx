@@ -64,12 +64,12 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge })
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
           onClick={onAccept}
-          className="mgt-hover-scale"
+          className="mgt-hover-scale mgt-press"
           style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 12, padding: "9px 16px", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "var(--text-on-accent)", minHeight: 40, boxShadow: "0 2px 6px rgba(0,122,255,0.22), inset 0 1px 1px rgba(255,255,255,0.2)" }}
         >Accept &amp; open</button>
         <button
           onClick={onDismiss}
-          className="mgt-hover-scale"
+          className="mgt-hover-scale mgt-press"
           style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: 12, padding: "9px 16px", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 40, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}
         >Dismiss</button>
       </div>

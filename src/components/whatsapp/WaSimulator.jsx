@@ -33,6 +33,12 @@ export function WaSimulator({ ctx, onClose }) {
     backendHealth().then((h) => { if (alive) setHealth(h); });
     return () => { alive = false; };
   }, [backendOn]);
+  // Esc closes the simulator (parity with the inbox + every other modal).
+  useEffect(() => {
+    function onKey(e) { if (e.key === "Escape") { e.preventDefault(); onClose(); } }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   function toggleBackend() {
     const next = !backendOn;
     setBackendEnabled(next);
@@ -116,6 +122,10 @@ export function WaSimulator({ ctx, onClose }) {
     };
     simulateInbound({ phone: form.phone, language: form.language, text: form.text || "(simulated message)", parse }, ctx);
     setStatus("Sent custom → " + form.phone + " · " + form.intent);
+  }
+  function onFailNext() {
+    if (ctx.simFailNextSend) ctx.simFailNextSend();
+    setStatus("⚠ Next staff reply (client mode) will fail — then use ↻ Retry on the bubble.");
   }
   function onSeed() { const n = seedSampleBookings(ctx); setStatus(n > 0 ? "Seeded " + n + " WA-SIM booking(s)." : "Sample bookings already present."); }
   function onClearBookings() { clearWaSimBookings(ctx); setStatus("Cleared WA-SIM bookings."); }
@@ -211,6 +221,12 @@ export function WaSimulator({ ctx, onClose }) {
           <button className="mgt-hover-scale" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: BTN.del })} onClick={onClearConvos}>Clear conversations</button>
         </div>
         <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>Seed first — the linked cancel/modify and Regular-chip scenarios reference these bookings.</div>
+      </Section>
+
+      <Section>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 8 }}>Send failure (test Retry)</div>
+        <button className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: BTN.del, width: "100%" })} onClick={onFailNext}>⚠ Make next staff reply fail</button>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>Client mode only. Then send a reply in the inbox — the bubble shows “failed” with a ↻ Retry button. (Backend mode handles failures server-side.)</div>
       </Section>
 
       <Section>

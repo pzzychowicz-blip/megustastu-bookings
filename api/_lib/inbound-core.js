@@ -27,7 +27,7 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN } from "../../src/lib/whatsapp.js";
+import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence } from "../../src/lib/whatsapp.js";
 import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours } from "./rtdb.js";
 import { sendText } from "./meta.js";
 import { parseMessage, mockParse } from "./gemini.js";
@@ -40,20 +40,21 @@ import { parseMessage, mockParse } from "./gemini.js";
 // stamps it, so a customer's "thank you" (intent other — drafts untouched)
 // never resurrects a handled banner.
 function draftPatchFromParse(parse, ts) {
-  return {
-    draftStatus: "parsed",
-    draftUpdatedAt: ts || Date.now(),
-    draftData: {
-      name: parse.name != null ? parse.name : null,
-      size: parse.size != null ? parse.size : null,
-      date: parse.date || null,
-      time: parse.time || null,
-      notes: parse.notes || "",
-      intent: parse.intent,
-      confidence: parse.confidence || "high",
-      ambiguity: parse.ambiguity || null,
-    },
+  const draftData = {
+    name: parse.name != null ? parse.name : null,
+    size: parse.size != null ? parse.size : null,
+    date: parse.date || null,
+    time: parse.time || null,
+    notes: parse.notes || "",
+    intent: parse.intent,
+    confidence: parse.confidence || "high",
+    ambiguity: parse.ambiguity || null,
   };
+  // Confidence ceiling: high only when size/date/time are all present and there's
+  // no ambiguity (see clampConfidence). A draft missing the party size can never
+  // read "high confidence".
+  draftData.confidence = clampConfidence(draftData.confidence, draftData);
+  return { draftStatus: "parsed", draftUpdatedAt: ts || Date.now(), draftData };
 }
 
 // applyParse(phoneKey, parse, ts) — the ASYNC half of the inbound flow.
@@ -64,11 +65,16 @@ function draftPatchFromParse(parse, ts) {
 // (the message's ts — the banner re-show gate); question/other only refresh
 // the detected language. No-op on a null parse (LLM failed → no draft).
 export async function applyParse(phoneKey, parse, ts) {
-  if (!phoneKey || !parse) return;
-  const patch = { language: parse.language === "en" ? "en" : "es" };
-  const intent = parse.intent || null;
-  if (intent === "new_booking" || intent === "cancel" || intent === "modify") {
-    Object.assign(patch, draftPatchFromParse(parse, ts));
+  if (!phoneKey) return;
+  // Always clear the "analyzing…" indicator — the LLM route has finished, even
+  // on a null/failed parse, so the indicator can never get stuck.
+  const patch = { parsing: null };
+  if (parse) {
+    patch.language = parse.language === "en" ? "en" : "es";
+    const intent = parse.intent || null;
+    if (intent === "new_booking" || intent === "cancel" || intent === "modify") {
+      Object.assign(patch, draftPatchFromParse(parse, ts));
+    }
   }
   await upsertConversation(phoneKey, patch);
 }
@@ -88,7 +94,7 @@ export async function applyParse(phoneKey, parse, ts) {
 //   preloadedConv— the conversation the caller (wa-inbound) already read for
 //                  the draft-aware parse; passing it avoids a duplicate read.
 // Returns { phoneKey, skipped } — skipped=true when the wamid was seen before.
-export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv }) {
+export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse }) {
   const phoneKey = normalizePhone(phone);
   if (!phoneKey) return { phoneKey: null, skipped: true };
   // Storage cap — one choke point for every caller (webhook, harness /dev).
@@ -129,6 +135,9 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   }
   if (profileName && (!existing || !existing.profileName)) patch.profileName = profileName;
   if (isDraftIntent) Object.assign(patch, draftPatchFromParse(parse, ts));
+  // Async path (parse runs after the response): flag "analyzing…" so the inbox
+  // shows the LLM route in progress; applyParse clears it when the draft lands.
+  if (parse == null && willParse) patch.parsing = true;
   await upsertConversation(phoneKey, patch);
 
   // ── The inbound message itself ────────────────────────────────────────────
@@ -186,11 +195,17 @@ export async function injectSimInbound({ phone, text, name, agoMs = 0 }, afterRe
     parse: null,
     langHint: mockParse(text).language,
     preloadedConv: conv,
+    willParse: true, // flags "analyzing…" until applyParse lands the draft
   });
   afterResponse((async () => {
-    const hours = await readOperatingHours();
-    const parse = await parseMessage(text, { hours, existingDraft });
-    await applyParse(r.phoneKey, parse, ts);
+    try {
+      const hours = await readOperatingHours();
+      const parse = await parseMessage(text, { hours, existingDraft });
+      await applyParse(r.phoneKey, parse, ts);
+    } catch (e) {
+      console.warn("[wa-sim] parse failed: " + e.message);
+      try { await applyParse(r.phoneKey, null, ts); } catch (_) {} // clear the indicator
+    }
   })());
   return r;
 }
