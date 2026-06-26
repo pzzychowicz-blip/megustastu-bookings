@@ -135,3 +135,30 @@ export function backendInbound({ phone, text, name, windowAgeMs = 0 }) {
     ? postFakeWebhook({ phone, text, name, agoMs: windowAgeMs })
     : postSimInbound({ phone, text, name, agoMs: windowAgeMs });
 }
+
+// ✨ Suggest reply (Gemini plays the customer). Same Gemini-stays-server-side
+// shape as the pipeline: DEV → the harness's open /dev/customer-reply; online →
+// the staff-auth /api/wa-sim-suggest. Returns { text }.
+export async function suggestCustomerReply({ language, history }) {
+  if (import.meta.env.DEV) {
+    const res = await fetch(WA_BACKEND_URL + "/dev/customer-reply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language, history }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+    return data;
+  }
+  const user = auth.currentUser;
+  if (!user) throw new Error("not signed in");
+  const idToken = await user.getIdToken();
+  const res = await fetch(WA_BACKEND_URL + "/api/wa-sim-suggest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
+    body: JSON.stringify({ language, history }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}

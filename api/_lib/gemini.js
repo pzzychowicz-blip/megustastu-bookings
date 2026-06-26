@@ -216,3 +216,47 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
   console.log("[wa-parse:" + mode + "] " + JSON.stringify({ text: String(text).slice(0, 200), merged: !!existingDraft, parsed }));
   return parsed;
 }
+
+// generateCustomerReply(history, language) → the CUSTOMER's next message, as a
+// plain string. Powers the Sim panel's ✨ Suggest (Gemini plays the customer so
+// staff-reply ⇄ customer-reply reads like a real exchange). Test tooling: it is
+// called by both the local harness's /dev/customer-reply route AND the online
+// api/wa-sim-suggest function, so the Gemini key never reaches the client. Plain
+// text (no schema), temperature 0.9 for natural variation. Throws on failure
+// with an http-ish `.status` so the caller can map it to a response code.
+export async function generateCustomerReply(history, language) {
+  const key = env("GEMINI_API_KEY", null);
+  if (!key) { const e = new Error("GEMINI_API_KEY not set"); e.status = 400; throw e; }
+  const model = env("GEMINI_MODEL", "gemini-3.1-flash-lite");
+  const langName = language === "en" ? "English" : "Spanish";
+  const transcript = (history || []).slice(-12)
+    .map((m) => (m.direction === "out" ? "Restaurant: " : "You (customer): ") + m.text)
+    .join("\n");
+  const prompt = [
+    "You are a customer of a small restaurant in the Canary Islands, chatting with the restaurant on WhatsApp.",
+    "Here is the conversation so far:",
+    "",
+    transcript || "(no messages yet — open the conversation naturally)",
+    "",
+    "Write ONLY your next message as the customer: short, natural, informal " + langName + ", like a real WhatsApp text.",
+    "Do not repeat yourself. No quotes, no role labels, no explanations.",
+  ].join("\n");
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  try {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.9, maxOutputTokens: 4000 } }),
+      signal: ac.signal,
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error((data.error && data.error.message) || ("Gemini error " + r.status)); e.status = 502; throw e; }
+    const text = data.candidates && data.candidates[0] && data.candidates[0].content
+      && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
+    if (!text) { const e = new Error("Gemini returned no text"); e.status = 502; throw e; }
+    return text.trim();
+  } finally {
+    clearTimeout(timer);
+  }
+}
