@@ -3234,3 +3234,25 @@ security-rule change → rolling deploy.
 
 Verified live in DEV. Build OK.
 
+## v15.8.1 -> v15.8.2 -- Timeline note marker (dog-ear on bookings with notes)
+
+Date: 2026-06-27
+
+**Scope**: one feature touch — `src/components/TimelineView.jsx` (+ the version bump in `src/App.jsx`).
+Behavioural change: bookings that carry a note (`b.notes`) now show a subtle marker on the timeline.
+Pure client change — no persistence / Firebase-shape / security-rule change → rolling deploy.
+
+- **Problem**: notes are entered in the booking form and shown in List view, but the Timeline gave no
+  indication a booking had one — staff had to open each block to find out.
+- **Fix**: `TimelineBlock` (module scope) computes `hasNote = b.notes && b.notes.trim()` and, when set,
+  renders a CSS border-triangle "dog-ear" in the block's **top-LEFT** corner (near-solid white
+  `rgba(255,255,255,0.95)`, 14px, with a small dark pencil/note SVG glyph nested in the corner,
+  `pointerEvents:"none"`). 14px keeps the triangle within the top ~14px of the 36px-tall block, so it
+  never overlaps the vertically-centred guest name. Top-left chosen so it never collides with the
+  right-edge `=` manual-assign handle; the block's existing `overflow:hidden` + `borderRadius:10` clip it
+  into a clean folded corner. The translucent white reads on every saturated `BLOCK_BG` status colour in
+  both themes (blocks are theme-invariant — v14.2.1 rule). Marker is **block-only** (the seated dashed
+  ghost outline is untouched) and is kept OUT of the label string so it never truncates on narrow blocks.
+
+Verified live in DEV (note shows/absent, no `=` collision, both themes/statuses). Build OK.
+
