@@ -69,6 +69,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, onEdit, 
     ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
     : "none";
   const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
+  // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
+  // corner. Kept OUT of the label string so it never truncates on narrow blocks.
+  const hasNote = b.notes && b.notes.trim();
   const lbl = b.name + " (" + b.size + ")"
     + (isLocked(b) ? " [L]" : "")
     + (hasPrefT ? " ★" : "")
@@ -156,6 +159,30 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, onEdit, 
       }}
     >
       {animOverlay}
+      {/* v15.8.2: top-LEFT dog-ear note marker (clear of the right-edge "=" handle). The
+          block's overflow:hidden + borderRadius clip it into a clean folded corner. The
+          white triangle (14px) sits in the top ~14px of the 36px block, so it never
+          overlaps the vertically-centred guest name. A small dark note/pencil glyph nests
+          in the corner where the triangle is thickest. Near-solid white + dark icon give
+          strong contrast on every saturated BLOCK_BG fill in both themes. */}
+      {hasNote ? (
+        <>
+          <div style={{
+            position: "absolute", top: 0, left: 0, width: 0, height: 0,
+            borderTop: "14px solid rgba(255,255,255,0.95)",
+            borderRight: "14px solid transparent",
+            pointerEvents: "none"
+          }} />
+          <svg viewBox="0 0 24 24" width="8" height="8" style={{
+            position: "absolute", top: "0.5px", left: "0.5px", pointerEvents: "none"
+          }}>
+            <path
+              d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+              fill="#1f2937"
+            />
+          </svg>
+        </>
+      ) : null}
       <span style={{
         flex: 1, padding: "0 8px", position: "relative",
         fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",
