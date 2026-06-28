@@ -8,7 +8,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useWinW } from "../../hooks/useWinW";
-import { INBOX_TWO_PANE_BREAKPOINT, sortConversations, matchCustomerByPhone, intentBannerVisible } from "../../lib/whatsapp";
+import { useWinH } from "../../hooks/useWinH";
+import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, matchCustomerByPhone, intentBannerVisible } from "../../lib/whatsapp";
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
@@ -41,6 +42,10 @@ export function InboxPanel({
 }) {
   const winW = useWinW();
   const twoPane = winW >= INBOX_TWO_PANE_BREAKPOINT;
+  // Short screens (tablet): collapse the draft card to a one-line bar + the
+  // composer template chips behind a button so the message thread stays readable.
+  const winH = useWinH();
+  const compact = winH < INBOX_COMPACT_HEIGHT;
   // v15.8.0 open/close animation: ModalPresence (in App.jsx) provides `leaving`;
   // the panel swaps its scrim/card to the *-out keyframes before unmounting.
   const { leaving } = usePresence();
@@ -177,7 +182,7 @@ export function InboxPanel({
       <ConversationView
         conv={activeConv} messages={activeMessages} onBack={() => setActiveKey(null)}
         onSend={(t) => onSend(activeConv.phoneKey, t)} onAccept={() => onAccept(activeConv)} onDismiss={() => onDismiss(activeConv.phoneKey)}
-        templates={templates} bookings={bookings} showBack={!twoPane}
+        templates={templates} bookings={bookings} showBack={!twoPane} compact={compact}
         onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete}
         onCancelLinkedBooking={onCancelLinkedBooking} onOpenLinkedBooking={onOpenLinkedBooking}
         onDismissAcceptedBadge={onDismissAcceptedBadge} onMarkIntentHandled={onMarkIntentHandled}

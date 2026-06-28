@@ -13,6 +13,12 @@
 // ≥ this viewport width → two-pane inbox; below → stacked (list ⇄ conversation).
 export const INBOX_TWO_PANE_BREAKPOINT = 900;
 
+// < this viewport HEIGHT → compact mode: the draft card collapses to a one-line
+// bar and the composer's template chips hide behind a "Templates" button, so the
+// message thread stays readable on short screens (tablet). At ≥ this height the
+// full laptop layout renders unchanged. (90dvh of <820px ≈ <740px usable.)
+export const INBOX_COMPACT_HEIGHT = 820;
+
 // The WhatsApp service-conversation window: 24h from the last INBOUND message.
 export const WA_WINDOW_MS = 24 * 60 * 60 * 1000;
 

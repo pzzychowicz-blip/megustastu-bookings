@@ -16,7 +16,7 @@ import { IntentBanner } from "./IntentBanner";
 export function ConversationView({
   conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
-  onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify,
+  onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
 }) {
   // Pass acceptedBookingId so the linked booking is excluded from the regular count.
   const match = matchCustomerByPhone(conv.phoneKey, bookings, conv.acceptedBookingId);
@@ -152,9 +152,9 @@ export function ConversationView({
         </div>
       </Reveal>
       <Reveal show={draftCardShows} style={{ padding: "0 14px" }}>
-        <DraftCard conv={conv} onAccept={onAccept} onDismiss={onDismiss} onDismissAcceptedBadge={onDismissAcceptedBadge} />
+        <DraftCard conv={conv} onAccept={onAccept} onDismiss={onDismiss} onDismissAcceptedBadge={onDismissAcceptedBadge} compact={compact} />
       </Reveal>
-      <ReplyComposer onSend={onSend} disabled={disabled} templates={templates} convLang={conv.language} />
+      <ReplyComposer onSend={onSend} disabled={disabled} templates={templates} convLang={conv.language} compact={compact} />
     </div>
   );
 }

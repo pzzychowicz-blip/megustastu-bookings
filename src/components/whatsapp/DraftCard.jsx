@@ -5,7 +5,14 @@
 // a quiet "not a booking request" note. Non-new_booking intents render nothing
 // here — the IntentBanner in ConversationView takes over.
 
-export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge }) {
+import { useState } from "react";
+import { Reveal } from "../atoms";
+import { clampConfidence } from "../../lib/whatsapp";
+
+export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, compact }) {
+  // Compact-mode disclosure for the new_booking bar (notes / warning / confidence).
+  // Declared before the early returns so the hook order stays stable.
+  const [expanded, setExpanded] = useState(false);
   if (conv.draftStatus === "accepted") {
     // Dismissable via the ✕; hidden once acceptedBadgeDismissedAt is set, and
     // re-shown when a new inbound message clears that stamp.
@@ -41,9 +48,55 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge })
   const intent = d.intent || "new_booking";
   if (intent !== "new_booking") return null;
 
-  const confColor = d.confidence === "low" ? "var(--danger-text)" : d.confidence === "medium" ? "var(--warn-text)" : "var(--success-text)";
-  const confBg = d.confidence === "low" ? "var(--danger-bg)" : d.confidence === "medium" ? "var(--warn-bg)" : "var(--suggest-bg)";
-  const confLbl = d.confidence || "high";
+  // Clamp at display time too: confidence can NEVER read higher than the draft's
+  // own fields warrant (any missing crucial field / ambiguity caps it). The write
+  // paths already clamp, so this is idempotent for fresh drafts — it only corrects
+  // legacy/stale drafts stored before the clamp rule (e.g. a "? time" draft that
+  // was saved as "high").
+  const conf = clampConfidence(d.confidence, d);
+  const confColor = conf === "low" ? "var(--danger-text)" : conf === "medium" ? "var(--warn-text)" : "var(--success-text)";
+  const confBg = conf === "low" ? "var(--danger-bg)" : conf === "medium" ? "var(--warn-bg)" : "var(--suggest-bg)";
+  const confLbl = conf;
+  const summary = (d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time");
+  // Confidence is shown inline in the compact bar (always), so only notes /
+  // ambiguity are "revealable" content behind the toggle.
+  const hasDetail = !!(d.notes || d.ambiguity);
+
+  // Compact (short-screen) bar: one line — 📋 summary · ▸ · [conf] [Accept] [Dismiss].
+  // Tapping the summary section toggles a Reveal of the notes / ambiguity detail;
+  // the confidence badge sits inline (left of Accept), always visible. Saves
+  // ~120px so the message thread stays readable.
+  if (compact) {
+    const smallBtn = (bg, fw, border) => ({ background: bg, border, borderRadius: 10, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: fw, color: "var(--text-on-accent)", minHeight: 32, flexShrink: 0 });
+    return (
+      <div style={{ borderRadius: 14, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", marginBottom: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", flexWrap: "wrap" }}>
+          {/* The draft section itself is the toggle (when there's detail to show). */}
+          <div
+            onClick={hasDetail ? () => setExpanded((v) => !v) : undefined}
+            title={hasDetail ? (expanded ? "Hide details" : "Show details") : undefined}
+            style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0, cursor: hasDetail ? "pointer" : "default" }}
+          >
+            <span style={{ fontSize: 15 }}>📋</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--wa-draft-text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span>
+            {hasDetail ? <span style={{ fontSize: 13, fontWeight: 700, color: "var(--wa-draft-text)", flexShrink: 0 }}>{expanded ? "▾" : "▸"}</span> : null}
+          </div>
+          {/* Confidence level — always shown, immediately left of Accept. */}
+          <span title={confLbl + " confidence"} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8, background: confBg, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em", flexShrink: 0 }}>{confLbl}</span>
+          <button onClick={onAccept} className="mgt-hover-scale mgt-press" style={smallBtn("var(--wa-btn-open)", 700, "1px solid rgba(255,255,255,0.2)")}>Accept</button>
+          <button onClick={onDismiss} className="mgt-hover-scale mgt-press" style={smallBtn("var(--btn-default)", 600, "1px solid var(--border-glass)")}>Dismiss</button>
+        </div>
+        {hasDetail ? (
+          <Reveal show={expanded} style={{ padding: "0 10px" }}>
+            <div style={{ paddingBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+              {d.notes ? <div style={{ fontSize: 13, color: "var(--wa-draft-text-dim)" }}>{"Notes: " + d.notes}</div> : null}
+              {d.ambiguity ? <div style={{ padding: "8px 10px", borderRadius: 10, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: 12, color: "var(--danger-text)" }}>{"⚠ " + d.ambiguity}</div> : null}
+            </div>
+          </Reveal>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "14px 16px", borderRadius: 14, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", marginBottom: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>

@@ -5,43 +5,66 @@
 // window has expired. Enter sends; Shift+Enter inserts a newline.
 
 import { useState, useRef, useEffect } from "react";
+import { Reveal } from "../atoms";
 
 // TemplateChips — private to the composer. Tapping a chip inserts its text.
-function TemplateChips({ templates, convLang, onInsert }) {
+// scrollLang (compact mode): the language switch joins the chips inside ONE
+// horizontal scroller (so a narrow screen scrolls across everything incl. the
+// switch). Otherwise (laptop) the switch stays pinned right and only the chips
+// scroll — preserving the original layout.
+function TemplateChips({ templates, convLang, onInsert, scrollLang }) {
   const [outLang, setOutLang] = useState(convLang || "es");
   useEffect(() => { setOutLang(convLang || "es"); }, [convLang]);
+
+  const chipBtns = templates.map((t) => (
+    <button
+      key={t.id}
+      className="mgt-hover-scale"
+      onClick={() => onInsert(outLang === "es" ? t.textEs : t.textEn)}
+      style={{ flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: 16, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "var(--text-primary)", boxShadow: "0 1px 2px rgba(0,0,0,0.04)", whiteSpace: "nowrap" }}
+    >{outLang === "es" ? t.labelEs : t.labelEn}</button>
+  ));
+
+  // EN/ES switch — eases its active highlight like the app's Toggle atom
+  // (`background-color`/`color` 160ms linear), per the shared toggle CSS.
+  const langSwitch = (
+    <div style={{ display: "flex", gap: 2, flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: 12, padding: 2 }}>
+      {["en", "es"].map((l) => (
+        <button
+          key={l}
+          className="mgt-hover-scale"
+          onClick={() => setOutLang(l)}
+          style={{ background: outLang === l ? "var(--accent)" : "transparent", color: outLang === l ? "var(--text-on-accent)" : "var(--text-primary)", border: "none", borderRadius: 10, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", textTransform: "uppercase", transition: "background-color 160ms linear, color 160ms linear" }}
+        >{l}</button>
+      ))}
+    </div>
+  );
+
+  // Padding gives the .mgt-hover-scale chips room to scale without being clipped
+  // by overflow-x:auto (which also clips the y axis); the matching negative
+  // margin keeps the composer's height/layout unchanged.
+  // keyed by outLang → the chip set crossfades when toggling EN⇄ES.
+  if (scrollLang) {
+    return (
+      <div key={outLang} className="mgt-fade-in" style={{ display: "flex", alignItems: "center", gap: 6, overflowX: "auto", padding: "8px 8px", margin: "-8px 0", minWidth: 0 }}>
+        {chipBtns}
+        {langSwitch}
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-      {/* Padding gives the .mgt-hover-scale chips room to scale without being
-          clipped by overflow-x:auto (which also clips the y axis); the matching
-          negative margin keeps the composer's height/layout unchanged. */}
-      {/* keyed by outLang → the chip set crossfades when toggling EN⇄ES */}
       <div key={outLang} className="mgt-fade-in" style={{ flex: 1, overflowX: "auto", display: "flex", gap: 6, padding: "8px 8px", margin: "-8px 0" }}>
-        {templates.map((t) => (
-          <button
-            key={t.id}
-            className="mgt-hover-scale"
-            onClick={() => onInsert(outLang === "es" ? t.textEs : t.textEn)}
-            style={{ flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: 16, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "var(--text-primary)", boxShadow: "0 1px 2px rgba(0,0,0,0.04)", whiteSpace: "nowrap" }}
-          >{outLang === "es" ? t.labelEs : t.labelEn}</button>
-        ))}
+        {chipBtns}
       </div>
-      <div style={{ display: "flex", gap: 2, flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: 12, padding: 2 }}>
-        {["en", "es"].map((l) => (
-          <button
-            key={l}
-            className="mgt-hover-scale"
-            onClick={() => setOutLang(l)}
-            style={{ background: outLang === l ? "var(--accent)" : "transparent", color: outLang === l ? "var(--text-on-accent)" : "var(--text-primary)", border: "none", borderRadius: 10, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", textTransform: "uppercase" }}
-          >{l}</button>
-        ))}
-      </div>
+      {langSwitch}
     </div>
   );
 }
 
-export function ReplyComposer({ onSend, disabled, templates, convLang }) {
+export function ReplyComposer({ onSend, disabled, templates, convLang, compact }) {
   const [txt, setTxt] = useState("");
+  const [tplOpen, setTplOpen] = useState(false);
   const areaRef = useRef(null);
   function send() {
     const t = txt.trim();
@@ -59,7 +82,22 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
   const canSend = !disabled && !!txt.trim();
   return (
     <div style={{ borderTop: "1px solid var(--wa-divider)", padding: "10px 12px", background: "var(--wa-list-bg)" }}>
-      <TemplateChips templates={templates} convLang={convLang} onInsert={insertTemplate} />
+      {/* Compact (short-screen): hide the chip row behind a Templates toggle so
+          the textarea + thread keep the space; the full inline row stays on tall
+          screens. */}
+      {compact ? (
+        <div style={{ marginBottom: 8 }}>
+          <button onClick={() => setTplOpen((v) => !v)} className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: 16, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "var(--text-primary)", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>{"Templates " + (tplOpen ? "▾" : "▸")}</button>
+          {/* gridTemplateColumns:minmax(0,1fr) caps the Reveal's grid column to the
+              container width (its default auto column grows to the chips' content
+              width, which would defeat the inner overflow-x scroll). */}
+          <Reveal show={tplOpen} style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+            <div style={{ paddingTop: 8, minWidth: 0 }}><TemplateChips templates={templates} convLang={convLang} onInsert={insertTemplate} scrollLang /></div>
+          </Reveal>
+        </div>
+      ) : (
+        <TemplateChips templates={templates} convLang={convLang} onInsert={insertTemplate} />
+      )}
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
         <textarea
           ref={areaRef}
