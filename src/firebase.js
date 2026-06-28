@@ -36,7 +36,15 @@ const devConfig = {
   appId:             "1:709562849905:web:30bb72ea4d6469dd4519d0"
 };
 
-const isDev = import.meta.env.DEV;
+// Build-time override (WA sandbox deployment). A Vercel build runs `vite build`,
+// where import.meta.env.DEV is false — so a deployed build would otherwise pick
+// the PROD config. The sandbox Vercel project sets VITE_FB_TARGET=dev to force
+// the DEV project; prod leaves it unset and behaves exactly as before. Accepts
+// "dev" | "prod"; anything else falls back to the import.meta.env.DEV default.
+const __fbTarget = import.meta.env.VITE_FB_TARGET;
+const isDev = __fbTarget === "dev" ? true
+            : __fbTarget === "prod" ? false
+            : import.meta.env.DEV;
 const firebaseConfig = isDev ? devConfig : prodConfig;
 
 // Visible boot signal — appears in the browser console next to the

@@ -3,16 +3,24 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "wa:backend": "node scripts/wa-backend-dev.mjs"
   },
   "dependencies": {
     "firebase": "^12.11.0",
+    "firebase-admin": "^14.0.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
+  },
+  "overrides": {
+    "jose": "^5.9.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

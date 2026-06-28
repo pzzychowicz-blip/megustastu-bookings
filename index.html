@@ -146,6 +146,30 @@
            (a translucent fill reads washy on the glass cards). Shared contract
            with Scheduling — keep this value identical across both apps. */
         --bg-hover-card: #ffffff;
+        /* ── WhatsApp module (sandbox) — green brand + module surfaces/banners.
+           Saturated fills (green, action buttons, unread dot, bubble-out) are
+           theme-invariant and kept here; only the soft surfaces/banners flip. */
+        --wa-green: rgba(20, 150, 110, 0.82);
+        --wa-green-dark: rgba(15, 120, 88, 0.9);
+        --wa-panel-bg: rgba(248, 250, 253, 0.96);    /* inbox panel card */
+        --wa-panel-scrim: rgba(0, 0, 0, 0.28);
+        --wa-header-bg: rgba(255, 255, 255, 0.55);   /* panel/conversation header strips */
+        --wa-list-bg: rgba(248, 250, 253, 0.55);     /* conversation-list pane */
+        --wa-row-bg: rgba(255, 255, 255, 0.55);
+        --wa-row-bg-hover: rgba(213, 224, 242, 0.96);   /* clearly-visible cool tint (white-on-white was too faint) */
+        --wa-row-active-bg: rgba(0, 122, 255, 0.12);
+        --wa-row-active-border: rgba(0, 122, 255, 0.5);
+        --wa-divider: rgba(200, 210, 225, 0.7);
+        --wa-bubble-in: rgba(255, 255, 255, 0.85);   --wa-bubble-in-border: rgba(200, 210, 225, 0.7);
+        --wa-bubble-out: rgba(0, 122, 255, 0.82);    --wa-bubble-out-border: rgba(0, 122, 255, 0.5);
+        --wa-draft-bg: rgba(254, 249, 195, 0.8);  --wa-draft-border: rgba(253, 224, 71, 0.65);  --wa-draft-text: #854d0e;  --wa-draft-text-dim: #713f12;
+        --wa-accept-bg: rgba(220, 252, 231, 0.7); --wa-accept-border: rgba(134, 239, 172, 0.6); --wa-accept-text: #166534;
+        --wa-teal-text: #0f766e;  --wa-teal-bg: rgba(13, 148, 136, 0.10);  --wa-teal-border: rgba(13, 148, 136, 0.35);
+        --wa-btn-open: rgba(0, 122, 255, 0.78);
+        --wa-btn-cancel: rgba(220, 38, 38, 0.85);
+        --wa-btn-handled: rgba(13, 148, 136, 0.85);
+        --wa-unread-dot: #dc2626;
+        --wa-sim-accent: rgba(168, 85, 247, 0.85);   /* dev-only simulator chrome */
       }
       [data-theme="dark"] {
         --bg-app: linear-gradient(135deg, #15171c 0%, #191c22 20%, #1c1a23 40%, #161c26 60%, #1b1f28 80%, #17191f 100%);
@@ -228,6 +252,21 @@
         /* walkin / new / danger / warn solids are saturated — read on both; kept from :root */
         /* v14.3.0: hover-lift card — opaque dark surface (matches Scheduling) */
         --bg-hover-card: rgb(50, 50, 53);
+        /* ── WhatsApp module (sandbox) dark overrides — soft surfaces/banners
+           flip; green / action-button / bubble-out solids kept from :root. */
+        --wa-panel-bg: rgba(36, 36, 38, 0.97);
+        --wa-panel-scrim: rgba(0, 0, 0, 0.5);
+        --wa-header-bg: rgba(255, 255, 255, 0.06);
+        --wa-list-bg: rgba(255, 255, 255, 0.03);
+        --wa-row-bg: rgba(255, 255, 255, 0.05);
+        --wa-row-bg-hover: rgba(255, 255, 255, 0.09);
+        --wa-row-active-bg: rgba(10, 132, 255, 0.22);
+        --wa-row-active-border: rgba(10, 132, 255, 0.6);
+        --wa-divider: rgba(255, 255, 255, 0.1);
+        --wa-bubble-in: rgba(255, 255, 255, 0.1);   --wa-bubble-in-border: rgba(255, 255, 255, 0.14);
+        --wa-draft-bg: rgba(90, 75, 20, 0.35);  --wa-draft-border: rgba(253, 224, 71, 0.4);  --wa-draft-text: #fde68a;  --wa-draft-text-dim: #fcd34d;
+        --wa-accept-bg: rgba(34, 90, 50, 0.4);  --wa-accept-border: rgba(134, 239, 172, 0.35); --wa-accept-text: #86efac;
+        --wa-teal-text: #5eead4; --wa-teal-bg: rgba(13, 148, 136, 0.18); --wa-teal-border: rgba(13, 148, 136, 0.4);
       }
       html, body { margin: 0; }
       body {
@@ -332,6 +371,22 @@
       /* Settings tab-content crossfade on switch. */
       @keyframes mgt-fade-in { from { opacity: 0; } to { opacity: 1; } }
       .mgt-fade-in { animation: mgt-fade-in 180ms ease-out both; }
+
+      /* WhatsApp module (animation parity, post-port): a new chat bubble eases
+         in (fade + small rise). Applied to the NEWEST bubble only — see
+         MessageBubble.jsx — so opening a thread doesn't cascade-animate history. */
+      @keyframes mgt-bubble-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+      .mgt-bubble-in { animation: mgt-bubble-in 200ms cubic-bezier(.4, 0, .2, 1) both; }
+      /* Parsing/typing indicator (WA inbox): a sweeping highlight across a muted
+         track while the inbound message is being parsed (Gemini round-trip). The
+         reduced-motion guard below stops the sweep. */
+      @keyframes mgt-shimmer { from { background-position: -160px 0; } to { background-position: 160px 0; } }
+      .mgt-shimmer {
+        background-image: linear-gradient(90deg, transparent 0%, var(--wa-shimmer, rgba(0,122,255,0.18)) 50%, transparent 100%);
+        background-size: 160px 100%;
+        background-repeat: no-repeat;
+        animation: mgt-shimmer 1100ms ease-in-out infinite;
+      }
 
       /* Accessibility + weak-hardware opt-out: collapse every animation/transition
          to ~instant when the OS requests reduced motion. */

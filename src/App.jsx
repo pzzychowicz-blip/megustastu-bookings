@@ -167,6 +167,20 @@ import { useAutoOptimizer } from "./hooks/useAutoOptimizer";
 // BookingApp.
 import { useWalkin } from "./hooks/useWalkin";
 
+// ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
+// `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
+// templates) + every inbox handler + the draft→form seam. InboxPanel is the
+// inbox overlay. WaSimulator + the wa-sim modules are the SANDBOX-ONLY local
+// stand-in for the (deferred) Meta webhook + LLM — every simulator surface is
+// gated behind WA_SANDBOX (dev server, or a deployed sandbox build with
+// VITE_FB_TARGET=dev) so it can never appear in a real production build.
+import { useWhatsApp } from "./hooks/useWhatsApp";
+import { InboxPanel } from "./components/whatsapp/InboxPanel";
+import { WaSimulator } from "./components/whatsapp/WaSimulator";
+import { simulateInbound } from "./lib/wa-sim";
+import { SCENARIOS_BY_ID, seedSampleBookings, clearWaSimBookings, simulateBurst } from "./lib/wa-sim-scenarios";
+import { WA_SANDBOX } from "./lib/waSandbox";
+
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
 // Module-level identity record. Survives bundling/minification — the strings
@@ -175,7 +189,10 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"15.8.2",
+  // Sandbox build marker — WhatsApp module under local test, NOT a release.
+  // The formal version bump happens on "give me the deployment version".
+  version:"15.8.2-wa-sandbox",
+  sandbox:"WhatsApp inbox + simulator (localhost only)",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -461,6 +478,14 @@ function BookingApp(){
   const [summaryOpen, setSummaryOpen] = useState(false);
   // v14.7.0: Week View popover (opened from the Summary panel's Week button).
   const [showWeek, setShowWeek] = useState(false);
+  // ── WhatsApp Inbox (sandbox) UI state — owned by BookingApp because these
+  // interleave with the global anyModal logic + the return-to-inbox effect. The
+  // useWhatsApp hook (below) owns the data + handlers and calls these setters.
+  const [showInbox, setShowInbox] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(null);       // phoneKey pending archive-confirm
+  const [confirmDeleteConv, setConfirmDeleteConv] = useState(null); // phoneKey pending delete-confirm
+  const [returnToInboxKey, setReturnToInboxKey] = useState(null);   // reopen the inbox here when an overlay closes
+  const [showSim, setShowSim] = useState(false);                    // DEV-only simulator panel
   // Settings tab state — which tab is active in the Settings modal.
   // Resets to 'general' on modal close so reopens start fresh. Belongs to
   // the Settings subsystem; lived inside the reminder state block pre-D2
@@ -514,6 +539,51 @@ function BookingApp(){
   // TABLE_GROUPS bindings on each snapshot. saveLayout is wired to the Settings
   // Layout tab. See ./hooks/useLayout.js.
   const { layout, saveLayout } = useLayout();
+  // ── WhatsApp Inbox hook (sandbox) ─────────────────────────────────────────
+  // Owns conversations/messages/templates (DEV Firebase) + every inbox handler.
+  // Form/view handoff setters flow in (controlled pattern, like useWalkin). The
+  // draft→form seam: handleAcceptDraft pre-fills the form + flags draftSourceRef;
+  // doSave calls wa.completeDraftAccept(newId) on success to flip the conversation.
+  const wa = useWhatsApp({
+    bookings, setWriteWarning,
+    setForm, setEditId, setError, setSwapAffected, setViewDate, setShowForm, setConfirmCancel,
+    setShowInbox, setConfirmArchive, setConfirmDeleteConv, setReturnToInboxKey,
+  });
+  // Return-to-inbox: when an overlay opened from the WA module (the booking form
+  // or the cancel-confirm) closes by ANY path, reopen the inbox at that
+  // conversation. returnToInboxKey is cleared only on explicit inbox close.
+  useEffect(function(){
+    if(returnToInboxKey&&!showForm&&!confirmCancel&&!showInbox){setShowInbox(true);}
+  },[returnToInboxKey,showForm,confirmCancel,showInbox]);
+  // Sandbox-only console helpers: window.__waSim.*. The ctx is read through a ref
+  // so the helpers always see live savers/conversations without rebinding. The
+  // whole effect is dead-code-eliminated in a real prod build (WA_SANDBOX false).
+  const waSimCtxRef=useRef(null);
+  waSimCtxRef.current={
+    conversations:wa.conversations, messagesMap:wa.messagesMap, upsertConversation:wa.upsertConversation,
+    appendMessage:wa.appendMessage, saveBookings:saveBookings, clearAllWaData:wa.clearAllWaData,
+  };
+  useEffect(function(){
+    if(!WA_SANDBOX) return;
+    const ctx=function(){return waSimCtxRef.current;};
+    const todayIso=function(){return new Date().toISOString().slice(0,10);};
+    window.__waSim={
+      scenario:function(id){const s=SCENARIOS_BY_ID[id];if(s) return s.run(ctx());console.warn("[waSim] unknown scenario:",id,"— try __waSim.list()");},
+      custom:function(p){return simulateInbound(p,ctx());},
+      newBooking:function(phone,opts){return simulateInbound(Object.assign({phone:phone,language:"es",text:"(sim) reserva",parse:{intent:"new_booking",size:2,date:todayIso(),time:"20:00",confidence:"high"}},opts||{}),ctx());},
+      cancel:function(phone,acceptedBookingId){return simulateInbound({phone:phone,language:"en",text:"(sim) need to cancel",parse:{intent:"cancel",confidence:"high"},acceptedBookingId:acceptedBookingId},ctx());},
+      modify:function(phone,acceptedBookingId){return simulateInbound({phone:phone,language:"es",text:"(sim) cambiar reserva",parse:{intent:"modify",confidence:"high"},acceptedBookingId:acceptedBookingId},ctx());},
+      question:function(phone){return simulateInbound({phone:phone,language:"es",text:"(sim) ¿una pregunta?",parse:{intent:"question"}},ctx());},
+      largeGroup:function(phone){return simulateInbound({phone:phone,language:"es",text:"(sim) somos 12",parse:{intent:"new_booking",size:12,date:todayIso(),time:"20:30",confidence:"high"}},ctx());},
+      burst:function(){return simulateBurst(ctx());},
+      seedBookings:function(){return seedSampleBookings(ctx());},
+      clearBookings:function(){return clearWaSimBookings(ctx());},
+      clearConversations:function(){return ctx().clearAllWaData();},
+      list:function(){return Object.keys(SCENARIOS_BY_ID);},
+    };
+    console.log("%c[waSim] console helpers ready","background:#a855f7;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold;","— __waSim.list(), __waSim.seedBookings(), __waSim.scenario(id)");
+    return function(){try{delete window.__waSim;}catch(e){}};
+  },[]);
   // ── Reminders hook ──────────────────────────────────────────────────────────
   // Owns all reminder state, savers, listeners, handlers, and the
   // reminderBanners JSX. nowMins drives banner re-evaluation; setWriteWarning
@@ -821,6 +891,9 @@ function BookingApp(){
         // job is done, so close it. Flash only on a real save (never claim "saved"
         // for a not-yet-persisted write — matches quick-action honesty).
         const ok=saveBookings(buildNext);
+        // WhatsApp sandbox: if this edit came from a modify request's "Apply
+        // changes", auto-mark that request handled — but only on a real save.
+        wa.completeModifyApply(editId, ok);
         if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash();
         setShowForm(false);setViewDate(f.date);
       } else {
@@ -870,6 +943,14 @@ function BookingApp(){
         // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
         // show + auto-retry; flash only on a real save.
         const ok=saveBookings(buildNext);
+        // WhatsApp sandbox: if this save came from accepting a draft, flip the
+        // source conversation to "accepted" + link the new booking id (no-op
+        // otherwise — draftSourceRef is only set by handleAcceptDraft).
+        wa.completeDraftAccept(newId);
+        // …and if this NEW booking's phone matches a WhatsApp conversation that
+        // isn't linked yet (booking typed manually, not via Accept & open),
+        // link it so the conversation shows the LinkedBookingCard.
+        wa.linkBookingByPhone(newId, f.phone);
         if(ok) flash();
         setShowForm(false);setViewDate(f.date);
       }
@@ -995,6 +1076,10 @@ function BookingApp(){
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
     showWeek:showWeek,setShowWeek:setShowWeek,
+    // WhatsApp sandbox: inbox open flag (suppresses global shortcuts) + the I
+    // shortcut opener. confirmArchive/confirmDeleteConv/showSim feed anyModal.
+    showInbox:showInbox,setShowInbox:setShowInbox,
+    confirmArchive:confirmArchive,confirmDeleteConv:confirmDeleteConv,showSim:showSim,setShowSim:setShowSim,
     save:save,doSave:doSave,saveWalkin:saveWalkin,doSaveWalkin:doSaveWalkin,
     forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain,
     // v15.8.0 cont.4: keyboard nav routes through the same slide path as the buttons.
@@ -1139,7 +1224,7 @@ function BookingApp(){
         }
       }
       // ── Global shortcuts: suppressed while any modal is open ──
-      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.reminderEditor||K.confirmReminderDel;
+      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.reminderEditor||K.confirmReminderDel||K.showInbox||K.confirmArchive||K.confirmDeleteConv||K.showSim;
       if(anyModal) return;
       // ── v14.4.0: List-view per-card shortcuts (act on the focused booking) ──
       // ↑/↓ move the focus ring; A/E/S/C/Shift+C/Delete act on it. Placed before
@@ -1172,6 +1257,10 @@ function BookingApp(){
       if(k==="d"||k==="D"){e.preventDefault();K.goToDate(new Date().toISOString().slice(0,10));return;}
       if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
+      // WhatsApp sandbox: I → open the inbox ("w" was taken by Walk-in).
+      if(k==="i"||k==="I"){e.preventDefault();K.setShowInbox(true);return;}
+      // WhatsApp sandbox: X → open the 🧪 simulator (sandbox builds only).
+      if((k==="x"||k==="X")&&WA_SANDBOX){e.preventDefault();K.setShowSim(true);return;}
       // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
       if(k===SUMMARY_KEY||k===SUMMARY_KEY.toUpperCase()){e.preventDefault();K.setSummaryOpen(function(o){return !o;});return;}
       if(k===WEEK_KEY||k===WEEK_KEY.toUpperCase()){e.preventDefault();K.setShowWeek(true);return;}
@@ -1253,6 +1342,7 @@ function BookingApp(){
   function doCancelBooking(id,noShow){
     const user=getUser();
     const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
+    wa.autoHandleCancelIntent(id); // a pending WA cancel-intent banner on this booking's conversation auto-handles
     setConfirmCancel(null);if(ok) flash();
   }
   function manualAssign(bookingId,tables,locked,affected){
@@ -1419,7 +1509,8 @@ function BookingApp(){
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={function(){setConfirmReshuffle(true);}}
-    onOpenSettings={function(){setShowSettings(true);}} />
+    onOpenSettings={function(){setShowSettings(true);}}
+    onOpenSim={function(){setShowSim(true);}} />
     :<ListView
     bookings={bookings}
     date={viewDate}
@@ -1496,6 +1587,10 @@ function BookingApp(){
               onClick={openNew}
               className="mgt-hover-scale"
               style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>+ New</button><button
+              onClick={function(){setShowInbox(true);}}
+              className="mgt-hover-scale"
+              title="WhatsApp inbox (I)"
+              style={{position:"relative",background:"var(--wa-green)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button><button
               onClick={function(){signOut(auth);}}
               className="mgt-hover-scale"
               style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button></div></div><div
@@ -1605,7 +1700,45 @@ function BookingApp(){
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
           onSave={saveReminderFromEditor}
           onCancel={function(){setReminderEditor(null);}}
-          isNew={reminderEditor.id==="new"} />:null}</ModalPresence>{historyPopup}</div></div>
+          isNew={reminderEditor.id==="new"} />:null}</ModalPresence><ModalPresence show={showInbox}>{showInbox?<InboxPanel
+          conversations={wa.conversations}
+          messages={wa.messagesMap}
+          templates={wa.templates}
+          bookings={bookings}
+          initialActiveKey={returnToInboxKey}
+          onClose={function(){setShowInbox(false);setReturnToInboxKey(null);}}
+          onSend={wa.handleSendReply}
+          onAccept={wa.handleAcceptDraft}
+          onDismiss={wa.handleDismissDraft}
+          onSaveTemplates={wa.saveTemplates}
+          onMarkRead={wa.handleMarkRead}
+          onArchive={wa.handleArchive}
+          onUnarchive={wa.handleUnarchive}
+          onDelete={wa.handleDeleteConversation}
+          onCancelLinkedBooking={wa.handleCancelLinkedBooking}
+          onOpenLinkedBooking={wa.handleOpenLinkedBooking}
+          onDismissAcceptedBadge={wa.handleDismissAcceptedBadge}
+          onMarkIntentHandled={wa.handleMarkIntentHandled}
+          onResend={wa.handleResend}
+          onApplyModify={wa.handleApplyModify} />:null}</ModalPresence>{confirmArchive?(function(){
+          const conv=wa.conversations.find(function(c){return c.phoneKey===confirmArchive;});
+          const bk=conv&&conv.acceptedBookingId?bookings.find(function(b){return b.id===conv.acceptedBookingId;}):null;
+          return <Overlay onClose={function(){setConfirmArchive(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              className="mgt-hover-scale"
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              onClick={function(){setConfirmArchive(null);}}>Back</button><button
+              onClick={function(){wa.doArchive(confirmArchive);setConfirmArchive(null);}}
+              className="mgt-hover-scale"
+              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Archive anyway</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+bk.date+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
+        })():null}{confirmDeleteConv?<Overlay onClose={function(){setConfirmDeleteConv(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              className="mgt-hover-scale"
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              onClick={function(){setConfirmDeleteConv(null);}}>Back</button><button
+              onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
+              className="mgt-hover-scale"
+              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<WaSimulator
+          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.appendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
+          onClose={function(){setShowSim(false);}} />:null):null}{historyPopup}</div></div>
   );
 }
 
