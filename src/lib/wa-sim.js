@@ -81,6 +81,7 @@ export function simulateInbound(params, ctx) {
       date: parse.date || null,
       time: parse.time || null,
       notes: parse.notes || "",
+      preference: parse.preference || "auto",
       intent,
       confidence: parse.confidence || "high",
       ambiguity: parse.ambiguity || null,

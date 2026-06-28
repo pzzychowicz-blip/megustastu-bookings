@@ -13,7 +13,8 @@ import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, mat
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
-import { mkBtn, mkInp, usePresence, ModalPresence } from "../atoms";
+import { TemplatesIcon, SelectIcon } from "./WaIcons";
+import { mkBtn, mkInp, usePresence, ModalPresence, Overlay, Reveal } from "../atoms";
 
 // A conversation is "actionable" when it needs a staff response. For a
 // cancel/modify request that's the intent banner being VISIBLE (i.e. not yet
@@ -39,6 +40,8 @@ export function InboxPanel({
   onClose, onSend, onAccept, onDismiss, onSaveTemplates, onMarkRead,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify,
+  onBulkArchive, onBulkUnarchive, onBulkDelete,
+  query, setQuery, needsAction, setNeedsAction,
 }) {
   const winW = useWinW();
   const twoPane = winW >= INBOX_TWO_PANE_BREAKPOINT;
@@ -54,9 +57,10 @@ export function InboxPanel({
   const cardCls = leaving ? (mob ? "mgt-sheet-out" : "mgt-card-out") : (mob ? "mgt-sheet-in" : "mgt-card-in");
 
   // Search + "Needs action" filter (client-only). The filtered set feeds BOTH the
-  // rendered list and the ↑/↓ keyboard nav so they stay in lockstep.
-  const [query, setQuery] = useState("");
-  const [needsAction, setNeedsAction] = useState(false);
+  // rendered list and the ↑/↓ keyboard nav so they stay in lockstep. State is
+  // OWNED BY BookingApp (passed as props) so it survives the inbox round-trip
+  // when "Open booking"/"Apply changes" closes the inbox to show the form —
+  // returning restores the same filter state (it only resets on explicit close).
   const q = query.trim().toLowerCase();
   function matchesFilters(c) {
     if (needsAction && !isActionable(c)) return false;
@@ -83,12 +87,48 @@ export function InboxPanel({
     return twoPane ? topKeyOfTab(conversations, "inbox") : null;
   });
   const [showTpl, setShowTpl] = useState(false);
+  const searchRef = useRef(null); // "/" focuses the search box
+
+  // ── Multi-select (bulk archive / restore / delete) ──────────────────────────
+  // selectMode flips the list rows into checkbox mode (row click toggles the
+  // checkbox instead of opening the conversation). `selected` holds phoneKeys.
+  // Works in both tabs; the bulk action bar's actions depend on the active tab.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  function clearSelection() { setSelected(new Set()); }
+  function exitSelectMode() { setSelectMode(false); setSelected(new Set()); setConfirmBulkDelete(false); }
+  function toggleSelect(key) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+  // The conversations currently visible in this tab (after search/needs-action),
+  // in render order — drives "Select all" and the selected-count display.
+  const visibleInTab = sortConversations(filteredConvs, tab === "archived");
+  const allVisibleSelected = visibleInTab.length > 0 && visibleInTab.every((c) => selected.has(c.phoneKey));
+  function selectAllVisible() { setSelected(new Set(visibleInTab.map((c) => c.phoneKey))); }
+  // Restrict the acted-on set to what's actually in the current tab (a stale key
+  // from the other tab can't leak in — selection clears on tab switch anyway).
+  function selectedKeysInTab() { return visibleInTab.filter((c) => selected.has(c.phoneKey)).map((c) => c.phoneKey); }
 
   function switchTab(next) {
     if (next === tab) return;
     setTab(next);
+    setSelected(new Set()); // selection is per-tab; drop it on switch
     // Two-pane: land on the top of the new tab. Stacked: show that tab's list.
     setActiveKey(twoPane ? topKeyOfTab(conversations, next) : null);
+  }
+
+  function runBulk(action) {
+    const keys = selectedKeysInTab();
+    if (!keys.length) return;
+    if (action === "archive" && onBulkArchive) onBulkArchive(keys);
+    else if (action === "unarchive" && onBulkUnarchive) onBulkUnarchive(keys);
+    else if (action === "delete" && onBulkDelete) onBulkDelete(keys);
+    exitSelectMode();
   }
 
   // When the layout widens to two-pane with nothing selected (e.g. the inbox was
@@ -112,6 +152,8 @@ export function InboxPanel({
     function onKey(e) {
       if (e.key === "Escape") {
         if (showTpl) { setShowTpl(false); return; }
+        if (confirmBulkDelete) { setConfirmBulkDelete(false); return; }
+        if (selectMode) { exitSelectMode(); return; }
         if (!twoPane && activeKey) { setActiveKey(null); return; }
         onClose();
         return;
@@ -138,11 +180,48 @@ export function InboxPanel({
           : e.key === "ArrowDown" ? Math.min(idx + 1, list.length - 1)
           : Math.max(idx - 1, 0);
         setActiveKey(list[next].phoneKey);
+        return;
+      }
+      // Letter shortcuts (ignore when a modifier is held so browser combos pass through).
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      // The active conversation's PENDING new_booking draft enables A=Accept / D=Dismiss.
+      const ac = activeKey ? conversations.find((c) => c.phoneKey === activeKey) : null;
+      const draftPending = !!(ac && ac.draftStatus === "parsed" && ac.draftData && (ac.draftData.intent || "new_booking") === "new_booking");
+      if (k === "s") { e.preventDefault(); if (selectMode) exitSelectMode(); else setSelectMode(true); return; }
+      if (k === "t") { e.preventDefault(); setShowTpl(true); return; }
+      if (k === "a") {
+        e.preventDefault();
+        if (draftPending && onAccept) onAccept(ac);  // draft visible → Accept takes precedence
+        else setNeedsAction((v) => !v);              // otherwise toggle the Needs-action filter
+        return;
+      }
+      if (k === "d") {
+        if (draftPending && onDismiss) { e.preventDefault(); onDismiss(ac.phoneKey); }
+        return;
+      }
+      // / → focus the search box.
+      if (e.key === "/") { e.preventDefault(); if (searchRef.current) searchRef.current.focus(); return; }
+      // Backspace → Archive (Inbox tab): bulk-archive the selection in select mode,
+      // else archive the active conversation.
+      if (e.key === "Backspace" && tab === "inbox") {
+        e.preventDefault();
+        if (selectMode) { const keys = selectedKeysInTab(); if (keys.length && onBulkArchive) { onBulkArchive(keys); exitSelectMode(); } }
+        else if (ac && onArchive) onArchive(ac.phoneKey);
+        return;
+      }
+      // R → Restore (Archived tab): bulk-restore the selection in select mode,
+      // else restore the active conversation.
+      if (k === "r" && tab === "archived") {
+        e.preventDefault();
+        if (selectMode) { const keys = selectedKeysInTab(); if (keys.length && onBulkUnarchive) { onBulkUnarchive(keys); exitSelectMode(); } }
+        else if (ac && onUnarchive) onUnarchive(ac.phoneKey);
+        return;
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [twoPane, activeKey, showTpl, tab, conversations, onClose, query, needsAction]);
+  }, [twoPane, activeKey, showTpl, tab, conversations, onClose, query, needsAction, selectMode, confirmBulkDelete, onAccept, onDismiss, onArchive, onUnarchive, onBulkArchive, onBulkUnarchive]);
   // Body-scroll lock while the inbox is open.
   useEffect(() => {
     const orig = document.body.style.overflow;
@@ -173,7 +252,7 @@ export function InboxPanel({
     <div style={{ width: twoPane ? 320 : "100%", flexShrink: 0, borderRight: twoPane ? "1px solid var(--wa-divider)" : "none", background: "var(--wa-list-bg)", height: "100%", overflow: "hidden", display: twoPane || !activeKey ? "flex" : "none", flexDirection: "column" }}>
       {/* keyed by tab → Inbox⇄Archived switch crossfades the list */}
       <div key={tab} className="mgt-fade-in" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        <ConversationList conversations={filteredConvs} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} />
+        <ConversationList conversations={filteredConvs} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
       </div>
     </div>
   );
@@ -220,14 +299,22 @@ export function InboxPanel({
             </div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={() => setShowTpl(true)} title="Templates" className="mgt-hover-scale mgt-press" style={mkBtn({ fontSize: 12, minHeight: 36, padding: "6px 12px", background: "var(--btn-default)" })}>⚙ Templates</button>
+            <button onClick={() => setShowTpl(true)} title="Templates" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ minHeight: 36, padding: "6px 12px", background: "var(--btn-default)" }), { display: "flex", alignItems: "center", justifyContent: "center" })}><TemplatesIcon size={17} /></button>
             <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={mkBtn({ fontSize: 18, minHeight: 36, padding: "4px 12px", background: "var(--btn-default)" })}>✕</button>
           </div>
         </div>
-        {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav. */}
+        {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav.
+            The select-mode toggle sits left of the search box (both tabs). */}
         <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <button
+            onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
+            title={selectMode ? "Exit selection" : "Select conversations"}
+            className="mgt-hover-scale mgt-press"
+            style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: 10, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color 160ms linear, color 160ms linear" }}
+          ><SelectIcon size={17} /></button>
           <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
             <input
+              ref={searchRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search name, number or message…"
@@ -239,9 +326,35 @@ export function InboxPanel({
             onClick={() => setNeedsAction((v) => !v)}
             title="Show only conversations that need a response"
             className="mgt-hover-scale mgt-press"
-            style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-input)"), borderRadius: 10, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+            style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: 10, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
           >● Needs action</button>
         </div>
+        {/* Bulk action bar — only in select mode. Actions depend on the tab:
+            Inbox → Archive; Archived → Restore + Delete (delete behind one
+            confirm). Select all / Cancel are always present. Eased open/closed
+            with the Reveal atom — same animation as the Summary panel. */}
+        <Reveal show={selectMode}>
+          <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--bg-soft)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
+            <button
+              onClick={() => { if (allVisibleSelected) clearSelection(); else selectAllVisible(); }}
+              className="mgt-hover-scale mgt-press"
+              title={allVisibleSelected ? "Clear selection" : "Select all"}
+              style={{ flexShrink: 0, background: "transparent", color: "var(--text-primary)", border: "1px solid var(--border-soft)", borderRadius: 10, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+            >{allVisibleSelected ? "Clear" : "Select all"}</button>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>{selected.size + " selected"}</span>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexShrink: 0 }}>
+              {tab === "archived" ? (
+                <>
+                  <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 700, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }}>↺ Restore</button>
+                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-btn-cancel)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 700, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }}>🗑 Delete</button>
+                </>
+              ) : (
+                <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 700, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }}>📦 Archive</button>
+              )}
+              <button onClick={exitSelectMode} className="mgt-hover-scale mgt-press" style={{ background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border-soft)", borderRadius: 10, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>Cancel</button>
+            </div>
+          </div>
+        </Reveal>
         <div style={{ flex: 1, display: "flex", flexDirection: "row", minHeight: 0, overflow: "hidden" }}>
           {twoPane ? (
             <>{listEl}{viewEl}</>
@@ -255,6 +368,18 @@ export function InboxPanel({
           )}
         </div>
         <ModalPresence show={showTpl}>{showTpl ? <TemplatesEditor templates={templates} onClose={() => setShowTpl(false)} onSave={(next) => { onSaveTemplates(next); setShowTpl(false); }} /> : null}</ModalPresence>
+        <ModalPresence show={confirmBulkDelete}>{confirmBulkDelete ? (
+          <Overlay
+            onClose={() => setConfirmBulkDelete(false)}
+            footer={<div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={() => setConfirmBulkDelete(false)} className="mgt-hover-scale mgt-press" style={mkBtn({ background: "var(--btn-default)" })}>Cancel</button>
+              <button onClick={() => { setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkBtn({ background: "var(--wa-btn-cancel)" })}>Delete {selected.size}</button>
+            </div>}
+          >
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>Delete {selected.size} conversation{selected.size !== 1 ? "s" : ""}?</div>
+            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>This permanently removes the selected conversations and their messages. This can't be undone.</div>
+          </Overlay>
+        ) : null}</ModalPresence>
       </div>
     </div>
   );

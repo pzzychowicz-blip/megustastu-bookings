@@ -44,6 +44,7 @@ const RESPONSE_SCHEMA = {
     date: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
     time: { type: "STRING", nullable: true, description: "HH:MM 24h" },
     notes: { type: "STRING", nullable: true },
+    preference: { type: "STRING", enum: ["auto", "indoor", "outdoor"], nullable: true, description: "Seating preference if the customer states one, else auto" },
     language: { type: "STRING", description: "ISO 639-1 of the customer's message, e.g. es, en" },
     confidence: { type: "STRING", enum: ["high", "medium", "low"] },
     ambiguity: { type: "STRING", nullable: true },
@@ -86,12 +87,24 @@ function buildPrompt(text, { todayIso, weekday, hoursLine, existingDraft }) {
     "- confidence: high = every extracted field was explicit; medium = one field inferred; low = multiple vague/unclear fields.",
     "- ambiguity: one short sentence describing what is unclear, else null.",
     "- name: only if the customer states their own name.",
-    "- notes: special requests verbatim-ish (terrace, allergy, birthday, wheelchair...), else null.",
+    "- notes: special requests verbatim-ish (allergy, birthday, wheelchair...), else null.",
+    "- preference: 'outdoor' if the customer asks to sit outside (terrace/terraza/fuera/afuera/patio/exterior), 'indoor' if they ask to sit inside (dentro/interior/adentro/inside). If they don't clearly state a seating area, use 'auto'. NEVER guess.",
     "- language: of the message itself.",
     "",
     "Customer message:",
     JSON.stringify(text),
   ].join("\n");
+}
+
+// inferPreference(text) → "outdoor" | "indoor" | null. Keyword detection of a
+// stated seating area, shared by mockParse and the liveParse fallback (the LLM
+// is inconsistent about populating the `preference` field even with the schema +
+// prompt rule, so we backstop it deterministically from the raw message).
+export function inferPreference(text) {
+  const t = String(text || "").toLowerCase();
+  if (/terraza|terrace|fuera|afuera|outside|outdoor|exterior|patio/.test(t)) return "outdoor";
+  if (/dentro|interior|adentro|inside|indoor/.test(t)) return "indoor";
+  return null;
 }
 
 // ── Mock parser (deterministic, no network) ───────────────────────────────────
@@ -132,6 +145,8 @@ export function mockParse(text) {
     }
   }
   const draftIntent = intent === "new_booking" || intent === "cancel" || intent === "modify";
+  // Seating preference: only when the customer clearly states an area, else auto.
+  const preference = inferPreference(t) || "auto";
   return {
     intent,
     name: null,
@@ -139,6 +154,7 @@ export function mockParse(text) {
     date: draftIntent ? date : null,
     time: draftIntent ? time : null,
     notes: null,
+    preference: draftIntent ? preference : "auto",
     language,
     confidence: sizeM && time && date ? "high" : "medium",
     ambiguity: null,
@@ -184,7 +200,17 @@ async function liveParse(text, ctx) {
       && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
       && data.candidates[0].content.parts[0].text;
     if (!jsonText) { console.warn("[gemini] empty candidates — message saved without draft."); return null; }
-    return JSON.parse(jsonText);
+    const parsed = JSON.parse(jsonText);
+    // Backstop the seating preference: the LLM often leaves it null/auto even when
+    // the customer clearly wrote "outside"/"terraza" etc. Infer it from the raw
+    // message; never downgrade a stated area Gemini DID return, and fall back to
+    // the existing draft's preference (so a follow-up that doesn't mention seating
+    // keeps the earlier choice).
+    if (parsed && (!parsed.preference || parsed.preference === "auto")) {
+      const prev = ctx && ctx.existingDraft && ctx.existingDraft.preference;
+      parsed.preference = inferPreference(text) || (prev && prev !== "auto" ? prev : "auto");
+    }
+    return parsed;
   } catch (e) {
     console.warn("[gemini] " + (e.name === "AbortError" ? "timeout after " + TIMEOUT_MS + "ms" : e.message) + " — message saved without draft.");
     return null;

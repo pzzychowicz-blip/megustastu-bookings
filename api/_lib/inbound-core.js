@@ -46,6 +46,7 @@ function draftPatchFromParse(parse, ts) {
     date: parse.date || null,
     time: parse.time || null,
     notes: parse.notes || "",
+    preference: parse.preference || "auto",
     intent: parse.intent,
     confidence: parse.confidence || "high",
     ambiguity: parse.ambiguity || null,

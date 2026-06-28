@@ -6,7 +6,7 @@ import { sortConversations } from "../../lib/whatsapp";
 import { useFlip } from "../atoms";
 import { ConversationRow } from "./ConversationRow";
 
-export function ConversationList({ conversations, activeKey, onSelect, bookings, archivedView, emptyLabel }) {
+export function ConversationList({ conversations, activeKey, onSelect, bookings, archivedView, emptyLabel, selectMode, selected, onToggleSelect }) {
   // Shared with InboxPanel's keyboard-nav so the rendered order and the ↑/↓
   // order are guaranteed identical (see lib/whatsapp.js → sortConversations).
   const sorted = sortConversations(conversations, archivedView);
@@ -25,7 +25,16 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
   return (
     <div ref={flipRef} style={{ padding: "10px 10px 20px", height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
       {sorted.map((c) => (
-        <ConversationRow key={c.phoneKey} flipId={c.phoneKey} conv={c} active={c.phoneKey === activeKey} onClick={() => onSelect(c.phoneKey)} bookings={bookings} />
+        <ConversationRow
+          key={c.phoneKey}
+          flipId={c.phoneKey}
+          conv={c}
+          active={c.phoneKey === activeKey}
+          onClick={() => (selectMode ? onToggleSelect(c.phoneKey) : onSelect(c.phoneKey))}
+          bookings={bookings}
+          selectMode={selectMode}
+          checked={!!(selected && selected.has(c.phoneKey))}
+        />
       ))}
     </div>
   );

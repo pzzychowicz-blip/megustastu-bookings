@@ -485,6 +485,12 @@ function BookingApp(){
   const [confirmArchive, setConfirmArchive] = useState(null);       // phoneKey pending archive-confirm
   const [confirmDeleteConv, setConfirmDeleteConv] = useState(null); // phoneKey pending delete-confirm
   const [returnToInboxKey, setReturnToInboxKey] = useState(null);   // reopen the inbox here when an overlay closes
+  // Inbox filter state lives here (not in InboxPanel) so it survives the inbox
+  // round-trip — Open booking / Apply changes close the inbox to show the form,
+  // and returning restores the same Needs-action / search state. Reset only on
+  // an explicit inbox close (the X / Esc / scrim → onClose).
+  const [waQuery, setWaQuery] = useState("");
+  const [waNeedsAction, setWaNeedsAction] = useState(false);
   const [showSim, setShowSim] = useState(false);                    // DEV-only simulator panel
   // Settings tab state — which tab is active in the Settings modal.
   // Resets to 'general' on modal close so reopens start fresh. Belongs to
@@ -1706,7 +1712,8 @@ function BookingApp(){
           templates={wa.templates}
           bookings={bookings}
           initialActiveKey={returnToInboxKey}
-          onClose={function(){setShowInbox(false);setReturnToInboxKey(null);}}
+          query={waQuery} setQuery={setWaQuery} needsAction={waNeedsAction} setNeedsAction={setWaNeedsAction}
+          onClose={function(){setShowInbox(false);setReturnToInboxKey(null);setWaQuery("");setWaNeedsAction(false);}}
           onSend={wa.handleSendReply}
           onAccept={wa.handleAcceptDraft}
           onDismiss={wa.handleDismissDraft}
@@ -1715,6 +1722,9 @@ function BookingApp(){
           onArchive={wa.handleArchive}
           onUnarchive={wa.handleUnarchive}
           onDelete={wa.handleDeleteConversation}
+          onBulkArchive={wa.bulkArchive}
+          onBulkUnarchive={wa.bulkUnarchive}
+          onBulkDelete={wa.bulkDeleteConversations}
           onCancelLinkedBooking={wa.handleCancelLinkedBooking}
           onOpenLinkedBooking={wa.handleOpenLinkedBooking}
           onDismissAcceptedBadge={wa.handleDismissAcceptedBadge}

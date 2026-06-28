@@ -57,7 +57,12 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   const confColor = conf === "low" ? "var(--danger-text)" : conf === "medium" ? "var(--warn-text)" : "var(--success-text)";
   const confBg = conf === "low" ? "var(--danger-bg)" : conf === "medium" ? "var(--warn-bg)" : "var(--suggest-bg)";
   const confLbl = conf;
-  const summary = (d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time");
+  // Seating preference suffix — only shown when the customer stated an area
+  // (indoor/outdoor); "auto"/unset adds nothing (it's the default).
+  const prefSuffix = (d.preference === "indoor" || d.preference === "outdoor")
+    ? " · " + (d.preference === "indoor" ? "Indoor" : "Outdoor")
+    : "";
+  const summary = (d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time") + prefSuffix;
   // Confidence is shown inline in the compact bar (always), so only notes /
   // ambiguity are "revealable" content behind the toggle.
   const hasDetail = !!(d.notes || d.ambiguity);
@@ -108,7 +113,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
         <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8, background: confBg, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl + " confidence"}</span>
       </div>
       <div style={{ fontSize: 14, color: "var(--wa-draft-text-dim)", lineHeight: 1.6, marginBottom: d.ambiguity ? 8 : 12 }}>
-        <span style={{ fontWeight: 700 }}>{(d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time")}</span>
+        <span style={{ fontWeight: 700 }}>{(d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time") + prefSuffix}</span>
         {d.notes ? <div style={{ fontSize: 13, marginTop: 4 }}>{"Notes: " + d.notes}</div> : null}
       </div>
       {d.ambiguity ? (

@@ -6,6 +6,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Reveal } from "../atoms";
+import { TemplatesIcon } from "./WaIcons";
 
 // TemplateChips — private to the composer. Tapping a chip inserts its text.
 // scrollLang (compact mode): the language switch joins the chips inside ONE
@@ -79,26 +80,39 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, compact }
     setTxt((cur) => (cur ? cur + " " + text : text));
     if (areaRef.current) areaRef.current.focus();
   }
+  // E → toggle the quick-reply template chips (handled here so the composer owns
+  // its own state; only fires when not typing in an input/textarea).
+  useEffect(() => {
+    function onKey(e) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const k = e.key.toLowerCase();
+      if (k === "e") { e.preventDefault(); setTplOpen((v) => !v); }
+      // C → focus the reply box (no-op when the window is closed / disabled).
+      else if (k === "c" && !disabled && areaRef.current) { e.preventDefault(); areaRef.current.focus(); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [disabled]);
   const canSend = !disabled && !!txt.trim();
   return (
     <div style={{ borderTop: "1px solid var(--wa-divider)", padding: "10px 12px", background: "var(--wa-list-bg)" }}>
-      {/* Compact (short-screen): hide the chip row behind a Templates toggle so
-          the textarea + thread keep the space; the full inline row stays on tall
-          screens. */}
-      {compact ? (
-        <div style={{ marginBottom: 8 }}>
-          <button onClick={() => setTplOpen((v) => !v)} className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: 16, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "var(--text-primary)", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>{"Templates " + (tplOpen ? "▾" : "▸")}</button>
-          {/* gridTemplateColumns:minmax(0,1fr) caps the Reveal's grid column to the
-              container width (its default auto column grows to the chips' content
-              width, which would defeat the inner overflow-x scroll). */}
-          <Reveal show={tplOpen} style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-            <div style={{ paddingTop: 8, minWidth: 0 }}><TemplateChips templates={templates} convLang={convLang} onInsert={insertTemplate} scrollLang /></div>
-          </Reveal>
-        </div>
-      ) : (
-        <TemplateChips templates={templates} convLang={convLang} onInsert={insertTemplate} />
-      )}
+      {/* v15.8.2-wa-sandbox: the Templates trigger became an icon button that
+          lives in the input row (left of the textarea). The chip strip reveals
+          above the row when toggled. gridTemplateColumns:minmax(0,1fr) caps the
+          Reveal's grid column to the container width (its default auto column
+          grows to the chips' content width, defeating the inner overflow-x). */}
+      <Reveal show={tplOpen} style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+        <div style={{ paddingBottom: 8, minWidth: 0 }}><TemplateChips templates={templates} convLang={convLang} onInsert={insertTemplate} scrollLang /></div>
+      </Reveal>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+        <button
+          onClick={() => setTplOpen((v) => !v)}
+          title="Templates"
+          className="mgt-hover-scale mgt-press"
+          style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: 12, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "0 1px 2px rgba(0,0,0,0.04)", transition: "background-color 160ms linear, color 160ms linear" }}
+        ><TemplatesIcon size={18} /></button>
         <textarea
           ref={areaRef}
           value={txt}

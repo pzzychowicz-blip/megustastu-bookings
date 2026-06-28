@@ -279,7 +279,10 @@ export function useWhatsApp({
     const today = new Date().toISOString().slice(0, 10);
     const date = d.date || today;
     const time = d.time || "13:00";
-    setForm(Object.assign({}, EMPTY_FORM, { name: prefilledName, phone: prefilledPhone, date, time, size, preference: "auto", notes: d.notes || "", status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }));
+    // Seating preference from the parsed message (indoor/outdoor); "auto" when
+    // the customer didn't state one — the default. (See mergeDraft / mockParse.)
+    const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : "auto";
+    setForm(Object.assign({}, EMPTY_FORM, { name: prefilledName, phone: prefilledPhone, date, time, size, preference, notes: d.notes || "", status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }));
     setEditId(null); setError(""); setSwapAffected(null);
     draftSourceRef.current = conv.phoneKey;
     setReturnToInboxKey(conv.phoneKey);
@@ -363,6 +366,17 @@ export function useWhatsApp({
     patchConversation(phoneKey, { archived: false, archivedAt: null });
   }
   function handleDeleteConversation(phoneKey) { setConfirmDeleteConv(phoneKey); }
+  // ── Bulk actions (multi-select) ──────────────────────────────────────────────
+  // Loop the existing single-key primitives (patchConversation is per-key
+  // update()-semantics, so a loop is safe). Bulk archive deliberately uses
+  // doArchive directly (NOT handleArchive) to skip the per-item "upcoming linked
+  // booking" warning — N popups would be unusable. Bulk delete's confirm is
+  // owned by the caller (InboxPanel), so these just execute.
+  function bulkArchive(keys) { (keys || []).forEach((k) => doArchive(k)); }
+  function bulkUnarchive(keys) { (keys || []).forEach((k) => handleUnarchive(k)); }
+  function bulkDeleteConversations(keys) {
+    (keys || []).forEach((k) => { removeConversation(k); removeMessages(k); });
+  }
   function doDeleteConversation(phoneKey) {
     removeConversation(phoneKey);
     removeMessages(phoneKey);
@@ -406,9 +420,12 @@ export function useWhatsApp({
     const date = d.date || booking.date || "";
     const time = d.time || booking.time || "13:00";
     const size = d.size != null ? d.size : (booking.size || 2);
+    // A modify request that states a seating area overrides the booking's current
+    // preference; otherwise ("auto"/unset) keep what the booking already had.
+    const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : (booking.preference || "auto");
     setForm(Object.assign({}, EMPTY_FORM, {
       name: booking.name || "", phone: booking.phone || "+", date, time, size,
-      preference: booking.preference || "auto", notes: booking.notes || "", status: booking.status || "confirmed",
+      preference, notes: booking.notes || "", status: booking.status || "confirmed",
       customDur: booking.customDur || null, manualTables: [], preferredTables: Array.isArray(booking.preferredTables) ? booking.preferredTables.slice() : [], returnOf: null,
     }));
     setEditId(booking.id); setError(""); setSwapAffected(null);
@@ -456,6 +473,7 @@ export function useWhatsApp({
     handleDismissAcceptedBadge, handleMarkIntentHandled, autoHandleCancelIntent,
     handleArchive, doArchive, handleUnarchive,
     handleDeleteConversation, doDeleteConversation,
+    bulkArchive, bulkUnarchive, bulkDeleteConversations,
     handleCancelLinkedBooking, handleOpenLinkedBooking, handleApplyModify, completeModifyApply,
   };
 }

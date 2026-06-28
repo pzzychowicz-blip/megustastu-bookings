@@ -6,7 +6,7 @@
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, formatPhone, formatRelativeTime } from "../../lib/whatsapp";
 
-export function ConversationRow({ conv, active, onClick, bookings, flipId }) {
+export function ConversationRow({ conv, active, onClick, bookings, flipId, selectMode, checked }) {
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
   const displayName = match ? match.name : (conv.phone || conv.phoneKey);
   const phoneLine = match ? formatPhone(conv.phone || conv.phoneKey) : null;
@@ -24,9 +24,12 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId }) {
   else if (hasAccepted) tagEl = <span title="Booking confirmed" style={{ fontSize: 12, marginLeft: 6, color: "var(--success-text)", fontWeight: 700 }}>✓</span>;
 
   const archivedDimming = conv.archived ? 0.65 : 1;
-  const bg = active ? "var(--wa-row-active-bg)" : "var(--wa-row-bg)";
-  const bgHover = active ? "var(--wa-row-active-bg)" : "var(--wa-row-bg-hover)";
-  const border = active ? "2px solid var(--wa-row-active-border)" : "1px solid var(--wa-bubble-in-border)";
+  // In select mode the "active" highlight gives way to the checked highlight so
+  // the row reads as selected, not opened.
+  const selHi = selectMode && checked;
+  const bg = selHi ? "var(--wa-row-active-bg)" : (active && !selectMode ? "var(--wa-row-active-bg)" : "var(--wa-row-bg)");
+  const bgHover = bg === "var(--wa-row-active-bg)" ? "var(--wa-row-active-bg)" : "var(--wa-row-bg-hover)";
+  const border = selHi ? "2px solid var(--wa-row-active-border)" : (active && !selectMode ? "2px solid var(--wa-row-active-border)" : "1px solid var(--wa-bubble-in-border)");
   const [hover, setHover] = useState(false);
   const rowRef = useRef(null);
   // InboxPanel's ↑/↓ keyboard nav can move the selection to an off-screen row —
@@ -43,8 +46,18 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId }) {
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{ cursor: "pointer", padding: "12px 14px", borderRadius: 12, background: hover && !active ? bgHover : bg, border, marginBottom: 6, transition: "background 0.12s", boxShadow: active ? "0 2px 8px rgba(0,122,255,0.12)" : "0 1px 3px rgba(0,0,0,0.04)", opacity: archivedDimming }}
+      style={{ cursor: "pointer", padding: "12px 14px", borderRadius: 12, background: hover ? bgHover : bg, border, marginBottom: 6, transition: "background 0.12s", boxShadow: (selHi || (active && !selectMode)) ? "0 2px 8px rgba(0,122,255,0.12)" : "0 1px 3px rgba(0,0,0,0.04)", opacity: archivedDimming, display: "flex", alignItems: "center", gap: 10 }}
     >
+      {selectMode ? (
+        <input
+          type="checkbox"
+          checked={!!checked}
+          readOnly
+          aria-label="Select conversation"
+          style={{ flexShrink: 0, width: 18, height: 18, accentColor: "var(--accent)", pointerEvents: "none", cursor: "pointer" }}
+        />
+      ) : null}
+      <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1 }}>
           {conv.unread
@@ -58,6 +71,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId }) {
       </div>
       {phoneLine ? <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 3, marginLeft: 14 }}>{phoneLine}</div> : null}
       <div style={{ fontSize: 13, color: conv.unread ? "var(--text-primary)" : "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginLeft: 14, fontWeight: conv.unread ? 500 : 400 }}>{conv.lastMessageSnippet || ""}</div>
+      </div>
     </div>
   );
 }

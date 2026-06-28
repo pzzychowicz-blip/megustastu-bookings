@@ -184,6 +184,11 @@ export function mergeDraft(oldDraft, newParse) {
     notes: pick(newParse.notes, oldDraft.notes) || "",
     language: pick(newParse.language, oldDraft.language),
   };
+  // preference: a stated area ("indoor"/"outdoor") wins; "auto" means the new
+  // message didn't mention seating, so keep whatever the draft already had.
+  merged.preference = (newParse.preference && newParse.preference !== "auto")
+    ? newParse.preference
+    : (oldDraft.preference || "auto");
   const filled = [merged.size, merged.date, merged.time].filter((v) => v !== null && v !== undefined && v !== "").length;
   merged.ambiguity = newParse.ambiguity || (filled === 3 ? null : oldDraft.ambiguity || null);
   merged.confidence = clampConfidence(newParse.confidence, merged);

@@ -108,20 +108,19 @@ export function ConversationView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0, background: "var(--wa-list-bg)" }}>
-      <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-          {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)", minHeight: 36, minWidth: 36 }} title="Back">‹</button> : null}
-          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
-          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 8, background: "var(--wa-green)", color: "var(--text-on-accent)", flexShrink: 0 }}>WA</span>
-          {headerActionBtns}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
-          {regularChip}
-          {acceptedBadge}
-          {conv.archived ? <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 8, background: "var(--bg-soft)", color: "var(--text-muted)", border: "1px solid var(--border-soft)" }}>📦 Archived</span> : null}
-          {windowEl}
-        </div>
+      {/* Single-row header (v15.8.2-wa-sandbox): name + phone + status pills + the
+          action buttons all on one level to reclaim vertical space. The pill
+          cluster wraps under the name on narrow widths; the action buttons stay
+          pinned right via marginLeft:auto. The old "WA" badge was removed. */}
+      <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)", minHeight: 36, minWidth: 36, flexShrink: 0 }} title="Back">‹</button> : null}
+        <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
+        <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
+        {regularChip}
+        {acceptedBadge}
+        {conv.archived ? <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 8, background: "var(--bg-soft)", color: "var(--text-muted)", border: "1px solid var(--border-soft)" }}>📦 Archived</span> : null}
+        {windowEl}
+        <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
       </div>
       <Reveal show={histOpen && hasRegulars} style={{ padding: "0 14px" }}><div style={{ paddingTop: 8 }}>{pastListBody}</div></Reveal>
       {linkedBooking ? (

@@ -98,7 +98,7 @@ function followUpFor(c) {
   const lang = c.language === "en" ? "en" : "es";
   const intent = c.draftData && c.draftData.intent;
   if (c.draftStatus === "parsed" && intent === "new_booking") {
-    return { phone, language: lang, text: lang === "es" ? "Perfecto, ¿podría ser en la terraza?" : "Great — could we sit outside if possible?", parse: Object.assign({}, c.draftData, { notes: "Prefers outdoor", confidence: "high" }) };
+    return { phone, language: lang, text: lang === "es" ? "Perfecto, ¿podría ser en la terraza?" : "Great — could we sit outside if possible?", parse: Object.assign({}, c.draftData, { notes: "Prefers outdoor", preference: "outdoor", confidence: "high" }) };
   }
   if (c.draftStatus === "accepted" && c.acceptedBookingId) {
     return { phone, language: lang, text: lang === "es" ? "¡Gracias! ¿Podríamos cambiar la hora a las 21:00?" : "Thanks! Could we move it to 21:00?", parse: { intent: "modify", confidence: "high" }, acceptedBookingId: c.acceptedBookingId };
@@ -196,7 +196,7 @@ export const SCENARIOS = [
   },
   {
     id: "nb_es_terrace2", group: "New bookings · ES", label: "Cena · 2 pers · viernes · terraza (nota)",
-    run: (ctx) => simulateInbound({ phone: "+34601000004", language: "es", text: "Mesa para 2 el viernes a las 21:00, a ser posible en la terraza", parse: { intent: "new_booking", size: 2, date: nextDow(5), time: "21:00", notes: "Prefiere terraza", confidence: "high" } }, ctx),
+    run: (ctx) => simulateInbound({ phone: "+34601000004", language: "es", text: "Mesa para 2 el viernes a las 21:00, a ser posible en la terraza", parse: { intent: "new_booking", size: 2, date: nextDow(5), time: "21:00", notes: "Prefiere terraza", preference: "outdoor", confidence: "high" } }, ctx),
   },
   {
     id: "nb_es_birthday6", group: "New bookings · ES", label: "Cena · 6 pers · cumpleaños + tarta (nota)",
@@ -222,7 +222,7 @@ export const SCENARIOS = [
   },
   {
     id: "nb_en_seaview2", group: "New bookings · EN", label: "Dinner · 2 · sea view request (note)",
-    run: (ctx) => simulateInbound({ phone: "+447900222003", language: "en", text: "Booking for 2 on Saturday 8:30pm — any chance of a table with a sea view?", parse: { intent: "new_booking", size: 2, date: nextDow(6), time: "20:30", notes: "Requests sea view", confidence: "high" } }, ctx),
+    run: (ctx) => simulateInbound({ phone: "+447900222003", language: "en", text: "Booking for 2 on Saturday 8:30pm — any chance of a table with a sea view?", parse: { intent: "new_booking", size: 2, date: nextDow(6), time: "20:30", notes: "Requests sea view", preference: "outdoor", confidence: "high" } }, ctx),
   },
   {
     id: "nb_en_anniversary2", group: "New bookings · EN", label: "Dinner · 2 · anniversary (note, IE)",
@@ -327,7 +327,7 @@ export const SCENARIOS = [
   {
     id: "md_terrace_ines", group: "Modifications", label: "Modify · pide terraza (Inés, nota)",
     note: "Needs sample bookings seeded (links to wasimI1).",
-    run: (ctx) => simulateInbound({ phone: PH.ines, language: "es", text: "¿Nos podríais poner en la terraza mañana si hace buen tiempo?", parse: { intent: "modify", name: "Inés Romero", notes: "Prefiere terraza si el tiempo acompaña", confidence: "medium" }, acceptedBookingId: "wasimI1" }, ctx),
+    run: (ctx) => simulateInbound({ phone: PH.ines, language: "es", text: "¿Nos podríais poner en la terraza mañana si hace buen tiempo?", parse: { intent: "modify", name: "Inés Romero", notes: "Prefiere terraza si el tiempo acompaña", preference: "outdoor", confidence: "medium" }, acceptedBookingId: "wasimI1" }, ctx),
   },
   {
     id: "md_running_late_greta", group: "Modifications", label: "Llega tarde a comida (Greta, nota)",
