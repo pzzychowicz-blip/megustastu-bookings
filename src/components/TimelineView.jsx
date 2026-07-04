@@ -85,10 +85,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, onEdit, 
   // v15.8.0: status-change overlay. `anim` ('wipe' Confirmed→Seated / 'fill'
   // Seated→Completed) is detected at the TimelineView level and passed in; the
   // overlay of the OLD colour animates away (keyframe on mount), revealing the new
-  // status colour underneath. wipe = right-to-left clip; fill = fade-out.
+  // status colour underneath. wipe = left-to-right clip (v15.9.0: unified with
+  // the List/form wipes — ltr, 760ms); fill = fade-out.
   const animOverlay = anim ? (
     <div
-      className={anim === "wipe" ? "mgt-wipe-rtl" : "mgt-fade-overlay"}
+      className={anim === "wipe" ? "mgt-wipe-ltr" : "mgt-fade-overlay"}
       style={{
         position: "absolute", inset: 0, borderRadius: 10, pointerEvents: "none",
         background: anim === "wipe" ? BLOCK_BG.confirmed : BLOCK_BG.seated
@@ -308,10 +309,12 @@ export function TimelineView({
       let changed = false;
       day.forEach(function (b) {
         const p = prev[b.id];
-        if (p === "confirmed" && b.status === "seated") { __statusAnims[b.id] = { type: "wipe", until: now + 700 }; changed = true; }
-        else if (p === "seated" && b.status === "completed") { __statusAnims[b.id] = { type: "fill", until: now + 700 }; changed = true; }
+        // v15.9.0: window 700→800ms so it outlives the slowed 760ms wipe keyframe
+        // (an early unmount would pop the last sliver of the old colour off).
+        if (p === "confirmed" && b.status === "seated") { __statusAnims[b.id] = { type: "wipe", until: now + 800 }; changed = true; }
+        else if (p === "seated" && b.status === "completed") { __statusAnims[b.id] = { type: "fill", until: now + 800 }; changed = true; }
       });
-      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 720); }
+      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 820); }
     }
     const m = {};
     day.forEach(function (b) { m[b.id] = b.status; });
