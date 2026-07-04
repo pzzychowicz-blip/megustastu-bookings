@@ -13,7 +13,7 @@ per booking.
 - **Live:** [megustastu-bookings.vercel.app](https://megustastu-bookings.vercel.app)
   (behind a staff login: this is the restaurant's production system, not a demo)
 - **Screenshots of every major feature:** [pz-my-page.vercel.app](https://pz-my-page.vercel.app/)
-- **Status:** production, v15.8.x · 128+ commits · tagged releases with changelogs
+- **Status:** production, v15.9.0 · 131 commits · 4 tagged releases with changelogs
 
 ## Who uses it
 
