@@ -23,7 +23,7 @@ import {
   KITCHEN_TABLE_LIMIT,
   hoursFor,
   ZONE_OF,
-  IS_MGT_LAYOUT
+  PRIORITIES
 } from "./constants";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
@@ -51,12 +51,14 @@ export function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var 
 export function isIn(id){return ZONE_OF[id]?ZONE_OF[id]==="indoor":String(id).startsWith("i");}
 export function isAllIn(ids){return ids.every(isIn);}
 export function isAllOut(ids){return ids.every(function(id){return !isIn(id);});}
-// v15.0.0 Phase 5: a "mixed-large" combo spans both zones. MGT keeps its bespoke
-// 1A&1B&7 rule; a generic layout treats any cross-zone set that is a DECLARED
-// combo (in VALID_COMBOS) as allowed.
+// v15.0.0 Phase 5 / v15.9.0: a "mixed-large" combo spans both zones. When the
+// priorities config names required tables (PRIORITIES.mixedRequire — MGT's seed:
+// 1A+1B+7), a cross-zone set is allowed only when it includes ALL of them;
+// otherwise any cross-zone set that is a DECLARED combo (in VALID_COMBOS) is allowed.
 export function isMixedLarge(ids){
   if(!ids.some(isIn)||!ids.some(function(id){return !isIn(id);})) return false;
-  if(IS_MGT_LAYOUT) return ids.includes("1A")&&ids.includes("1B")&&ids.includes("7");
+  var req=PRIORITIES.mixedRequire;
+  if(req.length) return req.every(function(id){return ids.includes(id);});
   var k=ids.slice().sort().join("|");
   return VALID_COMBOS.some(function(c){return c.ids.slice().sort().join("|")===k;});
 }
@@ -103,27 +105,60 @@ export function canAssign(ids,slots,s,e){
 }
 
 // ── Combo prioritisation (internal) ───────────────────────────────────────────
-// v15.0.0 Phase 5: _indoorPri + _comboPri encode MGT's hand-tuned table priorities
-// (magic ids i4/i1, the size-banded combo rankings). They short-circuit to 0 (no
-// preference) for a non-MGT layout — the optimizer then ranks combos purely by
+// v15.9.0: _indoorPri + _comboPri are DATA-DRIVEN via PRIORITIES (settings/layout
+// .priorities) — MGT's hand-tuned literals became DEFAULT_LAYOUT's seed values
+// (byte-identical output, proven by the v15.9.0 regression script). With an empty
+// config both return 0 (no preference) — the optimizer then ranks combos purely by
 // _comboLoc (zone grouping, layout-agnostic) + capacity/length. _comboLoc stays on.
-function _indoorPri(c){if(!IS_MGT_LAYOUT) return 0;if(c.ids.indexOf("i4")>=0) return 2;if(c.ids.indexOf("i1")>=0) return 1;return 0;}
+// _indoorPri: ranked anchor tables inside cross-zone combos; the earliest-ranked
+// anchor present wins, boost = anchors.length - index (MGT seed: i4→2, i1→1).
+function _indoorPri(c){var an=PRIORITIES.anchors;for(var i=0;i<an.length;i++){if(c.ids.indexOf(an[i])>=0) return an.length-i;}return 0;}
 function _comboLoc(c){if(isAllOut(c.ids)) return 0;if(isAllIn(c.ids)) return 1;return 2;}
-function _comboPri(c,size){if(!IS_MGT_LAYOUT) return 0;var k=c.ids.slice().sort().join("|");if(k==="1A|1B"&&size>=4&&size<=6) return -10;if(k==="2|3"&&size===4) return -5;if(size>=7&&size<=8){if(k==="2|3|4") return -10;if(k==="5A|5B|6") return -9;}if(size>=9&&size<=12){if(k==="1A|1B|7|i4") return -10;if(k==="1A|1B|7|i1") return -9;if(k==="1A|1B|7|i2"||k==="1A|1B|7|i3") return -7;}if(size>=13&&size<=16){if(c.ids.every(function(id){return ["2","3","4","5A","5B","6"].indexOf(id)>=0;})) return -10;}if(size>=17&&size<=20){if(k==="2|3|4|5A|5B|6|i4") return -10;if(k==="2|3|4|5A|5B|6|i1") return -9;if(k==="2|3|4|5A|5B|6|7") return -8;}if(k==="i1|i2|i3|i4") return 100;return 0;}
+// _comboPri: first comboRule matching (key, size band) wins — avoid → +100 (last
+// resort), else -weight (more negative sorts earlier). No match → 0.
+function _comboPri(c,size){var k=c.ids.slice().sort().join("|");var rules=PRIORITIES.comboRules;for(var i=0;i<rules.length;i++){var r=rules[i];if(r.key===k&&size>=r.min&&size<=r.max) return r.avoid?100:-r.weight;}return 0;}
 
 // ── Best-table finders ────────────────────────────────────────────────────────
 export function findBest(size,pref,s,e,slots){
   var sg=ALL_TABLES.filter(function(t){return t.capacity>=size&&comboOk([t.id],pref)&&canAssign([t.id],slots,s,e);});
   var co=VALID_COMBOS.filter(function(c){return c.cap>=size&&comboOk(c.ids,pref)&&canAssign(c.ids,slots,s,e);}).sort(function(a,b){var pa=_comboPri(a,size),pb=_comboPri(b,size);if(pa!==pb) return pa-pb;var la=_comboLoc(a),lb=_comboLoc(b);if(la!==lb) return la-lb;if(la===2){var ia=_indoorPri(a),ib=_indoorPri(b);if(ia!==ib) return ib-ia;}return a.cap-b.cap||a.ids.length-b.ids.length;});
-  // v15.0.0 Phase 5: generic (non-MGT) path — no table-7 special-casing. Prefer the
-  // smallest-capacity single that fits (least wasted seats), else the best combo.
-  if(!IS_MGT_LAYOUT){
+  // v15.9.0: data-driven single-table selection. The first PRIORITIES band whose
+  // min≤size≤max supplies the rules (MGT seed: hold 7 back from ≤2 with a per-size
+  // zone order; prefer 7 for 3–4 with combos before singles). A size with NO band
+  // takes the generic path: smallest-capacity single that fits (least wasted
+  // seats), else the best combo. Byte-identical to the pre-v15.9.0 literals for
+  // both the MGT seed and an empty config (regression-proven).
+  var band=PRIORITIES.bands.find(function(b){return size>=b.min&&size<=b.max;});
+  if(!band){
     if(sg.length) return [sg.slice().sort(function(a,b){return a.capacity-b.capacity;})[0].id];
     if(co.length) return co[0].ids;
     return null;
   }
-  if(size<=2){var n7=sg.filter(function(t){return t.id!=="7";});if(size===1){if(pref==="indoor"||pref==="auto"){var ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}if(pref==="outdoor"||pref==="auto"){var out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}}else{if(pref==="outdoor"||pref==="auto"){var out=n7.filter(function(t){return !isIn(t.id);});if(out.length) return [out[0].id];}if(pref==="indoor"||pref==="auto"){var ind=n7.filter(function(t){return isIn(t.id);});if(ind.length) return [ind[0].id];}}if(n7.length) return [n7[0].id];if(sg.length) return [sg[0].id];if(co.length) return co[0].ids;return null;}
-  if(size<=4){if(canAssign(["7"],slots,s,e)&&comboOk(["7"],pref)) return ["7"];if(co.length) return co[0].ids;if(sg.length) return [sg[0].id];return null;}
+  // 1. Ranked prefer list — each entry needs capacity, zone-pref fit and a free slot.
+  for(var i=0;i<band.prefer.length;i++){
+    var pid=band.prefer[i];
+    var pt=ALL_TABLES.find(function(t){return t.id===pid;});
+    if(pt&&pt.capacity>=size&&comboOk([pid],pref)&&canAssign([pid],slots,s,e)) return [pid];
+  }
+  // 2. Singles: non-avoided by zoneOrder → first non-avoided (ALL_TABLES order) →
+  //    any single (avoided = last resort). Order vs combos flips on combosFirst.
+  function bandSingle(){
+    var ok=sg.filter(function(t){return band.avoid.indexOf(t.id)<0;});
+    for(var z=0;z<band.zoneOrder.length;z++){
+      var indoorZone=band.zoneOrder[z]==="indoor";
+      var zs=ok.filter(function(t){return isIn(t.id)===indoorZone;});
+      if(zs.length) return [zs[0].id];
+    }
+    if(ok.length) return [ok[0].id];
+    if(sg.length) return [sg[0].id];
+    return null;
+  }
+  if(band.combosFirst){
+    if(co.length) return co[0].ids;
+    var st=bandSingle();if(st) return st;
+    return null;
+  }
+  var st2=bandSingle();if(st2) return st2;
   if(co.length) return co[0].ids;
   return null;
 }
@@ -235,10 +270,16 @@ export function optimise(bookings,date,blocks){
   var day=bookings.filter(function(b){return b&&b.date===date&&isActive(b);}).sort(function(a,b){var la=isLocked(a)?0:1,lb=isLocked(b)?0:1;if(la!==lb) return la-lb;if(b.size!==a.size) return b.size-a.size;var pa=a.preference!=="auto"?0:1,pb=b.preference!=="auto"?0:1;if(pa!==pb) return pa-pb;return toMins(a.time)-toMins(b.time);});
   // First pass
   var assigned=_runGreedy(day,baseSlots);
-  // Table 7 swap: if a size-4 has table 7 and an overlapping size-3 exists, give 7 to the 3 and let greedy re-assign everyone else
-  // v15.0.0 Phase 5: the table-7 swap is MGT-specific (magic id "7"); skip it generically.
-  var t7fours=IS_MGT_LAYOUT?day.filter(function(b){return !isLocked(b)&&assigned[b.id]&&assigned[b.id].length===1&&assigned[b.id][0]==="7"&&b.size===4;}):[];
-  if(t7fours.length){t7fours.forEach(function(fb){var fs=toMins(fb.time),fe=fs+(fb.duration||90);var three=day.find(function(b){return !isLocked(b)&&b.size===3&&b.id!==fb.id&&overlaps(fs,fe,toMins(b.time),toMins(b.time)+(b.duration||90))&&(!assigned[b.id]||assigned[b.id][0]!=="7");});if(!three) return;var lockedSlots=baseSlots.slice();day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)});});var ts=toMins(three.time),te=ts+(three.duration||90);if(!canAssign(["7"],lockedSlots,ts,te)) return;var trialSlots=lockedSlots.slice();trialSlots.push({tables:["7"],s:ts,e:te});var trialAssigned={};trialAssigned[three.id]=["7"];var others=day.filter(function(b){return b.id!==three.id&&!isLocked(b);}).sort(function(a,b){return b.size-a.size||toMins(a.time)-toMins(b.time);});others.forEach(function(b){var bs=toMins(b.time),be=bs+(b.duration||90);var tables;if(b.preferredTables&&b.preferredTables.length>0){var pt=b.preferredTables;if(comboCap(pt)>=(b.size||2)&&canAssign(pt,trialSlots,bs,be)) tables=pt;}if(!tables){tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}trialAssigned[b.id]=tables||null;if(tables) trialSlots.push({tables:tables,s:bs,e:be});});day.forEach(function(b){if(isLocked(b)) trialAssigned[b.id]=b.tables;});var curUn=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];}).length;var tryUn=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;if(tryUn<=curUn) assigned=trialAssigned;});}
+  // Swap pass — v15.9.0: data-driven via PRIORITIES.swapRules (was the MGT-only
+  // hard-coded table-7 swap). For each rule {table, fromSize, toSize}: if a party
+  // of `fromSize` holds exactly [table] and an overlapping party of `toSize`
+  // exists without it, trial giving the table to the `toSize` party and let
+  // greedy re-assign everyone else; accept only if the unassigned count doesn't
+  // grow. Empty rules → pass skipped (the pre-v15.9.0 generic behaviour).
+  PRIORITIES.swapRules.forEach(function(rule){
+    var holders=day.filter(function(b){return !isLocked(b)&&assigned[b.id]&&assigned[b.id].length===1&&assigned[b.id][0]===rule.table&&b.size===rule.fromSize;});
+    holders.forEach(function(fb){var fs=toMins(fb.time),fe=fs+(fb.duration||90);var three=day.find(function(b){return !isLocked(b)&&b.size===rule.toSize&&b.id!==fb.id&&overlaps(fs,fe,toMins(b.time),toMins(b.time)+(b.duration||90))&&(!assigned[b.id]||assigned[b.id][0]!==rule.table);});if(!three) return;var lockedSlots=baseSlots.slice();day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)});});var ts=toMins(three.time),te=ts+(three.duration||90);if(!canAssign([rule.table],lockedSlots,ts,te)) return;var trialSlots=lockedSlots.slice();trialSlots.push({tables:[rule.table],s:ts,e:te});var trialAssigned={};trialAssigned[three.id]=[rule.table];var others=day.filter(function(b){return b.id!==three.id&&!isLocked(b);}).sort(function(a,b){return b.size-a.size||toMins(a.time)-toMins(b.time);});others.forEach(function(b){var bs=toMins(b.time),be=bs+(b.duration||90);var tables;if(b.preferredTables&&b.preferredTables.length>0){var pt=b.preferredTables;if(comboCap(pt)>=(b.size||2)&&canAssign(pt,trialSlots,bs,be)) tables=pt;}if(!tables){tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}trialAssigned[b.id]=tables||null;if(tables) trialSlots.push({tables:tables,s:bs,e:be});});day.forEach(function(b){if(isLocked(b)) trialAssigned[b.id]=b.tables;});var curUn=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];}).length;var tryUn=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;if(tryUn<=curUn) assigned=trialAssigned;});
+  });
   // Preference retry: if any non-auto booking got wrong area, force-fix it
   var prefMismatch=day.filter(function(b){if(isLocked(b)||!assigned[b.id]||b.preference==="auto") return false;var tbl=assigned[b.id];if(b.preference==="indoor") return !isAllIn(tbl);if(b.preference==="outdoor") return !isAllOut(tbl);return false;});
   if(prefMismatch.length){

@@ -56,13 +56,13 @@ export function BookingFormModal({
   const inp=mkInp;
   // v15.8.0 cont.4: status-button click flashes the clicked status colour across the
   // Status section (mirrors the List card wipe). `k` re-keys the overlay so the
-  // mgt-wipe-rtl keyframe replays on every click (even re-picking the same status).
+  // mgt-wipe-ltr keyframe replays on every click (even re-picking the same status).
   const [statusFlash,setStatusFlash]=useState(null);
   const flashTimer=useRef(null);
   function flashStatus(s){
     setStatusFlash({color:BLOCK_BG[s],k:Date.now()});
     if(flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current=setTimeout(function(){setStatusFlash(null);},700);
+    flashTimer.current=setTimeout(function(){setStatusFlash(null);},800); // v15.9.0: outlives the 760ms wipe
   }
   const formCols=isMobile?"1fr":"1fr 1fr";
   const auto=getDur(Number(form.size));
@@ -189,7 +189,7 @@ export function BookingFormModal({
         style={{fontWeight:700,color:"var(--text-required)",fontSize:13,padding:"4px 12px",borderRadius:8,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}}>Kitchen busy</span>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>:null;
 
   const quickStatusBtns=editId?<Section style={{position:"relative"}}>{statusFlash?(
-        <div key={statusFlash.k} className="mgt-wipe-rtl" style={{position:"absolute",inset:0,borderRadius:16,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
+        <div key={statusFlash.k} className="mgt-wipe-ltr" style={{position:"absolute",inset:0,borderRadius:16,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
       ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600,marginRight:4}}>Status:</span>{["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return (
         <button
           key={s}

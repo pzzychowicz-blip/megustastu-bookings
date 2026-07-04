@@ -52,7 +52,57 @@ export var DEFAULT_LAYOUT={
     {ids:["2","3","4","5A","5B","6","i1"],cap:20},{ids:["2","3","4","5A","5B","6","i4"],cap:20},
     {ids:["1A","1B","7","2","3","4","5A","5B","6"],cap:26},{ids:["1A","1B","7","2","3","4","5A","5B"],cap:23},{ids:["1A","1B","7","2","3","4","5B","6"],cap:23}
   ],
-  kitchenLimit:3
+  kitchenLimit:3,
+  // v15.9.0: data-driven optimizer priorities. These seed values reproduce the
+  // formerly hard-coded MGT heuristics in booking-logic.js BYTE-FOR-BYTE (proven
+  // by the v15.9.0 regression script) — the IS_MGT_LAYOUT gate no longer exists
+  // in the optimizer; it only curates the table-picker grouping. Fields:
+  //   • bands        — per-party-size single-table rules for findBest. First band
+  //     whose min≤size≤max wins. `prefer` = ranked table ids tried first (need
+  //     capacity+zone-pref+free); `avoid` = last-resort tables (used only when no
+  //     other single fits); `zoneOrder` = which zone's singles to try first;
+  //     `combosFirst` = try combos before (non-preferred) singles. A size with NO
+  //     band takes the generic path: smallest single that fits, else best combo.
+  //   • comboRules   — ranked combo preferences: first rule matching (key, size)
+  //     wins. weight 1–10 (10 = strongest preference, sorts the combo earlier);
+  //     avoid:true = use this combo only when nothing else works.
+  //   • anchors      — ranked preferred tables INSIDE cross-zone combos (tiebreak).
+  //   • swapRules    — optimizer swap pass: free `table` from a party of `fromSize`
+  //     when an overlapping party of `toSize` could use it (accepted only if it
+  //     doesn't increase the unassigned count).
+  //   • mixedRequire — cross-zone combos are auto-assigned ONLY when they include
+  //     ALL of these tables; empty = any declared cross-zone combo is allowed.
+  //   • v:1          — presence marker: RTDB drops empty arrays, so an all-empty
+  //     config would read back as ABSENT and wrongly re-seed these defaults; the
+  //     scalar keeps the node present. Bump only on schema changes.
+  priorities:{
+    v:1,
+    bands:[
+      {min:1,max:1,prefer:[],avoid:["7"],zoneOrder:["indoor","outdoor"],combosFirst:false},
+      {min:2,max:2,prefer:[],avoid:["7"],zoneOrder:["outdoor","indoor"],combosFirst:false},
+      {min:3,max:4,prefer:["7"],avoid:[],zoneOrder:[],combosFirst:true}
+    ],
+    comboRules:[
+      {key:"1A|1B",min:4,max:6,weight:10},
+      {key:"2|3",min:4,max:4,weight:5},
+      {key:"2|3|4",min:7,max:8,weight:10},
+      {key:"5A|5B|6",min:7,max:8,weight:9},
+      {key:"1A|1B|7|i4",min:9,max:12,weight:10},
+      {key:"1A|1B|7|i1",min:9,max:12,weight:9},
+      {key:"1A|1B|7|i2",min:9,max:12,weight:7},
+      {key:"1A|1B|7|i3",min:9,max:12,weight:7},
+      {key:"2|3|4|5A|5B",min:13,max:16,weight:10},
+      {key:"2|3|4|5B|6",min:13,max:16,weight:10},
+      {key:"2|3|4|5A|5B|6",min:13,max:16,weight:10},
+      {key:"2|3|4|5A|5B|6|i4",min:17,max:20,weight:10},
+      {key:"2|3|4|5A|5B|6|i1",min:17,max:20,weight:9},
+      {key:"2|3|4|5A|5B|6|7",min:17,max:20,weight:8},
+      {key:"i1|i2|i3|i4",min:1,max:99,avoid:true}
+    ],
+    anchors:["i4","i1"],
+    swapRules:[{table:"7",fromSize:4,toSize:3}],
+    mixedRequire:["1A","1B","7"]
+  }
 };
 
 // The physical-cluster grouping for the table pickers — the CURATED MGT layout.
@@ -93,10 +143,15 @@ export let VALID_COMBOS=[];
 export let CLUSTERS={};
 // v15.0.0 Phase 5: detect-and-apply flag. True when the live layout matches the
 // canonical MGT signature (tables + caps + zones + combos === DEFAULT_LAYOUT's).
-// The optimizer (booking-logic) runs MGT's hand-tuned heuristics only when true;
-// otherwise a generic capacity-based fallback. Recomputed by setLayout on every
-// layout change, so an untouched install always takes the MGT path (zero regression).
+// v15.9.0: the optimizer NO LONGER reads this — its heuristics are data-driven
+// via PRIORITIES (below); the flag now only picks the curated MGT table-picker
+// grouping (TABLE_GROUPS) over the generic join-group derivation.
 export let IS_MGT_LAYOUT=true;
+// v15.9.0: the data-driven optimizer priorities (normalized shape — see the
+// DEFAULT_LAYOUT.priorities comment for field semantics). Live binding reassigned
+// only by setLayout; consumed by booking-logic's _comboPri/_indoorPri/findBest/
+// optimise/isMixedLarge. Seeded from DEFAULT_LAYOUT at the bottom of this file.
+export let PRIORITIES={v:1,bands:[],comboRules:[],anchors:[],swapRules:[],mixedRequire:[]};
 
 // MGT picker grouping (live caps, curated structure). Used only on the MGT path.
 function buildTableGroups(cfg){
@@ -158,6 +213,48 @@ export function contiguousRuns(group){
   return runs;
 }
 
+// v15.9.0: normalize a raw priorities config against the layout's table ids.
+// WHOLE-OBJECT fallback only: an absent/malformed priorities object seeds from
+// DEFAULT_LAYOUT.priorities (a legacy settings/layout node predating v15.9.0);
+// a PRESENT object with missing fields treats each missing field as EMPTY —
+// never per-field DEFAULT — so a tenant who deliberately cleared a rule list
+// doesn't get MGT's rules leaking back (RTDB drops empty arrays; the `v` scalar
+// keeps an all-empty object present). Every table reference is filtered against
+// the CURRENT ids, so removed/renamed tables self-heal at derive time too.
+function normalizePriorities(p,idSet){
+  p=(p&&typeof p==="object")?p:DEFAULT_LAYOUT.priorities;
+  var has=function(id){return !!idSet[id];};
+  var clampSize=function(n,d){n=Math.round(Number(n));if(!Number.isFinite(n)) n=d;return Math.max(1,Math.min(99,n));};
+  var bands=(Array.isArray(p.bands)?p.bands:[]).map(function(b){
+    if(!b||typeof b!=="object") return null;
+    var min=clampSize(b.min,1);
+    var max=Math.max(min,clampSize(b.max,min));
+    var zo=[];(Array.isArray(b.zoneOrder)?b.zoneOrder:[]).forEach(function(z){
+      if((z==="indoor"||z==="outdoor")&&zo.indexOf(z)<0) zo.push(z);
+    });
+    return {min:min,max:max,
+      prefer:(Array.isArray(b.prefer)?b.prefer:[]).map(String).filter(has),
+      avoid:(Array.isArray(b.avoid)?b.avoid:[]).map(String).filter(has),
+      zoneOrder:zo,combosFirst:!!b.combosFirst};
+  }).filter(Boolean);
+  var comboRules=(Array.isArray(p.comboRules)?p.comboRules:[]).map(function(r){
+    if(!r||typeof r!=="object"||!r.key) return null;
+    var ids=String(r.key).split("|");
+    if(!ids.length||!ids.every(has)) return null; // a rule for a removed table drops
+    var min=clampSize(r.min,1);
+    var max=Math.max(min,clampSize(r.max,min));
+    var w=Math.round(Number(r.weight));if(!Number.isFinite(w)) w=5;
+    return {key:comboKey(ids),min:min,max:max,weight:Math.max(1,Math.min(10,w)),avoid:!!r.avoid};
+  }).filter(Boolean);
+  var anchors=(Array.isArray(p.anchors)?p.anchors:[]).map(String).filter(has);
+  var swapRules=(Array.isArray(p.swapRules)?p.swapRules:[]).map(function(r){
+    if(!r||typeof r!=="object"||!has(String(r.table))) return null;
+    return {table:String(r.table),fromSize:clampSize(r.fromSize,4),toSize:clampSize(r.toSize,2)};
+  }).filter(Boolean);
+  var mixedRequire=(Array.isArray(p.mixedRequire)?p.mixedRequire:[]).map(String).filter(has);
+  return {v:1,bands:bands,comboRules:comboRules,anchors:anchors,swapRules:swapRules,mixedRequire:mixedRequire};
+}
+
 // Pure derivation: a layout config → every value the app reads at runtime,
 // INCLUDING the combos + clusters (Phase 4). setLayout() assigns the result to the
 // live bindings; the deep-equal verify calls this directly. buildLayout(DEFAULT_LAYOUT)
@@ -217,7 +314,9 @@ export function buildLayout(cfg){
     // !IS_MGT_LAYOUT path (the MGT path swaps in the curated struct), so defer
     // the work instead of computing-and-discarding it on every MGT snapshot.
     makeTableGroups:function(){return buildGenericTableGroups(tables,groups,runCapByKey,capOf,zoneOf);},
-    VALID_COMBOS:combos,CLUSTERS:clusters
+    VALID_COMBOS:combos,CLUSTERS:clusters,
+    // v15.9.0: data-driven optimizer priorities (see normalizePriorities above).
+    PRIORITIES:normalizePriorities(cfg.priorities,idSet)
   };
 }
 
@@ -242,6 +341,9 @@ export function setLayout(cfg){
   OUTDOOR=L.OUTDOOR;INDOOR=L.INDOOR;ALL_TABLES=L.ALL_TABLES;TIMELINE_TABLES=L.TIMELINE_TABLES;
   TOTAL_SEATS=L.TOTAL_SEATS;ZONE_OF=L.ZONE_OF;KITCHEN_TABLE_LIMIT=L.KITCHEN_TABLE_LIMIT;
   VALID_COMBOS=L.VALID_COMBOS;CLUSTERS=L.CLUSTERS;
+  PRIORITIES=L.PRIORITIES; // v15.9.0 — the optimizer's data-driven heuristics
+  // v15.9.0: the signature (tables+combos only — priorities deliberately excluded)
+  // now gates ONLY the curated picker grouping below; the optimizer reads PRIORITIES.
   IS_MGT_LAYOUT=(layoutSignature(L)===MGT_SIGNATURE);
   // Picker grouping: curated MGT struct on the MGT path (built from the resolved
   // tables so caps stay live), else the generic join-group derivation (lazy —

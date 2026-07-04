@@ -317,10 +317,13 @@
       .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
 
       /* v15.8.0 animation pass #2. */
-      /* Confirmed→Seated: the seated colour is revealed right→left (the confirmed
-         overlay is clipped away from its right edge). */
-      @keyframes mgt-wipe-rtl { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 100% 0 0); } }
-      .mgt-wipe-rtl { animation: mgt-wipe-rtl 380ms ease-out both; }
+      /* Status-change colour wipe (v15.9.0: unified left→right everywhere — List
+         card, Edit-booking Status flash, timeline block — and slowed 380→760ms).
+         The overlay of the old/new colour is clipped away from its LEFT edge, so
+         the reveal sweeps left→right. NB the timeline's overlay window
+         (__statusAnims `until` in TimelineView) must stay ≥ this duration. */
+      @keyframes mgt-wipe-ltr { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }
+      .mgt-wipe-ltr { animation: mgt-wipe-ltr 760ms ease-out both; }
       /* Seated→Completed: the old (seated) colour overlay fades out, revealing completed. */
       @keyframes mgt-fade-overlay { from { opacity: 1; } to { opacity: 0; } }
       .mgt-fade-overlay { animation: mgt-fade-overlay 360ms ease-out both; }

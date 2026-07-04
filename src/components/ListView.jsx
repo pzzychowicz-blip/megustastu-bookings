@@ -77,9 +77,10 @@ export function ListView({
       let changed = false;
       day.forEach(function (b) {
         const p = prev[b.id];
-        if (p && p !== b.status) { __listAnims[b.id] = { from: p, until: now + 700 }; changed = true; }
+        // v15.9.0: window 700→800ms so it outlives the slowed 760ms wipe keyframe.
+        if (p && p !== b.status) { __listAnims[b.id] = { from: p, until: now + 800 }; changed = true; }
       });
-      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 720); }
+      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 820); }
     }
     const m = {};
     day.forEach(function (b) { m[b.id] = b.status; });
@@ -213,10 +214,11 @@ export function ListView({
             }}
           >
             {/* v15.8.0 cont.4: status-change colour wipe — fills the NEW (clicked)
-                status colour (green Seated, red Cancelled, …) sweeping right→left.
+                status colour (green Seated, red Cancelled, …) sweeping left→right
+                (direction flipped rtl→ltr in v15.9.0 on request).
                 `animFrom` is only the trigger flag; the colour is the new status. */}
             {animFrom ? (
-              <div className="mgt-wipe-rtl" style={{
+              <div className="mgt-wipe-ltr" style={{
                 position: "absolute", inset: 0, borderRadius: 16, pointerEvents: "none", zIndex: 0,
                 background: BLOCK_BG[b.status] || "transparent", opacity: 0.5
               }} />
