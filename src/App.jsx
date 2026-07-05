@@ -41,6 +41,7 @@ import {
 } from "./lib/booking-logic";
 
 import { validateReminderDraft } from "./lib/reminders";
+import { normalizePhone } from "./lib/customers";
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
@@ -540,7 +541,7 @@ function BookingApp(){
     reminderBanners,
   } = useReminders({ nowMins, setWriteWarning });
   // ── v16.0.0: Waitlist state ─────────────────────────────────────────────────
-  const { waitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
+  const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
   const [showWaitlist, setShowWaitlist] = useState(false);
   // waitAvail: {entryId: {tables, time}} for entries a table CURRENTLY fits
   // (recomputed by an effect below — deliberately state, not a render-time
@@ -784,6 +785,19 @@ function BookingApp(){
     setShowWalkin(false);
     setWaitAddedShown(true);
     setTimeout(function(){setWaitAddedShown(false);},3000);
+  }
+
+  // v16.0.0: delete a customer = delete EVERY booking carrying their phone
+  // (customers are DERIVED from bookings — no separate collection) + their
+  // waitlist entries. Permanent (no backups on the Firebase free plan); the
+  // Customers tab arms an explicit confirm before calling this. Known edge:
+  // if the customer's bookings are the ENTIRE database, the empty-array
+  // write-guard refuses the delete — safety wins (document, don't bypass).
+  function deleteCustomer(phoneKey){
+    const key=normalizePhone(phoneKey);
+    if(!key) return;
+    saveBookings(function(prev){return prev.filter(function(b){return normalizePhone(b.phone)!==key;});});
+    saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
   }
 
   function openNew(){pendingWaitlistRef.current=null;setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
@@ -1744,6 +1758,8 @@ function BookingApp(){
             layout={layout}
             onSaveLayout={saveLayout}
             bookings={bookings}
+            waitlist={waitlist}
+            onDeleteCustomer={deleteCustomer}
             tab={settingsTab}
             setTab={setSettingsTab}
             reminders={reminders}

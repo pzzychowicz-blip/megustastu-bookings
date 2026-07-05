@@ -27,6 +27,7 @@
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
+import { CustomersTabContent } from "./CustomersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal } from "./atoms";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
@@ -343,6 +344,8 @@ export function SettingsContent({
   layout,
   onSaveLayout,
   bookings,
+  waitlist,
+  onDeleteCustomer,
   reminders,
   onAddReminder,
   onEditReminder,
@@ -354,6 +357,9 @@ export function SettingsContent({
     content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} />;
   } else if (tab === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} />;
+  } else if (tab === "customers") {
+    // v16.0.0: customer management (phone-derived index; delete-all-data).
+    content = <CustomersTabContent bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent
@@ -373,6 +379,7 @@ export function SettingsContent({
         tabs={[
           { id: "general",   label: "General" },
           { id: "layout",    label: "Layout" },
+          { id: "customers", label: "Customers" },
           { id: "reminders", label: "Reminders" },
           { id: "shortcuts", label: "Shortcuts" },
         ]}
