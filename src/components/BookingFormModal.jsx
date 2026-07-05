@@ -41,6 +41,7 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   optimizerActiveFor
 } from "../lib/booking-logic";
+import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, matchCustomerByPhone } from "../lib/customers";
 import { Overlay, Fld, Section, TBadge, AvailBanner, mkInp, mkBtn, AutoHeight, Reveal } from "./atoms";
 
 export function BookingFormModal({
@@ -64,6 +65,57 @@ export function BookingFormModal({
     if(flashTimer.current) clearTimeout(flashTimer.current);
     flashTimer.current=setTimeout(function(){setStatusFlash(null);},800); // v15.9.0: outlives the 760ms wipe
   }
+  // ── v16.0.0: customer layer — phone autocomplete + recognition chips ────────
+  // Customers are DERIVED from the bookings list (src/lib/customers.js) — no
+  // separate collection. The dropdown opens while the phone field is focused
+  // and the typed digits match known customers; selecting fills name+phone and
+  // (new bookings only) pre-fills size/preference from the latest booking, the
+  // same fields Book Again pre-fills.
+  const [phoneFocus,setPhoneFocus]=useState(false);
+  const custIdx=customerIndex(bookings);
+  const phoneMatches=phoneFocus&&hasRealPhone(form.phone)
+    ?searchCustomers(custIdx,form.phone,5).filter(function(c){
+      // hide an exact already-applied selection so the dropdown closes itself
+      return !(normalizePhone(form.phone)===c.phone&&form.name===c.name);
+    })
+    :[];
+  function pickCustomer(c){
+    const latest=c.bookings[0];
+    setForm(function(f){
+      const next={name:c.name,phone:c.rawPhone};
+      if(!editId){ // Book-Again-style prefill only for NEW bookings
+        next.size=latest.size||f.size;
+        next.preference=latest.preference||f.preference;
+        next.preferredTables=Array.isArray(latest.preferredTables)?latest.preferredTables:f.preferredTables;
+      }
+      return Object.assign({},f,next);
+    });
+    setPhoneFocus(false);
+  }
+  // Recognition chips: teal "Regular · X past visits" (the WA module's visual
+  // language) + no-show chips — neutral at 1, amber warning at 2+.
+  const custMatch=hasRealPhone(form.phone)?matchCustomerByPhone(form.phone,bookings,editId):null;
+  const chipBase={display:"inline-flex",alignItems:"center",borderRadius:10,padding:"3px 10px",fontSize:11,fontWeight:700};
+  const regularChip=custMatch&&custMatch.regularCount>=1?<span
+    key="reg"
+    style={Object.assign({},chipBase,{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",color:"var(--success-text)"})}>{"Regular · "+custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":"")}</span>:null;
+  const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<span
+    key="ns"
+    style={Object.assign({},chipBase,{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",color:"var(--warn-text)"})}>{"⚠ No-show ×"+custMatch.noShowCount}</span>:<span
+    key="ns"
+    style={Object.assign({},chipBase,{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",color:"var(--text-secondary)"})}>1 no-show</span>):null;
+  const custChips=(regularChip||noShowChip)?<div style={{display:"flex",gap:6,flexWrap:"wrap",paddingTop:8}}>{regularChip}{noShowChip}</div>:null;
+  // Dropdown rows use onMouseDown/onTouchStart (fire BEFORE the input's blur)
+  // so the tap lands before phoneFocus flips false. Opaque sheet token per the
+  // popover rule (a translucent card reads see-through over form content).
+  const phoneDropdown=phoneMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-sheet)",border:"1px solid var(--border-sheet)",borderRadius:12,boxShadow:"var(--shadow-sheet)",overflow:"hidden"}}>{phoneMatches.map(function(c){return (
+    <div
+      key={c.phone}
+      onMouseDown={function(e){e.preventDefault();pickCustomer(c);}}
+      onTouchStart={function(e){e.preventDefault();pickCustomer(c);}}
+      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize:11,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{c.visits>0?<span style={{fontSize:10,fontWeight:700,color:"var(--success-text)",background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:8,padding:"2px 6px"}}>{c.visits+" visit"+(c.visits!==1?"s":"")}</span>:null}{c.noShowCount>0?<span style={{fontSize:10,fontWeight:700,color:"var(--warn-text)",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:8,padding:"2px 6px"}}>{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</span>:null}</div></div>
+  );})}</div>:null;
+
   const formCols=isMobile?"1fr":"1fr 1fr";
   const auto=getDur(Number(form.size));
   const dur=form.customDur||auto;
@@ -283,14 +335,15 @@ export function BookingFormModal({
             onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
             placeholder="Full name"
             className="mgt-hover-scale"
-            style={inp()} /></Fld><Fld label="Phone number"><input
+            style={inp()} /></Fld><Fld label="Phone number"><div style={{position:"relative"}}><input
             type="tel"
             value={form.phone}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{phone:e.target.value});});}}
-            onFocus={function(e){const el=e.target;if(!el.value) setForm(function(f){return Object.assign({},f,{phone:"+"});});setTimeout(function(){el.selectionStart=el.selectionEnd=el.value.length;},0);}}
+            onFocus={function(e){setPhoneFocus(true);const el=e.target;if(!el.value) setForm(function(f){return Object.assign({},f,{phone:"+"});});setTimeout(function(){el.selectionStart=el.selectionEnd=el.value.length;},0);}}
+            onBlur={function(){setPhoneFocus(false);}}
             placeholder="+34 600 000 000"
             className="mgt-hover-scale"
-            style={inp()} /></Fld></div></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date"><input
+            style={inp()} />{phoneDropdown}</div></Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date"><input
             type="date"
             value={form.date}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}

@@ -122,6 +122,20 @@ export function customerIndex(bookings) {
   return map;
 }
 
+// noShowMap — lightweight {normalizedPhone: noShowCount} map for the timeline/
+// list repeat-offender markers (one pass, no per-customer sorting — cheaper
+// than customerIndex when only the counts are needed).
+export function noShowMap(bookings) {
+  const map = {};
+  if (!Array.isArray(bookings)) return map;
+  bookings.forEach(function (b) {
+    if (!b || !hasRealPhone(b.phone) || !isNoShow(b)) return;
+    const key = normalizePhone(b.phone);
+    map[key] = (map[key] || 0) + 1;
+  });
+  return map;
+}
+
 // searchCustomers — match customers against a typed query.
 // Digits in the query → substring match on the normalized phone (so "600" finds
 // "+34 600 123 456" no matter the formatting); non-digit text → case-insensitive
