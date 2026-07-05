@@ -3312,3 +3312,78 @@ flash, timeline block Confirmed→Seated) now sweep **left→right** and are ~50
 lifetimes were bumped 700→800ms (timeouts 720→820) so the longer keyframe is never cut off mid-wipe
 (an early unmount pops the last sliver of old colour). Verified live in DEV (only ltr@760ms in the
 sheet; form flash mid-anim left-inset growing; overlay outlives the keyframe; form closed unsaved).
+
+## v15.9.0 -> v16.0.0 -- Customer layer: phone-keyed guests, no-show tracking, waitlist, timeline time chip
+
+Date: 2026-07-05
+
+**Scope**: six user-requested features on one foundation — bookings become **phone-number-keyed**,
+so the app recognises a customer across bookings. Files: `src/lib/customers.js` (NEW — phone
+identity lib), `src/hooks/useWaitlist.js` (NEW — 6th collection), `src/components/WaitlistPanel.jsx`
+(NEW), `src/components/CustomersSettings.jsx` (NEW — Customers tab), `src/lib/booking-logic.js`
+(sanitize + `noShow`), `src/App.jsx` (cancel flag · waitlist wiring · deleteCustomer · version),
+`src/components/BookingFormModal.jsx` (autocomplete + chips + waitlist button), `WalkinForm.jsx`
+(waitlist button), `TimelineView.jsx` (time chip + ⚠), `ListView.jsx` (no-show tag),
+`Settings.jsx` (5th tab), `LoginScreen.jsx` + `index.html` (one-font fix). One branch
+(`feat/v16.0.0-customer-layer`), 6 phased commits, single PR — the v15.0.0 model.
+
+- **`src/lib/customers.js` — the shared foundation.** `normalizePhone`/`formatPhone`/
+  `matchCustomerByPhone` ported VERBATIM from the WA sandbox's `whatsapp.js` (complementarity
+  contract in the header: when the WA module merges, its whatsapp.js imports these from here —
+  one phone-identity primitive, never two). Extended: `isNoShow(b)` (the `noShow` flag OR a legacy
+  `history` entry `action:"no show"` — zero-migration backfill), `customerIndex(bookings)`,
+  `searchCustomers`, `noShowMap`. Customers are DERIVED from bookings — no separate collection.
+- **One app font (`--font-app`).** The stack moved from inline literals (App.jsx ×2, LoginScreen)
+  to a token in index.html + `body{font-family}` + **`input, textarea, select, button
+  { font-family: inherit }`** — form controls don't inherit font per the CSS spec, which is why the
+  Notes textarea rendered monospace. The Kbd keycap atom stays monospace by design.
+- **No-show tracking.** `doCancelBooking(id, noShow=true)` now sets `noShow:true` (whitelisted in
+  `sanitize`); history entry + notes append unchanged. Booking form chips (via
+  `matchCustomerByPhone(form.phone, bookings, editId)`): teal "Regular · X past visits"
+  (completed count, the WA chip language), neutral "1 no-show", amber "⚠ No-show ×N" at 2+.
+  Timeline block label gains " ⚠" and List cards an amber tag for 2+ offenders (`noShowMap`).
+- **Phone autocomplete.** ≥3 typed digits → dropdown under the phone field (opaque `--bg-sheet`
+  per the popover rule, ≤5 rows: name · phone · visits/no-show chips). Select fills name+phone and
+  (NEW bookings only) Book-Again-style size/preference/preferredTables prefill. Rows use
+  onMouseDown (beats the input's blur).
+- **Timeline start-time chip.** Compact translucent pill (`fontSize:9`, tabular-nums) before the
+  block name; auto-hidden while the block is under **140px** so the name always keeps ~55px after
+  the fixed "=" assign handle (~41px); `marginLeft` clears the v15.8.2 dog-ear.
+- **Waitlist (6th persisted collection, `waitlist`).** `useWaitlist` = reminders-pattern loaded-
+  guard, whole-array `set()`; auto-prunes past dates (silent). Entry: `{id,name,phone,size,date,
+  prefTime,notes,createdAt,status:"waiting"}`. "⏳ Add to waitlist" appears under the no-tables
+  banner (booking form, new only + walk-in). **Active matching** (BookingApp effect → `waitAvail`
+  state): per waiting entry, `trialFits` at `prefTime` first, else a 15-min first-fit scan — with a
+  wanted time the scan is clamped to **±90 min around it** (a 13:45 slot is no use to a party
+  waiting for ~20:30); no wanted time → the whole remaining day. Keyed on data + a 15-min clock
+  bucket (never the 15s tick). Transition-to-available fires a green toast (prev-id-set diff in a
+  ref; first pass never toasts). **"⏳ N" badge button lives in the Today slot** (Presence slide;
+  to Today's right when Today shows; the flex:1 Summary absorbs the width — Patryk's chosen spot),
+  orange when someone now fits. Panel = Overlay, FCFS rows, fits chip, **Book** (returnOf-style
+  prefill + `pendingWaitlistRef`, consumed in doSave's new path → entry removed) + two-tap Remove.
+- **⚠ GOTCHA fixed live: set()-inside-updater duplicated the entry.** Firebase fires local
+  listeners SYNCHRONOUSLY on `set()`; with the write inside the setState updater, the echo lands
+  mid-update and StrictMode re-applies the queued concat on the echo state — `[entry, entry]` was
+  PERSISTED. Fix = ref-mirror: compute from `waitlistRef.current`, then `setWaitlist` + `set()` as
+  plain statements. (This is memory/firebase-set-in-updater-doubling manifesting as real data
+  corruption, not just doubled writes. `useReminders` still carries the old shape — port this fix
+  if its adds ever double.)
+- **Settings → Customers tab (5th tab).** Search by name/phone over `customerIndex`; rows sorted
+  visits desc (top 50) with visits/no-shows/waitlist chips; expandable history (Reveal);
+  armed-confirm **"Delete customer & all data"** → `deleteCustomer(phoneKey)` in App = one
+  function-form `saveBookings` filter (per-node diff → child deletions) + silent waitlist filter.
+  Known edge (accepted): if the customer's bookings are the ENTIRE DB, the empty-array guard
+  refuses — safety wins.
+- **Deploy**: rolling — no rules/shape cutover. `waitlist` is a new node with no rule (client
+  guard only, like reminders); `noShow` rides inside each booking's per-$id node.
+
+`npm run build` ✅ — main bundle **191.27 kB gz** (186.91 at v15.9.0; +~4.4 kB for the customer
+lib + waitlist + Customers tab). Verified live in DEV end-to-end: font unified (textarea ===
+button computed family); autocomplete dropdown → select fills form + "Regular · 1 past visit";
+no-show cancel ×2 → amber "⚠ No-show ×2" chip + timeline " ⚠" + List tag (legacy history-only
+counting confirmed); time chip at 1x/2x incl. dog-ear coexistence + auto-hide; waitlist add via
+banner → toast + badge → panel (FCFS, fits chip "Table free · 21:00") → Book prefills (fits-time
++ size) → save removes entry → badge slides out; duplicate-entry bug reproduced, fixed,
+re-verified (exactly one node); Customers tab search → expand history → armed delete removes
+booking from timeline+DB+list; zero NEW console errors post-fix; DEV data reverted (test bookings
+and customers deleted via the new feature itself).
