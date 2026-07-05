@@ -59,7 +59,7 @@ export function LoginScreen() {
       minHeight: "100dvh",
       display: "flex", alignItems: "center", justifyContent: "center",
       padding: 20,
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",
+      fontFamily: "var(--font-app)", // v16.0.0: one app font — token in index.html
       color: S.text
     }}>
       <div style={{

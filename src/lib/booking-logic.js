@@ -35,6 +35,10 @@ export function genId(){return Date.now().toString(36)+Math.random().toString(36
 
 // ── Booking sanitisation / diffing ────────────────────────────────────────────
 export function sanitize(b){if(!b||typeof b!=="object") return null;var t=b.time||"13:00";return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:t,scheduledTime:b.scheduledTime||t,size:Number(b.size)||2,duration:Number(b.duration)||90,originalDuration:Number(b.originalDuration)||Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],returnOf:b.returnOf||null,history:Array.isArray(b.history)?b.history:[],
+  // v16.0.0: no-show flag set by doCancelBooking(id,noShow=true). Whitelisted so
+  // it survives reads; legacy no-shows (history entry only) are counted by
+  // customers.js isNoShow's history fallback — no migration needed.
+  noShow:!!b.noShow,
   // v15.5.0: per-booking revision stamp for the per-node write model. Carried
   // through sanitise so it survives reads (this whitelist would otherwise drop
   // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.

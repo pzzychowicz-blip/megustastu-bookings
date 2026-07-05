@@ -1252,7 +1252,7 @@ function BookingApp(){
   }
   function doCancelBooking(id,noShow){
     const user=getUser();
-    const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
+    const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow){extra.noShow=true;extra.notes=(x.notes?x.notes+"\n":"")+"No show";}return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
     setConfirmCancel(null);if(ok) flash();
   }
   function manualAssign(bookingId,tables,locked,affected){
@@ -1482,7 +1482,7 @@ function BookingApp(){
 
   return (
     <div
-      style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
+      style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>Me Gustas Tú</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
               <button
                 key={v}
@@ -1620,7 +1620,7 @@ export default function App(){
   },[]);
   if(checking) return (
     <div
-      style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,fontSize:15}}>Loading...</div>
+      style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-app)",color:S.text,fontSize:15}}>Loading...</div>
   );
   if(!user) return <LoginScreen />;
   return <BookingApp />;
