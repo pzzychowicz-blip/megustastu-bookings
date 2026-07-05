@@ -3427,3 +3427,26 @@ unmount after the out-animation; Settings arrow cycle General→Layout→Custome
 Shortcuts→wrap; Customers card computed `overflow:visible`; end-to-end scenario replay (booking
 completed on 1A, seated booking on 1B, "=" → 1A selectable → assigned; completed bar preserved);
 zero new console errors; DEV test data reverted.
+
+### v16.0.0 follow-up commit #2 — clickable customer chips (2026-07-05, same version)
+
+The booking form's "Regular · X past visits" / no-show chips are now **clickable** and reveal
+the matching past-bookings list — the WA module's ConversationView Regular-chip disclosure
+ported onto app tokens (`BookingFormModal.jsx` only):
+
+- Chips became `<button>`s (hover-scale + press affordance) with the WA ▸/▾ suffix. Regular
+  reveals `regularBookings` ("Past bookings", suggest/teal family); the no-show chip (both the
+  neutral "1 no-show" and the amber "⚠ No-show ×N") reveals `noShowBookings` ("No-shows", warn
+  family). Rows = `date · time · size pax · status` (scheduledTime preferred), top 5 + a muted
+  "+N earlier" tail. Panel eases open/closed/switched via `Reveal` inside the existing
+  chips-Reveal wrapper.
+- `chipHist` state is **keyed by the normalized phone captured at click time** — editing the
+  phone (different customer) makes the panel close by itself, no reset effect needed. Clicking
+  the open chip closes; clicking the other chip switches lists.
+- Data was already there: `matchCustomerByPhone`'s v16.0.0 `regularBookings`/`noShowBookings`
+  (sorted desc). No lib/App change — pure component edit, rolling deploy.
+
+`npm run build` ✅ — 191.58 kB gz (+0.33). Live QA in DEV: Regular chip ▸→▾ reveals the completed
+visit; no-show chip reveals the cancelled no-show row; switching chips swaps panels; re-click
+closes (panel fully unmounts after the Reveal collapse); test customer created for the QA deleted
+via the Customers tab afterwards.

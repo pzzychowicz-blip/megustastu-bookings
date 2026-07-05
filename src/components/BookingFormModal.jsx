@@ -95,17 +95,47 @@ export function BookingFormModal({
   }
   // Recognition chips: teal "Regular · X past visits" (the WA module's visual
   // language) + no-show chips — neutral at 1, amber warning at 2+.
+  // v16.0.0 follow-up: the chips are CLICKABLE (buttons, ▸/▾ suffix) and reveal
+  // the matching past-bookings list — the WA ConversationView Regular-chip
+  // disclosure, ported: Regular → regularBookings, no-show → noShowBookings.
+  // `chipHist` is keyed by the normalized phone at click time, so editing the
+  // phone (a different customer) closes the panel by itself — no effect needed.
   const custMatch=hasRealPhone(form.phone)?matchCustomerByPhone(form.phone,bookings,editId):null;
-  const chipBase={display:"inline-flex",alignItems:"center",borderRadius:10,padding:"3px 10px",fontSize:11,fontWeight:700};
-  const regularChip=custMatch&&custMatch.regularCount>=1?<span
-    key="reg"
-    style={Object.assign({},chipBase,{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",color:"var(--success-text)"})}>{"Regular · "+custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":"")}</span>:null;
-  const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<span
-    key="ns"
-    style={Object.assign({},chipBase,{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",color:"var(--warn-text)"})}>{"⚠ No-show ×"+custMatch.noShowCount}</span>:<span
-    key="ns"
-    style={Object.assign({},chipBase,{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",color:"var(--text-secondary)"})}>1 no-show</span>):null;
-  const custChips=(regularChip||noShowChip)?<div style={{display:"flex",gap:6,flexWrap:"wrap",paddingTop:8}}>{regularChip}{noShowChip}</div>:null;
+  const [chipHist,setChipHist]=useState(null); // {key,which:"regular"|"noshow"} | null
+  const phoneKeyNow=normalizePhone(form.phone);
+  const histWhich=chipHist&&chipHist.key===phoneKeyNow?chipHist.which:null;
+  function toggleChipHist(which){
+    setChipHist(histWhich===which?null:{key:phoneKeyNow,which:which});
+  }
+  const chipBase={display:"inline-flex",alignItems:"center",borderRadius:10,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer"};
+  const regularChip=custMatch&&custMatch.regularCount>=1?<button
+    key="reg" type="button" className="mgt-hover-scale mgt-press"
+    onClick={function(){toggleChipHist("regular");}}
+    style={Object.assign({},chipBase,{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",color:"var(--success-text)"})}>{"Regular · "+custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":"")+(histWhich==="regular"?" ▾":" ▸")}</button>:null;
+  const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<button
+    key="ns" type="button" className="mgt-hover-scale mgt-press"
+    onClick={function(){toggleChipHist("noshow");}}
+    style={Object.assign({},chipBase,{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",color:"var(--warn-text)"})}>{"⚠ No-show ×"+custMatch.noShowCount+(histWhich==="noshow"?" ▾":" ▸")}</button>:<button
+    key="ns" type="button" className="mgt-hover-scale mgt-press"
+    onClick={function(){toggleChipHist("noshow");}}
+    style={Object.assign({},chipBase,{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",color:"var(--text-secondary)"})}>{"1 no-show"+(histWhich==="noshow"?" ▾":" ▸")}</button>):null;
+  // Disclosure panel — the WA pastListBody, on app tokens (suggest family for
+  // Regular, warn family for no-shows). Top 5 rows like WA; a muted "+N earlier"
+  // tail when there are more. Reveal (below) eases it open/closed; its cached-
+  // children fallback animates the collapse when the panel goes null.
+  const histList=histWhich&&custMatch?(histWhich==="regular"?custMatch.regularBookings:custMatch.noShowBookings):null;
+  const histTk=histWhich==="noshow"
+    ?{bg:"var(--warn-bg)",border:"var(--warn-border)",text:"var(--warn-text)",title:"No-shows"}
+    :{bg:"var(--suggest-bg)",border:"var(--suggest-border)",text:"var(--success-text)",title:"Past bookings"};
+  const chipHistPanel=histList&&histList.length?<div style={{marginTop:8,padding:"8px 12px",background:histTk.bg,border:"1px solid "+histTk.border,borderRadius:10,fontSize:12,color:S.text}}>
+    <div style={{fontWeight:700,marginBottom:4,color:histTk.text}}>{histTk.title}</div>
+    {histList.slice(0,5).map(function(b){return <div key={b.id} style={{padding:"3px 0",borderTop:"1px solid "+histTk.border}}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</div>;})}
+    {histList.length>5?<div style={{padding:"3px 0",borderTop:"1px solid "+histTk.border,color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</div>:null}
+  </div>:null;
+  const custChips=(regularChip||noShowChip)?<div style={{paddingTop:8}}>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{regularChip}{noShowChip}</div>
+    <Reveal show={!!chipHistPanel}>{chipHistPanel}</Reveal>
+  </div>:null;
   // Dropdown rows use onMouseDown/onTouchStart (fire BEFORE the input's blur)
   // so the tap lands before phoneFocus flips false. Opaque sheet token per the
   // popover rule (a translucent card reads see-through over form content).
