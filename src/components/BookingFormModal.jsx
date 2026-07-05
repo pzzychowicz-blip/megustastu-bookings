@@ -50,6 +50,7 @@ export function BookingFormModal({
   autoOptimizer, isMobile,
   onSave, onClose, onClearSwap, onBookAgain,
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel,
+  onAddToWaitlist,
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
   // Pre-E1, these all lived inline in BookingApp's body. Moved here because
@@ -205,10 +206,15 @@ export function BookingFormModal({
     );
   })();
 
-  const availBanner=formAvail&&!formAvail.ok?<AvailBanner
+  // v16.0.0: when nothing fits, offer the waitlist (new bookings only — an
+  // edited booking already exists; waitlisting it would double-track the party).
+  const availBanner=formAvail&&!formAvail.ok?<><AvailBanner
     msg={"No tables available"+(form.preference!=="auto"?" ("+form.preference+" preference)":"")+"."}
     sugg={formAvail.sugg}
-    onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />:null;
+    onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />{!editId&&onAddToWaitlist?<div style={{display:"flex",justifyContent:"center",marginTop:-4,marginBottom:12}}><button
+      className="mgt-hover-scale"
+      style={mkBtn({fontSize:13,background:BTN.orange,minHeight:40,padding:"8px 16px"})}
+      onClick={function(){onAddToWaitlist();}}>⏳ Add to waitlist</button></div>:null}</>:null;
   // v15.0.0: closed-day notice — the chosen date falls on a weekday marked Closed
   // (Settings → General → Opening hours). doSave blocks the write; this explains why.
   const closedBanner=fh.closed?<div style={{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:600,color:"var(--warn-text)",textAlign:"center"}}>{"Closed on "+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."}</div>:null;
