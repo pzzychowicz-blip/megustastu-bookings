@@ -66,7 +66,7 @@ import { BlockModal }  from "./components/BlockModal";
 // needs SettingsContent). ReminderEditor (modal at z-index 250)
 // gets its own file because it's a top-level modal, mirroring how
 // ManualModal and BlockModal were treated in B2.
-import { SettingsContent }         from "./components/Settings";
+import { SettingsContent, SETTINGS_TABS } from "./components/Settings";
 import { ReminderEditor }          from "./components/ReminderEditor";
 
 // ── Phase B4 (v15-refactor): Timeline + List views ────────────────────────
@@ -874,7 +874,10 @@ function BookingApp(){
       const dur=f.customDur||getDur(size);
       const cleanPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";
       const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
-      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
+      // v16.0.0 follow-up: completed bookings excluded from the busy set — a
+      // completed visit is over, its table is free (mirrors ManualModal +
+      // WalkinForm; the optimizer already ignores completed via isActive).
+      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
       if(editId){
         const orig=bookings.find(function(b){return b.id===editId;});
         const origPt=(orig&&Array.isArray(orig.preferredTables))?orig.preferredTables.slice().sort().join(","):"";
@@ -1219,7 +1222,10 @@ function BookingApp(){
       if(K.showSettings&&!K.reminderEditor&&!K.confirmReminderDel){
         if(k==="ArrowLeft"||k==="ArrowRight"){
           e.preventDefault();
-          const TABS=["general","layout","reminders","shortcuts"];
+          // v16.0.0 follow-up: derived from SETTINGS_TABS (Settings.jsx — the ONE
+          // tab list) so a newly added tab can never be skipped here again. Do
+          // NOT inline a literal id list (that's how Customers got skipped).
+          const TABS=SETTINGS_TABS.map(function(t){return t.id;});
           let curIdx=TABS.indexOf(K.settingsTab);if(curIdx<0) curIdx=0;
           const newIdx=k==="ArrowLeft"?(curIdx-1+TABS.length)%TABS.length:(curIdx+1)%TABS.length;
           K.setSettingsTab(TABS[newIdx]);

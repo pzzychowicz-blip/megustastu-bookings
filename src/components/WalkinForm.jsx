@@ -69,10 +69,13 @@ export function WalkinForm({
   const wE = wS + wDur;
 
   // Build the "other slots" array for availability checks. Excludes
-  // cancelled bookings and any bookings without tables (those don't occupy
-  // anything). Then concat the table-blocks for the same date.
+  // cancelled AND (v16.0.0 follow-up) completed bookings — a completed visit
+  // is over, its table is free (mirrors ManualModal + the doSave guard; the
+  // optimizer already ignores completed via isActive) — plus any bookings
+  // without tables (those don't occupy anything). Then concat the
+  // table-blocks for the same date.
   const wOther = liveBookings
-    .filter((b) => b && b.date === wDate && b.status !== "cancelled" && (b.tables || []).length > 0)
+    .filter((b) => b && b.date === wDate && b.status !== "cancelled" && b.status !== "completed" && (b.tables || []).length > 0)
     .map((b) => ({
       tables: b.tables || [],
       s: toMins(b.time),

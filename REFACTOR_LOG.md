@@ -3387,3 +3387,43 @@ banner → toast + badge → panel (FCFS, fits chip "Table free · 21:00") → B
 re-verified (exactly one node); Customers tab search → expand history → armed delete removes
 booking from timeline+DB+list; zero NEW console errors post-fix; DEV data reverted (test bookings
 and customers deleted via the new feature itself).
+
+### v16.0.0 follow-up commit — 4 live-QA fixes (2026-07-05, same version)
+
+Patryk's post-review bug list; all verified live in DEV. No version bump (same-version follow-up
+per the log discipline).
+
+1. **Timeline start-time chips: all-or-nothing + animated** (`TimelineView.jsx`). The per-block
+   ≥140px auto-hide left a MIXED grid (some blocks chipped, some not) — visually messy. The
+   decision moved up to TimelineView: `chipsOn = day.every(width ≥ 140px)` — every block shows
+   the chip or none does. The chip is now wrapped in `Presence` (`mgt-slide-in`/`mgt-slide-out`,
+   the Reshuffle-button pattern) so a zoom change slides it in from the left and back out instead
+   of popping. Name-span padding made constant (no layout flip during the exit animation).
+2. **Settings ←/→ skipped the Customers tab** (`App.jsx` keyboard nav). Root cause: a hand-copied
+   4-item tab-id list in the keydown handler that predated the 5th tab. Durable fix: new exported
+   **`SETTINGS_TABS`** in `Settings.jsx` — the ONE tab list — rendered by SettingsContent's TabBar
+   AND imported by App.jsx's arrow-nav (`SETTINGS_TABS.map(t=>t.id)`). A future tab added to the
+   list is automatically in the cycle; CLAUDE.md gotcha added so the list is never duplicated.
+3. **Customers-row hover lift clipped** (`CustomersSettings.jsx`). The row card had
+   `overflow:hidden`, which clipped the header's `.mgt-hover-scale` scale — the v15.8.0 "clip only
+   while animating" gotcha generalises to ANY container of a hover-lift, not just height
+   animators. Removed (no child paints edge-to-edge, so the rounded corners never needed it;
+   Reveal clips itself while animating). CLAUDE.md gotcha row generalised.
+4. **Completed booking blocked moving a seated party to its freed table.** Reported live: table A
+   finished (Seated→Completed), the still-seated table B asked to move there — the app refused
+   ("not available") or offered to displace the completed booking via Swap busy. Root cause: the
+   manual-move busy sets filtered only `status!=="cancelled"`, so a completed booking still
+   occupied its (past) window, and the mover's FULL window (from its original start) overlapped
+   it past-vs-past. Decision (AskUserQuestion): **completed = table free, everywhere** — matches
+   the optimizer, which already ignores completed via `isActive`; and the moved booking keeps its
+   true start/duration (the past-portion visual overlap with the completed bar is accepted as
+   history). Excluded `completed` from: `ManualModal` otherSlots (also makes it un-swappable),
+   `doSave`'s manual-assign guard (App.jsx), `WalkinForm` wOther, and booking-logic's
+   `findKitchenFriendlyTimes` exSl + `findFreeSlot` slots. `daySummary` deliberately unchanged
+   (completed are still covers served).
+
+`npm run build` ✅ — 191.25 kB gz (flat). Live QA: chip slide-in at 1.5×, slide-out at 1×, full
+unmount after the out-animation; Settings arrow cycle General→Layout→Customers→Reminders→
+Shortcuts→wrap; Customers card computed `overflow:visible`; end-to-end scenario replay (booking
+completed on 1A, seated booking on 1B, "=" → 1A selectable → assigned; completed bar preserved);
+zero new console errors; DEV test data reverted.

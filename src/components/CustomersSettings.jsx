@@ -54,7 +54,12 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
       );
     }) : null;
     return (
-      <div key={c.phone} style={{ borderRadius: 14, border: "1px solid var(--border-soft)", background: "var(--bg-soft)", marginBottom: 8, overflow: "hidden" }}>
+      // No overflow:hidden on this card — it clips the header row's
+      // .mgt-hover-scale lift (the v15.8.0 "clip only while animating" gotcha
+      // applies to ANY container of a hover-lift, not just height animators).
+      // No child paints edge-to-edge, so the rounded corners don't need
+      // clipping; Reveal does its own clipping while the history animates.
+      <div key={c.phone} style={{ borderRadius: 14, border: "1px solid var(--border-soft)", background: "var(--bg-soft)", marginBottom: 8 }}>
         <div
           className="mgt-hover-scale"
           onClick={function () { setOpenKey(open ? null : c.phone); setArmedKey(null); }}

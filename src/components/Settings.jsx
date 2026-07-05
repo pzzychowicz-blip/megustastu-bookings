@@ -30,6 +30,20 @@ import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal } from "./atoms";
 
+// ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
+// Single source of truth for the Settings tabs. SettingsContent renders it AND
+// App.jsx's ←/→ keyboard nav derives its cycle order from it (imported there).
+// Add or reorder tabs HERE ONLY — a hand-copied id list elsewhere is exactly
+// how the "arrow keys skip the new Customers tab" bug happened when the 5th
+// tab shipped. Never duplicate this list.
+export const SETTINGS_TABS = [
+  { id: "general",   label: "General" },
+  { id: "layout",    label: "Layout" },
+  { id: "customers", label: "Customers" },
+  { id: "reminders", label: "Reminders" },
+  { id: "shortcuts", label: "Shortcuts" },
+];
+
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
 // Reusable enough for future modals to import; lives here for now because
 // only the Settings modal uses it. If a second consumer appears later, this
@@ -376,13 +390,7 @@ export function SettingsContent({
   return (
     <div>
       <TabBar
-        tabs={[
-          { id: "general",   label: "General" },
-          { id: "layout",    label: "Layout" },
-          { id: "customers", label: "Customers" },
-          { id: "reminders", label: "Reminders" },
-          { id: "shortcuts", label: "Shortcuts" },
-        ]}
+        tabs={SETTINGS_TABS}
         current={tab}
         onSelect={setTab}
       />

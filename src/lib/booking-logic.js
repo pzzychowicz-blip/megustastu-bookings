@@ -231,7 +231,9 @@ export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excl
   var times=Array.from({length:(h.close-h.open)*4},function(_,i){return h.open*60+i*15;});
   var aroundM=toMins(around);
   var results=[];
-  var exSl=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});
+  // v16.0.0 follow-up: completed excluded — a completed visit's table is free
+  // (its duration is frozen at the completion moment; app-wide rule).
+  var exSl=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});
   if(blocks) exSl=exSl.concat(getBlockSlots(blocks,date));
   times.forEach(function(m){
     if(m===aroundM) return;
@@ -398,7 +400,8 @@ export function applySeatedShift(booking,nowM,allBookings){
   return {newTime:toTime(nowM),newDuration:scheduledEnd-nowM,oldTime:booking.time,direction:nowM<scheduledStart?"early":"late"};
 }
 export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
-  var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
+  // v16.0.0 follow-up: completed excluded — a completed visit's table is free.
+  var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
   if(blocks) slots=slots.concat(getBlockSlots(blocks,date));
   var s=toMins(time),e=s+dur;
   var pt=Array.isArray(prefTables)?prefTables:[];

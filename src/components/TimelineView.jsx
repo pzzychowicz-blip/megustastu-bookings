@@ -59,7 +59,7 @@ const __statusAnims = {};
 // module-level component the node persists, so `transition: left/width` eases a
 // reposition (seated-shift / reshuffle) and the wipe/fill overlays + long-press
 // work reliably. Former closures are now props.
-function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, noShows = 0, pxPerMin = 0, onEdit, onManual, setQuickStatus }) {
+function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, noShows = 0, showChip = false, onEdit, onManual, setQuickStatus }) {
   const d = liveBarDur(b, nowMins);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -80,19 +80,22 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, noShows 
     + (noShows >= 2 ? " ⚠" : "")
     + (warn && warn.overdue ? " !!" : "");
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
-  // name; rendered only when the block is wide enough that the NAME keeps
-  // ≥~55px after the chip (~42px) and the fixed "=" assign handle (~41px) —
-  // i.e. ≥140px. Below that the chip auto-hides (name always wins). marginLeft
-  // clears the v15.8.2 dog-ear corner so a noted booking's fold never overlaps.
-  const showTimeChip = pxPerMin > 0 && d * pxPerMin >= 140;
-  const timeChip = showTimeChip ? (
-    <span style={{
-      flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: 5,
-      fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
-      background: "rgba(255,255,255,0.25)", color: "var(--text-on-accent)",
-      pointerEvents: "none", position: "relative"
-    }}>{b.time}</span>
-  ) : null;
+  // name. The show/hide decision (`showChip`) is made ONCE at the TimelineView
+  // level for the WHOLE day — all blocks show chips or none do (a mixed grid
+  // read messy in live QA). Wrapped in Presence so it slides in from the left
+  // and back out (the Reshuffle-button pattern) when a zoom change flips the
+  // decision, instead of popping. marginLeft clears the v15.8.2 dog-ear corner
+  // so a noted booking's fold never overlaps.
+  const timeChip = (
+    <Presence show={showChip} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={180} tag="span" style={{ pointerEvents: "none" }}>
+      <span style={{
+        flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: 5,
+        fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+        background: "rgba(255,255,255,0.25)", color: "var(--text-on-accent)",
+        pointerEvents: "none", position: "relative"
+      }}>{b.time}</span>
+    </Presence>
+  );
 
   // Per-instance refs for long-press detection.
   const pressTimer = useRef(null);
@@ -203,7 +206,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, noShows 
       ) : null}
       {timeChip}
       <span style={{
-        flex: 1, padding: showTimeChip ? "0 8px 0 6px" : "0 8px", position: "relative",
+        flex: 1, padding: "0 8px 0 6px", position: "relative",
         fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
       }}>
@@ -241,7 +244,7 @@ export function TimelineView({
   const isToday = date === new Date().toISOString().slice(0, 10);
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const gridW = Math.max(320, totalMins * zoom * 1.2);
-  // v16.0.0: px-per-minute estimate for the time-chip auto-hide (gridW is a
+  // v16.0.0: px-per-minute estimate for the time-chip decision (gridW is a
   // lower bound — minWidth:100% can stretch wider — so the hide errs
   // conservative) + the repeat-no-show map (full bookings list, all dates).
   const pxPerMin = gridW / totalMins;
@@ -302,6 +305,13 @@ export function TimelineView({
   const unassigned = day.filter((b) =>
     b.status !== "completed" && (!(b.tables || []).length || b._conflict)
   );
+
+  // v16.0.0 follow-up: start-time chips are ALL-OR-NOTHING for the day — shown
+  // only when EVERY rendered block is wide enough that its name keeps ≥~55px
+  // after the chip (~42px) and the fixed "=" assign handle (~41px), i.e.
+  // ≥140px. A per-block decision left a mixed grid (some chips, some not),
+  // which read messy in live QA. The flip animates per block via Presence.
+  const chipsOn = day.length > 0 && day.every((b) => liveBarDur(b, nowMins) * pxPerMin >= 140);
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
   // CSS left/width transition can't cover — the block re-parents into a new row) eases
@@ -550,7 +560,7 @@ export function TimelineView({
           return (
             <Fragment key={b.id}>
               {ghost}
-              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} pxPerMin={pxPerMin} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
+              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
             </Fragment>
           );
         })}
@@ -566,7 +576,7 @@ export function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} pxPerMin={pxPerMin} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
     </div>
   ) : null;
 
