@@ -32,7 +32,10 @@
       "optimizerRev":      { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
       "layout":            { ".validate": "newData.parent().child('layoutRev').val() === (data.parent().child('layoutRev').exists() ? data.parent().child('layoutRev').val() + 1 : 1)" },
-      "layoutRev":         { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" }
+      "layoutRev":         { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+      "bookingDefaults":    { ".validate": "newData.parent().child('bookingDefaultsRev').val() === (data.parent().child('bookingDefaultsRev').exists() ? data.parent().child('bookingDefaultsRev').val() + 1 : 1)" },
+      "bookingDefaultsRev": { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" }
     }
   }
 }

@@ -196,7 +196,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {} }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {} }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
@@ -213,6 +213,13 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
   // (00:00–24:00). Its own formatter shows 24 as "24:00" (the full-day endpoint),
   // distinct from "00:00". Endpoints are meaningful: 0 = off all day, 24 = on all day.
   const cutoffLabel = (n) => String(n).padStart(2, "0") + ":00";
+  // v16.1.0: booking-defaults (duration tiers + running-late thresholds).
+  // Defensive fallback mirrors the hook's DEFAULT_BOOKING_DEFAULTS seed.
+  const bd = bookingDefaults && typeof bookingDefaults === "object"
+    ? bookingDefaults
+    : { t1Max: 1, t1Dur: 90, t2Max: 4, t2Dur: 90, t3Dur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20 };
+  const minsLabel = (n) => n + " min";
+  const guestsLabel = (n) => "≤ " + n;
   const cutoffNote =
     oc >= 24 ? "Optimizer keeps reshuffling all day, then resets at the start of the next day."
     : oc <= 0 ? "Optimizer stays off all day; resume it manually (timeline control or the “o” key)."
@@ -324,6 +331,74 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           </div>
         )}</AutoHeight>
       </Section>
+      {/* v16.1.0: Default booking durations — three party-size tiers with
+          EDITABLE band boundaries. Firebase-shared (settings/bookingDefaults).
+          Only NEW bookings pick up a change; existing ones keep their stored
+          duration. The hook's sanitizer enforces t1Max < t2Max; the steppers
+          disable at the same bounds so an invalid value can't be set. */}
+      <Collapsible
+        title="Booking durations"
+        subtitle="Default length of new bookings by party size. Shared across all devices."
+        summary={bd.t1Dur + " / " + bd.t2Dur + " / " + bd.t3Dur + " min"}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <HourStepper label="Parties up to" value={bd.t1Max} fmt={guestsLabel}
+              disableDec={bd.t1Max <= 1} disableInc={bd.t1Max >= bd.t2Max - 1}
+              onDec={() => onSaveBookingDefaults({ t1Max: bd.t1Max - 1 })} onInc={() => onSaveBookingDefaults({ t1Max: bd.t1Max + 1 })} />
+            <HourStepper label="stay for" value={bd.t1Dur} fmt={minsLabel}
+              disableDec={bd.t1Dur <= 15} disableInc={bd.t1Dur >= 360}
+              onDec={() => onSaveBookingDefaults({ t1Dur: bd.t1Dur - 15 })} onInc={() => onSaveBookingDefaults({ t1Dur: bd.t1Dur + 15 })} />
+          </div>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <HourStepper label="Parties up to" value={bd.t2Max} fmt={guestsLabel}
+              disableDec={bd.t2Max <= bd.t1Max + 1} disableInc={bd.t2Max >= 20}
+              onDec={() => onSaveBookingDefaults({ t2Max: bd.t2Max - 1 })} onInc={() => onSaveBookingDefaults({ t2Max: bd.t2Max + 1 })} />
+            <HourStepper label="stay for" value={bd.t2Dur} fmt={minsLabel}
+              disableDec={bd.t2Dur <= 15} disableInc={bd.t2Dur >= 360}
+              onDec={() => onSaveBookingDefaults({ t2Dur: bd.t2Dur - 15 })} onInc={() => onSaveBookingDefaults({ t2Dur: bd.t2Dur + 15 })} />
+          </div>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div style={{ alignSelf: "center", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", minWidth: 132 }}>
+              {"Larger parties (" + (bd.t2Max + 1) + "+)"}
+            </div>
+            <HourStepper label="stay for" value={bd.t3Dur} fmt={minsLabel}
+              disableDec={bd.t3Dur <= 15} disableInc={bd.t3Dur >= 360}
+              onDec={() => onSaveBookingDefaults({ t3Dur: bd.t3Dur - 15 })} onInc={() => onSaveBookingDefaults({ t3Dur: bd.t3Dur + 15 })} />
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>
+            {"1–" + bd.t1Max + " guests → " + bd.t1Dur + " min · " + (bd.t1Max + 1) + "–" + bd.t2Max + " → " + bd.t2Dur + " min · " + (bd.t2Max + 1) + "+ → " + bd.t3Dur + " min. Applies to new bookings only."}
+          </div>
+        </div>
+      </Collapsible>
+      {/* v16.1.0: Running late — amber highlight for a confirmed booking past
+          its time, then a one-tap "No show" offer. Firebase-shared
+          (settings/bookingDefaults, same node as the durations). */}
+      <Section style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Running late</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Highlight confirmed bookings past their time and offer a one-tap no-show. Shared across all devices.
+            </div>
+          </div>
+          <Toggle on={bd.lateEnabled} onClick={() => onSaveBookingDefaults({ lateEnabled: !bd.lateEnabled })} />
+        </div>
+        <AutoHeight>{bd.lateEnabled ? (
+          <div style={{ marginTop: 14, display: "flex", gap: 18, flexWrap: "wrap" }}>
+            <HourStepper label="Highlight after" value={bd.lateWarnMin} fmt={minsLabel}
+              disableDec={bd.lateWarnMin <= 5} disableInc={bd.lateWarnMin >= bd.lateNoShowMin - 5}
+              onDec={() => onSaveBookingDefaults({ lateWarnMin: bd.lateWarnMin - 5 })} onInc={() => onSaveBookingDefaults({ lateWarnMin: bd.lateWarnMin + 5 })} />
+            <HourStepper label="Offer no-show after" value={bd.lateNoShowMin} fmt={minsLabel}
+              disableDec={bd.lateNoShowMin <= bd.lateWarnMin + 5} disableInc={bd.lateNoShowMin >= 120}
+              onDec={() => onSaveBookingDefaults({ lateNoShowMin: bd.lateNoShowMin - 5 })} onInc={() => onSaveBookingDefaults({ lateNoShowMin: bd.lateNoShowMin + 5 })} />
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 12 }}>
+            Off — late bookings are not highlighted.
+          </div>
+        )}</AutoHeight>
+      </Section>
       <div style={{ padding: "10px 12px 12px", textAlign: "center" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.02em" }}>
           version {appVersion}
@@ -355,6 +430,8 @@ export function SettingsContent({
   optimizerCutoff,
   optimizerAutoSwitch,
   onSaveOptimizer,
+  bookingDefaults,
+  onSaveBookingDefaults,
   layout,
   onSaveLayout,
   bookings,
@@ -368,7 +445,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} />;
   } else if (tab === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} />;
   } else if (tab === "customers") {

@@ -23,11 +23,28 @@ import {
   KITCHEN_TABLE_LIMIT,
   hoursFor,
   ZONE_OF,
-  PRIORITIES
+  PRIORITIES,
+  DUR_TIERS
 } from "./constants";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
-export function getDur(s){return s<5?90:120;}
+// v16.1.0: default duration reads the DUR_TIERS live binding (settings/
+// bookingDefaults via useBookingDefaults). Seed = the historical literals
+// (≤4 → 90, else 120), so behaviour is unchanged until the setting is edited.
+// Read at call time — never capture DUR_TIERS into a local (live binding).
+export function getDur(s){return s<=DUR_TIERS.t1Max?DUR_TIERS.t1Dur:s<=DUR_TIERS.t2Max?DUR_TIERS.t2Dur:DUR_TIERS.t3Dur;}
+// v16.1.0: running-late state for a booking. Returns null | "warn" | "noshow".
+// Only a CONFIRMED booking on TODAY whose start time is ≥ warn/no-show minutes
+// in the past qualifies (seated/completed/cancelled never flag). cfg =
+// {lateEnabled, lateWarnMin, lateNoShowMin} from settings/bookingDefaults.
+export function lateState(b,todayStr,nowMins,cfg){
+  if(!cfg||!cfg.lateEnabled) return null;
+  if(!b||b.status!=="confirmed"||b.date!==todayStr) return null;
+  var lateBy=nowMins-toMins(b.time);
+  if(lateBy>=cfg.lateNoShowMin) return "noshow";
+  if(lateBy>=cfg.lateWarnMin) return "warn";
+  return null;
+}
 export function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
 export function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}

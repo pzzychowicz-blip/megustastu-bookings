@@ -3534,3 +3534,58 @@ accepted as out of threat model (staff-only app; the threat is our own stale wri
 two firebase/database module instances (the ?v= hash matters in Vite dev) corrupts the SDK's
 in-memory write tree — probe with the app's exact dep URL. Remaining: PROD rules after merge +
 device refresh.
+
+## v16.0.0 -> v16.1.0 -- Running-late flag + configurable booking durations
+Date: 2026-07-07
+Branch: feat/v16.1.0-late-flag-and-durations
+Files: src/lib/constants.js, src/lib/booking-logic.js, src/hooks/useBookingDefaults.js (new),
+src/App.jsx, src/components/TimelineView.jsx, src/components/ListView.jsx,
+src/components/Settings.jsx, database.rules.json, database.rules.README.md, CLAUDE.md
+
+Two staff-facing features sharing ONE new Firebase node, `settings/bookingDefaults` (5th
+settings node, revGuard CAS + a `bookingDefaultsRev` rule pair — the v16.0.0 rule of law):
+
+1. Configurable default booking durations. getDur() no longer hard-codes `size<5?90:120`;
+   it reads a new DUR_TIERS live binding (constants.js, setDurTiers — the OPEN/CLOSE/setLayout
+   mechanism), fed per snapshot by the new useBookingDefaults hook (clone of
+   useOptimizerSettings: loaded-ref guard + writeWithRev). Three tiers with EDITABLE band
+   boundaries: size <= t1Max -> t1Dur, <= t2Max -> t2Dur, else t3Dur. Seed = 1/90, 4/90, 120 —
+   byte-identical to the old literals, so an absent node is a no-op. Durations clamp 15–360
+   step 15; sanitizer enforces t1Max < t2Max. getDur's signature is unchanged, so all ~15 call
+   sites are untouched; existing bookings keep their stored duration/originalDuration
+   (Patryk-confirmed: new bookings only). NB the old "60 min for 1 person" belief was wrong —
+   the code always gave solo diners 90; the seed keeps current behaviour (Patryk's pick).
+
+2. Running-late flag. New pure lateState(b, todayStr, nowMins, cfg) in booking-logic.js ->
+   null | "warn" | "noshow": only TODAY'S CONFIRMED bookings past their start time qualify.
+   App.jsx derives lateMap (IIFE sibling of overlapWarnings, recomputed on the 15s tick) and
+   threads it to both views + a new in-flow "Running late" banner (Reveal, overlap-banner
+   pattern). "warn" (default 15 min, editable 5–115 step 5) = amber border on the timeline
+   block + list card (existing --tl-block-warn-soon / --card-warn-border tokens; seated-
+   overstay warnings keep precedence) + a "N min late" list tag. "noshow" (default 20, editable,
+   sanitizer enforces warn < noShow) additionally offers ONE-TAP "No show" in three places:
+   the banner row, the list card's right action group, and the timeline quick-status popup
+   (confirmed + noshow-stage only) — all calling the existing doCancelBooking(id, true)
+   (status cancelled + noShow flag + history/notes; flash gated on the save boolean as always).
+   Master toggle lateEnabled kills the whole feature (highlights + banner ease out).
+
+Settings -> General gains two sections: "Booking durations" (Collapsible; three rows of
+HourStepper pairs reusing the existing stepper atom via its fmt prop — guests "≤ N" / minutes
+"N min"; steppers disable at the sanitizer's invariant bounds) and "Running late" (Toggle +
+two minute steppers, AutoHeight reveal — the Auto-optimizer section's shape).
+
+Rules: database.rules.json adds the bookingDefaults/bookingDefaultsRev pair (copy of the
+optimizer pair). Deploy is rolling-safe, app first, rules second; pasting to DEV then PROD is
+Patryk's manual console step (README v16.1.0 note).
+
+Build: passes; main bundle 698.70 kB / gzip 193.64 kB.
+
+Verified live in DEV (Preview bridge, logged in): Settings sections render + persist (t1Dur
+90->105 echoed, summary line updates); booking form auto-duration follows the tiers live
+(size 1 -> 105, 2 -> 90, 6 -> 120) then reverted to 90/90/120; late flag exercised by faking
+the clock to 13:39 against a 13:00 confirmed booking — amber timeline border, "Running late"
+banner with "Late Test (13:00) — 40 min late" + one-tap No show, tap cancels the booking; a
+non-late today booking shows no highlight (negative test). Side-note: the 13-hour clock jump
+tripped the v15.2.0 heartbeat freshness gate (expected — it IS a fake sleep), so the no-show
+write was held + shown optimistically; that's the stale-recovery arc working as designed, not
+a feature bug. Test booking deleted; DEV data clean. No console errors.
