@@ -342,24 +342,30 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
         summary={bd.t1Dur + " / " + bd.t2Dur + " / " + bd.t3Dur + " min"}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
+          {/* Fixed-width first column so the "stay for" steppers of all three
+              rows align vertically (row 3's label sits in the same column). */}
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <HourStepper label="Parties up to" value={bd.t1Max} fmt={guestsLabel}
-              disableDec={bd.t1Max <= 1} disableInc={bd.t1Max >= bd.t2Max - 1}
-              onDec={() => onSaveBookingDefaults({ t1Max: bd.t1Max - 1 })} onInc={() => onSaveBookingDefaults({ t1Max: bd.t1Max + 1 })} />
+            <div style={{ width: 150 }}>
+              <HourStepper label="Parties up to" value={bd.t1Max} fmt={guestsLabel}
+                disableDec={bd.t1Max <= 1} disableInc={bd.t1Max >= bd.t2Max - 1}
+                onDec={() => onSaveBookingDefaults({ t1Max: bd.t1Max - 1 })} onInc={() => onSaveBookingDefaults({ t1Max: bd.t1Max + 1 })} />
+            </div>
             <HourStepper label="stay for" value={bd.t1Dur} fmt={minsLabel}
               disableDec={bd.t1Dur <= 15} disableInc={bd.t1Dur >= 360}
               onDec={() => onSaveBookingDefaults({ t1Dur: bd.t1Dur - 15 })} onInc={() => onSaveBookingDefaults({ t1Dur: bd.t1Dur + 15 })} />
           </div>
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <HourStepper label="Parties up to" value={bd.t2Max} fmt={guestsLabel}
-              disableDec={bd.t2Max <= bd.t1Max + 1} disableInc={bd.t2Max >= 20}
-              onDec={() => onSaveBookingDefaults({ t2Max: bd.t2Max - 1 })} onInc={() => onSaveBookingDefaults({ t2Max: bd.t2Max + 1 })} />
+            <div style={{ width: 150 }}>
+              <HourStepper label="Parties up to" value={bd.t2Max} fmt={guestsLabel}
+                disableDec={bd.t2Max <= bd.t1Max + 1} disableInc={bd.t2Max >= 20}
+                onDec={() => onSaveBookingDefaults({ t2Max: bd.t2Max - 1 })} onInc={() => onSaveBookingDefaults({ t2Max: bd.t2Max + 1 })} />
+            </div>
             <HourStepper label="stay for" value={bd.t2Dur} fmt={minsLabel}
               disableDec={bd.t2Dur <= 15} disableInc={bd.t2Dur >= 360}
               onDec={() => onSaveBookingDefaults({ t2Dur: bd.t2Dur - 15 })} onInc={() => onSaveBookingDefaults({ t2Dur: bd.t2Dur + 15 })} />
           </div>
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <div style={{ alignSelf: "center", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", minWidth: 132 }}>
+            <div style={{ width: 150, height: 38, display: "flex", alignItems: "center", fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>
               {"Larger parties (" + (bd.t2Max + 1) + "+)"}
             </div>
             <HourStepper label="stay for" value={bd.t3Dur} fmt={minsLabel}
