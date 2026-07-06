@@ -23,6 +23,7 @@ import { ref, onValue, set, get, update } from "firebase/database";
 import { db } from "../firebase";
 import { sanitizeAll, toMins, bookingsAfterAction, histEntry } from "../lib/booking-logic";
 import { hoursFor } from "../lib/constants";
+import { attachRev, writeWithRev } from "../lib/revGuard";
 
 // v15.2.0: heartbeat-gap threshold for the freshness/resync gate. A foreground
 // tab ticks the heartbeat every 10s; a backgrounded tab's timers throttle to
@@ -110,6 +111,20 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // stamp is monotonic-per-device AND always above the booking's last-seen server
   // value, so it survives clock skew between devices and StrictMode's double-write.
   const lastStampRef=useRef(0); // highest updatedAt this device has issued (monotonic)
+  // v16.0.0 (stale-overwrite protection): per-booking COMPARE-AND-SWAP. Every
+  // written child also carries `baseUpdatedAt` — the updatedAt of the version
+  // this device BASED its write on (from local `prev`, i.e. the last server echo
+  // it saw). The Security Rule requires base === the stored updatedAt, so a
+  // device holding a stale snapshot (sleep, zombie socket, offline-queue flush)
+  // is rejected server-side no matter what its wall clock says — the hole the
+  // 2026-07-05 incident exposed: the old ">" rule let any live-clock device
+  // overwrite content it never saw. `lastPatchSigRef` dedupes StrictMode's dev
+  // double-dispatch (same patch twice = the 2nd base is already consumed → it
+  // would self-reject + resync-churn on every dev write; an identical patch
+  // within the window IS the same write, so skipping it is prod-safe).
+  const lastPatchSigRef=useRef({sig:"",at:0});
+  // v16.0.0: revision CAS for the whole-node tableBlocks (see lib/revGuard.js).
+  const blocksRevRef=useRef(0);
   // True while the local snapshot is still the LEGACY single-array shape (migration
   // to keyed children not yet echoed). Per-child writes are held until it clears, so
   // a string-keyed child is never mixed into the integer-indexed array.
@@ -151,7 +166,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   function resync(){
     if(resyncInFlightRef.current||!isConnectedRef.current) return;
     resyncInFlightRef.current=true;
-    Promise.all([get(ref(db,"bookings")),get(ref(db,"tableBlocks"))]).then(function(snaps){
+    Promise.all([get(ref(db,"bookings")),get(ref(db,"tableBlocks")),get(ref(db,"tableBlocksRev"))]).then(function(snaps){
       const bVal=snaps[0].val();
       arrayShapeRef.current=Array.isArray(bVal); // v15.5.0: keep the migration/shape gate fresh
       const bArr=bVal?sanitizeAll(bVal):[];
@@ -160,6 +175,10 @@ export function usePersistence({ autoOptimizer, nowMins }){
       const tVal=snaps[1].val();
       if(tVal){const a=Array.isArray(tVal)?tVal:Object.values(tVal);setTableBlocks(a.filter(Boolean));}
       else setTableBlocks([]);
+      // v16.0.0: re-anchor the blocks revision-CAS ref to the true server value —
+      // the rev onValue may have been dead through the stale window.
+      const rVal=snaps[2].val();
+      blocksRevRef.current=typeof rVal==="number"?rVal:0;
       clearStale();
       // v15.4.0/v15.6.0: replay any held/blocked writes, now on fresh data (flicker-
       // free — batched with the setBookings above into one commit).
@@ -176,6 +195,22 @@ export function usePersistence({ autoOptimizer, nowMins }){
     staleRef.current=true;
     setResyncing(true);
     resync();
+  }
+  // v16.0.0 (wake-race fix): a heartbeat-GAP trip means the event loop was frozen
+  // (OS sleep) — and `isConnectedRef` still holds its PRE-SLEEP value (true),
+  // because the .info/connected listener couldn't fire while frozen. Trusting it
+  // let resync()'s get() run before the SDK noticed the dead socket, potentially
+  // resolve from the LOCAL CACHE, "succeed" with stale data, and clear the gate —
+  // after which the auto-effects wrote the stale snapshot freely (the 2026-07-05
+  // incident's client-side trigger). So a gap trip now RESETS the ref: resync()
+  // waits for a FRESH `.info/connected: true` from the SDK (which re-fires after
+  // a real sleep — the socket provably died) before reading. Escape hatches if
+  // the socket somehow survived: any live onValue snapshot clears the stale gate,
+  // and the reconnect handler re-runs resync(). Used ONLY for gap trips — a
+  // server write-rejection keeps its live connection and calls markStale directly.
+  function gapTrip(){
+    isConnectedRef.current=false;
+    markStale();
   }
   // Firebase save helpers — write-on-action only (prevents multi-device data corruption).
   // GUARDED: will refuse to write until Firebase has sent us the initial snapshot.
@@ -195,7 +230,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
     // snapshot may be stale, so a frozen tab's stale data never lands on the server.
     // This is NOT a red error: a user write is PARKED for auto-replay on freshly-
     // resynced data (resync() drains the queue), and (v15.6.0) shown optimistically.
-    if(Date.now()-lastBeatRef.current>STALE_GAP_MS) markStale();
+    if(Date.now()-lastBeatRef.current>STALE_GAP_MS) gapTrip();
     if(staleRef.current){
       console.warn("[SAFE] bookings write held — local data may be stale; queued for resync + retry, shown optimistically.");
       if(typeof next==="function"&&!isSilent){
@@ -220,10 +255,14 @@ export function usePersistence({ autoOptimizer, nowMins }){
     // own last-seen server value (survives cross-device clock skew: a behind-clock
     // device still writes a stamp the server will accept). Returns a copy — never
     // mutates React state; the real value lands back via the onValue echo.
+    // v16.0.0: also carries `baseUpdatedAt` (the CAS base — see the ref block
+    // above). Per-write metadata only: `sanitize` deliberately does NOT whitelist
+    // it, so it never enters app state; each write overwrites the whole child,
+    // refreshing the stored copy.
     function stampForWrite(b,old){
       const t=Math.max(Date.now(),(old&&Number(old.updatedAt)||0)+1,lastStampRef.current+1);
       lastStampRef.current=t;
-      return Object.assign({},b,{updatedAt:t});
+      return Object.assign({},b,{updatedAt:t,baseUpdatedAt:old?(Number(old.updatedAt)||0):0});
     }
     // Diff prev vs computed → a multi-path patch of ONLY changed children
     // ({id: stampedBooking}) plus deletions ({id: null}). Empty patch ⇒ no write.
@@ -269,6 +308,17 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // update is refused) → resync + replay the function on fresh data (v15.4.0).
       const patch=buildPatch(prev,computed);
       if(!Object.keys(patch).length) return; // nothing actually changed — skip the write
+      // v16.0.0: StrictMode dedupe — the dev double-invoked updater calls persist()
+      // twice with the same prev/computed. The two patches differ ONLY in their
+      // fresh `updatedAt` stamps (contentKey excludes those, and both carry the
+      // same content + the same consumed `baseUpdatedAt`), so an identical
+      // signature within the window is the SAME write: dispatching it again would
+      // be server-rejected by the CAS (base already consumed) → resync churn on
+      // every dev write. Skipping a byte-identical re-dispatch is prod-safe.
+      const sig=Object.keys(patch).sort().map(function(id){return id+"="+(patch[id]===null?"null":contentKey(patch[id]));}).join("|");
+      const nowMs=Date.now();
+      if(sig===lastPatchSigRef.current.sig&&nowMs-lastPatchSigRef.current.at<2000) return;
+      lastPatchSigRef.current={sig:sig,at:nowMs};
       update(ref(db,"bookings"),patch).catch(function(){
         console.warn("[SAFE] bookings write rejected by server (stale per-booking revision) — resyncing + retry.");
         if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN});
@@ -290,7 +340,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // (rare, low-stakes); on a stale-block the caller simply re-does the action.
   function saveBlocks(next,isSilent){
     // v15.2.0/v15.4.0: same staleness gate as saveBookings — held, not errored.
-    if(Date.now()-lastBeatRef.current>STALE_GAP_MS) markStale();
+    if(Date.now()-lastBeatRef.current>STALE_GAP_MS) gapTrip();
     if(staleRef.current){
       console.warn("[SAFE] tableBlocks write held — local data may be stale; resyncing first.");
       markStale();
@@ -301,7 +351,12 @@ export function usePersistence({ autoOptimizer, nowMins }){
         console.warn("[SAFE] Refused to write tableBlocks — initial read has not completed yet.");
         return;
       }
-      set(ref(db,"tableBlocks"),computed).catch(function(){});
+      // v16.0.0: revision-CAS write (lib/revGuard.js) — a stale device's rev is
+      // behind the server's, so its overwrite is rejected server-side; the SDK's
+      // rollback echo then restores local state via the onValue listeners.
+      writeWithRev("tableBlocks",computed,blocksRevRef,function(){
+        if(!isSilent) setWriteWarning("Couldn't save — this device's data was out of date and has been refreshed. Please redo the change.");
+      });
     }
     if(typeof next==="function"){
       setTableBlocks(function(prev){const computed=next(prev);persist(computed);return computed;});
@@ -362,6 +417,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
     });
     return unsub;
   },[]);
+  // v16.0.0: keep the tableBlocks revision-CAS ref anchored to the server value
+  // (also re-anchors after a rejected write's rollback echo).
+  useEffect(function(){ return attachRev("tableBlocks",blocksRevRef); },[]);
   // v15.5.0: the v15.3.0 `bookingsRev` listener was removed — the global revision
   // counter is replaced by per-booking `updatedAt` stamps (see the write-model note
   // above). The legacy `bookingsRev` node, if present, is now ignored (harmless).
@@ -409,9 +467,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
     const t=setInterval(function(){
       const gap=Date.now()-lastBeatRef.current;
       lastBeatRef.current=Date.now();
-      if(gap>STALE_GAP_MS) markStale();
+      if(gap>STALE_GAP_MS) gapTrip();
     },10000);
-    function onResume(){ if(Date.now()-lastBeatRef.current>STALE_GAP_MS) markStale(); }
+    function onResume(){ if(Date.now()-lastBeatRef.current>STALE_GAP_MS) gapTrip(); }
     function onVis(){ if(document.visibilityState==="visible") onResume(); }
     window.addEventListener("focus",onResume);
     window.addEventListener("pageshow",onResume);

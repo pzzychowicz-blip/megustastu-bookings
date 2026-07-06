@@ -17,6 +17,11 @@
          table chips) are RGB-channel triplets composed rgba(var(--…-rgb), a). -->
     <style>
       :root {
+        /* v16.0.0: the ONE app font stack — single source of truth. Previously
+           duplicated inline on the App/LoginScreen root wrappers; those now
+           read this token (deliberate exception: the Kbd keycap atom stays
+           monospace by design). */
+        --font-app: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
         /* App background (6-stop glass gradient) */
         --bg-app: linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%);
         /* Core surfaces */
@@ -273,7 +278,16 @@
         background: var(--bg-app);
         min-height: 100dvh;
         color: var(--text-primary);
+        font-family: var(--font-app);
         -webkit-font-smoothing: antialiased;
+      }
+      /* v16.0.0: form controls do NOT inherit font-family per the CSS spec —
+         they fall back to UA defaults (textarea = monospace in some browsers,
+         which made the Notes field visibly mismatch the app). Force every
+         control to inherit the app font. The Kbd atom overrides this inline
+         (monospace keycap — intentional). */
+      input, textarea, select, button {
+        font-family: inherit;
       }
       /* v14.3.0: .mgt-hover-scale hover-lift — ported from MGT Scheduling so
          both apps share one hover identity. Opt-in per element via
@@ -356,10 +370,13 @@
       .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
 
       /* v15.8.0 animation pass #2. */
-      /* Confirmed→Seated: the seated colour is revealed right→left (the confirmed
-         overlay is clipped away from its right edge). */
-      @keyframes mgt-wipe-rtl { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 100% 0 0); } }
-      .mgt-wipe-rtl { animation: mgt-wipe-rtl 380ms ease-out both; }
+      /* Status-change colour wipe (v15.9.0: unified left→right everywhere — List
+         card, Edit-booking Status flash, timeline block — and slowed 380→760ms).
+         The overlay of the old/new colour is clipped away from its LEFT edge, so
+         the reveal sweeps left→right. NB the timeline's overlay window
+         (__statusAnims `until` in TimelineView) must stay ≥ this duration. */
+      @keyframes mgt-wipe-ltr { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }
+      .mgt-wipe-ltr { animation: mgt-wipe-ltr 760ms ease-out both; }
       /* Seated→Completed: the old (seated) colour overlay fades out, revealing completed. */
       @keyframes mgt-fade-overlay { from { opacity: 1; } to { opacity: 0; } }
       .mgt-fade-overlay { animation: mgt-fade-overlay 360ms ease-out both; }

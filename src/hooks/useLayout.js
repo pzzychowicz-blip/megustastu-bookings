@@ -19,9 +19,10 @@
 // join-groups, auto-combo caps, and cross-group combos — all via LayoutTabContent.
 
 import { useState, useRef, useEffect } from "react";
-import { ref, onValue, set } from "firebase/database";
+import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
-import { DEFAULT_LAYOUT, setLayout } from "../lib/constants";
+import { attachRev, writeWithRev } from "../lib/revGuard";
+import { DEFAULT_LAYOUT, setLayout, comboKey } from "../lib/constants";
 
 // Validate + clamp a layout config. Drops malformed/duplicate tables; coerces
 // capacity (1–20) and zone ("indoor"|"outdoor"); falls back to DEFAULT_LAYOUT
@@ -91,13 +92,64 @@ function sanitizeLayout(val){
     megaCombos.push({ ids: ids, cap: Math.max(1, Math.min(60, c)) });
   });
 
-  return { tables: tables, joinGroups: joinGroups, comboCaps: comboCaps, megaCombos: megaCombos, kitchenLimit: kitchenLimit };
+  // v15.9.0: priorities — the data-driven optimizer heuristics. WHOLE-OBJECT
+  // fallback only: an absent object (a legacy pre-v15.9.0 node) seeds from
+  // DEFAULT_LAYOUT.priorities; a present object with missing fields treats each
+  // field as EMPTY (never per-field default) so deliberately-cleared rule lists
+  // stay cleared — RTDB drops empty arrays, hence the `v` scalar presence marker.
+  // Every table reference is filtered to current ids; sizes clamp 1–99, weights 1–10.
+  const rawPri = (val.priorities && typeof val.priorities === "object") ? val.priorities : DEFAULT_LAYOUT.priorities;
+  const clampSize = function(n, d){
+    n = Math.round(Number(n));
+    if(!Number.isFinite(n)) n = d;
+    return Math.max(1, Math.min(99, n));
+  };
+  const bands = (Array.isArray(rawPri.bands) ? rawPri.bands : []).map(function(b){
+    if(!b || typeof b !== "object") return null;
+    const min = clampSize(b.min, 1);
+    const max = Math.max(min, clampSize(b.max, min));
+    const zo = [];
+    (Array.isArray(b.zoneOrder) ? b.zoneOrder : []).forEach(function(z){
+      if((z === "indoor" || z === "outdoor") && zo.indexOf(z) < 0) zo.push(z);
+    });
+    return { min: min, max: max,
+      prefer: (Array.isArray(b.prefer) ? b.prefer : []).map(String).filter(function(id){ return idSet[id]; }),
+      avoid: (Array.isArray(b.avoid) ? b.avoid : []).map(String).filter(function(id){ return idSet[id]; }),
+      zoneOrder: zo, combosFirst: !!b.combosFirst };
+  }).filter(Boolean);
+  const comboRules = (Array.isArray(rawPri.comboRules) ? rawPri.comboRules : []).map(function(r){
+    if(!r || typeof r !== "object" || !r.key) return null;
+    const ids = String(r.key).split("|");
+    if(!ids.length || !ids.every(function(id){ return idSet[id]; })) return null;
+    const min = clampSize(r.min, 1);
+    const max = Math.max(min, clampSize(r.max, min));
+    let w = Math.round(Number(r.weight));
+    if(!Number.isFinite(w)) w = 5;
+    return { key: comboKey(ids), min: min, max: max, weight: Math.max(1, Math.min(10, w)), avoid: !!r.avoid };
+  }).filter(Boolean);
+  const priorities = {
+    v: 1,
+    bands: bands,
+    comboRules: comboRules,
+    anchors: (Array.isArray(rawPri.anchors) ? rawPri.anchors : []).map(String).filter(function(id){ return idSet[id]; }),
+    swapRules: (Array.isArray(rawPri.swapRules) ? rawPri.swapRules : []).map(function(r){
+      if(!r || typeof r !== "object" || !idSet[String(r.table)]) return null;
+      return { table: String(r.table), fromSize: clampSize(r.fromSize, 4), toSize: clampSize(r.toSize, 2) };
+    }).filter(Boolean),
+    mixedRequire: (Array.isArray(rawPri.mixedRequire) ? rawPri.mixedRequire : []).map(String).filter(function(id){ return idSet[id]; })
+  };
+
+  return { tables: tables, joinGroups: joinGroups, comboCaps: comboCaps, megaCombos: megaCombos, kitchenLimit: kitchenLimit, priorities: priorities };
 }
 
 export function useLayout(){
   // Seeded with DEFAULT_LAYOUT (already applied to the bindings at import).
   const [layout, setLO] = useState(DEFAULT_LAYOUT);
   const loaded = useRef(false);
+  // v16.0.0: revision-CAS ref (lib/revGuard.js) — a stale device's overwrite is
+  // rejected server-side; the rollback echo restores state via onValue.
+  const revRef = useRef(0);
+  useEffect(function(){ return attachRev("settings/layout", revRef); }, []);
 
   useEffect(function(){
     const unsub = onValue(ref(db, "settings/layout"), function(snap){
@@ -127,7 +179,7 @@ export function useLayout(){
     }
     setLayout(cfg);
     setLO(cfg);
-    set(ref(db, "settings/layout"), cfg).catch(function(){});
+    writeWithRev("settings/layout", cfg, revRef);
   }
 
   return { layout, saveLayout };

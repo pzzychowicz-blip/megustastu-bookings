@@ -48,55 +48,15 @@ export const AUTO_ACK_TEXT = {
   es: "¡Gracias por su mensaje! Le contestaremos en breve.",
 };
 
-// Phone normalisation: strip all non-digits except a single leading +.
-// Used for matching customers across bookings and conversations — the same
-// normaliser must run everywhere so keys line up.
-export function normalizePhone(p) {
-  if (!p) return "";
-  const s = String(p).trim();
-  const hasPlus = s.charAt(0) === "+";
-  const digits = s.replace(/[^\d]/g, "");
-  return (hasPlus ? "+" : "") + digits;
-}
-
-// Pretty display phone (inserts a space after the country code for readability).
-export function formatPhone(p) {
-  if (!p) return "";
-  const n = normalizePhone(p);
-  if (n.length < 4) return n;
-  if (n.charAt(0) === "+") return n.slice(0, 3) + " " + n.slice(3);
-  return n;
-}
-
-// matchCustomerByPhone — look up a customer by phone across the bookings list.
-// Returns null if there's no match. Otherwise:
-//   name            — most recent booking's name (for display)
-//   count           — total bookings matched (all statuses, incl. the linked one)
-//   latestDate      — most recent booking date
-//   all             — all matched bookings, sorted by date desc
-//   regularCount    — bookings that count toward "regular" status: completed AND
-//                     not the currently linked booking. Confirmed/cancelled don't
-//                     count. Gates the "Regular · X past visits" chip.
-//   regularBookings — those bookings, sorted desc by date.
-// excludeBookingId is the conversation's acceptedBookingId (the linked booking),
-// excluded so a customer's first-ever booking doesn't trigger the regular chip.
-export function matchCustomerByPhone(phoneKey, bookings, excludeBookingId) {
-  if (!phoneKey || !Array.isArray(bookings)) return null;
-  const key = normalizePhone(phoneKey);
-  if (!key) return null;
-  const matches = bookings.filter((b) => b && b.phone && normalizePhone(b.phone) === key);
-  if (!matches.length) return null;
-  const sorted = matches.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  const regular = sorted.filter((b) => b.status === "completed" && (!excludeBookingId || b.id !== excludeBookingId));
-  return {
-    name: sorted[0].name,
-    count: matches.length,
-    latestDate: sorted[0].date,
-    all: sorted,
-    regularCount: regular.length,
-    regularBookings: regular,
-  };
-}
+// Phone-identity primitives — complementarity contract (applied at the v16.0.0
+// prod sync): `src/lib/customers.js` is now the ONE home of normalizePhone /
+// formatPhone / matchCustomerByPhone (ported verbatim from here; its
+// matchCustomerByPhone is a strict superset — adds noShowCount/noShowBookings,
+// which existing WA consumers ignore). Re-exported so every WA import path
+// keeps working. Never re-add local copies.
+// NB: the explicit .js extension is load-bearing — this module is ALSO imported
+// by the Node server side (api/_lib), where extensionless ESM specifiers fail.
+export { normalizePhone, formatPhone, matchCustomerByPhone } from "./customers.js";
 
 // Human-readable relative time ("2 min ago", "yesterday", "3 days ago").
 export function formatRelativeTime(ts) {

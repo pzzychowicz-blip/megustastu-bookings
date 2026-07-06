@@ -31,6 +31,7 @@
 import { useEffect, useState } from "react";
 import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder } from "../lib/booking-logic";
+import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
@@ -77,9 +78,10 @@ export function ListView({
       let changed = false;
       day.forEach(function (b) {
         const p = prev[b.id];
-        if (p && p !== b.status) { __listAnims[b.id] = { from: p, until: now + 700 }; changed = true; }
+        // v15.9.0: window 700→800ms so it outlives the slowed 760ms wipe keyframe.
+        if (p && p !== b.status) { __listAnims[b.id] = { from: p, until: now + 800 }; changed = true; }
       });
-      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 720); }
+      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 820); }
     }
     const m = {};
     day.forEach(function (b) { m[b.id] = b.status; });
@@ -91,6 +93,10 @@ export function ListView({
     return a && a.until > Date.now() ? a.from : null;
   }
   const flipRef = useFlip([active.map(function (b) { return b.id; }).join(",")]);
+
+  // v16.0.0: repeat no-show offender map (2+ past no-shows on this phone,
+  // counted across ALL dates — the full bookings prop, not just `day`).
+  const nsMap = noShowMap(bookings);
 
   function renderCard(b) {
         // v14 p1 (Issue 2 fix): end-time label is pinned to the scheduled plan
@@ -151,6 +157,11 @@ export function ListView({
         ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (
           <SmallTag label={"★ " + b.preferredTables.join("+")} style={{ background: "#0d9488", color: "var(--text-on-accent)", border: "none" }} />
+        ) : null;
+        // v16.0.0: repeat no-show offender chip (same threshold as the timeline ⚠).
+        const noShowCt = nsMap[normalizePhone(b.phone)] || 0;
+        const noShowTag = noShowCt >= 2 ? (
+          <SmallTag label={"⚠ no-show ×" + noShowCt} style={{ background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)" }} />
         ) : null;
 
         const notesEl = b.notes ? (
@@ -213,10 +224,11 @@ export function ListView({
             }}
           >
             {/* v15.8.0 cont.4: status-change colour wipe — fills the NEW (clicked)
-                status colour (green Seated, red Cancelled, …) sweeping right→left.
+                status colour (green Seated, red Cancelled, …) sweeping left→right
+                (direction flipped rtl→ltr in v15.9.0 on request).
                 `animFrom` is only the trigger flag; the colour is the new status. */}
             {animFrom ? (
-              <div className="mgt-wipe-rtl" style={{
+              <div className="mgt-wipe-ltr" style={{
                 position: "absolute", inset: 0, borderRadius: 16, pointerEvents: "none", zIndex: 0,
                 background: BLOCK_BG[b.status] || "transparent", opacity: 0.5
               }} />
@@ -235,6 +247,7 @@ export function ListView({
                 {manualTag}
                 {lockedTag}
                 {prefTag}
+                {noShowTag}
                 {durationTag}
               </div>
               <span style={{ fontSize: 14, fontWeight: 700, color: S.text }}>{b.time + "–" + end}</span>
