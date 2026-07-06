@@ -3514,3 +3514,23 @@ once under StrictMode (ref-mirror holds) with `remindersRev` counting; zero cons
 DEV test data reverted (rev siblings remain by design). The REJECTION path (rule enforcement)
 tests after Patryk applies the DEV rules — the recovery code itself is the unchanged
 v15.4.0–15.6.0 machinery.
+
+**DEV-rules verification (2026-07-06, rules applied by Patryk to the DEV console):** all six rule
+probes correct — a stale-base booking write with a FRESH wall clock (the incident class), a
+no-base write (pre-v16 shape), a non-advancing stamp, a whole-node `reminders` set() without a
+rev bump, and a stale-rev `tableBlocks` update are ALL `PERMISSION_DENIED`; a correct-base /
+correct-rev write is accepted. Normal app flows (create · seat · delete · blocks) all pass with
+zero `[SAFE]` refusals. **Full incident replay:** tab offline → offline status change queued →
+"tablet" edits the same booking server-side via REST (proper CAS) → reconnect: the stale flush is
+REJECTED, the app resyncs, the tablet's edit SURVIVES, and the offline status change is replayed
+on top (final: both changes present, stamps chained). Recovery produced a transient burst of
+~23 rejected silent auto-effect writes during the ~4s resync window (each rejection re-triggers
+the effects on the rollback echo until fresh data lands) — self-limiting (count frozen after),
+no data impact, roughly halved in prod (no StrictMode double-dispatch). Two probe-tooling notes,
+NOT app issues: (1) a raw update() at grandchild paths (`bookings/<id>/notes`) bypasses the $bid
+.validate (RTDB validates only at-and-below the written paths) — the app always writes whole
+children, where the rule runs; root ".write auth" grants can't be revoked deeper, so this is
+accepted as out of threat model (staff-only app; the threat is our own stale writes). (2) Mixing
+two firebase/database module instances (the ?v= hash matters in Vite dev) corrupts the SDK's
+in-memory write tree — probe with the app's exact dep URL. Remaining: PROD rules after merge +
+device refresh.
