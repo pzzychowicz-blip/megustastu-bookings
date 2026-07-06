@@ -45,8 +45,14 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
   const needed = booking.size || 2;
   const s = toMins(booking.time || "13:00");
   const e = s + (booking.duration || 90);
+  // v16.0.0 follow-up: completed bookings are excluded — a completed visit is
+  // over (its guests left; its duration is frozen at the completion moment), so
+  // it must neither read as busy NOR be swappable. This is what lets a seated
+  // booking move onto a table whose earlier party has been marked Completed
+  // (previously the two PAST windows overlapped and the grid showed it busy).
+  // Matches the optimizer, which already ignores completed via isActive.
   const otherBookings = bookings.filter((b) =>
-    b && b.id !== booking.id && b.date === booking.date && b.status !== "cancelled" && (b.tables || []).length > 0
+    b && b.id !== booking.id && b.date === booking.date && b.status !== "cancelled" && b.status !== "completed" && (b.tables || []).length > 0
   );
   const otherSlots = otherBookings.map((b) => ({
     tables: b.tables || [],

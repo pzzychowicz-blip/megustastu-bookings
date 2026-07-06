@@ -42,6 +42,7 @@ import {
   S, TBL, BTN, TIMELINE_TABLES, hoursFor
 } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
+import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, useFlip } from "./atoms";
 import { CogIcon } from "./Settings";
 
@@ -58,7 +59,7 @@ const __statusAnims = {};
 // module-level component the node persists, so `transition: left/width` eases a
 // reposition (seated-shift / reshuffle) and the wipe/fill overlays + long-press
 // work reliably. Former closures are now props.
-function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, onEdit, onManual, setQuickStatus }) {
+function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, noShows = 0, showChip = false, onEdit, onManual, setQuickStatus }) {
   const d = liveBarDur(b, nowMins);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -72,10 +73,29 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, onEdit, 
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
   const hasNote = b.notes && b.notes.trim();
+  // v16.0.0: repeat no-show offender marker (2+ past no-shows on this phone).
   const lbl = b.name + " (" + b.size + ")"
     + (isLocked(b) ? " [L]" : "")
     + (hasPrefT ? " ★" : "")
+    + (noShows >= 2 ? " ⚠" : "")
     + (warn && warn.overdue ? " !!" : "");
+  // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
+  // name. The show/hide decision (`showChip`) is made ONCE at the TimelineView
+  // level for the WHOLE day — all blocks show chips or none do (a mixed grid
+  // read messy in live QA). Wrapped in Presence so it slides in from the left
+  // and back out (the Reshuffle-button pattern) when a zoom change flips the
+  // decision, instead of popping. marginLeft clears the v15.8.2 dog-ear corner
+  // so a noted booking's fold never overlaps.
+  const timeChip = (
+    <Presence show={showChip} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={180} tag="span" style={{ pointerEvents: "none" }}>
+      <span style={{
+        flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: 5,
+        fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+        background: "rgba(255,255,255,0.25)", color: "var(--text-on-accent)",
+        pointerEvents: "none", position: "relative"
+      }}>{b.time}</span>
+    </Presence>
+  );
 
   // Per-instance refs for long-press detection.
   const pressTimer = useRef(null);
@@ -184,8 +204,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, onEdit, 
           </svg>
         </>
       ) : null}
+      {timeChip}
       <span style={{
-        flex: 1, padding: "0 8px", position: "relative",
+        flex: 1, padding: "0 8px 0 6px", position: "relative",
         fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
       }}>
@@ -223,6 +244,11 @@ export function TimelineView({
   const isToday = date === new Date().toISOString().slice(0, 10);
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const gridW = Math.max(320, totalMins * zoom * 1.2);
+  // v16.0.0: px-per-minute estimate for the time-chip decision (gridW is a
+  // lower bound — minWidth:100% can stretch wider — so the hide errs
+  // conservative) + the repeat-no-show map (full bookings list, all dates).
+  const pxPerMin = gridW / totalMins;
+  const nsMap = noShowMap(bookings);
 
   // ── Follow-now scroll synchronisation ────────────────────────────────────
   // When followNow is on (today only), keep the current minute ~30 min from
@@ -279,6 +305,19 @@ export function TimelineView({
   const unassigned = day.filter((b) =>
     b.status !== "completed" && (!(b.tables || []).length || b._conflict)
   );
+
+  // v16.0.0 follow-up: start-time chips are CONFIRMED-ONLY (a seated/completed
+  // party has arrived — the start time is no longer at-a-glance info, so those
+  // blocks never carry a chip) and ALL-OR-NOTHING across the day's CONFIRMED
+  // blocks — shown only when every confirmed block is wide enough that its name
+  // keeps ≥~55px after the chip (~42px) and the fixed "=" assign handle
+  // (~41px), i.e. ≥140px. A per-block decision left a mixed grid, which read
+  // messy in live QA; and scoping the every() to confirmed blocks means a
+  // status change (seated/completed durations shrink/stretch) can never kill
+  // the other bookings' chips (the reported bug). Each flip animates per block
+  // via Presence.
+  const confirmedDay = day.filter((b) => b.status === "confirmed");
+  const chipsOn = confirmedDay.length > 0 && confirmedDay.every((b) => liveBarDur(b, nowMins) * pxPerMin >= 140);
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
   // CSS left/width transition can't cover — the block re-parents into a new row) eases
@@ -527,7 +566,7 @@ export function TimelineView({
           return (
             <Fragment key={b.id}>
               {ghost}
-              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
+              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
             </Fragment>
           );
         })}
@@ -543,7 +582,7 @@ export function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
     </div>
   ) : null;
 

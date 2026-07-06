@@ -52,7 +52,7 @@ export function WalkinForm({
   error,
   liveBookings, bookings, tableBlocks, autoOptimizer,
   walkinNum, isMobile, nowMins = 0,
-  onSave, onClose
+  onSave, onClose, onAddToWaitlist
 }) {
   const wf = draft;
   const wSize = Number(wf.size) || 2;
@@ -69,10 +69,13 @@ export function WalkinForm({
   const wE = wS + wDur;
 
   // Build the "other slots" array for availability checks. Excludes
-  // cancelled bookings and any bookings without tables (those don't occupy
-  // anything). Then concat the table-blocks for the same date.
+  // cancelled AND (v16.0.0 follow-up) completed bookings — a completed visit
+  // is over, its table is free (mirrors ManualModal + the doSave guard; the
+  // optimizer already ignores completed via isActive) — plus any bookings
+  // without tables (those don't occupy anything). Then concat the
+  // table-blocks for the same date.
   const wOther = liveBookings
-    .filter((b) => b && b.date === wDate && b.status !== "cancelled" && (b.tables || []).length > 0)
+    .filter((b) => b && b.date === wDate && b.status !== "cancelled" && b.status !== "completed" && (b.tables || []).length > 0)
     .map((b) => ({
       tables: b.tables || [],
       s: toMins(b.time),
@@ -475,12 +478,27 @@ export function WalkinForm({
       />
 
       {wAutoCheck && wSel.length === 0 ? (
-        <AvailBanner
-          msg={"No tables available at " + wTime + "."}
-          sugg={wAutoCheck}
-          warn
-          onTapTime={(t) => setDraft({ ...wf, tables: [], time: t })}
-        />
+        <>
+          <AvailBanner
+            msg={"No tables available at " + wTime + "."}
+            sugg={wAutoCheck}
+            warn
+            onTapTime={(t) => setDraft({ ...wf, tables: [], time: t })}
+          />
+          {/* v16.0.0: nothing fits right now → offer the waitlist (today's date,
+              current draft time as the wanted time). */}
+          {onAddToWaitlist ? (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: -4, marginBottom: 12 }}>
+              <button
+                className="mgt-hover-scale"
+                style={mkBtn({ fontSize: 13, background: BTN.orange, minHeight: 40, padding: "8px 16px" })}
+                onClick={() => onAddToWaitlist()}
+              >
+                ⏳ Add to waitlist
+              </button>
+            </div>
+          ) : null}
+        </>
       ) : null}
       </AutoHeight>
     </Overlay>

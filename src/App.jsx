@@ -36,10 +36,12 @@ import {
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
   checkInefficent, verifyClean, findConflicts,
-  nowTime
+  nowTime,
+  trialFits, toTime
 } from "./lib/booking-logic";
 
 import { validateReminderDraft } from "./lib/reminders";
+import { normalizePhone } from "./lib/customers";
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
@@ -64,7 +66,7 @@ import { BlockModal }  from "./components/BlockModal";
 // needs SettingsContent). ReminderEditor (modal at z-index 250)
 // gets its own file because it's a top-level modal, mirroring how
 // ManualModal and BlockModal were treated in B2.
-import { SettingsContent }         from "./components/Settings";
+import { SettingsContent, SETTINGS_TABS } from "./components/Settings";
 import { ReminderEditor }          from "./components/ReminderEditor";
 
 // ── Phase B4 (v15-refactor): Timeline + List views ────────────────────────
@@ -167,6 +169,14 @@ import { useAutoOptimizer } from "./hooks/useAutoOptimizer";
 // BookingApp.
 import { useWalkin } from "./hooks/useWalkin";
 
+// ── v16.0.0: Waitlist ───────────────────────────────────────────────────────
+// useWaitlist owns the Firebase `waitlist` node (6th collection, reminders-
+// pattern write-guard); WaitlistPanel is the Overlay listing the viewed day's
+// entries. Active matching (does a table currently fit each entry?) is a
+// BookingApp effect → `waitAvail` state, derived via trialFits, not persisted.
+import { useWaitlist } from "./hooks/useWaitlist";
+import { WaitlistPanel } from "./components/WaitlistPanel";
+
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
 // Module-level identity record. Survives bundling/minification — the strings
@@ -175,7 +185,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"15.9.0",
+  version:"16.0.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -530,6 +540,18 @@ function BookingApp(){
     deleteReminder, toggleReminderActive,
     reminderBanners,
   } = useReminders({ nowMins, setWriteWarning });
+  // ── v16.0.0: Waitlist state ─────────────────────────────────────────────────
+  const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
+  const [showWaitlist, setShowWaitlist] = useState(false);
+  // waitAvail: {entryId: {tables, time}} for entries a table CURRENTLY fits
+  // (recomputed by an effect below — deliberately state, not a render-time
+  // derivation, so the trialFits scans run only when the inputs change, not
+  // on every 15s clock re-render).
+  const [waitAvail, setWaitAvail] = useState({});
+  const [waitFreeToast, setWaitFreeToast] = useState(null); // {name,size,time}
+  const [waitAddedShown, setWaitAddedShown] = useState(false);
+  const prevWaitAvailRef = useRef(null);   // previous available-id set (transition detect)
+  const pendingWaitlistRef = useRef(null); // entry id being converted via Book
   // Derived: bookings with seated-today durations synced to live time.
   // Used by form/walk-in availability checks so they match what bookingsAfterAction
   // will see on save.
@@ -656,8 +678,130 @@ function BookingApp(){
     },true);
     if(ok&&changed) flashSyncFix();
   },[bookings,tableBlocks,autoOptimizer,resyncing]);
-  function openNew(){setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+
+  // ── v16.0.0: Waitlist active matching ───────────────────────────────────────
+  // For each waiting entry (date ≥ today, open day) find the FIRST time from
+  // "now" (today) / opening (future dates) where the party fits, via the same
+  // trialFits the booking form uses — so "Table free" here means a booking
+  // would really save. prefTime is tried first; otherwise a 15-min first-fit
+  // scan (stops at the first success, so an un-full day exits immediately).
+  // Runs as an effect keyed on the data + a 15-min clock bucket — NOT raw
+  // nowMins — so the scans don't re-run on every 15s tick. A transition to
+  // available (vs the previous pass) fires the one-shot green toast; the first
+  // pass after load never toasts (prevWaitAvailRef starts null).
+  const nowQuarter=Math.floor(nowMins/15);
+  useEffect(function(){
+    const todayStr=new Date().toISOString().slice(0,10);
+    const next={};
+    waitlist.forEach(function(w){
+      if(!w||w.status!=="waiting"||!w.date||w.date<todayStr) return;
+      const h=hoursFor(w.date);
+      if(h.closed) return;
+      const size=Number(w.size)||2;
+      const dur=getDur(size);
+      const noResh=!optimizerActiveFor(w.date,autoOptimizer);
+      const fromM=w.date===todayStr?Math.max(nowMins,h.open*60):h.open*60;
+      // With a wanted time, only offers within ±90 min of it count as "free"
+      // (a 13:45 slot is no use to a party waiting for ~20:30); without one,
+      // any remaining time that day counts. The wanted time itself is tried
+      // first so the chip shows it exactly when it fits.
+      let scanLo=Math.ceil(fromM/15)*15;
+      let scanHi=h.close*60-dur;
+      if(w.prefTime){
+        const sm=toMins(w.prefTime);
+        if(sm>=fromM&&sm+dur<=h.close*60){
+          const t=trialFits(liveBookings,w.date,w.prefTime,size,"auto",dur,tableBlocks,null,null,noResh);
+          if(t){next[w.id]={tables:t,time:w.prefTime};return;}
+        }
+        scanLo=Math.max(scanLo,Math.ceil((sm-90)/15)*15);
+        scanHi=Math.min(scanHi,sm+90);
+      }
+      for(let m=scanLo;m<=scanHi&&m<24*60;m+=15){
+        const t=trialFits(liveBookings,w.date,toTime(m),size,"auto",dur,tableBlocks,null,null,noResh);
+        if(t){next[w.id]={tables:t,time:toTime(m)};break;}
+      }
+    });
+    setWaitAvail(next);
+    const prev=prevWaitAvailRef.current;
+    prevWaitAvailRef.current=Object.keys(next);
+    if(prev!==null){
+      const fresh=Object.keys(next).filter(function(id){return prev.indexOf(id)===-1;});
+      if(fresh.length){
+        const w=waitlist.find(function(x){return x.id===fresh[0];});
+        if(w){
+          setWaitFreeToast({name:w.name,size:w.size,time:next[w.id].time});
+          setTimeout(function(){setWaitFreeToast(null);},6000);
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter]);
+
+  // Book a waitlist entry: pre-fill a fresh new-booking form from it (the
+  // returnOf pattern) and remember the entry id — doSave's new-booking path
+  // removes it once the booking is dispatched.
+  function bookFromWaitlist(w){
+    const avail=waitAvail[w.id];
+    setForm(Object.assign({},EMPTY_FORM,{
+      name:w.name||"",
+      phone:w.phone||"+",
+      date:w.date,
+      time:(avail&&avail.time)||w.prefTime||"",
+      size:w.size||2,
+      notes:w.notes||""
+    }));
+    setEditId(null);setError("");setSwapAffected(null);
+    pendingWaitlistRef.current=w.id;
+    setShowWaitlist(false);
+    setShowForm(true);
+  }
+  // "Add to waitlist" from the booking form's no-tables banner: capture the
+  // draft's fields as a waiting entry, close the form, flash the toast.
+  function addFormToWaitlist(){
+    const f=formRef.current;
+    addToWaitlist({
+      name:f.name||"",
+      phone:f.phone&&f.phone.trim()!=="+"?f.phone.trim():"",
+      size:Number(f.size)||2,
+      date:f.date||viewDate,
+      prefTime:f.time||null,
+      notes:f.notes||""
+    });
+    setShowForm(false);
+    setWaitAddedShown(true);
+    setTimeout(function(){setWaitAddedShown(false);},3000);
+  }
+  // Same from the walk-in form (today, current draft time).
+  function addWalkinToWaitlist(){
+    const wf=walkinForm||{};
+    addToWaitlist({
+      name:wf.name||"",
+      phone:wf.phone&&String(wf.phone).trim()!=="+"?String(wf.phone).trim():"",
+      size:Number(wf.size)||2,
+      date:new Date().toISOString().slice(0,10),
+      prefTime:wf.time||null,
+      notes:wf.notes||""
+    });
+    setShowWalkin(false);
+    setWaitAddedShown(true);
+    setTimeout(function(){setWaitAddedShown(false);},3000);
+  }
+
+  // v16.0.0: delete a customer = delete EVERY booking carrying their phone
+  // (customers are DERIVED from bookings — no separate collection) + their
+  // waitlist entries. Permanent (no backups on the Firebase free plan); the
+  // Customers tab arms an explicit confirm before calling this. Known edge:
+  // if the customer's bookings are the ENTIRE database, the empty-array
+  // write-guard refuses the delete — safety wins (document, don't bypass).
+  function deleteCustomer(phoneKey){
+    const key=normalizePhone(phoneKey);
+    if(!key) return;
+    saveBookings(function(prev){return prev.filter(function(b){return normalizePhone(b.phone)!==key;});});
+    saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
+  }
+
+  function openNew(){pendingWaitlistRef.current=null;setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  function openEdit(b){pendingWaitlistRef.current=null;setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -668,6 +812,7 @@ function BookingApp(){
   // without scheduledTime (sanitize also backfills it on load).
   function bookAgain(sourceBooking){
     if(!sourceBooking) return;
+    pendingWaitlistRef.current=null;
     const schedTime=sourceBooking.scheduledTime||sourceBooking.time||"13:00";
     setForm(Object.assign({},EMPTY_FORM,{
       name:sourceBooking.name||"",
@@ -729,7 +874,10 @@ function BookingApp(){
       const dur=f.customDur||getDur(size);
       const cleanPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";
       const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
-      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
+      // v16.0.0 follow-up: completed bookings excluded from the busy set — a
+      // completed visit is over, its table is free (mirrors ManualModal +
+      // WalkinForm; the optimizer already ignores completed via isActive).
+      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
       if(editId){
         const orig=bookings.find(function(b){return b.id===editId;});
         const origPt=(orig&&Array.isArray(orig.preferredTables))?orig.preferredTables.slice().sort().join(","):"";
@@ -871,6 +1019,10 @@ function BookingApp(){
         // show + auto-retry; flash only on a real save.
         const ok=saveBookings(buildNext);
         if(ok) flash();
+        // v16.0.0: this new booking converted a waitlist entry (Book from the
+        // panel) — remove the entry now the booking is dispatched (a held write
+        // shows optimistically + auto-retries, so the intent stands either way).
+        if(pendingWaitlistRef.current){removeFromWaitlist(pendingWaitlistRef.current);pendingWaitlistRef.current=null;}
         setShowForm(false);setViewDate(f.date);
       }
     }catch(err){setError("Error: "+err.message);}
@@ -1070,7 +1222,10 @@ function BookingApp(){
       if(K.showSettings&&!K.reminderEditor&&!K.confirmReminderDel){
         if(k==="ArrowLeft"||k==="ArrowRight"){
           e.preventDefault();
-          const TABS=["general","layout","reminders","shortcuts"];
+          // v16.0.0 follow-up: derived from SETTINGS_TABS (Settings.jsx — the ONE
+          // tab list) so a newly added tab can never be skipped here again. Do
+          // NOT inline a literal id list (that's how Customers got skipped).
+          const TABS=SETTINGS_TABS.map(function(t){return t.id;});
           let curIdx=TABS.indexOf(K.settingsTab);if(curIdx<0) curIdx=0;
           const newIdx=k==="ArrowLeft"?(curIdx-1+TABS.length)%TABS.length:(curIdx+1)%TABS.length;
           K.setSettingsTab(TABS[newIdx]);
@@ -1252,7 +1407,7 @@ function BookingApp(){
   }
   function doCancelBooking(id,noShow){
     const user=getUser();
-    const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.notes=(x.notes?x.notes+"\n":"")+"No show";return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
+    const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow){extra.noShow=true;extra.notes=(x.notes?x.notes+"\n":"")+"No show";}return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
     setConfirmCancel(null);if(ok) flash();
   }
   function manualAssign(bookingId,tables,locked,affected){
@@ -1338,6 +1493,10 @@ function BookingApp(){
       style={{background:"var(--app-reconnect-bg)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:toastShadow}}>✓ Reconnected — changes synced.</div>},
     {key:"syncfix",on:syncFix,node:<div
       style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
+    {key:"waitfree",on:!!waitFreeToast,node:<div
+      style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>{waitFreeToast?"Waitlist: a table for "+waitFreeToast.size+" now fits"+(waitFreeToast.time?" at "+waitFreeToast.time:"")+(waitFreeToast.name?" — "+waitFreeToast.name+" is waiting.":"."):""}</div>},
+    {key:"waitadded",on:waitAddedShown,node:<div
+      style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
     {key:"reshuffled",on:reshuffled,node:<div
       style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>},
     {key:"load",on:loadBannerShown,node:<div
@@ -1399,6 +1558,19 @@ function BookingApp(){
   }).filter(Boolean);
   const overlapBanner=overlapEntries.length?<div
     style={{background:"var(--app-overlap-bg)",border:"2px solid var(--app-overlap-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><div style={{fontSize:13,fontWeight:700,color:"var(--warn-text)",marginBottom:2}}>Overlap warnings</div>{overlapEntries}</div>:null;
+
+  // ── v16.0.0: viewed day's waitlist (badge button + panel) ───────────────────
+  // First-come-first-served order; dayWaitAvail turns the badge orange when a
+  // table currently fits at least one waiting party.
+  const dayWaiting=waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===viewDate;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);});
+  const dayWaitAvail=dayWaiting.some(function(w){return !!waitAvail[w.id];});
+  const waitlistModal=<ModalPresence show={showWaitlist}>{showWaitlist?<WaitlistPanel
+    entries={dayWaiting}
+    availability={waitAvail}
+    date={viewDate}
+    onBook={bookFromWaitlist}
+    onRemove={removeFromWaitlist}
+    onClose={function(){setShowWaitlist(false);}} />:null}</ModalPresence>;
 
   const mainView=view==="timeline"
     ?<TimelineView
@@ -1472,7 +1644,8 @@ function BookingApp(){
     isMobile={isMobile}
     nowMins={nowMins}
     onSave={saveWalkin}
-    onClose={function(){setShowWalkin(false);}} />:null}</ModalPresence>;
+    onClose={function(){setShowWalkin(false);}}
+    onAddToWaitlist={addWalkinToWaitlist} />:null}</ModalPresence>;
 
   const weekModal=<ModalPresence show={showWeek}>{showWeek?<WeekView
     bookings={bookings}
@@ -1482,7 +1655,7 @@ function BookingApp(){
 
   return (
     <div
-      style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
+      style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>Me Gustas Tú</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
               <button
                 key={v}
@@ -1515,7 +1688,13 @@ function BookingApp(){
               style={{fontSize:14,padding:"8px 10px",borderRadius:12,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center"}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){goToDate(new Date().toISOString().slice(0,10));}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
+              Today is visible); the flex:1 Summary sibling absorbs the width change.
+              Orange = a table currently fits someone waiting; slate = just waiting. */}
+            <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
+              onClick={function(){setShowWaitlist(true);}}
+              className="mgt-hover-scale"
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
@@ -1532,7 +1711,8 @@ function BookingApp(){
               onOpenPrefPicker={function(){setShowPrefPicker(true);}}
               onOpenManualAssign={function(target){setManualTarget(target);}}
               onOpenHistory={function(){setShowHistory(true);}}
-              onRequestCancel={function(id){setConfirmCancel(id);}} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}<ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              onRequestCancel={function(id){setConfirmCancel(id);}}
+              onAddToWaitlist={addFormToWaitlist} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}<ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}
@@ -1584,6 +1764,8 @@ function BookingApp(){
             layout={layout}
             onSaveLayout={saveLayout}
             bookings={bookings}
+            waitlist={waitlist}
+            onDeleteCustomer={deleteCustomer}
             tab={settingsTab}
             setTab={setSettingsTab}
             reminders={reminders}
@@ -1620,7 +1802,7 @@ export default function App(){
   },[]);
   if(checking) return (
     <div
-      style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif",color:S.text,fontSize:15}}>Loading...</div>
+      style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-app)",color:S.text,fontSize:15}}>Loading...</div>
   );
   if(!user) return <LoginScreen />;
   return <BookingApp />;

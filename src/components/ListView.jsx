@@ -31,6 +31,7 @@
 import { useEffect, useState } from "react";
 import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder } from "../lib/booking-logic";
+import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
@@ -93,6 +94,10 @@ export function ListView({
   }
   const flipRef = useFlip([active.map(function (b) { return b.id; }).join(",")]);
 
+  // v16.0.0: repeat no-show offender map (2+ past no-shows on this phone,
+  // counted across ALL dates — the full bookings prop, not just `day`).
+  const nsMap = noShowMap(bookings);
+
   function renderCard(b) {
         // v14 p1 (Issue 2 fix): end-time label is pinned to the scheduled plan
         // (time + duration) while the guest is within plan; once they overstay,
@@ -152,6 +157,11 @@ export function ListView({
         ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (
           <SmallTag label={"★ " + b.preferredTables.join("+")} style={{ background: "#0d9488", color: "var(--text-on-accent)", border: "none" }} />
+        ) : null;
+        // v16.0.0: repeat no-show offender chip (same threshold as the timeline ⚠).
+        const noShowCt = nsMap[normalizePhone(b.phone)] || 0;
+        const noShowTag = noShowCt >= 2 ? (
+          <SmallTag label={"⚠ no-show ×" + noShowCt} style={{ background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)" }} />
         ) : null;
 
         const notesEl = b.notes ? (
@@ -237,6 +247,7 @@ export function ListView({
                 {manualTag}
                 {lockedTag}
                 {prefTag}
+                {noShowTag}
                 {durationTag}
               </div>
               <span style={{ fontSize: 14, fontWeight: 700, color: S.text }}>{b.time + "–" + end}</span>

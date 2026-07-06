@@ -5,6 +5,55 @@ RTDB Security Rules. The rules are still applied **manually** via the Firebase c
 (Realtime Database → Rules → paste → Publish) — this file is the canonical copy to paste
 from and to diff against.
 
+## What the rules do (v16.0.0 — TRUE compare-and-swap, all collections)
+
+Motivated by the **2026-07-05 incident**: a laptop asleep at home woke and wrote its old
+snapshot over a night of tablet status changes. The v15.5.0 rule only required a booking's
+`updatedAt` to be **greater** than the stored one — and a stale device stamps writes with its
+current wall clock, which is always greater. Greater-than is last-writer-wins, not staleness
+protection. The v16.0.0 rules make every write prove **it was based on the data it is
+overwriting**:
+
+- **`bookings/$bid`** — each written child now also carries **`baseUpdatedAt`**: the
+  `updatedAt` of the version the device based its write on (its last server echo of that
+  booking). Overwrites require `baseUpdatedAt === stored updatedAt` (AND the stamp still
+  advances). A device holding a stale copy — sleep/wake, zombie socket, offline-queue flush —
+  is **rejected** no matter what its clock says; the app's existing rejection recovery
+  (resync + replay user intent on fresh data, v15.4.0–15.7.0) takes over. Creates (no stored
+  child) need only the stamp; deletes stay unconditional (a multi-path `null` cannot carry a
+  base — documented residual; deletes are explicit user actions).
+- **Every whole-node collection** — `tableBlocks`, `waitlist`, `reminders`, `reminderFires`,
+  and the four `settings/*` nodes — gets the proven **v15.3.0 revision CAS**: a sibling
+  `<name>Rev` integer, written atomically with the node (`update({node, nodeRev: base+1})`,
+  `src/lib/revGuard.js`), and a rule pair rejecting any write whose rev is not exactly
+  `stored+1`. A stale device's rev is behind, so its overwrite (or wipe — an empty array
+  deletes the node, whose own `.validate` is skipped, but the **rev child's** rule still
+  gates the atomic update) is rejected; the SDK's rollback echo restores its local state.
+
+## ⚠️ Deployment (v16.0.0) — app FIRST, rules SECOND (rolling-safe)
+
+Unlike v15.5.0 this is **not** a hard cutover, but order still matters:
+
+1. **Merge + deploy the app.** New writes carry `baseUpdatedAt` + the rev bumps; the
+   **current** rules accept both (extra fields are ignored; the whole-node collections have
+   no rules yet). Devices can be refreshed at leisure at this stage.
+2. **Refresh every device** (tablet + laptops + phones). Once the new rules are live, a
+   pre-v16.0.0 tab's writes are rejected (no `baseUpdatedAt`, no rev bump) — that IS the
+   protection working, but refreshing first avoids nuisance rejections.
+3. **Apply the new rules to DEV** (console → Rules → paste `database.rules.json` → Publish).
+   Verify on localhost: a normal edit/status change saves; blocks/waitlist/reminders/settings
+   writes create their `<name>Rev` siblings at 1 and count up; a forced stale write (wrong
+   base/rev) is rejected and the app self-recovers. Keep the prior rules text to revert.
+4. **Apply to PROD** at a quiet moment. Confirm one real edit on each device type.
+
+**Rollback:** paste the v15.5.0 rules back (git history of `database.rules.json`, commit
+`fe75308`) — the app keeps writing `baseUpdatedAt`/revs, which the old rule ignores. No data
+or shape change is involved; the rev siblings are harmless extra nodes.
+
+---
+
+# Historical: v15.5.0 rules (superseded by v16.0.0 above)
+
 ## What the rules do (v15.5.0 — per-booking-node conflict protection)
 
 `bookings` is now stored as a **keyed object** `/bookings/{id}` — one child per booking,

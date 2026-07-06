@@ -35,6 +35,10 @@ export function genId(){return Date.now().toString(36)+Math.random().toString(36
 
 // ── Booking sanitisation / diffing ────────────────────────────────────────────
 export function sanitize(b){if(!b||typeof b!=="object") return null;var t=b.time||"13:00";return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:t,scheduledTime:b.scheduledTime||t,size:Number(b.size)||2,duration:Number(b.duration)||90,originalDuration:Number(b.originalDuration)||Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],returnOf:b.returnOf||null,history:Array.isArray(b.history)?b.history:[],
+  // v16.0.0: no-show flag set by doCancelBooking(id,noShow=true). Whitelisted so
+  // it survives reads; legacy no-shows (history entry only) are counted by
+  // customers.js isNoShow's history fallback — no migration needed.
+  noShow:!!b.noShow,
   // v15.5.0: per-booking revision stamp for the per-node write model. Carried
   // through sanitise so it survives reads (this whitelist would otherwise drop
   // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.
@@ -227,7 +231,9 @@ export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excl
   var times=Array.from({length:(h.close-h.open)*4},function(_,i){return h.open*60+i*15;});
   var aroundM=toMins(around);
   var results=[];
-  var exSl=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});
+  // v16.0.0 follow-up: completed excluded — a completed visit's table is free
+  // (its duration is frozen at the completion moment; app-wide rule).
+  var exSl=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});
   if(blocks) exSl=exSl.concat(getBlockSlots(blocks,date));
   times.forEach(function(m){
     if(m===aroundM) return;
@@ -394,7 +400,8 @@ export function applySeatedShift(booking,nowM,allBookings){
   return {newTime:toTime(nowM),newDuration:scheduledEnd-nowM,oldTime:booking.time,direction:nowM<scheduledStart?"early":"late"};
 }
 export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
-  var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
+  // v16.0.0 follow-up: completed excluded — a completed visit's table is free.
+  var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
   if(blocks) slots=slots.concat(getBlockSlots(blocks,date));
   var s=toMins(time),e=s+dur;
   var pt=Array.isArray(prefTables)?prefTables:[];

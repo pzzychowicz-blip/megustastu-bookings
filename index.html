@@ -17,6 +17,11 @@
          table chips) are RGB-channel triplets composed rgba(var(--…-rgb), a). -->
     <style>
       :root {
+        /* v16.0.0: the ONE app font stack — single source of truth. Previously
+           duplicated inline on the App/LoginScreen root wrappers; those now
+           read this token (deliberate exception: the Kbd keycap atom stays
+           monospace by design). */
+        --font-app: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
         /* App background (6-stop glass gradient) */
         --bg-app: linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%);
         /* Core surfaces */
@@ -234,7 +239,16 @@
         background: var(--bg-app);
         min-height: 100dvh;
         color: var(--text-primary);
+        font-family: var(--font-app);
         -webkit-font-smoothing: antialiased;
+      }
+      /* v16.0.0: form controls do NOT inherit font-family per the CSS spec —
+         they fall back to UA defaults (textarea = monospace in some browsers,
+         which made the Notes field visibly mismatch the app). Force every
+         control to inherit the app font. The Kbd atom overrides this inline
+         (monospace keycap — intentional). */
+      input, textarea, select, button {
+        font-family: inherit;
       }
       /* v14.3.0: .mgt-hover-scale hover-lift — ported from MGT Scheduling so
          both apps share one hover identity. Opt-in per element via

@@ -3312,3 +3312,225 @@ flash, timeline block Confirmed→Seated) now sweep **left→right** and are ~50
 lifetimes were bumped 700→800ms (timeouts 720→820) so the longer keyframe is never cut off mid-wipe
 (an early unmount pops the last sliver of old colour). Verified live in DEV (only ltr@760ms in the
 sheet; form flash mid-anim left-inset growing; overlay outlives the keyframe; form closed unsaved).
+
+## v15.9.0 -> v16.0.0 -- Customer layer: phone-keyed guests, no-show tracking, waitlist, timeline time chip
+
+Date: 2026-07-05
+
+**Scope**: six user-requested features on one foundation — bookings become **phone-number-keyed**,
+so the app recognises a customer across bookings. Files: `src/lib/customers.js` (NEW — phone
+identity lib), `src/hooks/useWaitlist.js` (NEW — 6th collection), `src/components/WaitlistPanel.jsx`
+(NEW), `src/components/CustomersSettings.jsx` (NEW — Customers tab), `src/lib/booking-logic.js`
+(sanitize + `noShow`), `src/App.jsx` (cancel flag · waitlist wiring · deleteCustomer · version),
+`src/components/BookingFormModal.jsx` (autocomplete + chips + waitlist button), `WalkinForm.jsx`
+(waitlist button), `TimelineView.jsx` (time chip + ⚠), `ListView.jsx` (no-show tag),
+`Settings.jsx` (5th tab), `LoginScreen.jsx` + `index.html` (one-font fix). One branch
+(`feat/v16.0.0-customer-layer`), 6 phased commits, single PR — the v15.0.0 model.
+
+- **`src/lib/customers.js` — the shared foundation.** `normalizePhone`/`formatPhone`/
+  `matchCustomerByPhone` ported VERBATIM from the WA sandbox's `whatsapp.js` (complementarity
+  contract in the header: when the WA module merges, its whatsapp.js imports these from here —
+  one phone-identity primitive, never two). Extended: `isNoShow(b)` (the `noShow` flag OR a legacy
+  `history` entry `action:"no show"` — zero-migration backfill), `customerIndex(bookings)`,
+  `searchCustomers`, `noShowMap`. Customers are DERIVED from bookings — no separate collection.
+- **One app font (`--font-app`).** The stack moved from inline literals (App.jsx ×2, LoginScreen)
+  to a token in index.html + `body{font-family}` + **`input, textarea, select, button
+  { font-family: inherit }`** — form controls don't inherit font per the CSS spec, which is why the
+  Notes textarea rendered monospace. The Kbd keycap atom stays monospace by design.
+- **No-show tracking.** `doCancelBooking(id, noShow=true)` now sets `noShow:true` (whitelisted in
+  `sanitize`); history entry + notes append unchanged. Booking form chips (via
+  `matchCustomerByPhone(form.phone, bookings, editId)`): teal "Regular · X past visits"
+  (completed count, the WA chip language), neutral "1 no-show", amber "⚠ No-show ×N" at 2+.
+  Timeline block label gains " ⚠" and List cards an amber tag for 2+ offenders (`noShowMap`).
+- **Phone autocomplete.** ≥3 typed digits → dropdown under the phone field (opaque `--bg-sheet`
+  per the popover rule, ≤5 rows: name · phone · visits/no-show chips). Select fills name+phone and
+  (NEW bookings only) Book-Again-style size/preference/preferredTables prefill. Rows use
+  onMouseDown (beats the input's blur).
+- **Timeline start-time chip.** Compact translucent pill (`fontSize:9`, tabular-nums) before the
+  block name; auto-hidden while the block is under **140px** so the name always keeps ~55px after
+  the fixed "=" assign handle (~41px); `marginLeft` clears the v15.8.2 dog-ear.
+- **Waitlist (6th persisted collection, `waitlist`).** `useWaitlist` = reminders-pattern loaded-
+  guard, whole-array `set()`; auto-prunes past dates (silent). Entry: `{id,name,phone,size,date,
+  prefTime,notes,createdAt,status:"waiting"}`. "⏳ Add to waitlist" appears under the no-tables
+  banner (booking form, new only + walk-in). **Active matching** (BookingApp effect → `waitAvail`
+  state): per waiting entry, `trialFits` at `prefTime` first, else a 15-min first-fit scan — with a
+  wanted time the scan is clamped to **±90 min around it** (a 13:45 slot is no use to a party
+  waiting for ~20:30); no wanted time → the whole remaining day. Keyed on data + a 15-min clock
+  bucket (never the 15s tick). Transition-to-available fires a green toast (prev-id-set diff in a
+  ref; first pass never toasts). **"⏳ N" badge button lives in the Today slot** (Presence slide;
+  to Today's right when Today shows; the flex:1 Summary absorbs the width — Patryk's chosen spot),
+  orange when someone now fits. Panel = Overlay, FCFS rows, fits chip, **Book** (returnOf-style
+  prefill + `pendingWaitlistRef`, consumed in doSave's new path → entry removed) + two-tap Remove.
+- **⚠ GOTCHA fixed live: set()-inside-updater duplicated the entry.** Firebase fires local
+  listeners SYNCHRONOUSLY on `set()`; with the write inside the setState updater, the echo lands
+  mid-update and StrictMode re-applies the queued concat on the echo state — `[entry, entry]` was
+  PERSISTED. Fix = ref-mirror: compute from `waitlistRef.current`, then `setWaitlist` + `set()` as
+  plain statements. (This is memory/firebase-set-in-updater-doubling manifesting as real data
+  corruption, not just doubled writes. `useReminders` still carries the old shape — port this fix
+  if its adds ever double.)
+- **Settings → Customers tab (5th tab).** Search by name/phone over `customerIndex`; rows sorted
+  visits desc (top 50) with visits/no-shows/waitlist chips; expandable history (Reveal);
+  armed-confirm **"Delete customer & all data"** → `deleteCustomer(phoneKey)` in App = one
+  function-form `saveBookings` filter (per-node diff → child deletions) + silent waitlist filter.
+  Known edge (accepted): if the customer's bookings are the ENTIRE DB, the empty-array guard
+  refuses — safety wins.
+- **Deploy**: rolling — no rules/shape cutover. `waitlist` is a new node with no rule (client
+  guard only, like reminders); `noShow` rides inside each booking's per-$id node.
+
+`npm run build` ✅ — main bundle **191.27 kB gz** (186.91 at v15.9.0; +~4.4 kB for the customer
+lib + waitlist + Customers tab). Verified live in DEV end-to-end: font unified (textarea ===
+button computed family); autocomplete dropdown → select fills form + "Regular · 1 past visit";
+no-show cancel ×2 → amber "⚠ No-show ×2" chip + timeline " ⚠" + List tag (legacy history-only
+counting confirmed); time chip at 1x/2x incl. dog-ear coexistence + auto-hide; waitlist add via
+banner → toast + badge → panel (FCFS, fits chip "Table free · 21:00") → Book prefills (fits-time
++ size) → save removes entry → badge slides out; duplicate-entry bug reproduced, fixed,
+re-verified (exactly one node); Customers tab search → expand history → armed delete removes
+booking from timeline+DB+list; zero NEW console errors post-fix; DEV data reverted (test bookings
+and customers deleted via the new feature itself).
+
+### v16.0.0 follow-up commit — 4 live-QA fixes (2026-07-05, same version)
+
+Patryk's post-review bug list; all verified live in DEV. No version bump (same-version follow-up
+per the log discipline).
+
+1. **Timeline start-time chips: all-or-nothing + animated** (`TimelineView.jsx`). The per-block
+   ≥140px auto-hide left a MIXED grid (some blocks chipped, some not) — visually messy. The
+   decision moved up to TimelineView: `chipsOn = day.every(width ≥ 140px)` — every block shows
+   the chip or none does. The chip is now wrapped in `Presence` (`mgt-slide-in`/`mgt-slide-out`,
+   the Reshuffle-button pattern) so a zoom change slides it in from the left and back out instead
+   of popping. Name-span padding made constant (no layout flip during the exit animation).
+2. **Settings ←/→ skipped the Customers tab** (`App.jsx` keyboard nav). Root cause: a hand-copied
+   4-item tab-id list in the keydown handler that predated the 5th tab. Durable fix: new exported
+   **`SETTINGS_TABS`** in `Settings.jsx` — the ONE tab list — rendered by SettingsContent's TabBar
+   AND imported by App.jsx's arrow-nav (`SETTINGS_TABS.map(t=>t.id)`). A future tab added to the
+   list is automatically in the cycle; CLAUDE.md gotcha added so the list is never duplicated.
+3. **Customers-row hover lift clipped** (`CustomersSettings.jsx`). The row card had
+   `overflow:hidden`, which clipped the header's `.mgt-hover-scale` scale — the v15.8.0 "clip only
+   while animating" gotcha generalises to ANY container of a hover-lift, not just height
+   animators. Removed (no child paints edge-to-edge, so the rounded corners never needed it;
+   Reveal clips itself while animating). CLAUDE.md gotcha row generalised.
+4. **Completed booking blocked moving a seated party to its freed table.** Reported live: table A
+   finished (Seated→Completed), the still-seated table B asked to move there — the app refused
+   ("not available") or offered to displace the completed booking via Swap busy. Root cause: the
+   manual-move busy sets filtered only `status!=="cancelled"`, so a completed booking still
+   occupied its (past) window, and the mover's FULL window (from its original start) overlapped
+   it past-vs-past. Decision (AskUserQuestion): **completed = table free, everywhere** — matches
+   the optimizer, which already ignores completed via `isActive`; and the moved booking keeps its
+   true start/duration (the past-portion visual overlap with the completed bar is accepted as
+   history). Excluded `completed` from: `ManualModal` otherSlots (also makes it un-swappable),
+   `doSave`'s manual-assign guard (App.jsx), `WalkinForm` wOther, and booking-logic's
+   `findKitchenFriendlyTimes` exSl + `findFreeSlot` slots. `daySummary` deliberately unchanged
+   (completed are still covers served).
+
+`npm run build` ✅ — 191.25 kB gz (flat). Live QA: chip slide-in at 1.5×, slide-out at 1×, full
+unmount after the out-animation; Settings arrow cycle General→Layout→Customers→Reminders→
+Shortcuts→wrap; Customers card computed `overflow:visible`; end-to-end scenario replay (booking
+completed on 1A, seated booking on 1B, "=" → 1A selectable → assigned; completed bar preserved);
+zero new console errors; DEV test data reverted.
+
+### v16.0.0 follow-up commit #2 — clickable customer chips (2026-07-05, same version)
+
+The booking form's "Regular · X past visits" / no-show chips are now **clickable** and reveal
+the matching past-bookings list — the WA module's ConversationView Regular-chip disclosure
+ported onto app tokens (`BookingFormModal.jsx` only):
+
+- Chips became `<button>`s (hover-scale + press affordance) with the WA ▸/▾ suffix. Regular
+  reveals `regularBookings` ("Past bookings", suggest/teal family); the no-show chip (both the
+  neutral "1 no-show" and the amber "⚠ No-show ×N") reveals `noShowBookings` ("No-shows", warn
+  family). Rows = `date · time · size pax · status` (scheduledTime preferred), top 5 + a muted
+  "+N earlier" tail. Panel eases open/closed/switched via `Reveal` inside the existing
+  chips-Reveal wrapper.
+- `chipHist` state is **keyed by the normalized phone captured at click time** — editing the
+  phone (different customer) makes the panel close by itself, no reset effect needed. Clicking
+  the open chip closes; clicking the other chip switches lists.
+- Data was already there: `matchCustomerByPhone`'s v16.0.0 `regularBookings`/`noShowBookings`
+  (sorted desc). No lib/App change — pure component edit, rolling deploy.
+
+`npm run build` ✅ — 191.58 kB gz (+0.33). Live QA in DEV: Regular chip ▸→▾ reveals the completed
+visit; no-show chip reveals the cancelled no-show row; switching chips swaps panels; re-click
+closes (panel fully unmounts after the Reveal collapse); test customer created for the QA deleted
+via the Customers tab afterwards.
+
+### v16.0.0 follow-up commit #3 — time chips are confirmed-only (2026-07-06, same version)
+
+Live-caught bug: changing any booking's status made ALL time chips disappear. Cause: the
+all-or-nothing `day.every(width ≥ 140px)` spanned every status — a completed booking's duration
+is frozen at the completion moment (often a sliver, e.g. 18px), so one completion failed the
+every() and killed the whole day's chips at any zoom. New rule (Patryk's spec): chips belong to
+**Confirmed blocks only** — a seated/completed party has arrived, so its block never carries a
+chip (it slides out via the existing Presence on the status change) — and the all-or-nothing
+every() is scoped to the day's **confirmed** blocks, so seated/completed widths can never affect
+the others' chips. One-line-ish TimelineView change (`confirmedDay` filter + `showChip={chipsOn
+&& b.status==="confirmed"}` at both call sites).
+
+`npm run build` ✅ — 191.60 kB gz (flat). Live QA in DEV (2026-07-07 test day): two confirmed
+90-min bookings at 1.5× both chip; a 144px completed block shows none despite being wide enough;
+seating one booking slides ITS chip out while the other confirmed block keeps its chip (the
+reported repro); today's data (18px completed Javier blocks) no longer suppresses anything; test
+bookings deleted after.
+
+### v16.0.0 follow-up commit #4 — true compare-and-swap on every collection (2026-07-06, same version)
+
+Second stale-overwrite incident (2026-07-05): a laptop asleep at home woke and wrote its old
+snapshot over a night of tablet status changes — "statuses kept returning". Root cause: the
+v15.5.0 per-booking rule only required `updatedAt > stored` — and a stale device stamps with its
+current wall clock, which is ALWAYS greater. Greater-than is last-writer-wins, not staleness
+protection. Contributing client race: on wake, `resync()` trusted `isConnectedRef`, which still
+held its pre-sleep `true`, so its `get()` could be served from the local cache and clear the
+freshness gate with stale data. Planned jointly with Patryk (plan-mode + AskUserQuestion; scope
+= ALL collections).
+
+1. **Bookings — per-booking base-timestamp CAS.** Every written child now carries
+   `baseUpdatedAt` (the `updatedAt` of the version this device based its write on; 0 on create).
+   New rule: overwrites require `baseUpdatedAt === stored updatedAt` AND an advancing stamp.
+   A stale writer is rejected server-side regardless of clocks; the existing v15.4.0–15.7.0
+   rejection recovery (resync + replay intent on fresh data) takes over. `sanitize` deliberately
+   does NOT whitelist the field (per-write metadata). `lastPatchSigRef` dedupes StrictMode's
+   dev double-dispatch. Deletes stay unconditional (multi-path null can't carry a base —
+   documented residual).
+2. **Whole-node collections — revision CAS via new `src/lib/revGuard.js`.** `tableBlocks`,
+   `waitlist`, `reminders`, `reminderFires`, and the four `settings/*` nodes each get a sibling
+   `<name>Rev`; every write is an atomic `update({node, nodeRev: base+1})` and the rule pair
+   rejects a non-+1 rev (wipes covered: an empty array deletes the node, skipping its own
+   validate, but the REV child's rule still gates the atomic update). Recovery is free — the SDK
+   rolls back a rejected write and re-fires the node+rev listeners. Refs advance optimistically
+   (v15.3.0 technique). The `useReminders` conversion also PORTED THE REF-MIRROR FIX (its saves
+   no longer write inside the setState updater — the last carrier of the corruption-prone shape
+   from the gotcha table is retired).
+3. **Wake-race client fix (`gapTrip()`).** A heartbeat-gap trip now resets
+   `isConnectedRef=false` before `markStale()`, so `resync()` waits for a FRESH
+   `.info/connected: true` instead of trusting the frozen pre-sleep ref.
+
+`database.rules.json` rewritten (per-$id base check + 8 rev pairs; the old v15.5.0 text is in
+git at `fe75308` for rollback); `database.rules.README.md` gained the v16.0.0 section + a
+rolling-safe runbook (**app first, rules second** — old rules ignore the new fields; refresh all
+devices before applying rules; DEV test then PROD — Patryk's manual console step, pending).
+
+`npm run build` ✅ — 192.05 kB gz (+0.45). Live QA in DEV (current rules): booking create carries
+`baseUpdatedAt:0`; a status change chains base === previous stored stamp; block/unblock creates
+`tableBlocksRev` 1→2 (unblock deletes the node but still bumps the rev — the wipe case);
+dayShifts edit ×2 → `settings/dayShiftsRev` 1→2 (value reverted); reminder add persisted EXACTLY
+once under StrictMode (ref-mirror holds) with `remindersRev` counting; zero console errors; all
+DEV test data reverted (rev siblings remain by design). The REJECTION path (rule enforcement)
+tests after Patryk applies the DEV rules — the recovery code itself is the unchanged
+v15.4.0–15.6.0 machinery.
+
+**DEV-rules verification (2026-07-06, rules applied by Patryk to the DEV console):** all six rule
+probes correct — a stale-base booking write with a FRESH wall clock (the incident class), a
+no-base write (pre-v16 shape), a non-advancing stamp, a whole-node `reminders` set() without a
+rev bump, and a stale-rev `tableBlocks` update are ALL `PERMISSION_DENIED`; a correct-base /
+correct-rev write is accepted. Normal app flows (create · seat · delete · blocks) all pass with
+zero `[SAFE]` refusals. **Full incident replay:** tab offline → offline status change queued →
+"tablet" edits the same booking server-side via REST (proper CAS) → reconnect: the stale flush is
+REJECTED, the app resyncs, the tablet's edit SURVIVES, and the offline status change is replayed
+on top (final: both changes present, stamps chained). Recovery produced a transient burst of
+~23 rejected silent auto-effect writes during the ~4s resync window (each rejection re-triggers
+the effects on the rollback echo until fresh data lands) — self-limiting (count frozen after),
+no data impact, roughly halved in prod (no StrictMode double-dispatch). Two probe-tooling notes,
+NOT app issues: (1) a raw update() at grandchild paths (`bookings/<id>/notes`) bypasses the $bid
+.validate (RTDB validates only at-and-below the written paths) — the app always writes whole
+children, where the rule runs; root ".write auth" grants can't be revoked deeper, so this is
+accepted as out of threat model (staff-only app; the threat is our own stale writes). (2) Mixing
+two firebase/database module instances (the ?v= hash matters in Vite dev) corrupts the SDK's
+in-memory write tree — probe with the app's exact dep URL. Remaining: PROD rules after merge +
+device refresh.

@@ -20,8 +20,9 @@
 // the node. The empty-array guard doesn't apply (small object, not a collection).
 
 import { useState, useRef, useEffect } from "react";
-import { ref, onValue, set } from "firebase/database";
+import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
+import { attachRev, writeWithRev } from "../lib/revGuard";
 
 // Clamp the cutoff to the full day and coerce `autoSwitch` to a boolean (default
 // true). v15.0.0 (cutoff range): the cutoff is a single GLOBAL switch-off hour and
@@ -42,6 +43,10 @@ export function useOptimizerSettings(){
   // these match the previously hard-coded behaviour, so an absent node is a no-op.
   const [optimizerSettings, setOS] = useState({ cutoff: 15, autoSwitch: true });
   const loaded = useRef(false);
+  // v16.0.0: revision-CAS ref (lib/revGuard.js) — a stale device's overwrite is
+  // rejected server-side; the rollback echo restores state via onValue.
+  const revRef = useRef(0);
+  useEffect(function(){ return attachRev("settings/optimizer", revRef); }, []);
 
   useEffect(function(){
     const unsub = onValue(ref(db, "settings/optimizer"), function(snap){
@@ -65,7 +70,7 @@ export function useOptimizerSettings(){
     }
     const next = sanitizeOptimizer({ ...optimizerSettings, ...(partial || {}) });
     setOS(next);
-    set(ref(db, "settings/optimizer"), next).catch(function(){});
+    writeWithRev("settings/optimizer", next, revRef);
   }
 
   return { optimizerSettings, saveOptimizerSettings };

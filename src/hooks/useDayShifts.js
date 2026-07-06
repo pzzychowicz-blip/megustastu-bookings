@@ -16,8 +16,9 @@
 // The empty-array guard doesn't apply (small object, not a collection).
 
 import { useState, useRef, useEffect } from "react";
-import { ref, onValue, set } from "firebase/database";
+import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
+import { attachRev, writeWithRev } from "../lib/revGuard";
 import { weekRange } from "../lib/constants";
 
 // Clamp split strictly inside the service window so BOTH shifts stay non-empty;
@@ -40,6 +41,10 @@ export function useDayShifts(){
   // Seed with the defaults (split 17:00, enabled) until Firebase responds.
   const [dayShifts, setDS] = useState({ split: 17, enabled: true });
   const loaded = useRef(false);
+  // v16.0.0: revision-CAS ref (lib/revGuard.js) — a stale device's overwrite is
+  // rejected server-side; the rollback echo restores state via onValue.
+  const revRef = useRef(0);
+  useEffect(function(){ return attachRev("settings/dayShifts", revRef); }, []);
 
   useEffect(function(){
     const unsub = onValue(ref(db, "settings/dayShifts"), function(snap){
@@ -63,7 +68,7 @@ export function useDayShifts(){
     }
     const next = sanitizeShifts({ ...dayShifts, ...(partial || {}) });
     setDS(next);
-    set(ref(db, "settings/dayShifts"), next).catch(function(){});
+    writeWithRev("settings/dayShifts", next, revRef);
   }
 
   return { dayShifts, saveDayShifts };
