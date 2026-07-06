@@ -306,12 +306,18 @@ export function TimelineView({
     b.status !== "completed" && (!(b.tables || []).length || b._conflict)
   );
 
-  // v16.0.0 follow-up: start-time chips are ALL-OR-NOTHING for the day — shown
-  // only when EVERY rendered block is wide enough that its name keeps ≥~55px
-  // after the chip (~42px) and the fixed "=" assign handle (~41px), i.e.
-  // ≥140px. A per-block decision left a mixed grid (some chips, some not),
-  // which read messy in live QA. The flip animates per block via Presence.
-  const chipsOn = day.length > 0 && day.every((b) => liveBarDur(b, nowMins) * pxPerMin >= 140);
+  // v16.0.0 follow-up: start-time chips are CONFIRMED-ONLY (a seated/completed
+  // party has arrived — the start time is no longer at-a-glance info, so those
+  // blocks never carry a chip) and ALL-OR-NOTHING across the day's CONFIRMED
+  // blocks — shown only when every confirmed block is wide enough that its name
+  // keeps ≥~55px after the chip (~42px) and the fixed "=" assign handle
+  // (~41px), i.e. ≥140px. A per-block decision left a mixed grid, which read
+  // messy in live QA; and scoping the every() to confirmed blocks means a
+  // status change (seated/completed durations shrink/stretch) can never kill
+  // the other bookings' chips (the reported bug). Each flip animates per block
+  // via Presence.
+  const confirmedDay = day.filter((b) => b.status === "confirmed");
+  const chipsOn = confirmedDay.length > 0 && confirmedDay.every((b) => liveBarDur(b, nowMins) * pxPerMin >= 140);
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
   // CSS left/width transition can't cover — the block re-parents into a new row) eases
@@ -560,7 +566,7 @@ export function TimelineView({
           return (
             <Fragment key={b.id}>
               {ghost}
-              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
+              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
             </Fragment>
           );
         })}
@@ -576,7 +582,7 @@ export function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
     </div>
   ) : null;
 

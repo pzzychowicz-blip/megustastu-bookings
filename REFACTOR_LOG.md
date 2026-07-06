@@ -3450,3 +3450,21 @@ ported onto app tokens (`BookingFormModal.jsx` only):
 visit; no-show chip reveals the cancelled no-show row; switching chips swaps panels; re-click
 closes (panel fully unmounts after the Reveal collapse); test customer created for the QA deleted
 via the Customers tab afterwards.
+
+### v16.0.0 follow-up commit #3 — time chips are confirmed-only (2026-07-06, same version)
+
+Live-caught bug: changing any booking's status made ALL time chips disappear. Cause: the
+all-or-nothing `day.every(width ≥ 140px)` spanned every status — a completed booking's duration
+is frozen at the completion moment (often a sliver, e.g. 18px), so one completion failed the
+every() and killed the whole day's chips at any zoom. New rule (Patryk's spec): chips belong to
+**Confirmed blocks only** — a seated/completed party has arrived, so its block never carries a
+chip (it slides out via the existing Presence on the status change) — and the all-or-nothing
+every() is scoped to the day's **confirmed** blocks, so seated/completed widths can never affect
+the others' chips. One-line-ish TimelineView change (`confirmedDay` filter + `showChip={chipsOn
+&& b.status==="confirmed"}` at both call sites).
+
+`npm run build` ✅ — 191.60 kB gz (flat). Live QA in DEV (2026-07-07 test day): two confirmed
+90-min bookings at 1.5× both chip; a 144px completed block shows none despite being wide enough;
+seating one booking slides ITS chip out while the other confirmed block keeps its chip (the
+reported repro); today's data (18px completed Javier blocks) no longer suppresses anything; test
+bookings deleted after.
