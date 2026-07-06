@@ -217,9 +217,24 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
   // Defensive fallback mirrors the hook's DEFAULT_BOOKING_DEFAULTS seed.
   const bd = bookingDefaults && typeof bookingDefaults === "object"
     ? bookingDefaults
-    : { t1Max: 1, t1Dur: 90, t2Max: 4, t2Dur: 90, t3Dur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20 };
+    : { tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }], restDur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20 };
+  const tiers = Array.isArray(bd.tiers) ? bd.tiers : [];
   const minsLabel = (n) => n + " min";
   const guestsLabel = (n) => "≤ " + n;
+  // Tier-list edits: the hook's sanitizer re-sorts/dedupes/clamps, so these
+  // just describe intent. Stepper bounds keep each `max` strictly between its
+  // neighbours (1…19 at the edges), matching the sanitizer's invariants.
+  const saveTiers = (next) => onSaveBookingDefaults({ tiers: next });
+  const updateTier = (i, patch) => saveTiers(tiers.map((t, j) => (j === i ? { ...t, ...patch } : t)));
+  const removeTier = (i) => saveTiers(tiers.filter((_, j) => j !== i));
+  const addTier = () => {
+    const last = tiers[tiers.length - 1];
+    const max = last ? last.max + 1 : 1;
+    saveTiers(tiers.concat([{ max: max, dur: last ? last.dur : bd.restDur }]));
+  };
+  const canAddTier = tiers.length < 6 && (tiers.length === 0 || tiers[tiers.length - 1].max < 19);
+  const restFrom = (tiers.length ? tiers[tiers.length - 1].max : 0) + 1;
+  const durSummary = tiers.map((t) => t.dur).concat([bd.restDur]).join(" / ") + " min";
   const cutoffNote =
     oc >= 24 ? "Optimizer keeps reshuffling all day, then resets at the start of the next day."
     : oc <= 0 ? "Optimizer stays off all day; resume it manually (timeline control or the “o” key)."
@@ -339,41 +354,54 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
       <Collapsible
         title="Booking durations"
         subtitle="Default length of new bookings by party size. Shared across all devices."
-        summary={bd.t1Dur + " / " + bd.t2Dur + " / " + bd.t3Dur + " min"}
+        summary={durSummary}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
-          {/* Fixed-width first column so the "stay for" steppers of all three
-              rows align vertically (row 3's label sits in the same column). */}
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <div style={{ width: 150 }}>
-              <HourStepper label="Parties up to" value={bd.t1Max} fmt={guestsLabel}
-                disableDec={bd.t1Max <= 1} disableInc={bd.t1Max >= bd.t2Max - 1}
-                onDec={() => onSaveBookingDefaults({ t1Max: bd.t1Max - 1 })} onInc={() => onSaveBookingDefaults({ t1Max: bd.t1Max + 1 })} />
-            </div>
-            <HourStepper label="stay for" value={bd.t1Dur} fmt={minsLabel}
-              disableDec={bd.t1Dur <= 15} disableInc={bd.t1Dur >= 360}
-              onDec={() => onSaveBookingDefaults({ t1Dur: bd.t1Dur - 15 })} onInc={() => onSaveBookingDefaults({ t1Dur: bd.t1Dur + 15 })} />
-          </div>
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <div style={{ width: 150 }}>
-              <HourStepper label="Parties up to" value={bd.t2Max} fmt={guestsLabel}
-                disableDec={bd.t2Max <= bd.t1Max + 1} disableInc={bd.t2Max >= 20}
-                onDec={() => onSaveBookingDefaults({ t2Max: bd.t2Max - 1 })} onInc={() => onSaveBookingDefaults({ t2Max: bd.t2Max + 1 })} />
-            </div>
-            <HourStepper label="stay for" value={bd.t2Dur} fmt={minsLabel}
-              disableDec={bd.t2Dur <= 15} disableInc={bd.t2Dur >= 360}
-              onDec={() => onSaveBookingDefaults({ t2Dur: bd.t2Dur - 15 })} onInc={() => onSaveBookingDefaults({ t2Dur: bd.t2Dur + 15 })} />
-          </div>
+          {/* Editable tier list + the catch-all row. Fixed-width first column
+              so every row's "stay for" stepper aligns vertically. */}
+          {tiers.map((t, i) => {
+            const minMax = i > 0 ? tiers[i - 1].max + 1 : 1;
+            const maxMax = i < tiers.length - 1 ? tiers[i + 1].max - 1 : 19;
+            return (
+              <div key={i} style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <div style={{ width: 150 }}>
+                  <HourStepper label="Parties up to" value={t.max} fmt={guestsLabel}
+                    disableDec={t.max <= minMax} disableInc={t.max >= maxMax}
+                    onDec={() => updateTier(i, { max: t.max - 1 })} onInc={() => updateTier(i, { max: t.max + 1 })} />
+                </div>
+                <HourStepper label="stay for" value={t.dur} fmt={minsLabel}
+                  disableDec={t.dur <= 15} disableInc={t.dur >= 360}
+                  onDec={() => updateTier(i, { dur: t.dur - 15 })} onInc={() => updateTier(i, { dur: t.dur + 15 })} />
+                <button
+                  onClick={() => removeTier(i)}
+                  className="mgt-hover-scale"
+                  title="Remove this tier"
+                  style={{ ...HOUR_STEP_BTN, width: 32, height: 32, fontSize: 15, marginBottom: 3, color: "var(--danger-text)" }}>×</button>
+              </div>
+            );
+          })}
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
             <div style={{ width: 150, height: 38, display: "flex", alignItems: "center", fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>
-              {"Larger parties (" + (bd.t2Max + 1) + "+)"}
+              {tiers.length ? "Larger parties (" + restFrom + "+)" : "All parties"}
             </div>
-            <HourStepper label="stay for" value={bd.t3Dur} fmt={minsLabel}
-              disableDec={bd.t3Dur <= 15} disableInc={bd.t3Dur >= 360}
-              onDec={() => onSaveBookingDefaults({ t3Dur: bd.t3Dur - 15 })} onInc={() => onSaveBookingDefaults({ t3Dur: bd.t3Dur + 15 })} />
+            <HourStepper label="stay for" value={bd.restDur} fmt={minsLabel}
+              disableDec={bd.restDur <= 15} disableInc={bd.restDur >= 360}
+              onDec={() => onSaveBookingDefaults({ restDur: bd.restDur - 15 })} onInc={() => onSaveBookingDefaults({ restDur: bd.restDur + 15 })} />
+          </div>
+          <div>
+            <button
+              onClick={addTier}
+              disabled={!canAddTier}
+              className={canAddTier ? "mgt-hover-scale" : undefined}
+              style={{
+                background: "var(--bg-stepper)", border: "1px solid var(--border-soft)", borderRadius: 10,
+                padding: "8px 14px", fontSize: 13, fontWeight: 600, color: "var(--accent)",
+                cursor: canAddTier ? "pointer" : "not-allowed", opacity: canAddTier ? 1 : 0.4,
+                boxShadow: "var(--shadow-input)"
+              }}>+ Add tier</button>
           </div>
           <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>
-            {"1–" + bd.t1Max + " guests → " + bd.t1Dur + " min · " + (bd.t1Max + 1) + "–" + bd.t2Max + " → " + bd.t2Dur + " min · " + (bd.t2Max + 1) + "+ → " + bd.t3Dur + " min. Applies to new bookings only."}
+            {tiers.map((t, i) => ((i > 0 ? tiers[i - 1].max + 1 : 1) === t.max ? String(t.max) : (i > 0 ? tiers[i - 1].max + 1 : 1) + "–" + t.max) + " guests → " + t.dur + " min").concat([restFrom + "+ → " + bd.restDur + " min"]).join(" · ") + ". Applies to new bookings only."}
           </div>
         </div>
       </Collapsible>

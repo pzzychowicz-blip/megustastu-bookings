@@ -32,7 +32,7 @@ import {
 // bookingDefaults via useBookingDefaults). Seed = the historical literals
 // (≤4 → 90, else 120), so behaviour is unchanged until the setting is edited.
 // Read at call time — never capture DUR_TIERS into a local (live binding).
-export function getDur(s){return s<=DUR_TIERS.t1Max?DUR_TIERS.t1Dur:s<=DUR_TIERS.t2Max?DUR_TIERS.t2Dur:DUR_TIERS.t3Dur;}
+export function getDur(s){var ts=DUR_TIERS.tiers||[];for(var i=0;i<ts.length;i++){if(s<=ts[i].max) return ts[i].dur;}return DUR_TIERS.restDur;}
 // v16.1.0: running-late state for a booking. Returns null | "warn" | "noshow".
 // Only a CONFIRMED booking on TODAY whose start time is ≥ warn/no-show minutes
 // in the past qualifies (seated/completed/cancelled never flag). cfg =

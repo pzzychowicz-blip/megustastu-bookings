@@ -4,20 +4,27 @@
 // restaurant-wide knobs (Firebase-shared, NOT localStorage — same rule as the
 // other settings hooks; see CLAUDE.md):
 //
-//   1. Default booking DURATIONS by party size — three tiers with editable
-//      band boundaries: size ≤ t1Max → t1Dur min, ≤ t2Max → t2Dur, else t3Dur.
-//      Consumed by booking-logic's getDur() via the DUR_TIERS live binding
-//      (setDurTiers, same mechanism as setLayout/setActiveDayHours). Only NEW
-//      bookings pick up a change — stored duration/originalDuration are frozen.
+//   1. Default booking DURATIONS by party size — an EDITABLE LIST of tiers
+//      (`tiers: [{max, dur}, …]`, sorted by ascending `max`) plus a catch-all
+//      `restDur` for parties above the last tier. Size s gets the first tier
+//      with s ≤ max, else restDur. Consumed by booking-logic's getDur() via
+//      the DUR_TIERS live binding (setDurTiers, same mechanism as setLayout/
+//      setActiveDayHours). Only NEW bookings pick up a change — stored
+//      duration/originalDuration are frozen.
 //   2. RUNNING-LATE thresholds — a confirmed booking lateWarnMin+ minutes past
 //      its time (today, not seated) highlights amber; at lateNoShowMin+ the UI
 //      offers a one-tap "No show". lateEnabled is the master switch. Consumed
 //      by booking-logic's lateState() via the lateMap derivation in BookingApp.
 //
-// Model: { v, t1Max, t1Dur, t2Max, t2Dur, t3Dur, lateEnabled, lateWarnMin,
+// Model: { v, tiers: [{max, dur}…], restDur, lateEnabled, lateWarnMin,
 // lateNoShowMin }. `v:1` is the presence marker (RTDB drops empty objects —
-// the v15.9.0 priorities lesson). Seed = the historical hard-coded behaviour
-// (90/90/120, warn 15 / no-show 20), so an absent node is a no-op.
+// the v15.9.0 priorities lesson; it also drops an EMPTY tiers array, so a
+// PRESENT node with no tiers reads as [] — all parties get restDur — never
+// as the default tiers). Seed = the historical hard-coded behaviour
+// (≤1→90, ≤4→90, else 120; warn 15 / no-show 20), so an absent node is a
+// no-op. A legacy flat v16.1.0 node ({t1Max, t1Dur, …}) converts on read and
+// is rewritten in the new shape on the next save (lazy migration, the
+// operating-hours pattern).
 //
 // Write-guard mirrors useOptimizerSettings: `loaded` ref refuses writes until
 // the initial read completes; revGuard CAS (bookingDefaultsRev) rejects a stale
@@ -29,37 +36,62 @@ import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { setDurTiers } from "../lib/constants";
 
+export const MAX_TIERS = 6;
+
 export const DEFAULT_BOOKING_DEFAULTS = {
   v: 1,
-  t1Max: 1, t1Dur: 90,
-  t2Max: 4, t2Dur: 90,
-  t3Dur: 120,
+  tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }],
+  restDur: 120,
   lateEnabled: true,
   lateWarnMin: 15,
   lateNoShowMin: 20
 };
 
 // Clamp helpers. Durations snap to the 15-min grid (the app's quarter-hour
-// resolution); late thresholds to 5-min steps. Band bounds keep t1Max < t2Max.
+// resolution); late thresholds to 5-min steps.
 function clampStep(n, def, min, max, step){
   let v = Math.round(Number(n) / step) * step;
   if(!Number.isFinite(v)) v = def;
   return Math.max(min, Math.min(max, v));
 }
 
+// Tier list: clamp each entry, sort ascending by `max`, drop duplicate maxes
+// (first wins), cap the count. An empty/absent list is VALID (all parties →
+// restDur) — per the priorities lesson, a present node's missing array field
+// means EMPTY, never "fall back to the defaults".
+function sanitizeTiers(raw){
+  const src = Array.isArray(raw) ? raw : [];
+  const out = [];
+  src.forEach(function(t){
+    if(!t || typeof t !== "object") return;
+    const max = clampStep(t.max, NaN, 1, 19, 1);
+    if(!Number.isFinite(max)) return;
+    if(out.some(function(o){ return o.max === max; })) return;
+    out.push({ max: max, dur: clampStep(t.dur, 90, 15, 360, 15) });
+  });
+  out.sort(function(a, b){ return a.max - b.max; });
+  return out.slice(0, MAX_TIERS);
+}
+
 function sanitizeBookingDefaults(raw){
   const src = raw && typeof raw === "object" ? raw : {};
   const d = DEFAULT_BOOKING_DEFAULTS;
-  let t1Max = clampStep(src.t1Max, d.t1Max, 1, 19, 1);
-  let t2Max = clampStep(src.t2Max, d.t2Max, 2, 20, 1);
-  if(t2Max <= t1Max) t2Max = t1Max + 1; // invariant: t1Max < t2Max
+  // Legacy v16.1.0 flat shape ({t1Max,t1Dur,t2Max,t2Dur,t3Dur}) → tier list.
+  let tiers, restDur;
+  if(!("tiers" in src) && !("restDur" in src) && ("t1Max" in src || "t3Dur" in src)){
+    tiers = sanitizeTiers([
+      { max: src.t1Max, dur: src.t1Dur },
+      { max: src.t2Max, dur: src.t2Dur }
+    ]);
+    restDur = clampStep(src.t3Dur, d.restDur, 15, 360, 15);
+  } else {
+    tiers = sanitizeTiers(src.tiers);
+    restDur = clampStep(src.restDur, d.restDur, 15, 360, 15);
+  }
   const out = {
     v: 1,
-    t1Max: t1Max,
-    t1Dur: clampStep(src.t1Dur, d.t1Dur, 15, 360, 15),
-    t2Max: t2Max,
-    t2Dur: clampStep(src.t2Dur, d.t2Dur, 15, 360, 15),
-    t3Dur: clampStep(src.t3Dur, d.t3Dur, 15, 360, 15),
+    tiers: tiers,
+    restDur: restDur,
     lateEnabled: src.lateEnabled !== false,
     lateWarnMin: clampStep(src.lateWarnMin, d.lateWarnMin, 5, 115, 5),
     lateNoShowMin: clampStep(src.lateNoShowMin, d.lateNoShowMin, 10, 120, 5)

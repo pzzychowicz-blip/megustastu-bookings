@@ -423,13 +423,14 @@ export function weekRange(){
 }
 // ── Default booking durations — live binding (v16.1.0) ──────────────────────
 // Size→duration tiers for NEW bookings (existing bookings keep their stored
-// duration). Three tiers with EDITABLE band boundaries: parties ≤ t1Max get
-// t1Dur, ≤ t2Max get t2Dur, larger get t3Dur. Seed = the historical hard-coded
-// behaviour (getDur: size<5 → 90, else 120), so an absent Firebase node is a
-// no-op. Reassigned ONLY by setDurTiers() (useBookingDefaults per snapshot) —
-// same live-ESM-binding mechanism as OPEN/CLOSE/setLayout. Don't capture into
-// a module-scope local; read at call time (booking-logic's getDur does).
-export var DEFAULT_DUR_TIERS={t1Max:1,t1Dur:90,t2Max:4,t2Dur:90,t3Dur:120};
+// duration). An EDITABLE LIST of tiers ({tiers:[{max,dur}…] sorted by max,
+// restDur for parties above the last tier}); size s gets the first tier with
+// s ≤ max, else restDur. Seed = the historical hard-coded behaviour (getDur:
+// size<5 → 90, else 120), so an absent Firebase node is a no-op. Reassigned
+// ONLY by setDurTiers() (useBookingDefaults per snapshot) — same live-ESM-
+// binding mechanism as OPEN/CLOSE/setLayout. Don't capture into a module-
+// scope local; read at call time (booking-logic's getDur does).
+export var DEFAULT_DUR_TIERS={tiers:[{max:1,dur:90},{max:4,dur:90}],restDur:120};
 export let DUR_TIERS=DEFAULT_DUR_TIERS;
 export function setDurTiers(t){
   if(t&&typeof t==="object") DUR_TIERS=t;

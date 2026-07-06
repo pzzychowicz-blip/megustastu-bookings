@@ -3589,3 +3589,21 @@ non-late today booking shows no highlight (negative test). Side-note: the 13-hou
 tripped the v15.2.0 heartbeat freshness gate (expected — it IS a fake sleep), so the no-show
 write was held + shown optimistically; that's the stale-recovery arc working as designed, not
 a feature bug. Test booking deleted; DEV data clean. No console errors.
+
+### v16.1.0 follow-up — variable-length duration tiers (+ stepper alignment)
+Same version/branch. (1) Steppers in "Booking durations" aligned via a fixed-width (150px)
+first column. (2) Per Patryk: the NUMBER of tiers is now editable too — the model changed from
+the flat {t1Max,t1Dur,t2Max,t2Dur,t3Dur} to `tiers: [{max,dur}…]` (sorted by max, deduped,
+capped at 6) + a catch-all `restDur`; getDur walks the list (first tier with size<=max, else
+restDur; empty list = flat restDur). The Settings section renders one row per tier with a
+remove (×) button, the catch-all row ("Larger parties (N+)" / "All parties" when empty), and
+"+ Add tier" (disabled at 6 tiers or last max 19). Sanitizer enforces sort/dedupe/clamps; the
+steppers disable at neighbour bounds. A legacy flat node CONVERTS ON READ (lazy migration —
+the next save rewrites the new shape); NB RTDB drops an empty tiers array, so a present node
+with no tiers reads as [] (all→restDur), never as the seed (the priorities lesson). No rules
+change (same node + rev pair). Verified live in DEV against the NEWLY APPLIED DEV rules: the
+legacy node converted (two tiers shown), add tier -> <=5 row appears with correct neighbour
+bounds, middle-tier remove re-merges the bands, config restored to 1/90 · 2–4/90 · 5+/120 and
+persisted in the new shape (writes accepted, rev chained), form auto-duration size 6 -> 120.
+Gotcha reconfirmed: mid-HMR the hook/binding state is inconsistent — full reload before
+judging (the constants.js live-binding HMR rule).
