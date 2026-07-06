@@ -25,8 +25,9 @@
 // inline by BookingApp.
 
 import { useState, useRef, useEffect } from "react";
-import { ref, onValue, set } from "firebase/database";
+import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
+import { attachRev, writeWithRev } from "../lib/revGuard";
 import { BTN } from "../lib/constants";
 import { mkBtn } from "../components/atoms";
 import { genId } from "../lib/booking-logic";
@@ -63,42 +64,47 @@ export function useReminders({ nowMins, setWriteWarning }){
   //   unless user intent is explicit (i.e. prior delete+confirm flow).
   //   `reminderFires` does NOT have that guard — fire-state is allowed to
   //   shrink to {} legitimately (e.g. prune after midnight).
+  // v16.0.0: BOTH saves converted to the ref-mirror shape (compute from a live
+  // ref, then setState + write as plain statements) — retiring this hook's old
+  // set()-inside-updater pattern, the shape that PERSISTED a duplicate waitlist
+  // entry under StrictMode (see CLAUDE.md gotcha table / useWaitlist.js). The
+  // writes are revision-CAS guarded (lib/revGuard.js): a stale device's
+  // overwrite is rejected server-side and the rollback echo restores state.
+  const remindersRef=useRef([]);
+  const reminderFiresRef=useRef({});
+  const remindersRevRef=useRef(0);
+  const reminderFiresRevRef=useRef(0);
   function saveReminders(next,isSilent){
-    function persist(computed){
-      if(!remindersLoaded.current){
-        console.warn("[SAFE] Refused to write reminders — initial read has not completed yet.");
-        if(!isSilent) setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
-        return;
-      }
-      set(ref(db,"reminders"),computed).catch(function(){});
+    if(!remindersLoaded.current){
+      console.warn("[SAFE] Refused to write reminders — initial read has not completed yet.");
+      if(!isSilent) setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
+      return;
     }
-    if(typeof next==="function"){
-      setReminders(function(prev){const c=next(prev);persist(c);return c;});
-    } else {setReminders(next);persist(next);}
+    const computed=typeof next==="function"?next(remindersRef.current):next;
+    remindersRef.current=computed;
+    setReminders(computed);
+    writeWithRev("reminders",computed,remindersRevRef,function(){
+      if(!isSilent) setWriteWarning("Couldn't save — this device's data was out of date and has been refreshed. Please redo the change.");
+    });
   }
   function saveReminderFires(next){
-    function persist(computed){
-      if(!reminderFiresLoaded.current){
-        console.warn("[SAFE] Refused to write reminderFires — initial read has not completed yet.");
-        return;
-      }
-      set(ref(db,"reminderFires"),computed).catch(function(){});
+    if(!reminderFiresLoaded.current){
+      console.warn("[SAFE] Refused to write reminderFires — initial read has not completed yet.");
+      return;
     }
-    if(typeof next==="function"){
-      setReminderFires(function(prev){const c=next(prev);persist(c);return c;});
-    } else {setReminderFires(next);persist(next);}
+    const computed=typeof next==="function"?next(reminderFiresRef.current):next;
+    reminderFiresRef.current=computed;
+    setReminderFires(computed);
+    writeWithRev("reminderFires",computed,reminderFiresRevRef,function(){});
   }
   // Firebase listeners — reminders. Array stored; object-form also tolerated
   // (defensive — matches the tableBlocks pattern).
   useEffect(function(){
     const unsub=onValue(ref(db,"reminders"),function(snap){
       const val=snap.val();
-      if(val){
-        const arr=Array.isArray(val)?val:Object.values(val);
-        setReminders(arr.filter(Boolean));
-      } else {
-        setReminders([]);
-      }
+      const arr=val?(Array.isArray(val)?val:Object.values(val)).filter(Boolean):[];
+      remindersRef.current=arr;
+      setReminders(arr);
       remindersLoaded.current=true;
     });
     return unsub;
@@ -106,11 +112,15 @@ export function useReminders({ nowMins, setWriteWarning }){
   useEffect(function(){
     const unsub=onValue(ref(db,"reminderFires"),function(snap){
       const val=snap.val();
-      setReminderFires(val&&typeof val==="object"?val:{});
+      const m=val&&typeof val==="object"?val:{};
+      reminderFiresRef.current=m;
+      setReminderFires(m);
       reminderFiresLoaded.current=true;
     });
     return unsub;
   },[]);
+  useEffect(function(){ return attachRev("reminders",remindersRevRef); },[]);
+  useEffect(function(){ return attachRev("reminderFires",reminderFiresRevRef); },[]);
   // Prune fire-state entries older than today. Runs AFTER reminderFires has
   // loaded (hence the dep on reminderFiresLoaded.current via a second effect
   // that watches `reminderFires` itself — once data arrives, we clean it).

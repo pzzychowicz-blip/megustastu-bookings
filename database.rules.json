@@ -5,8 +5,34 @@
 
     "bookings": {
       "$bid": {
-        ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber() && (!data.exists() || newData.child('updatedAt').val() > data.child('updatedAt').val()))"
+        ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber() && (!data.exists() || (newData.child('updatedAt').val() > data.child('updatedAt').val() && newData.child('baseUpdatedAt').val() === data.child('updatedAt').val())))"
       }
+    },
+
+    "tableBlocks":       { ".validate": "newData.parent().child('tableBlocksRev').val() === (data.parent().child('tableBlocksRev').exists() ? data.parent().child('tableBlocksRev').val() + 1 : 1)" },
+    "tableBlocksRev":    { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+    "waitlist":          { ".validate": "newData.parent().child('waitlistRev').val() === (data.parent().child('waitlistRev').exists() ? data.parent().child('waitlistRev').val() + 1 : 1)" },
+    "waitlistRev":       { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+    "reminders":         { ".validate": "newData.parent().child('remindersRev').val() === (data.parent().child('remindersRev').exists() ? data.parent().child('remindersRev').val() + 1 : 1)" },
+    "remindersRev":      { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+    "reminderFires":     { ".validate": "newData.parent().child('reminderFiresRev').val() === (data.parent().child('reminderFiresRev').exists() ? data.parent().child('reminderFiresRev').val() + 1 : 1)" },
+    "reminderFiresRev":  { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+    "settings": {
+      "operatingHours":    { ".validate": "newData.parent().child('operatingHoursRev').val() === (data.parent().child('operatingHoursRev').exists() ? data.parent().child('operatingHoursRev').val() + 1 : 1)" },
+      "operatingHoursRev": { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+      "dayShifts":         { ".validate": "newData.parent().child('dayShiftsRev').val() === (data.parent().child('dayShiftsRev').exists() ? data.parent().child('dayShiftsRev').val() + 1 : 1)" },
+      "dayShiftsRev":      { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+      "optimizer":         { ".validate": "newData.parent().child('optimizerRev').val() === (data.parent().child('optimizerRev').exists() ? data.parent().child('optimizerRev').val() + 1 : 1)" },
+      "optimizerRev":      { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+      "layout":            { ".validate": "newData.parent().child('layoutRev').val() === (data.parent().child('layoutRev').exists() ? data.parent().child('layoutRev').val() + 1 : 1)" },
+      "layoutRev":         { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" }
     }
   }
 }

@@ -19,8 +19,9 @@
 // join-groups, auto-combo caps, and cross-group combos — all via LayoutTabContent.
 
 import { useState, useRef, useEffect } from "react";
-import { ref, onValue, set } from "firebase/database";
+import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
+import { attachRev, writeWithRev } from "../lib/revGuard";
 import { DEFAULT_LAYOUT, setLayout, comboKey } from "../lib/constants";
 
 // Validate + clamp a layout config. Drops malformed/duplicate tables; coerces
@@ -145,6 +146,10 @@ export function useLayout(){
   // Seeded with DEFAULT_LAYOUT (already applied to the bindings at import).
   const [layout, setLO] = useState(DEFAULT_LAYOUT);
   const loaded = useRef(false);
+  // v16.0.0: revision-CAS ref (lib/revGuard.js) — a stale device's overwrite is
+  // rejected server-side; the rollback echo restores state via onValue.
+  const revRef = useRef(0);
+  useEffect(function(){ return attachRev("settings/layout", revRef); }, []);
 
   useEffect(function(){
     const unsub = onValue(ref(db, "settings/layout"), function(snap){
@@ -174,7 +179,7 @@ export function useLayout(){
     }
     setLayout(cfg);
     setLO(cfg);
-    set(ref(db, "settings/layout"), cfg).catch(function(){});
+    writeWithRev("settings/layout", cfg, revRef);
   }
 
   return { layout, saveLayout };

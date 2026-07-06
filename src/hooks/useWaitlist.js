@@ -25,14 +25,16 @@
 // the old shape; port this fix if its adds ever double).
 
 import { useState, useRef, useEffect } from "react";
-import { ref, onValue, set } from "firebase/database";
+import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { genId } from "../lib/booking-logic";
+import { attachRev, writeWithRev } from "../lib/revGuard";
 
 export function useWaitlist({ setWriteWarning }){
   const waitlistLoaded=useRef(false);
   const [waitlist, setWaitlist] = useState([]);
   const waitlistRef=useRef([]); // mirror for updater-free saves (see gotcha above)
+  const waitlistRevRef=useRef(0); // v16.0.0: revision-CAS ref (lib/revGuard.js)
 
   function saveWaitlist(next,isSilent){
     if(!waitlistLoaded.current){
@@ -43,7 +45,11 @@ export function useWaitlist({ setWriteWarning }){
     const computed=typeof next==="function"?next(waitlistRef.current):next;
     waitlistRef.current=computed;
     setWaitlist(computed);
-    set(ref(db,"waitlist"),computed).catch(function(){});
+    // v16.0.0: revision-CAS write — a stale device's overwrite is rejected
+    // server-side; the rollback echo restores waitlistRef/state via onValue.
+    writeWithRev("waitlist",computed,waitlistRevRef,function(){
+      if(!isSilent) setWriteWarning("Couldn't save — this device's data was out of date and has been refreshed. Please redo the change.");
+    });
   }
 
   useEffect(function(){
@@ -56,6 +62,7 @@ export function useWaitlist({ setWriteWarning }){
     });
     return unsub;
   },[]);
+  useEffect(function(){ return attachRev("waitlist",waitlistRevRef); },[]);
 
   // Auto-prune past-date entries once per load (and whenever a snapshot brings
   // stale ones in). Silent write — an auto-effect, per the write-guard contract.

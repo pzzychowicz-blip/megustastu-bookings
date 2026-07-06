@@ -3468,3 +3468,49 @@ the others' chips. One-line-ish TimelineView change (`confirmedDay` filter + `sh
 seating one booking slides ITS chip out while the other confirmed block keeps its chip (the
 reported repro); today's data (18px completed Javier blocks) no longer suppresses anything; test
 bookings deleted after.
+
+### v16.0.0 follow-up commit #4 — true compare-and-swap on every collection (2026-07-06, same version)
+
+Second stale-overwrite incident (2026-07-05): a laptop asleep at home woke and wrote its old
+snapshot over a night of tablet status changes — "statuses kept returning". Root cause: the
+v15.5.0 per-booking rule only required `updatedAt > stored` — and a stale device stamps with its
+current wall clock, which is ALWAYS greater. Greater-than is last-writer-wins, not staleness
+protection. Contributing client race: on wake, `resync()` trusted `isConnectedRef`, which still
+held its pre-sleep `true`, so its `get()` could be served from the local cache and clear the
+freshness gate with stale data. Planned jointly with Patryk (plan-mode + AskUserQuestion; scope
+= ALL collections).
+
+1. **Bookings — per-booking base-timestamp CAS.** Every written child now carries
+   `baseUpdatedAt` (the `updatedAt` of the version this device based its write on; 0 on create).
+   New rule: overwrites require `baseUpdatedAt === stored updatedAt` AND an advancing stamp.
+   A stale writer is rejected server-side regardless of clocks; the existing v15.4.0–15.7.0
+   rejection recovery (resync + replay intent on fresh data) takes over. `sanitize` deliberately
+   does NOT whitelist the field (per-write metadata). `lastPatchSigRef` dedupes StrictMode's
+   dev double-dispatch. Deletes stay unconditional (multi-path null can't carry a base —
+   documented residual).
+2. **Whole-node collections — revision CAS via new `src/lib/revGuard.js`.** `tableBlocks`,
+   `waitlist`, `reminders`, `reminderFires`, and the four `settings/*` nodes each get a sibling
+   `<name>Rev`; every write is an atomic `update({node, nodeRev: base+1})` and the rule pair
+   rejects a non-+1 rev (wipes covered: an empty array deletes the node, skipping its own
+   validate, but the REV child's rule still gates the atomic update). Recovery is free — the SDK
+   rolls back a rejected write and re-fires the node+rev listeners. Refs advance optimistically
+   (v15.3.0 technique). The `useReminders` conversion also PORTED THE REF-MIRROR FIX (its saves
+   no longer write inside the setState updater — the last carrier of the corruption-prone shape
+   from the gotcha table is retired).
+3. **Wake-race client fix (`gapTrip()`).** A heartbeat-gap trip now resets
+   `isConnectedRef=false` before `markStale()`, so `resync()` waits for a FRESH
+   `.info/connected: true` instead of trusting the frozen pre-sleep ref.
+
+`database.rules.json` rewritten (per-$id base check + 8 rev pairs; the old v15.5.0 text is in
+git at `fe75308` for rollback); `database.rules.README.md` gained the v16.0.0 section + a
+rolling-safe runbook (**app first, rules second** — old rules ignore the new fields; refresh all
+devices before applying rules; DEV test then PROD — Patryk's manual console step, pending).
+
+`npm run build` ✅ — 192.05 kB gz (+0.45). Live QA in DEV (current rules): booking create carries
+`baseUpdatedAt:0`; a status change chains base === previous stored stamp; block/unblock creates
+`tableBlocksRev` 1→2 (unblock deletes the node but still bumps the rev — the wipe case);
+dayShifts edit ×2 → `settings/dayShiftsRev` 1→2 (value reverted); reminder add persisted EXACTLY
+once under StrictMode (ref-mirror holds) with `remindersRev` counting; zero console errors; all
+DEV test data reverted (rev siblings remain by design). The REJECTION path (rule enforcement)
+tests after Patryk applies the DEV rules — the recovery code itself is the unchanged
+v15.4.0–15.6.0 machinery.
