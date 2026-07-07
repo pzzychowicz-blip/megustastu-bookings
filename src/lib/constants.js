@@ -421,6 +421,21 @@ export function weekRange(){
   if(!opens.length) return {minOpen:DEFAULT_DAY.open,maxClose:DEFAULT_DAY.close};
   return {minOpen:Math.min.apply(null,opens),maxClose:Math.max.apply(null,closes)};
 }
+// ── Default booking durations — live binding (v16.1.0) ──────────────────────
+// Size→duration tiers for NEW bookings (existing bookings keep their stored
+// duration). An EDITABLE LIST of tiers ({tiers:[{max,dur}…] sorted by max,
+// restDur for parties above the last tier}); size s gets the first tier with
+// s ≤ max, else restDur. Seed = the historical hard-coded behaviour (getDur:
+// size<5 → 90, else 120), so an absent Firebase node is a no-op. Reassigned
+// ONLY by setDurTiers() (useBookingDefaults per snapshot) — same live-ESM-
+// binding mechanism as OPEN/CLOSE/setLayout. Don't capture into a module-
+// scope local; read at call time (booking-logic's getDur does).
+export var DEFAULT_DUR_TIERS={tiers:[{max:1,dur:90},{max:4,dur:90}],restDur:120};
+export let DUR_TIERS=DEFAULT_DUR_TIERS;
+export function setDurTiers(t){
+  if(t&&typeof t==="object") DUR_TIERS=t;
+}
+
 export var ROW_H=44,LABEL_W=58;
 export var STATUS_COLORS={confirmed:{bg:"rgba(var(--status-confirmed-rgb),0.15)",text:"var(--status-confirmed-text)",border:"rgba(var(--status-confirmed-rgb),0.35)"},seated:{bg:"rgba(var(--status-seated-rgb),0.15)",text:"var(--status-seated-text)",border:"rgba(var(--status-seated-rgb),0.35)"},completed:{bg:"rgba(var(--status-completed-rgb),0.12)",text:"var(--status-completed-text)",border:"rgba(var(--status-completed-rgb),0.3)"},cancelled:{bg:"rgba(var(--status-cancelled-rgb),0.12)",text:"var(--status-cancelled-text)",border:"rgba(var(--status-cancelled-rgb),0.3)"}};
 export var BLOCK_BG={confirmed:"var(--block-confirmed)",seated:"var(--block-seated)",completed:"var(--block-completed)",cancelled:"var(--block-cancelled)"};

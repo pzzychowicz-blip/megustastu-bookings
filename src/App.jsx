@@ -37,7 +37,7 @@ import {
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
   checkInefficent, verifyClean, findConflicts,
   nowTime,
-  trialFits, toTime
+  trialFits, toTime, lateState
 } from "./lib/booking-logic";
 
 import { validateReminderDraft } from "./lib/reminders";
@@ -135,6 +135,12 @@ import { usePersistence } from "./hooks/usePersistence";
 import { useOperatingHours } from "./hooks/useOperatingHours";
 import { useDayShifts } from "./hooks/useDayShifts";
 import { useOptimizerSettings } from "./hooks/useOptimizerSettings";
+
+// ── v16.1.0: Booking-defaults subsystem (Settings → General) ───────────────
+// `useBookingDefaults` owns the 5th settings node (settings/bookingDefaults):
+// size→duration tiers (feeds getDur via the DUR_TIERS live binding) + the
+// running-late thresholds (feed the lateMap derivation below).
+import { useBookingDefaults } from "./hooks/useBookingDefaults";
 import { useLayout } from "./hooks/useLayout";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
@@ -185,7 +191,7 @@ import { WaitlistPanel } from "./components/WaitlistPanel";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"16.0.0",
+  version:"16.1.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -495,6 +501,8 @@ function BookingApp(){
   // the daily cutoff hour + the master auto-switch. Mounted BEFORE useAutoOptimizer
   // so its values feed the thermostat. See ./hooks/useOptimizerSettings.js.
   const { optimizerSettings, saveOptimizerSettings } = useOptimizerSettings();
+  // v16.1.0: booking defaults — duration tiers + running-late thresholds.
+  const { bookingDefaults, saveBookingDefaults } = useBookingDefaults();
   const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins, cutoffMins: optimizerSettings.cutoff*60, autoSwitch: optimizerSettings.autoSwitch });
   // ── Persistence hook ────────────────────────────────────────────────────────
   // Owns bookings/tableBlocks state, Firebase listeners, savers, and the
@@ -631,6 +639,23 @@ function BookingApp(){
       }
     });
     return warnings;
+  })();
+
+  // v16.1.0 — Running-late map: {id: "warn"|"noshow"} for TODAY'S confirmed
+  // bookings past their start time (lateState, booking-logic.js). "warn" =
+  // amber highlight (lateWarnMin+); "noshow" additionally offers the one-tap
+  // "No show" (lateNoShowMin+). Thresholds + master switch live in
+  // settings/bookingDefaults. Recomputed per render (nowMins ticks every 15s);
+  // trivially cheap, so no memo — matches the overlapWarnings IIFE above.
+  const lateMap=(function(){
+    const today=new Date().toISOString().slice(0,10);
+    if(viewDate!==today) return {};
+    const map={};
+    bookings.forEach(function(b){
+      const st=lateState(b,today,nowMins,bookingDefaults);
+      if(st) map[b.id]=st;
+    });
+    return map;
   })();
 
   function flash(){setReshuffled(true);setTimeout(function(){setReshuffled(false);},3000);}
@@ -1559,6 +1584,29 @@ function BookingApp(){
   const overlapBanner=overlapEntries.length?<div
     style={{background:"var(--app-overlap-bg)",border:"2px solid var(--app-overlap-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><div style={{fontSize:13,fontWeight:700,color:"var(--warn-text)",marginBottom:2}}>Overlap warnings</div>{overlapEntries}</div>:null;
 
+  // v16.1.0 — Running-late banner (sibling of the overlap banner): amber rows
+  // for today's late confirmed bookings. At the "noshow" stage each row gains
+  // a one-tap "No show" → doCancelBooking(id, true) (the existing no-show
+  // path: cancels + sets the noShow flag + history/notes). Flash is handled
+  // inside doCancelBooking (gated on the save boolean).
+  const lateEntries=Object.keys(lateMap).map(function(id){
+    const b=bookings.find(function(x){return x.id===id;});
+    if(!b) return null;
+    const lateBy=nowMins-toMins(b.time);
+    const offerNoShow=lateMap[id]==="noshow";
+    return (
+      <div
+        key={id}
+        style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",padding:"8px 12px",borderRadius:12,background:"var(--warn-bg)",border:"1px solid var(--warn-border)",marginTop:6}}><span
+          style={{fontSize:13,color:"var(--warn-text)",fontWeight:600,flex:"1 1 auto",minWidth:0}}>{b.name+" ("+b.time+") — "+lateBy+" min late"}</span>{offerNoShow?<button
+          onClick={function(){doCancelBooking(id,true);}}
+          className="mgt-hover-scale"
+          style={mkBtn({fontSize:12,minHeight:32,padding:"4px 12px",background:BTN.orange})}>No show</button>:null}</div>
+    );
+  }).filter(Boolean);
+  const lateBanner=lateEntries.length?<div
+    style={{background:"var(--app-overlap-bg)",border:"2px solid var(--app-overlap-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><div style={{fontSize:13,fontWeight:700,color:"var(--warn-text)",marginBottom:2}}>Running late</div>{lateEntries}</div>:null;
+
   // ── v16.0.0: viewed day's waitlist (badge button + panel) ───────────────────
   // First-come-first-served order; dayWaitAvail turns the badge orange when a
   // table currently fits at least one waiting party.
@@ -1583,6 +1631,8 @@ function BookingApp(){
     onBlock={function(id){setBlockTarget(id);}}
     nowMins={nowMins}
     warnings={overlapWarnings}
+    late={lateMap}
+    onNoShow={function(id){doCancelBooking(id,true);}}
     zoom={timelineZoom}
     setZoom={setTimelineZoom}
     scrollPosRef={timelineScrollRef}
@@ -1601,6 +1651,8 @@ function BookingApp(){
     onManual={function(id){setManualTarget(id);}}
     nowMins={nowMins}
     warnings={overlapWarnings}
+    late={lateMap}
+    onNoShow={function(id){doCancelBooking(id,true);}}
     selectedId={selectedListId}
     onSelect={setSelectedListId}
     showFinished={showFinished}
@@ -1694,7 +1746,7 @@ function BookingApp(){
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={lateEntries.length>0}>{lateBanner}</Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
@@ -1761,6 +1813,8 @@ function BookingApp(){
             optimizerCutoff={optimizerSettings.cutoff}
             optimizerAutoSwitch={optimizerSettings.autoSwitch}
             onSaveOptimizer={saveOptimizerSettings}
+            bookingDefaults={bookingDefaults}
+            onSaveBookingDefaults={saveBookingDefaults}
             layout={layout}
             onSaveLayout={saveLayout}
             bookings={bookings}

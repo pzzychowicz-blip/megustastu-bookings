@@ -59,16 +59,19 @@ const __statusAnims = {};
 // module-level component the node persists, so `transition: left/width` eases a
 // reposition (seated-shift / reshuffle) and the wipe/fill overlays + long-press
 // work reliably. Former closures are now props.
-function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, noShows = 0, showChip = false, onEdit, onManual, setQuickStatus }) {
+function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, onEdit, onManual, setQuickStatus }) {
   const d = liveBarDur(b, nowMins);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
   const w = Math.max((d / totalMins) * 100, 0.5) + "%";
   const warn = warnings[b.id];
   const bgc = BLOCK_BG[b.status] || BLOCK_BG.confirmed;
+  // v16.1.0: running-late amber border (confirmed booking past its time — the
+  // `late` prop is "warn"/"noshow" from App's lateMap). Seated-overstay
+  // warnings keep precedence (they carry the more urgent red tier).
   const border = warn
     ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
-    : "none";
+    : (late ? "3px solid var(--tl-block-warn-soon)" : "none");
   const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
@@ -230,6 +233,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, noShows 
 export function TimelineView({
   bookings, date, onEdit, onManual, onStatus,
   blocks = [], onBlock, nowMins = 0, warnings = {},
+  late = {}, onNoShow = () => {},
   zoom = 1, setZoom,
   followNow, setFollowNow,
   scrollPosRef,
@@ -566,7 +570,7 @@ export function TimelineView({
           return (
             <Fragment key={b.id}>
               {ghost}
-              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
+              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
             </Fragment>
           );
         })}
@@ -582,7 +586,7 @@ export function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
     </div>
   ) : null;
 
@@ -808,6 +812,26 @@ export function TimelineView({
                 {st}
               </button>
             ))}
+          {/* v16.1.0: one-tap No show for a confirmed booking past the
+              no-show threshold (App's lateMap). Cancels + sets the noShow
+              flag via the existing doCancelBooking path. */}
+          {quickStatus.booking.status === "confirmed" && late[quickStatus.booking.id] === "noshow" ? (
+            <button
+              style={{
+                background: BTN.orange, border: "none",
+                borderRadius: 12, padding: "10px 18px",
+                fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
+                cursor: "pointer",
+                minHeight: 44, flex: "1 1 auto"
+              }}
+              onClick={() => {
+                onNoShow(quickStatus.booking.id);
+                setQuickStatus(null);
+              }}
+            >
+              No show
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
