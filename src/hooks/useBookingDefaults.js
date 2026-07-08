@@ -50,6 +50,9 @@ export const DEFAULT_BOOKING_DEFAULTS = {
 // Clamp helpers. Durations snap to the 15-min grid (the app's quarter-hour
 // resolution); late thresholds to 5-min steps.
 function clampStep(n, def, min, max, step){
+  // A non-numeric/absent `n` makes Number(n) NaN, which propagates through
+  // Math.round(...) * step as NaN; Number.isFinite then catches it and falls
+  // back to `def`. (This is why the NaN check sits AFTER the round, not before.)
   let v = Math.round(Number(n) / step) * step;
   if(!Number.isFinite(v)) v = def;
   return Math.max(min, Math.min(max, v));

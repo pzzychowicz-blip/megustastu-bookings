@@ -79,6 +79,7 @@ import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
 import { WeekView }     from "./components/WeekView";
+import { LateBanner }   from "./components/LateBanner";
 
 // ── Phase B5 (v15-refactor): Final modal & screen extraction ──────────────
 // LoginScreen (the unauthenticated entry screen), WalkinForm (the walk-in
@@ -191,7 +192,7 @@ import { WaitlistPanel } from "./components/WaitlistPanel";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"16.1.0",
+  version:"16.1.1",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1589,23 +1590,10 @@ function BookingApp(){
   // a one-tap "No show" → doCancelBooking(id, true) (the existing no-show
   // path: cancels + sets the noShow flag + history/notes). Flash is handled
   // inside doCancelBooking (gated on the save boolean).
-  const lateEntries=Object.keys(lateMap).map(function(id){
-    const b=bookings.find(function(x){return x.id===id;});
-    if(!b) return null;
-    const lateBy=nowMins-toMins(b.time);
-    const offerNoShow=lateMap[id]==="noshow";
-    return (
-      <div
-        key={id}
-        style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",padding:"8px 12px",borderRadius:12,background:"var(--warn-bg)",border:"1px solid var(--warn-border)",marginTop:6}}><span
-          style={{fontSize:13,color:"var(--warn-text)",fontWeight:600,flex:"1 1 auto",minWidth:0}}>{b.name+" ("+b.time+") — "+lateBy+" min late"}</span>{offerNoShow?<button
-          onClick={function(){doCancelBooking(id,true);}}
-          className="mgt-hover-scale"
-          style={mkBtn({fontSize:12,minHeight:32,padding:"4px 12px",background:BTN.orange})}>No show</button>:null}</div>
-    );
-  }).filter(Boolean);
-  const lateBanner=lateEntries.length?<div
-    style={{background:"var(--app-overlap-bg)",border:"2px solid var(--app-overlap-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><div style={{fontSize:13,fontWeight:700,color:"var(--warn-text)",marginBottom:2}}>Running late</div>{lateEntries}</div>:null;
+  // v16.1.1: row rendering + the per-row ease-in/out lifecycle moved to the
+  // LateBanner component (rendered in the banner stack below); `hasLate` drives
+  // the outer Reveal for the whole-banner open/close.
+  const hasLate=Object.keys(lateMap).length>0;
 
   // ── v16.0.0: viewed day's waitlist (badge button + panel) ───────────────────
   // First-come-first-served order; dayWaitAvail turns the badge orange when a
@@ -1746,7 +1734,7 @@ function BookingApp(){
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={lateEntries.length>0}>{lateBanner}</Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={hasLate}><LateBanner lateMap={lateMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}

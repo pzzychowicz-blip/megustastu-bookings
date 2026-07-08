@@ -24,6 +24,7 @@
 // __APP_SIGNATURE__ edit in App.jsx; this file no longer needs touching
 // for version changes.
 
+import { useState, useEffect, useRef } from "react";
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
@@ -224,10 +225,31 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
   // Tier-list edits: the hook's sanitizer re-sorts/dedupes/clamps, so these
   // just describe intent. Stepper bounds keep each `max` strictly between its
   // neighbours (1…19 at the edges), matching the sanitizer's invariants.
+  // v16.1.1: armed two-tap confirm on the tier × — a mis-tap mid-service
+  // shouldn't silently drop a duration tier. First tap arms the row ("Remove?");
+  // a second tap within ARM_MS removes it. Auto-disarms on timeout, on any other
+  // tier edit, or when a different row arms. (No booking data is at stake — tiers
+  // only affect NEW bookings — so a light confirm, not a modal/undo.)
+  const [armedTier, setArmedTier] = useState(null);
+  const armTimer = useRef(null);
+  const disarmTier = () => { if (armTimer.current) { clearTimeout(armTimer.current); armTimer.current = null; } setArmedTier(null); };
+  useEffect(() => () => { if (armTimer.current) clearTimeout(armTimer.current); }, []);
+  // armedTier is an INDEX, so if the tier count changes out from under us (a
+  // concurrent remote bookingDefaults save on another device) the armed row would
+  // shift — disarm on any count change so a second tap can't hit the wrong tier.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { disarmTier(); }, [tiers.length]);
   const saveTiers = (next) => onSaveBookingDefaults({ tiers: next });
-  const updateTier = (i, patch) => saveTiers(tiers.map((t, j) => (j === i ? { ...t, ...patch } : t)));
+  const updateTier = (i, patch) => { disarmTier(); saveTiers(tiers.map((t, j) => (j === i ? { ...t, ...patch } : t))); };
   const removeTier = (i) => saveTiers(tiers.filter((_, j) => j !== i));
+  const armTierRemove = (i) => {
+    if (armedTier === i) { disarmTier(); removeTier(i); return; }
+    setArmedTier(i);
+    if (armTimer.current) clearTimeout(armTimer.current);
+    armTimer.current = setTimeout(() => { armTimer.current = null; setArmedTier(null); }, 3000);
+  };
   const addTier = () => {
+    disarmTier();
     const last = tiers[tiers.length - 1];
     const max = last ? last.max + 1 : 1;
     saveTiers(tiers.concat([{ max: max, dur: last ? last.dur : bd.restDur }]));
@@ -373,10 +395,12 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
                   disableDec={t.dur <= 15} disableInc={t.dur >= 360}
                   onDec={() => updateTier(i, { dur: t.dur - 15 })} onInc={() => updateTier(i, { dur: t.dur + 15 })} />
                 <button
-                  onClick={() => removeTier(i)}
+                  onClick={() => armTierRemove(i)}
                   className="mgt-hover-scale"
-                  title="Remove this tier"
-                  style={{ ...HOUR_STEP_BTN, width: 32, height: 32, fontSize: 15, marginBottom: 3, color: "var(--danger-text)" }}>×</button>
+                  title={armedTier === i ? "Tap again to remove" : "Remove this tier"}
+                  style={{ ...HOUR_STEP_BTN, height: 32, marginBottom: 3, ...(armedTier === i
+                    ? { width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700, background: "var(--danger-bg)", color: "var(--danger-text)", border: "1px solid var(--danger-border)" }
+                    : { width: 32, fontSize: 15, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : "×"}</button>
               </div>
             );
           })}
