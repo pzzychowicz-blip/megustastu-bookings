@@ -1853,7 +1853,8 @@ function BookingApp(){
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={function(){setConfirmReshuffle(true);}}
-    onOpenSettings={function(){setShowSettings(true);}} />
+    onOpenSettings={function(){setShowSettings(true);}}
+    onOpenSearch={function(){setShowSearch(true);}} />
     :<ListView
     bookings={bookings}
     date={viewDate}
@@ -1932,10 +1933,6 @@ function BookingApp(){
                 onClick={function(){if(v!==view){bumpSlide(v==="list"?"mgt-view-in-right":"mgt-view-in-left");}setView(v);}}
                 style={mkBtn({background:view===v?S.accent:"var(--app-btn-grey)",textTransform:"capitalize",minHeight:40})}>{v}</button>
             );})}<button
-              onClick={function(){setShowSearch(true);}}
-              className="mgt-hover-scale"
-              aria-label="Find a booking"
-              style={mkBtn({fontSize:15,minHeight:40,padding:"8px 12px",background:BTN.nav})}>🔍</button><button
               onClick={openWalkin}
               className="mgt-hover-scale"
               style={{background:"var(--app-walkin)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Walk-in</button><button

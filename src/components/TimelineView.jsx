@@ -257,7 +257,8 @@ export function TimelineView({
   autoOptimizer = true,
   setAutoOptimizer = () => {},
   onReshuffle = () => {},
-  onOpenSettings = () => {}
+  onOpenSettings = () => {},
+  onOpenSearch = () => {}
 }) {
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
@@ -895,23 +896,46 @@ export function TimelineView({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", flex: "1 1 auto", minWidth: 0 }}>
           {legendEls}
         </div>
-        <button
-          onClick={onOpenSettings}
-          title="Settings & keyboard shortcuts"
-          className="mgt-hover-scale"
-          style={{
-            background: "var(--cog-bg)",
-            border: "1px solid var(--cog-border)",
-            borderRadius: 10, width: 34, height: 34,
-            cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0, padding: 0,
-            color: S.text,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
-          }}
-        >
-          <CogIcon />
-        </button>
+        {/* v16.3.0: search + settings grouped at the legend's right. The 🔍
+            button matches the cog's 34×34 chrome exactly (was in the header). */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+          <button
+            onClick={onOpenSearch}
+            title="Find a booking"
+            aria-label="Find a booking"
+            className="mgt-hover-scale"
+            style={{
+              background: "var(--cog-bg)",
+              border: "1px solid var(--cog-border)",
+              borderRadius: 10, width: 34, height: 34,
+              cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0, padding: 0,
+              fontSize: 15, lineHeight: 1,
+              color: S.text,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
+            }}
+          >
+            🔍
+          </button>
+          <button
+            onClick={onOpenSettings}
+            title="Settings & keyboard shortcuts"
+            className="mgt-hover-scale"
+            style={{
+              background: "var(--cog-bg)",
+              border: "1px solid var(--cog-border)",
+              borderRadius: 10, width: 34, height: 34,
+              cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0, padding: 0,
+              color: S.text,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
+            }}
+          >
+            <CogIcon />
+          </button>
+        </div>
       </div>
       <div style={{ marginTop: 6, fontSize: 11, color: S.muted }}>
         tap booking to edit  ·  = assign  ·  hold to change status  ·  tap table label to block
