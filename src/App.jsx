@@ -184,6 +184,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // BookingApp effect → `waitAvail` state, derived via trialFits, not persisted.
 import { useWaitlist } from "./hooks/useWaitlist";
 import { WaitlistPanel } from "./components/WaitlistPanel";
+import { WaitAvailBanner } from "./components/WaitAvailBanner";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -558,9 +559,8 @@ function BookingApp(){
   // derivation, so the trialFits scans run only when the inputs change, not
   // on every 15s clock re-render).
   const [waitAvail, setWaitAvail] = useState({});
-  const [waitFreeToast, setWaitFreeToast] = useState(null); // {name,size,time}
   const [waitAddedShown, setWaitAddedShown] = useState(false);
-  const prevWaitAvailRef = useRef(null);   // previous available-id set (transition detect)
+  const [waitNotifyDismissed, setWaitNotifyDismissed] = useState(function(){return new Set();}); // v16.3.0: session-only ✕-dismissed waitlist-free rows
   const pendingWaitlistRef = useRef(null); // entry id being converted via Book
   // Derived: bookings with seated-today durations synced to live time.
   // Used by form/walk-in availability checks so they match what bookingsAfterAction
@@ -607,7 +607,7 @@ function BookingApp(){
   // v16.3.0: also clear the Running-late ✕-dismissed set (declared below) — the
   // dismissals are per-day glances, not permanent mutes. (Referencing the setter
   // here is safe: the effect body runs post-render, after the const initialises.)
-  useEffect(function(){setSelectedListId(null);setShowFinished(false);setLateDismissed(function(prev){return prev.size?new Set():prev;});},[viewDate]);
+  useEffect(function(){setSelectedListId(null);setShowFinished(false);setLateDismissed(function(prev){return prev.size?new Set():prev;});setWaitNotifyDismissed(function(prev){return prev.size?new Set():prev;});},[viewDate]);
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
   // finished card holds the keyboard focus, drop the focus — the card is about
   // to disappear and the shortcuts must not act on an invisible booking.
@@ -748,9 +748,9 @@ function BookingApp(){
   // would really save. prefTime is tried first; otherwise a 15-min first-fit
   // scan (stops at the first success, so an un-full day exits immediately).
   // Runs as an effect keyed on the data + a 15-min clock bucket — NOT raw
-  // nowMins — so the scans don't re-run on every 15s tick. A transition to
-  // available (vs the previous pass) fires the one-shot green toast; the first
-  // pass after load never toasts (prevWaitAvailRef starts null).
+  // nowMins — so the scans don't re-run on every 15s tick. v16.3.0: the result
+  // (waitAvail) drives the in-flow WaitAvailBanner directly; the old
+  // transition-diff green toast was removed (superseded by the persistent banner).
   const nowQuarter=Math.floor(nowMins/15);
   useEffect(function(){
     const todayStr=new Date().toISOString().slice(0,10);
@@ -784,18 +784,9 @@ function BookingApp(){
       }
     });
     setWaitAvail(next);
-    const prev=prevWaitAvailRef.current;
-    prevWaitAvailRef.current=Object.keys(next);
-    if(prev!==null){
-      const fresh=Object.keys(next).filter(function(id){return prev.indexOf(id)===-1;});
-      if(fresh.length){
-        const w=waitlist.find(function(x){return x.id===fresh[0];});
-        if(w){
-          setWaitFreeToast({name:w.name,size:w.size,time:next[w.id].time});
-          setTimeout(function(){setWaitFreeToast(null);},6000);
-        }
-      }
-    }
+    // v16.3.0: the transition-to-available cue is now the in-flow WaitAvailBanner
+    // (persistent + actionable), not a 6-second toast — so the prev-set diff that
+    // fired the old toast is gone. waitAvail alone drives the banner.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter]);
 
@@ -1568,8 +1559,6 @@ function BookingApp(){
       style={{background:"var(--app-reconnect-bg)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:toastShadow}}>✓ Reconnected — changes synced.</div>},
     {key:"syncfix",on:syncFix,node:<div
       style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
-    {key:"waitfree",on:!!waitFreeToast,node:<div
-      style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>{waitFreeToast?"Waitlist: a table for "+waitFreeToast.size+" now fits"+(waitFreeToast.time?" at "+waitFreeToast.time:"")+(waitFreeToast.name?" — "+waitFreeToast.name+" is waiting.":"."):""}</div>},
     {key:"waitadded",on:waitAddedShown,node:<div
       style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
     {key:"reshuffled",on:reshuffled,node:<div
@@ -1651,6 +1640,14 @@ function BookingApp(){
   // table currently fits at least one waiting party.
   const dayWaiting=waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===viewDate;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);});
   const dayWaitAvail=dayWaiting.some(function(w){return !!waitAvail[w.id];});
+  // v16.3.0 — WaitAvailBanner rows: TODAY'S waiting parties for whom a table
+  // currently fits (waitAvail) AND not ✕-dismissed this session. Today-only —
+  // a future-date fit isn't operationally urgent (it stays in the panel + badge).
+  const todayStr2=new Date().toISOString().slice(0,10);
+  const waitBannerEntries=(viewDate===todayStr2?dayWaiting:waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===todayStr2;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);}))
+    .filter(function(w){return !!waitAvail[w.id]&&!waitNotifyDismissed.has(w.id);});
+  function dismissWaitRow(id){setWaitNotifyDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});}
+  const hasWaitBanner=waitBannerEntries.length>0;
   const waitlistModal=<ModalPresence show={showWaitlist}>{showWaitlist?<WaitlistPanel
     entries={dayWaiting}
     availability={waitAvail}
@@ -1787,7 +1784,7 @@ function BookingApp(){
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
