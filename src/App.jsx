@@ -183,6 +183,7 @@ import { useWalkin } from "./hooks/useWalkin";
 // entries. Active matching (does a table currently fit each entry?) is a
 // BookingApp effect → `waitAvail` state, derived via trialFits, not persisted.
 import { useWaitlist } from "./hooks/useWaitlist";
+import { useRecurring } from "./hooks/useRecurring";
 import { WaitlistPanel } from "./components/WaitlistPanel";
 import { WaitAvailBanner } from "./components/WaitAvailBanner";
 import { SearchPanel } from "./components/SearchPanel";
@@ -557,6 +558,8 @@ function BookingApp(){
   } = useReminders({ nowMins, setWriteWarning });
   // ── v16.0.0: Waitlist state ─────────────────────────────────────────────────
   const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
+  // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
+  const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   const [showWaitlist, setShowWaitlist] = useState(false);
   // waitAvail: {entryId: {tables, time}} for entries a table CURRENTLY fits
   // (recomputed by an effect below — deliberately state, not a render-time
@@ -812,6 +815,67 @@ function BookingApp(){
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter]);
 
+  // ── v16.3.0: Recurring-booking generator ────────────────────────────────────
+  // For each ACTIVE rule, materialise its occurrences across the rolling horizon
+  // [today … today + horizonWeeks·7] as normal /bookings children, stamped with
+  // recurringId + recurringDate. IDEMPOTENT + cross-device-safe:
+  //   • existence is checked by (recurringId, recurringDate) — immutable stamps —
+  //     so a moved/cancelled occurrence is never re-created;
+  //   • the occurrence id is DETERMINISTIC ("r"+ruleId+"_"+date, path-safe), so
+  //     two devices generating concurrently converge — the second create is
+  //     rejected by the per-$id updatedAt CAS (baseUpdatedAt 0 vs stored) and
+  //     reconciles via the echo;
+  //   • skipDates (a deleted occurrence's date) are skipped;
+  //   • closed days / out-of-hours times are skipped.
+  // Self-stabilising (created rows populate `existing` next pass → no-op) and
+  // silent (auto-effect). Gated on !resyncing + loaded, like the reconciliation
+  // effect. Keyed on nowQuarter too so a day-rollover extends the horizon without
+  // needing a booking edit (the empty-toCreate early-out keeps it cheap).
+  useEffect(function(){
+    if(resyncing||firstLoadCount.current===null) return;
+    if(!recurring.enabled||!recurring.rules.length) return;
+    const today=new Date().toISOString().slice(0,10);
+    const horizonDays=recurring.horizonWeeks*7;
+    const existing={};
+    bookings.forEach(function(b){ if(b.recurringId&&b.recurringDate) existing[b.recurringId+"|"+b.recurringDate]=true; });
+    const toCreate=[];
+    recurring.rules.forEach(function(rule){
+      if(!rule.active) return;
+      const skip=rule.skipDates||[];
+      for(let i=0;i<=horizonDays;i++){
+        const d=new Date(today+"T00:00:00Z");
+        d.setUTCDate(d.getUTCDate()+i);
+        if(d.getUTCDay()!==rule.weekday) continue;
+        const ds=d.toISOString().slice(0,10);
+        if(skip.indexOf(ds)!==-1) continue;
+        const h=hoursFor(ds);
+        if(h.closed) continue;
+        const sm=toMins(rule.time);
+        if(sm<h.open*60||sm>h.close*60) continue;
+        if(existing[rule.id+"|"+ds]) continue;
+        toCreate.push({rule:rule,date:ds});
+      }
+    });
+    if(!toCreate.length) return;
+    saveBookings(function(prev){
+      let next=prev;
+      const byDate={};
+      toCreate.forEach(function(oc){ (byDate[oc.date]=byDate[oc.date]||[]).push(oc); });
+      Object.keys(byDate).forEach(function(ds){
+        byDate[ds].forEach(function(oc){
+          const rule=oc.rule;
+          const dur=getDur(rule.size);
+          const nb={id:"r"+rule.id+"_"+ds,name:rule.name,phone:rule.phone,date:ds,time:rule.time,scheduledTime:rule.time,size:rule.size,duration:dur,originalDuration:dur,preference:rule.preference,notes:rule.notes,status:"confirmed",tables:[],customDur:null,deposit:0,_manual:false,_locked:false,_conflict:false,preferredTables:[],returnOf:null,recurringId:rule.id,recurringDate:ds,history:[histEntry("auto-created from weekly rule","auto")]};
+          if(next.some(function(b){return b.id===nb.id||(b.recurringId===rule.id&&b.recurringDate===ds);})) return;
+          next=next.concat([nb]);
+        });
+        next=bookingsAfterAction(next,ds,tableBlocks,null,false,autoOptimizer);
+      });
+      return next;
+    },true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[bookings,recurring,tableBlocks,autoOptimizer,resyncing,nowQuarter]);
+
   // Book a waitlist entry: pre-fill a fresh new-booking form from it (the
   // returnOf pattern) and remember the entry id — doSave's new-booking path
   // removes it once the booking is dispatched.
@@ -879,6 +943,7 @@ function BookingApp(){
       tableBlocks:tableBlocks,
       waitlist:waitlist,
       reminders:reminders,
+      recurring:recurring,
       settings:{
         operatingHours:weekHours,
         dayShifts:dayShifts,
@@ -1093,8 +1158,17 @@ function BookingApp(){
         const source=returnOfId?bookings.find(function(b){return b.id===returnOfId;}):null;
         const sourceSchedTime=source?(source.scheduledTime||source.time):"";
         const createHist=source?histEntry("created via Book Again (from "+source.name+" on "+source.date+" at "+sourceSchedTime+")",getUser()):histEntry("created",getUser());
+        // v16.3.0: "Repeat weekly" — create a standing-booking rule from these
+        // fields (weekday from the booking date, UTC) and stamp THIS first
+        // occurrence with the rule's id + date so the generator dedupes it. Done
+        // once here (outside buildNext) so a retry replay never makes a 2nd rule.
+        let recStampId=null;
+        if(f.repeatWeekly&&f.name&&f.name.trim()&&f.date&&f.time){
+          const rule=addRule({name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes});
+          recStampId=rule.id;
+        }
         // v14 p1: scheduledTime=f.time on creation (new bookings always start confirmed).
-        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Number(f.deposit)||0,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,history:[createHist]};
+        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Number(f.deposit)||0,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,history:[createHist]};
         // v15.7.0: build the next state as a PURE transform of `prev` (see the edit
         // path above) so the new-booking save joins the optimistic-show + auto-retry
         // path. `newId`/`nb` are computed once (stable id) → a held/rejected write
@@ -1204,7 +1278,14 @@ function BookingApp(){
     setError("");
     if(ok) flash();
   }
-  function delBooking(id){const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);if(ok) flash();}
+  function delBooking(id){const target=bookings.find(function(x){return x.id===id;});
+    // v16.3.0: deleting a recurring OCCURRENCE parks its date on the rule's
+    // skipDates so the generator never resurrects it. Done BEFORE the booking
+    // delete and UNGATED by `ok` — if the delete is held/auto-retried, the
+    // skipDate must still land so the generator doesn't re-create the occurrence
+    // during the hold (addSkipDate is idempotent). Silent write.
+    if(target&&target.recurringId&&target.recurringDate) addSkipDate(target.recurringId,target.recurringDate,true);
+    const ok=saveBookings(function(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);if(ok) flash();}
 
   // v14 preview 3: Global keyboard shortcuts. Uses a ref to capture the latest
   // state and action callbacks on every render so the window-level keydown
@@ -1956,6 +2037,11 @@ function BookingApp(){
             bookingDefaults={bookingDefaults}
             onSaveBookingDefaults={saveBookingDefaults}
             onBackup={doBackup}
+            recurring={recurring}
+            onSetRecurringEnabled={setRecurringEnabled}
+            onSetRecurringHorizon={setRecurringHorizon}
+            onUpdateRule={updateRule}
+            onRemoveRule={removeRule}
             layout={layout}
             onSaveLayout={saveLayout}
             bookings={bookings}

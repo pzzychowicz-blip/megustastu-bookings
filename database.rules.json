@@ -21,6 +21,9 @@
     "reminderFires":     { ".validate": "newData.parent().child('reminderFiresRev').val() === (data.parent().child('reminderFiresRev').exists() ? data.parent().child('reminderFiresRev').val() + 1 : 1)" },
     "reminderFiresRev":  { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
+    "recurring":         { ".validate": "newData.parent().child('recurringRev').val() === (data.parent().child('recurringRev').exists() ? data.parent().child('recurringRev').val() + 1 : 1)" },
+    "recurringRev":      { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
     "settings": {
       "operatingHours":    { ".validate": "newData.parent().child('operatingHoursRev').val() === (data.parent().child('operatingHoursRev').exists() ? data.parent().child('operatingHoursRev').val() + 1 : 1)" },
       "operatingHoursRev": { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },

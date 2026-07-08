@@ -88,6 +88,12 @@ export function sanitize(b){if(!b||typeof b!=="object") return null;var t=b.time
   // v16.3.0: deposit / prepayment amount in € (0 = none). Whitelisted so it
   // survives reads; per-booking field → covered by the existing per-$id CAS.
   deposit:Number(b.deposit)||0,
+  // v16.3.0: recurring-occurrence stamps (null for a one-off). recurringId links
+  // to the settings/recurring rule; recurringDate is the occurrence's date. The
+  // generator dedupes on these; doDelete adds recurringDate to the rule's
+  // skipDates so a deleted occurrence is never regenerated.
+  recurringId:b.recurringId||null,
+  recurringDate:b.recurringDate||null,
   // v15.5.0: per-booking revision stamp for the per-node write model. Carried
   // through sanitise so it survives reads (this whitelist would otherwise drop
   // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.

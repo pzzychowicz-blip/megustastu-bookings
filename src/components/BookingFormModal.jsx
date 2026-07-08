@@ -42,7 +42,10 @@ import {
   optimizerActiveFor
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, matchCustomerByPhone } from "../lib/customers";
-import { Overlay, Fld, Section, TBadge, AvailBanner, mkInp, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn, AutoHeight, Reveal } from "./atoms";
+
+// v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export function BookingFormModal({
   form, setForm, editId, error,
@@ -423,6 +426,18 @@ export function BookingFormModal({
           onChange={function(e){setForm(function(f){return Object.assign({},f,{deposit:e.target.value});});}}
           placeholder="0"
           className="mgt-hover-scale"
-          style={inp()} /></Fld></Section></AutoHeight></Overlay>
+          style={inp()} /></Fld></Section>{!editId?(
+        <Section>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+            <div style={{textAlign:"left"}}>
+              <div style={{fontSize:14,fontWeight:600,color:"var(--text-primary)"}}>Repeat weekly</div>
+              <div style={{fontSize:12,fontWeight:500,color:"var(--text-faint)",marginTop:2}}>
+                {"Create a standing booking every "+(WEEKDAY_NAMES[new Date(form.date).getUTCDay()]||"week")+(form.time?" at "+form.time:"")+". Manage it in Settings → General → Standing bookings."}
+              </div>
+            </div>
+            <Toggle on={!!form.repeatWeekly} onClick={function(){setForm(function(f){return Object.assign({},f,{repeatWeekly:!f.repeatWeekly});});}} />
+          </div>
+        </Section>
+      ):null}</AutoHeight></Overlay>
   );
 }
