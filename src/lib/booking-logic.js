@@ -568,6 +568,53 @@ export function comboCapBest(ids){
   return ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);
 }
 
+// ── Range stats (v16.3.0) ─────────────────────────────────────────────────────
+// Aggregate booking metrics over an inclusive date range [fromDate, toDate]
+// (ISO date strings). Pure; one pass over the bookings list. Cancelled bookings
+// are excluded from covers/bookings/table/hour tallies (matching daySummary);
+// no-shows are counted separately (the flag OR a legacy history entry — the
+// isNoShow rule, inlined here to keep booking-logic free of a customers.js dep).
+//   totalCovers, totalBookings, avgParty
+//   activeDays (distinct dates with ≥1 booking) + avgCoversPerDay
+//   hours: [{hour, covers}] sorted busiest-first
+//   tables: [{id, bookings, covers}] sorted by bookings desc
+//   noShows
+export function rangeStats(bookings,fromDate,toDate){
+  var day=(bookings||[]).filter(function(b){return b&&b.date>=fromDate&&b.date<=toDate;});
+  var active=day.filter(function(b){return b.status!=="cancelled";});
+  var totalCovers=0,totalBookings=active.length;
+  var byHour={},byTable={},dates={},noShows=0;
+  day.forEach(function(b){
+    var isNS=b.noShow===true||(Array.isArray(b.history)&&b.history.some(function(h){return h&&h.action==="no show";}));
+    if(isNS) noShows++;
+  });
+  active.forEach(function(b){
+    var size=Number(b.size)||2;
+    totalCovers+=size;
+    dates[b.date]=true;
+    var h=Math.floor(toMins(b.time)/60);
+    if(!byHour[h]) byHour[h]=0;
+    byHour[h]+=size;
+    (b.tables||[]).forEach(function(id){
+      if(!byTable[id]) byTable[id]={id:id,bookings:0,covers:0};
+      byTable[id].bookings+=1;byTable[id].covers+=size;
+    });
+  });
+  var activeDays=Object.keys(dates).length;
+  var hours=Object.keys(byHour).map(function(h){return {hour:Number(h),covers:byHour[h]};}).sort(function(a,b){return b.covers-a.covers;});
+  var tables=Object.keys(byTable).map(function(id){return byTable[id];}).sort(function(a,b){return b.bookings-a.bookings||b.covers-a.covers;});
+  return {
+    totalCovers:totalCovers,
+    totalBookings:totalBookings,
+    avgParty:totalBookings?Math.round((totalCovers/totalBookings)*10)/10:0,
+    activeDays:activeDays,
+    avgCoversPerDay:activeDays?Math.round(totalCovers/activeDays):0,
+    hours:hours,
+    tables:tables,
+    noShows:noShows
+  };
+}
+
 // ── Day summary (v14.6.0) ─────────────────────────────────────────────────────
 // Covers (guests) for one date, broken down by hour and by the two editable
 // shifts. Covers = Σ booking.size over NON-cancelled bookings (cancelled excluded
