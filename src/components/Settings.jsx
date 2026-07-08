@@ -29,7 +29,8 @@ import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn } from "./atoms";
+import { BTN } from "../lib/constants";
 
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
 // Single source of truth for the Settings tabs. SettingsContent renders it AND
@@ -207,7 +208,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {} }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, onBackup }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
@@ -481,6 +482,24 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           <Toggle on={bd.freeSoonEnabled !== false} onClick={() => onSaveBookingDefaults({ freeSoonEnabled: bd.freeSoonEnabled === false })} />
         </div>
       </Section>
+      {/* v16.3.0: Backup — download a JSON snapshot of every collection + all
+          settings to this device (the Firebase free plan has no auto-backups). */}
+      {onBackup ? (
+        <Section style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ textAlign: "left", flex: "1 1 200px" }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Backup</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+                Download a JSON copy of all bookings, waitlist, reminders and settings to this device. There are no automatic backups — save one periodically. Restoring is manual (keep the file safe).
+              </div>
+            </div>
+            <button
+              onClick={onBackup}
+              className="mgt-hover-scale mgt-press"
+              style={mkBtn({ fontSize: 13, minHeight: 40, padding: "8px 16px", background: BTN.nav })}>⬇ Download backup</button>
+          </div>
+        </Section>
+      ) : null}
       <div style={{ padding: "10px 12px 12px", textAlign: "center" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.02em" }}>
           version {appVersion}
@@ -514,6 +533,7 @@ export function SettingsContent({
   onSaveOptimizer,
   bookingDefaults,
   onSaveBookingDefaults,
+  onBackup,
   layout,
   onSaveLayout,
   bookings,
@@ -527,7 +547,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} onBackup={onBackup} />;
   } else if (tab === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} />;
   } else if (tab === "customers") {

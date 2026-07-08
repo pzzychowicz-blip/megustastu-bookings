@@ -868,6 +868,37 @@ function BookingApp(){
   // Customers tab arms an explicit confirm before calling this. Known edge:
   // if the customer's bookings are the ENTIRE database, the empty-array
   // write-guard refuses the delete — safety wins (document, don't bypass).
+  // v16.3.0: download a JSON backup of every collection + all settings to the
+  // device. Read-only (no write-guard concerns). The Firebase free plan has NO
+  // automatic backups, so this is one-tap insurance; restore stays manual.
+  function doBackup(){
+    const payload={
+      exportedAt:new Date().toISOString(),
+      appVersion:__APP_SIGNATURE__.version,
+      bookings:bookings,
+      tableBlocks:tableBlocks,
+      waitlist:waitlist,
+      reminders:reminders,
+      settings:{
+        operatingHours:weekHours,
+        dayShifts:dayShifts,
+        optimizer:optimizerSettings,
+        layout:layout,
+        bookingDefaults:bookingDefaults
+      }
+    };
+    try{
+      const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download="mgt-backup-"+new Date().toISOString().slice(0,10)+".json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){URL.revokeObjectURL(url);},1000);
+    }catch(e){setWriteWarning("Couldn't create the backup file on this device.");}
+  }
   function deleteCustomer(phoneKey){
     const key=normalizePhone(phoneKey);
     if(!key) return;
@@ -1924,6 +1955,7 @@ function BookingApp(){
             onSaveOptimizer={saveOptimizerSettings}
             bookingDefaults={bookingDefaults}
             onSaveBookingDefaults={saveBookingDefaults}
+            onBackup={doBackup}
             layout={layout}
             onSaveLayout={saveLayout}
             bookings={bookings}
