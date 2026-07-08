@@ -236,7 +236,12 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // Needs iOS Safari 16+ — the app already relies on dvh/backdrop-filter, so
 // that floor is safe. `overflow:hidden` + `minHeight:0` on the inner track let
 // the row truly collapse to zero (incl. each child's own marginBottom).
-export function Reveal({ show, children, style }) {
+// v16.1.1: optional `horizontal` — ease the occupied WIDTH (grid-template-columns
+// 0fr↔1fr, inline-grid) instead of height. Used by the timeline start-time chip so
+// the sibling booking-name span slides in lockstep with the chip instead of
+// snapping when the chip appears/disappears. Default `false` = the original
+// vertical behaviour, byte-for-byte for every existing caller.
+export function Reveal({ show, children, style, horizontal = false }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -263,15 +268,18 @@ export function Reveal({ show, children, style }) {
     return function () { clearTimeout(t); };
   }, [show]);
   if (!mounted) return null;
+  const track = horizontal
+    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns 280ms cubic-bezier(.4,0,.2,1), opacity 220ms ease" }
+    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows 280ms cubic-bezier(.4,0,.2,1), opacity 220ms ease" };
+  // v16.1.1: the horizontal inner track is a flex box (align-items:center) so the
+  // revealed child is vertically centred without an inherited-font line-box strut
+  // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).
+  const innerStyle = horizontal
+    ? { overflow: revealed ? "visible" : "hidden", minWidth: 0, minHeight: 0, display: "flex", alignItems: "center" }
+    : { overflow: revealed ? "visible" : "hidden", minHeight: 0 };
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateRows: open ? "1fr" : "0fr",
-      opacity: open ? 1 : 0,
-      transition: "grid-template-rows 280ms cubic-bezier(.4,0,.2,1), opacity 220ms ease",
-      ...(style || {})
-    }}>
-      <div style={{ overflow: revealed ? "visible" : "hidden", minHeight: 0 }}>{children || last.current}</div>
+    <div style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
+      <div style={innerStyle}>{children || last.current}</div>
     </div>
   );
 }

@@ -30,7 +30,7 @@
 
 import { useEffect, useState } from "react";
 import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
-import { toMins, toTime, isLocked, statusOrder } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder, lateMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
 
@@ -172,7 +172,7 @@ export function ListView({
         ) : null;
         // v16.1.0: running-late tag (minutes past the booked time).
         const lateTag = lateSt ? (
-          <SmallTag label={(nowMins - toMins(b.time)) + " min late"} style={{ background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)" }} />
+          <SmallTag label={lateMins(b, nowMins) + " min late"} style={{ background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)" }} />
         ) : null;
 
         const notesEl = b.notes ? (

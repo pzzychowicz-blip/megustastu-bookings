@@ -37,14 +37,23 @@ export function getDur(s){var ts=DUR_TIERS.tiers||[];for(var i=0;i<ts.length;i++
 // Only a CONFIRMED booking on TODAY whose start time is ≥ warn/no-show minutes
 // in the past qualifies (seated/completed/cancelled never flag). cfg =
 // {lateEnabled, lateWarnMin, lateNoShowMin} from settings/bookingDefaults.
+// NOTE (v16.1.1): no midnight-wraparound handling — `lateBy` assumes `nowMins`
+// and the booking's start are on the same day. Safe today because bookings never
+// START past midnight (the extend-window caps starts ≤ 23:30); if that ever
+// changes, a booking near midnight compared against a post-rollover `nowMins`
+// would compute a large negative `lateBy` (harmlessly → null here, but any future
+// consumer of the raw minutes must account for it).
 export function lateState(b,todayStr,nowMins,cfg){
   if(!cfg||!cfg.lateEnabled) return null;
   if(!b||b.status!=="confirmed"||b.date!==todayStr) return null;
-  var lateBy=nowMins-toMins(b.time);
+  var lateBy=lateMins(b,nowMins);
   if(lateBy>=cfg.lateNoShowMin) return "noshow";
   if(lateBy>=cfg.lateWarnMin) return "warn";
   return null;
 }
+// v16.1.1: minutes a booking is past its start time. Single source for the
+// "N min late" arithmetic (was duplicated in the App banner + the ListView tag).
+export function lateMins(b,nowMins){return nowMins-toMins(b.time);}
 export function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
 export function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}

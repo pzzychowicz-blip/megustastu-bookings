@@ -3607,3 +3607,59 @@ bounds, middle-tier remove re-merges the bands, config restored to 1/90 · 2–4
 persisted in the new shape (writes accepted, rev chained), form auto-duration size 6 -> 120.
 Gotcha reconfirmed: mid-HMR the hook/binding state is inconsistent — full reload before
 judging (the constants.js live-binding HMR rule).
+
+## v16.1.0 -> v16.1.1 -- Late-flag & timeline animation polish (+ prior-review follow-ups)
+Branch: this worktree. Behavioural change: animation/interaction only (no data/rules/shape
+change — rolling-safe patch). Verified live in DEV via the Preview bridge (chips, per-row late
+banner, popup hover, armed tier-remove); `npm run build` OK (gz 194.55 kB).
+
+Three UI polish fixes Patryk flagged after v16.1.0:
+1. **Timeline booking name no longer "jumps"** when the start-time chip appears/disappears.
+   Root cause: the chip was wrapped in `Presence` (a `transform` translateX slide), but the
+   flexbox reserved/released the chip's WIDTH in one frame, so the sibling name span snapped
+   while the chip glided. Fix: generalised the `Reveal` atom with an optional `horizontal` prop
+   (`grid-template-columns: 0fr↔1fr`, `inline-grid`, `minWidth:0` inner track — default `false`
+   preserves every existing caller); the chip now uses `<Reveal horizontal>` so its occupied
+   WIDTH eases and the `flex:1` name slides in lockstep. (atoms.jsx, TimelineView.jsx.)
+2. **Running-late banner: per-row reveal + sliding No-show button.** Extracted the row rendering
+   from App.jsx's render-time `lateEntries` IIFE into a new **`LateBanner.jsx`** so each ROW can
+   ease in/out via `Reveal` — a departed booking must stay mounted long enough to animate its
+   collapse, which needs local lifecycle state (`renderIds` = current late ids ∪ recently-departed;
+   a `prevKeys` ref diffs each lateMap change: newcomers append, departed get a ~350ms prune
+   timer, a returning id cancels its prune; the diff is computed against `prevKeys.current`, never
+   a side-effect inside a setState updater). The No-show button is wrapped in `Presence`
+   (`mgt-slide-in/out`, matching the Today button). App keeps an outer `Reveal show={hasLate}` for
+   whole-banner open/close. Verified live: 1 row -> 2 rows -> 1 row via a faked clock, with the
+   departed row easing out while the other stayed.
+3. **Timeline quick-action popup buttons get `.mgt-hover-scale`** (RMB / long-press quick-status
+   menu — status buttons + the No-show option). Desktop right-click users now get the 8% hover
+   lift like every other action button; the existing `@media (hover:hover) and (pointer:fine)`
+   guard means no sticky-hover on touch. (TimelineView.jsx.)
+
+Prior `/code-review` follow-ups folded in (v16.1.0 review): (1) `LateBanner` builds a
+`byId` Map once instead of the O(n·m) nested `find`; (2) new exported **`lateMins(b,nowMins)`**
+(booking-logic.js) is the single source for the "N min late" arithmetic, used by both `LateBanner`
+and `ListView` (was duplicated); (5) a comment on `lateState` noting the no-midnight-wraparound
+assumption; (4) a comment on `useBookingDefaults.clampStep` explaining the NaN-propagation trick;
+(3) an **armed two-tap confirm** on the duration-tier `×` remove (Settings General tab —
+`armedTier` state: first tap -> "Remove?", a second within ~3s removes, auto-disarms on
+timeout / other tier edit / another row arming). No booking data is at stake (tiers only affect
+NEW bookings), so a light confirm rather than a modal. Verified live: arm -> "Remove?" ->
+auto-disarm after 3s.
+
+Self-review follow-ups (applied same version, verified live): (#1) a late row ADDED to an
+already-open banner used to pop — a conditionally-mounted `Reveal` with show=true starts open.
+`LateBanner` now tracks `openIds` (the show=true subset of `renderIds`): a newcomer mounts CLOSED
+then an opener effect adds it on the next rAF → it eases IN (traced 0→56px live; ease-OUT
+56→0-then-prune still correct, other rows untouched). (#2) `Reveal`'s `minWidth:0` scoped to the
+`horizontal` branch so the vertical path stays byte-identical. (#3) the membership effect keys on
+a stable sorted key-set `sig` string, not the fresh-each-render `lateMap` object (a warn→noshow
+value flip no longer churns the lifecycle). (#4) the armed tier-remove disarms on any
+`tiers.length` change (a concurrent remote bookingDefaults save can't shift the armed index onto
+the wrong tier).
+
+Files: NEW src/components/LateBanner.jsx; src/components/atoms.jsx (Reveal `horizontal`);
+src/components/TimelineView.jsx (chip Reveal + popup hover); src/App.jsx (LateBanner wiring,
+version 16.1.1); src/lib/booking-logic.js (`lateMins` + comment); src/components/ListView.jsx
+(`lateMins`); src/hooks/useBookingDefaults.js (comment); src/components/Settings.jsx (armed
+tier-remove).

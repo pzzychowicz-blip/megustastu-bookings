@@ -43,7 +43,7 @@ import {
 } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
-import { mkBtn, Presence, useFlip } from "./atoms";
+import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 import { CogIcon } from "./Settings";
 
 // v15.8.0: module-level status-change animation state (survives the inline Block
@@ -85,19 +85,22 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
   // name. The show/hide decision (`showChip`) is made ONCE at the TimelineView
   // level for the WHOLE day — all blocks show chips or none do (a mixed grid
-  // read messy in live QA). Wrapped in Presence so it slides in from the left
-  // and back out (the Reshuffle-button pattern) when a zoom change flips the
-  // decision, instead of popping. marginLeft clears the v15.8.2 dog-ear corner
-  // so a noted booking's fold never overlaps.
+  // read messy in live QA). marginLeft clears the v15.8.2 dog-ear corner so a
+  // noted booking's fold never overlaps.
+  // v16.1.1: wrapped in a HORIZONTAL Reveal (eases occupied width 0↔full) rather
+  // than Presence (transform slide). Presence only translated the chip, so the
+  // flexbox reserved/released the chip's width in one frame and the sibling name
+  // span SNAPPED. With the width easing, the flex:1 name slides in lockstep.
   const timeChip = (
-    <Presence show={showChip} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={180} tag="span" style={{ pointerEvents: "none" }}>
+    <Reveal show={showChip} horizontal style={{ pointerEvents: "none" }}>
       <span style={{
         flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: 5,
         fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+        whiteSpace: "nowrap",
         background: "rgba(255,255,255,0.25)", color: "var(--text-on-accent)",
         pointerEvents: "none", position: "relative"
       }}>{b.time}</span>
-    </Presence>
+    </Reveal>
   );
 
   // Per-instance refs for long-press detection.
@@ -797,6 +800,7 @@ export function TimelineView({
             .map((st) => (
               <button
                 key={st}
+                className="mgt-hover-scale"
                 style={{
                   background: BLOCK_BG[st], border: "none",
                   borderRadius: 12, padding: "10px 18px",
@@ -817,6 +821,7 @@ export function TimelineView({
               flag via the existing doCancelBooking path. */}
           {quickStatus.booking.status === "confirmed" && late[quickStatus.booking.id] === "noshow" ? (
             <button
+              className="mgt-hover-scale"
               style={{
                 background: BTN.orange, border: "none",
                 borderRadius: 12, padding: "10px 18px",
