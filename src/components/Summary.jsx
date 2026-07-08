@@ -39,7 +39,7 @@ function freeingLabel(freeing){
   return parts.join(", ") + extra;
 }
 
-export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, onToggle, onOpenWeek }) {
+export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, onToggle, onOpenWeek, onPrint }) {
   const s = daySummary(bookings, date, splitHour);
   const hasData = s.totalBookings > 0;
   // v15.0.0: per-weekday hours. The Afternoon/Evening split is ONE global value, so
@@ -149,6 +149,14 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, ope
           ) : (
             <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "4px 0 2px" }}>No bookings for this day.</div>
           )}
+          {onPrint ? (
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+              <button
+                onClick={onPrint}
+                className="mgt-hover-scale mgt-press"
+                style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>🖨 Print day sheet</button>
+            </div>
+          ) : null}
         </div>
       </Reveal>
     </div>

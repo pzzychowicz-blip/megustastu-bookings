@@ -186,6 +186,7 @@ import { useWaitlist } from "./hooks/useWaitlist";
 import { WaitlistPanel } from "./components/WaitlistPanel";
 import { WaitAvailBanner } from "./components/WaitAvailBanner";
 import { SearchPanel } from "./components/SearchPanel";
+import { DaySheet } from "./components/DaySheet";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -1767,7 +1768,11 @@ function BookingApp(){
     open={summaryOpen}
     freeing={freeingList}
     onToggle={function(){setSummaryOpen(function(o){return !o;});}}
-    onOpenWeek={function(){setShowWeek(true);}} />;
+    onOpenWeek={function(){setShowWeek(true);}}
+    onPrint={function(){window.print();}} />;
+  // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
+  // permanently — cheap (display:none) — so window.print() always has fresh content.
+  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} />;
 
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
@@ -1868,7 +1873,7 @@ function BookingApp(){
               onOpenManualAssign={function(target){setManualTarget(target);}}
               onOpenHistory={function(){setShowHistory(true);}}
               onRequestCancel={function(id){setConfirmCancel(id);}}
-              onAddToWaitlist={addFormToWaitlist} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}<ModalPresence show={showSearch}>{showSearch?<SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} />:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              onAddToWaitlist={addFormToWaitlist} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} />:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}
