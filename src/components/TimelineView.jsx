@@ -81,6 +81,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     + (isLocked(b) ? " [L]" : "")
     + (hasPrefT ? " ★" : "")
     + (noShows >= 2 ? " ⚠" : "")
+    + ((Number(b.deposit) || 0) > 0 ? " €" : "")   // v16.3.0: deposit marker
     + (warn && warn.overdue ? " !!" : "");
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
   // name. The show/hide decision (`showChip`) is made ONCE at the TimelineView

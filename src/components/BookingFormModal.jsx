@@ -415,6 +415,14 @@ export function BookingFormModal({
           rows={2}
           placeholder="Allergies, special requests..."
           className="mgt-hover-scale"
-          style={Object.assign({},inp(),{resize:"vertical"})} /></Fld></Section></AutoHeight></Overlay>
+          style={Object.assign({},inp(),{resize:"vertical"})} /></Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none. */}<Fld label="Deposit (€)"><input
+          type="number"
+          min={0}
+          step={5}
+          value={form.deposit}
+          onChange={function(e){setForm(function(f){return Object.assign({},f,{deposit:e.target.value});});}}
+          placeholder="0"
+          className="mgt-hover-scale"
+          style={inp()} /></Fld></Section></AutoHeight></Overlay>
   );
 }

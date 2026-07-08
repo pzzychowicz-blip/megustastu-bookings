@@ -174,6 +174,10 @@ export function ListView({
         const lateTag = lateSt ? (
           <SmallTag label={lateMins(b, nowMins) + " min late"} style={{ background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)" }} />
         ) : null;
+        // v16.3.0: deposit chip (suggest/green tokens — a prepaid booking).
+        const depositTag = (Number(b.deposit) || 0) > 0 ? (
+          <SmallTag label={"€" + b.deposit + " deposit"} style={{ background: "var(--suggest-bg)", color: "var(--success-text)", border: "1px solid var(--suggest-border)" }} />
+        ) : null;
 
         const notesEl = b.notes ? (
           <div style={{
@@ -260,6 +264,7 @@ export function ListView({
                 {prefTag}
                 {noShowTag}
                 {lateTag}
+                {depositTag}
                 {durationTag}
               </div>
               <span style={{ fontSize: 14, fontWeight: 700, color: S.text }}>{b.time + "–" + end}</span>
