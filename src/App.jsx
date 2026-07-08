@@ -561,6 +561,8 @@ function BookingApp(){
   const [waitAvail, setWaitAvail] = useState({});
   const [waitAddedShown, setWaitAddedShown] = useState(false);
   const [waitNotifyDismissed, setWaitNotifyDismissed] = useState(function(){return new Set();}); // v16.3.0: session-only ✕-dismissed waitlist-free rows
+  const [undoInfo, setUndoInfo] = useState(null);   // v16.3.0: {snapshot, noShow} pending undo after a cancel/no-show
+  const undoTimerRef = useRef(null);                // 10s auto-clear timer for the undo toast
   const pendingWaitlistRef = useRef(null); // entry id being converted via Book
   // Derived: bookings with seated-today durations synced to live time.
   // Used by form/walk-in availability checks so they match what bookingsAfterAction
@@ -1473,8 +1475,40 @@ function BookingApp(){
   }
   function doCancelBooking(id,noShow){
     const user=getUser();
+    // v16.3.0: snapshot the pre-cancel booking so the undo toast can restore it
+    // (status/noShow/notes/tables — the whole object). Single pending slot; a
+    // newer cancel replaces it.
+    const snapshot=bookings.find(function(x){return x.id===id;});
     const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow){extra.noShow=true;extra.notes=(x.notes?x.notes+"\n":"")+"No show";}return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
-    setConfirmCancel(null);if(ok) flash();
+    setConfirmCancel(null);
+    if(ok){
+      flash();
+      if(snapshot){
+        if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
+        setUndoInfo({snapshot:snapshot,noShow:!!noShow});
+        undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},10000);
+      }
+    }
+  }
+  // v16.3.0: restore the last-cancelled booking from its snapshot. Re-applies the
+  // pre-cancel object (status/tables/notes/noShow) + a history note, then runs
+  // bookingsAfterAction so the table re-places (if it was taken meanwhile, the
+  // optimizer/reconciliation resolves or flags it — accepted). Gated on `ok`.
+  function undoCancel(){
+    const info=undoInfo;
+    if(!info||!info.snapshot) return;
+    const user=getUser();
+    const snap=info.snapshot;
+    const ok=saveBookings(function(b){
+      const exists=b.some(function(x){return x.id===snap.id;});
+      const restored=Object.assign({},snap,{history:(snap.history||[]).concat([histEntry("cancellation undone",user)])});
+      const updated=exists?b.map(function(x){return x.id===snap.id?restored:x;}):b.concat([restored]);
+      return bookingsAfterAction(updated,snap.date,tableBlocks,snap.id,false,autoOptimizer);
+    });
+    if(ok){
+      if(undoTimerRef.current){clearTimeout(undoTimerRef.current);undoTimerRef.current=null;}
+      setUndoInfo(null);
+    }
   }
   function manualAssign(bookingId,tables,locked,affected){
     const user=getUser();
@@ -1561,6 +1595,11 @@ function BookingApp(){
       style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
     {key:"waitadded",on:waitAddedShown,node:<div
       style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
+    {key:"undo",on:!!undoInfo,node:<div
+      style={{background:"var(--bg-sheet)",border:"2px solid var(--border-sheet)",borderRadius:14,padding:"8px 10px 8px 14px",fontSize:13,fontWeight:600,color:"var(--text-primary)",boxShadow:toastShadow,display:"flex",alignItems:"center",gap:10,pointerEvents:"auto"}}><span>{undoInfo&&undoInfo.noShow?"Marked no-show":"Booking cancelled"}</span><button
+        onClick={function(e){e.stopPropagation();undoCancel();}}
+        className="mgt-hover-scale mgt-press"
+        style={mkBtn({fontSize:12,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button></div>},
     {key:"reshuffled",on:reshuffled,node:<div
       style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>},
     {key:"load",on:loadBannerShown,node:<div
