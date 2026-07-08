@@ -27,7 +27,19 @@ function hh(n){ return String(((n % 24) + 24) % 24).padStart(2, "0") + ":00"; }
 function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
 function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
 
-export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, onToggle, onOpenWeek }) {
+// v16.3.0: compact "freeing soon" label from the freeing list ([{tables,inMin}]).
+// Tables joined with + (a multi-table booking), cap at 3 entries + "+N".
+function freeingLabel(freeing){
+  if(!freeing || !freeing.length) return "";
+  const parts = freeing.slice(0, 3).map(function(f){
+    const t = (f.tables && f.tables.length) ? f.tables.join("+") : "?";
+    return t + " (~" + f.inMin + "m)";
+  });
+  const extra = freeing.length > 3 ? " +" + (freeing.length - 3) : "";
+  return parts.join(", ") + extra;
+}
+
+export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, onToggle, onOpenWeek }) {
   const s = daySummary(bookings, date, splitHour);
   const hasData = s.totalBookings > 0;
   // v15.0.0: per-weekday hours. The Afternoon/Evening split is ONE global value, so
@@ -76,6 +88,12 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, ope
               <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{s.upcoming.count}</span> upcoming
               <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
               <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{s.seated.covers}/{TOTAL_SEATS}</span> seats filled
+              {freeing && freeing.length ? (
+                <span>
+                  <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
+                  <span style={{ color: "var(--success-text)", fontWeight: 600 }}>freeing soon: {freeingLabel(freeing)}</span>
+                </span>
+              ) : null}
             </div>
           ) : null}
           {onOpenWeek ? (

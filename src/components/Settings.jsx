@@ -228,7 +228,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
   // Defensive fallback mirrors the hook's DEFAULT_BOOKING_DEFAULTS seed.
   const bd = bookingDefaults && typeof bookingDefaults === "object"
     ? bookingDefaults
-    : { tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }], restDur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20 };
+    : { tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }], restDur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20, freeSoonEnabled: true };
   const tiers = Array.isArray(bd.tiers) ? bd.tiers : [];
   const minsLabel = (n) => n + " min";
   const guestsLabel = (n) => "≤ " + n;
@@ -466,6 +466,20 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
             Off — late bookings are not highlighted.
           </div>
         )}</AutoHeight>
+      </Section>
+      {/* v16.3.0: Table turns — predict which seated tables free up in the next
+          ~15 min (Summary "freeing soon" line + timeline countdown pills).
+          Firebase-shared (settings/bookingDefaults). */}
+      <Section style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Table turns</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Show which seated tables are about to free up (a "freeing soon" line and a timeline countdown). Shared across all devices.
+            </div>
+          </div>
+          <Toggle on={bd.freeSoonEnabled !== false} onClick={() => onSaveBookingDefaults({ freeSoonEnabled: bd.freeSoonEnabled === false })} />
+        </div>
       </Section>
       <div style={{ padding: "10px 12px 12px", textAlign: "center" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.02em" }}>

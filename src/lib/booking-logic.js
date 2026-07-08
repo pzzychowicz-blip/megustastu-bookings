@@ -54,6 +54,26 @@ export function lateState(b,todayStr,nowMins,cfg){
 // v16.1.1: minutes a booking is past its start time. Single source for the
 // "N min late" arithmetic (was duplicated in the App banner + the ListView tag).
 export function lateMins(b,nowMins){return nowMins-toMins(b.time);}
+// v16.3.0: table-turn prediction. Which of TODAY'S SEATED bookings are about to
+// free their table? Returns [{id, name, tables, inMin}] for seated bookings whose
+// scheduled end (start + duration) is 0 < end−now ≤ windowMin (default 15),
+// sorted soonest-first. OVERSTAYERS (end already passed) are excluded — the
+// overlap-warning machinery covers them, and "free in ~N" would be a lie for an
+// open-ended overstay. cfg-gated by the caller (freeSoonEnabled). Same
+// no-midnight-wraparound assumption as lateState (bookings don't start past
+// midnight, so an end up to ~01:30 stays same-side of `nowMins`).
+export function freeingSoon(bookings,todayStr,nowMins,windowMin){
+  var win=windowMin||15;
+  var out=[];
+  (bookings||[]).forEach(function(b){
+    if(!b||b.status!=="seated"||b.date!==todayStr) return;
+    var end=toMins(b.time)+(b.duration||90);
+    var inMin=end-nowMins;
+    if(inMin>0&&inMin<=win) out.push({id:b.id,name:b.name,tables:(b.tables||[]).slice(),inMin:inMin});
+  });
+  out.sort(function(a,b){return a.inMin-b.inMin;});
+  return out;
+}
 export function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
 export function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}

@@ -44,7 +44,10 @@ export const DEFAULT_BOOKING_DEFAULTS = {
   restDur: 120,
   lateEnabled: true,
   lateWarnMin: 15,
-  lateNoShowMin: 20
+  lateNoShowMin: 20,
+  // v16.3.0: table-turn prediction master switch (Summary "freeing soon" line +
+  // timeline countdown pills). Default on; rolling-safe field add.
+  freeSoonEnabled: true
 };
 
 // Clamp helpers. Durations snap to the 15-min grid (the app's quarter-hour
@@ -97,7 +100,9 @@ function sanitizeBookingDefaults(raw){
     restDur: restDur,
     lateEnabled: src.lateEnabled !== false,
     lateWarnMin: clampStep(src.lateWarnMin, d.lateWarnMin, 5, 115, 5),
-    lateNoShowMin: clampStep(src.lateNoShowMin, d.lateNoShowMin, 10, 120, 5)
+    lateNoShowMin: clampStep(src.lateNoShowMin, d.lateNoShowMin, 10, 120, 5),
+    // v16.3.0: default true when absent (rolling-safe — an old node has no field).
+    freeSoonEnabled: src.freeSoonEnabled !== false
   };
   // invariant: warn strictly before the no-show offer
   if(out.lateNoShowMin <= out.lateWarnMin) out.lateNoShowMin = out.lateWarnMin + 5;

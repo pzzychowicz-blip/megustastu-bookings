@@ -37,7 +37,7 @@ import {
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
   checkInefficent, verifyClean, findConflicts,
   nowTime,
-  trialFits, toTime, lateState
+  trialFits, toTime, lateState, freeingSoon
 } from "./lib/booking-logic";
 
 import { validateReminderDraft } from "./lib/reminders";
@@ -604,7 +604,10 @@ function BookingApp(){
   // on the new day. (A status change that drops a booking from view just leaves
   // selectedListId pointing at a missing id → shortcuts no-op until it's re-set.)
   // v15.1.0: also re-collapse the finished disclosure on day change.
-  useEffect(function(){setSelectedListId(null);setShowFinished(false);},[viewDate]);
+  // v16.3.0: also clear the Running-late ✕-dismissed set (declared below) — the
+  // dismissals are per-day glances, not permanent mutes. (Referencing the setter
+  // here is safe: the effect body runs post-render, after the const initialises.)
+  useEffect(function(){setSelectedListId(null);setShowFinished(false);setLateDismissed(function(prev){return prev.size?new Set():prev;});},[viewDate]);
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
   // finished card holds the keyboard focus, drop the focus — the card is about
   // to disappear and the shortcuts must not act on an invisible booking.
@@ -657,6 +660,38 @@ function BookingApp(){
       const st=lateState(b,today,nowMins,bookingDefaults);
       if(st) map[b.id]=st;
     });
+    return map;
+  })();
+  // v16.3.0: per-row ✕ dismiss on the Running-late banner. Session-only (never
+  // persisted); lives HERE (not in LateBanner) because the whole banner's outer
+  // Reveal must collapse once the last row is dismissed. lateMap itself stays
+  // UNFILTERED — the list/timeline amber highlights keep showing for a dismissed
+  // row; only the banner (lateBannerMap) hides it. Reset on day change (below).
+  const [lateDismissed,setLateDismissed]=useState(function(){return new Set();});
+  const lateBannerMap=(function(){
+    if(lateDismissed.size===0) return lateMap;
+    const map={};
+    Object.keys(lateMap).forEach(function(id){if(!lateDismissed.has(id)) map[id]=lateMap[id];});
+    return map;
+  })();
+  function dismissLateRow(id){
+    setLateDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
+  }
+  // v16.3.0 — Table-turn prediction: today's seated bookings whose scheduled end
+  // is within the next 15 min (freeingSoon, booking-logic.js). Gated on the
+  // settings/bookingDefaults master switch (freeSoonEnabled). Two shapes:
+  //   freeingList — [{id,name,tables,inMin}] soonest-first, for the Summary line.
+  //   freeingMap  — {bookingId: inMin}, for the timeline countdown pills.
+  // Today-only + recomputed per render (nowMins ticks every 15s) — the lateMap
+  // pattern; trivially cheap.
+  const freeingList=(function(){
+    const today=new Date().toISOString().slice(0,10);
+    if(viewDate!==today||!bookingDefaults.freeSoonEnabled) return [];
+    return freeingSoon(bookings,today,nowMins,15);
+  })();
+  const freeingMap=(function(){
+    const map={};
+    freeingList.forEach(function(f){map[f.id]=f.inMin;});
     return map;
   })();
 
@@ -1607,7 +1642,9 @@ function BookingApp(){
   // v16.1.1: row rendering + the per-row ease-in/out lifecycle moved to the
   // LateBanner component (rendered in the banner stack below); `hasLate` drives
   // the outer Reveal for the whole-banner open/close.
-  const hasLate=Object.keys(lateMap).length>0;
+  // v16.3.0: reads the ✕-dismiss-filtered lateBannerMap, so dismissing the last
+  // row collapses the whole banner (list/timeline still read the raw lateMap).
+  const hasLate=Object.keys(lateBannerMap).length>0;
 
   // ── v16.0.0: viewed day's waitlist (badge button + panel) ───────────────────
   // First-come-first-served order; dayWaitAvail turns the badge orange when a
@@ -1634,6 +1671,7 @@ function BookingApp(){
     nowMins={nowMins}
     warnings={overlapWarnings}
     late={lateMap}
+    freeing={freeingMap}
     onNoShow={function(id){doCancelBooking(id,true);}}
     zoom={timelineZoom}
     setZoom={setTimelineZoom}
@@ -1668,6 +1706,7 @@ function BookingApp(){
     shiftsEnabled={dayShifts.enabled}
     isToday={viewDate===new Date().toISOString().slice(0,10)}
     open={summaryOpen}
+    freeing={freeingList}
     onToggle={function(){setSummaryOpen(function(o){return !o;});}}
     onOpenWeek={function(){setShowWeek(true);}} />;
 
@@ -1748,7 +1787,7 @@ function BookingApp(){
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={hasLate}><LateBanner lateMap={lateMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}

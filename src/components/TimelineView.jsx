@@ -59,7 +59,7 @@ const __statusAnims = {};
 // module-level component the node persists, so `transition: left/width` eases a
 // reposition (seated-shift / reshuffle) and the wipe/fill overlays + long-press
 // work reliably. Former closures are now props.
-function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, onEdit, onManual, setQuickStatus }) {
+function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, freeMin = null, onEdit, onManual, setQuickStatus }) {
   const d = liveBarDur(b, nowMins);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -218,6 +218,19 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       }}>
         {lbl}
       </span>
+      {/* v16.3.0: table-turn countdown pill — a seated block within ~15 min of
+          its scheduled end shows "~Nm" (translucent, like the start-time chip).
+          Flex item before the "=" handle (no absolute overlap of the name); the
+          seated block is near full width this late, so there's room. */}
+      {freeMin != null ? (
+        <span style={{
+          flexShrink: 0, marginRight: 2, padding: "1px 5px", borderRadius: 5,
+          fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+          whiteSpace: "nowrap", position: "relative",
+          background: "rgba(255,255,255,0.28)", color: "var(--text-on-accent)",
+          pointerEvents: "none"
+        }}>{"~" + freeMin + "m"}</span>
+      ) : null}
       <span
         onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
         style={{
@@ -236,7 +249,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
 export function TimelineView({
   bookings, date, onEdit, onManual, onStatus,
   blocks = [], onBlock, nowMins = 0, warnings = {},
-  late = {}, onNoShow = () => {},
+  late = {}, freeing = {}, onNoShow = () => {},
   zoom = 1, setZoom,
   followNow, setFollowNow,
   scrollPosRef,
@@ -573,7 +586,7 @@ export function TimelineView({
           return (
             <Fragment key={b.id}>
               {ghost}
-              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
+              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
             </Fragment>
           );
         })}
