@@ -185,6 +185,7 @@ import { useWalkin } from "./hooks/useWalkin";
 import { useWaitlist } from "./hooks/useWaitlist";
 import { WaitlistPanel } from "./components/WaitlistPanel";
 import { WaitAvailBanner } from "./components/WaitAvailBanner";
+import { SearchPanel } from "./components/SearchPanel";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -476,6 +477,8 @@ function BookingApp(){
   // v14 preview 3: Settings / keyboard-shortcuts modal. Toggled by the cog
   // icon in TimelineView's legend row and by the `?` keyboard shortcut.
   const [showSettings, setShowSettings] = useState(false);
+  const [showSearch, setShowSearch] = useState(false); // v16.3.0: global booking search panel
+  const pendingSelectRef = useRef(null); // v16.3.0: booking id to focus in the List after a search-jump changes the day
   // v14.6.0: Summary panel expand/collapse (toggled by click or the g shortcut).
   const [summaryOpen, setSummaryOpen] = useState(false);
   // v14.7.0: Week View popover (opened from the Summary panel's Week button).
@@ -609,7 +612,23 @@ function BookingApp(){
   // v16.3.0: also clear the Running-late ✕-dismissed set (declared below) — the
   // dismissals are per-day glances, not permanent mutes. (Referencing the setter
   // here is safe: the effect body runs post-render, after the const initialises.)
-  useEffect(function(){setSelectedListId(null);setShowFinished(false);setLateDismissed(function(prev){return prev.size?new Set():prev;});setWaitNotifyDismissed(function(prev){return prev.size?new Set():prev;});},[viewDate]);
+  // v16.3.0: a search-jump to another day parks the target booking id in
+  // pendingSelectRef; consume it here (after the day changes) instead of clearing
+  // the focus, and open the finished fold if the target is completed/cancelled so
+  // its card is visible. Otherwise the day change clears the (now off-day) focus.
+  useEffect(function(){
+    const pend=pendingSelectRef.current;
+    if(pend){
+      pendingSelectRef.current=null;
+      setSelectedListId(pend);
+      const b=bookings.find(function(x){return x.id===pend;});
+      setShowFinished(!!(b&&(b.status==="completed"||b.status==="cancelled")));
+    }else{
+      setSelectedListId(null);setShowFinished(false);
+    }
+    setLateDismissed(function(prev){return prev.size?new Set():prev;});setWaitNotifyDismissed(function(prev){return prev.size?new Set():prev;});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[viewDate]);
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
   // finished card holds the keyboard focus, drop the focus — the card is about
   // to disappear and the shortcuts must not act on an invisible booking.
@@ -1180,6 +1199,7 @@ function BookingApp(){
     showWalkin:showWalkin,setShowWalkin:setShowWalkin,
     showHistory:showHistory,setShowHistory:setShowHistory,
     showSettings:showSettings,setShowSettings:setShowSettings,
+    showSearch:showSearch,setShowSearch:setShowSearch, // v16.3.0: "/" opens global search
     // v14 p7: settingsTab for ←/→ tab-cycle shortcut inside Settings modal.
     settingsTab:settingsTab,setSettingsTab:setSettingsTab,
     // v14 p7: reminder editor state for Esc/Enter handling.
@@ -1354,12 +1374,15 @@ function BookingApp(){
         }
       }
       // ── Global shortcuts: suppressed while any modal is open ──
-      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.reminderEditor||K.confirmReminderDel;
+      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
       if(anyModal) return;
       // v16.2.0: Shift+D flips dark/light. Placed BEFORE the list-view per-card
       // block and the global D handlers so it beats D=delete (list card focused)
       // and D=jump-to-today. Shift produces k==="D"; check both to be safe.
       if((k==="d"||k==="D")&&e.shiftKey){e.preventDefault();K.onToggleDark();return;}
+      // v16.3.0: "/" opens the global booking search (typing guard above keeps it
+      // out of form fields; anyModal guard keeps it from re-firing while open).
+      if(k==="/"){e.preventDefault();K.setShowSearch(true);return;}
       // ── v14.4.0: List-view per-card shortcuts (act on the focused booking) ──
       // ↑/↓ move the focus ring; A/E/S/C/Shift+C/Delete act on it. Placed before
       // the global letter shortcuts so Delete wins over "jump to today" ONLY while
@@ -1792,6 +1815,10 @@ function BookingApp(){
                 onClick={function(){if(v!==view){bumpSlide(v==="list"?"mgt-view-in-right":"mgt-view-in-left");}setView(v);}}
                 style={mkBtn({background:view===v?S.accent:"var(--app-btn-grey)",textTransform:"capitalize",minHeight:40})}>{v}</button>
             );})}<button
+              onClick={function(){setShowSearch(true);}}
+              className="mgt-hover-scale"
+              aria-label="Find a booking"
+              style={mkBtn({fontSize:15,minHeight:40,padding:"8px 12px",background:BTN.nav})}>🔍</button><button
               onClick={openWalkin}
               className="mgt-hover-scale"
               style={{background:"var(--app-walkin)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Walk-in</button><button
@@ -1841,7 +1868,7 @@ function BookingApp(){
               onOpenManualAssign={function(target){setManualTarget(target);}}
               onOpenHistory={function(){setShowHistory(true);}}
               onRequestCancel={function(id){setConfirmCancel(id);}}
-              onAddToWaitlist={addFormToWaitlist} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}<ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              onAddToWaitlist={addFormToWaitlist} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}<ModalPresence show={showSearch}>{showSearch?<SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} />:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}
