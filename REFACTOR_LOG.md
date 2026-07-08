@@ -3723,3 +3723,83 @@ container around `.mgt-hover-scale` tabs (~2-3px lift clip on the OUTER tabs at 
 accepted trade for the scroller); (b) the actual-duration recompute is duplicated in updateStatus
 (nowMins clock) + doSave (fresh Date) — fold a shared helper into the next booking-logic touch.
 Files: src/components/ConnectionStatus.jsx, src/App.jsx (mount).
+
+---
+
+## v16.3.0 — floor-ops & insights (11 features, one branch, phased commits)
+
+Date: 2026-07-08 · Branch: `feat/v16.3.0-ops-and-insights` · Behavioural change: YES (11 new
+features) · Build: OK, main-bundle gz ≈202 kB (from ≈195.6 at v16.2.0, +6.6 kB for 11 features).
+
+Implements Appendix Part C's High-value + Medium idea tiers plus user-requested additions. One
+version, phased commits (v16.0.0 model). Each phase live-verified in DEV before the next.
+
+**Phase 1 — Running-late banner collapsible + ✕ dismiss.** `LateBanner.jsx` gains a click-toggle
+header (count) with the rows in an outer `<Reveal>`; each row gets an ✕ dismiss. Dismissed ids
+live in BookingApp (`lateDismissed` Set, session-only, reset on day change) so the banner collapses
+when the last row goes; `lateMap` stays unfiltered (list/timeline amber highlights keep showing) —
+the banner reads a derived `lateBannerMap`.
+
+**Phase 2 — Table-turn prediction.** New pure `freeingSoon(bookings, today, nowMins, windowMin)`
+(booking-logic) → today's seated bookings whose scheduled end is within ~15 min (overstayers
+excluded). Summary today-status-bar "freeing soon: 7 (~10m), …" line + a seated-block timeline
+countdown pill. Master `freeSoonEnabled` field on `settings/bookingDefaults` (rolling-safe add) +
+a "Table turns" toggle in Settings → General.
+
+**Phase 3 — Waitlist "table free" banner + `useRevealRows`.** Extracted LateBanner's per-row
+ease-in/out lifecycle into `src/hooks/useRevealRows.js` (LateBanner refactored onto it, behaviour
+identical), then reused for the new `WaitAvailBanner.jsx` — an in-flow suggest/green banner, one row
+per TODAY'S waiting party a table currently fits (Book + ✕). Removed the old 6s `waitFreeToast`.
+
+**Phase 4 — Deposit €.** `sanitize` whitelists `deposit`; `diffBooking` logs it; `EMPTY_FORM` +
+a numeric form field; `doSave` (both paths) + `openEdit` map it; ListView "€N deposit" chip +
+TimelineView "€" label marker.
+
+**Phase 5 — Undo after cancel/no-show.** `doCancelBooking` snapshots the pre-cancel booking; a 10s
+`undoInfo` slot drives an Undo toast in the floatingToasts crossfade (pointerEvents:auto so the
+button is clickable). `undoCancel` restores the snapshot + a history note + re-places the table;
+CAS-safe (stampForWrite derives baseUpdatedAt from `prev[id]`, not the snapshot's stale stamp).
+
+**Phase 6 — Customers insights.** `CustomersSettings.jsx` only — totals strip (customers · visits ·
+with-a-no-show) + All/Regulars/No-shows filters + per-row no-show rate. Pure derivation.
+
+**Phase 7 — Global search.** `searchBookings()` (customers.js) + `SearchPanel.jsx` Overlay; 🔍
+header button + "/" shortcut. onPick jumps to the day + selects in List (cross-day select survives
+the day-change reset via `pendingSelectRef` consumed in the [viewDate] effect).
+
+**Phase 8 — Printable day sheet.** `DaySheet.jsx` — print-only DOM portalled to `<body>`; `@media
+print` in index.html hides #root + reveals it; hard-coded light (print stays light). Print button
+in the Summary body.
+
+**Phase 9 — Backup export.** Settings → General "Backup" → downloads a JSON of bookings, tableBlocks,
+waitlist, reminders, recurring + all 5 settings nodes. Read-only; restore is manual.
+
+**Phase 10 — Table-turn analytics.** `rangeStats(bookings, from, to)` (booking-logic) + a third
+"Stats" segment in WeekView (month period, `S` key): stat tiles + busiest-hours + table-usage bars.
+
+**Phase 11 — Recurring / standing bookings.** 7th collection `recurring` (`useRecurring.js`, whole-
+node object + revGuard CAS `recurringRev`; `database.rules.json` pair added). An idempotent generator
+effect in BookingApp materialises each active rule's occurrences over [today … +horizonWeeks·7] as
+normal /bookings children (deterministic id `"r{ruleId}_{date}"` + recurringId/recurringDate stamps;
+dedupe on the stamps; cross-device-safe via the per-$id CAS; skips skipDates/closed/out-of-hours;
+silent; nowQuarter-keyed for day-rollover). Booking form "Repeat weekly" toggle creates the rule +
+stamps the first occurrence; Settings → General "Standing bookings" manager (master enable, per-rule
+pause/delete, horizon 1–12wk; MiniStepper gained an optional `fmt` prop). `delBooking` adds a deleted
+occurrence's date to the rule's `skipDates` **before** the delete and ungated by `ok` — this ordering
+was the fix for a regenerate-on-delete race found in live QA. Deploy: rolling-safe, app first, rules
+second (README updated).
+
+**Docs/version:** version 16.2.0 → 16.3.0; CLAUDE.md (structure + persisted-collections + 2 new
+gotcha rows + this feature entry); database.rules.README.md (recurring pair).
+
+**Consistency sweep:** grepped new files for colour literals (fixed SearchPanel's Done button to
+`var(--app-btn-slate)`; block-overlay whites + title-pill blue kept as established conventions); no
+horizontal overflow at 375px; dark-mode spot-checked.
+
+**Verification (DEV):** all 11 features driven live via the Preview bridge — late banner
+collapse/✕-dismiss (list/timeline stay amber); undo restore persists through reload; deposit chip +
+timeline € survive reload; customers filters + rate; search digit/name + cross-day jump + "/";
+day sheet light-only portal; backup JSON has all collections; Stats segment + month re-aggregation;
+recurring generated 5 Wednesday occurrences over 4 weeks, no duplicates on reload, delete→skipDate
+held through reload (not regenerated). Real wall-clock during the build was post-midnight then in
+service hours, so the late banner + turn pill were exercised live once the clock entered hours.
