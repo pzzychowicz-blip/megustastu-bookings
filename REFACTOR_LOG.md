@@ -3696,3 +3696,14 @@ Files: NEW src/components/ConnectionStatus.jsx; src/App.jsx (updateStatus + doSa
 kbRef `onToggleDark` + ⇧D handler, ConnectionStatus import + mount, version 16.2.0); index.html
 (`--status-online/-offline(-glow)`, both themes); src/components/Shortcuts.jsx (⇧D row);
 CLAUDE.md (ConnectionStatus line + duration gotcha + ⇧D note + v16.2.0 log entry).
+
+Follow-up (same version) — **Settings tab bar overflow on narrow screens.** On an iPhone 12 mini
+(375px) the 5-tab `TabBar` didn't fit: each button was `flex:1` with `min-width:auto`, so the row's
+combined min-content width forced the WHOLE Settings modal wider than the viewport — content cards
+were cut off on both edges. Fix (Settings.jsx `TabBar`): the tab row is now its own horizontal
+scroller (`overflowX:auto` → `min-width:0`, so the modal collapses back to viewport width) and the
+buttons are `flex:"1 0 0%"` + `whiteSpace:nowrap` (equal-width and filling when there's room —
+desktop unchanged, byte-for-byte look — but no-shrink so on a narrow screen they keep full-label
+width and the row scrolls instead of forcing the modal wide). Live-verified in DEV at 375px (modal
+scrollWidth == clientWidth == 375; tab row scrolls; all 5 tabs reachable incl. Shortcuts) and at
+desktop (tabs equal 101px, no scroll). Files: src/components/Settings.jsx.
