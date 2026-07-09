@@ -54,6 +54,7 @@ const SHORTCUT_SECTIONS = [
     { keys: ["W"],       label: "Walk-in" },
     { keys: ["S"],       label: "Toggle Summary panel" },
     { keys: ["M"],       label: "Open More (Week / Month)" },
+    { keys: ["⇧D"], label: "Toggle dark / light mode" },
     { keys: ["?"],       label: "Show this help" },
   ]},
   { title: "Timeline", rows: [

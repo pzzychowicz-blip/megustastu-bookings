@@ -80,6 +80,7 @@ import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
 import { WeekView }     from "./components/WeekView";
 import { LateBanner }   from "./components/LateBanner";
+import { ConnectionStatus } from "./components/ConnectionStatus";
 
 // ── Phase B5 (v15-refactor): Final modal & screen extraction ──────────────
 // LoginScreen (the unauthenticated entry screen), WalkinForm (the walk-in
@@ -192,7 +193,7 @@ import { WaitlistPanel } from "./components/WaitlistPanel";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"16.1.1",
+  version:"16.2.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -928,7 +929,10 @@ function BookingApp(){
         let saveDur=planChanged?formPlan:(orig?(orig.duration||90):formPlan);
         const saveOrigDur=planChanged?formPlan:origPlan;
         let saveCustDur=planChanged?(f.customDur||null):(orig?(orig.customDur||null):(f.customDur||null));
-        if(f.status==="completed"&&orig&&orig.status!=="completed"&&!f.customDur){const now=new Date();const nowMinsLocal=now.getHours()*60+now.getMinutes();const startMins=toMins(f.time);const actualDur=Math.max(15,nowMinsLocal-startMins);saveDur=actualDur;saveCustDur=actualDur;}
+        // v16.2.0: truncate to the actual span ONLY when the booking was SEATED
+        // before this save. A direct Confirmed → Completed edit keeps the form's
+        // scheduled duration (mirrors the updateStatus quick-action gate).
+        if(f.status==="completed"&&orig&&orig.status==="seated"&&!f.customDur){const now=new Date();const nowMinsLocal=now.getHours()*60+now.getMinutes();const startMins=toMins(f.time);const actualDur=Math.max(15,nowMinsLocal-startMins);saveDur=actualDur;saveCustDur=actualDur;}
         // Apply seated shift (if any) to the values we'll write. Overrides plan
         // numbers above — the shift always wins over default-duration logic.
         let saveTime=f.time;
@@ -1176,7 +1180,9 @@ function BookingApp(){
     save:save,doSave:doSave,saveWalkin:saveWalkin,doSaveWalkin:doSaveWalkin,
     forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain,
     // v15.8.0 cont.4: keyboard nav routes through the same slide path as the buttons.
-    goToDate:goToDate,bumpSlide:bumpSlide
+    goToDate:goToDate,bumpSlide:bumpSlide,
+    // v16.2.0: Shift+D theme toggle.
+    onToggleDark:onToggleDark
   };
   useEffect(function(){
     function isTyping(el){if(!el) return false;const t=el.tagName;return t==="INPUT"||t==="TEXTAREA"||t==="SELECT"||el.isContentEditable;}
@@ -1322,6 +1328,10 @@ function BookingApp(){
       // ── Global shortcuts: suppressed while any modal is open ──
       const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.reminderEditor||K.confirmReminderDel;
       if(anyModal) return;
+      // v16.2.0: Shift+D flips dark/light. Placed BEFORE the list-view per-card
+      // block and the global D handlers so it beats D=delete (list card focused)
+      // and D=jump-to-today. Shift produces k==="D"; check both to be safe.
+      if((k==="d"||k==="D")&&e.shiftKey){e.preventDefault();K.onToggleDark();return;}
       // ── v14.4.0: List-view per-card shortcuts (act on the focused booking) ──
       // ↑/↓ move the focus ring; A/E/S/C/Shift+C/Delete act on it. Placed before
       // the global letter shortcuts so Delete wins over "jump to today" ONLY while
@@ -1403,7 +1413,11 @@ function BookingApp(){
         if(x.id!==id) return x;
         const histEntries=[histEntry("status → "+status,user)];
         const extra={status:status};
-        if(status==="completed"){
+        // v16.2.0: only a real SEATED visit gets its duration truncated to the
+        // actual span (now − start). A direct Confirmed → Completed keeps the
+        // scheduled duration unchanged — otherwise the block balloons to hours
+        // on the timeline (e.g. completing a 13:00 booking at 21:00 → 8h block).
+        if(status==="completed"&&x.status==="seated"){
           const startMins=toMins(x.time);
           const actualDur=Math.max(15,nowM-startMins);
           extra.duration=actualDur;
@@ -1711,7 +1725,7 @@ function BookingApp(){
               style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>+ New</button><button
               onClick={function(){signOut(auth);}}
               className="mgt-hover-scale"
-              style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button></div></div><div
+              style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button><ConnectionStatus connected={isOnline} userEmail={auth.currentUser&&auth.currentUser.email} isMobile={isMobile} /></div></div><div
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"

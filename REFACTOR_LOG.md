@@ -3663,3 +3663,36 @@ src/components/TimelineView.jsx (chip Reveal + popup hover); src/App.jsx (LateBa
 version 16.1.1); src/lib/booking-logic.js (`lateMins` + comment); src/components/ListView.jsx
 (`lateMins`); src/hooks/useBookingDefaults.js (comment); src/components/Settings.jsx (armed
 tier-remove).
+
+## v16.1.1 -> v16.2.0 -- Completion-duration fix · ⇧D theme toggle · connection-status dot
+Branch: this worktree (started from the app-documentation-review branch). Behavioural change:
+a targeted duration fix + two user-visible additions. No Firebase/rules/shape change — rolling-safe.
+Verified live in DEV via the Preview bridge (all three); `npm run build` OK (gz ~195.29 kB, +~0.7 kB).
+
+Three staff-requested changes:
+1. **Confirmed → Completed keeps its scheduled duration.** Marking a booking Completed used to
+   recompute `duration = now − start` (the actual-visit-length logic) on ANY transition, so a
+   never-seated booking completed late ballooned to an hours-long block (e.g. a 13:00 booking
+   completed at 21:00 → an 8h block). Now the recompute fires ONLY when the prior status was
+   `seated`, in BOTH completion paths: `updateStatus` (`status==="completed" && x.status==="seated"`,
+   App.jsx) and `doSave` (guard `orig.status==="seated"`, App.jsx). A direct Confirmed → Completed
+   keeps the scheduled `duration`/`customDur` untouched. Seated → Completed (manual + the close-time
+   auto-complete in usePersistence.js, which is seated-only) is unchanged — it still reflects the
+   true visit length. Completed bookings already free their table everywhere (v16.0.0), so the
+   longer frozen block has no availability effect. Live-verified: completing the confirmed "Mark"
+   (18:00, 90 min) at 19:47 kept 18:00–19:30, not 18:00–19:47.
+2. **⇧D toggles dark/light.** New global keyboard shortcut → the existing `onToggleDark`, added to
+   `kbRef` and handled right after the `anyModal` guard (before the `D`=delete / `D`=jump-to-today
+   handlers, so Shift wins). The `typing` guard already stops it firing in inputs. Documented in
+   the Shortcuts cheatsheet (⇧D row). Live-verified: flips both ways; plain `D` still deletes/jumps.
+3. **Connection-status dot** (`ConnectionStatus.jsx`, NEW) — ported from the MGT Scheduling sibling
+   (structurally identical, tokens remapped to Bookings). A green/red illuminated dot to the right
+   of Log out, driven by usePersistence's `isOnline` (`.info/connected`); click opens a popover with
+   the status line + the signed-in email (`auth.currentUser.email`), closing on outside-click/Esc.
+   New `--status-online/-offline` (+ `-glow`) tokens in index.html (both theme blocks, same saturated
+   values) keep colour literals out of JS (project rule). Live-verified in light + dark.
+
+Files: NEW src/components/ConnectionStatus.jsx; src/App.jsx (updateStatus + doSave duration gate,
+kbRef `onToggleDark` + ⇧D handler, ConnectionStatus import + mount, version 16.2.0); index.html
+(`--status-online/-offline(-glow)`, both themes); src/components/Shortcuts.jsx (⇧D row);
+CLAUDE.md (ConnectionStatus line + duration gotcha + ⇧D note + v16.2.0 log entry).
