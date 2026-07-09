@@ -3707,3 +3707,19 @@ desktop unchanged, byte-for-byte look — but no-shrink so on a narrow screen th
 width and the row scrolls instead of forcing the modal wide). Live-verified in DEV at 375px (modal
 scrollWidth == clientWidth == 375; tab row scrolls; all 5 tabs reachable incl. Shortcuts) and at
 desktop (tabs equal 101px, no scroll). Files: src/components/Settings.jsx.
+
+Follow-up #2 (same version) — **/code-review fix: ConnectionStatus popover measured anchoring.**
+The popover's anchor side was guessed from the `isMobile` prop (`left:0` on mobile), but the dot's
+x position depends on header flex-wrap, not viewport width — at 599px (isMobile true, header
+unwrapped, dot at the right edge) the popover ran **50px off-screen right** (verified live). Fix:
+the anchor side is now MEASURED at open time — `toggleOpen` reads the wrapper's
+`getBoundingClientRect()` and right-anchors (grows leftward, the desktop look) unless
+`r.right − POPOVER_W < 8` (no room on the left), then flips to left-anchoring. The `isMobile`
+prop is gone (App mount updated). Verified live at 599px (right-anchored 181→427, fits), 375px
+(dot wrapped to x≈93 → flipped left-anchor 93→339, fits) and desktop (right-anchored, byte-identical
+to before). **NB Scheduling's ConnectionStatus has the same latent bug — port this fix on its next
+touch** (shared-pattern rule). Review nits noted, not fixed: (a) the TabBar scroller is now a clip
+container around `.mgt-hover-scale` tabs (~2-3px lift clip on the OUTER tabs at wide desktops —
+accepted trade for the scroller); (b) the actual-duration recompute is duplicated in updateStatus
+(nowMins clock) + doSave (fresh Date) — fold a shared helper into the next booking-logic touch.
+Files: src/components/ConnectionStatus.jsx, src/App.jsx (mount).

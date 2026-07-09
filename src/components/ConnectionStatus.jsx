@@ -15,14 +15,36 @@
 // Props:
 //   connected  (bool)    — isOnline from usePersistence()
 //   userEmail  (string)  — currently signed-in user's email
-//   isMobile   (bool)    — nudges the popover so it doesn't clip off-screen
+//
+// v16.2.0 review fix: the anchor side is MEASURED at open time, not guessed
+// from isMobile. The dot's x position depends on header flex-wrap, not on
+// viewport width — a left:0 popover from a right-edge dot ran 50px off-screen
+// at 599px (isMobile true, header unwrapped). Prefer right-anchoring (grows
+// leftward, the desktop look); flip to left-anchoring only when there's no
+// room on the left. NB Scheduling's copy has the same latent bug — port this
+// fix on its next touch (shared-pattern rule).
 
 import { useEffect, useRef, useState } from "react";
 import { S } from "../lib/constants";
 
-export function ConnectionStatus({ connected, userEmail, isMobile }) {
+// Rendered popover width: minWidth 220 + 2×12 padding + 2×1 border.
+const POPOVER_W = 246;
+
+export function ConnectionStatus({ connected, userEmail }) {
   const [open, setOpen] = useState(false);
+  const [alignRight, setAlignRight] = useState(true);
   const wrapRef = useRef(null);
+
+  function toggleOpen() {
+    const node = wrapRef.current;
+    if (node) {
+      const r = node.getBoundingClientRect();
+      // right-anchored popover spans [r.right − POPOVER_W, r.right] — keep it
+      // unless that runs past the left viewport edge (8px margin).
+      setAlignRight(r.right - POPOVER_W >= 8);
+    }
+    setOpen(function (v) { return !v; });
+  }
 
   // Close on outside-click + Esc.
   useEffect(function () {
@@ -51,7 +73,7 @@ export function ConnectionStatus({ connected, userEmail, isMobile }) {
       <button
         type="button"
         className="mgt-hover-scale"
-        onClick={function () { setOpen(function (v) { return !v; }); }}
+        onClick={toggleOpen}
         title={connected ? "Connected to Firebase" : "Firebase connection lost"}
         aria-label={connected ? "Connected to Firebase" : "Firebase connection lost"}
         style={{
@@ -85,8 +107,8 @@ export function ConnectionStatus({ connected, userEmail, isMobile }) {
           style={{
             position: "absolute",
             top: "calc(100% + 8px)",
-            right: isMobile ? "auto" : 0,
-            left: isMobile ? 0 : "auto",
+            right: alignRight ? 0 : "auto",
+            left: alignRight ? "auto" : 0,
             zIndex: 30,
             minWidth: 220,
             padding: 12,

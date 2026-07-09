@@ -1725,7 +1725,7 @@ function BookingApp(){
               style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>+ New</button><button
               onClick={function(){signOut(auth);}}
               className="mgt-hover-scale"
-              style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button><ConnectionStatus connected={isOnline} userEmail={auth.currentUser&&auth.currentUser.email} isMobile={isMobile} /></div></div><div
+              style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button><ConnectionStatus connected={isOnline} userEmail={auth.currentUser&&auth.currentUser.email} /></div></div><div
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
