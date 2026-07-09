@@ -56,7 +56,16 @@ export function TabBar({ tabs, current, onSelect }) {
       borderRadius: 12,
       background: "var(--bg-tabbar)",
       marginBottom: 16,
-      border: "1px solid var(--border-soft)"
+      border: "1px solid var(--border-soft)",
+      // v16.2.0: on a narrow screen (iPhone 12 mini, 375px) the 5 tabs' combined
+      // min-content width used to force the whole modal wider than the viewport
+      // (content cut off on both edges). Making the tab row its own horizontal
+      // scroller gives it min-width:0, so the modal collapses back to viewport
+      // width and the tabs scroll independently instead. Buttons don't shrink
+      // (flex-shrink 0) — they keep full-label width and overflow to scroll.
+      overflowX: "auto",
+      WebkitOverflowScrolling: "touch",
+      scrollbarWidth: "none"
     }}>
       {tabs.map((t) => {
         const active = t.id === current;
@@ -66,7 +75,8 @@ export function TabBar({ tabs, current, onSelect }) {
             className="mgt-hover-scale"
             onClick={() => onSelect(t.id)}
             style={{
-              flex: 1,
+              flex: "1 0 0%",
+              whiteSpace: "nowrap",
               padding: "8px 12px",
               borderRadius: 8,
               border: "none",

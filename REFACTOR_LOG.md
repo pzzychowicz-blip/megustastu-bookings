@@ -3663,3 +3663,63 @@ src/components/TimelineView.jsx (chip Reveal + popup hover); src/App.jsx (LateBa
 version 16.1.1); src/lib/booking-logic.js (`lateMins` + comment); src/components/ListView.jsx
 (`lateMins`); src/hooks/useBookingDefaults.js (comment); src/components/Settings.jsx (armed
 tier-remove).
+
+## v16.1.1 -> v16.2.0 -- Completion-duration fix · ⇧D theme toggle · connection-status dot
+Branch: this worktree (started from the app-documentation-review branch). Behavioural change:
+a targeted duration fix + two user-visible additions. No Firebase/rules/shape change — rolling-safe.
+Verified live in DEV via the Preview bridge (all three); `npm run build` OK (gz ~195.29 kB, +~0.7 kB).
+
+Three staff-requested changes:
+1. **Confirmed → Completed keeps its scheduled duration.** Marking a booking Completed used to
+   recompute `duration = now − start` (the actual-visit-length logic) on ANY transition, so a
+   never-seated booking completed late ballooned to an hours-long block (e.g. a 13:00 booking
+   completed at 21:00 → an 8h block). Now the recompute fires ONLY when the prior status was
+   `seated`, in BOTH completion paths: `updateStatus` (`status==="completed" && x.status==="seated"`,
+   App.jsx) and `doSave` (guard `orig.status==="seated"`, App.jsx). A direct Confirmed → Completed
+   keeps the scheduled `duration`/`customDur` untouched. Seated → Completed (manual + the close-time
+   auto-complete in usePersistence.js, which is seated-only) is unchanged — it still reflects the
+   true visit length. Completed bookings already free their table everywhere (v16.0.0), so the
+   longer frozen block has no availability effect. Live-verified: completing the confirmed "Mark"
+   (18:00, 90 min) at 19:47 kept 18:00–19:30, not 18:00–19:47.
+2. **⇧D toggles dark/light.** New global keyboard shortcut → the existing `onToggleDark`, added to
+   `kbRef` and handled right after the `anyModal` guard (before the `D`=delete / `D`=jump-to-today
+   handlers, so Shift wins). The `typing` guard already stops it firing in inputs. Documented in
+   the Shortcuts cheatsheet (⇧D row). Live-verified: flips both ways; plain `D` still deletes/jumps.
+3. **Connection-status dot** (`ConnectionStatus.jsx`, NEW) — ported from the MGT Scheduling sibling
+   (structurally identical, tokens remapped to Bookings). A green/red illuminated dot to the right
+   of Log out, driven by usePersistence's `isOnline` (`.info/connected`); click opens a popover with
+   the status line + the signed-in email (`auth.currentUser.email`), closing on outside-click/Esc.
+   New `--status-online/-offline` (+ `-glow`) tokens in index.html (both theme blocks, same saturated
+   values) keep colour literals out of JS (project rule). Live-verified in light + dark.
+
+Files: NEW src/components/ConnectionStatus.jsx; src/App.jsx (updateStatus + doSave duration gate,
+kbRef `onToggleDark` + ⇧D handler, ConnectionStatus import + mount, version 16.2.0); index.html
+(`--status-online/-offline(-glow)`, both themes); src/components/Shortcuts.jsx (⇧D row);
+CLAUDE.md (ConnectionStatus line + duration gotcha + ⇧D note + v16.2.0 log entry).
+
+Follow-up (same version) — **Settings tab bar overflow on narrow screens.** On an iPhone 12 mini
+(375px) the 5-tab `TabBar` didn't fit: each button was `flex:1` with `min-width:auto`, so the row's
+combined min-content width forced the WHOLE Settings modal wider than the viewport — content cards
+were cut off on both edges. Fix (Settings.jsx `TabBar`): the tab row is now its own horizontal
+scroller (`overflowX:auto` → `min-width:0`, so the modal collapses back to viewport width) and the
+buttons are `flex:"1 0 0%"` + `whiteSpace:nowrap` (equal-width and filling when there's room —
+desktop unchanged, byte-for-byte look — but no-shrink so on a narrow screen they keep full-label
+width and the row scrolls instead of forcing the modal wide). Live-verified in DEV at 375px (modal
+scrollWidth == clientWidth == 375; tab row scrolls; all 5 tabs reachable incl. Shortcuts) and at
+desktop (tabs equal 101px, no scroll). Files: src/components/Settings.jsx.
+
+Follow-up #2 (same version) — **/code-review fix: ConnectionStatus popover measured anchoring.**
+The popover's anchor side was guessed from the `isMobile` prop (`left:0` on mobile), but the dot's
+x position depends on header flex-wrap, not viewport width — at 599px (isMobile true, header
+unwrapped, dot at the right edge) the popover ran **50px off-screen right** (verified live). Fix:
+the anchor side is now MEASURED at open time — `toggleOpen` reads the wrapper's
+`getBoundingClientRect()` and right-anchors (grows leftward, the desktop look) unless
+`r.right − POPOVER_W < 8` (no room on the left), then flips to left-anchoring. The `isMobile`
+prop is gone (App mount updated). Verified live at 599px (right-anchored 181→427, fits), 375px
+(dot wrapped to x≈93 → flipped left-anchor 93→339, fits) and desktop (right-anchored, byte-identical
+to before). **NB Scheduling's ConnectionStatus has the same latent bug — port this fix on its next
+touch** (shared-pattern rule). Review nits noted, not fixed: (a) the TabBar scroller is now a clip
+container around `.mgt-hover-scale` tabs (~2-3px lift clip on the OUTER tabs at wide desktops —
+accepted trade for the scroller); (b) the actual-duration recompute is duplicated in updateStatus
+(nowMins clock) + doSave (fresh Date) — fold a shared helper into the next booking-logic touch.
+Files: src/components/ConnectionStatus.jsx, src/App.jsx (mount).
