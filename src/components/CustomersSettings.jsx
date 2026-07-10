@@ -26,6 +26,10 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
   const [openKey, setOpenKey] = useState(null);   // expanded customer
   const [armedKey, setArmedKey] = useState(null); // delete armed for this key
   const [filter, setFilter] = useState("all");    // v16.3.0: all | regulars | noshows
+  // v16.3.0 follow-up (Patryk): "Regular" threshold — minimum completed visits
+  // for the Regulars filter, adjustable via a stepper (session-only view
+  // preference, like `filter` itself). Default 2.
+  const [regularMin, setRegularMin] = useState(2);
 
   const idx = customerIndex(bookings);
   const all = Object.keys(idx).map(function (k) { return idx[k]; });
@@ -35,7 +39,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
   const noShowCustomers = all.filter(function (c) { return c.noShowCount > 0; }).length;
   // v16.3.0: quick filters (applied only when NOT searching — a query overrides).
   const base = filter === "regulars"
-    ? all.filter(function (c) { return c.visits > 0; }).sort(function (a, b) { return b.visits - a.visits || (b.latestDate || "").localeCompare(a.latestDate || ""); })
+    ? all.filter(function (c) { return c.visits >= regularMin; }).sort(function (a, b) { return b.visits - a.visits || (b.latestDate || "").localeCompare(a.latestDate || ""); })
     : filter === "noshows"
       ? all.filter(function (c) { return c.noShowCount > 0; }).sort(function (a, b) { return b.noShowCount - a.noShowCount || (b.latestDate || "").localeCompare(a.latestDate || ""); })
       : all.sort(function (a, b) {
@@ -133,10 +137,27 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
           placeholder="Search by name or phone…"
           className="mgt-hover-scale"
           style={mkInp()} />
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
           {filterChip("all", "All")}
           {filterChip("regulars", "Regulars")}
           {filterChip("noshows", "No-shows")}
+          {/* v16.3.0 follow-up: Regulars visit-threshold stepper — visible while
+              the Regulars filter is active (and not overridden by a search). */}
+          {filter === "regulars" && !searching ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
+              <button
+                onClick={function () { setRegularMin(function (m) { return Math.max(1, m - 1); }); }}
+                disabled={regularMin <= 1}
+                className={regularMin <= 1 ? undefined : "mgt-hover-scale"}
+                style={mkBtn({ fontSize: 14, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin <= 1 ? 0.4 : 1, cursor: regularMin <= 1 ? "not-allowed" : "pointer" })}>−</button>
+              <span style={{ fontSize: 12, fontWeight: 700, color: S.text, minWidth: 62, textAlign: "center" }}>{regularMin + "+ visit" + (regularMin !== 1 ? "s" : "")}</span>
+              <button
+                onClick={function () { setRegularMin(function (m) { return Math.min(50, m + 1); }); }}
+                disabled={regularMin >= 50}
+                className={regularMin >= 50 ? undefined : "mgt-hover-scale"}
+                style={mkBtn({ fontSize: 14, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin >= 50 ? 0.4 : 1, cursor: regularMin >= 50 ? "not-allowed" : "pointer" })}>+</button>
+            </span>
+          ) : null}
         </div>
         <div style={{ fontSize: 11, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number across all bookings. Deleting a customer permanently removes every booking and waitlist entry with their number.</div>
       </Section>

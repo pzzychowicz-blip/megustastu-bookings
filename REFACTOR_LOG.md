@@ -3876,3 +3876,32 @@ double-render; ~500 ms prod-equivalent on this worst-case day, near-instant on a
 findTimes 5,155 → 2–455 ms. Plain re-renders were never the issue (59 ms). Future lever if a real
 full-service day still feels slow: the `optimise` retry pass itself (~70 ms whenever a booking is
 unplaceable) — untouched per the zero-regression rule.
+
+**Perf phase 2 — instant New/Walk-in open (deferred scans + ⏳ cue + budgets).** Patryk's
+requirement: form open must be INSTANTANEOUS always; show a loading indicator instead if the
+availability check outlives the open. Architecture (ADR'd, defer-in-effect chosen over
+useTransition / Web Worker / chunking): new **`useDeferredCompute(fn, deps)`** hook
+(`src/hooks/useDeferredCompute.js`) → `{value, pending}` — commits a pending render (value=null:
+the banner collapses, never a stale answer — Patryk-chosen over stale-while-revalidate), then runs
+the compute AFTER a **guaranteed paint** (requestAnimationFrame → setTimeout(0); two plain
+timeouts do NOT guarantee a paint between them) so the modal + ⏳ cue are on screen before the scan
+blocks; a run token supersedes stale completions (StrictMode-safe). **⚠ rAF-starvation fallback
+(bug hit live):** a hidden/occluded tab fires NO animation frames (the Preview pane sat at
+`visibilityState==="hidden"`), deadlocking the scan — a parallel 120ms fallback timeout starts the
+compute when the rAF path hasn't (no paint matters when nobody can see the tab). Consumers:
+BookingFormModal's `formAvail` + `kitchenSugg` and WalkinForm's `wAutoCheck` suggestion scan (its
+cheap findBest probe stays sync); each shows a "⏳ Checking table availability…" row whose
+**Reveal ~300ms ease IS the grace** — a fast scan unmounts it as an imperceptible sliver, no timer
+needed. **Hard time budgets** (found necessary when Patryk's 19-booking stress-day made one scan
+take tens of seconds — each optimise ~500ms with many mutually-conflicting bookings): `findTimes`
+stops after **600ms** (partial suggestions returned; cheap-first slots still collected), the
+waitlist matcher's `tryFit` skips further full trials past a **300ms** per-pass budget (re-runs
+next data change). Also: **Regulars visit-threshold stepper** (Settings → Customers, Patryk ask) —
+`regularMin` session state, default 2 (was hard-coded visits>0), "N+ visits" stepper 1–50 shown
+while the Regulars filter is active; functional setState (a burst-click stale-closure was caught in
+verification). Verified live on the stress-day (19 bookings, 55 covers, 13 late): **modal DOM in
+79–86ms** (was 11.3s pre-phase-1, ~1.1s post-phase-1), ⏳ → banner sequence correct at size 12 +
+optimizer ON, walk-in 79ms via the fits-now fast path, stepper filters 2+→18 rows / 3+→14 rows.
+Files: `useDeferredCompute.js` (new), `BookingFormModal.jsx`, `WalkinForm.jsx`, `App.jsx` (waitlist
+budget), `booking-logic.js` (findTimes budget), `CustomersSettings.jsx` (stepper), CLAUDE.md (hook
+entry + 2 gotcha rows: scan layers, rAF-in-hidden-tab).

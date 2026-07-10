@@ -271,12 +271,20 @@ export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noRes
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
   if(h.closed) return []; // closed day → no valid times
   var aroundM=around||0;
+  // v16.3.0 perf phase 2: hard time budget. On an extreme day (many mutually
+  // conflicting bookings) a single full trial can cost 100ms+ — 20 of them would
+  // freeze the UI for seconds even off the mount path. When the budget runs out
+  // we stop scanning and return what we found (partial suggestions on
+  // pathological days beat a frozen app; normal days never hit this).
+  var BUDGET_MS=600;
+  var t0=Date.now();
   function slotValid(m){
     if(m>=24*60) return false; // v14.5.0: never suggest a post-midnight start (24h-hours is extend-window only)
     if(m+dur>h.close*60) return false;
     if(m===aroundM) return false;
     // Cheap-first: a slot with a plainly free table is valid without simulation.
     if(!noReshuffle&&findFreeSlot(existing,date,toTime(m),size,pref,dur,blocks,editId,null)) return true;
+    if(Date.now()-t0>BUDGET_MS) return false; // budget spent — skip the expensive trial
     return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId,null,noReshuffle);
   }
   var first=h.open*60,last=h.close*60-15;
@@ -288,9 +296,9 @@ export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noRes
   var startEarlier=off===0?aroundM-15:aroundM-off;
   var startLater=off===0?aroundM+15:aroundM+(15-off);
   var earlier=[];
-  for(var m=startEarlier;m>=first&&earlier.length<CAP;m-=15){ if(slotValid(m)) earlier.push(m); }
+  for(var m=startEarlier;m>=first&&earlier.length<CAP;m-=15){ if(Date.now()-t0>BUDGET_MS) break; if(slotValid(m)) earlier.push(m); }
   var later=[];
-  for(var m2=startLater;m2<=last&&later.length<CAP;m2+=15){ if(slotValid(m2)) later.push(m2); }
+  for(var m2=startLater;m2<=last&&later.length<CAP;m2+=15){ if(Date.now()-t0>BUDGET_MS) break; if(slotValid(m2)) later.push(m2); }
   return earlier.reverse().concat(later);
 }
 export function formatSugg(sugg,around){

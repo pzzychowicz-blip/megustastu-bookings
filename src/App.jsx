@@ -785,6 +785,10 @@ function BookingApp(){
   useEffect(function(){
     const todayStr=new Date().toISOString().slice(0,10);
     const next={};
+    // v16.3.0 perf phase 2: whole-pass time budget for the expensive trials
+    // (shared across entries — see tryFit below).
+    const WAIT_SCAN_BUDGET_MS=300;
+    const scanT0=Date.now();
     waitlist.forEach(function(w){
       if(!w||w.status!=="waiting"||!w.date||w.date<todayStr) return;
       const h=hoursFor(w.date);
@@ -801,10 +805,15 @@ function BookingApp(){
       let scanHi=h.close*60-dur;
       // v16.3.0 perf: cheap-first (the findTimes pattern) — a plainly free table
       // means the slot fits WITHOUT reshuffling anyone; only slots failing the
-      // cheap check pay for the full trial optimisation (~70ms each on a day
-      // with an unplaceable booking — this scan runs on every data change).
+      // cheap check pay for the full trial optimisation (expensive on a day
+      // with unplaceable bookings — this scan runs on every data change).
+      // Perf phase 2: a hard per-effect time budget — on an extreme day a
+      // single full trial can cost 100ms+; past the budget we skip further
+      // expensive trials this pass (cheap checks still run; the effect re-runs
+      // on the next data change / 15-min bucket anyway).
       const tryFit=function(timeStr){
         if(!noResh){const cheap=findFreeSlot(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null);if(cheap) return cheap;}
+        if(Date.now()-scanT0>WAIT_SCAN_BUDGET_MS) return null;
         return trialFits(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null,noResh);
       };
       if(w.prefTime){
