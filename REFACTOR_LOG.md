@@ -3845,3 +3845,34 @@ an `omitted:["reminderFires …"]` key so a future restore knows the transient f
 (verified in the captured blob). (4) **DaySheet memoised** — the permanently-mounted print sheet
 re-ran its filter/sort/`daySummary` passes on every 15s tick; now `useMemo`-keyed on the data (the
 documented profiled-need exception to the no-memo-by-default rule).
+
+**Performance fix — "New booking freezes for seconds" (same follow-up, profiled live).** Patryk
+reported the form taking long seconds to open with ~350 bookings in DEV. Profiled via the Preview
+bridge: click→modal was **11.3 s**, one synchronous long task. Root-cause chain: (a) today's DEV
+data has ONE unplaceable booking, which makes every `optimise()` call take ~70 ms (the retry pass:
+~8 combo-bookings × ~45 `findAllOptions` × a full greedy re-run of the day — measured identical
+whether given 15 or 352 bookings, so it's the retry, not list size); (b) `findTimes` ran that full
+trial per quarter-slot — 61 slots with the 07:00–01:00 test hours ≈ **5.1 s per call**; (c) the
+form computed `formAvail` (trialFits + findTimes) + `kitchenSugg` on **every render** — every
+keystroke and every 15 s tick — and dev StrictMode doubles the mount render (2 × ~5.5 s = the 11 s).
+Three-part fix, output-verified: **(1)** `liveBookings` in App is now `useMemo([bookings,
+nowMins])` — it was a fresh array every BookingApp render (incl. every form keystroke, since the
+form draft lives in the parent), which made any downstream memo useless. **(2)** `formAvail`,
+`kitchenSugg`, and `custIdx` in BookingFormModal are `useMemo`-keyed on their actual scan inputs —
+typing no longer re-runs the scans (measured: 10 keystrokes = 241 ms total, was ~5 s+). **(3)**
+`findTimes` rewritten cheap-first + outward-early-stop: per slot, try the no-reshuffle
+`findFreeSlot` first (a plainly free table = valid without simulation, ~µs) and only run the full
+`trialFits` when the cheap check fails; scan outward from `around` stopping at 10 valid slots per
+side (exactly what `formatSugg` keeps — both consumers, BookingFormModal + WalkinForm, pipe through
+it), grid-aligned even for a non-quarter `around`. Same cheap-first applied to the waitlist
+matching effect's `tryFit`. **Equivalence-tested old-vs-new** on live data across 5 cases: 4/5
+byte-identical after formatSugg; the 5th case the NEW code additionally offers two slots where a
+plainly free table exists but the old full-trial rejected them (the optimizer's rescue attempt for
+the unplaceable booking displaced someone) — the new answer is the honest one (the party fits
+without touching anyone) but it IS a suggestions-list behaviour delta on pathological days —
+⚠️ flagged to Patryk. Optimizer/save paths untouched (`optimise`/`applyOpt`/`bookingsAfterAction`
+byte-identical). Measured result: click→modal **11,261 ms → ~1,100 ms** in dev (StrictMode
+double-render; ~500 ms prod-equivalent on this worst-case day, near-instant on a normal day);
+findTimes 5,155 → 2–455 ms. Plain re-renders were never the issue (59 ms). Future lever if a real
+full-service day still feels slow: the `optimise` retry pass itself (~70 ms whenever a booking is
+unplaceable) — untouched per the zero-regression rule.

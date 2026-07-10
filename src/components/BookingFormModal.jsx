@@ -33,7 +33,7 @@
 //     ordering as today, no z-index changes)
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import { KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, hoursFor, INDOOR, OUTDOOR } from "../lib/constants";
 import {
   getDur, toMins, toTime,
@@ -76,7 +76,10 @@ export function BookingFormModal({
   // (new bookings only) pre-fills size/preference from the latest booking, the
   // same fields Book Again pre-fills.
   const [phoneFocus,setPhoneFocus]=useState(false);
-  const custIdx=customerIndex(bookings);
+  // v16.3.0 perf: memoised — rebuilt only when the bookings list changes, not on
+  // every keystroke (the form draft lives in the parent, so EVERY field edit
+  // re-renders this component).
+  const custIdx=useMemo(function(){return customerIndex(bookings);},[bookings]);
   const phoneMatches=phoneFocus&&hasRealPhone(form.phone)
     ?searchCustomers(custIdx,form.phone,5).filter(function(c){
       // hide an exact already-applied selection so the dropdown closes itself
@@ -160,7 +163,14 @@ export function BookingFormModal({
   // ── Real-time availability check (trial optimization) ──
   // Pre-E1's showForm guard is dropped — this component is only mounted when
   // the parent has showForm=true.
-  const formAvail=(function(){
+  // v16.3.0 perf: useMemo — the trial optimisation (trialFits) and especially the
+  // full-day suggestion scan (findTimes = trialFits per quarter-slot) are the
+  // heaviest computations in the app. They used to run on EVERY render of this
+  // component — every name/notes keystroke and every 15s parent tick — which on a
+  // day with an unplaceable booking (optimise's retry pass ~70ms per trial) froze
+  // the UI for seconds. Keyed on the actual scan inputs only; liveBookings is
+  // referentially stable across keystrokes since App's v16.3.0 useMemo.
+  const formAvail=useMemo(function(){
     if(!form.time) return null;
     if(fh.closed) return null; // closed day → no availability to compute
     const sm=toMins(form.time);
@@ -174,7 +184,8 @@ export function BookingFormModal({
     if(tables) return {ok:true,tables:tables,sugg:null};
     const sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh);
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
-  })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fh derives from form.date
+  },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,liveBookings,tableBlocks,editId,autoOptimizer]);
 
   const tablesBtn=(function(){
     const mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
@@ -257,7 +268,11 @@ export function BookingFormModal({
   const kitchenStarts=kitchenLoad?kitchenLoad.starts+1:1;
   const kitchenGuests=kitchenLoad?kitchenLoad.guests+(Number(form.size)||2):Number(form.size)||2;
   const kitchenBusy=kitchenLoad&&kitchenStarts>=KITCHEN_TABLE_LIMIT;
-  const kitchenSugg=kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks):null;
+  // v16.3.0 perf: memoised like formAvail — a per-quarter-slot day scan that must
+  // not re-run on unrelated keystrokes (name/notes/phone).
+  const kitchenSugg=useMemo(function(){
+    return kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks):null;
+  },[kitchenBusy,bookings,form.date,form.size,form.preference,form.customDur,form.time,editId,tableBlocks]);
   function renderKitchenTimes(arr){
     if(!arr||!arr.length) return null;
     return arr.map(function(r){return (

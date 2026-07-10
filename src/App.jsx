@@ -11,7 +11,7 @@
  * Author:  Patryk Zychowicz
  * Contact: pz.zychowicz@gmail.com
  */
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 
@@ -574,10 +574,15 @@ function BookingApp(){
   // Derived: bookings with seated-today durations synced to live time.
   // Used by form/walk-in availability checks so they match what bookingsAfterAction
   // will see on save.
-  const liveBookings=(function(){
+  // v16.3.0 perf: useMemo — this used to be a fresh array EVERY BookingApp render
+  // (incl. every form keystroke, since the form draft lives here), which made any
+  // downstream memo of the availability scans useless (their `liveBookings` input
+  // changed ref each render). Keyed on [bookings, nowMins]: recomputes on a data
+  // change or the 15s tick, stays referentially stable across keystrokes/toggles.
+  const liveBookings=useMemo(function(){
     const today=new Date().toISOString().slice(0,10);
     return syncLiveDurations(bookings,today,nowMins);
-  })();
+  },[bookings,nowMins]);
   const winW=useWinW();
   const isMobile=winW<600;
   // ── v14.2.0: Dark-mode theme state ────────────────────────────────────────
@@ -794,17 +799,25 @@ function BookingApp(){
       // first so the chip shows it exactly when it fits.
       let scanLo=Math.ceil(fromM/15)*15;
       let scanHi=h.close*60-dur;
+      // v16.3.0 perf: cheap-first (the findTimes pattern) — a plainly free table
+      // means the slot fits WITHOUT reshuffling anyone; only slots failing the
+      // cheap check pay for the full trial optimisation (~70ms each on a day
+      // with an unplaceable booking — this scan runs on every data change).
+      const tryFit=function(timeStr){
+        if(!noResh){const cheap=findFreeSlot(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null);if(cheap) return cheap;}
+        return trialFits(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null,noResh);
+      };
       if(w.prefTime){
         const sm=toMins(w.prefTime);
         if(sm>=fromM&&sm+dur<=h.close*60){
-          const t=trialFits(liveBookings,w.date,w.prefTime,size,"auto",dur,tableBlocks,null,null,noResh);
+          const t=tryFit(w.prefTime);
           if(t){next[w.id]={tables:t,time:w.prefTime};return;}
         }
         scanLo=Math.max(scanLo,Math.ceil((sm-90)/15)*15);
         scanHi=Math.min(scanHi,sm+90);
       }
       for(let m=scanLo;m<=scanHi&&m<24*60;m+=15){
-        const t=trialFits(liveBookings,w.date,toTime(m),size,"auto",dur,tableBlocks,null,null,noResh);
+        const t=tryFit(toTime(m));
         if(t){next[w.id]={tables:t,time:toTime(m)};break;}
       }
     });

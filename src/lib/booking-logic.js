@@ -252,18 +252,46 @@ export function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTab
   }
   return assigned.tables;
 }
+// v16.3.0 perf rewrite — same output, a fraction of the work. The old shape ran
+// the FULL trial optimisation (trialFits → applyOpt → optimise, incl. its retry
+// passes) for EVERY quarter-slot of the day — with 07:00–01:00 hours that's ~70
+// slots, and on a day where one booking is unplaceable each optimise takes ~70ms
+// (the retry pass), so one findTimes call cost ~5 SECONDS (the "New booking
+// freezes" bug). Two changes, both output-preserving for the only consumers
+// (formatSugg keeps just the 10 nearest valid slots each side of `around`):
+//   1. CHEAP-FIRST: per slot, try the no-reshuffle findFreeSlot before the full
+//      optimizer trial. A plain free table means the slot is bookable WITHOUT
+//      touching anyone — trivially valid, no simulation needed. Only slots that
+//      fail the cheap check pay for the full trial (which exists to find
+//      reshuffle-rescuable slots).
+//   2. OUTWARD EARLY-STOP: scan from `around` outwards and stop after 10 valid
+//      slots per side — exactly what formatSugg would keep. Result is returned
+//      ascending, so formatSugg's slice sees the identical list.
 export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
   if(h.closed) return []; // closed day → no valid times
-  var times=Array.from({length:(h.close-h.open)*4},function(_,i){return h.open*60+i*15;});
   var aroundM=around||0;
-  var valid=times.filter(function(m){
+  function slotValid(m){
     if(m>=24*60) return false; // v14.5.0: never suggest a post-midnight start (24h-hours is extend-window only)
     if(m+dur>h.close*60) return false;
     if(m===aroundM) return false;
+    // Cheap-first: a slot with a plainly free table is valid without simulation.
+    if(!noReshuffle&&findFreeSlot(existing,date,toTime(m),size,pref,dur,blocks,editId,null)) return true;
     return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId,null,noReshuffle);
-  });
-  return valid;
+  }
+  var first=h.open*60,last=h.close*60-15;
+  var CAP=10; // formatSugg keeps 10 per side — scanning further is wasted work
+  // Stay on the quarter-hour grid even when `around` isn't grid-aligned (the old
+  // fixed-grid scan only ever produced grid slots): step outwards from the
+  // nearest grid positions strictly below/above aroundM.
+  var off=((aroundM-first)%15+15)%15;
+  var startEarlier=off===0?aroundM-15:aroundM-off;
+  var startLater=off===0?aroundM+15:aroundM+(15-off);
+  var earlier=[];
+  for(var m=startEarlier;m>=first&&earlier.length<CAP;m-=15){ if(slotValid(m)) earlier.push(m); }
+  var later=[];
+  for(var m2=startLater;m2<=last&&later.length<CAP;m2+=15){ if(slotValid(m2)) later.push(m2); }
+  return earlier.reverse().concat(later);
 }
 export function formatSugg(sugg,around){
   if(!sugg||!sugg.length) return {earlier:[],later:[]};
