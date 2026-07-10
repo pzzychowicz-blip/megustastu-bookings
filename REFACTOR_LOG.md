@@ -3822,3 +3822,13 @@ Verified live in DEV: window stepper 30→25 dropped 5B from the freeing-soon li
 standing OFF removed "Repeat weekly" from the form; Esc closed the search panel; Backup renders
 last. Version stays 16.3.0 (unmerged branch). Rolling-safe — both new fields are additive/absent-
 tolerant, no rules change.
+
+**Fifth correction (same follow-up) — freeing-soon overflow:** the Summary status bar
+(`Summary.jsx`) was `white-space:nowrap` on the whole line, so when several tables were freeing at
+once the "freeing soon: 2 (~6m), 5A (~9m), 5B (~13m)" list overran the card's right edge and got
+clipped by the root `overflow:hidden`. Fix: the status container is now `white-space:normal` (+ the
+right cluster went `flexShrink:1`/`minWidth:0` so it can shrink); the short occupancy metrics stay
+one no-wrap unit, and `freeingParts()` (was `freeingLabel()`) returns an ARRAY so each entry renders
+as its own no-wrap span — the list now wraps BETWEEN tables (never mid-token) and flows to a second
+line inside the card. Verified live: at 390px the list wraps cleanly right-aligned with no clipping
+and zero horizontal page overflow; wider widths still fit on one line. Pure client change.

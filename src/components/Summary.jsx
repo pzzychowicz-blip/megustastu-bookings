@@ -27,16 +27,19 @@ function hh(n){ return String(((n % 24) + 24) % 24).padStart(2, "0") + ":00"; }
 function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
 function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
 
-// v16.3.0: compact "freeing soon" label from the freeing list ([{tables,inMin}]).
-// Tables joined with + (a multi-table booking), cap at 3 entries + "+N".
-function freeingLabel(freeing){
-  if(!freeing || !freeing.length) return "";
+// v16.3.0: "freeing soon" entries from the freeing list ([{tables,inMin}]).
+// Tables joined with + (a multi-table booking), cap at 3 entries + a "+N" tail.
+// Returns an ARRAY so each entry can render as its own no-wrap span — the line
+// wraps BETWEEN entries (never mid-token) when several tables are freeing at
+// once, instead of overflowing the card (v16.3.0-correction).
+function freeingParts(freeing){
+  if(!freeing || !freeing.length) return [];
   const parts = freeing.slice(0, 3).map(function(f){
     const t = (f.tables && f.tables.length) ? f.tables.join("+") : "?";
     return t + " (~" + f.inMin + "m)";
   });
-  const extra = freeing.length > 3 ? " +" + (freeing.length - 3) : "";
-  return parts.join(", ") + extra;
+  if(freeing.length > 3) parts.push("+" + (freeing.length - 3));
+  return parts;
 }
 
 export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, onToggle, onOpenWeek, onPrint }) {
@@ -80,18 +83,28 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, ope
         </button>
         {/* Right cluster — the live status bar (today only) + Week + chevron, right-aligned
             via marginLeft:auto; wraps below the headline as a unit on narrow widths. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexShrink: 1, minWidth: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {isToday ? (
-            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-              <span style={{ fontWeight: 700, color: "var(--status-seated-text)" }}>{s.seated.count}</span> seated
-              <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
-              <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{s.upcoming.count}</span> upcoming
-              <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
-              <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{s.seated.covers}/{TOTAL_SEATS}</span> seats filled
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", minWidth: 0, textAlign: "right" }}>
+              {/* Occupancy metrics stay together as one no-wrap unit (short line). */}
+              <span style={{ whiteSpace: "nowrap" }}>
+                <span style={{ fontWeight: 700, color: "var(--status-seated-text)" }}>{s.seated.count}</span> seated
+                <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
+                <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{s.upcoming.count}</span> upcoming
+                <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
+                <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{s.seated.covers}/{TOTAL_SEATS}</span> seats filled
+              </span>
+              {/* freeing soon — each entry is its own no-wrap span so the list
+                  wraps BETWEEN tables (never mid-token) when it gets long. */}
               {freeing && freeing.length ? (
-                <span>
-                  <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
-                  <span style={{ color: "var(--success-text)", fontWeight: 600 }}>freeing soon: {freeingLabel(freeing)}</span>
+                <span style={{ color: "var(--success-text)", fontWeight: 600 }}>
+                  <span style={{ margin: "0 5px", color: "var(--text-faint)", fontWeight: 500 }}>·</span>
+                  <span style={{ whiteSpace: "nowrap" }}>freeing soon:</span>{" "}
+                  {freeingParts(freeing).map(function(p, i){
+                    return (
+                      <span key={i}>{i > 0 ? ", " : ""}<span style={{ whiteSpace: "nowrap" }}>{p}</span></span>
+                    );
+                  })}
                 </span>
               ) : null}
             </div>
