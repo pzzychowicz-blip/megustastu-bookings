@@ -26,7 +26,10 @@ import { db } from "../firebase";
 import { genId } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 
-const DEFAULT_RECURRING = { v: 1, enabled: true, horizonWeeks: 4, rules: [] };
+// v16.3.0 correction: standing bookings default OFF — the feature (and the
+// booking-form "Repeat weekly" toggle) stays hidden until staff enable it in
+// Settings. Absent/legacy node ⇒ off (sanitize requires `enabled === true`).
+const DEFAULT_RECURRING = { v: 1, enabled: false, horizonWeeks: 4, rules: [] };
 
 function clampInt(n, def, min, max) {
   const v = Math.round(Number(n));
@@ -55,7 +58,7 @@ function sanitizeRecurring(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   return {
     v: 1,
-    enabled: src.enabled !== false,
+    enabled: src.enabled === true,
     horizonWeeks: clampInt(src.horizonWeeks, 4, 1, 12),
     rules: Array.isArray(src.rules) ? src.rules.map(sanitizeRule).filter(Boolean) : []
   };

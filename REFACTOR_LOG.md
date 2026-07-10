@@ -3803,3 +3803,22 @@ day sheet light-only portal; backup JSON has all collections; Stats segment + mo
 recurring generated 5 Wednesday occurrences over 4 weeks, no duplicates on reload, delete→skipDate
 held through reload (not regenerated). Real wall-clock during the build was post-midnight then in
 service hours, so the late banner + turn pill were exercised live once the clock entered hours.
+
+**UI corrections follow-up (same version, new session · 2026-07-10):** four Patryk-requested
+adjustments on the still-open branch (PR #40). (1) **Table turns — prediction-window stepper:** the
+freeing-soon window is no longer hard-coded to 15 — new `freeSoonWindow` field on
+`settings/bookingDefaults` (sanitize clamps 5–60 step 5, default 15) + a "Predict up to N min ahead"
+MiniStepper in the Table-turns section (AutoHeight-revealed while the feature is on); App's
+`freeingSoon(bookings,today,nowMins,…)` reads it. (2) **Standing bookings default OFF + form gate:**
+`DEFAULT_RECURRING.enabled=false` and sanitize `enabled: src.enabled===true` (absent/legacy node ⇒
+off); the form's "Repeat weekly" section is now gated on `!editId && standingEnabled` (new
+`standingEnabled={recurring.enabled!==false}` prop) so it's hidden entirely when the feature is off.
+(3) **Search closes on Esc:** added `showSearch` to App.jsx's Escape z-order chain (the "Done"
+button's logical key; Enter left alone since the autofocused input owns it). (4) **Backup at the
+bottom:** the Backup `Section` moved below Standing bookings (last section before the version
+footer) in Settings → General. Files: `useBookingDefaults.js`, `useRecurring.js`, `App.jsx`,
+`BookingFormModal.jsx`, `Settings.jsx`, CLAUDE.md. Build OK, gz ≈202.5 kB (no meaningful delta).
+Verified live in DEV: window stepper 30→25 dropped 5B from the freeing-soon line + its pill;
+standing OFF removed "Repeat weekly" from the form; Esc closed the search panel; Backup renders
+last. Version stays 16.3.0 (unmerged branch). Rolling-safe — both new fields are additive/absent-
+tolerant, no rules change.

@@ -703,8 +703,8 @@ function BookingApp(){
     setLateDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
   }
   // v16.3.0 — Table-turn prediction: today's seated bookings whose scheduled end
-  // is within the next 15 min (freeingSoon, booking-logic.js). Gated on the
-  // settings/bookingDefaults master switch (freeSoonEnabled). Two shapes:
+  // is within the next freeSoonWindow min (freeingSoon, booking-logic.js). Gated
+  // on the settings/bookingDefaults master switch (freeSoonEnabled). Two shapes:
   //   freeingList — [{id,name,tables,inMin}] soonest-first, for the Summary line.
   //   freeingMap  — {bookingId: inMin}, for the timeline countdown pills.
   // Today-only + recomputed per render (nowMins ticks every 15s) — the lateMap
@@ -712,7 +712,7 @@ function BookingApp(){
   const freeingList=(function(){
     const today=new Date().toISOString().slice(0,10);
     if(viewDate!==today||!bookingDefaults.freeSoonEnabled) return [];
-    return freeingSoon(bookings,today,nowMins,15);
+    return freeingSoon(bookings,today,nowMins,bookingDefaults.freeSoonWindow||15);
   })();
   const freeingMap=(function(){
     const map={};
@@ -1365,6 +1365,8 @@ function BookingApp(){
         if(K.confirmCancel){e.preventDefault();K.setConfirmCancel(null);return;}
         if(K.confirmDel){e.preventDefault();K.setConfirmDel(null);return;}
         if(K.showPrefPicker){e.preventDefault();K.setShowPrefPicker(false);return;}
+        // v16.3.0 correction: Esc dismisses the search panel (its "Done" button).
+        if(K.showSearch){e.preventDefault();K.setShowSearch(false);return;}
         if(K.blockTarget){e.preventDefault();K.setBlockTarget(null);return;}
         if(K.manualTarget){e.preventDefault();K.setManualTarget(null);return;}
         if(K.showWalkin){e.preventDefault();K.setShowWalkin(false);return;}
@@ -1982,7 +1984,8 @@ function BookingApp(){
               onOpenManualAssign={function(target){setManualTarget(target);}}
               onOpenHistory={function(){setShowHistory(true);}}
               onRequestCancel={function(id){setConfirmCancel(id);}}
-              onAddToWaitlist={addFormToWaitlist} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} />:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              onAddToWaitlist={addFormToWaitlist}
+              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} />:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}

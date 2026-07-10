@@ -487,25 +487,19 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           </div>
           <Toggle on={bd.freeSoonEnabled !== false} onClick={() => onSaveBookingDefaults({ freeSoonEnabled: bd.freeSoonEnabled === false })} />
         </div>
-      </Section>
-      {/* v16.3.0: Backup — download a JSON snapshot of every collection + all
-          settings to this device (the Firebase free plan has no auto-backups). */}
-      {onBackup ? (
-        <Section style={{ marginBottom: 18 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <div style={{ textAlign: "left", flex: "1 1 200px" }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Backup</div>
-              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-                Download a JSON copy of all bookings, waitlist, reminders and settings to this device. There are no automatic backups — save one periodically. Restoring is manual (keep the file safe).
-              </div>
-            </div>
-            <button
-              onClick={onBackup}
-              className="mgt-hover-scale mgt-press"
-              style={mkBtn({ fontSize: 13, minHeight: 40, padding: "8px 16px", background: BTN.nav })}>⬇ Download backup</button>
+        {/* v16.3.0 correction: prediction window — how far ahead "freeing soon"
+            looks. Revealed only while the feature is on. 5–60 min, 5-min steps. */}
+        <AutoHeight>{bd.freeSoonEnabled !== false ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Predict up to</span>
+            <MiniStepper value={(bd.freeSoonWindow || 15)} fmt={(n) => n + " min"}
+              disableDec={(bd.freeSoonWindow || 15) <= 5} disableInc={(bd.freeSoonWindow || 15) >= 60}
+              onDec={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) - 5 })}
+              onInc={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) + 5 })} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>ahead</span>
           </div>
-        </Section>
-      ) : null}
+        ) : null}</AutoHeight>
+      </Section>
       {/* v16.3.0: Standing bookings — the recurring-rule manager. Rules are
           CREATED from the booking form ("Repeat weekly"); here staff pause /
           delete them and set the generation horizon. */}
@@ -552,6 +546,25 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           ) : (
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 12 }}>Off — no new standing bookings are generated.</div>
           )}</AutoHeight>
+        </Section>
+      ) : null}
+      {/* v16.3.0 correction: Backup lives at the BOTTOM of the General tab —
+          download a JSON snapshot of every collection + all settings to this
+          device (the Firebase free plan has no auto-backups). */}
+      {onBackup ? (
+        <Section style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ textAlign: "left", flex: "1 1 200px" }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Backup</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+                Download a JSON copy of all bookings, waitlist, reminders and settings to this device. There are no automatic backups — save one periodically. Restoring is manual (keep the file safe).
+              </div>
+            </div>
+            <button
+              onClick={onBackup}
+              className="mgt-hover-scale mgt-press"
+              style={mkBtn({ fontSize: 13, minHeight: 40, padding: "8px 16px", background: BTN.nav })}>⬇ Download backup</button>
+          </div>
         </Section>
       ) : null}
       <div style={{ padding: "10px 12px 12px", textAlign: "center" }}>
