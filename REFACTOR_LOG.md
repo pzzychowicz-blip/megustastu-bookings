@@ -3832,3 +3832,16 @@ one no-wrap unit, and `freeingParts()` (was `freeingLabel()`) returns an ARRAY s
 as its own no-wrap span — the list now wraps BETWEEN tables (never mid-token) and flows to a second
 line inside the card. Verified live: at 390px the list wraps cleanly right-aligned with no clipping
 and zero horizontal page overflow; wider widths still fit on one line. Pure client change.
+
+**/code-review fixes (same follow-up):** the PR-review pass surfaced four minor findings, all
+applied. (1) **Deposit clamped ≥0** — the form's `min={0}` only blocks the stepper (a typed "-50"
+passed `Number()` through); `Math.max(0,…)` at all four sites (`sanitize`, both `doSave` paths,
+`diffBooking`'s history string). Verified live: a React-held "-25" saved → stored 0. (2)
+**`addSkipDate` returns a boolean** (`saveRecurring` reports the loaded-guard refusal) and
+`delBooking` now ABORTS a recurring-occurrence delete when the skipDate is refused (recurring node
+not loaded yet — tiny post-load window), with a "still syncing" warning — deleting anyway would let
+the generator resurrect the occurrence. (3) **Backup self-documents its omission** — the JSON gains
+an `omitted:["reminderFires …"]` key so a future restore knows the transient fire-log wasn't lost
+(verified in the captured blob). (4) **DaySheet memoised** — the permanently-mounted print sheet
+re-ran its filter/sort/`daySummary` passes on every 15s tick; now `useMemo`-keyed on the data (the
+documented profiled-need exception to the no-memo-by-default rule).

@@ -70,11 +70,14 @@ export function useRecurring({ setWriteWarning }) {
   const loaded = useRef(false);
   const revRef = useRef(0);
 
+  // Returns true when the write was dispatched, false when refused by the
+  // loaded-guard (/code-review: delBooking gates a recurring-occurrence delete
+  // on addSkipDate's success so the generator can never resurrect it).
   function saveRecurring(next, isSilent) {
     if (!loaded.current) {
       console.warn("[SAFE] Refused to write recurring — initial read has not completed yet.");
       if (!isSilent) setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
-      return;
+      return false;
     }
     const computed = sanitizeRecurring(typeof next === "function" ? next(recurringRef.current) : next);
     recurringRef.current = computed;
@@ -82,6 +85,7 @@ export function useRecurring({ setWriteWarning }) {
     writeWithRev("recurring", computed, revRef, function () {
       if (!isSilent) setWriteWarning("Couldn't save — this device's data was out of date and has been refreshed. Please redo the change.");
     });
+    return true;
   }
 
   useEffect(function () {
@@ -111,7 +115,7 @@ export function useRecurring({ setWriteWarning }) {
     saveRecurring(function (prev) { return Object.assign({}, prev, { rules: prev.rules.filter(function (r) { return r.id !== id; }) }); });
   }
   function addSkipDate(id, date, isSilent) {
-    saveRecurring(function (prev) {
+    return saveRecurring(function (prev) {
       return Object.assign({}, prev, { rules: prev.rules.map(function (r) {
         if (r.id !== id) return r;
         if ((r.skipDates || []).indexOf(date) !== -1) return r;

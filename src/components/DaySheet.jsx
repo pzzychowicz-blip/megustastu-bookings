@@ -16,6 +16,7 @@
 //
 // Props: bookings, date, splitHour, waitlist, blocks
 
+import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import { daySummary } from "../lib/booking-logic";
 
@@ -29,16 +30,27 @@ const cell = { border: "1px solid #999", padding: "5px 7px", fontSize: 12, textA
 const th = Object.assign({}, cell, { fontWeight: 700, background: "#eee" });
 
 export function DaySheet({ bookings, date, splitHour, waitlist, blocks }) {
-  const day = (bookings || [])
-    .filter(function (b) { return b && b.date === date && b.status !== "cancelled"; })
-    .slice()
-    .sort(function (a, b) { return (a.time || "").localeCompare(b.time || ""); });
-  const s = daySummary(bookings, date, splitHour);
-  const dayBlocks = (blocks || []).filter(function (bl) { return bl && bl.date === date; });
-  const dayWait = (waitlist || [])
-    .filter(function (w) { return w && w.date === date && w.status === "waiting"; })
-    .slice()
-    .sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+  // /code-review: the sheet is PERMANENTLY mounted (display:none) and BookingApp
+  // re-renders every 15s tick — memoise the filter/sort/summary passes so they
+  // run only when the underlying data (not the clock) changes. This is the
+  // profiled-need exception to the "no memo by default" rule: a known
+  // every-15s recomputation over the whole bookings list with zero visual output.
+  const day = useMemo(function () {
+    return (bookings || [])
+      .filter(function (b) { return b && b.date === date && b.status !== "cancelled"; })
+      .slice()
+      .sort(function (a, b) { return (a.time || "").localeCompare(b.time || ""); });
+  }, [bookings, date]);
+  const s = useMemo(function () { return daySummary(bookings, date, splitHour); }, [bookings, date, splitHour]);
+  const dayBlocks = useMemo(function () {
+    return (blocks || []).filter(function (bl) { return bl && bl.date === date; });
+  }, [blocks, date]);
+  const dayWait = useMemo(function () {
+    return (waitlist || [])
+      .filter(function (w) { return w && w.date === date && w.status === "waiting"; })
+      .slice()
+      .sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+  }, [waitlist, date]);
 
   return createPortal(
     <div className="mgt-print-sheet" style={{ color: "#000", background: "#fff", padding: 24, fontFamily: "-apple-system, system-ui, sans-serif" }}>

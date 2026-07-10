@@ -939,6 +939,11 @@ function BookingApp(){
     const payload={
       exportedAt:new Date().toISOString(),
       appVersion:__APP_SIGNATURE__.version,
+      // /code-review: reminderFires (the transient per-device fire log) is
+      // DELIBERATELY omitted — restoring reminders without it can only re-show
+      // an already-seen banner once, which pruneOldReminderFires then re-prunes.
+      // Recorded in the file itself so a future restore knows it wasn't lost.
+      omitted:["reminderFires (transient reminder fire-log — intentionally not backed up)"],
       bookings:bookings,
       tableBlocks:tableBlocks,
       waitlist:waitlist,
@@ -1117,7 +1122,7 @@ function BookingApp(){
               let h=(b.history||[]).concat([editHist]);
               if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
               const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
-              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Number(f.deposit)||0,status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
             }
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
@@ -1168,7 +1173,7 @@ function BookingApp(){
           recStampId=rule.id;
         }
         // v14 p1: scheduledTime=f.time on creation (new bookings always start confirmed).
-        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Number(f.deposit)||0,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,history:[createHist]};
+        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,history:[createHist]};
         // v15.7.0: build the next state as a PURE transform of `prev` (see the edit
         // path above) so the new-booking save joins the optimistic-show + auto-retry
         // path. `newId`/`nb` are computed once (stable id) → a held/rejected write
@@ -1281,10 +1286,17 @@ function BookingApp(){
   function delBooking(id){const target=bookings.find(function(x){return x.id===id;});
     // v16.3.0: deleting a recurring OCCURRENCE parks its date on the rule's
     // skipDates so the generator never resurrects it. Done BEFORE the booking
-    // delete and UNGATED by `ok` — if the delete is held/auto-retried, the
-    // skipDate must still land so the generator doesn't re-create the occurrence
-    // during the hold (addSkipDate is idempotent). Silent write.
-    if(target&&target.recurringId&&target.recurringDate) addSkipDate(target.recurringId,target.recurringDate,true);
+    // delete and UNGATED by the delete's `ok` — if the delete is held/auto-
+    // retried, the skipDate must still land so the generator doesn't re-create
+    // the occurrence during the hold (addSkipDate is idempotent). Silent write.
+    // /code-review: if the skipDate itself is REFUSED (recurring node not loaded
+    // yet — a tiny post-load window), ABORT the delete: deleting anyway would
+    // let the generator resurrect the occurrence moments later. Non-silent
+    // warning so the tap isn't a mystery no-op.
+    if(target&&target.recurringId&&target.recurringDate){
+      const okSkip=addSkipDate(target.recurringId,target.recurringDate,true);
+      if(!okSkip){setWriteWarning("Still syncing standing bookings — try deleting again in a moment.");setConfirmDel(null);return;}
+    }
     const ok=saveBookings(function(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);if(ok) flash();}
 
   // v14 preview 3: Global keyboard shortcuts. Uses a ref to capture the latest
