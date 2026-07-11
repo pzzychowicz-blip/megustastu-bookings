@@ -54,6 +54,8 @@ const SHORTCUT_SECTIONS = [
     { keys: ["W"],       label: "Walk-in" },
     { keys: ["S"],       label: "Toggle Summary panel" },
     { keys: ["M"],       label: "Open More (Week / Month)" },
+    { keys: ["/"],       label: "Find a booking (any date)" },
+    { keys: ["⇧D"], label: "Toggle dark / light mode" },
     { keys: ["I"],       label: "Open WhatsApp inbox" },
     { keys: ["X"],       label: "Open WhatsApp simulator" },
     { keys: ["?"],       label: "Show this help" },

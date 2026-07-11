@@ -33,7 +33,7 @@
 //     ordering as today, no z-index changes)
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import { KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, hoursFor, INDOOR, OUTDOOR } from "../lib/constants";
 import {
   getDur, toMins, toTime,
@@ -42,7 +42,11 @@ import {
   optimizerActiveFor
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, matchCustomerByPhone } from "../lib/customers";
-import { Overlay, Fld, Section, TBadge, AvailBanner, mkInp, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { useDeferredCompute } from "../hooks/useDeferredCompute";
+
+// v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export function BookingFormModal({
   form, setForm, editId, error,
@@ -50,7 +54,7 @@ export function BookingFormModal({
   autoOptimizer, isMobile,
   onSave, onClose, onClearSwap, onBookAgain,
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel,
-  onAddToWaitlist,
+  onAddToWaitlist, standingEnabled,
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
   // Pre-E1, these all lived inline in BookingApp's body. Moved here because
@@ -73,7 +77,10 @@ export function BookingFormModal({
   // (new bookings only) pre-fills size/preference from the latest booking, the
   // same fields Book Again pre-fills.
   const [phoneFocus,setPhoneFocus]=useState(false);
-  const custIdx=customerIndex(bookings);
+  // v16.3.0 perf: memoised — rebuilt only when the bookings list changes, not on
+  // every keystroke (the form draft lives in the parent, so EVERY field edit
+  // re-renders this component).
+  const custIdx=useMemo(function(){return customerIndex(bookings);},[bookings]);
   const phoneMatches=phoneFocus&&hasRealPhone(form.phone)
     ?searchCustomers(custIdx,form.phone,5).filter(function(c){
       // hide an exact already-applied selection so the dropdown closes itself
@@ -153,11 +160,27 @@ export function BookingFormModal({
   // v15.0.0: per-weekday hours for THIS booking's date (which may differ from the
   // viewed day) — drives the time min/max + a closed-day notice.
   const fh=hoursFor(form.date);
+  // /code-review: hours SIGNATURE for the scan deps — hoursFor reads the live
+  // WEEK_HOURS binding, so a Settings hours change on another device changes fh
+  // WITHOUT any form.* dep changing; keying the deferred scans on this string
+  // re-checks availability instead of leaving a stale banner until the next
+  // input nudge.
+  const hoursSig=fh.closed?"closed":fh.open+"-"+fh.close;
 
   // ── Real-time availability check (trial optimization) ──
   // Pre-E1's showForm guard is dropped — this component is only mounted when
   // the parent has showForm=true.
-  const formAvail=(function(){
+  // v16.3.0 perf: the trial optimisation (trialFits) and especially the full-day
+  // suggestion scan (findTimes = trialFits per quarter-slot) are the heaviest
+  // computations in the app — on a day with an unplaceable booking (optimise's
+  // retry pass ~70ms per trial) they froze form-open for seconds. Perf phase 2:
+  // useDeferredCompute runs them POST-PAINT (the modal opens instantly, the
+  // banner eases in when the result lands ~a frame later; ⏳ cue past ~150ms) and
+  // only when the actual scan inputs change — never on name/notes keystrokes or
+  // the 15s tick. liveBookings is referentially stable across keystrokes since
+  // App's v16.3.0 useMemo. `value` is null while (re-)checking — the banner
+  // collapses rather than showing a stale answer (Patryk-chosen).
+  const availScan=useDeferredCompute(function(){
     if(!form.time) return null;
     if(fh.closed) return null; // closed day → no availability to compute
     const sm=toMins(form.time);
@@ -171,7 +194,8 @@ export function BookingFormModal({
     if(tables) return {ok:true,tables:tables,sugg:null};
     const sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh);
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
-  })();
+  },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig]);
+  const formAvail=availScan.value;
 
   const tablesBtn=(function(){
     const mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
@@ -254,7 +278,21 @@ export function BookingFormModal({
   const kitchenStarts=kitchenLoad?kitchenLoad.starts+1:1;
   const kitchenGuests=kitchenLoad?kitchenLoad.guests+(Number(form.size)||2):Number(form.size)||2;
   const kitchenBusy=kitchenLoad&&kitchenStarts>=KITCHEN_TABLE_LIMIT;
-  const kitchenSugg=kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks):null;
+  // v16.3.0 perf: deferred like formAvail — a per-quarter-slot day scan that must
+  // not run at mount-paint time nor on unrelated keystrokes (name/notes/phone).
+  // getKitchenLoad/kitchenBusy above stay synchronous (cheap, O(day)) so the
+  // "Starting at this time: N bookings · N guests" line renders instantly; only
+  // the suggested-times chips arrive post-paint.
+  const kitchenScan=useDeferredCompute(function(){
+    return kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks):null;
+  },[kitchenBusy,bookings,form.date,form.size,form.preference,form.customDur,form.time,editId,tableBlocks,hoursSig]);
+  const kitchenSugg=kitchenScan.value;
+  // v16.3.0 perf phase 2: the ⏳ cue — shown while a deferred scan is pending.
+  // Its Reveal's ~300ms ease is the natural grace: a fast scan unmounts it
+  // having barely opened (imperceptible sliver), a slow scan shows it fully.
+  // One shared row covers both scans; it sits in the availBanner's slot region.
+  const availChecking=availScan.pending||(kitchenBusy&&kitchenScan.pending);
+  const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:600,color:"var(--text-muted)",textAlign:"center"}}>⏳ Checking table availability…</div>;
   function renderKitchenTimes(arr){
     if(!arr||!arr.length) return null;
     return arr.map(function(r){return (
@@ -409,12 +447,32 @@ export function BookingFormModal({
               style={{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}}>{dur+" min"}</span><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:12,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
-              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize:13,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes"><textarea
+              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize:13,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal><Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes"><textarea
           value={form.notes}
           onChange={function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});}}
           rows={2}
           placeholder="Allergies, special requests..."
           className="mgt-hover-scale"
-          style={Object.assign({},inp(),{resize:"vertical"})} /></Fld></Section></AutoHeight></Overlay>
+          style={Object.assign({},inp(),{resize:"vertical"})} /></Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none. */}<Fld label="Deposit (€)"><input
+          type="number"
+          min={0}
+          step={5}
+          value={form.deposit}
+          onChange={function(e){setForm(function(f){return Object.assign({},f,{deposit:e.target.value});});}}
+          placeholder="0"
+          className="mgt-hover-scale"
+          style={inp()} /></Fld></Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
+        <Section>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+            <div style={{textAlign:"left"}}>
+              <div style={{fontSize:14,fontWeight:600,color:"var(--text-primary)"}}>Repeat weekly</div>
+              <div style={{fontSize:12,fontWeight:500,color:"var(--text-faint)",marginTop:2}}>
+                {"Create a standing booking every "+(WEEKDAY_NAMES[new Date(form.date).getUTCDay()]||"week")+(form.time?" at "+form.time:"")+". Manage it in Settings → General → Standing bookings."}
+              </div>
+            </div>
+            <Toggle on={!!form.repeatWeekly} onClick={function(){setForm(function(f){return Object.assign({},f,{repeatWeekly:!f.repeatWeekly});});}} />
+          </div>
+        </Section>
+      ):null}</AutoHeight></Overlay>
   );
 }

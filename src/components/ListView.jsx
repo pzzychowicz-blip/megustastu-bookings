@@ -30,7 +30,7 @@
 
 import { useEffect, useState } from "react";
 import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
-import { toMins, toTime, isLocked, statusOrder } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder, lateMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
 
@@ -43,6 +43,7 @@ const __listAnims = {};
 export function ListView({
   bookings, date, onEdit, onStatus, onDelete, onManual,
   nowMins = 0, warnings = {},
+  late = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {},
   showFinished = false, onToggleFinished = () => {}
 }) {
@@ -110,15 +111,21 @@ export function ListView({
         const liveDur = b.status === "seated" ? Math.max(elapsedMin, b.duration || 90) : b.duration;
         const end = toTime(toMins(b.time) + liveDur);
         const warn = warnings[b.id];
+        // v16.1.0: running-late state ("warn"/"noshow") from App's lateMap —
+        // amber border + "N min late" tag; at "noshow" a one-tap No show button.
+        // Seated-overstay warnings keep precedence over the late highlight.
+        const lateSt = late[b.id] || null;
         const sc = STATUS_COLORS[b.status];
         const useStatusColor = b.status === "seated" || b.status === "completed" || b.status === "cancelled";
         const cardBg = useStatusColor ? "var(--bg-card-dim)" : "var(--bg-card-strong)";
         const cardBrd = warn
           ? (warn.overdue ? "var(--card-overdue-border)" : "var(--card-warn-border)")
-          : b._conflict
-            ? "var(--card-conflict-border)"
-            : useStatusColor ? sc.border : "var(--border-card-plain)";
-        const cardBrdW = warn ? "3px" : useStatusColor ? "3px" : "1px";
+          : lateSt
+            ? "var(--card-warn-border)"
+            : b._conflict
+              ? "var(--card-conflict-border)"
+              : useStatusColor ? sc.border : "var(--border-card-plain)";
+        const cardBrdW = (warn || lateSt) ? "3px" : useStatusColor ? "3px" : "1px";
 
         const durationTag = b.status === "seated" ? (
           <SmallTag label={elapsedMin + " min"} style={{ background: "#166534", color: "var(--text-on-accent)", border: "none" }} />
@@ -162,6 +169,14 @@ export function ListView({
         const noShowCt = nsMap[normalizePhone(b.phone)] || 0;
         const noShowTag = noShowCt >= 2 ? (
           <SmallTag label={"⚠ no-show ×" + noShowCt} style={{ background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)" }} />
+        ) : null;
+        // v16.1.0: running-late tag (minutes past the booked time).
+        const lateTag = lateSt ? (
+          <SmallTag label={lateMins(b, nowMins) + " min late"} style={{ background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)" }} />
+        ) : null;
+        // v16.3.0: deposit chip (suggest/green tokens — a prepaid booking).
+        const depositTag = (Number(b.deposit) || 0) > 0 ? (
+          <SmallTag label={"€" + b.deposit + " deposit"} style={{ background: "var(--suggest-bg)", color: "var(--success-text)", border: "1px solid var(--suggest-border)" }} />
         ) : null;
 
         const notesEl = b.notes ? (
@@ -248,6 +263,8 @@ export function ListView({
                 {lockedTag}
                 {prefTag}
                 {noShowTag}
+                {lateTag}
+                {depositTag}
                 {durationTag}
               </div>
               <span style={{ fontSize: 14, fontWeight: 700, color: S.text }}>{b.time + "–" + end}</span>
@@ -262,6 +279,10 @@ export function ListView({
               <button className="mgt-hover-scale" style={mkBtn({ background: BTN.edit })} onClick={() => onEdit(b)}>Edit</button>
               {statusBtns}
               <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center" }}>
+                {/* v16.1.0: one-tap No show once past the no-show threshold. */}
+                {lateSt === "noshow" ? (
+                  <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange })} onClick={() => onNoShow(b.id)}>No show</button>
+                ) : null}
                 {cancelBtn}
                 <button className="mgt-hover-scale" style={mkBtn({ background: BTN.del })} onClick={() => onDelete(b.id)}>Delete</button>
               </div>

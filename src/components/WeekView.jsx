@@ -25,7 +25,7 @@
 
 import { useState, useEffect } from "react";
 import { Overlay, mkBtn, AutoHeight } from "./atoms";
-import { daySummary } from "../lib/booking-logic";
+import { daySummary, rangeStats } from "../lib/booking-logic";
 import { BTN } from "../lib/constants";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
@@ -100,6 +100,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   const [focus, setFocus] = useState(viewDate); // keyboard-highlighted day
   const today = new Date().toISOString().slice(0, 10);
   const isWeek = mode === "week";
+  const isStats = mode === "stats"; // v16.3.0: analytics over the month of `ref`
 
   // ── Period navigation (keep `ref` + `focus` in sync) ──
   function goWeek(delta){ setRef(addDays(ref, delta * 7)); setFocus(addDays(focus, delta * 7)); }
@@ -136,12 +137,14 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
       const k = e.key;
       if(k === "w" || k === "W"){ e.preventDefault(); switchMode("week"); }
       else if(k === "m" || k === "M"){ e.preventDefault(); switchMode("month"); }
+      else if(k === "s" || k === "S"){ e.preventDefault(); switchMode("stats"); }
       else if(k === "t" || k === "T"){ e.preventDefault(); goToday(); }
-      else if(k === "Enter"){ e.preventDefault(); onPick(focus); }
-      else if(k === "ArrowLeft"){ e.preventDefault(); isWeek ? goWeek(-1) : moveFocus(-1); }
-      else if(k === "ArrowRight"){ e.preventDefault(); isWeek ? goWeek(1) : moveFocus(1); }
-      else if(k === "ArrowUp"){ e.preventDefault(); isWeek ? focusWithinWeek(-1) : moveFocus(-7); }
-      else if(k === "ArrowDown"){ e.preventDefault(); isWeek ? focusWithinWeek(1) : moveFocus(7); }
+      // In stats mode the arrows navigate months (no day focus); Enter is a no-op.
+      else if(k === "Enter"){ if(!isStats){ e.preventDefault(); onPick(focus); } }
+      else if(k === "ArrowLeft"){ e.preventDefault(); isStats ? goMonth(-1) : isWeek ? goWeek(-1) : moveFocus(-1); }
+      else if(k === "ArrowRight"){ e.preventDefault(); isStats ? goMonth(1) : isWeek ? goWeek(1) : moveFocus(1); }
+      else if(k === "ArrowUp"){ if(!isStats){ e.preventDefault(); isWeek ? focusWithinWeek(-1) : moveFocus(-7); } }
+      else if(k === "ArrowDown"){ if(!isStats){ e.preventDefault(); isWeek ? focusWithinWeek(1) : moveFocus(7); } }
     }
     window.addEventListener("keydown", onKey);
     return function(){ window.removeEventListener("keydown", onKey); };
@@ -185,6 +188,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
         <div style={{ display: "inline-flex", gap: 2, padding: 3, borderRadius: 12, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
           {modeBtn("week", "Week")}
           {modeBtn("month", "Month")}
+          {modeBtn("stats", "Stats")}
         </div>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginTop: 8 }}>
           {isWeek ? weekRangeLabel(weekDates(ref)) : monthLabel(ref)}
@@ -192,12 +196,14 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
       </div>
 
       {/* v15.8.0: AutoHeight (linear) eases the height when switching Week↔Month. */}
-      <AutoHeight linear>{isWeek ? weekBody() : monthBody()}</AutoHeight>
+      <AutoHeight linear>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
 
       <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-faint)", textAlign: "center" }}>
-        {isWeek
-          ? "W/M view · ↑↓ day · ←→ week · T today · Enter open"
-          : "W/M view · ↑↓←→ day · ‹ › month · T today · Enter open"}
+        {isStats
+          ? "W/M/S view · ‹ › month · T this month"
+          : isWeek
+            ? "W/M/S view · ↑↓ day · ←→ week · T today · Enter open"
+            : "W/M/S view · ↑↓←→ day · ‹ › month · T today · Enter open"}
       </div>
     </Overlay>
   );
@@ -245,6 +251,60 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
             </button>
           );
         })}
+      </div>
+    );
+  }
+
+  // ── Stats body (v16.3.0): analytics over the MONTH containing `ref` ──
+  function statsBody(){
+    const d = new Date(ref);
+    const y = d.getUTCFullYear(), m = d.getUTCMonth();
+    const from = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+    const to = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+    const st = rangeStats(bookings, from, to);
+    const maxH = st.hours.reduce(function(mx, h){ return Math.max(mx, h.covers); }, 0) || 1;
+    const maxT = st.tables.reduce(function(mx, t){ return Math.max(mx, t.bookings); }, 0) || 1;
+    const stat = function(val, label, color){
+      return (
+        <div style={{ flex: "1 1 84px", padding: "8px 10px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 10 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: color || "var(--text-primary)" }}>{val}</div>
+          <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>{label}</div>
+        </div>
+      );
+    };
+    const bar = function(label, val, max, color){
+      return (
+        <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 4 }}>
+          <span style={{ color: "var(--text-secondary)", fontWeight: 600, minWidth: 64, flexShrink: 0 }}>{label}</span>
+          <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4, overflow: "hidden", minWidth: 30 }}>
+            <div style={{ width: ((val / max) * 100) + "%", height: "100%", background: color || "var(--accent)", opacity: 0.8, borderRadius: 4 }} />
+          </div>
+          <span style={{ color: "var(--text-primary)", fontWeight: 700, minWidth: 64, textAlign: "right", flexShrink: 0 }}>{val}</span>
+        </div>
+      );
+    };
+    if(st.totalBookings === 0 && st.noShows === 0){
+      return <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>No bookings this month.</div>;
+    }
+    return (
+      <div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          {stat(st.totalCovers, "covers")}
+          {stat(st.totalBookings, "bookings")}
+          {stat(st.avgParty, "avg party")}
+          {stat(st.avgCoversPerDay, "covers / day")}
+          {stat(st.noShows, "no-shows", st.noShows ? "var(--warn-text)" : undefined)}
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", margin: "0 0 6px" }}>Busiest hours</div>
+        <div style={{ marginBottom: 14 }}>
+          {st.hours.slice(0, 6).map(function(h){ return bar(String(h.hour).padStart(2, "0") + ":00", h.covers, maxH); })}
+          {st.hours.length === 0 ? <div style={{ fontSize: 12, color: "var(--text-faint)" }}>—</div> : null}
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", margin: "0 0 6px" }}>Table usage</div>
+        <div>
+          {st.tables.slice(0, 10).map(function(t){ return bar("Table " + t.id, t.bookings, maxT); })}
+          {st.tables.length === 0 ? <div style={{ fontSize: 12, color: "var(--text-faint)" }}>—</div> : null}
+        </div>
       </div>
     );
   }

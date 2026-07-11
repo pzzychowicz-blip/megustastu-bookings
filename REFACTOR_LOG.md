@@ -3534,3 +3534,394 @@ accepted as out of threat model (staff-only app; the threat is our own stale wri
 two firebase/database module instances (the ?v= hash matters in Vite dev) corrupts the SDK's
 in-memory write tree — probe with the app's exact dep URL. Remaining: PROD rules after merge +
 device refresh.
+
+## v16.0.0 -> v16.1.0 -- Running-late flag + configurable booking durations
+Date: 2026-07-07
+Branch: feat/v16.1.0-late-flag-and-durations
+Files: src/lib/constants.js, src/lib/booking-logic.js, src/hooks/useBookingDefaults.js (new),
+src/App.jsx, src/components/TimelineView.jsx, src/components/ListView.jsx,
+src/components/Settings.jsx, database.rules.json, database.rules.README.md, CLAUDE.md
+
+Two staff-facing features sharing ONE new Firebase node, `settings/bookingDefaults` (5th
+settings node, revGuard CAS + a `bookingDefaultsRev` rule pair — the v16.0.0 rule of law):
+
+1. Configurable default booking durations. getDur() no longer hard-codes `size<5?90:120`;
+   it reads a new DUR_TIERS live binding (constants.js, setDurTiers — the OPEN/CLOSE/setLayout
+   mechanism), fed per snapshot by the new useBookingDefaults hook (clone of
+   useOptimizerSettings: loaded-ref guard + writeWithRev). Three tiers with EDITABLE band
+   boundaries: size <= t1Max -> t1Dur, <= t2Max -> t2Dur, else t3Dur. Seed = 1/90, 4/90, 120 —
+   byte-identical to the old literals, so an absent node is a no-op. Durations clamp 15–360
+   step 15; sanitizer enforces t1Max < t2Max. getDur's signature is unchanged, so all ~15 call
+   sites are untouched; existing bookings keep their stored duration/originalDuration
+   (Patryk-confirmed: new bookings only). NB the old "60 min for 1 person" belief was wrong —
+   the code always gave solo diners 90; the seed keeps current behaviour (Patryk's pick).
+
+2. Running-late flag. New pure lateState(b, todayStr, nowMins, cfg) in booking-logic.js ->
+   null | "warn" | "noshow": only TODAY'S CONFIRMED bookings past their start time qualify.
+   App.jsx derives lateMap (IIFE sibling of overlapWarnings, recomputed on the 15s tick) and
+   threads it to both views + a new in-flow "Running late" banner (Reveal, overlap-banner
+   pattern). "warn" (default 15 min, editable 5–115 step 5) = amber border on the timeline
+   block + list card (existing --tl-block-warn-soon / --card-warn-border tokens; seated-
+   overstay warnings keep precedence) + a "N min late" list tag. "noshow" (default 20, editable,
+   sanitizer enforces warn < noShow) additionally offers ONE-TAP "No show" in three places:
+   the banner row, the list card's right action group, and the timeline quick-status popup
+   (confirmed + noshow-stage only) — all calling the existing doCancelBooking(id, true)
+   (status cancelled + noShow flag + history/notes; flash gated on the save boolean as always).
+   Master toggle lateEnabled kills the whole feature (highlights + banner ease out).
+
+Settings -> General gains two sections: "Booking durations" (Collapsible; three rows of
+HourStepper pairs reusing the existing stepper atom via its fmt prop — guests "≤ N" / minutes
+"N min"; steppers disable at the sanitizer's invariant bounds) and "Running late" (Toggle +
+two minute steppers, AutoHeight reveal — the Auto-optimizer section's shape).
+
+Rules: database.rules.json adds the bookingDefaults/bookingDefaultsRev pair (copy of the
+optimizer pair). Deploy is rolling-safe, app first, rules second; pasting to DEV then PROD is
+Patryk's manual console step (README v16.1.0 note).
+
+Build: passes; main bundle 698.70 kB / gzip 193.64 kB.
+
+Verified live in DEV (Preview bridge, logged in): Settings sections render + persist (t1Dur
+90->105 echoed, summary line updates); booking form auto-duration follows the tiers live
+(size 1 -> 105, 2 -> 90, 6 -> 120) then reverted to 90/90/120; late flag exercised by faking
+the clock to 13:39 against a 13:00 confirmed booking — amber timeline border, "Running late"
+banner with "Late Test (13:00) — 40 min late" + one-tap No show, tap cancels the booking; a
+non-late today booking shows no highlight (negative test). Side-note: the 13-hour clock jump
+tripped the v15.2.0 heartbeat freshness gate (expected — it IS a fake sleep), so the no-show
+write was held + shown optimistically; that's the stale-recovery arc working as designed, not
+a feature bug. Test booking deleted; DEV data clean. No console errors.
+
+### v16.1.0 follow-up — variable-length duration tiers (+ stepper alignment)
+Same version/branch. (1) Steppers in "Booking durations" aligned via a fixed-width (150px)
+first column. (2) Per Patryk: the NUMBER of tiers is now editable too — the model changed from
+the flat {t1Max,t1Dur,t2Max,t2Dur,t3Dur} to `tiers: [{max,dur}…]` (sorted by max, deduped,
+capped at 6) + a catch-all `restDur`; getDur walks the list (first tier with size<=max, else
+restDur; empty list = flat restDur). The Settings section renders one row per tier with a
+remove (×) button, the catch-all row ("Larger parties (N+)" / "All parties" when empty), and
+"+ Add tier" (disabled at 6 tiers or last max 19). Sanitizer enforces sort/dedupe/clamps; the
+steppers disable at neighbour bounds. A legacy flat node CONVERTS ON READ (lazy migration —
+the next save rewrites the new shape); NB RTDB drops an empty tiers array, so a present node
+with no tiers reads as [] (all→restDur), never as the seed (the priorities lesson). No rules
+change (same node + rev pair). Verified live in DEV against the NEWLY APPLIED DEV rules: the
+legacy node converted (two tiers shown), add tier -> <=5 row appears with correct neighbour
+bounds, middle-tier remove re-merges the bands, config restored to 1/90 · 2–4/90 · 5+/120 and
+persisted in the new shape (writes accepted, rev chained), form auto-duration size 6 -> 120.
+Gotcha reconfirmed: mid-HMR the hook/binding state is inconsistent — full reload before
+judging (the constants.js live-binding HMR rule).
+
+## v16.1.0 -> v16.1.1 -- Late-flag & timeline animation polish (+ prior-review follow-ups)
+Branch: this worktree. Behavioural change: animation/interaction only (no data/rules/shape
+change — rolling-safe patch). Verified live in DEV via the Preview bridge (chips, per-row late
+banner, popup hover, armed tier-remove); `npm run build` OK (gz 194.55 kB).
+
+Three UI polish fixes Patryk flagged after v16.1.0:
+1. **Timeline booking name no longer "jumps"** when the start-time chip appears/disappears.
+   Root cause: the chip was wrapped in `Presence` (a `transform` translateX slide), but the
+   flexbox reserved/released the chip's WIDTH in one frame, so the sibling name span snapped
+   while the chip glided. Fix: generalised the `Reveal` atom with an optional `horizontal` prop
+   (`grid-template-columns: 0fr↔1fr`, `inline-grid`, `minWidth:0` inner track — default `false`
+   preserves every existing caller); the chip now uses `<Reveal horizontal>` so its occupied
+   WIDTH eases and the `flex:1` name slides in lockstep. (atoms.jsx, TimelineView.jsx.)
+2. **Running-late banner: per-row reveal + sliding No-show button.** Extracted the row rendering
+   from App.jsx's render-time `lateEntries` IIFE into a new **`LateBanner.jsx`** so each ROW can
+   ease in/out via `Reveal` — a departed booking must stay mounted long enough to animate its
+   collapse, which needs local lifecycle state (`renderIds` = current late ids ∪ recently-departed;
+   a `prevKeys` ref diffs each lateMap change: newcomers append, departed get a ~350ms prune
+   timer, a returning id cancels its prune; the diff is computed against `prevKeys.current`, never
+   a side-effect inside a setState updater). The No-show button is wrapped in `Presence`
+   (`mgt-slide-in/out`, matching the Today button). App keeps an outer `Reveal show={hasLate}` for
+   whole-banner open/close. Verified live: 1 row -> 2 rows -> 1 row via a faked clock, with the
+   departed row easing out while the other stayed.
+3. **Timeline quick-action popup buttons get `.mgt-hover-scale`** (RMB / long-press quick-status
+   menu — status buttons + the No-show option). Desktop right-click users now get the 8% hover
+   lift like every other action button; the existing `@media (hover:hover) and (pointer:fine)`
+   guard means no sticky-hover on touch. (TimelineView.jsx.)
+
+Prior `/code-review` follow-ups folded in (v16.1.0 review): (1) `LateBanner` builds a
+`byId` Map once instead of the O(n·m) nested `find`; (2) new exported **`lateMins(b,nowMins)`**
+(booking-logic.js) is the single source for the "N min late" arithmetic, used by both `LateBanner`
+and `ListView` (was duplicated); (5) a comment on `lateState` noting the no-midnight-wraparound
+assumption; (4) a comment on `useBookingDefaults.clampStep` explaining the NaN-propagation trick;
+(3) an **armed two-tap confirm** on the duration-tier `×` remove (Settings General tab —
+`armedTier` state: first tap -> "Remove?", a second within ~3s removes, auto-disarms on
+timeout / other tier edit / another row arming). No booking data is at stake (tiers only affect
+NEW bookings), so a light confirm rather than a modal. Verified live: arm -> "Remove?" ->
+auto-disarm after 3s.
+
+Self-review follow-ups (applied same version, verified live): (#1) a late row ADDED to an
+already-open banner used to pop — a conditionally-mounted `Reveal` with show=true starts open.
+`LateBanner` now tracks `openIds` (the show=true subset of `renderIds`): a newcomer mounts CLOSED
+then an opener effect adds it on the next rAF → it eases IN (traced 0→56px live; ease-OUT
+56→0-then-prune still correct, other rows untouched). (#2) `Reveal`'s `minWidth:0` scoped to the
+`horizontal` branch so the vertical path stays byte-identical. (#3) the membership effect keys on
+a stable sorted key-set `sig` string, not the fresh-each-render `lateMap` object (a warn→noshow
+value flip no longer churns the lifecycle). (#4) the armed tier-remove disarms on any
+`tiers.length` change (a concurrent remote bookingDefaults save can't shift the armed index onto
+the wrong tier).
+
+Files: NEW src/components/LateBanner.jsx; src/components/atoms.jsx (Reveal `horizontal`);
+src/components/TimelineView.jsx (chip Reveal + popup hover); src/App.jsx (LateBanner wiring,
+version 16.1.1); src/lib/booking-logic.js (`lateMins` + comment); src/components/ListView.jsx
+(`lateMins`); src/hooks/useBookingDefaults.js (comment); src/components/Settings.jsx (armed
+tier-remove).
+
+## v16.1.1 -> v16.2.0 -- Completion-duration fix · ⇧D theme toggle · connection-status dot
+Branch: this worktree (started from the app-documentation-review branch). Behavioural change:
+a targeted duration fix + two user-visible additions. No Firebase/rules/shape change — rolling-safe.
+Verified live in DEV via the Preview bridge (all three); `npm run build` OK (gz ~195.29 kB, +~0.7 kB).
+
+Three staff-requested changes:
+1. **Confirmed → Completed keeps its scheduled duration.** Marking a booking Completed used to
+   recompute `duration = now − start` (the actual-visit-length logic) on ANY transition, so a
+   never-seated booking completed late ballooned to an hours-long block (e.g. a 13:00 booking
+   completed at 21:00 → an 8h block). Now the recompute fires ONLY when the prior status was
+   `seated`, in BOTH completion paths: `updateStatus` (`status==="completed" && x.status==="seated"`,
+   App.jsx) and `doSave` (guard `orig.status==="seated"`, App.jsx). A direct Confirmed → Completed
+   keeps the scheduled `duration`/`customDur` untouched. Seated → Completed (manual + the close-time
+   auto-complete in usePersistence.js, which is seated-only) is unchanged — it still reflects the
+   true visit length. Completed bookings already free their table everywhere (v16.0.0), so the
+   longer frozen block has no availability effect. Live-verified: completing the confirmed "Mark"
+   (18:00, 90 min) at 19:47 kept 18:00–19:30, not 18:00–19:47.
+2. **⇧D toggles dark/light.** New global keyboard shortcut → the existing `onToggleDark`, added to
+   `kbRef` and handled right after the `anyModal` guard (before the `D`=delete / `D`=jump-to-today
+   handlers, so Shift wins). The `typing` guard already stops it firing in inputs. Documented in
+   the Shortcuts cheatsheet (⇧D row). Live-verified: flips both ways; plain `D` still deletes/jumps.
+3. **Connection-status dot** (`ConnectionStatus.jsx`, NEW) — ported from the MGT Scheduling sibling
+   (structurally identical, tokens remapped to Bookings). A green/red illuminated dot to the right
+   of Log out, driven by usePersistence's `isOnline` (`.info/connected`); click opens a popover with
+   the status line + the signed-in email (`auth.currentUser.email`), closing on outside-click/Esc.
+   New `--status-online/-offline` (+ `-glow`) tokens in index.html (both theme blocks, same saturated
+   values) keep colour literals out of JS (project rule). Live-verified in light + dark.
+
+Files: NEW src/components/ConnectionStatus.jsx; src/App.jsx (updateStatus + doSave duration gate,
+kbRef `onToggleDark` + ⇧D handler, ConnectionStatus import + mount, version 16.2.0); index.html
+(`--status-online/-offline(-glow)`, both themes); src/components/Shortcuts.jsx (⇧D row);
+CLAUDE.md (ConnectionStatus line + duration gotcha + ⇧D note + v16.2.0 log entry).
+
+Follow-up (same version) — **Settings tab bar overflow on narrow screens.** On an iPhone 12 mini
+(375px) the 5-tab `TabBar` didn't fit: each button was `flex:1` with `min-width:auto`, so the row's
+combined min-content width forced the WHOLE Settings modal wider than the viewport — content cards
+were cut off on both edges. Fix (Settings.jsx `TabBar`): the tab row is now its own horizontal
+scroller (`overflowX:auto` → `min-width:0`, so the modal collapses back to viewport width) and the
+buttons are `flex:"1 0 0%"` + `whiteSpace:nowrap` (equal-width and filling when there's room —
+desktop unchanged, byte-for-byte look — but no-shrink so on a narrow screen they keep full-label
+width and the row scrolls instead of forcing the modal wide). Live-verified in DEV at 375px (modal
+scrollWidth == clientWidth == 375; tab row scrolls; all 5 tabs reachable incl. Shortcuts) and at
+desktop (tabs equal 101px, no scroll). Files: src/components/Settings.jsx.
+
+Follow-up #2 (same version) — **/code-review fix: ConnectionStatus popover measured anchoring.**
+The popover's anchor side was guessed from the `isMobile` prop (`left:0` on mobile), but the dot's
+x position depends on header flex-wrap, not viewport width — at 599px (isMobile true, header
+unwrapped, dot at the right edge) the popover ran **50px off-screen right** (verified live). Fix:
+the anchor side is now MEASURED at open time — `toggleOpen` reads the wrapper's
+`getBoundingClientRect()` and right-anchors (grows leftward, the desktop look) unless
+`r.right − POPOVER_W < 8` (no room on the left), then flips to left-anchoring. The `isMobile`
+prop is gone (App mount updated). Verified live at 599px (right-anchored 181→427, fits), 375px
+(dot wrapped to x≈93 → flipped left-anchor 93→339, fits) and desktop (right-anchored, byte-identical
+to before). **NB Scheduling's ConnectionStatus has the same latent bug — port this fix on its next
+touch** (shared-pattern rule). Review nits noted, not fixed: (a) the TabBar scroller is now a clip
+container around `.mgt-hover-scale` tabs (~2-3px lift clip on the OUTER tabs at wide desktops —
+accepted trade for the scroller); (b) the actual-duration recompute is duplicated in updateStatus
+(nowMins clock) + doSave (fresh Date) — fold a shared helper into the next booking-logic touch.
+Files: src/components/ConnectionStatus.jsx, src/App.jsx (mount).
+
+---
+
+## v16.3.0 — floor-ops & insights (11 features, one branch, phased commits)
+
+Date: 2026-07-08 · Branch: `feat/v16.3.0-ops-and-insights` · Behavioural change: YES (11 new
+features) · Build: OK, main-bundle gz ≈202 kB (from ≈195.6 at v16.2.0, +6.6 kB for 11 features).
+
+Implements Appendix Part C's High-value + Medium idea tiers plus user-requested additions. One
+version, phased commits (v16.0.0 model). Each phase live-verified in DEV before the next.
+
+**Phase 1 — Running-late banner collapsible + ✕ dismiss.** `LateBanner.jsx` gains a click-toggle
+header (count) with the rows in an outer `<Reveal>`; each row gets an ✕ dismiss. Dismissed ids
+live in BookingApp (`lateDismissed` Set, session-only, reset on day change) so the banner collapses
+when the last row goes; `lateMap` stays unfiltered (list/timeline amber highlights keep showing) —
+the banner reads a derived `lateBannerMap`.
+
+**Phase 2 — Table-turn prediction.** New pure `freeingSoon(bookings, today, nowMins, windowMin)`
+(booking-logic) → today's seated bookings whose scheduled end is within ~15 min (overstayers
+excluded). Summary today-status-bar "freeing soon: 7 (~10m), …" line + a seated-block timeline
+countdown pill. Master `freeSoonEnabled` field on `settings/bookingDefaults` (rolling-safe add) +
+a "Table turns" toggle in Settings → General.
+
+**Phase 3 — Waitlist "table free" banner + `useRevealRows`.** Extracted LateBanner's per-row
+ease-in/out lifecycle into `src/hooks/useRevealRows.js` (LateBanner refactored onto it, behaviour
+identical), then reused for the new `WaitAvailBanner.jsx` — an in-flow suggest/green banner, one row
+per TODAY'S waiting party a table currently fits (Book + ✕). Removed the old 6s `waitFreeToast`.
+
+**Phase 4 — Deposit €.** `sanitize` whitelists `deposit`; `diffBooking` logs it; `EMPTY_FORM` +
+a numeric form field; `doSave` (both paths) + `openEdit` map it; ListView "€N deposit" chip +
+TimelineView "€" label marker.
+
+**Phase 5 — Undo after cancel/no-show.** `doCancelBooking` snapshots the pre-cancel booking; a 10s
+`undoInfo` slot drives an Undo toast in the floatingToasts crossfade (pointerEvents:auto so the
+button is clickable). `undoCancel` restores the snapshot + a history note + re-places the table;
+CAS-safe (stampForWrite derives baseUpdatedAt from `prev[id]`, not the snapshot's stale stamp).
+
+**Phase 6 — Customers insights.** `CustomersSettings.jsx` only — totals strip (customers · visits ·
+with-a-no-show) + All/Regulars/No-shows filters + per-row no-show rate. Pure derivation.
+
+**Phase 7 — Global search.** `searchBookings()` (customers.js) + `SearchPanel.jsx` Overlay; 🔍
+header button + "/" shortcut. onPick jumps to the day + selects in List (cross-day select survives
+the day-change reset via `pendingSelectRef` consumed in the [viewDate] effect).
+
+**Phase 8 — Printable day sheet.** `DaySheet.jsx` — print-only DOM portalled to `<body>`; `@media
+print` in index.html hides #root + reveals it; hard-coded light (print stays light). Print button
+in the Summary body.
+
+**Phase 9 — Backup export.** Settings → General "Backup" → downloads a JSON of bookings, tableBlocks,
+waitlist, reminders, recurring + all 5 settings nodes. Read-only; restore is manual.
+
+**Phase 10 — Table-turn analytics.** `rangeStats(bookings, from, to)` (booking-logic) + a third
+"Stats" segment in WeekView (month period, `S` key): stat tiles + busiest-hours + table-usage bars.
+
+**Phase 11 — Recurring / standing bookings.** 7th collection `recurring` (`useRecurring.js`, whole-
+node object + revGuard CAS `recurringRev`; `database.rules.json` pair added). An idempotent generator
+effect in BookingApp materialises each active rule's occurrences over [today … +horizonWeeks·7] as
+normal /bookings children (deterministic id `"r{ruleId}_{date}"` + recurringId/recurringDate stamps;
+dedupe on the stamps; cross-device-safe via the per-$id CAS; skips skipDates/closed/out-of-hours;
+silent; nowQuarter-keyed for day-rollover). Booking form "Repeat weekly" toggle creates the rule +
+stamps the first occurrence; Settings → General "Standing bookings" manager (master enable, per-rule
+pause/delete, horizon 1–12wk; MiniStepper gained an optional `fmt` prop). `delBooking` adds a deleted
+occurrence's date to the rule's `skipDates` **before** the delete and ungated by `ok` — this ordering
+was the fix for a regenerate-on-delete race found in live QA. Deploy: rolling-safe, app first, rules
+second (README updated).
+
+**Docs/version:** version 16.2.0 → 16.3.0; CLAUDE.md (structure + persisted-collections + 2 new
+gotcha rows + this feature entry); database.rules.README.md (recurring pair).
+
+**Consistency sweep:** grepped new files for colour literals (fixed SearchPanel's Done button to
+`var(--app-btn-slate)`; block-overlay whites + title-pill blue kept as established conventions); no
+horizontal overflow at 375px; dark-mode spot-checked.
+
+**Verification (DEV):** all 11 features driven live via the Preview bridge — late banner
+collapse/✕-dismiss (list/timeline stay amber); undo restore persists through reload; deposit chip +
+timeline € survive reload; customers filters + rate; search digit/name + cross-day jump + "/";
+day sheet light-only portal; backup JSON has all collections; Stats segment + month re-aggregation;
+recurring generated 5 Wednesday occurrences over 4 weeks, no duplicates on reload, delete→skipDate
+held through reload (not regenerated). Real wall-clock during the build was post-midnight then in
+service hours, so the late banner + turn pill were exercised live once the clock entered hours.
+
+**UI corrections follow-up (same version, new session · 2026-07-10):** four Patryk-requested
+adjustments on the still-open branch (PR #40). (1) **Table turns — prediction-window stepper:** the
+freeing-soon window is no longer hard-coded to 15 — new `freeSoonWindow` field on
+`settings/bookingDefaults` (sanitize clamps 5–60 step 5, default 15) + a "Predict up to N min ahead"
+MiniStepper in the Table-turns section (AutoHeight-revealed while the feature is on); App's
+`freeingSoon(bookings,today,nowMins,…)` reads it. (2) **Standing bookings default OFF + form gate:**
+`DEFAULT_RECURRING.enabled=false` and sanitize `enabled: src.enabled===true` (absent/legacy node ⇒
+off); the form's "Repeat weekly" section is now gated on `!editId && standingEnabled` (new
+`standingEnabled={recurring.enabled!==false}` prop) so it's hidden entirely when the feature is off.
+(3) **Search closes on Esc:** added `showSearch` to App.jsx's Escape z-order chain (the "Done"
+button's logical key; Enter left alone since the autofocused input owns it). (4) **Backup at the
+bottom:** the Backup `Section` moved below Standing bookings (last section before the version
+footer) in Settings → General. Files: `useBookingDefaults.js`, `useRecurring.js`, `App.jsx`,
+`BookingFormModal.jsx`, `Settings.jsx`, CLAUDE.md. Build OK, gz ≈202.5 kB (no meaningful delta).
+Verified live in DEV: window stepper 30→25 dropped 5B from the freeing-soon line + its pill;
+standing OFF removed "Repeat weekly" from the form; Esc closed the search panel; Backup renders
+last. Version stays 16.3.0 (unmerged branch). Rolling-safe — both new fields are additive/absent-
+tolerant, no rules change.
+
+**Fifth correction (same follow-up) — freeing-soon overflow:** the Summary status bar
+(`Summary.jsx`) was `white-space:nowrap` on the whole line, so when several tables were freeing at
+once the "freeing soon: 2 (~6m), 5A (~9m), 5B (~13m)" list overran the card's right edge and got
+clipped by the root `overflow:hidden`. Fix: the status container is now `white-space:normal` (+ the
+right cluster went `flexShrink:1`/`minWidth:0` so it can shrink); the short occupancy metrics stay
+one no-wrap unit, and `freeingParts()` (was `freeingLabel()`) returns an ARRAY so each entry renders
+as its own no-wrap span — the list now wraps BETWEEN tables (never mid-token) and flows to a second
+line inside the card. Verified live: at 390px the list wraps cleanly right-aligned with no clipping
+and zero horizontal page overflow; wider widths still fit on one line. Pure client change.
+
+**/code-review fixes (same follow-up):** the PR-review pass surfaced four minor findings, all
+applied. (1) **Deposit clamped ≥0** — the form's `min={0}` only blocks the stepper (a typed "-50"
+passed `Number()` through); `Math.max(0,…)` at all four sites (`sanitize`, both `doSave` paths,
+`diffBooking`'s history string). Verified live: a React-held "-25" saved → stored 0. (2)
+**`addSkipDate` returns a boolean** (`saveRecurring` reports the loaded-guard refusal) and
+`delBooking` now ABORTS a recurring-occurrence delete when the skipDate is refused (recurring node
+not loaded yet — tiny post-load window), with a "still syncing" warning — deleting anyway would let
+the generator resurrect the occurrence. (3) **Backup self-documents its omission** — the JSON gains
+an `omitted:["reminderFires …"]` key so a future restore knows the transient fire-log wasn't lost
+(verified in the captured blob). (4) **DaySheet memoised** — the permanently-mounted print sheet
+re-ran its filter/sort/`daySummary` passes on every 15s tick; now `useMemo`-keyed on the data (the
+documented profiled-need exception to the no-memo-by-default rule).
+
+**Performance fix — "New booking freezes for seconds" (same follow-up, profiled live).** Patryk
+reported the form taking long seconds to open with ~350 bookings in DEV. Profiled via the Preview
+bridge: click→modal was **11.3 s**, one synchronous long task. Root-cause chain: (a) today's DEV
+data has ONE unplaceable booking, which makes every `optimise()` call take ~70 ms (the retry pass:
+~8 combo-bookings × ~45 `findAllOptions` × a full greedy re-run of the day — measured identical
+whether given 15 or 352 bookings, so it's the retry, not list size); (b) `findTimes` ran that full
+trial per quarter-slot — 61 slots with the 07:00–01:00 test hours ≈ **5.1 s per call**; (c) the
+form computed `formAvail` (trialFits + findTimes) + `kitchenSugg` on **every render** — every
+keystroke and every 15 s tick — and dev StrictMode doubles the mount render (2 × ~5.5 s = the 11 s).
+Three-part fix, output-verified: **(1)** `liveBookings` in App is now `useMemo([bookings,
+nowMins])` — it was a fresh array every BookingApp render (incl. every form keystroke, since the
+form draft lives in the parent), which made any downstream memo useless. **(2)** `formAvail`,
+`kitchenSugg`, and `custIdx` in BookingFormModal are `useMemo`-keyed on their actual scan inputs —
+typing no longer re-runs the scans (measured: 10 keystrokes = 241 ms total, was ~5 s+). **(3)**
+`findTimes` rewritten cheap-first + outward-early-stop: per slot, try the no-reshuffle
+`findFreeSlot` first (a plainly free table = valid without simulation, ~µs) and only run the full
+`trialFits` when the cheap check fails; scan outward from `around` stopping at 10 valid slots per
+side (exactly what `formatSugg` keeps — both consumers, BookingFormModal + WalkinForm, pipe through
+it), grid-aligned even for a non-quarter `around`. Same cheap-first applied to the waitlist
+matching effect's `tryFit`. **Equivalence-tested old-vs-new** on live data across 5 cases: 4/5
+byte-identical after formatSugg; the 5th case the NEW code additionally offers two slots where a
+plainly free table exists but the old full-trial rejected them (the optimizer's rescue attempt for
+the unplaceable booking displaced someone) — the new answer is the honest one (the party fits
+without touching anyone) but it IS a suggestions-list behaviour delta on pathological days —
+⚠️ flagged to Patryk. Optimizer/save paths untouched (`optimise`/`applyOpt`/`bookingsAfterAction`
+byte-identical). Measured result: click→modal **11,261 ms → ~1,100 ms** in dev (StrictMode
+double-render; ~500 ms prod-equivalent on this worst-case day, near-instant on a normal day);
+findTimes 5,155 → 2–455 ms. Plain re-renders were never the issue (59 ms). Future lever if a real
+full-service day still feels slow: the `optimise` retry pass itself (~70 ms whenever a booking is
+unplaceable) — untouched per the zero-regression rule.
+
+**Perf phase 2 — instant New/Walk-in open (deferred scans + ⏳ cue + budgets).** Patryk's
+requirement: form open must be INSTANTANEOUS always; show a loading indicator instead if the
+availability check outlives the open. Architecture (ADR'd, defer-in-effect chosen over
+useTransition / Web Worker / chunking): new **`useDeferredCompute(fn, deps)`** hook
+(`src/hooks/useDeferredCompute.js`) → `{value, pending}` — commits a pending render (value=null:
+the banner collapses, never a stale answer — Patryk-chosen over stale-while-revalidate), then runs
+the compute AFTER a **guaranteed paint** (requestAnimationFrame → setTimeout(0); two plain
+timeouts do NOT guarantee a paint between them) so the modal + ⏳ cue are on screen before the scan
+blocks; a run token supersedes stale completions (StrictMode-safe). **⚠ rAF-starvation fallback
+(bug hit live):** a hidden/occluded tab fires NO animation frames (the Preview pane sat at
+`visibilityState==="hidden"`), deadlocking the scan — a parallel 120ms fallback timeout starts the
+compute when the rAF path hasn't (no paint matters when nobody can see the tab). Consumers:
+BookingFormModal's `formAvail` + `kitchenSugg` and WalkinForm's `wAutoCheck` suggestion scan (its
+cheap findBest probe stays sync); each shows a "⏳ Checking table availability…" row whose
+**Reveal ~300ms ease IS the grace** — a fast scan unmounts it as an imperceptible sliver, no timer
+needed. **Hard time budgets** (found necessary when Patryk's 19-booking stress-day made one scan
+take tens of seconds — each optimise ~500ms with many mutually-conflicting bookings): `findTimes`
+stops after **600ms** (partial suggestions returned; cheap-first slots still collected), the
+waitlist matcher's `tryFit` skips further full trials past a **300ms** per-pass budget (re-runs
+next data change). Also: **Regulars visit-threshold stepper** (Settings → Customers, Patryk ask) —
+`regularMin` session state, default 2 (was hard-coded visits>0), "N+ visits" stepper 1–50 shown
+while the Regulars filter is active; functional setState (a burst-click stale-closure was caught in
+verification). Verified live on the stress-day (19 bookings, 55 covers, 13 late): **modal DOM in
+79–86ms** (was 11.3s pre-phase-1, ~1.1s post-phase-1), ⏳ → banner sequence correct at size 12 +
+optimizer ON, walk-in 79ms via the fits-now fast path, stepper filters 2+→18 rows / 3+→14 rows.
+Files: `useDeferredCompute.js` (new), `BookingFormModal.jsx`, `WalkinForm.jsx`, `App.jsx` (waitlist
+budget), `booking-logic.js` (findTimes budget), `CustomersSettings.jsx` (stepper), CLAUDE.md (hook
+entry + 2 gotcha rows: scan layers, rAF-in-hidden-tab).
+
+**Second /code-review pass (whole-PR, 2026-07-11) — 4 findings, all fixed.** (1) **`findTimes`
+bounds clamp** (latent): an out-of-hours `around` (pre-opening) could let the outward scan's
+`startLater` start below the service grid and suggest a pre-opening slot — the old fixed-grid scan
+structurally couldn't; unreachable via current callers (the form guards `sm` within hours, the
+walk-in cheap-probe fits on an empty pre-open day) but clamped anyway (`startLater≥first`,
+`startEarlier≤last`; both grid-aligned). (2) **Waitlist anti-flap**: when the 300ms scan budget cut
+an entry's pass short, a previously-available entry read as unavailable and its banner row blinked
+out → a `budgetHit` flag + `waitAvailRef` mirror now carry the PREVIOUS pass's availability forward
+for budget-skipped entries only (a genuine "no longer fits" still clears immediately; the Book path
+re-validates via the form scan + doSave guards regardless). (3) **`doSave` optimiser pass halved**:
+`buildNext` ran the full optimiser once for the synchronous guards (`buildNext(bookings)`) and
+again inside the `setBookings` updater with the SAME `bookings` reference (3× under dev
+StrictMode) — a prev-IDENTITY memo (`buildNextMemo`) shares one pass between guards + immediate
+dispatch while a retry replay (fresh `prev` ref) still recomputes, exactly per the v15.7.0
+capture-intent contract; applied to both the edit and new paths. (4) **Live-hours re-scan**: the
+deferred scans' deps couldn't see a `settings/operatingHours` change from another device while the
+form was open (hoursFor reads a live binding — no React dep changes) → a `hoursSig` string
+("open-close"/"closed") added to formAvail/kitchenSugg/walk-in scan deps, so an hours edit
+re-checks availability instead of leaving a stale banner until the next input nudge.

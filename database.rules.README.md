@@ -5,6 +5,30 @@ RTDB Security Rules. The rules are still applied **manually** via the Firebase c
 (Realtime Database → Rules → paste → Publish) — this file is the canonical copy to paste
 from and to diff against.
 
+## v16.3.0 addition — `recurring` rev pair (7th collection)
+
+v16.3.0 adds a **seventh** persisted collection, the top-level `recurring` node (standing /
+weekly booking rules, `useRecurring.js`), guarded by the same revision-CAS pattern: a
+`recurringRev` sibling and a rule pair identical to `waitlist`/`waitlistRev`. The recurring
+node stores only the RULES; the generated occurrences are normal `/bookings/{id}` children
+(stamped `recurringId` + `recurringDate`) already covered by the per-`$id` CAS rule — no new
+booking rule is needed. Deploy is **rolling-safe, app first, rules second**: until the pair is
+pasted, `recurring` has no per-node rule (the root auth rule still applies), so a v16.3.0 app
+writes it fine (`writeWithRev`) and an old app never touches it. Paste the updated
+`database.rules.json` to DEV, verify a "Repeat weekly" booking (or a Settings → Standing
+bookings edit) counts `recurringRev` up from 1, then PROD.
+
+## v16.1.0 addition — `settings/bookingDefaults` rev pair
+
+v16.1.0 adds a **fifth** settings node, `settings/bookingDefaults` (default booking-duration
+tiers + running-late thresholds, `useBookingDefaults.js`), guarded by the same revision-CAS
+pattern: a `bookingDefaultsRev` sibling and a rule pair identical to `optimizer`/`optimizerRev`.
+Deploy is rolling-safe and the order is the same as v16.0.0: **app first, rules second** —
+until the pair is pasted, the node simply has no per-node rule (the root auth rule still
+applies); once pasted, a v16.1.0 app writes it correctly (`writeWithRev`) and an old app
+never writes it at all. Paste the updated `database.rules.json` to DEV, verify a Settings →
+Booking-durations / Running-late save counts `bookingDefaultsRev` up from 1, then PROD.
+
 ## What the rules do (v16.0.0 — TRUE compare-and-swap, all collections)
 
 Motivated by the **2026-07-05 incident**: a laptop asleep at home woke and wrote its old

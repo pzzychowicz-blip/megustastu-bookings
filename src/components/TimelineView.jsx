@@ -43,7 +43,7 @@ import {
 } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
-import { mkBtn, Presence, useFlip } from "./atoms";
+import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 import { CogIcon } from "./Settings";
 import { WA_SANDBOX } from "../lib/waSandbox";
 
@@ -60,16 +60,19 @@ const __statusAnims = {};
 // module-level component the node persists, so `transition: left/width` eases a
 // reposition (seated-shift / reshuffle) and the wipe/fill overlays + long-press
 // work reliably. Former closures are now props.
-function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, noShows = 0, showChip = false, onEdit, onManual, setQuickStatus }) {
+function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, freeMin = null, onEdit, onManual, setQuickStatus }) {
   const d = liveBarDur(b, nowMins);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
   const w = Math.max((d / totalMins) * 100, 0.5) + "%";
   const warn = warnings[b.id];
   const bgc = BLOCK_BG[b.status] || BLOCK_BG.confirmed;
+  // v16.1.0: running-late amber border (confirmed booking past its time — the
+  // `late` prop is "warn"/"noshow" from App's lateMap). Seated-overstay
+  // warnings keep precedence (they carry the more urgent red tier).
   const border = warn
     ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
-    : "none";
+    : (late ? "3px solid var(--tl-block-warn-soon)" : "none");
   const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
@@ -79,23 +82,27 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, noShows 
     + (isLocked(b) ? " [L]" : "")
     + (hasPrefT ? " ★" : "")
     + (noShows >= 2 ? " ⚠" : "")
+    + ((Number(b.deposit) || 0) > 0 ? " €" : "")   // v16.3.0: deposit marker
     + (warn && warn.overdue ? " !!" : "");
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
   // name. The show/hide decision (`showChip`) is made ONCE at the TimelineView
   // level for the WHOLE day — all blocks show chips or none do (a mixed grid
-  // read messy in live QA). Wrapped in Presence so it slides in from the left
-  // and back out (the Reshuffle-button pattern) when a zoom change flips the
-  // decision, instead of popping. marginLeft clears the v15.8.2 dog-ear corner
-  // so a noted booking's fold never overlaps.
+  // read messy in live QA). marginLeft clears the v15.8.2 dog-ear corner so a
+  // noted booking's fold never overlaps.
+  // v16.1.1: wrapped in a HORIZONTAL Reveal (eases occupied width 0↔full) rather
+  // than Presence (transform slide). Presence only translated the chip, so the
+  // flexbox reserved/released the chip's width in one frame and the sibling name
+  // span SNAPPED. With the width easing, the flex:1 name slides in lockstep.
   const timeChip = (
-    <Presence show={showChip} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={180} tag="span" style={{ pointerEvents: "none" }}>
+    <Reveal show={showChip} horizontal style={{ pointerEvents: "none" }}>
       <span style={{
         flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: 5,
         fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+        whiteSpace: "nowrap",
         background: "rgba(255,255,255,0.25)", color: "var(--text-on-accent)",
         pointerEvents: "none", position: "relative"
       }}>{b.time}</span>
-    </Presence>
+    </Reveal>
   );
 
   // Per-instance refs for long-press detection.
@@ -213,6 +220,19 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, noShows 
       }}>
         {lbl}
       </span>
+      {/* v16.3.0: table-turn countdown pill — a seated block within ~15 min of
+          its scheduled end shows "~Nm" (translucent, like the start-time chip).
+          Flex item before the "=" handle (no absolute overlap of the name); the
+          seated block is near full width this late, so there's room. */}
+      {freeMin != null ? (
+        <span style={{
+          flexShrink: 0, marginRight: 2, padding: "1px 5px", borderRadius: 5,
+          fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+          whiteSpace: "nowrap", position: "relative",
+          background: "rgba(255,255,255,0.28)", color: "var(--text-on-accent)",
+          pointerEvents: "none"
+        }}>{"~" + freeMin + "m"}</span>
+      ) : null}
       <span
         onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
         style={{
@@ -231,6 +251,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, noShows 
 export function TimelineView({
   bookings, date, onEdit, onManual, onStatus,
   blocks = [], onBlock, nowMins = 0, warnings = {},
+  late = {}, freeing = {}, onNoShow = () => {},
   zoom = 1, setZoom,
   followNow, setFollowNow,
   scrollPosRef,
@@ -238,6 +259,7 @@ export function TimelineView({
   setAutoOptimizer = () => {},
   onReshuffle = () => {},
   onOpenSettings = () => {},
+  onOpenSearch = () => {},
   // WhatsApp sandbox: opener for the simulator panel. Renders a 🧪 icon button
   // left of the settings cog ONLY when WA_SANDBOX (dev server or a deployed
   // sandbox build) and the prop is passed — real prod builds never show it.
@@ -571,7 +593,7 @@ export function TimelineView({
           return (
             <Fragment key={b.id}>
               {ghost}
-              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
+              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
             </Fragment>
           );
         })}
@@ -587,7 +609,7 @@ export function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
     </div>
   ) : null;
 
@@ -798,6 +820,7 @@ export function TimelineView({
             .map((st) => (
               <button
                 key={st}
+                className="mgt-hover-scale"
                 style={{
                   background: BLOCK_BG[st], border: "none",
                   borderRadius: 12, padding: "10px 18px",
@@ -813,6 +836,27 @@ export function TimelineView({
                 {st}
               </button>
             ))}
+          {/* v16.1.0: one-tap No show for a confirmed booking past the
+              no-show threshold (App's lateMap). Cancels + sets the noShow
+              flag via the existing doCancelBooking path. */}
+          {quickStatus.booking.status === "confirmed" && late[quickStatus.booking.id] === "noshow" ? (
+            <button
+              className="mgt-hover-scale"
+              style={{
+                background: BTN.orange, border: "none",
+                borderRadius: 12, padding: "10px 18px",
+                fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
+                cursor: "pointer",
+                minHeight: 44, flex: "1 1 auto"
+              }}
+              onClick={() => {
+                onNoShow(quickStatus.booking.id);
+                setQuickStatus(null);
+              }}
+            >
+              No show
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -857,7 +901,29 @@ export function TimelineView({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", flex: "1 1 auto", minWidth: 0 }}>
           {legendEls}
         </div>
-        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        {/* v16.3.0: search + settings grouped at the legend's right. The 🔍
+            button matches the cog's 34×34 chrome exactly (was in the header). */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+          <button
+            onClick={onOpenSearch}
+            title="Find a booking"
+            aria-label="Find a booking"
+            className="mgt-hover-scale"
+            style={{
+              background: "var(--cog-bg)",
+              border: "1px solid var(--cog-border)",
+              borderRadius: 10, width: 34, height: 34,
+              cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0, padding: 0,
+              fontSize: 15, lineHeight: 1,
+              color: S.text,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
+            }}
+          >
+            🔍
+          </button>
+          {/* WhatsApp sandbox: 🧪 simulator opener, left of the cog (sandbox builds only). */}
           {WA_SANDBOX && onOpenSim ? (
             <button
               onClick={onOpenSim}

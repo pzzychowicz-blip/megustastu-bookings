@@ -87,6 +87,9 @@
         --warn-text: #9a3412;
         --danger-text: #991b1b;
         --success-text: #166534;
+        /* v16.2.0: Firebase connection dot — saturated, identical in both themes */
+        --status-online: #34c759;  --status-online-glow: rgba(52, 199, 89, 0.25);
+        --status-offline: #ff3b30; --status-offline-glow: rgba(255, 59, 48, 0.25);
         /* Banners (warn / danger / suggestion) — bg + border + text flip together */
         --warn-bg: rgba(255, 237, 213, 0.7);    --warn-border: rgba(253, 186, 116, 0.55);
         --danger-bg: rgba(254, 226, 226, 0.7);  --danger-border: rgba(252, 165, 165, 0.55);
@@ -238,6 +241,9 @@
         --warn-text: #fdba74;
         --danger-text: #fca5a5;
         --success-text: #86efac;
+        /* v16.2.0: connection dot — same saturated colours as light */
+        --status-online: #34c759;  --status-online-glow: rgba(52, 199, 89, 0.25);
+        --status-offline: #ff3b30; --status-offline-glow: rgba(255, 59, 48, 0.25);
         --warn-bg: rgba(120, 70, 20, 0.3);    --warn-border: rgba(253, 186, 116, 0.4);
         --danger-bg: rgba(120, 30, 30, 0.32); --danger-border: rgba(252, 165, 165, 0.4);
         --suggest-bg: rgba(34, 90, 50, 0.45); --suggest-border: rgba(134, 239, 172, 0.35);
@@ -413,6 +419,17 @@
           animation-delay: 0ms !important;
           transition-duration: 0.001ms !important;
         }
+      }
+
+      /* v16.3.0: printable day sheet (DaySheet.jsx). Hidden on screen; on print,
+         hide the whole app (#root) and reveal ONLY the sheet. The sheet is
+         portalled to <body> (sibling of #root) so hiding #root doesn't hide it.
+         The sheet hard-codes light colours, so print stays light in any theme. */
+      .mgt-print-sheet { display: none; }
+      @media print {
+        #root { display: none !important; }
+        .mgt-print-sheet { display: block !important; }
+        @page { margin: 12mm; }
       }
     </style>
   </head>
