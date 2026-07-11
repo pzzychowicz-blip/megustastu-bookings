@@ -197,7 +197,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"16.3.0",
+  version:"16.4.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1469,6 +1469,14 @@ function BookingApp(){
       }
       // ── Letter / symbol / arrow shortcuts: never hijack typing ──
       if(typing) return;
+      // v16.4.0 (Patryk): Shift+D (dark toggle) and ? (Settings/shortcuts help)
+      // are GLOBAL — they fire even while a modal is open and NEVER close it.
+      // Placed here (above the settings-arrow / prefPicker / form-letter blocks
+      // and the anyModal guard) so they always win; no form/pref shortcut uses D
+      // or ?, so nothing is shadowed. The `typing` guard above still lets you
+      // type "D"/"?" into a field. `?` opens Settings ON TOP of any open modal.
+      if((k==="d"||k==="D")&&e.shiftKey){e.preventDefault();K.onToggleDark();return;}
+      if(k==="?"){e.preventDefault();K.setShowSettings(true);return;}
       // ── v14 p7: Settings tab-cycle with ←/→ ──
       // Active only when Settings is the top layer (reminderEditor and
       // confirmReminderDel are sub-modals on top of Settings — when they're
@@ -1551,10 +1559,6 @@ function BookingApp(){
       // ── Global shortcuts: suppressed while any modal is open ──
       const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
       if(anyModal) return;
-      // v16.2.0: Shift+D flips dark/light. Placed BEFORE the list-view per-card
-      // block and the global D handlers so it beats D=delete (list card focused)
-      // and D=jump-to-today. Shift produces k==="D"; check both to be safe.
-      if((k==="d"||k==="D")&&e.shiftKey){e.preventDefault();K.onToggleDark();return;}
       // v16.3.0: "/" opens the global booking search (typing guard above keeps it
       // out of form fields; anyModal guard keeps it from re-firing while open).
       if(k==="/"){e.preventDefault();K.setShowSearch(true);return;}
@@ -1583,7 +1587,6 @@ function BookingApp(){
           if(k==="d"||k==="D"){e.preventDefault();K.setConfirmDel(sel.id);return;}
         }
       }
-      if(k==="?"){e.preventDefault();K.setShowSettings(true);return;}
       if(k==="t"||k==="T"){e.preventDefault();if(K.view!=="timeline"){K.bumpSlide("mgt-view-in-left");}K.setView("timeline");return;}
       if(k==="l"||k==="L"){e.preventDefault();if(K.view!=="list"){K.bumpSlide("mgt-view-in-right");}K.setView("list");return;}
       if(k==="d"||k==="D"){e.preventDefault();K.goToDate(new Date().toISOString().slice(0,10));return;}
@@ -1931,7 +1934,8 @@ function BookingApp(){
     selectedId={selectedListId}
     onSelect={setSelectedListId}
     showFinished={showFinished}
-    onToggleFinished={toggleShowFinished} />;
+    onToggleFinished={toggleShowFinished}
+    onOpenSearch={function(){setShowSearch(true);}} />;
 
 
   const summaryPanel=<Summary

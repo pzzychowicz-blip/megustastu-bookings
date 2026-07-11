@@ -45,8 +45,36 @@ export function ListView({
   nowMins = 0, warnings = {},
   late = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {},
-  showFinished = false, onToggleFinished = () => {}
+  showFinished = false, onToggleFinished = () => {},
+  onOpenSearch = () => {}
 }) {
+  // v16.4.0: List view has no legend, so the global-search 🔍 (previously
+  // Timeline-legend-only) gets a right-aligned home above the cards here —
+  // byte-for-byte the timeline button's chrome (TimelineView.jsx). Shown even on
+  // an empty day (you may search precisely because today is empty).
+  const searchBar = (
+    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <button
+        onClick={onOpenSearch}
+        title="Find a booking"
+        aria-label="Find a booking"
+        className="mgt-hover-scale"
+        style={{
+          background: "var(--cog-bg)",
+          border: "1px solid var(--cog-border)",
+          borderRadius: 10, width: 34, height: 34,
+          cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0, padding: 0,
+          fontSize: 15, lineHeight: 1,
+          color: S.text,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
+        }}
+      >
+        🔍
+      </button>
+    </div>
+  );
   const day = bookings
     .filter((b) => b.date === date)
     .sort((a, b) => {
@@ -56,14 +84,6 @@ export function ListView({
       return a.time.localeCompare(b.time);
     });
 
-  if (!day.length) {
-    return (
-      <div style={{ textAlign: "center", padding: "48px 0", color: S.text, fontSize: 15 }}>
-        No bookings for this date.
-      </div>
-    );
-  }
-
   // statusOrder already sorts completed/cancelled last, so splitting here
   // preserves the exact visual order the inline list had.
   const active = day.filter((b) => b.status !== "completed" && b.status !== "cancelled");
@@ -71,6 +91,10 @@ export function ListView({
 
   // v15.8.0: detect status changes → stamp a wipe of the OLD colour; FLIP the
   // active list so a re-sorted card eases to its new position instead of jumping.
+  // v16.4.0 /code-review: this hooks block MUST run before the empty-day early
+  // return below (rules of hooks) — it used to sit after it, so adding the
+  // day's FIRST booking without a remount (no slide bump) changed the hook
+  // count between renders and crashed the view.
   const [, bumpAnim] = useState(0);
   useEffect(function () {
     const prev = __listPrev;
@@ -94,6 +118,17 @@ export function ListView({
     return a && a.until > Date.now() ? a.from : null;
   }
   const flipRef = useFlip([active.map(function (b) { return b.id; }).join(",")]);
+
+  if (!day.length) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {searchBar}
+        <div style={{ textAlign: "center", padding: "48px 0", color: S.text, fontSize: 15 }}>
+          No bookings for this date.
+        </div>
+      </div>
+    );
+  }
 
   // v16.0.0: repeat no-show offender map (2+ past no-shows on this phone,
   // counted across ALL dates — the full bookings prop, not just `day`).
@@ -294,6 +329,7 @@ export function ListView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {searchBar}
       <div ref={flipRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {active.map(renderCard)}
       </div>

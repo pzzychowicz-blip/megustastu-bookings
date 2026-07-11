@@ -26,7 +26,10 @@ import { BTN } from "../lib/constants";
 import { useRevealRows } from "../hooks/useRevealRows";
 
 export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss }) {
-  const [open, setOpen] = useState(true); // collapsible, revealed by default (v16.3.0)
+  // v16.4.0 (Patryk): collapsed BY DEFAULT when more than 2 bookings are late —
+  // a long list shouldn't shove the grid down. ≤2 stays expanded. Initial-only
+  // (session state): it won't auto-re-collapse if the count later crosses 2.
+  const [open, setOpen] = useState(function () { return Object.keys(lateMap).length <= 2; });
   // v16.3.0: per-row ease-in/out lifecycle extracted to useRevealRows (shared
   // with WaitAvailBanner). Was inlined here since v16.1.1.
   const { renderIds, openIds } = useRevealRows(Object.keys(lateMap));

@@ -3925,3 +3925,77 @@ deferred scans' deps couldn't see a `settings/operatingHours` change from anothe
 form was open (hoursFor reads a live binding — no React dep changes) → a `hoursSig` string
 ("open-close"/"closed") added to formAvail/kitchenSugg/walk-in scan deps, so an hours edit
 re-checks availability instead of leaving a stale banner until the next input nudge.
+
+---
+
+## v16.4.0 — floor-ops corrections & name-based guest search (2026-07-11)
+
+Eight items on a single branch off the merged v16.3.0 `main`. All pure client changes → rolling
+deploy (no Firebase rules / shape change). Build clean; main-bundle gz ≈203.9 kB (from ≈202).
+
+**Files:** `src/App.jsx` (keyboard handler, ListView mount, version), `src/components/LateBanner.jsx`,
+`src/components/BookingFormModal.jsx`, `src/components/ManualModal.jsx`, `src/components/ListView.jsx`,
+`src/components/CustomersSettings.jsx`, `src/lib/customers.js`, `CLAUDE.md`.
+
+1. **Running-late banner collapsed by default when > 2 late** (`LateBanner.jsx`) — `open` init is now
+   `useState(() => Object.keys(lateMap).length <= 2)` (was `true`). ≤2 stays expanded; a long late
+   list starts collapsed so it doesn't shove the grid down. Initial-only (won't auto-re-collapse
+   mid-session). Verified live: 8 late → banner rendered collapsed.
+2. **Shift+D and `?` are GLOBAL shortcuts** (`App.jsx` keyboard `handler`) — both moved from BELOW the
+   `if(anyModal) return;` guard to just after `if(typing) return;`, so they fire even while a modal is
+   open and NEVER close it (they only toggle theme / open Settings; `?` layers Settings on top). No
+   form/pref shortcut uses D or ?, so nothing is shadowed; the typing guard still lets you type the
+   chars into a field. Verified live: Shift+D flips theme with the form open (form stays); `?` opens
+   Settings over an open Manual modal and Escape reveals the Manual modal intact (selection preserved).
+3. **DEV Firebase login saved to memory** (no code) — `dev-firebase-login.md`; "always start the local
+   server logged in." Password entry stays the user's step (prohibited category); rely on the persisted
+   session.
+4. **Name-based guest search — per-booking, NO merging** (`customers.js` + `BookingFormModal.jsx`) —
+   new pure `searchGuestsByName(bookings, index, query, limit)` returns a unified dropdown list: phone
+   customers collapse by phone (verified single identity), but phone-LESS guests are ONE ROW PER
+   BOOKING (never merged — two same-name phone-less people can't collapse into one). The booking form's
+   NAME field gains an autocomplete mirroring the phone dropdown (new bookings only; each row shows
+   phone-or-"no phone" + last date so duplicates are distinguishable); `pickGuest` fills name (+ phone
+   when present) + Book-Again prefill. Verified live: typing "Mar" listed two separate "Marco · no
+   phone" rows.
+5. **"Regular" label only at 2+ completed visits** (`BookingFormModal.jsx`) — the recognition chip now
+   reads `"Regular · N past visits"` at `regularCount>=2` and `"1 past visit"` (no "Regular") at
+   exactly 1; still teal + clickable disclosure. (CustomersSettings' Regulars filter already defaults
+   to 2.) Verified live: a 1-visit guest showed "1 past visit".
+6. **Swap-busy panel readability** (`ManualModal.jsx`) — the active Swap-busy header was pale peach +
+   `--warn-text` (low contrast, esp. dark). Now a saturated orange fill (`rgba(249,115,22,0.85)`) with
+   WHITE title/subtitle (`--text-on-accent`), matching the swap-cell / "Swap & Assign" orange family.
+   Verified live: white text reads cleanly on orange.
+7. **List-view 🔍 search button** (`ListView.jsx` + `App.jsx`) — new `onOpenSearch` prop renders a
+   right-aligned 🔍 (byte-for-byte the timeline legend button) above the cards, shown even on empty
+   days (the `!day.length` early return was restructured). Wired to `setShowSearch(true)`. List view
+   had no button chrome before; Settings there stays keyboard-only (`?`). Verified live: 🔍 opens the
+   global SearchPanel.
+8. **Phone-less no-show count stat** (`customers.js` reuse + `CustomersSettings.jsx`) — a 4th totals
+   tile ("N no-show, no phone", rendered only when > 0) counts `!hasRealPhone(b.phone) && isNoShow(b)`
+   bookings. Count only — never aggregated into an identity (consistent with item 4's no-merge rule).
+   Verified live: tile showed "6 no-show, no phone".
+
+**/code-review (same version):** one finding fixed — **ListView rules-of-hooks crash (pre-existing,
+latent since v15.8.0):** the `!day.length` early return sat ABOVE the `useState`/`useEffect`/`useFlip`
+hooks block, so adding a day's FIRST booking while viewing that empty day in List view (no remount —
+`slide.k` only bumps on date/view change) changed the hook count between renders → React "Rendered
+more hooks" crash. The hooks block (+ the `active`/`finished` derivations it needs) now runs BEFORE
+the early return. Verified live: empty 2026-09-15 in List → + New → Save rendered the first card
+cleanly (and delete → back to empty, also clean); zero console errors. **Second finding also
+fixed:** the name-dropdown's exact-match self-close filter hid ALL phone-less rows once the name was
+fully typed — forfeiting their Book-Again prefill, and with two same-name phone-less guests you
+couldn't switch rows. The filter now self-hides only an exactly-applied PHONE-customer row
+(name+phone both match the form); phone-less rows always stay listed (picking still closes the
+dropdown via setNameFocus(false)). Verified live: exact-typed "Marco" kept all three phone-less
+Marco rows visible + pickable. Remaining nit accepted as-is: the swap-busy orange literals follow
+the TableGrid saturated-fill exception.
+
+**UI polish follow-up (same version, Patryk):** (1) **Swap-busy orange desaturated ~30%** — the
+v16.4.0 `rgb(249,115,22)` read too vivid; now `rgb(215,121,56)` (HSL S 95%→66%, same hue/lightness),
+softer but still white-text-readable in both themes. (2) **Autocomplete dropdowns less transparent +
+hover affordance** — the booking-form phone AND name pickers used `--bg-sheet` (light 0.72 → form
+fields bled through); now a new near-opaque `--bg-ac-menu` token (light/dark 0.98). Rows gained a
+`.mgt-ac-row` class → `:hover` background `--bg-ac-hover` (accent tint, both themes, behind the
+hover-capability media guard) so the cursor's target row is visible. New tokens + one CSS rule in
+`index.html`; both dropdowns in `BookingFormModal.jsx`. Verified live in light + dark.

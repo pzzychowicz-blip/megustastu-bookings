@@ -63,6 +63,8 @@
         /* Surfaces */
         --bg-sheet: rgba(255, 255, 255, 0.72);         /* Overlay desktop dialog card */
         --bg-sheet-mobile: rgba(240, 243, 248, 0.98);  /* Overlay mobile full-screen sheet */
+        --bg-ac-menu: rgba(255, 255, 255, 0.98);       /* v16.4.0: autocomplete dropdown menu — near-opaque so form fields don't bleed through */
+        --bg-ac-hover: rgba(0, 122, 255, 0.12);        /* v16.4.0: autocomplete row hover tint */
         --bg-soft: rgba(248, 250, 253, 0.95);          /* Section panel */
         --bg-input: rgba(255, 255, 255, 0.5);          /* text inputs / selects */
         --bg-kbd: rgba(255, 255, 255, 0.75);           /* keycap */
@@ -172,6 +174,8 @@
         /* ── v14.2.2: atoms / modal dark overrides ── */
         --bg-sheet: rgba(44, 44, 46, 0.85);
         --bg-sheet-mobile: rgba(28, 28, 30, 0.98);
+        --bg-ac-menu: rgba(44, 44, 46, 0.98);          /* v16.4.0: autocomplete dropdown menu — near-opaque */
+        --bg-ac-hover: rgba(10, 132, 255, 0.24);       /* v16.4.0: autocomplete row hover tint */
         --bg-soft: rgba(255, 255, 255, 0.05);
         --bg-input: rgba(118, 118, 128, 0.24);
         --bg-kbd: rgba(255, 255, 255, 0.1);
@@ -274,6 +278,14 @@
          behaviour is unchanged. */
       .mgt-hover-scale {
         transition: transform 120ms ease, background-color 120ms ease, box-shadow 120ms ease, border-radius 120ms ease;
+      }
+      /* v16.4.0: autocomplete dropdown rows (phone + name pickers in the booking
+         form) — a hover tint so the cursor's target row is visible. Not a
+         .mgt-hover-scale (rows shouldn't scale); plain background swap, and no
+         touch sticky-hover concern (the rows are tapped, not lifted). */
+      .mgt-ac-row { transition: background-color 120ms ease; }
+      @media (hover: hover) and (pointer: fine) {
+        .mgt-ac-row:hover { background-color: var(--bg-ac-hover); }
       }
       @media (hover: hover) and (pointer: fine) {
         .mgt-hover-scale:hover:not(:disabled) {

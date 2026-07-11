@@ -18,7 +18,7 @@
 
 import { useState } from "react";
 import { S, BTN, STATUS_COLORS } from "../lib/constants";
-import { customerIndex, searchCustomers, normalizePhone, formatPhone } from "../lib/customers";
+import { customerIndex, searchCustomers, normalizePhone, formatPhone, hasRealPhone, isNoShow } from "../lib/customers";
 import { Section, Reveal, mkInp, mkBtn } from "./atoms";
 
 export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
@@ -37,6 +37,10 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
   const totalCustomers = all.length;
   const totalVisits = all.reduce(function (a, c) { return a + c.visits; }, 0);
   const noShowCustomers = all.filter(function (c) { return c.noShowCount > 0; }).length;
+  // v16.4.0: phone-less no-shows aren't in the phone-keyed index at all — count
+  // them (count only, never aggregated into an identity: two same-name phone-less
+  // people are different people) so they're not fully invisible.
+  const phonelessNoShowCount = (bookings || []).filter(function (b) { return b && !hasRealPhone(b.phone) && isNoShow(b); }).length;
   // v16.3.0: quick filters (applied only when NOT searching — a query overrides).
   const base = filter === "regulars"
     ? all.filter(function (c) { return c.visits >= regularMin; }).sort(function (a, b) { return b.visits - a.visits || (b.latestDate || "").localeCompare(a.latestDate || ""); })
@@ -130,6 +134,12 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
             <div style={{ fontSize: 18, fontWeight: 700, color: "var(--warn-text)" }}>{noShowCustomers}</div>
             <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>with a no-show</div>
           </div>
+          {phonelessNoShowCount > 0 ? (
+            <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 10 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--warn-text)" }}>{phonelessNoShowCount}</div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>no-show, no phone</div>
+            </div>
+          ) : null}
         </div>
         <input
           value={query}
