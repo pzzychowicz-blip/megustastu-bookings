@@ -185,3 +185,37 @@ export function searchCustomers(index, query, limit) {
   out.sort(function (a, b) { return (b.latestDate || "").localeCompare(a.latestDate || ""); });
   return out.slice(0, max);
 }
+
+// searchGuestsByName — the booking-form NAME autocomplete (v16.4.0). Matches
+// guests by NAME (case-insensitive substring) and returns a unified, ordered
+// list of dropdown rows spanning BOTH identity tiers:
+//   • phone customers  → ONE row per phone (a verified single identity, from the
+//                        prebuilt phone index) — `isPhoneless:false`.
+//   • phone-LESS guests → ONE row PER BOOKING (NO merging) — two different people
+//                        sharing a name never collapse into one; each row carries
+//                        its own date so duplicates are distinguishable.
+// Row shape (uniform so the dropdown renders both): { key, name, rawPhone, phone,
+// latestDate, isPhoneless, latest } where `latest` is the booking to Book-Again
+// prefill from. Sorted most-recent-first, capped at `limit` (default 6).
+export function searchGuestsByName(bookings, index, query, limit) {
+  const max = limit || 6;
+  const q = String(query || "").trim().toLowerCase();
+  if (q.length < 2 || !Array.isArray(bookings)) return [];
+  const rows = [];
+  // Phone customers (from the phone-keyed index) whose name matches.
+  Object.keys(index || {}).forEach(function (key) {
+    const c = index[key];
+    if (c.name && c.name.toLowerCase().indexOf(q) !== -1) {
+      rows.push({ key: "p:" + c.phone, name: c.name, rawPhone: c.rawPhone, phone: c.phone, latestDate: c.latestDate, isPhoneless: false, latest: c.bookings[0] });
+    }
+  });
+  // Phone-LESS bookings whose name matches — one row each, never merged.
+  bookings.forEach(function (b) {
+    if (!b || hasRealPhone(b.phone)) return;
+    if (b.name && b.name.toLowerCase().indexOf(q) !== -1) {
+      rows.push({ key: "b:" + b.id, name: b.name, rawPhone: "", phone: null, latestDate: b.date || "", isPhoneless: true, latest: b });
+    }
+  });
+  rows.sort(function (a, b) { return (b.latestDate || "").localeCompare(a.latestDate || ""); });
+  return rows.slice(0, max);
+}
