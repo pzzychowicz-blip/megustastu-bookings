@@ -365,6 +365,17 @@
           transition-duration: 0.001ms !important;
         }
       }
+
+      /* v16.3.0: printable day sheet (DaySheet.jsx). Hidden on screen; on print,
+         hide the whole app (#root) and reveal ONLY the sheet. The sheet is
+         portalled to <body> (sibling of #root) so hiding #root doesn't hide it.
+         The sheet hard-codes light colours, so print stays light in any theme. */
+      .mgt-print-sheet { display: none; }
+      @media print {
+        #root { display: none !important; }
+        .mgt-print-sheet { display: block !important; }
+        @page { margin: 12mm; }
+      }
     </style>
   </head>
   <body>

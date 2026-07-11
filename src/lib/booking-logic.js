@@ -54,6 +54,26 @@ export function lateState(b,todayStr,nowMins,cfg){
 // v16.1.1: minutes a booking is past its start time. Single source for the
 // "N min late" arithmetic (was duplicated in the App banner + the ListView tag).
 export function lateMins(b,nowMins){return nowMins-toMins(b.time);}
+// v16.3.0: table-turn prediction. Which of TODAY'S SEATED bookings are about to
+// free their table? Returns [{id, name, tables, inMin}] for seated bookings whose
+// scheduled end (start + duration) is 0 < end−now ≤ windowMin (default 15),
+// sorted soonest-first. OVERSTAYERS (end already passed) are excluded — the
+// overlap-warning machinery covers them, and "free in ~N" would be a lie for an
+// open-ended overstay. cfg-gated by the caller (freeSoonEnabled). Same
+// no-midnight-wraparound assumption as lateState (bookings don't start past
+// midnight, so an end up to ~01:30 stays same-side of `nowMins`).
+export function freeingSoon(bookings,todayStr,nowMins,windowMin){
+  var win=windowMin||15;
+  var out=[];
+  (bookings||[]).forEach(function(b){
+    if(!b||b.status!=="seated"||b.date!==todayStr) return;
+    var end=toMins(b.time)+(b.duration||90);
+    var inMin=end-nowMins;
+    if(inMin>0&&inMin<=win) out.push({id:b.id,name:b.name,tables:(b.tables||[]).slice(),inMin:inMin});
+  });
+  out.sort(function(a,b){return a.inMin-b.inMin;});
+  return out;
+}
 export function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
 export function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
@@ -65,12 +85,23 @@ export function sanitize(b){if(!b||typeof b!=="object") return null;var t=b.time
   // it survives reads; legacy no-shows (history entry only) are counted by
   // customers.js isNoShow's history fallback — no migration needed.
   noShow:!!b.noShow,
+  // v16.3.0: deposit / prepayment amount in € (0 = none). Whitelisted so it
+  // survives reads; per-booking field → covered by the existing per-$id CAS.
+  // Clamped ≥0 (/code-review): the form's min={0} only blocks the stepper —
+  // a typed "-50" would otherwise pass Number() straight through.
+  deposit:Math.max(0,Number(b.deposit)||0),
+  // v16.3.0: recurring-occurrence stamps (null for a one-off). recurringId links
+  // to the settings/recurring rule; recurringDate is the occurrence's date. The
+  // generator dedupes on these; doDelete adds recurringDate to the rule's
+  // skipDates so a deleted occurrence is never regenerated.
+  recurringId:b.recurringId||null,
+  recurringDate:b.recurringDate||null,
   // v15.5.0: per-booking revision stamp for the per-node write model. Carried
   // through sanitise so it survives reads (this whitelist would otherwise drop
   // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.
   updatedAt:Number(b.updatedAt)||0};}
 export function histEntry(action,user){return {at:new Date().toISOString(),by:user||"staff",action:action};}
-export function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=orig.phone||"";var formPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
+export function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=orig.phone||"";var formPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var origDep=Math.max(0,Number(orig.deposit)||0);var formDep=Math.max(0,Number(f.deposit)||0);if(origDep!==formDep) ch.push("deposit "+origDep+"→"+formDep+" €");var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
 export function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var vals=Object.values(arr);return vals.map(sanitize).filter(Boolean);}return arr.map(sanitize).filter(Boolean);}
 
 // ── Table classification ──────────────────────────────────────────────────────
@@ -221,18 +252,62 @@ export function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTab
   }
   return assigned.tables;
 }
+// v16.3.0 perf rewrite — same output, a fraction of the work. The old shape ran
+// the FULL trial optimisation (trialFits → applyOpt → optimise, incl. its retry
+// passes) for EVERY quarter-slot of the day — with 07:00–01:00 hours that's ~70
+// slots, and on a day where one booking is unplaceable each optimise takes ~70ms
+// (the retry pass), so one findTimes call cost ~5 SECONDS (the "New booking
+// freezes" bug). Two changes, both output-preserving for the only consumers
+// (formatSugg keeps just the 10 nearest valid slots each side of `around`):
+//   1. CHEAP-FIRST: per slot, try the no-reshuffle findFreeSlot before the full
+//      optimizer trial. A plain free table means the slot is bookable WITHOUT
+//      touching anyone — trivially valid, no simulation needed. Only slots that
+//      fail the cheap check pay for the full trial (which exists to find
+//      reshuffle-rescuable slots).
+//   2. OUTWARD EARLY-STOP: scan from `around` outwards and stop after 10 valid
+//      slots per side — exactly what formatSugg would keep. Result is returned
+//      ascending, so formatSugg's slice sees the identical list.
 export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
   if(h.closed) return []; // closed day → no valid times
-  var times=Array.from({length:(h.close-h.open)*4},function(_,i){return h.open*60+i*15;});
   var aroundM=around||0;
-  var valid=times.filter(function(m){
+  // v16.3.0 perf phase 2: hard time budget. On an extreme day (many mutually
+  // conflicting bookings) a single full trial can cost 100ms+ — 20 of them would
+  // freeze the UI for seconds even off the mount path. When the budget runs out
+  // we stop scanning and return what we found (partial suggestions on
+  // pathological days beat a frozen app; normal days never hit this).
+  var BUDGET_MS=600;
+  var t0=Date.now();
+  function slotValid(m){
     if(m>=24*60) return false; // v14.5.0: never suggest a post-midnight start (24h-hours is extend-window only)
     if(m+dur>h.close*60) return false;
     if(m===aroundM) return false;
+    // Cheap-first: a slot with a plainly free table is valid without simulation.
+    if(!noReshuffle&&findFreeSlot(existing,date,toTime(m),size,pref,dur,blocks,editId,null)) return true;
+    if(Date.now()-t0>BUDGET_MS) return false; // budget spent — skip the expensive trial
     return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId,null,noReshuffle);
-  });
-  return valid;
+  }
+  var first=h.open*60,last=h.close*60-15;
+  var CAP=10; // formatSugg keeps 10 per side — scanning further is wasted work
+  // Stay on the quarter-hour grid even when `around` isn't grid-aligned (the old
+  // fixed-grid scan only ever produced grid slots): step outwards from the
+  // nearest grid positions strictly below/above aroundM.
+  var off=((aroundM-first)%15+15)%15;
+  var startEarlier=off===0?aroundM-15:aroundM-off;
+  var startLater=off===0?aroundM+15:aroundM+(15-off);
+  // Bounds clamp (/code-review): an out-of-hours `around` (e.g. pre-opening)
+  // must not let the outward scan step outside the service grid — the old
+  // fixed-grid scan structurally never produced such slots. `first`/`last` are
+  // grid-aligned (open/close are whole hours), so clamping stays on-grid.
+  // (The upper side of the earlier-loop is additionally covered by the
+  // m+dur>close check in slotValid, but the clamp keeps both symmetric.)
+  if(startLater<first) startLater=first;
+  if(startEarlier>last) startEarlier=last;
+  var earlier=[];
+  for(var m=startEarlier;m>=first&&earlier.length<CAP;m-=15){ if(Date.now()-t0>BUDGET_MS) break; if(slotValid(m)) earlier.push(m); }
+  var later=[];
+  for(var m2=startLater;m2<=last&&later.length<CAP;m2+=15){ if(Date.now()-t0>BUDGET_MS) break; if(slotValid(m2)) later.push(m2); }
+  return earlier.reverse().concat(later);
 }
 export function formatSugg(sugg,around){
   if(!sugg||!sugg.length) return {earlier:[],later:[]};
@@ -543,6 +618,53 @@ export function comboCapBest(ids){
     return bestCap+rem.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);
   }
   return ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);
+}
+
+// ── Range stats (v16.3.0) ─────────────────────────────────────────────────────
+// Aggregate booking metrics over an inclusive date range [fromDate, toDate]
+// (ISO date strings). Pure; one pass over the bookings list. Cancelled bookings
+// are excluded from covers/bookings/table/hour tallies (matching daySummary);
+// no-shows are counted separately (the flag OR a legacy history entry — the
+// isNoShow rule, inlined here to keep booking-logic free of a customers.js dep).
+//   totalCovers, totalBookings, avgParty
+//   activeDays (distinct dates with ≥1 booking) + avgCoversPerDay
+//   hours: [{hour, covers}] sorted busiest-first
+//   tables: [{id, bookings, covers}] sorted by bookings desc
+//   noShows
+export function rangeStats(bookings,fromDate,toDate){
+  var day=(bookings||[]).filter(function(b){return b&&b.date>=fromDate&&b.date<=toDate;});
+  var active=day.filter(function(b){return b.status!=="cancelled";});
+  var totalCovers=0,totalBookings=active.length;
+  var byHour={},byTable={},dates={},noShows=0;
+  day.forEach(function(b){
+    var isNS=b.noShow===true||(Array.isArray(b.history)&&b.history.some(function(h){return h&&h.action==="no show";}));
+    if(isNS) noShows++;
+  });
+  active.forEach(function(b){
+    var size=Number(b.size)||2;
+    totalCovers+=size;
+    dates[b.date]=true;
+    var h=Math.floor(toMins(b.time)/60);
+    if(!byHour[h]) byHour[h]=0;
+    byHour[h]+=size;
+    (b.tables||[]).forEach(function(id){
+      if(!byTable[id]) byTable[id]={id:id,bookings:0,covers:0};
+      byTable[id].bookings+=1;byTable[id].covers+=size;
+    });
+  });
+  var activeDays=Object.keys(dates).length;
+  var hours=Object.keys(byHour).map(function(h){return {hour:Number(h),covers:byHour[h]};}).sort(function(a,b){return b.covers-a.covers;});
+  var tables=Object.keys(byTable).map(function(id){return byTable[id];}).sort(function(a,b){return b.bookings-a.bookings||b.covers-a.covers;});
+  return {
+    totalCovers:totalCovers,
+    totalBookings:totalBookings,
+    avgParty:totalBookings?Math.round((totalCovers/totalBookings)*10)/10:0,
+    activeDays:activeDays,
+    avgCoversPerDay:activeDays?Math.round(totalCovers/activeDays):0,
+    hours:hours,
+    tables:tables,
+    noShows:noShows
+  };
 }
 
 // ── Day summary (v14.6.0) ─────────────────────────────────────────────────────

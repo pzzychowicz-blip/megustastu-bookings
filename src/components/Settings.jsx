@@ -29,7 +29,11 @@ import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn } from "./atoms";
+import { BTN } from "../lib/constants";
+
+// v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
+const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
 // Single source of truth for the Settings tabs. SettingsContent renders it AND
@@ -154,13 +158,15 @@ const MINI_STEP_BTN = {
   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   boxShadow: "var(--shadow-input)"
 };
-function MiniStepper({ value, onDec, onInc, disableDec, disableInc }) {
-  const fmt = (n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00";
+function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt }) {
+  // v16.3.0: fmt is now optional (defaults to the HH:00 time format used by the
+  // Opening-hours editor); the Standing-bookings horizon passes a plain number.
+  const fmtFn = fmt || ((n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00");
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
         style={{ ...MINI_STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
-      <span style={{ minWidth: 46, textAlign: "center", fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{fmt(value)}</span>
+      <span style={{ minWidth: 46, textAlign: "center", fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{fmtFn(value)}</span>
       <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
         style={{ ...MINI_STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
     </div>
@@ -207,7 +213,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {} }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
@@ -228,7 +234,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
   // Defensive fallback mirrors the hook's DEFAULT_BOOKING_DEFAULTS seed.
   const bd = bookingDefaults && typeof bookingDefaults === "object"
     ? bookingDefaults
-    : { tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }], restDur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20 };
+    : { tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }], restDur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20, freeSoonEnabled: true };
   const tiers = Array.isArray(bd.tiers) ? bd.tiers : [];
   const minsLabel = (n) => n + " min";
   const guestsLabel = (n) => "≤ " + n;
@@ -241,6 +247,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
   // tier edit, or when a different row arms. (No booking data is at stake — tiers
   // only affect NEW bookings — so a light confirm, not a modal/undo.)
   const [armedTier, setArmedTier] = useState(null);
+  const [armedRule, setArmedRule] = useState(null); // v16.3.0: armed delete for a standing-booking rule id
   const armTimer = useRef(null);
   const disarmTier = () => { if (armTimer.current) { clearTimeout(armTimer.current); armTimer.current = null; } setArmedTier(null); };
   useEffect(() => () => { if (armTimer.current) clearTimeout(armTimer.current); }, []);
@@ -467,6 +474,99 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           </div>
         )}</AutoHeight>
       </Section>
+      {/* v16.3.0: Table turns — predict which seated tables free up in the next
+          ~15 min (Summary "freeing soon" line + timeline countdown pills).
+          Firebase-shared (settings/bookingDefaults). */}
+      <Section style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Table turns</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Show which seated tables are about to free up (a "freeing soon" line and a timeline countdown). Shared across all devices.
+            </div>
+          </div>
+          <Toggle on={bd.freeSoonEnabled !== false} onClick={() => onSaveBookingDefaults({ freeSoonEnabled: bd.freeSoonEnabled === false })} />
+        </div>
+        {/* v16.3.0 correction: prediction window — how far ahead "freeing soon"
+            looks. Revealed only while the feature is on. 5–60 min, 5-min steps. */}
+        <AutoHeight>{bd.freeSoonEnabled !== false ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Predict up to</span>
+            <MiniStepper value={(bd.freeSoonWindow || 15)} fmt={(n) => n + " min"}
+              disableDec={(bd.freeSoonWindow || 15) <= 5} disableInc={(bd.freeSoonWindow || 15) >= 60}
+              onDec={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) - 5 })}
+              onInc={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) + 5 })} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>ahead</span>
+          </div>
+        ) : null}</AutoHeight>
+      </Section>
+      {/* v16.3.0: Standing bookings — the recurring-rule manager. Rules are
+          CREATED from the booking form ("Repeat weekly"); here staff pause /
+          delete them and set the generation horizon. */}
+      {recurring ? (
+        <Section style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ textAlign: "left", flex: "1 1 200px" }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Standing bookings</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+                Weekly repeat bookings, auto-created for the next few weeks. Create one with "Repeat weekly" on the booking form. Shared across all devices.
+              </div>
+            </div>
+            <Toggle on={recurring.enabled !== false} onClick={() => onSetRecurringEnabled(recurring.enabled === false)} />
+          </div>
+          <AutoHeight>{recurring.enabled !== false ? (
+            <div style={{ marginTop: 12 }}>
+              {(recurring.rules || []).length === 0 ? (
+                <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>No standing bookings yet.</div>
+              ) : (recurring.rules || []).map(function (r) {
+                const armed = armedRule === r.id;
+                return (
+                  <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", opacity: r.active !== false ? 1 : 0.5 }}>{(r.name || "(no name)") + " · " + r.size + " pax"}</div>
+                      <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>{"Every " + (RULE_WD[r.weekday] || "?") + " at " + r.time + (r.active === false ? " · paused" : "")}</div>
+                    </div>
+                    <Toggle on={r.active !== false} onClick={() => onUpdateRule(r.id, { active: r.active === false })} />
+                    <button
+                      onClick={() => { if (armed) { onRemoveRule(r.id); setArmedRule(null); } else setArmedRule(r.id); }}
+                      className="mgt-hover-scale mgt-press"
+                      style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 10px", background: BTN.del, opacity: armed ? 1 : 0.85 })}>{armed ? "Confirm?" : "Delete"}</button>
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Generate ahead</span>
+                <MiniStepper value={(recurring.horizonWeeks || 4)} fmt={(n) => String(n)}
+                  disableDec={(recurring.horizonWeeks || 4) <= 1} disableInc={(recurring.horizonWeeks || 4) >= 12}
+                  onDec={() => onSetRecurringHorizon((recurring.horizonWeeks || 4) - 1)} onInc={() => onSetRecurringHorizon((recurring.horizonWeeks || 4) + 1)} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>{"week" + ((recurring.horizonWeeks || 4) !== 1 ? "s" : "")}</span>
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 8 }}>Deleting a rule leaves already-created future bookings in place — cancel those individually if needed.</div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 12 }}>Off — no new standing bookings are generated.</div>
+          )}</AutoHeight>
+        </Section>
+      ) : null}
+      {/* v16.3.0 correction: Backup lives at the BOTTOM of the General tab —
+          download a JSON snapshot of every collection + all settings to this
+          device (the Firebase free plan has no auto-backups). */}
+      {onBackup ? (
+        <Section style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ textAlign: "left", flex: "1 1 200px" }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Backup</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+                Download a JSON copy of all bookings, waitlist, reminders and settings to this device. There are no automatic backups — save one periodically. Restoring is manual (keep the file safe).
+              </div>
+            </div>
+            <button
+              onClick={onBackup}
+              className="mgt-hover-scale mgt-press"
+              style={mkBtn({ fontSize: 13, minHeight: 40, padding: "8px 16px", background: BTN.nav })}>⬇ Download backup</button>
+          </div>
+        </Section>
+      ) : null}
       <div style={{ padding: "10px 12px 12px", textAlign: "center" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.02em" }}>
           version {appVersion}
@@ -500,6 +600,12 @@ export function SettingsContent({
   onSaveOptimizer,
   bookingDefaults,
   onSaveBookingDefaults,
+  onBackup,
+  recurring,
+  onSetRecurringEnabled,
+  onSetRecurringHorizon,
+  onUpdateRule,
+  onRemoveRule,
   layout,
   onSaveLayout,
   bookings,
@@ -513,7 +619,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
   } else if (tab === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} />;
   } else if (tab === "customers") {

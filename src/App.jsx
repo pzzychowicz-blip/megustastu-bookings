@@ -11,7 +11,7 @@
  * Author:  Patryk Zychowicz
  * Contact: pz.zychowicz@gmail.com
  */
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 
@@ -37,7 +37,7 @@ import {
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
   checkInefficent, verifyClean, findConflicts,
   nowTime,
-  trialFits, toTime, lateState
+  trialFits, toTime, lateState, freeingSoon
 } from "./lib/booking-logic";
 
 import { validateReminderDraft } from "./lib/reminders";
@@ -183,7 +183,11 @@ import { useWalkin } from "./hooks/useWalkin";
 // entries. Active matching (does a table currently fit each entry?) is a
 // BookingApp effect → `waitAvail` state, derived via trialFits, not persisted.
 import { useWaitlist } from "./hooks/useWaitlist";
+import { useRecurring } from "./hooks/useRecurring";
 import { WaitlistPanel } from "./components/WaitlistPanel";
+import { WaitAvailBanner } from "./components/WaitAvailBanner";
+import { SearchPanel } from "./components/SearchPanel";
+import { DaySheet } from "./components/DaySheet";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -193,7 +197,7 @@ import { WaitlistPanel } from "./components/WaitlistPanel";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"16.2.0",
+  version:"16.3.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -475,6 +479,8 @@ function BookingApp(){
   // v14 preview 3: Settings / keyboard-shortcuts modal. Toggled by the cog
   // icon in TimelineView's legend row and by the `?` keyboard shortcut.
   const [showSettings, setShowSettings] = useState(false);
+  const [showSearch, setShowSearch] = useState(false); // v16.3.0: global booking search panel
+  const pendingSelectRef = useRef(null); // v16.3.0: booking id to focus in the List after a search-jump changes the day
   // v14.6.0: Summary panel expand/collapse (toggled by click or the g shortcut).
   const [summaryOpen, setSummaryOpen] = useState(false);
   // v14.7.0: Week View popover (opened from the Summary panel's Week button).
@@ -552,23 +558,35 @@ function BookingApp(){
   } = useReminders({ nowMins, setWriteWarning });
   // ── v16.0.0: Waitlist state ─────────────────────────────────────────────────
   const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
+  // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
+  const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   const [showWaitlist, setShowWaitlist] = useState(false);
   // waitAvail: {entryId: {tables, time}} for entries a table CURRENTLY fits
   // (recomputed by an effect below — deliberately state, not a render-time
   // derivation, so the trialFits scans run only when the inputs change, not
   // on every 15s clock re-render).
   const [waitAvail, setWaitAvail] = useState({});
-  const [waitFreeToast, setWaitFreeToast] = useState(null); // {name,size,time}
+  // Mirror of the last-computed waitAvail (/code-review anti-flap): lets the
+  // matching effect carry an entry's previous availability forward when the
+  // scan budget cut its pass short, instead of blinking the banner row.
+  const waitAvailRef = useRef({});
   const [waitAddedShown, setWaitAddedShown] = useState(false);
-  const prevWaitAvailRef = useRef(null);   // previous available-id set (transition detect)
+  const [waitNotifyDismissed, setWaitNotifyDismissed] = useState(function(){return new Set();}); // v16.3.0: session-only ✕-dismissed waitlist-free rows
+  const [undoInfo, setUndoInfo] = useState(null);   // v16.3.0: {snapshot, noShow} pending undo after a cancel/no-show
+  const undoTimerRef = useRef(null);                // 10s auto-clear timer for the undo toast
   const pendingWaitlistRef = useRef(null); // entry id being converted via Book
   // Derived: bookings with seated-today durations synced to live time.
   // Used by form/walk-in availability checks so they match what bookingsAfterAction
   // will see on save.
-  const liveBookings=(function(){
+  // v16.3.0 perf: useMemo — this used to be a fresh array EVERY BookingApp render
+  // (incl. every form keystroke, since the form draft lives here), which made any
+  // downstream memo of the availability scans useless (their `liveBookings` input
+  // changed ref each render). Keyed on [bookings, nowMins]: recomputes on a data
+  // change or the 15s tick, stays referentially stable across keystrokes/toggles.
+  const liveBookings=useMemo(function(){
     const today=new Date().toISOString().slice(0,10);
     return syncLiveDurations(bookings,today,nowMins);
-  })();
+  },[bookings,nowMins]);
   const winW=useWinW();
   const isMobile=winW<600;
   // ── v14.2.0: Dark-mode theme state ────────────────────────────────────────
@@ -604,7 +622,26 @@ function BookingApp(){
   // on the new day. (A status change that drops a booking from view just leaves
   // selectedListId pointing at a missing id → shortcuts no-op until it's re-set.)
   // v15.1.0: also re-collapse the finished disclosure on day change.
-  useEffect(function(){setSelectedListId(null);setShowFinished(false);},[viewDate]);
+  // v16.3.0: also clear the Running-late ✕-dismissed set (declared below) — the
+  // dismissals are per-day glances, not permanent mutes. (Referencing the setter
+  // here is safe: the effect body runs post-render, after the const initialises.)
+  // v16.3.0: a search-jump to another day parks the target booking id in
+  // pendingSelectRef; consume it here (after the day changes) instead of clearing
+  // the focus, and open the finished fold if the target is completed/cancelled so
+  // its card is visible. Otherwise the day change clears the (now off-day) focus.
+  useEffect(function(){
+    const pend=pendingSelectRef.current;
+    if(pend){
+      pendingSelectRef.current=null;
+      setSelectedListId(pend);
+      const b=bookings.find(function(x){return x.id===pend;});
+      setShowFinished(!!(b&&(b.status==="completed"||b.status==="cancelled")));
+    }else{
+      setSelectedListId(null);setShowFinished(false);
+    }
+    setLateDismissed(function(prev){return prev.size?new Set():prev;});setWaitNotifyDismissed(function(prev){return prev.size?new Set():prev;});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[viewDate]);
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
   // finished card holds the keyboard focus, drop the focus — the card is about
   // to disappear and the shortcuts must not act on an invisible booking.
@@ -657,6 +694,38 @@ function BookingApp(){
       const st=lateState(b,today,nowMins,bookingDefaults);
       if(st) map[b.id]=st;
     });
+    return map;
+  })();
+  // v16.3.0: per-row ✕ dismiss on the Running-late banner. Session-only (never
+  // persisted); lives HERE (not in LateBanner) because the whole banner's outer
+  // Reveal must collapse once the last row is dismissed. lateMap itself stays
+  // UNFILTERED — the list/timeline amber highlights keep showing for a dismissed
+  // row; only the banner (lateBannerMap) hides it. Reset on day change (below).
+  const [lateDismissed,setLateDismissed]=useState(function(){return new Set();});
+  const lateBannerMap=(function(){
+    if(lateDismissed.size===0) return lateMap;
+    const map={};
+    Object.keys(lateMap).forEach(function(id){if(!lateDismissed.has(id)) map[id]=lateMap[id];});
+    return map;
+  })();
+  function dismissLateRow(id){
+    setLateDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
+  }
+  // v16.3.0 — Table-turn prediction: today's seated bookings whose scheduled end
+  // is within the next freeSoonWindow min (freeingSoon, booking-logic.js). Gated
+  // on the settings/bookingDefaults master switch (freeSoonEnabled). Two shapes:
+  //   freeingList — [{id,name,tables,inMin}] soonest-first, for the Summary line.
+  //   freeingMap  — {bookingId: inMin}, for the timeline countdown pills.
+  // Today-only + recomputed per render (nowMins ticks every 15s) — the lateMap
+  // pattern; trivially cheap.
+  const freeingList=(function(){
+    const today=new Date().toISOString().slice(0,10);
+    if(viewDate!==today||!bookingDefaults.freeSoonEnabled) return [];
+    return freeingSoon(bookings,today,nowMins,bookingDefaults.freeSoonWindow||15);
+  })();
+  const freeingMap=(function(){
+    const map={};
+    freeingList.forEach(function(f){map[f.id]=f.inMin;});
     return map;
   })();
 
@@ -713,13 +782,17 @@ function BookingApp(){
   // would really save. prefTime is tried first; otherwise a 15-min first-fit
   // scan (stops at the first success, so an un-full day exits immediately).
   // Runs as an effect keyed on the data + a 15-min clock bucket — NOT raw
-  // nowMins — so the scans don't re-run on every 15s tick. A transition to
-  // available (vs the previous pass) fires the one-shot green toast; the first
-  // pass after load never toasts (prevWaitAvailRef starts null).
+  // nowMins — so the scans don't re-run on every 15s tick. v16.3.0: the result
+  // (waitAvail) drives the in-flow WaitAvailBanner directly; the old
+  // transition-diff green toast was removed (superseded by the persistent banner).
   const nowQuarter=Math.floor(nowMins/15);
   useEffect(function(){
     const todayStr=new Date().toISOString().slice(0,10);
     const next={};
+    // v16.3.0 perf phase 2: whole-pass time budget for the expensive trials
+    // (shared across entries — see tryFit below).
+    const WAIT_SCAN_BUDGET_MS=300;
+    const scanT0=Date.now();
     waitlist.forEach(function(w){
       if(!w||w.status!=="waiting"||!w.date||w.date<todayStr) return;
       const h=hoursFor(w.date);
@@ -734,35 +807,110 @@ function BookingApp(){
       // first so the chip shows it exactly when it fits.
       let scanLo=Math.ceil(fromM/15)*15;
       let scanHi=h.close*60-dur;
+      // v16.3.0 perf: cheap-first (the findTimes pattern) — a plainly free table
+      // means the slot fits WITHOUT reshuffling anyone; only slots failing the
+      // cheap check pay for the full trial optimisation (expensive on a day
+      // with unplaceable bookings — this scan runs on every data change).
+      // Perf phase 2: a hard per-effect time budget — on an extreme day a
+      // single full trial can cost 100ms+; past the budget we skip further
+      // expensive trials this pass. /code-review anti-flap: a budget-skip is
+      // recorded (budgetHit) so an entry that was available LAST pass keeps its
+      // sticky result below instead of blinking out of the banner — a future
+      // pass (next data change / 15-min bucket) re-verifies for real, and the
+      // Book path re-validates via the form's own scan + doSave guards anyway.
+      let budgetHit=false;
+      const tryFit=function(timeStr){
+        if(!noResh){const cheap=findFreeSlot(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null);if(cheap) return cheap;}
+        if(Date.now()-scanT0>WAIT_SCAN_BUDGET_MS){budgetHit=true;return null;}
+        return trialFits(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null,noResh);
+      };
       if(w.prefTime){
         const sm=toMins(w.prefTime);
         if(sm>=fromM&&sm+dur<=h.close*60){
-          const t=trialFits(liveBookings,w.date,w.prefTime,size,"auto",dur,tableBlocks,null,null,noResh);
+          const t=tryFit(w.prefTime);
           if(t){next[w.id]={tables:t,time:w.prefTime};return;}
         }
         scanLo=Math.max(scanLo,Math.ceil((sm-90)/15)*15);
         scanHi=Math.min(scanHi,sm+90);
       }
       for(let m=scanLo;m<=scanHi&&m<24*60;m+=15){
-        const t=trialFits(liveBookings,w.date,toTime(m),size,"auto",dur,tableBlocks,null,null,noResh);
+        const t=tryFit(toTime(m));
         if(t){next[w.id]={tables:t,time:toTime(m)};break;}
       }
+      // Anti-flap carry-forward: no match found AND the budget cut this entry's
+      // scan short → keep the previous pass's availability (if any) rather than
+      // dropping the row. A genuine "no longer fits" (budget NOT hit) still
+      // clears immediately.
+      if(!next[w.id]&&budgetHit&&waitAvailRef.current[w.id]) next[w.id]=waitAvailRef.current[w.id];
     });
+    waitAvailRef.current=next;
     setWaitAvail(next);
-    const prev=prevWaitAvailRef.current;
-    prevWaitAvailRef.current=Object.keys(next);
-    if(prev!==null){
-      const fresh=Object.keys(next).filter(function(id){return prev.indexOf(id)===-1;});
-      if(fresh.length){
-        const w=waitlist.find(function(x){return x.id===fresh[0];});
-        if(w){
-          setWaitFreeToast({name:w.name,size:w.size,time:next[w.id].time});
-          setTimeout(function(){setWaitFreeToast(null);},6000);
-        }
-      }
-    }
+    // v16.3.0: the transition-to-available cue is now the in-flow WaitAvailBanner
+    // (persistent + actionable), not a 6-second toast — so the prev-set diff that
+    // fired the old toast is gone. waitAvail alone drives the banner.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter]);
+
+  // ── v16.3.0: Recurring-booking generator ────────────────────────────────────
+  // For each ACTIVE rule, materialise its occurrences across the rolling horizon
+  // [today … today + horizonWeeks·7] as normal /bookings children, stamped with
+  // recurringId + recurringDate. IDEMPOTENT + cross-device-safe:
+  //   • existence is checked by (recurringId, recurringDate) — immutable stamps —
+  //     so a moved/cancelled occurrence is never re-created;
+  //   • the occurrence id is DETERMINISTIC ("r"+ruleId+"_"+date, path-safe), so
+  //     two devices generating concurrently converge — the second create is
+  //     rejected by the per-$id updatedAt CAS (baseUpdatedAt 0 vs stored) and
+  //     reconciles via the echo;
+  //   • skipDates (a deleted occurrence's date) are skipped;
+  //   • closed days / out-of-hours times are skipped.
+  // Self-stabilising (created rows populate `existing` next pass → no-op) and
+  // silent (auto-effect). Gated on !resyncing + loaded, like the reconciliation
+  // effect. Keyed on nowQuarter too so a day-rollover extends the horizon without
+  // needing a booking edit (the empty-toCreate early-out keeps it cheap).
+  useEffect(function(){
+    if(resyncing||firstLoadCount.current===null) return;
+    if(!recurring.enabled||!recurring.rules.length) return;
+    const today=new Date().toISOString().slice(0,10);
+    const horizonDays=recurring.horizonWeeks*7;
+    const existing={};
+    bookings.forEach(function(b){ if(b.recurringId&&b.recurringDate) existing[b.recurringId+"|"+b.recurringDate]=true; });
+    const toCreate=[];
+    recurring.rules.forEach(function(rule){
+      if(!rule.active) return;
+      const skip=rule.skipDates||[];
+      for(let i=0;i<=horizonDays;i++){
+        const d=new Date(today+"T00:00:00Z");
+        d.setUTCDate(d.getUTCDate()+i);
+        if(d.getUTCDay()!==rule.weekday) continue;
+        const ds=d.toISOString().slice(0,10);
+        if(skip.indexOf(ds)!==-1) continue;
+        const h=hoursFor(ds);
+        if(h.closed) continue;
+        const sm=toMins(rule.time);
+        if(sm<h.open*60||sm>h.close*60) continue;
+        if(existing[rule.id+"|"+ds]) continue;
+        toCreate.push({rule:rule,date:ds});
+      }
+    });
+    if(!toCreate.length) return;
+    saveBookings(function(prev){
+      let next=prev;
+      const byDate={};
+      toCreate.forEach(function(oc){ (byDate[oc.date]=byDate[oc.date]||[]).push(oc); });
+      Object.keys(byDate).forEach(function(ds){
+        byDate[ds].forEach(function(oc){
+          const rule=oc.rule;
+          const dur=getDur(rule.size);
+          const nb={id:"r"+rule.id+"_"+ds,name:rule.name,phone:rule.phone,date:ds,time:rule.time,scheduledTime:rule.time,size:rule.size,duration:dur,originalDuration:dur,preference:rule.preference,notes:rule.notes,status:"confirmed",tables:[],customDur:null,deposit:0,_manual:false,_locked:false,_conflict:false,preferredTables:[],returnOf:null,recurringId:rule.id,recurringDate:ds,history:[histEntry("auto-created from weekly rule","auto")]};
+          if(next.some(function(b){return b.id===nb.id||(b.recurringId===rule.id&&b.recurringDate===ds);})) return;
+          next=next.concat([nb]);
+        });
+        next=bookingsAfterAction(next,ds,tableBlocks,null,false,autoOptimizer);
+      });
+      return next;
+    },true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[bookings,recurring,tableBlocks,autoOptimizer,resyncing,nowQuarter]);
 
   // Book a waitlist entry: pre-fill a fresh new-booking form from it (the
   // returnOf pattern) and remember the entry id — doSave's new-booking path
@@ -820,6 +968,43 @@ function BookingApp(){
   // Customers tab arms an explicit confirm before calling this. Known edge:
   // if the customer's bookings are the ENTIRE database, the empty-array
   // write-guard refuses the delete — safety wins (document, don't bypass).
+  // v16.3.0: download a JSON backup of every collection + all settings to the
+  // device. Read-only (no write-guard concerns). The Firebase free plan has NO
+  // automatic backups, so this is one-tap insurance; restore stays manual.
+  function doBackup(){
+    const payload={
+      exportedAt:new Date().toISOString(),
+      appVersion:__APP_SIGNATURE__.version,
+      // /code-review: reminderFires (the transient per-device fire log) is
+      // DELIBERATELY omitted — restoring reminders without it can only re-show
+      // an already-seen banner once, which pruneOldReminderFires then re-prunes.
+      // Recorded in the file itself so a future restore knows it wasn't lost.
+      omitted:["reminderFires (transient reminder fire-log — intentionally not backed up)"],
+      bookings:bookings,
+      tableBlocks:tableBlocks,
+      waitlist:waitlist,
+      reminders:reminders,
+      recurring:recurring,
+      settings:{
+        operatingHours:weekHours,
+        dayShifts:dayShifts,
+        optimizer:optimizerSettings,
+        layout:layout,
+        bookingDefaults:bookingDefaults
+      }
+    };
+    try{
+      const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download="mgt-backup-"+new Date().toISOString().slice(0,10)+".json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){URL.revokeObjectURL(url);},1000);
+    }catch(e){setWriteWarning("Couldn't create the backup file on this device.");}
+  }
   function deleteCustomer(phoneKey){
     const key=normalizePhone(phoneKey);
     if(!key) return;
@@ -828,7 +1013,7 @@ function BookingApp(){
   }
 
   function openNew(){pendingWaitlistRef.current=null;setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){pendingWaitlistRef.current=null;setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openEdit(b){pendingWaitlistRef.current=null;setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -973,7 +1158,7 @@ function BookingApp(){
               let h=(b.history||[]).concat([editHist]);
               if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
               const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
-              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
             }
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
@@ -982,7 +1167,15 @@ function BookingApp(){
           if(wasSeatedLocked&&needsR&&!mt.length&&!clearM){out=out.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
           return out;
         }
-        const fin=buildNext(bookings);
+        // /code-review perf: buildNext runs a full optimiser pass (expensive on
+        // a loaded day). Memoised by `prev` IDENTITY so the synchronous guard
+        // check below and the immediate dispatch (updater called with the same
+        // `bookings` reference — 2×, 3× under dev StrictMode) share ONE pass. A
+        // retry replay gets a FRESH prev ref → recomputes, exactly as the
+        // v15.7.0 capture-intent contract requires.
+        let bnPrev=null,bnFin=null;
+        function buildNextMemo(prev){if(prev===bnPrev) return bnFin;const r=buildNext(prev);bnPrev=prev;bnFin=r;return r;}
+        const fin=buildNextMemo(bookings);
         if(!mt.length&&needsR&&!prefOnly){
           const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
           const displaced=fin.filter(function(b){return b.id!==editId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
@@ -998,7 +1191,7 @@ function BookingApp(){
         // fresh data (the resyncing banner informs the user). Either way the form's
         // job is done, so close it. Flash only on a real save (never claim "saved"
         // for a not-yet-persisted write — matches quick-action honesty).
-        const ok=saveBookings(buildNext);
+        const ok=saveBookings(buildNextMemo);
         if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash();
         setShowForm(false);setViewDate(f.date);
       } else {
@@ -1014,8 +1207,17 @@ function BookingApp(){
         const source=returnOfId?bookings.find(function(b){return b.id===returnOfId;}):null;
         const sourceSchedTime=source?(source.scheduledTime||source.time):"";
         const createHist=source?histEntry("created via Book Again (from "+source.name+" on "+source.date+" at "+sourceSchedTime+")",getUser()):histEntry("created",getUser());
+        // v16.3.0: "Repeat weekly" — create a standing-booking rule from these
+        // fields (weekday from the booking date, UTC) and stamp THIS first
+        // occurrence with the rule's id + date so the generator dedupes it. Done
+        // once here (outside buildNext) so a retry replay never makes a 2nd rule.
+        let recStampId=null;
+        if(f.repeatWeekly&&f.name&&f.name.trim()&&f.date&&f.time){
+          const rule=addRule({name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes});
+          recStampId=rule.id;
+        }
         // v14 p1: scheduledTime=f.time on creation (new bookings always start confirmed).
-        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,history:[createHist]};
+        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,history:[createHist]};
         // v15.7.0: build the next state as a PURE transform of `prev` (see the edit
         // path above) so the new-booking save joins the optimistic-show + auto-retry
         // path. `newId`/`nb` are computed once (stable id) → a held/rejected write
@@ -1035,8 +1237,12 @@ function BookingApp(){
           return base;
         }
         function buildNext(prev){return bookingsAfterAction(applyBase(prev).concat([nb]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);}
+        // /code-review perf: prev-identity memo — one optimiser pass shared by
+        // the guard check + the immediate dispatch (see the edit path above).
+        let bnPrev=null,bnFin=null;
+        function buildNextMemo(prev){if(prev===bnPrev) return bnFin;const r=buildNext(prev);bnPrev=prev;bnFin=r;return r;}
         const base=applyBase(bookings);
-        const fin=buildNext(bookings);
+        const fin=buildNextMemo(bookings);
         if(!mt.length){
           const ne=fin.find(function(b){return b.id===newId;});
           if(!ne||(ne.tables||[]).length===0){setError("Could not assign a table — try manual assignment.");return;}
@@ -1047,7 +1253,7 @@ function BookingApp(){
         }
         // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
         // show + auto-retry; flash only on a real save.
-        const ok=saveBookings(buildNext);
+        const ok=saveBookings(buildNextMemo);
         if(ok) flash();
         // v16.0.0: this new booking converted a waitlist entry (Book from the
         // panel) — remove the entry now the booking is dispatched (a held write
@@ -1125,7 +1331,21 @@ function BookingApp(){
     setError("");
     if(ok) flash();
   }
-  function delBooking(id){const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);if(ok) flash();}
+  function delBooking(id){const target=bookings.find(function(x){return x.id===id;});
+    // v16.3.0: deleting a recurring OCCURRENCE parks its date on the rule's
+    // skipDates so the generator never resurrects it. Done BEFORE the booking
+    // delete and UNGATED by the delete's `ok` — if the delete is held/auto-
+    // retried, the skipDate must still land so the generator doesn't re-create
+    // the occurrence during the hold (addSkipDate is idempotent). Silent write.
+    // /code-review: if the skipDate itself is REFUSED (recurring node not loaded
+    // yet — a tiny post-load window), ABORT the delete: deleting anyway would
+    // let the generator resurrect the occurrence moments later. Non-silent
+    // warning so the tap isn't a mystery no-op.
+    if(target&&target.recurringId&&target.recurringDate){
+      const okSkip=addSkipDate(target.recurringId,target.recurringDate,true);
+      if(!okSkip){setWriteWarning("Still syncing standing bookings — try deleting again in a moment.");setConfirmDel(null);return;}
+    }
+    const ok=saveBookings(function(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);if(ok) flash();}
 
   // v14 preview 3: Global keyboard shortcuts. Uses a ref to capture the latest
   // state and action callbacks on every render so the window-level keydown
@@ -1152,6 +1372,7 @@ function BookingApp(){
     showWalkin:showWalkin,setShowWalkin:setShowWalkin,
     showHistory:showHistory,setShowHistory:setShowHistory,
     showSettings:showSettings,setShowSettings:setShowSettings,
+    showSearch:showSearch,setShowSearch:setShowSearch, // v16.3.0: "/" opens global search
     // v14 p7: settingsTab for ←/→ tab-cycle shortcut inside Settings modal.
     settingsTab:settingsTab,setSettingsTab:setSettingsTab,
     // v14 p7: reminder editor state for Esc/Enter handling.
@@ -1204,6 +1425,8 @@ function BookingApp(){
         if(K.confirmCancel){e.preventDefault();K.setConfirmCancel(null);return;}
         if(K.confirmDel){e.preventDefault();K.setConfirmDel(null);return;}
         if(K.showPrefPicker){e.preventDefault();K.setShowPrefPicker(false);return;}
+        // v16.3.0 correction: Esc dismisses the search panel (its "Done" button).
+        if(K.showSearch){e.preventDefault();K.setShowSearch(false);return;}
         if(K.blockTarget){e.preventDefault();K.setBlockTarget(null);return;}
         if(K.manualTarget){e.preventDefault();K.setManualTarget(null);return;}
         if(K.showWalkin){e.preventDefault();K.setShowWalkin(false);return;}
@@ -1326,12 +1549,15 @@ function BookingApp(){
         }
       }
       // ── Global shortcuts: suppressed while any modal is open ──
-      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.reminderEditor||K.confirmReminderDel;
+      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
       if(anyModal) return;
       // v16.2.0: Shift+D flips dark/light. Placed BEFORE the list-view per-card
       // block and the global D handlers so it beats D=delete (list card focused)
       // and D=jump-to-today. Shift produces k==="D"; check both to be safe.
       if((k==="d"||k==="D")&&e.shiftKey){e.preventDefault();K.onToggleDark();return;}
+      // v16.3.0: "/" opens the global booking search (typing guard above keeps it
+      // out of form fields; anyModal guard keeps it from re-firing while open).
+      if(k==="/"){e.preventDefault();K.setShowSearch(true);return;}
       // ── v14.4.0: List-view per-card shortcuts (act on the focused booking) ──
       // ↑/↓ move the focus ring; A/E/S/C/Shift+C/Delete act on it. Placed before
       // the global letter shortcuts so Delete wins over "jump to today" ONLY while
@@ -1447,8 +1673,40 @@ function BookingApp(){
   }
   function doCancelBooking(id,noShow){
     const user=getUser();
+    // v16.3.0: snapshot the pre-cancel booking so the undo toast can restore it
+    // (status/noShow/notes/tables — the whole object). Single pending slot; a
+    // newer cancel replaces it.
+    const snapshot=bookings.find(function(x){return x.id===id;});
     const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow){extra.noShow=true;extra.notes=(x.notes?x.notes+"\n":"")+"No show";}return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
-    setConfirmCancel(null);if(ok) flash();
+    setConfirmCancel(null);
+    if(ok){
+      flash();
+      if(snapshot){
+        if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
+        setUndoInfo({snapshot:snapshot,noShow:!!noShow});
+        undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},10000);
+      }
+    }
+  }
+  // v16.3.0: restore the last-cancelled booking from its snapshot. Re-applies the
+  // pre-cancel object (status/tables/notes/noShow) + a history note, then runs
+  // bookingsAfterAction so the table re-places (if it was taken meanwhile, the
+  // optimizer/reconciliation resolves or flags it — accepted). Gated on `ok`.
+  function undoCancel(){
+    const info=undoInfo;
+    if(!info||!info.snapshot) return;
+    const user=getUser();
+    const snap=info.snapshot;
+    const ok=saveBookings(function(b){
+      const exists=b.some(function(x){return x.id===snap.id;});
+      const restored=Object.assign({},snap,{history:(snap.history||[]).concat([histEntry("cancellation undone",user)])});
+      const updated=exists?b.map(function(x){return x.id===snap.id?restored:x;}):b.concat([restored]);
+      return bookingsAfterAction(updated,snap.date,tableBlocks,snap.id,false,autoOptimizer);
+    });
+    if(ok){
+      if(undoTimerRef.current){clearTimeout(undoTimerRef.current);undoTimerRef.current=null;}
+      setUndoInfo(null);
+    }
   }
   function manualAssign(bookingId,tables,locked,affected){
     const user=getUser();
@@ -1533,10 +1791,13 @@ function BookingApp(){
       style={{background:"var(--app-reconnect-bg)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:toastShadow}}>✓ Reconnected — changes synced.</div>},
     {key:"syncfix",on:syncFix,node:<div
       style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
-    {key:"waitfree",on:!!waitFreeToast,node:<div
-      style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>{waitFreeToast?"Waitlist: a table for "+waitFreeToast.size+" now fits"+(waitFreeToast.time?" at "+waitFreeToast.time:"")+(waitFreeToast.name?" — "+waitFreeToast.name+" is waiting.":"."):""}</div>},
     {key:"waitadded",on:waitAddedShown,node:<div
       style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
+    {key:"undo",on:!!undoInfo,node:<div
+      style={{background:"var(--bg-sheet)",border:"2px solid var(--border-sheet)",borderRadius:14,padding:"8px 10px 8px 14px",fontSize:13,fontWeight:600,color:"var(--text-primary)",boxShadow:toastShadow,display:"flex",alignItems:"center",gap:10,pointerEvents:"auto"}}><span>{undoInfo&&undoInfo.noShow?"Marked no-show":"Booking cancelled"}</span><button
+        onClick={function(e){e.stopPropagation();undoCancel();}}
+        className="mgt-hover-scale mgt-press"
+        style={mkBtn({fontSize:12,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button></div>},
     {key:"reshuffled",on:reshuffled,node:<div
       style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>},
     {key:"load",on:loadBannerShown,node:<div
@@ -1607,13 +1868,23 @@ function BookingApp(){
   // v16.1.1: row rendering + the per-row ease-in/out lifecycle moved to the
   // LateBanner component (rendered in the banner stack below); `hasLate` drives
   // the outer Reveal for the whole-banner open/close.
-  const hasLate=Object.keys(lateMap).length>0;
+  // v16.3.0: reads the ✕-dismiss-filtered lateBannerMap, so dismissing the last
+  // row collapses the whole banner (list/timeline still read the raw lateMap).
+  const hasLate=Object.keys(lateBannerMap).length>0;
 
   // ── v16.0.0: viewed day's waitlist (badge button + panel) ───────────────────
   // First-come-first-served order; dayWaitAvail turns the badge orange when a
   // table currently fits at least one waiting party.
   const dayWaiting=waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===viewDate;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);});
   const dayWaitAvail=dayWaiting.some(function(w){return !!waitAvail[w.id];});
+  // v16.3.0 — WaitAvailBanner rows: TODAY'S waiting parties for whom a table
+  // currently fits (waitAvail) AND not ✕-dismissed this session. Today-only —
+  // a future-date fit isn't operationally urgent (it stays in the panel + badge).
+  const todayStr2=new Date().toISOString().slice(0,10);
+  const waitBannerEntries=(viewDate===todayStr2?dayWaiting:waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===todayStr2;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);}))
+    .filter(function(w){return !!waitAvail[w.id]&&!waitNotifyDismissed.has(w.id);});
+  function dismissWaitRow(id){setWaitNotifyDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});}
+  const hasWaitBanner=waitBannerEntries.length>0;
   const waitlistModal=<ModalPresence show={showWaitlist}>{showWaitlist?<WaitlistPanel
     entries={dayWaiting}
     availability={waitAvail}
@@ -1634,6 +1905,7 @@ function BookingApp(){
     nowMins={nowMins}
     warnings={overlapWarnings}
     late={lateMap}
+    freeing={freeingMap}
     onNoShow={function(id){doCancelBooking(id,true);}}
     zoom={timelineZoom}
     setZoom={setTimelineZoom}
@@ -1643,7 +1915,8 @@ function BookingApp(){
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={function(){setConfirmReshuffle(true);}}
-    onOpenSettings={function(){setShowSettings(true);}} />
+    onOpenSettings={function(){setShowSettings(true);}}
+    onOpenSearch={function(){setShowSearch(true);}} />
     :<ListView
     bookings={bookings}
     date={viewDate}
@@ -1668,8 +1941,13 @@ function BookingApp(){
     shiftsEnabled={dayShifts.enabled}
     isToday={viewDate===new Date().toISOString().slice(0,10)}
     open={summaryOpen}
+    freeing={freeingList}
     onToggle={function(){setSummaryOpen(function(o){return !o;});}}
-    onOpenWeek={function(){setShowWeek(true);}} />;
+    onOpenWeek={function(){setShowWeek(true);}}
+    onPrint={function(){window.print();}} />;
+  // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
+  // permanently — cheap (display:none) — so window.print() always has fresh content.
+  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} />;
 
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
@@ -1748,7 +2026,7 @@ function BookingApp(){
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={hasLate}><LateBanner lateMap={lateMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
@@ -1766,7 +2044,8 @@ function BookingApp(){
               onOpenManualAssign={function(target){setManualTarget(target);}}
               onOpenHistory={function(){setShowHistory(true);}}
               onRequestCancel={function(id){setConfirmCancel(id);}}
-              onAddToWaitlist={addFormToWaitlist} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}<ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              onAddToWaitlist={addFormToWaitlist}
+              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} />:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}
@@ -1817,6 +2096,12 @@ function BookingApp(){
             onSaveOptimizer={saveOptimizerSettings}
             bookingDefaults={bookingDefaults}
             onSaveBookingDefaults={saveBookingDefaults}
+            onBackup={doBackup}
+            recurring={recurring}
+            onSetRecurringEnabled={setRecurringEnabled}
+            onSetRecurringHorizon={setRecurringHorizon}
+            onUpdateRule={updateRule}
+            onRemoveRule={removeRule}
             layout={layout}
             onSaveLayout={saveLayout}
             bookings={bookings}

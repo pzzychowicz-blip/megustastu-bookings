@@ -3723,3 +3723,205 @@ container around `.mgt-hover-scale` tabs (~2-3px lift clip on the OUTER tabs at 
 accepted trade for the scroller); (b) the actual-duration recompute is duplicated in updateStatus
 (nowMins clock) + doSave (fresh Date) — fold a shared helper into the next booking-logic touch.
 Files: src/components/ConnectionStatus.jsx, src/App.jsx (mount).
+
+---
+
+## v16.3.0 — floor-ops & insights (11 features, one branch, phased commits)
+
+Date: 2026-07-08 · Branch: `feat/v16.3.0-ops-and-insights` · Behavioural change: YES (11 new
+features) · Build: OK, main-bundle gz ≈202 kB (from ≈195.6 at v16.2.0, +6.6 kB for 11 features).
+
+Implements Appendix Part C's High-value + Medium idea tiers plus user-requested additions. One
+version, phased commits (v16.0.0 model). Each phase live-verified in DEV before the next.
+
+**Phase 1 — Running-late banner collapsible + ✕ dismiss.** `LateBanner.jsx` gains a click-toggle
+header (count) with the rows in an outer `<Reveal>`; each row gets an ✕ dismiss. Dismissed ids
+live in BookingApp (`lateDismissed` Set, session-only, reset on day change) so the banner collapses
+when the last row goes; `lateMap` stays unfiltered (list/timeline amber highlights keep showing) —
+the banner reads a derived `lateBannerMap`.
+
+**Phase 2 — Table-turn prediction.** New pure `freeingSoon(bookings, today, nowMins, windowMin)`
+(booking-logic) → today's seated bookings whose scheduled end is within ~15 min (overstayers
+excluded). Summary today-status-bar "freeing soon: 7 (~10m), …" line + a seated-block timeline
+countdown pill. Master `freeSoonEnabled` field on `settings/bookingDefaults` (rolling-safe add) +
+a "Table turns" toggle in Settings → General.
+
+**Phase 3 — Waitlist "table free" banner + `useRevealRows`.** Extracted LateBanner's per-row
+ease-in/out lifecycle into `src/hooks/useRevealRows.js` (LateBanner refactored onto it, behaviour
+identical), then reused for the new `WaitAvailBanner.jsx` — an in-flow suggest/green banner, one row
+per TODAY'S waiting party a table currently fits (Book + ✕). Removed the old 6s `waitFreeToast`.
+
+**Phase 4 — Deposit €.** `sanitize` whitelists `deposit`; `diffBooking` logs it; `EMPTY_FORM` +
+a numeric form field; `doSave` (both paths) + `openEdit` map it; ListView "€N deposit" chip +
+TimelineView "€" label marker.
+
+**Phase 5 — Undo after cancel/no-show.** `doCancelBooking` snapshots the pre-cancel booking; a 10s
+`undoInfo` slot drives an Undo toast in the floatingToasts crossfade (pointerEvents:auto so the
+button is clickable). `undoCancel` restores the snapshot + a history note + re-places the table;
+CAS-safe (stampForWrite derives baseUpdatedAt from `prev[id]`, not the snapshot's stale stamp).
+
+**Phase 6 — Customers insights.** `CustomersSettings.jsx` only — totals strip (customers · visits ·
+with-a-no-show) + All/Regulars/No-shows filters + per-row no-show rate. Pure derivation.
+
+**Phase 7 — Global search.** `searchBookings()` (customers.js) + `SearchPanel.jsx` Overlay; 🔍
+header button + "/" shortcut. onPick jumps to the day + selects in List (cross-day select survives
+the day-change reset via `pendingSelectRef` consumed in the [viewDate] effect).
+
+**Phase 8 — Printable day sheet.** `DaySheet.jsx` — print-only DOM portalled to `<body>`; `@media
+print` in index.html hides #root + reveals it; hard-coded light (print stays light). Print button
+in the Summary body.
+
+**Phase 9 — Backup export.** Settings → General "Backup" → downloads a JSON of bookings, tableBlocks,
+waitlist, reminders, recurring + all 5 settings nodes. Read-only; restore is manual.
+
+**Phase 10 — Table-turn analytics.** `rangeStats(bookings, from, to)` (booking-logic) + a third
+"Stats" segment in WeekView (month period, `S` key): stat tiles + busiest-hours + table-usage bars.
+
+**Phase 11 — Recurring / standing bookings.** 7th collection `recurring` (`useRecurring.js`, whole-
+node object + revGuard CAS `recurringRev`; `database.rules.json` pair added). An idempotent generator
+effect in BookingApp materialises each active rule's occurrences over [today … +horizonWeeks·7] as
+normal /bookings children (deterministic id `"r{ruleId}_{date}"` + recurringId/recurringDate stamps;
+dedupe on the stamps; cross-device-safe via the per-$id CAS; skips skipDates/closed/out-of-hours;
+silent; nowQuarter-keyed for day-rollover). Booking form "Repeat weekly" toggle creates the rule +
+stamps the first occurrence; Settings → General "Standing bookings" manager (master enable, per-rule
+pause/delete, horizon 1–12wk; MiniStepper gained an optional `fmt` prop). `delBooking` adds a deleted
+occurrence's date to the rule's `skipDates` **before** the delete and ungated by `ok` — this ordering
+was the fix for a regenerate-on-delete race found in live QA. Deploy: rolling-safe, app first, rules
+second (README updated).
+
+**Docs/version:** version 16.2.0 → 16.3.0; CLAUDE.md (structure + persisted-collections + 2 new
+gotcha rows + this feature entry); database.rules.README.md (recurring pair).
+
+**Consistency sweep:** grepped new files for colour literals (fixed SearchPanel's Done button to
+`var(--app-btn-slate)`; block-overlay whites + title-pill blue kept as established conventions); no
+horizontal overflow at 375px; dark-mode spot-checked.
+
+**Verification (DEV):** all 11 features driven live via the Preview bridge — late banner
+collapse/✕-dismiss (list/timeline stay amber); undo restore persists through reload; deposit chip +
+timeline € survive reload; customers filters + rate; search digit/name + cross-day jump + "/";
+day sheet light-only portal; backup JSON has all collections; Stats segment + month re-aggregation;
+recurring generated 5 Wednesday occurrences over 4 weeks, no duplicates on reload, delete→skipDate
+held through reload (not regenerated). Real wall-clock during the build was post-midnight then in
+service hours, so the late banner + turn pill were exercised live once the clock entered hours.
+
+**UI corrections follow-up (same version, new session · 2026-07-10):** four Patryk-requested
+adjustments on the still-open branch (PR #40). (1) **Table turns — prediction-window stepper:** the
+freeing-soon window is no longer hard-coded to 15 — new `freeSoonWindow` field on
+`settings/bookingDefaults` (sanitize clamps 5–60 step 5, default 15) + a "Predict up to N min ahead"
+MiniStepper in the Table-turns section (AutoHeight-revealed while the feature is on); App's
+`freeingSoon(bookings,today,nowMins,…)` reads it. (2) **Standing bookings default OFF + form gate:**
+`DEFAULT_RECURRING.enabled=false` and sanitize `enabled: src.enabled===true` (absent/legacy node ⇒
+off); the form's "Repeat weekly" section is now gated on `!editId && standingEnabled` (new
+`standingEnabled={recurring.enabled!==false}` prop) so it's hidden entirely when the feature is off.
+(3) **Search closes on Esc:** added `showSearch` to App.jsx's Escape z-order chain (the "Done"
+button's logical key; Enter left alone since the autofocused input owns it). (4) **Backup at the
+bottom:** the Backup `Section` moved below Standing bookings (last section before the version
+footer) in Settings → General. Files: `useBookingDefaults.js`, `useRecurring.js`, `App.jsx`,
+`BookingFormModal.jsx`, `Settings.jsx`, CLAUDE.md. Build OK, gz ≈202.5 kB (no meaningful delta).
+Verified live in DEV: window stepper 30→25 dropped 5B from the freeing-soon line + its pill;
+standing OFF removed "Repeat weekly" from the form; Esc closed the search panel; Backup renders
+last. Version stays 16.3.0 (unmerged branch). Rolling-safe — both new fields are additive/absent-
+tolerant, no rules change.
+
+**Fifth correction (same follow-up) — freeing-soon overflow:** the Summary status bar
+(`Summary.jsx`) was `white-space:nowrap` on the whole line, so when several tables were freeing at
+once the "freeing soon: 2 (~6m), 5A (~9m), 5B (~13m)" list overran the card's right edge and got
+clipped by the root `overflow:hidden`. Fix: the status container is now `white-space:normal` (+ the
+right cluster went `flexShrink:1`/`minWidth:0` so it can shrink); the short occupancy metrics stay
+one no-wrap unit, and `freeingParts()` (was `freeingLabel()`) returns an ARRAY so each entry renders
+as its own no-wrap span — the list now wraps BETWEEN tables (never mid-token) and flows to a second
+line inside the card. Verified live: at 390px the list wraps cleanly right-aligned with no clipping
+and zero horizontal page overflow; wider widths still fit on one line. Pure client change.
+
+**/code-review fixes (same follow-up):** the PR-review pass surfaced four minor findings, all
+applied. (1) **Deposit clamped ≥0** — the form's `min={0}` only blocks the stepper (a typed "-50"
+passed `Number()` through); `Math.max(0,…)` at all four sites (`sanitize`, both `doSave` paths,
+`diffBooking`'s history string). Verified live: a React-held "-25" saved → stored 0. (2)
+**`addSkipDate` returns a boolean** (`saveRecurring` reports the loaded-guard refusal) and
+`delBooking` now ABORTS a recurring-occurrence delete when the skipDate is refused (recurring node
+not loaded yet — tiny post-load window), with a "still syncing" warning — deleting anyway would let
+the generator resurrect the occurrence. (3) **Backup self-documents its omission** — the JSON gains
+an `omitted:["reminderFires …"]` key so a future restore knows the transient fire-log wasn't lost
+(verified in the captured blob). (4) **DaySheet memoised** — the permanently-mounted print sheet
+re-ran its filter/sort/`daySummary` passes on every 15s tick; now `useMemo`-keyed on the data (the
+documented profiled-need exception to the no-memo-by-default rule).
+
+**Performance fix — "New booking freezes for seconds" (same follow-up, profiled live).** Patryk
+reported the form taking long seconds to open with ~350 bookings in DEV. Profiled via the Preview
+bridge: click→modal was **11.3 s**, one synchronous long task. Root-cause chain: (a) today's DEV
+data has ONE unplaceable booking, which makes every `optimise()` call take ~70 ms (the retry pass:
+~8 combo-bookings × ~45 `findAllOptions` × a full greedy re-run of the day — measured identical
+whether given 15 or 352 bookings, so it's the retry, not list size); (b) `findTimes` ran that full
+trial per quarter-slot — 61 slots with the 07:00–01:00 test hours ≈ **5.1 s per call**; (c) the
+form computed `formAvail` (trialFits + findTimes) + `kitchenSugg` on **every render** — every
+keystroke and every 15 s tick — and dev StrictMode doubles the mount render (2 × ~5.5 s = the 11 s).
+Three-part fix, output-verified: **(1)** `liveBookings` in App is now `useMemo([bookings,
+nowMins])` — it was a fresh array every BookingApp render (incl. every form keystroke, since the
+form draft lives in the parent), which made any downstream memo useless. **(2)** `formAvail`,
+`kitchenSugg`, and `custIdx` in BookingFormModal are `useMemo`-keyed on their actual scan inputs —
+typing no longer re-runs the scans (measured: 10 keystrokes = 241 ms total, was ~5 s+). **(3)**
+`findTimes` rewritten cheap-first + outward-early-stop: per slot, try the no-reshuffle
+`findFreeSlot` first (a plainly free table = valid without simulation, ~µs) and only run the full
+`trialFits` when the cheap check fails; scan outward from `around` stopping at 10 valid slots per
+side (exactly what `formatSugg` keeps — both consumers, BookingFormModal + WalkinForm, pipe through
+it), grid-aligned even for a non-quarter `around`. Same cheap-first applied to the waitlist
+matching effect's `tryFit`. **Equivalence-tested old-vs-new** on live data across 5 cases: 4/5
+byte-identical after formatSugg; the 5th case the NEW code additionally offers two slots where a
+plainly free table exists but the old full-trial rejected them (the optimizer's rescue attempt for
+the unplaceable booking displaced someone) — the new answer is the honest one (the party fits
+without touching anyone) but it IS a suggestions-list behaviour delta on pathological days —
+⚠️ flagged to Patryk. Optimizer/save paths untouched (`optimise`/`applyOpt`/`bookingsAfterAction`
+byte-identical). Measured result: click→modal **11,261 ms → ~1,100 ms** in dev (StrictMode
+double-render; ~500 ms prod-equivalent on this worst-case day, near-instant on a normal day);
+findTimes 5,155 → 2–455 ms. Plain re-renders were never the issue (59 ms). Future lever if a real
+full-service day still feels slow: the `optimise` retry pass itself (~70 ms whenever a booking is
+unplaceable) — untouched per the zero-regression rule.
+
+**Perf phase 2 — instant New/Walk-in open (deferred scans + ⏳ cue + budgets).** Patryk's
+requirement: form open must be INSTANTANEOUS always; show a loading indicator instead if the
+availability check outlives the open. Architecture (ADR'd, defer-in-effect chosen over
+useTransition / Web Worker / chunking): new **`useDeferredCompute(fn, deps)`** hook
+(`src/hooks/useDeferredCompute.js`) → `{value, pending}` — commits a pending render (value=null:
+the banner collapses, never a stale answer — Patryk-chosen over stale-while-revalidate), then runs
+the compute AFTER a **guaranteed paint** (requestAnimationFrame → setTimeout(0); two plain
+timeouts do NOT guarantee a paint between them) so the modal + ⏳ cue are on screen before the scan
+blocks; a run token supersedes stale completions (StrictMode-safe). **⚠ rAF-starvation fallback
+(bug hit live):** a hidden/occluded tab fires NO animation frames (the Preview pane sat at
+`visibilityState==="hidden"`), deadlocking the scan — a parallel 120ms fallback timeout starts the
+compute when the rAF path hasn't (no paint matters when nobody can see the tab). Consumers:
+BookingFormModal's `formAvail` + `kitchenSugg` and WalkinForm's `wAutoCheck` suggestion scan (its
+cheap findBest probe stays sync); each shows a "⏳ Checking table availability…" row whose
+**Reveal ~300ms ease IS the grace** — a fast scan unmounts it as an imperceptible sliver, no timer
+needed. **Hard time budgets** (found necessary when Patryk's 19-booking stress-day made one scan
+take tens of seconds — each optimise ~500ms with many mutually-conflicting bookings): `findTimes`
+stops after **600ms** (partial suggestions returned; cheap-first slots still collected), the
+waitlist matcher's `tryFit` skips further full trials past a **300ms** per-pass budget (re-runs
+next data change). Also: **Regulars visit-threshold stepper** (Settings → Customers, Patryk ask) —
+`regularMin` session state, default 2 (was hard-coded visits>0), "N+ visits" stepper 1–50 shown
+while the Regulars filter is active; functional setState (a burst-click stale-closure was caught in
+verification). Verified live on the stress-day (19 bookings, 55 covers, 13 late): **modal DOM in
+79–86ms** (was 11.3s pre-phase-1, ~1.1s post-phase-1), ⏳ → banner sequence correct at size 12 +
+optimizer ON, walk-in 79ms via the fits-now fast path, stepper filters 2+→18 rows / 3+→14 rows.
+Files: `useDeferredCompute.js` (new), `BookingFormModal.jsx`, `WalkinForm.jsx`, `App.jsx` (waitlist
+budget), `booking-logic.js` (findTimes budget), `CustomersSettings.jsx` (stepper), CLAUDE.md (hook
+entry + 2 gotcha rows: scan layers, rAF-in-hidden-tab).
+
+**Second /code-review pass (whole-PR, 2026-07-11) — 4 findings, all fixed.** (1) **`findTimes`
+bounds clamp** (latent): an out-of-hours `around` (pre-opening) could let the outward scan's
+`startLater` start below the service grid and suggest a pre-opening slot — the old fixed-grid scan
+structurally couldn't; unreachable via current callers (the form guards `sm` within hours, the
+walk-in cheap-probe fits on an empty pre-open day) but clamped anyway (`startLater≥first`,
+`startEarlier≤last`; both grid-aligned). (2) **Waitlist anti-flap**: when the 300ms scan budget cut
+an entry's pass short, a previously-available entry read as unavailable and its banner row blinked
+out → a `budgetHit` flag + `waitAvailRef` mirror now carry the PREVIOUS pass's availability forward
+for budget-skipped entries only (a genuine "no longer fits" still clears immediately; the Book path
+re-validates via the form scan + doSave guards regardless). (3) **`doSave` optimiser pass halved**:
+`buildNext` ran the full optimiser once for the synchronous guards (`buildNext(bookings)`) and
+again inside the `setBookings` updater with the SAME `bookings` reference (3× under dev
+StrictMode) — a prev-IDENTITY memo (`buildNextMemo`) shares one pass between guards + immediate
+dispatch while a retry replay (fresh `prev` ref) still recomputes, exactly per the v15.7.0
+capture-intent contract; applied to both the edit and new paths. (4) **Live-hours re-scan**: the
+deferred scans' deps couldn't see a `settings/operatingHours` change from another device while the
+form was open (hoursFor reads a live binding — no React dep changes) → a `hoursSig` string
+("open-close"/"closed") added to formAvail/kitchenSugg/walk-in scan deps, so an hours edit
+re-checks availability instead of leaving a stale banner until the next input nudge.

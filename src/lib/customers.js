@@ -136,6 +136,34 @@ export function noShowMap(bookings) {
   return map;
 }
 
+// searchBookings — match INDIVIDUAL bookings against a typed query (v16.3.0),
+// across ALL dates (the global-search panel). Same query semantics as
+// searchCustomers: digits (≥3) → phone substring match; non-digit text →
+// case-insensitive name substring. Results sorted UPCOMING-first (date ≥ today,
+// ascending) then PAST (descending), capped at `limit` (default 30). `todayStr`
+// is passed in so the caller controls "today" (all-UTC ISO date string).
+export function searchBookings(bookings, query, todayStr, limit) {
+  const max = limit || 30;
+  const q = String(query || "").trim();
+  if (!q || !Array.isArray(bookings)) return [];
+  const qDigits = q.replace(/[^\d]/g, "");
+  const qName = q.toLowerCase();
+  const useDigits = qDigits.length >= 3;
+  const out = bookings.filter(function (b) {
+    if (!b) return false;
+    if (useDigits) return b.phone && normalizePhone(b.phone).replace(/[^\d]/g, "").indexOf(qDigits) !== -1;
+    return b.name && b.name.toLowerCase().indexOf(qName) !== -1;
+  });
+  const today = todayStr || "";
+  out.sort(function (a, b) {
+    const au = (a.date || "") >= today, bu = (b.date || "") >= today;
+    if (au !== bu) return au ? -1 : 1;           // upcoming block before past block
+    if (au) return (a.date || "").localeCompare(b.date || "") || (a.time || "").localeCompare(b.time || "");   // upcoming asc
+    return (b.date || "").localeCompare(a.date || "") || (b.time || "").localeCompare(a.time || "");            // past desc
+  });
+  return out.slice(0, max);
+}
+
 // searchCustomers — match customers against a typed query.
 // Digits in the query → substring match on the normalized phone (so "600" finds
 // "+34 600 123 456" no matter the formatting); non-digit text → case-insensitive

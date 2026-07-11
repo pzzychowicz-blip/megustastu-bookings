@@ -46,6 +46,7 @@ import {
 } from "../lib/booking-logic";
 import { Overlay, Section, Fld, AvailBanner, mkInp, mkBtn, AutoHeight, Reveal } from "./atoms";
 import { TableGrid } from "./TableGrid";
+import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
 export function WalkinForm({
   draft, setDraft,
@@ -89,15 +90,24 @@ export function WalkinForm({
   const wBusy = getBusy(wOther, wS, wE);
 
   // Auto-check: only relevant when the host hasn't picked any tables yet.
-  // First tries an automatic best-fit; if nothing fits, returns suggestion
-  // chips (alternative times before/after) for the AvailBanner to render.
-  const wAutoCheck = (() => {
-    const pre = findBest(wSize, "auto", wS, wE, wOther) || findBestAny(wSize, wS, wE, wOther);
-    if (pre) return null;
+  // First tries an automatic best-fit; if nothing fits, suggestion chips
+  // (alternative times before/after) for the AvailBanner to render.
+  // v16.3.0 perf phase 2: the cheap best-fit probe stays synchronous (µs — it
+  // reuses wOther), but the findTimes suggestion scan (the heavy part — full
+  // trial optimisations on failing slots) is DEFERRED post-paint via
+  // useDeferredCompute, so opening Walk-in is instantaneous even on a day
+  // where the scan takes ~0.5s; the ⏳ cue shows past ~150ms.
+  const wFitsNow = !!(findBest(wSize, "auto", wS, wE, wOther) || findBestAny(wSize, wS, wE, wOther));
+  const wSuggScan = useDeferredCompute(function () {
+    if (wFitsNow) return null;
     const noResh = !optimizerActiveFor(wDate, autoOptimizer);
-    const sugg = findTimes(wDate, wSize, "auto", liveBookings, wDur, wS, tableBlocks, null, noResh);
-    return formatSugg(sugg, wS);
-  })();
+    return formatSugg(findTimes(wDate, wSize, "auto", liveBookings, wDur, wS, tableBlocks, null, noResh), wS);
+    // wOther is rebuilt per render (not dep-safe); its inputs are covered by
+    // liveBookings/tableBlocks + the wFitsNow boolean itself. The th signature
+    // (/code-review) re-scans when another device edits today's hours live.
+  }, [wFitsNow, wSize, wDur, wS, liveBookings, tableBlocks, autoOptimizer, th.closed ? "closed" : th.open + "-" + th.close]);
+  const wAutoCheck = wFitsNow ? null : wSuggScan.value;
+  const wChecking = !wFitsNow && wSuggScan.pending;
 
   // Capacity computation — see booking-logic.js#comboCapBest. Local alias
   // keeps existing call sites readable.
@@ -477,6 +487,12 @@ export function WalkinForm({
         swapBusy={false}
       />
 
+      {/* v16.3.0 perf phase 2: ⏳ cue while the deferred suggestion scan runs.
+          Reveal-wrapped — its ~300ms ease is the grace, so a fast scan shows
+          only an imperceptible sliver instead of a flash. */}
+      <Reveal show={wChecking && wSel.length === 0}>
+        <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: 12, padding: "10px 14px", marginBottom: 12, fontSize: 13, fontWeight: 600, color: "var(--text-muted)", textAlign: "center" }}>⏳ Checking table availability…</div>
+      </Reveal>
       {wAutoCheck && wSel.length === 0 ? (
         <>
           <AvailBanner
