@@ -103,8 +103,9 @@ export function WalkinForm({
     const noResh = !optimizerActiveFor(wDate, autoOptimizer);
     return formatSugg(findTimes(wDate, wSize, "auto", liveBookings, wDur, wS, tableBlocks, null, noResh), wS);
     // wOther is rebuilt per render (not dep-safe); its inputs are covered by
-    // liveBookings/tableBlocks + the wFitsNow boolean itself.
-  }, [wFitsNow, wSize, wDur, wS, liveBookings, tableBlocks, autoOptimizer]);
+    // liveBookings/tableBlocks + the wFitsNow boolean itself. The th signature
+    // (/code-review) re-scans when another device edits today's hours live.
+  }, [wFitsNow, wSize, wDur, wS, liveBookings, tableBlocks, autoOptimizer, th.closed ? "closed" : th.open + "-" + th.close]);
   const wAutoCheck = wFitsNow ? null : wSuggScan.value;
   const wChecking = !wFitsNow && wSuggScan.pending;
 

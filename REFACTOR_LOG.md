@@ -3905,3 +3905,23 @@ optimizer ON, walk-in 79ms via the fits-now fast path, stepper filters 2+→18 r
 Files: `useDeferredCompute.js` (new), `BookingFormModal.jsx`, `WalkinForm.jsx`, `App.jsx` (waitlist
 budget), `booking-logic.js` (findTimes budget), `CustomersSettings.jsx` (stepper), CLAUDE.md (hook
 entry + 2 gotcha rows: scan layers, rAF-in-hidden-tab).
+
+**Second /code-review pass (whole-PR, 2026-07-11) — 4 findings, all fixed.** (1) **`findTimes`
+bounds clamp** (latent): an out-of-hours `around` (pre-opening) could let the outward scan's
+`startLater` start below the service grid and suggest a pre-opening slot — the old fixed-grid scan
+structurally couldn't; unreachable via current callers (the form guards `sm` within hours, the
+walk-in cheap-probe fits on an empty pre-open day) but clamped anyway (`startLater≥first`,
+`startEarlier≤last`; both grid-aligned). (2) **Waitlist anti-flap**: when the 300ms scan budget cut
+an entry's pass short, a previously-available entry read as unavailable and its banner row blinked
+out → a `budgetHit` flag + `waitAvailRef` mirror now carry the PREVIOUS pass's availability forward
+for budget-skipped entries only (a genuine "no longer fits" still clears immediately; the Book path
+re-validates via the form scan + doSave guards regardless). (3) **`doSave` optimiser pass halved**:
+`buildNext` ran the full optimiser once for the synchronous guards (`buildNext(bookings)`) and
+again inside the `setBookings` updater with the SAME `bookings` reference (3× under dev
+StrictMode) — a prev-IDENTITY memo (`buildNextMemo`) shares one pass between guards + immediate
+dispatch while a retry replay (fresh `prev` ref) still recomputes, exactly per the v15.7.0
+capture-intent contract; applied to both the edit and new paths. (4) **Live-hours re-scan**: the
+deferred scans' deps couldn't see a `settings/operatingHours` change from another device while the
+form was open (hoursFor reads a live binding — no React dep changes) → a `hoursSig` string
+("open-close"/"closed") added to formAvail/kitchenSugg/walk-in scan deps, so an hours edit
+re-checks availability instead of leaving a stale banner until the next input nudge.

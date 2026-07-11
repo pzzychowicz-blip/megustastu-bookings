@@ -160,6 +160,12 @@ export function BookingFormModal({
   // v15.0.0: per-weekday hours for THIS booking's date (which may differ from the
   // viewed day) — drives the time min/max + a closed-day notice.
   const fh=hoursFor(form.date);
+  // /code-review: hours SIGNATURE for the scan deps — hoursFor reads the live
+  // WEEK_HOURS binding, so a Settings hours change on another device changes fh
+  // WITHOUT any form.* dep changing; keying the deferred scans on this string
+  // re-checks availability instead of leaving a stale banner until the next
+  // input nudge.
+  const hoursSig=fh.closed?"closed":fh.open+"-"+fh.close;
 
   // ── Real-time availability check (trial optimization) ──
   // Pre-E1's showForm guard is dropped — this component is only mounted when
@@ -188,7 +194,7 @@ export function BookingFormModal({
     if(tables) return {ok:true,tables:tables,sugg:null};
     const sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh);
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
-  },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,liveBookings,tableBlocks,editId,autoOptimizer]);
+  },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig]);
   const formAvail=availScan.value;
 
   const tablesBtn=(function(){
@@ -279,7 +285,7 @@ export function BookingFormModal({
   // the suggested-times chips arrive post-paint.
   const kitchenScan=useDeferredCompute(function(){
     return kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks):null;
-  },[kitchenBusy,bookings,form.date,form.size,form.preference,form.customDur,form.time,editId,tableBlocks]);
+  },[kitchenBusy,bookings,form.date,form.size,form.preference,form.customDur,form.time,editId,tableBlocks,hoursSig]);
   const kitchenSugg=kitchenScan.value;
   // v16.3.0 perf phase 2: the ⏳ cue — shown while a deferred scan is pending.
   // Its Reveal's ~300ms ease is the natural grace: a fast scan unmounts it

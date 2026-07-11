@@ -566,6 +566,10 @@ function BookingApp(){
   // derivation, so the trialFits scans run only when the inputs change, not
   // on every 15s clock re-render).
   const [waitAvail, setWaitAvail] = useState({});
+  // Mirror of the last-computed waitAvail (/code-review anti-flap): lets the
+  // matching effect carry an entry's previous availability forward when the
+  // scan budget cut its pass short, instead of blinking the banner row.
+  const waitAvailRef = useRef({});
   const [waitAddedShown, setWaitAddedShown] = useState(false);
   const [waitNotifyDismissed, setWaitNotifyDismissed] = useState(function(){return new Set();}); // v16.3.0: session-only ✕-dismissed waitlist-free rows
   const [undoInfo, setUndoInfo] = useState(null);   // v16.3.0: {snapshot, noShow} pending undo after a cancel/no-show
@@ -809,11 +813,15 @@ function BookingApp(){
       // with unplaceable bookings — this scan runs on every data change).
       // Perf phase 2: a hard per-effect time budget — on an extreme day a
       // single full trial can cost 100ms+; past the budget we skip further
-      // expensive trials this pass (cheap checks still run; the effect re-runs
-      // on the next data change / 15-min bucket anyway).
+      // expensive trials this pass. /code-review anti-flap: a budget-skip is
+      // recorded (budgetHit) so an entry that was available LAST pass keeps its
+      // sticky result below instead of blinking out of the banner — a future
+      // pass (next data change / 15-min bucket) re-verifies for real, and the
+      // Book path re-validates via the form's own scan + doSave guards anyway.
+      let budgetHit=false;
       const tryFit=function(timeStr){
         if(!noResh){const cheap=findFreeSlot(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null);if(cheap) return cheap;}
-        if(Date.now()-scanT0>WAIT_SCAN_BUDGET_MS) return null;
+        if(Date.now()-scanT0>WAIT_SCAN_BUDGET_MS){budgetHit=true;return null;}
         return trialFits(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null,noResh);
       };
       if(w.prefTime){
@@ -829,7 +837,13 @@ function BookingApp(){
         const t=tryFit(toTime(m));
         if(t){next[w.id]={tables:t,time:toTime(m)};break;}
       }
+      // Anti-flap carry-forward: no match found AND the budget cut this entry's
+      // scan short → keep the previous pass's availability (if any) rather than
+      // dropping the row. A genuine "no longer fits" (budget NOT hit) still
+      // clears immediately.
+      if(!next[w.id]&&budgetHit&&waitAvailRef.current[w.id]) next[w.id]=waitAvailRef.current[w.id];
     });
+    waitAvailRef.current=next;
     setWaitAvail(next);
     // v16.3.0: the transition-to-available cue is now the in-flow WaitAvailBanner
     // (persistent + actionable), not a 6-second toast — so the prev-set diff that
@@ -1153,7 +1167,15 @@ function BookingApp(){
           if(wasSeatedLocked&&needsR&&!mt.length&&!clearM){out=out.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
           return out;
         }
-        const fin=buildNext(bookings);
+        // /code-review perf: buildNext runs a full optimiser pass (expensive on
+        // a loaded day). Memoised by `prev` IDENTITY so the synchronous guard
+        // check below and the immediate dispatch (updater called with the same
+        // `bookings` reference — 2×, 3× under dev StrictMode) share ONE pass. A
+        // retry replay gets a FRESH prev ref → recomputes, exactly as the
+        // v15.7.0 capture-intent contract requires.
+        let bnPrev=null,bnFin=null;
+        function buildNextMemo(prev){if(prev===bnPrev) return bnFin;const r=buildNext(prev);bnPrev=prev;bnFin=r;return r;}
+        const fin=buildNextMemo(bookings);
         if(!mt.length&&needsR&&!prefOnly){
           const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
           const displaced=fin.filter(function(b){return b.id!==editId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
@@ -1169,7 +1191,7 @@ function BookingApp(){
         // fresh data (the resyncing banner informs the user). Either way the form's
         // job is done, so close it. Flash only on a real save (never claim "saved"
         // for a not-yet-persisted write — matches quick-action honesty).
-        const ok=saveBookings(buildNext);
+        const ok=saveBookings(buildNextMemo);
         if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash();
         setShowForm(false);setViewDate(f.date);
       } else {
@@ -1215,8 +1237,12 @@ function BookingApp(){
           return base;
         }
         function buildNext(prev){return bookingsAfterAction(applyBase(prev).concat([nb]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);}
+        // /code-review perf: prev-identity memo — one optimiser pass shared by
+        // the guard check + the immediate dispatch (see the edit path above).
+        let bnPrev=null,bnFin=null;
+        function buildNextMemo(prev){if(prev===bnPrev) return bnFin;const r=buildNext(prev);bnPrev=prev;bnFin=r;return r;}
         const base=applyBase(bookings);
-        const fin=buildNext(bookings);
+        const fin=buildNextMemo(bookings);
         if(!mt.length){
           const ne=fin.find(function(b){return b.id===newId;});
           if(!ne||(ne.tables||[]).length===0){setError("Could not assign a table — try manual assignment.");return;}
@@ -1227,7 +1253,7 @@ function BookingApp(){
         }
         // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
         // show + auto-retry; flash only on a real save.
-        const ok=saveBookings(buildNext);
+        const ok=saveBookings(buildNextMemo);
         if(ok) flash();
         // v16.0.0: this new booking converted a waitlist entry (Book from the
         // panel) — remove the entry now the booking is dispatched (a held write

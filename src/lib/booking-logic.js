@@ -295,6 +295,14 @@ export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noRes
   var off=((aroundM-first)%15+15)%15;
   var startEarlier=off===0?aroundM-15:aroundM-off;
   var startLater=off===0?aroundM+15:aroundM+(15-off);
+  // Bounds clamp (/code-review): an out-of-hours `around` (e.g. pre-opening)
+  // must not let the outward scan step outside the service grid — the old
+  // fixed-grid scan structurally never produced such slots. `first`/`last` are
+  // grid-aligned (open/close are whole hours), so clamping stays on-grid.
+  // (The upper side of the earlier-loop is additionally covered by the
+  // m+dur>close check in slotValid, but the clamp keeps both symmetric.)
+  if(startLater<first) startLater=first;
+  if(startEarlier>last) startEarlier=last;
   var earlier=[];
   for(var m=startEarlier;m>=first&&earlier.length<CAP;m-=15){ if(Date.now()-t0>BUDGET_MS) break; if(slotValid(m)) earlier.push(m); }
   var later=[];
