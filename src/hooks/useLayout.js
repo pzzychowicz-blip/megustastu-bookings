@@ -33,6 +33,85 @@ import { DEFAULT_LAYOUT, setLayout, comboKey } from "../lib/constants";
 // it seeds from DEFAULT_LAYOUT so the node migrates to MGT's combos on first save.
 // Every combo reference is filtered to the CURRENT table ids, so stored config
 // never points at a removed table (buildLayout also self-heals at derive time).
+// ── v17.0.0: floor plan (the Plan view's geometry) ───────────────────────────
+// settings/layout gains a `floorPlan` field: a top-down map of the room —
+// per-table position/shape/size/rotation/chairs, plus walls and doors.
+// Shape: { v:1, room:{w,h}, tables:{ [id]:{x,y,shape,w,h,rot,
+// chairs:{top,right,bottom,left}} }, walls:[{x1,y1,x2,y2}], doors:[{x,y,rot,width}] }.
+// Coordinates are abstract units rendered via an SVG viewBox (responsive).
+//
+// Sanitize contract (the priorities lesson): a PRESENT floorPlan treats each
+// missing field as EMPTY (RTDB drops empty arrays — walls/doors default to []
+// anyway, so this is naturally safe); an ABSENT floorPlan — or any table with
+// no stored entry (a newly added table, or first run) — gets a deterministic
+// AUTO placement (rows grouped by zone) so the Plan view works before any
+// editing. Entries for removed tables are dropped. NOT part of layoutSignature
+// (like priorities) — editing the plan never kills IS_MGT_LAYOUT.
+const FP_MIN_ROOM = 300, FP_MAX_ROOM = 4000;
+function fpNum(n, def, min, max){
+  let v = Math.round(Number(n));
+  if(!Number.isFinite(v)) v = def;
+  return Math.max(min, Math.min(max, v));
+}
+function defaultChairs(capacity, shape){
+  // Split capacity top/bottom for square/rect (round renders the total evenly
+  // around the rim, but keeps the same per-side model for uniform editing).
+  const top = Math.ceil(capacity / 2);
+  return { top: top, right: 0, bottom: capacity - top, left: 0 };
+}
+function defaultEntry(index, table, room){
+  // Deterministic grid: 5 per row, outdoor block first, indoor continues after.
+  const col = index % 5, row = Math.floor(index / 5);
+  const shape = table.capacity >= 4 ? "rect" : "square";
+  const w = shape === "rect" ? 90 : 60;
+  return {
+    x: Math.min(room.w - 100, 60 + col * 150),
+    y: Math.min(room.h - 100, 60 + row * 140),
+    shape: shape, w: w, h: 60, rot: 0,
+    chairs: defaultChairs(table.capacity, shape)
+  };
+}
+export function sanitizeFloorPlan(raw, tables){
+  const src = raw && typeof raw === "object" ? raw : {};
+  const rawRoom = src.room && typeof src.room === "object" ? src.room : {};
+  const room = { w: fpNum(rawRoom.w, 900, FP_MIN_ROOM, FP_MAX_ROOM), h: fpNum(rawRoom.h, 600, FP_MIN_ROOM, FP_MAX_ROOM) };
+  const srcTables = src.tables && typeof src.tables === "object" ? src.tables : {};
+  const outT = {};
+  // Auto-placement index walks zone-sorted tables so outdoor/indoor group visually.
+  const sorted = tables.slice().sort(function(a, b){
+    if(a.zone !== b.zone) return a.zone === "outdoor" ? -1 : 1;
+    return 0;
+  });
+  sorted.forEach(function(t, i){
+    const e = srcTables[t.id];
+    if(e && typeof e === "object"){
+      const shape = (e.shape === "round" || e.shape === "rect") ? e.shape : "square";
+      const w = fpNum(e.w, 60, 30, 400), h = fpNum(e.h, 60, 30, 400);
+      const rawCh = e.chairs && typeof e.chairs === "object" ? e.chairs : null;
+      const chairs = rawCh
+        ? { top: fpNum(rawCh.top, 0, 0, 12), right: fpNum(rawCh.right, 0, 0, 12), bottom: fpNum(rawCh.bottom, 0, 0, 12), left: fpNum(rawCh.left, 0, 0, 12) }
+        : defaultChairs(t.capacity, shape);
+      outT[t.id] = {
+        x: fpNum(e.x, 60, 0, room.w), y: fpNum(e.y, 60, 0, room.h),
+        shape: shape, w: w, h: shape === "square" || shape === "round" ? w : h,
+        rot: fpNum(e.rot, 0, 0, 359),
+        chairs: chairs
+      };
+    } else {
+      outT[t.id] = defaultEntry(i, t, room);
+    }
+  });
+  const walls = (Array.isArray(src.walls) ? src.walls : []).map(function(wl){
+    if(!wl || typeof wl !== "object") return null;
+    return { x1: fpNum(wl.x1, 0, 0, room.w), y1: fpNum(wl.y1, 0, 0, room.h), x2: fpNum(wl.x2, 0, 0, room.w), y2: fpNum(wl.y2, 0, 0, room.h) };
+  }).filter(Boolean).slice(0, 200);
+  const doors = (Array.isArray(src.doors) ? src.doors : []).map(function(d){
+    if(!d || typeof d !== "object") return null;
+    return { x: fpNum(d.x, 0, 0, room.w), y: fpNum(d.y, 0, 0, room.h), rot: fpNum(d.rot, 0, 0, 359), width: fpNum(d.width, 80, 40, 300) };
+  }).filter(Boolean).slice(0, 50);
+  return { v: 1, room: room, tables: outT, walls: walls, doors: doors };
+}
+
 function sanitizeLayout(val){
   if(!val || typeof val !== "object" || !Array.isArray(val.tables)) return DEFAULT_LAYOUT;
   const seen = {};
@@ -139,12 +218,18 @@ function sanitizeLayout(val){
     mixedRequire: (Array.isArray(rawPri.mixedRequire) ? rawPri.mixedRequire : []).map(String).filter(function(id){ return idSet[id]; })
   };
 
-  return { tables: tables, joinGroups: joinGroups, comboCaps: comboCaps, megaCombos: megaCombos, kitchenLimit: kitchenLimit, priorities: priorities };
+  // v17.0.0: floor plan rides along on the same node (same layoutRev CAS).
+  // Deliberately NOT in layoutSignature — plan edits never affect IS_MGT_LAYOUT.
+  return { tables: tables, joinGroups: joinGroups, comboCaps: comboCaps, megaCombos: megaCombos, kitchenLimit: kitchenLimit, priorities: priorities, floorPlan: sanitizeFloorPlan(val.floorPlan, tables) };
 }
 
 export function useLayout(){
   // Seeded with DEFAULT_LAYOUT (already applied to the bindings at import).
-  const [layout, setLO] = useState(DEFAULT_LAYOUT);
+  // v17.0.0: + an auto-generated floorPlan so the Plan view/editor always have
+  // geometry, even before the first settings/layout snapshot arrives.
+  const [layout, setLO] = useState(function(){
+    return { ...DEFAULT_LAYOUT, floorPlan: sanitizeFloorPlan(null, DEFAULT_LAYOUT.tables) };
+  });
   const loaded = useRef(false);
   // v16.0.0: revision-CAS ref (lib/revGuard.js) — a stale device's overwrite is
   // rejected server-side; the rollback echo restores state via onValue.
