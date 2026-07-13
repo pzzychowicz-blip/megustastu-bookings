@@ -152,6 +152,9 @@ export function ListView({
         const lateSt = late[b.id] || null;
         const sc = STATUS_COLORS[b.status];
         const useStatusColor = b.status === "seated" || b.status === "completed" || b.status === "cancelled";
+        // v17.0.0: a pending card keeps the strong (upcoming) background but
+        // carries the yellow status border — the spec's List marker for pending.
+        const isPending = b.status === "pending";
         const cardBg = useStatusColor ? "var(--bg-card-dim)" : "var(--bg-card-strong)";
         const cardBrd = warn
           ? (warn.overdue ? "var(--card-overdue-border)" : "var(--card-warn-border)")
@@ -159,8 +162,8 @@ export function ListView({
             ? "var(--card-warn-border)"
             : b._conflict
               ? "var(--card-conflict-border)"
-              : useStatusColor ? sc.border : "var(--border-card-plain)";
-        const cardBrdW = (warn || lateSt) ? "3px" : useStatusColor ? "3px" : "1px";
+              : (useStatusColor || isPending) ? sc.border : "var(--border-card-plain)";
+        const cardBrdW = (warn || lateSt) ? "3px" : (useStatusColor || isPending) ? "3px" : "1px";
 
         const durationTag = b.status === "seated" ? (
           <SmallTag label={elapsedMin + " min"} style={{ background: "#166534", color: "var(--text-on-accent)", border: "none" }} />
@@ -230,7 +233,9 @@ export function ListView({
 
         // v14.4.0: Cancel + Delete are pulled into a right-aligned group (Cancel
         // then Delete); the remaining status changers stay in the left group.
-        const statusBtns = ["confirmed", "seated", "completed"]
+        // v17.0.0: a pending card's only forward status is Confirmed (the
+        // right-group Cancel button stays — the decline flow).
+        const statusBtns = (b.status === "pending" ? ["confirmed"] : ["confirmed", "seated", "completed"])
           .filter((s) => s !== b.status)
           .map((s) => (
             <button

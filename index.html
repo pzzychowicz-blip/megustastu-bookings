@@ -34,13 +34,17 @@
         --accent: #007aff;
         /* Status chips — bg + border share a hue (RGB triplet, composed in
            constants.js as rgba(var(--…-rgb), a)); text is a solid token. */
-        --status-confirmed-rgb: 250, 204, 21;  --status-confirmed-text: #92400e;
+        /* v17.0.0: confirmed moved to the accent-blue family so the new PENDING
+           status could take the yellow (the two clashed — confirmed WAS amber). */
+        --status-confirmed-rgb: 0, 122, 255;   --status-confirmed-text: #1d4ed8;
+        --status-pending-rgb: 250, 204, 21;    --status-pending-text: #92400e;
         --status-seated-rgb: 34, 197, 94;      --status-seated-text: #166534;
         --status-completed-rgb: 148, 163, 184; --status-completed-text: #64748b;
         --status-cancelled-rgb: 239, 68, 68;   --status-cancelled-text: #991b1b;
         /* Timeline block fills / status buttons — saturated, white text;
            theme-invariant (read on light + dark), defined once here. */
-        --block-confirmed: rgba(180, 130, 40, 0.85);
+        --block-confirmed: rgba(0, 106, 220, 0.85);
+        --block-pending: rgba(212, 165, 10, 0.85);
         --block-seated: rgba(34, 160, 80, 0.85);
         --block-completed: rgba(140, 140, 150, 0.7);
         --block-cancelled: rgba(200, 80, 80, 0.8);
@@ -341,6 +345,12 @@
       @keyframes mgt-slide-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-12px); } }
       .mgt-slide-in  { animation: mgt-slide-in  180ms linear both; display: inline-flex; }
       .mgt-slide-out { animation: mgt-slide-out 180ms linear both; display: inline-flex; }
+      /* v17.0.0: rightward mirror — the form's Save&confirm button slides out to
+         the RIGHT (Patryk-specified direction; same timing as the Today button). */
+      @keyframes mgt-slide-in-r  { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+      @keyframes mgt-slide-out-r { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(12px); } }
+      .mgt-slide-in-r  { animation: mgt-slide-in-r  180ms linear both; display: inline-flex; }
+      .mgt-slide-out-r { animation: mgt-slide-out-r 180ms linear both; display: inline-flex; }
 
       /* Press feedback (ease-out, v15.8.0 cont.4) — Follow / − / 1× / + AND utility
          buttons (Clear / Reset / Done). Uses brightness (not transform) so it never

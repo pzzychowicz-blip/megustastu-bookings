@@ -197,7 +197,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"16.4.0",
+  version:"17.0.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -472,6 +472,11 @@ function BookingApp(){
   const [manualTarget, setManualTarget] = useState(null);
   const [dismissedIneff, setDismissedIneff] = useState(null);
   const formRef=useRef(EMPTY_FORM);
+  // v17.0.0: status override for the pending flow — set by save("pending"/
+  // "confirmed") ("Save pending" / "Save&confirm" buttons) and read by doSave.
+  // A ref (not an arg) because the kitchen-confirm modal + its Enter shortcut
+  // call doSave() with no args after the modal round-trip.
+  const statusOverrideRef=useRef(null);
   const [swapAffected, setSwapAffected] = useState(null);
   const [confirmKitchen, setConfirmKitchen] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -1069,7 +1074,11 @@ function BookingApp(){
   });
 
   function doSave(){
-    const f=formRef.current;
+    // v17.0.0: apply the pending/confirm status override to a CLONE of the form
+    // so every downstream read (status write, diffBooking history, completed-
+    // duration gate, flash condition) sees the effective status uniformly.
+    const so=statusOverrideRef.current;
+    const f=so?Object.assign({},formRef.current,{status:so}):formRef.current;
     try{
       if(!f.name||!f.name.trim()){setError("Customer name is required.");return;}
       // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
@@ -1216,8 +1225,9 @@ function BookingApp(){
           const rule=addRule({name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes});
           recStampId=rule.id;
         }
-        // v14 p1: scheduledTime=f.time on creation (new bookings always start confirmed).
-        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,history:[createHist]};
+        // v14 p1: scheduledTime=f.time on creation. v17.0.0: new bookings start
+        // confirmed, OR pending via the "Save pending" button (status override).
+        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,history:[createHist]};
         // v15.7.0: build the next state as a PURE transform of `prev` (see the edit
         // path above) so the new-booking save joins the optimistic-show + auto-retry
         // path. `newId`/`nb` are computed once (stable id) → a held/rejected write
@@ -1263,7 +1273,10 @@ function BookingApp(){
       }
     }catch(err){setError("Error: "+err.message);}
   }
-  function save(){
+  function save(statusOverride){
+    // v17.0.0: record the override FIRST — the kitchen-confirm path re-enters
+    // doSave() without args, so the intent must survive the modal round-trip.
+    statusOverrideRef.current=statusOverride||null;
     const f=formRef.current;
     if(!f.time) return doSave();
     const size=Number(f.size)||2;const d=f.customDur||getDur(size);
@@ -1581,9 +1594,11 @@ function BookingApp(){
         if(sel){
           if(k==="a"||k==="A"){e.preventDefault();K.setManualTarget(sel.id);return;}
           if(k==="e"||k==="E"){e.preventDefault();K.openEdit(sel);return;}
-          if(k==="s"||k==="S"){e.preventDefault();K.updateStatus(sel.id,"seated");return;}
+          // v17.0.0: a PENDING card can only be confirmed (or cancelled) — S/C
+          // are no-ops on it, matching the List/RMB button gating.
+          if(k==="s"||k==="S"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"seated");return;}
           if((k==="c"||k==="C")&&e.shiftKey){e.preventDefault();K.updateStatus(sel.id,"cancelled");return;}
-          if(k==="c"||k==="C"){e.preventDefault();K.updateStatus(sel.id,"completed");return;}
+          if(k==="c"||k==="C"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"completed");return;}
           if(k==="d"||k==="D"){e.preventDefault();K.setConfirmDel(sel.id);return;}
         }
       }
@@ -2040,7 +2055,9 @@ function BookingApp(){
               tableBlocks={tableBlocks}
               autoOptimizer={autoOptimizer}
               isMobile={isMobile}
-              onSave={save}
+              onSave={function(){save();}}
+              onSavePending={function(){save("pending");}}
+              onSaveConfirm={function(){save("confirmed");}}
               onClose={function(){setShowForm(false);}}
               onClearSwap={function(){setSwapAffected(null);}}
               onBookAgain={bookAgain}

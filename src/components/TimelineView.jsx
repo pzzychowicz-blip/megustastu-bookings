@@ -338,7 +338,8 @@ export function TimelineView({
   // status change (seated/completed durations shrink/stretch) can never kill
   // the other bookings' chips (the reported bug). Each flip animates per block
   // via Presence.
-  const confirmedDay = day.filter((b) => b.status === "confirmed");
+  // v17.0.0: pending joins the chip family (treated same as confirmed).
+  const confirmedDay = day.filter((b) => b.status === "confirmed" || b.status === "pending");
   const chipsOn = confirmedDay.length > 0 && confirmedDay.every((b) => liveBarDur(b, nowMins) * pxPerMin >= 140);
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
@@ -588,7 +589,7 @@ export function TimelineView({
           return (
             <Fragment key={b.id}>
               {ghost}
-              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
+              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
             </Fragment>
           );
         })}
@@ -604,7 +605,7 @@ export function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
     </div>
   ) : null;
 
@@ -810,7 +811,11 @@ export function TimelineView({
           {quickStatus.booking.name}
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {["confirmed", "seated", "completed", "cancelled"]
+          {/* v17.0.0: a PENDING booking's only forward status is Confirmed
+              (+ Cancel stays reachable — the decline flow, Patryk-confirmed). */}
+          {(quickStatus.booking.status === "pending"
+            ? ["confirmed", "cancelled"]
+            : ["confirmed", "seated", "completed", "cancelled"])
             .filter((st) => st !== quickStatus.booking.status)
             .map((st) => (
               <button
@@ -834,7 +839,7 @@ export function TimelineView({
           {/* v16.1.0: one-tap No show for a confirmed booking past the
               no-show threshold (App's lateMap). Cancels + sets the noShow
               flag via the existing doCancelBooking path. */}
-          {quickStatus.booking.status === "confirmed" && late[quickStatus.booking.id] === "noshow" ? (
+          {(quickStatus.booking.status === "confirmed" || quickStatus.booking.status === "pending") && late[quickStatus.booking.id] === "noshow" ? (
             <button
               className="mgt-hover-scale"
               style={{

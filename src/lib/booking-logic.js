@@ -45,7 +45,9 @@ export function getDur(s){var ts=DUR_TIERS.tiers||[];for(var i=0;i<ts.length;i++
 // consumer of the raw minutes must account for it).
 export function lateState(b,todayStr,nowMins,cfg){
   if(!cfg||!cfg.lateEnabled) return null;
-  if(!b||b.status!=="confirmed"||b.date!==todayStr) return null;
+  // v17.0.0: PENDING flags late too (Patryk-confirmed "same as confirmed") —
+  // an unconfirmed request past its time needs staff attention just the same.
+  if(!b||(b.status!=="confirmed"&&b.status!=="pending")||b.date!==todayStr) return null;
   var lateBy=lateMins(b,nowMins);
   if(lateBy>=cfg.lateNoShowMin) return "noshow";
   if(lateBy>=cfg.lateWarnMin) return "warn";
@@ -567,9 +569,10 @@ export function checkInefficent(bookings,date){
 export function nowTime(){var d=new Date();return toTime(d.getHours()*60+d.getMinutes());}
 
 // Sort priority for the day-list view: seated first (most operationally
-// urgent), then confirmed (upcoming), completed (already left), cancelled.
+// urgent), then confirmed (upcoming), pending (awaiting confirmation, v17.0.0),
+// completed (already left), cancelled.
 // Previously inlined in ListView. Pure function of the status string.
-export function statusOrder(s){return s==="seated"?0:s==="confirmed"?1:s==="completed"?2:3;}
+export function statusOrder(s){return s==="seated"?0:s==="confirmed"?1:s==="pending"?2:s==="completed"?3:4;}
 
 // Position-percentage helper for the timeline grid — converts a clock-minutes
 // value into a CSS `left` percentage relative to the open–close span. The
@@ -686,7 +689,7 @@ export function daySummary(bookings,date,splitHour){
     if(!byHour[h]) byHour[h]={covers:0,count:0};
     byHour[h].covers+=size;byHour[h].count+=1;
     if(h<splitHour){aCovers+=size;aCount+=1;}else{eCovers+=size;eCount+=1;}
-    if(b.status==="seated"){seatedCount+=1;seatedCovers+=size;}else if(b.status==="confirmed"){upcomingCount+=1;}
+    if(b.status==="seated"){seatedCount+=1;seatedCovers+=size;}else if(b.status==="confirmed"||b.status==="pending"){upcomingCount+=1;} // v17.0.0: pending counts as upcoming
   });
   var hours=Object.keys(byHour).map(Number).sort(function(a,b){return a-b;}).map(function(h){
     return {hour:h,covers:byHour[h].covers,count:byHour[h].count};

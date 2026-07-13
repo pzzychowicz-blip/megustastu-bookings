@@ -81,7 +81,7 @@ export function DaySheet({ bookings, date, splitHour, waitlist, blocks }) {
               return (
                 <tr key={b.id}>
                   <td style={cell}>{b.scheduledTime || b.time}</td>
-                  <td style={Object.assign({}, cell, { fontWeight: 700 })}>{b.name || "—"}{b.status === "seated" ? " (seated)" : b.status === "completed" ? " (done)" : ""}</td>
+                  <td style={Object.assign({}, cell, { fontWeight: 700 })}>{b.name || "—"}{b.status === "seated" ? " (seated)" : b.status === "completed" ? " (done)" : b.status === "pending" ? " (pending)" : ""}</td>
                   <td style={cell}>{b.size}</td>
                   <td style={cell}>{(b.tables || []).join(", ") || "—"}</td>
                   <td style={cell}>{b.phone || "—"}</td>
