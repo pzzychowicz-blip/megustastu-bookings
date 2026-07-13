@@ -46,6 +46,7 @@ export function ListView({
   late = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {},
   showFinished = false, onToggleFinished = () => {},
+  currency = "€",
   onOpenSearch = () => {}
 }) {
   // v16.4.0: List view has no legend, so the global-search 🔍 (previously
@@ -214,7 +215,7 @@ export function ListView({
         ) : null;
         // v16.3.0: deposit chip (suggest/green tokens — a prepaid booking).
         const depositTag = (Number(b.deposit) || 0) > 0 ? (
-          <SmallTag label={"€" + b.deposit + " deposit"} style={{ background: "var(--suggest-bg)", color: "var(--success-text)", border: "1px solid var(--suggest-border)" }} />
+          <SmallTag label={(currency || "€") + b.deposit + " deposit"} style={{ background: "var(--suggest-bg)", color: "var(--success-text)", border: "1px solid var(--suggest-border)" }} />
         ) : null;
 
         const notesEl = b.notes ? (

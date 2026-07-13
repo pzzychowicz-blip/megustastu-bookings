@@ -143,6 +143,11 @@ import { useOptimizerSettings } from "./hooks/useOptimizerSettings";
 // size→duration tiers (feeds getDur via the DUR_TIERS live binding) + the
 // running-late thresholds (feed the lateMap derivation below).
 import { useBookingDefaults } from "./hooks/useBookingDefaults";
+// v17.0.0: `useGeneralSettings` owns the 6th settings node (settings/general):
+// restaurant name, currency symbol, phone prefix, Regular threshold, late-
+// banner collapse threshold, waitlist match window, undo-toast duration —
+// the ex-hard-coded literals from the multi-tenancy configurability pass.
+import { useGeneralSettings } from "./hooks/useGeneralSettings";
 import { useLayout } from "./hooks/useLayout";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
@@ -516,6 +521,14 @@ function BookingApp(){
   const { optimizerSettings, saveOptimizerSettings } = useOptimizerSettings();
   // v16.1.0: booking defaults — duration tiers + running-late thresholds.
   const { bookingDefaults, saveBookingDefaults } = useBookingDefaults();
+  // v17.0.0: settings/general (6th settings node) — see the import note.
+  const { generalSettings, saveGeneralSettings } = useGeneralSettings();
+  // A phone value that is empty, a bare "+", or exactly the untouched prefix
+  // seed counts as "no phone" (the prefix is a typing convenience, not data).
+  function cleanPhoneOf(p){
+    const t=p==null?"":String(p).trim();
+    return (t===""||t==="+"||t===generalSettings.phonePrefix)?"":t;
+  }
   const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins, cutoffMins: optimizerSettings.cutoff*60, autoSwitch: optimizerSettings.autoSwitch });
   // ── Persistence hook ────────────────────────────────────────────────────────
   // Owns bookings/tableBlocks state, Firebase listeners, savers, and the
@@ -835,8 +848,10 @@ function BookingApp(){
           const t=tryFit(w.prefTime);
           if(t){next[w.id]={tables:t,time:w.prefTime};return;}
         }
-        scanLo=Math.max(scanLo,Math.ceil((sm-90)/15)*15);
-        scanHi=Math.min(scanHi,sm+90);
+        // v17.0.0: the ± window is editable (settings/general waitMatchWin).
+        const win=generalSettings.waitMatchWin||90;
+        scanLo=Math.max(scanLo,Math.ceil((sm-win)/15)*15);
+        scanHi=Math.min(scanHi,sm+win);
       }
       for(let m=scanLo;m<=scanHi&&m<24*60;m+=15){
         const t=tryFit(toTime(m));
@@ -854,7 +869,7 @@ function BookingApp(){
     // (persistent + actionable), not a 6-second toast — so the prev-set diff that
     // fired the old toast is gone. waitAvail alone drives the banner.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter]);
+  },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter,generalSettings.waitMatchWin]);
 
   // ── v16.3.0: Recurring-booking generator ────────────────────────────────────
   // For each ACTIVE rule, materialise its occurrences across the rolling horizon
@@ -924,7 +939,7 @@ function BookingApp(){
     const avail=waitAvail[w.id];
     setForm(Object.assign({},EMPTY_FORM,{
       name:w.name||"",
-      phone:w.phone||"+",
+      phone:w.phone||generalSettings.phonePrefix,
       date:w.date,
       time:(avail&&avail.time)||w.prefTime||"",
       size:w.size||2,
@@ -941,7 +956,7 @@ function BookingApp(){
     const f=formRef.current;
     addToWaitlist({
       name:f.name||"",
-      phone:f.phone&&f.phone.trim()!=="+"?f.phone.trim():"",
+      phone:cleanPhoneOf(f.phone),
       size:Number(f.size)||2,
       date:f.date||viewDate,
       prefTime:f.time||null,
@@ -956,7 +971,7 @@ function BookingApp(){
     const wf=walkinForm||{};
     addToWaitlist({
       name:wf.name||"",
-      phone:wf.phone&&String(wf.phone).trim()!=="+"?String(wf.phone).trim():"",
+      phone:cleanPhoneOf(wf.phone),
       size:Number(wf.size)||2,
       date:new Date().toISOString().slice(0,10),
       prefTime:wf.time||null,
@@ -1028,8 +1043,8 @@ function BookingApp(){
     saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
   }
 
-  function openNew(){pendingWaitlistRef.current=null;setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){pendingWaitlistRef.current=null;setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openNew(){pendingWaitlistRef.current=null;setForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  function openEdit(b){pendingWaitlistRef.current=null;setForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -1044,7 +1059,7 @@ function BookingApp(){
     const schedTime=sourceBooking.scheduledTime||sourceBooking.time||"13:00";
     setForm(Object.assign({},EMPTY_FORM,{
       name:sourceBooking.name||"",
-      phone:sourceBooking.phone||"+",
+      phone:sourceBooking.phone||generalSettings.phonePrefix,
       date:"",
       time:schedTime,
       size:sourceBooking.size||2,
@@ -1104,7 +1119,7 @@ function BookingApp(){
       if(sm<fh.open*60||sm>fh.close*60){setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
       const size=Number(f.size)||2;
       const dur=f.customDur||getDur(size);
-      const cleanPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";
+      const cleanPhone=cleanPhoneOf(f.phone);
       const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
@@ -1713,7 +1728,7 @@ function BookingApp(){
       if(snapshot){
         if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
         setUndoInfo({snapshot:snapshot,noShow:!!noShow});
-        undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},10000);
+        undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
       }
     }
   }
@@ -1945,6 +1960,7 @@ function BookingApp(){
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={function(){setConfirmReshuffle(true);}}
     onOpenSettings={function(){setShowSettings(true);}}
+    currency={generalSettings.currency}
     onOpenSearch={function(){setShowSearch(true);}} />
     :<ListView
     bookings={bookings}
@@ -1961,6 +1977,7 @@ function BookingApp(){
     onSelect={setSelectedListId}
     showFinished={showFinished}
     onToggleFinished={toggleShowFinished}
+    currency={generalSettings.currency}
     onOpenSearch={function(){setShowSearch(true);}} />;
 
 
@@ -1977,7 +1994,7 @@ function BookingApp(){
     onPrint={function(){window.print();}} />;
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
-  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} />;
+  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} />;
 
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
@@ -2018,7 +2035,7 @@ function BookingApp(){
   return (
     <div
       style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>Me Gustas Tú</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
               <button
                 key={v}
                 className="mgt-hover-scale"
@@ -2056,7 +2073,7 @@ function BookingApp(){
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
@@ -2066,6 +2083,8 @@ function BookingApp(){
               tableBlocks={tableBlocks}
               autoOptimizer={autoOptimizer}
               isMobile={isMobile}
+              currency={generalSettings.currency}
+              regularMin={generalSettings.regularMin}
               onSave={function(){save();}}
               onSavePending={function(){save("pending");}}
               onSaveConfirm={function(){save("confirmed");}}
@@ -2128,6 +2147,8 @@ function BookingApp(){
             onSaveOptimizer={saveOptimizerSettings}
             bookingDefaults={bookingDefaults}
             onSaveBookingDefaults={saveBookingDefaults}
+            generalSettings={generalSettings}
+            onSaveGeneralSettings={saveGeneralSettings}
             onBackup={doBackup}
             recurring={recurring}
             onSetRecurringEnabled={setRecurringEnabled}

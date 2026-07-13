@@ -18,12 +18,12 @@
 //   onDeleteCustomer(key) — normalized-phone key; parent deletes bookings +
 //                           waitlist entries and reports the outcome
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { S, BTN, STATUS_COLORS } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, hasRealPhone, isNoShow } from "../lib/customers";
 import { Section, Reveal, mkInp, mkBtn } from "./atoms";
 
-export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
+export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2 }) {
   const [query, setQuery] = useState("");
   const [openKey, setOpenKey] = useState(null);   // expanded customer
   const [armedKey, setArmedKey] = useState(null); // delete armed for this key
@@ -31,7 +31,12 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
   // v16.3.0 follow-up (Patryk): "Regular" threshold — minimum completed visits
   // for the Regulars filter, adjustable via a stepper (session-only view
   // preference, like `filter` itself). Default 2.
-  const [regularMin, setRegularMin] = useState(2);
+  // v17.0.0: the initial threshold comes from settings/general (regularMin);
+  // the in-tab stepper still adjusts it per-session, and a remote settings
+  // change re-syncs it (clobbering a session tweak is acceptable — the setting
+  // IS the intended value).
+  const [regularMin, setRegularMin] = useState(regularMinDefault);
+  useEffect(function () { setRegularMin(regularMinDefault); }, [regularMinDefault]);
 
   const idx = customerIndex(bookings);
   const all = Object.keys(idx).map(function (k) { return idx[k]; });

@@ -14,7 +14,7 @@
 // (Time · Name · Pax · Tables · Phone · Deposit · Notes), any table blocks, and
 // the day's waitlist entries.
 //
-// Props: bookings, date, splitHour, waitlist, blocks
+// Props: bookings, date, splitHour, waitlist, blocks, restaurantName, currency (v17.0.0 — settings/general)
 
 import { useMemo } from "react";
 import { createPortal } from "react-dom";
@@ -29,7 +29,7 @@ function weekdayOf(dateStr) {
 const cell = { border: "1px solid #999", padding: "5px 7px", fontSize: 12, textAlign: "left", verticalAlign: "top", color: "#000" };
 const th = Object.assign({}, cell, { fontWeight: 700, background: "#eee" });
 
-export function DaySheet({ bookings, date, splitHour, waitlist, blocks }) {
+export function DaySheet({ bookings, date, splitHour, waitlist, blocks, restaurantName, currency }) {
   // /code-review: the sheet is PERMANENTLY mounted (display:none) and BookingApp
   // re-renders every 15s tick — memoise the filter/sort/summary passes so they
   // run only when the underlying data (not the clock) changes. This is the
@@ -55,7 +55,7 @@ export function DaySheet({ bookings, date, splitHour, waitlist, blocks }) {
   return createPortal(
     <div className="mgt-print-sheet" style={{ color: "#000", background: "#fff", padding: 24, fontFamily: "-apple-system, system-ui, sans-serif" }}>
       <div style={{ borderBottom: "2px solid #000", paddingBottom: 8, marginBottom: 12 }}>
-        <div style={{ fontSize: 20, fontWeight: 800 }}>Me Gustas Tú — Day sheet</div>
+        <div style={{ fontSize: 20, fontWeight: 800 }}>{(restaurantName || "Me Gustas Tú") + " — Day sheet"}</div>
         <div style={{ fontSize: 14, marginTop: 2 }}>{weekdayOf(date) + " · " + date}</div>
         <div style={{ fontSize: 13, marginTop: 4 }}>
           {s.totalBookings + " booking" + (s.totalBookings !== 1 ? "s" : "") + " · " + s.totalCovers + " cover" + (s.totalCovers !== 1 ? "s" : "")
@@ -85,7 +85,7 @@ export function DaySheet({ bookings, date, splitHour, waitlist, blocks }) {
                   <td style={cell}>{b.size}</td>
                   <td style={cell}>{(b.tables || []).join(", ") || "—"}</td>
                   <td style={cell}>{b.phone || "—"}</td>
-                  <td style={cell}>{(Number(b.deposit) || 0) > 0 ? "€" + b.deposit : "—"}</td>
+                  <td style={cell}>{(Number(b.deposit) || 0) > 0 ? (currency || "€") + b.deposit : "—"}</td>
                   <td style={cell}>{b.notes || ""}</td>
                 </tr>
               );
@@ -112,7 +112,7 @@ export function DaySheet({ bookings, date, splitHour, waitlist, blocks }) {
         </div>
       ) : null}
 
-      <div style={{ marginTop: 20, fontSize: 10, color: "#666" }}>Me Gustas Tú Booking System</div>
+      <div style={{ marginTop: 20, fontSize: 10, color: "#666" }}>{(restaurantName || "Me Gustas Tú") + " Booking System"}</div>
     </div>,
     document.body
   );
