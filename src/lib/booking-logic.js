@@ -98,6 +98,10 @@ export function sanitize(b){if(!b||typeof b!=="object") return null;var t=b.time
   // skipDates so a deleted occurrence is never regenerated.
   recurringId:b.recurringId||null,
   recurringDate:b.recurringDate||null,
+  // v17.0.0: "Delete customer" anonymizes instead of deleting — the booking
+  // stays for statistics as name "Data removed" (phone/notes/history wiped,
+  // noShow kept). The flag excludes it from the name-search/autocomplete paths.
+  anonymized:!!b.anonymized,
   // v15.5.0: per-booking revision stamp for the per-node write model. Carried
   // through sanitise so it survives reads (this whitelist would otherwise drop
   // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.

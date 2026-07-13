@@ -150,7 +150,7 @@ export function searchBookings(bookings, query, todayStr, limit) {
   const qName = q.toLowerCase();
   const useDigits = qDigits.length >= 3;
   const out = bookings.filter(function (b) {
-    if (!b) return false;
+    if (!b || b.anonymized) return false; // v17.0.0: anonymized ("Data removed") bookings never match
     if (useDigits) return b.phone && normalizePhone(b.phone).replace(/[^\d]/g, "").indexOf(qDigits) !== -1;
     return b.name && b.name.toLowerCase().indexOf(qName) !== -1;
   });
@@ -211,7 +211,7 @@ export function searchGuestsByName(bookings, index, query, limit) {
   });
   // Phone-LESS bookings whose name matches — one row each, never merged.
   bookings.forEach(function (b) {
-    if (!b || hasRealPhone(b.phone)) return;
+    if (!b || b.anonymized || hasRealPhone(b.phone)) return; // v17.0.0: skip anonymized
     if (b.name && b.name.toLowerCase().indexOf(q) !== -1) {
       rows.push({ key: "b:" + b.id, name: b.name, rawPhone: "", phone: null, latestDate: b.date || "", isPhoneless: true, latest: b });
     }

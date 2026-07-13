@@ -1010,10 +1010,21 @@ function BookingApp(){
       setTimeout(function(){URL.revokeObjectURL(url);},1000);
     }catch(e){setWriteWarning("Couldn't create the backup file on this device.");}
   }
+  // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
+  // bookings remain for statistics (covers, day/range stats, phone-less
+  // no-show tile) as name "Data removed" with phone/notes/history wiped and
+  // the noShow flag KEPT (Patryk-confirmed scope). The `anonymized` flag
+  // excludes them from every name-search/autocomplete path (customers.js).
+  // Waitlist entries are still fully deleted (personal data, not statistics).
+  // Side benefit: the old whole-DB edge (filter → empty array refused by the
+  // write-guard) is gone — a map never changes the booking count.
   function deleteCustomer(phoneKey){
     const key=normalizePhone(phoneKey);
     if(!key) return;
-    saveBookings(function(prev){return prev.filter(function(b){return normalizePhone(b.phone)!==key;});});
+    saveBookings(function(prev){return prev.map(function(b){
+      if(normalizePhone(b.phone)!==key) return b;
+      return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],anonymized:true});
+    });});
     saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
   }
 
