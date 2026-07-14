@@ -24,7 +24,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, VALID_COMBOS
 } from "./lib/constants";
 
 import {
@@ -237,15 +237,19 @@ function readThemePref(){
 
 // v17.0.0 correction: per-device max app width (px). localStorage like the
 // theme — screen size is a device property, not restaurant config. The 1.08
-// hover-scale lift overflowed the viewport at 1600 on smaller monitors, so
-// the width is now a Settings→General stepper (900–2400, step 100).
-const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400, APP_WIDTH_DEFAULT=1600;
+// hover-scale lift overflowed the viewport at a fixed 1600 on smaller
+// monitors, so the width is a Settings→General stepper (900–2400, step 50).
+// Round 3: no stored value → default to THIS screen's width minus 150px
+// margins each side (rounded to 50), so the app fills the browser out of the
+// box without ever overflowing it.
+const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400;
 function readAppWidth(){
   try{
     const v=parseInt(localStorage.getItem("mgt-appwidth"),10);
     if(Number.isFinite(v)&&v>=APP_WIDTH_MIN&&v<=APP_WIDTH_MAX) return v;
   }catch(e){}
-  return APP_WIDTH_DEFAULT;
+  const w=Math.round((window.innerWidth-300)/50)*50;
+  return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,w));
 }
 
 // ── Console boot banner ──────────────────────────────────────────────────────
@@ -1394,13 +1398,21 @@ function BookingApp(){
     setError("");
     if(ok) flash();
   }
-  // ── v17.0.0 correction: Timeline drag & drop (move / swap tables) ─────────
-  // Drop a dragged block on another table row: a FREE row = move the booking
-  // onto that single table (capacity-guarded); a row with ONE overlapping
-  // booking = swap the two bookings' FULL table sets (Patryk-confirmed, the
-  // Swap-busy semantics). Both written bookings become _manual+_locked so the
-  // optimizer never undoes a hand-placed drag. Refusals surface via the
-  // dragMsg floating toast; success reuses flash() (gated on `ok`, v15.4.0).
+  // ── v17.0.0 correction: Timeline drag & drop (move / swap / displace) ─────
+  // Drop a dragged block on another table row. Round 3 semantics (Patryk):
+  //   1. pick the table SET the party takes at the target — the single table
+  //      if it seats them, else the smallest VALID_COMBO containing the target
+  //      that does (skipping combos with a blocked member or a seated party);
+  //   2. set free → plain move onto it;
+  //   3. exactly one overlapping booking → try the round-1 full-set SWAP first
+  //      (capacity both ways + canAssign);
+  //   4. else DISPLACE: strip the desired tables from the occupants, unlock
+  //      them, give the dragged booking the set, re-optimize (the manualAssign
+  //      Swap-busy recipe) — but commit ONLY if a trial pass re-seats every
+  //      displaced booking (no stranding; refusal toast otherwise).
+  // The dragged booking becomes _manual+_locked so the optimizer never undoes
+  // a hand-placed drag. Refusals surface via the dragMsg floating toast;
+  // success messages are gated on the saveBookings `ok` boolean (v15.4.0).
   function flashDragMsg(text,good){setDragMsg({text:text,good:!!good});clearTimeout(dragMsgTimer.current);dragMsgTimer.current=setTimeout(function(){setDragMsg(null);},3500);}
   function dropOnTable(id,targetId){
     const src=liveBookings.find(function(b){return b.id===id;});
@@ -1408,44 +1420,79 @@ function BookingApp(){
     const cur=src.tables||[];
     if(cur.length===1&&cur[0]===targetId) return; // dropped back on its own row
     const size=src.size||2;
-    const cap=(ALL_TABLES.find(function(t){return t.id===targetId;})||{}).capacity||0;
     const s=toMins(src.time);
     const e=Math.max(occupancyEnd(src,nowMins),s+1);
     const blockSlots=getBlockSlots(tableBlocks,src.date);
-    if(getBusy(blockSlots,s,e).has(targetId)){flashDragMsg("Table "+targetId+" is blocked then.");return;}
-    // Overlapping occupants on the target row (completed = free, the v16.0.0 rule).
-    const occ=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&isActive(b)&&b.status!=="completed"&&(b.tables||[]).includes(targetId)&&overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins));});
+    const busyBlocked=getBusy(blockSlots,s,e);
+    if(busyBlocked.has(targetId)){flashDragMsg("Table "+targetId+" is blocked then.");return;}
+    // Day's other active bookings (completed = free, the v16.0.0 rule) + the
+    // tables held by SEATED parties over the span — those are immovable.
+    const dayActive=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&isActive(b)&&b.status!=="completed";});
+    const isOver=function(b){return overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins));};
+    const seatedOn=new Set();
+    dayActive.forEach(function(b){if(b.status==="seated"&&isOver(b))(b.tables||[]).forEach(function(t){seatedOn.add(t);});});
+    // 1. Desired table set at the target.
+    const cap1=(ALL_TABLES.find(function(t){return t.id===targetId;})||{}).capacity||0;
+    let desired=null;
+    if(cap1>=size) desired=[targetId];
+    else{
+      const cands=VALID_COMBOS.filter(function(c){return c.ids.includes(targetId)&&c.cap>=size&&!c.ids.some(function(t){return busyBlocked.has(t)||seatedOn.has(t);});});
+      cands.sort(function(a,b){return (a.cap-b.cap)||(a.ids.length-b.ids.length);});
+      if(cands.length>0) desired=cands[0].ids.slice();
+    }
+    if(!desired){flashDragMsg("Party of "+size+" won't fit at "+targetId+", even with joined tables.");return;}
+    const occ=dayActive.filter(function(b){return isOver(b)&&(b.tables||[]).some(function(t){return desired.includes(t);});});
     const user=getUser();
+    // 2. Free set → plain move.
     if(occ.length===0){
-      // free row → move onto the single target table
-      if(cap<size){flashDragMsg("Table "+targetId+" seats "+cap+" — party of "+size+".");return;}
       const ok=saveBookings(function(prev){return prev.map(function(b){
         if(b.id!==id) return b;
-        return Object.assign({},b,{tables:[targetId],_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+targetId+" (drag)",user)])});
+        return Object.assign({},b,{tables:desired,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+desired.join("+")+" (drag)",user)])});
       });});
-      if(ok) flashDragMsg(src.name+" moved to table "+targetId+".",true);
+      if(ok) flashDragMsg(src.name+" moved to "+desired.join("+")+".",true);
       return;
     }
-    const ids={};occ.forEach(function(b){ids[b.id]=true;});
-    if(Object.keys(ids).length>1){flashDragMsg("Several bookings sit on "+targetId+" then — use Manual assign.");return;}
-    const other=occ[0];
-    if(cur.length===0){flashDragMsg("Table "+targetId+" is occupied then — drop on a free row, or assign tables first.");return;}
-    // swap full table sets; validate BOTH against everyone else + blocks
-    const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
-    // v17.0.0 correction: the Manual-assign capacity rule (comboCapBest ≥ size)
-    // applies to BOTH sides of a swap — an 8-top must never land on a 2-seater.
-    if(comboCapBest(newSrc)<size){flashDragMsg("That swap would seat "+size+" at "+newSrc.join("+")+" (seats "+comboCapBest(newSrc)+").");return;}
-    const otherSize=other.size||2;
-    if(comboCapBest(newOther)<otherSize){flashDragMsg("That swap would seat "+other.name+"'s "+otherSize+" at "+newOther.join("+")+" (seats "+comboCapBest(newOther)+").");return;}
-    const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins),os+1);
-    const slots=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&b.id!==other.id&&isActive(b)&&b.status!=="completed"&&(b.tables||[]).length;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins)};}).concat(blockSlots);
-    if(!canAssign(newSrc,slots,s,e)||!canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){flashDragMsg("That swap clashes with another booking — use Manual assign.");return;}
-    const ok=saveBookings(function(prev){return prev.map(function(b){
-      if(b.id===id) return Object.assign({},b,{tables:newSrc,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+other.name+" ("+(cur.join("+")||"none")+" → "+newSrc.join("+")+")",user)])});
-      if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
-      return b;
-    });});
-    if(ok) flashDragMsg(src.name+" ⇄ "+other.name+" — tables swapped.",true);
+    // 3. Exactly one occupant → try the straight full-set swap first.
+    if(occ.length===1&&cur.length>0&&occ[0].status!=="seated"){
+      const other=occ[0];
+      const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
+      const otherSize=other.size||2;
+      if(comboCapBest(newSrc)>=size&&comboCapBest(newOther)>=otherSize){
+        const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins),os+1);
+        const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins)};}).concat(blockSlots);
+        if(canAssign(newSrc,slots,s,e)&&canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){
+          const ok=saveBookings(function(prev){return prev.map(function(b){
+            if(b.id===id) return Object.assign({},b,{tables:newSrc,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+other.name+" ("+(cur.join("+")||"none")+" → "+newSrc.join("+")+")",user)])});
+            if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
+            return b;
+          });});
+          if(ok) flashDragMsg(src.name+" ⇄ "+other.name+" — tables swapped.",true);
+          return;
+        }
+      }
+    }
+    // 4. Displacement — the manualAssign Swap-busy recipe, with a trial gate.
+    const seatedOcc=occ.find(function(b){return b.status==="seated";});
+    if(seatedOcc){flashDragMsg(seatedOcc.name+" is seated on "+targetId+"'s tables — can't move them.");return;}
+    const occIds=new Set(occ.map(function(b){return b.id;}));
+    const transform=function(list){
+      const updated=list.map(function(b){
+        if(b.id===id) return Object.assign({},b,{tables:desired,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+desired.join("+")+" (drag)",user)])});
+        if(occIds.has(b.id)){
+          const remaining=(b.tables||[]).filter(function(t){return !desired.includes(t);});
+          return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});
+        }
+        return b;
+      });
+      return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
+    };
+    // Trial against current data: every displaced booking must come out
+    // re-seated and conflict-free, or the whole drop refuses (no stranding).
+    const trial=transform(bookings);
+    const stranded=occ.find(function(o){const t=trial.find(function(x){return x.id===o.id;});return !t||(t.tables||[]).length===0||t._conflict;});
+    if(stranded){flashDragMsg("Can't re-seat "+stranded.name+" elsewhere — use Manual assign.");return;}
+    const ok=saveBookings(transform);
+    if(ok) flashDragMsg(src.name+" moved to "+desired.join("+")+" — "+occ.map(function(o){return o.name;}).join(", ")+" reassigned.",true);
   }
   function delBooking(id){const target=bookings.find(function(x){return x.id===id;});
     // v16.3.0: deleting a recurring OCCURRENCE parks its date on the rule's

@@ -4126,3 +4126,28 @@ Four items, one commit. Files: `index.html`, `src/App.jsx`, `src/components/Quic
 All verified live in DEV (popup screenshot-centered at the viewport midpoint; width stepper
 1600→1500 applied + persisted to localStorage; swap refusal + legal swap both exercised via
 dispatched PointerEvents). Build clean.
+
+**Corrections round 3 (same version, same branch, pre-merge — Patryk's third review, 2026-07-14).**
+Four items, one commit. Files: `index.html`, `src/App.jsx`, `src/components/Settings.jsx`.
+
+1. **App width: step 50 + screen-relative default** — the stepper moves in 50px; with no stored
+   value the default is now `window.innerWidth − 300` (a 150px margin each side), rounded to 50 and
+   clamped to 900–2400 — so a fresh device fills its browser without overflowing it.
+2. **Plan-view popup centering** — free (verified, no code): PlanView mounts the same
+   `QuickStatusPopup` that round 2 portalled to `<body>`, so RMB on a Plan table now centers on the
+   viewport too.
+3. **Drag & drop displacement (Patryk-confirmed "auto-reassign")** — `dropOnTable` reworked:
+   pick the table SET the party needs at the target (the single table if it seats them, else the
+   smallest `VALID_COMBO` containing the target whose members aren't blocked or seated-occupied);
+   free set → plain move; exactly one occupant → the round-2 full-set swap first; otherwise
+   DISPLACE via the `manualAssign` Swap-busy recipe (strip the desired tables from occupants,
+   unlock them, `bookingsAfterAction` re-seats them) — gated on a TRIAL pass against current data:
+   commit only if every displaced booking comes out re-seated and conflict-free, else refuse with
+   a toast ("Can't re-seat X elsewhere — use Manual assign"). Seated occupants always refuse.
+   Verified live both directions: Adam (8) dropped on 5A → "moved to 5A+5B+6 — Stefan, Alan test
+   reassigned" (both re-seated on 2/3); dragged back to row 2 → exact original layout restored.
+4. **Confirmed → teal rgba(13,148,136) · pending back to rgba(250,204,21)** (Patryk's pick from
+   proposals; navy too heavy, orange too close to pending's yellow). `--block-confirmed`
+   rgba(13,148,136,0.88); confirmed text `#0f766e` light / `#5eead4` dark.
+
+Build clean (gz ≈214.9 kB). All verified live in DEV.

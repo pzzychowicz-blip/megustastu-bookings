@@ -348,7 +348,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           </div>
           <MiniStepper value={appWidth} fmt={(v) => v + " px"}
             disableDec={appWidth <= 900} disableInc={appWidth >= 2400}
-            onDec={() => onSetAppWidth(appWidth - 100)} onInc={() => onSetAppWidth(appWidth + 100)} />
+            onDec={() => onSetAppWidth(appWidth - 50)} onInc={() => onSetAppWidth(appWidth + 50)} />
         </div>
       </Section>
       {/* v17.0.0: Restaurant identity — name / currency / phone prefix.
