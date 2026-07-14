@@ -79,21 +79,22 @@ export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDas
   );
 }
 
-// A door: a wall-gap bar + a quarter-circle swing arc.
+// A door: a wall-gap bar + a quarter-circle swing arc. `flip` (v17.0.0
+// correction) mirrors the swing side — hinge left (default) ↔ hinge right —
+// via a scale(-1,1) wrapper (the bar is x-symmetric, only arc+hinge mirror).
 export function DoorGlyph({ door, selected, onPointerDown, onClick }){
   const w = door.width;
   return (
     <g transform={"translate(" + door.x + "," + door.y + ") rotate(" + (door.rot || 0) + ")"}
       onPointerDown={onPointerDown} onClick={onClick}
       style={{ cursor: onPointerDown ? "grab" : "default" }}>
-      <path d={"M " + (-w / 2) + " 0 A " + w + " " + w + " 0 0 1 " + (w / 2) + " " + (-0) + ""}
-        transform={"translate(" + (0) + ",0)"} fill="none" stroke="transparent" />
-      <path d={"M " + (-w / 2) + " 0 Q " + (-w / 2) + " " + (-w) + " " + (w / 2) + " " + (-w) + ""} fill="none" stroke="transparent" />
-      {/* swing arc from the hinge (left end) */}
-      <path d={"M " + (w / 2) + " 0 A " + w + " " + w + " 0 0 0 " + (-w / 2) + " " + (-w) + ""}
-        fill="none" stroke={selected ? "var(--accent)" : "var(--text-faint)"} strokeWidth={1.5} strokeDasharray="4 4" />
       <line x1={-w / 2} y1={0} x2={w / 2} y2={0} stroke={selected ? "var(--accent)" : "var(--text-muted)"} strokeWidth={5} strokeLinecap="round" />
-      <line x1={-w / 2} y1={0} x2={-w / 2} y2={-w} stroke={selected ? "var(--accent)" : "var(--text-muted)"} strokeWidth={2.5} strokeLinecap="round" />
+      <g transform={door.flip ? "scale(-1,1)" : undefined}>
+        {/* swing arc from the hinge (left end pre-flip) */}
+        <path d={"M " + (w / 2) + " 0 A " + w + " " + w + " 0 0 0 " + (-w / 2) + " " + (-w) + ""}
+          fill="none" stroke={selected ? "var(--accent)" : "var(--text-faint)"} strokeWidth={1.5} strokeDasharray="4 4" />
+        <line x1={-w / 2} y1={0} x2={-w / 2} y2={-w} stroke={selected ? "var(--accent)" : "var(--text-muted)"} strokeWidth={2.5} strokeLinecap="round" />
+      </g>
     </g>
   );
 }
@@ -146,12 +147,13 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
     return { x: (e.clientX - r.left) * (fp.room.w / r.width), y: (e.clientY - r.top) * (fp.room.h / r.height) };
   }
 
-  function startDrag(e, type, key, cur){
+  function startDrag(e, type, key, cur, extra){
     if(mode !== "select") return;
     e.preventDefault(); e.stopPropagation();
-    setSel({ type: type, key: key });
+    // Wall drags select the WALL (endpoint handles are wall sub-parts).
+    setSel({ type: type.indexOf("wall") === 0 ? "wall" : type, key: key });
     const p = toFp(e);
-    dragRef.current = { type: type, key: key, dx: cur.x - p.x, dy: cur.y - p.y };
+    dragRef.current = { type: type, key: key, dx: cur.x - p.x, dy: cur.y - p.y, ...(extra || {}) };
     try{ e.currentTarget.ownerSVGElement.setPointerCapture(e.pointerId); }catch(_e){}
   }
   function onMove(e){
@@ -168,6 +170,18 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         commitFp({ ...fp, tables: { ...fp.tables, [d.key]: { ...fp.tables[d.key], x: dragPos.x, y: dragPos.y } } });
       } else if(d.type === "door"){
         commitFp({ ...fp, doors: fp.doors.map(function(dr, i){ return i === d.key ? { ...dr, x: dragPos.x, y: dragPos.y } : dr; }) });
+      } else if(d.type === "wallA" || d.type === "wallB"){
+        // v17.0.0 correction: draggable wall endpoints (full wall editing).
+        commitFp({ ...fp, walls: fp.walls.map(function(wl, i){
+          if(i !== d.key) return wl;
+          return d.type === "wallA" ? { ...wl, x1: dragPos.x, y1: dragPos.y } : { ...wl, x2: dragPos.x, y2: dragPos.y };
+        }) });
+      } else if(d.type === "wallBody"){
+        // dragPos = the new A endpoint; move both ends by the same delta.
+        const ddx = dragPos.x - d.ax, ddy = dragPos.y - d.ay;
+        commitFp({ ...fp, walls: fp.walls.map(function(wl, i){
+          return i === d.key ? { x1: wl.x1 + ddx, y1: wl.y1 + ddy, x2: wl.x2 + ddx, y2: wl.y2 + ddy } : wl;
+        }) });
       }
     }
     dragRef.current = null;
@@ -202,6 +216,18 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
     if(dragPos && dragPos.type === "door" && dragPos.key === i) return { ...d, x: dragPos.x, y: dragPos.y };
     return d;
   }
+  function wallOf(i){
+    const wl = fp.walls[i];
+    if(!dragPos || dragPos.key !== i) return wl;
+    if(dragPos.type === "wallA") return { ...wl, x1: dragPos.x, y1: dragPos.y };
+    if(dragPos.type === "wallB") return { ...wl, x2: dragPos.x, y2: dragPos.y };
+    if(dragPos.type === "wallBody"){
+      const d = dragRef.current || {};
+      const ddx = dragPos.x - (d.ax || 0), ddy = dragPos.y - (d.ay || 0);
+      return { x1: wl.x1 + ddx, y1: wl.y1 + ddy, x2: wl.x2 + ddx, y2: wl.y2 + ddy };
+    }
+    return wl;
+  }
   function patchTable(id, patch){
     commitFp({ ...fp, tables: { ...fp.tables, [id]: { ...fp.tables[id], ...patch } } });
   }
@@ -233,11 +259,11 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
           })}
         </div>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 12 }}>
-          <Step label={e.shape === "rect" ? "Width" : "Size"} value={e.w} fmt={function(n){ return n; }}
+          <Step label={e.shape === "rect" ? "Width" : "Size"} value={e.w} fmt={function(n){ return n + " cm"; }}
             disableDec={e.w <= 30} disableInc={e.w >= 400}
             onDec={function(){ patchTable(id, { w: e.w - 10 }); }} onInc={function(){ patchTable(id, { w: e.w + 10 }); }} />
           {e.shape === "rect" ? (
-            <Step label="Height" value={e.h}
+            <Step label="Height" value={e.h} fmt={function(n){ return n + " cm"; }}
               disableDec={e.h <= 30} disableInc={e.h >= 400}
               onDec={function(){ patchTable(id, { h: e.h - 10 }); }} onInc={function(){ patchTable(id, { h: e.h + 10 }); }} />
           ) : null}
@@ -268,22 +294,34 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
           <Step label="Rotation" value={d.rot || 0} fmt={function(n){ return n + "°"; }}
             onDec={function(){ patchDoor(i, { rot: ((d.rot || 0) + 345) % 360 }); }} onInc={function(){ patchDoor(i, { rot: ((d.rot || 0) + 15) % 360 }); }} />
-          <Step label="Width" value={d.width}
+          <Step label="Width" value={d.width} fmt={function(n){ return n + " cm"; }}
             disableDec={d.width <= 40} disableInc={d.width >= 300}
             onDec={function(){ patchDoor(i, { width: d.width - 10 }); }} onInc={function(){ patchDoor(i, { width: d.width + 10 }); }} />
+          {/* v17.0.0 correction: which side the door opens toward (hinge side) */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>Opens</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {[["left", !d.flip], ["right", !!d.flip]].map(function(o){
+                return <button key={o[0]} onClick={function(){ patchDoor(i, { flip: o[0] === "right" }); }}
+                  className="mgt-hover-scale"
+                  style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: o[1] ? S.accent : "var(--app-btn-grey)", textTransform: "capitalize" })}>{o[0]}</button>;
+              })}
+            </div>
+          </div>
           <button onClick={function(){ commitFp({ ...fp, doors: fp.doors.filter(function(_, j){ return j !== i; }) }); setSel(null); }}
             className="mgt-hover-scale" style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: "var(--btn-del)" })}>Delete door</button>
         </div>
       </div>
     );
   } else if(sel && sel.type === "wall" && fp.walls[sel.key]){
-    const i = sel.key;
+    const i = sel.key, wl = fp.walls[i];
+    const len = Math.round(Math.sqrt(Math.pow(wl.x2 - wl.x1, 2) + Math.pow(wl.y2 - wl.y1, 2)));
     inspector = (
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: S.text }}>Wall</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: S.text }}>{"Wall · " + len + " cm"}</div>
         <button onClick={function(){ commitFp({ ...fp, walls: fp.walls.filter(function(_, j){ return j !== i; }) }); setSel(null); }}
           className="mgt-hover-scale" style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: "var(--btn-del)" })}>Delete wall</button>
-        <span style={{ fontSize: 12, color: S.muted }}>To move a wall, delete it and draw it again.</span>
+        <span style={{ fontSize: 12, color: S.muted }}>Drag the wall to move it, or drag its endpoint handles to reshape it.</span>
       </div>
     );
   }
@@ -316,12 +354,28 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             </pattern>
           </defs>
           <rect x={0} y={0} width={fp.room.w} height={fp.room.h} fill="url(#fp-grid)" />
-          {fp.walls.map(function(wl, i){
+          {fp.walls.map(function(wl0, i){
+            const wl = wallOf(i);
             const selWall = sel && sel.type === "wall" && sel.key === i;
-            return <line key={"w" + i} x1={wl.x1} y1={wl.y1} x2={wl.x2} y2={wl.y2}
-              stroke={selWall ? "var(--accent)" : "var(--text-muted)"} strokeWidth={7} strokeLinecap="round"
-              style={{ cursor: "pointer" }}
-              onPointerDown={function(e){ if(mode === "select"){ e.stopPropagation(); setSel({ type: "wall", key: i }); } }} />;
+            return (
+              <g key={"w" + i}>
+                <line x1={wl.x1} y1={wl.y1} x2={wl.x2} y2={wl.y2}
+                  stroke={selWall ? "var(--accent)" : "var(--text-muted)"} strokeWidth={7} strokeLinecap="round"
+                  style={{ cursor: mode === "select" ? "grab" : "pointer" }}
+                  onPointerDown={function(e){ startDrag(e, "wallBody", i, { x: wl0.x1, y: wl0.y1 }, { ax: wl0.x1, ay: wl0.y1 }); }} />
+                {selWall ? (
+                  <>
+                    {/* v17.0.0 correction: draggable endpoint handles */}
+                    <circle cx={wl.x1} cy={wl.y1} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2}
+                      style={{ cursor: "move" }}
+                      onPointerDown={function(e){ startDrag(e, "wallA", i, { x: wl0.x1, y: wl0.y1 }); }} />
+                    <circle cx={wl.x2} cy={wl.y2} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2}
+                      style={{ cursor: "move" }}
+                      onPointerDown={function(e){ startDrag(e, "wallB", i, { x: wl0.x2, y: wl0.y2 }); }} />
+                  </>
+                ) : null}
+              </g>
+            );
           })}
           {wallStart ? (
             <>
@@ -345,11 +399,11 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         </svg>
       </div>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end", marginTop: 12 }}>
-        <Step label="Room width" value={fp.room.w}
+        <Step label="Room width" value={fp.room.w} fmt={function(n){ return n + " cm"; }}
           disableDec={fp.room.w <= 300} disableInc={fp.room.w >= 4000}
           onDec={function(){ commitFp({ ...fp, room: { ...fp.room, w: fp.room.w - 50 } }); }}
           onInc={function(){ commitFp({ ...fp, room: { ...fp.room, w: fp.room.w + 50 } }); }} />
-        <Step label="Room height" value={fp.room.h}
+        <Step label="Room height" value={fp.room.h} fmt={function(n){ return n + " cm"; }}
           disableDec={fp.room.h <= 300} disableInc={fp.room.h >= 4000}
           onDec={function(){ commitFp({ ...fp, room: { ...fp.room, h: fp.room.h - 50 } }); }}
           onInc={function(){ commitFp({ ...fp, room: { ...fp.room, h: fp.room.h + 50 } }); }} />
@@ -360,6 +414,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         </div>
       ) : null}
       <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 10 }}>
+        All distances are in centimeters — grid squares are 50 cm, positions snap to 10 cm.
         The plan mirrors your Tables list — add, remove or rename tables in the Tables editor above; new tables appear here automatically. Shared across all devices.
       </div>
     </div>

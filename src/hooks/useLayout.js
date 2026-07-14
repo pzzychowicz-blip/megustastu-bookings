@@ -37,8 +37,8 @@ import { DEFAULT_LAYOUT, setLayout, comboKey } from "../lib/constants";
 // settings/layout gains a `floorPlan` field: a top-down map of the room —
 // per-table position/shape/size/rotation/chairs, plus walls and doors.
 // Shape: { v:1, room:{w,h}, tables:{ [id]:{x,y,shape,w,h,rot,
-// chairs:{top,right,bottom,left}} }, walls:[{x1,y1,x2,y2}], doors:[{x,y,rot,width}] }.
-// Coordinates are abstract units rendered via an SVG viewBox (responsive).
+// chairs:{top,right,bottom,left}} }, walls:[{x1,y1,x2,y2}], doors:[{x,y,rot,width,flip}] }.
+// Coordinates are CENTIMETERS (1 unit = 1 cm) rendered via an SVG viewBox.
 //
 // Sanitize contract (the priorities lesson): a PRESENT floorPlan treats each
 // missing field as EMPTY (RTDB drops empty arrays — walls/doors default to []
@@ -107,7 +107,8 @@ export function sanitizeFloorPlan(raw, tables){
   }).filter(Boolean).slice(0, 200);
   const doors = (Array.isArray(src.doors) ? src.doors : []).map(function(d){
     if(!d || typeof d !== "object") return null;
-    return { x: fpNum(d.x, 0, 0, room.w), y: fpNum(d.y, 0, 0, room.h), rot: fpNum(d.rot, 0, 0, 359), width: fpNum(d.width, 80, 40, 300) };
+    // v17.0.0 correction: `flip` mirrors the swing side (hinge left ↔ right).
+    return { x: fpNum(d.x, 0, 0, room.w), y: fpNum(d.y, 0, 0, room.h), rot: fpNum(d.rot, 0, 0, 359), width: fpNum(d.width, 80, 40, 300), flip: d.flip === true };
   }).filter(Boolean).slice(0, 50);
   return { v: 1, room: room, tables: outT, walls: walls, doors: doors };
 }
