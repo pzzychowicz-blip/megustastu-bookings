@@ -4224,3 +4224,11 @@ Three items, one commit. Files: `index.html`, `src/components/PlanView.jsx`,
    alongside this commit for Patryk to weigh.
 
 Build clean. All verified live in DEV.
+
+**Corrections round 6 colour follow-up (same commit series — Patryk picked Option B from the swatch widget).**
+Confirmed and Pending are now a coordinated matched-intensity pair, replacing the round-6 pastel
+tangerine (which sat lighter than the other statuses): Confirmed = amber `rgb(217,119,6)`
+(`--block-confirmed` .92; text `#92400e` light / `#fcd9a0` dark), Pending = amber-yellow
+`rgb(234,179,8)` (`--block-pending` .92; text `#854d0e` / `#fde047`). Both carry crisp white block
+text and sit at the seated-green / cancelled-red weight; the depth gap keeps the two warm statuses
+distinct. Verified live in DEV.
