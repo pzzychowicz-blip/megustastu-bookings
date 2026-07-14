@@ -32,7 +32,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { S, STATUS_COLORS, BLOCK_BG, hoursFor } from "../lib/constants";
-import { toMins, toTime, getBlockSlots, statusOrder } from "../lib/booking-logic";
+import { toMins, toTime, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorPlanEditor";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { mkBtn } from "./atoms";
@@ -146,7 +146,10 @@ export function PlanView({
     const pts = Object.values(pointersRef.current);
     if (pinchRef.current && pts.length === 2) {
       const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      const k = Math.max(0.5, Math.min(5, pinchRef.current.k0 * (d / pinchRef.current.d0)));
+      // v17.0.0 correction round 6: dampen pinch — the raw finger-distance ratio
+      // felt hair-trigger. 0.5 = half sensitivity (a 2× spread → 1.5× zoom).
+      const ratio = 1 + (d / pinchRef.current.d0 - 1) * 0.5;
+      const k = Math.max(0.5, Math.min(5, pinchRef.current.k0 * ratio));
       setView((v) => ({ ...v, k: k }));
       return;
     }
@@ -194,6 +197,16 @@ export function PlanView({
       .filter((b) => (b.tables || []).indexOf(id) >= 0)
       .sort((a, b) => toMins(a.time) - toMins(b.time));
     const freeNow = !occupying[id] && !isBlocked(id);
+    // v17.0.0 correction round 6: only OFFER a walk-in when the table can
+    // actually seat one now — free at the slider AND a real window before the
+    // next booking/block/close (≥ a minimal walk-in duration). A table free now
+    // but booked in 10 min used to still show "Walk-in here" → dead-end form.
+    const nextBusy = Math.min(
+      closeM,
+      ...day.filter((b) => (b.status === "confirmed" || b.status === "pending") && (b.tables || []).indexOf(id) >= 0 && toMins(b.time) > slider).map((b) => toMins(b.time)),
+      ...blockSlots.filter((sl) => sl.tables.indexOf(id) >= 0 && sl.s > slider).map((sl) => sl.s)
+    );
+    const canWalkin = freeNow && isToday && (nextBusy - slider) >= getDur(2);
     // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
     // SlideView's transform makes an in-tree position:fixed scrim center on
     // the container, not the viewport.
@@ -217,10 +230,12 @@ export function PlanView({
               </div>
             );
           })}
-          {freeNow && isToday ? (
-            <button className="mgt-hover-scale"
-              onClick={() => { setTablePop(null); onWalkin(id); }}
-              style={mkBtn({ marginTop: 8, minHeight: 40, padding: "8px 16px", background: "var(--app-walkin)" })}>Walk-in here</button>
+          {canWalkin ? (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+              <button className="mgt-hover-scale"
+                onClick={() => { setTablePop(null); onWalkin(id); }}
+                style={mkBtn({ minHeight: 40, padding: "8px 20px", background: "var(--app-walkin)" })}>Walk-in here</button>
+            </div>
           ) : null}
         </div>
       </div>,

@@ -35,17 +35,18 @@
         /* Status chips — bg + border share a hue (RGB triplet, composed in
            constants.js as rgba(var(--…-rgb), a)); text is a solid token. */
         /* v17.0.0: confirmed left the amber family so the new PENDING status
-           could take the yellow. Correction round 5 (Patryk's exact RGB):
-           confirmed = muted terracotta rgb(191,106,40) — softer than the
-           orange-600 of round 4, still clearly apart from pending's yellow. */
-        --status-confirmed-rgb: 191, 106, 40;  --status-confirmed-text: #9a5216;
+           could take the yellow. Correction round 6 (Patryk's exact RGB):
+           confirmed = soft tangerine rgb(245,156,88). NB it's light — the
+           timeline block keeps white text, borderline contrast; see the
+           coordinated-palette suggestion offered in round 6. */
+        --status-confirmed-rgb: 245, 156, 88;  --status-confirmed-text: #b45309;
         --status-pending-rgb: 250, 204, 21;    --status-pending-text: #92400e;
         --status-seated-rgb: 34, 197, 94;      --status-seated-text: #166534;
         --status-completed-rgb: 148, 163, 184; --status-completed-text: #64748b;
         --status-cancelled-rgb: 239, 68, 68;   --status-cancelled-text: #991b1b;
         /* Timeline block fills / status buttons — saturated, white text;
            theme-invariant (read on light + dark), defined once here. */
-        --block-confirmed: rgba(191, 106, 40, 0.92);
+        --block-confirmed: rgba(245, 156, 88, 0.95);
         --block-pending: rgba(212, 165, 10, 0.85);
         --block-seated: rgba(34, 160, 80, 0.85);
         --block-completed: rgba(140, 140, 150, 0.7);
@@ -131,6 +132,7 @@
            chairs blended into the canvas; strokes need real contrast per theme. */
         --fp-outline: rgba(70, 75, 90, 0.55);
         --fp-chair-outline: rgba(70, 75, 90, 0.4);
+        --fp-grid: rgba(70, 75, 90, 0.22);               /* floor-plan minor grid (round 6) */
         --cog-bg: rgba(120, 130, 150, 0.4);              /* settings cog button */
         --cog-border: rgba(255, 255, 255, 0.45);
         /* ── v14.2.4: ListView cards ── */
@@ -177,7 +179,7 @@
         /* Status chip text -> light variants for dark surfaces. Tint RGB and
            the block/table/button tokens are theme-invariant (inherited from
            :root); only the chip text needs to flip. */
-        --status-confirmed-text: #e0a56a;
+        --status-confirmed-text: #f9c08a;
         --status-pending-text: #fcd34d;
         --status-seated-text: #86efac;
         --status-completed-text: #cbd5e1;
@@ -212,6 +214,7 @@
         --tl-popup-scrim: rgba(0, 0, 0, 0.45);
         --fp-outline: rgba(200, 205, 220, 0.4);
         --fp-chair-outline: rgba(200, 205, 220, 0.3);
+        --fp-grid: rgba(200, 205, 220, 0.18);
         --cog-bg: rgba(255, 255, 255, 0.1);
         --cog-border: rgba(255, 255, 255, 0.14);
         /* ── v14.2.4: ListView cards (dark) ── */

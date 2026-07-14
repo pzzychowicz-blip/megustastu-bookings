@@ -136,16 +136,31 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
   const [dragPos, setDragPos] = useState(null);          // {type,id|index,x,y}
   const dragRef = useRef(null);                          // {type,id|index,dx,dy}
   const svgRef = useRef(null);
+  // v17.0.0 correction round 6: zoom/pan via the viewBox window. {k, x, y} =
+  // magnification + top-left origin (world cm). k=1,x=0,y=0 shows the whole room.
+  const [zoom, setZoom] = useState({ k: 1, x: 0, y: 0 });
+  const panRef = useRef(null);                           // {sx,sy,ox,oy,moved} while panning empty canvas
+  const vbW = fp.room.w / zoom.k, vbH = fp.room.h / zoom.k;
 
   function commitFp(next){ onSaveLayout({ ...layout, floorPlan: next }); }
 
-  // Client → floor-plan coordinates (viewBox scaling).
+  // Client → floor-plan coordinates (viewBox scaling + zoom window).
   function toFp(e){
     const svg = svgRef.current;
     if(!svg) return { x: 0, y: 0 };
     const r = svg.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (fp.room.w / r.width), y: (e.clientY - r.top) * (fp.room.h / r.height) };
+    return { x: zoom.x + (e.clientX - r.left) * (vbW / r.width), y: zoom.y + (e.clientY - r.top) * (vbH / r.height) };
   }
+  // Zoom keeping the current view centre fixed; clamp origin inside the room.
+  function zoomBy(factor){
+    setZoom(function(z){
+      const k = Math.max(1, Math.min(4, z.k * factor));
+      const zw = fp.room.w / z.k, zh = fp.room.h / z.k, cx = z.x + zw / 2, cy = z.y + zh / 2;
+      const nw = fp.room.w / k, nh = fp.room.h / k;
+      return { k: k, x: Math.max(0, Math.min(fp.room.w - nw, cx - nw / 2)), y: Math.max(0, Math.min(fp.room.h - nh, cy - nh / 2)) };
+    });
+  }
+  function resetZoom(){ setZoom({ k: 1, x: 0, y: 0 }); }
 
   function startDrag(e, type, key, cur, extra){
     if(mode !== "select") return;
@@ -157,6 +172,13 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
     try{ e.currentTarget.ownerSVGElement.setPointerCapture(e.pointerId); }catch(_e){}
   }
   function onMove(e){
+    if(panRef.current){
+      const svg = svgRef.current, r = svg.getBoundingClientRect();
+      if(Math.abs(e.clientX - panRef.current.sx) > 3 || Math.abs(e.clientY - panRef.current.sy) > 3) panRef.current.moved = true;
+      const dx = (e.clientX - panRef.current.sx) * (vbW / r.width), dy = (e.clientY - panRef.current.sy) * (vbH / r.height);
+      setZoom(function(z){ return { ...z, x: Math.max(0, Math.min(fp.room.w - vbW, panRef.current.ox - dx)), y: Math.max(0, Math.min(fp.room.h - vbH, panRef.current.oy - dy)) }; });
+      return;
+    }
     if(mode === "wall" && wallStart){ setHoverPt(toFp(e)); return; }
     const d = dragRef.current;
     if(!d) return;
@@ -164,6 +186,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
     setDragPos({ type: d.type, key: d.key, x: snap(p.x + d.dx), y: snap(p.y + d.dy) });
   }
   function onUp(){
+    if(panRef.current){ const moved = panRef.current.moved; panRef.current = null; if(!moved) setSel(null); return; }
     const d = dragRef.current;
     if(d && dragPos && dragPos.type === d.type && dragPos.key === d.key){
       if(d.type === "table"){
@@ -203,7 +226,9 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
       setMode("select");
       return;
     }
-    setSel(null); // select-mode click on empty canvas deselects
+    // select-mode empty-canvas press: pan when zoomed (deselect on a clean tap).
+    if(zoom.k > 1){ panRef.current = { sx: e.clientX, sy: e.clientY, ox: zoom.x, oy: zoom.y, moved: false }; return; }
+    setSel(null);
   }
 
   function entryOf(id){
@@ -338,6 +363,16 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         {modeBtn("select", "Select / move")}
         {modeBtn("wall", "+ Wall")}
         {modeBtn("door", "+ Door")}
+        {/* v17.0.0 correction round 6: zoom controls */}
+        <div style={{ display: "flex", gap: 4, marginLeft: 6, alignItems: "center" }}>
+          <button onClick={function(){ zoomBy(1 / 1.25); }} disabled={zoom.k <= 1} className={zoom.k <= 1 ? undefined : "mgt-hover-scale"}
+            style={mkBtn({ fontSize: 15, fontWeight: 700, minHeight: 32, width: 34, padding: 0, background: "var(--app-btn-grey)", opacity: zoom.k <= 1 ? 0.4 : 1 })}>−</button>
+          <span style={{ fontSize: 11, color: S.muted, minWidth: 30, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom.k * 100) + "%"}</span>
+          <button onClick={function(){ zoomBy(1.25); }} disabled={zoom.k >= 4} className={zoom.k >= 4 ? undefined : "mgt-hover-scale"}
+            style={mkBtn({ fontSize: 15, fontWeight: 700, minHeight: 32, width: 34, padding: 0, background: "var(--app-btn-grey)", opacity: zoom.k >= 4 ? 0.4 : 1 })}>+</button>
+          <button onClick={resetZoom} disabled={zoom.k === 1 && zoom.x === 0 && zoom.y === 0} className={zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? undefined : "mgt-hover-scale"}
+            style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 10px", background: "var(--app-btn-grey)", opacity: zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? 0.4 : 1 })}>Reset</button>
+        </div>
         <span style={{ fontSize: 12, color: S.muted, marginLeft: 6 }}>
           {mode === "wall" ? (wallStart ? "Tap the wall's END point." : "Tap the wall's START point.")
             : mode === "door" ? "Tap where the door sits."
@@ -345,15 +380,20 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         </span>
       </div>
       <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)" }}>
-        <svg ref={svgRef} viewBox={"0 0 " + fp.room.w + " " + fp.room.h} style={{ display: "block", width: "100%", touchAction: "none" }}
+        <svg ref={svgRef} viewBox={zoom.x + " " + zoom.y + " " + vbW + " " + vbH} style={{ display: "block", width: "100%", touchAction: "none", cursor: zoom.k > 1 && mode === "select" ? "grab" : "default" }}
           onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
-          {/* subtle grid */}
+          {/* grid: minor 50 cm + stronger major every 250 cm (v17.0.0 round 6 — more visible) */}
           <defs>
             <pattern id="fp-grid" width={50} height={50} patternUnits="userSpaceOnUse">
-              <path d={"M 50 0 L 0 0 0 50"} fill="none" stroke="var(--border-soft)" strokeWidth={0.5} />
+              <path d={"M 50 0 L 0 0 0 50"} fill="none" stroke="var(--fp-grid)" strokeWidth={1} />
+            </pattern>
+            <pattern id="fp-grid-major" width={250} height={250} patternUnits="userSpaceOnUse">
+              <path d={"M 250 0 L 0 0 0 250"} fill="none" stroke="var(--fp-outline)" strokeWidth={1.5} />
             </pattern>
           </defs>
+          <rect x={0} y={0} width={fp.room.w} height={fp.room.h} fill="var(--bg-card)" />
           <rect x={0} y={0} width={fp.room.w} height={fp.room.h} fill="url(#fp-grid)" />
+          <rect x={0} y={0} width={fp.room.w} height={fp.room.h} fill="url(#fp-grid-major)" />
           {fp.walls.map(function(wl0, i){
             const wl = wallOf(i);
             const selWall = sel && sel.type === "wall" && sel.key === i;

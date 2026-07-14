@@ -4197,3 +4197,30 @@ Two items, one commit. Files: `index.html`, `src/lib/booking-logic.js`.
    Verified live in List (chip on white) and Timeline (block) — distinct from pending's yellow.
 
 Build clean. Both verified live in DEV.
+
+**Corrections round 6 (same version, same branch, pre-merge — Patryk's sixth review, 2026-07-14).**
+Three items, one commit. Files: `index.html`, `src/components/PlanView.jsx`,
+`src/components/FloorPlanEditor.jsx`.
+
+1. **PlanView LMB popover — walk-in availability + centering + pinch damping.** (a) "Walk-in here"
+   now only shows when the table can actually seat one now: free at the slider AND
+   `(nextBusy − slider) ≥ getDur(2)`, where `nextBusy` = the earliest of {next confirmed/pending
+   start on the table > slider, next block start, close}. A table free now but booked in 10 min no
+   longer offers a dead-end walk-in. Verified live: Table 6 offers it at 15:15 (hours free) but not
+   at 23:45 (75 min to close < 90). (b) The button is wrapped in a flex/justify-center row (was
+   left-aligned). (c) Pinch zoom dampened to 50% sensitivity — `k = k0·(1 + (d/d0 − 1)·0.5)` —
+   the raw finger-distance ratio felt hair-trigger.
+2. **FloorPlanEditor — zoom controls + pan + clearer grid.** viewBox-window zoom state `{k,x,y}`
+   (k 1–4); a −/percentage/+/Reset control group in the toolbar; `toFp` maps through the zoom
+   window; empty-canvas drag PANS when zoomed (`panRef`, clamped to the room; a clean no-move tap
+   still deselects). Grid is now a minor 50 cm pattern (`--fp-grid`, new token both themes) plus a
+   stronger major 250 cm pattern (`--fp-outline`) over a `--bg-card` fill — far more visible than
+   the old 0.5-width `--border-soft` lines. Verified live: zoom 100→156%, viewBox panned
+   `162,126` → `266,230`, no crash; grid clearly readable in light mode.
+3. **Confirmed → soft tangerine rgb(245,156,88)** (Patryk's exact RGB). `--block-confirmed`
+   rgba(245,156,88,0.95); text `#b45309` light / `#f9c08a` dark. NB it is lighter/more pastel than
+   the other status colours (seated green 34,197,94 / cancelled red 239,68,68 sit at ~500-level),
+   so the timeline block's white text is borderline — a coordinated-palette suggestion was offered
+   alongside this commit for Patryk to weigh.
+
+Build clean. All verified live in DEV.
