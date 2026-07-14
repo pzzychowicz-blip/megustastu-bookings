@@ -48,6 +48,7 @@ const SHORTCUT_SECTIONS = [
   { title: "Navigation", rows: [
     { keys: ["T"],       label: "Timeline view" },
     { keys: ["L"],       label: "List view" },
+    { keys: ["P"],       label: "Plan (floor) view" },
     { keys: ["D"],       label: "Jump to today" },
     { keys: ["←", "→"],  label: "Previous / next day" },
     { keys: ["N"],       label: "New booking" },

@@ -45,6 +45,7 @@ import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 import { CogIcon } from "./Settings";
+import { QuickStatusPopup } from "./QuickStatusPopup";
 
 // v15.8.0: module-level status-change animation state (survives the inline Block
 // remount + any TimelineView remount during the save flow). Single timeline, so
@@ -787,80 +788,15 @@ export function TimelineView({
   );
 
   // ── Quick-status popup (long-press → choose new status) ──────────────────
+  // v17.0.0: the popup body moved VERBATIM to QuickStatusPopup.jsx so PlanView
+  // shares the same status-gating (pending → Confirmed/Cancel; late no-show).
   const quickPopup = quickStatus ? (
-    <div
-      onClick={() => setQuickStatus(null)}
-      className="mgt-scrim-in"
-      style={{
-        position: "fixed", inset: 0, zIndex: 300,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: "var(--tl-popup-scrim)"
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="mgt-card-in"
-        style={{
-          background: "var(--tl-popup-bg)", borderRadius: 20,
-          border: "1px solid " + S.border,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
-          padding: "20px 24px",
-          minWidth: 240, maxWidth: 320, zIndex: 301
-        }}
-      >
-        <div style={{ fontSize: 20, fontWeight: 700, color: S.text, marginBottom: 16 }}>
-          {quickStatus.booking.name}
-        </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {/* v17.0.0: a PENDING booking's only forward status is Confirmed
-              (+ Cancel stays reachable — the decline flow, Patryk-confirmed). */}
-          {(quickStatus.booking.status === "pending"
-            ? ["confirmed", "cancelled"]
-            : ["confirmed", "seated", "completed", "cancelled"])
-            .filter((st) => st !== quickStatus.booking.status)
-            .map((st) => (
-              <button
-                key={st}
-                className="mgt-hover-scale"
-                style={{
-                  background: BLOCK_BG[st], border: "none",
-                  borderRadius: 12, padding: "10px 18px",
-                  fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
-                  cursor: "pointer", textTransform: "capitalize",
-                  minHeight: 44, flex: "1 1 auto"
-                }}
-                onClick={() => {
-                  onStatus(quickStatus.booking.id, st);
-                  setQuickStatus(null);
-                }}
-              >
-                {st}
-              </button>
-            ))}
-          {/* v16.1.0: one-tap No show for a confirmed booking past the
-              no-show threshold (App's lateMap). Cancels + sets the noShow
-              flag via the existing doCancelBooking path. */}
-          {(quickStatus.booking.status === "confirmed" || quickStatus.booking.status === "pending") && late[quickStatus.booking.id] === "noshow" ? (
-            <button
-              className="mgt-hover-scale"
-              style={{
-                background: BTN.orange, border: "none",
-                borderRadius: 12, padding: "10px 18px",
-                fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
-                cursor: "pointer",
-                minHeight: 44, flex: "1 1 auto"
-              }}
-              onClick={() => {
-                onNoShow(quickStatus.booking.id);
-                setQuickStatus(null);
-              }}
-            >
-              No show
-            </button>
-          ) : null}
-        </div>
-      </div>
-    </div>
+    <QuickStatusPopup
+      booking={quickStatus.booking}
+      late={late}
+      onStatus={onStatus}
+      onNoShow={onNoShow}
+      onClose={() => setQuickStatus(null)} />
   ) : null;
 
   // ── Final assembly ───────────────────────────────────────────────────────

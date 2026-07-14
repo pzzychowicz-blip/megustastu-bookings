@@ -192,6 +192,7 @@ import { useRecurring } from "./hooks/useRecurring";
 import { WaitlistPanel } from "./components/WaitlistPanel";
 import { WaitAvailBanner } from "./components/WaitAvailBanner";
 import { SearchPanel } from "./components/SearchPanel";
+import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
 
 
@@ -1628,8 +1629,12 @@ function BookingApp(){
           if(k==="d"||k==="D"){e.preventDefault();K.setConfirmDel(sel.id);return;}
         }
       }
-      if(k==="t"||k==="T"){e.preventDefault();if(K.view!=="timeline"){K.bumpSlide("mgt-view-in-left");}K.setView("timeline");return;}
-      if(k==="l"||k==="L"){e.preventDefault();if(K.view!=="list"){K.bumpSlide("mgt-view-in-right");}K.setView("list");return;}
+      // v17.0.0: three views — slide direction follows the view order (T·L·P).
+      const VIEW_ORD=["timeline","list","plan"];
+      const goView=function(v){if(K.view!==v){K.bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(K.view)?"mgt-view-in-right":"mgt-view-in-left");}K.setView(v);};
+      if(k==="t"||k==="T"){e.preventDefault();goView("timeline");return;}
+      if(k==="l"||k==="L"){e.preventDefault();goView("list");return;}
+      if(k==="p"||k==="P"){e.preventDefault();goView("plan");return;}
       if(k==="d"||k==="D"){e.preventDefault();K.goToDate(new Date().toISOString().slice(0,10));return;}
       if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
@@ -1937,7 +1942,21 @@ function BookingApp(){
     onRemove={removeFromWaitlist}
     onClose={function(){setShowWaitlist(false);}} />:null}</ModalPresence>;
 
-  const mainView=view==="timeline"
+  // v17.0.0: the Plan (floor) view — reads settings/layout.floorPlan via the
+  // `layout` state; quick-status + edit + walk-in ride the existing handlers.
+  const planView=<PlanView
+    bookings={bookings}
+    date={viewDate}
+    layout={layout}
+    blocks={tableBlocks}
+    nowMins={nowMins}
+    late={lateMap}
+    freeing={freeingMap}
+    onEdit={openEdit}
+    onStatus={updateStatus}
+    onNoShow={function(id){doCancelBooking(id,true);}}
+    onWalkin={function(tableId){openWalkin(tableId);}} />;
+  const mainView=view==="plan"?planView:view==="timeline"
     ?<TimelineView
     bookings={bookings}
     date={viewDate}
@@ -1979,6 +1998,7 @@ function BookingApp(){
     onToggleFinished={toggleShowFinished}
     currency={generalSettings.currency}
     onOpenSearch={function(){setShowSearch(true);}} />;
+
 
 
   const summaryPanel=<Summary
@@ -2035,11 +2055,11 @@ function BookingApp(){
   return (
     <div
       style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list","plan"].map(function(v){return (
               <button
                 key={v}
                 className="mgt-hover-scale"
-                onClick={function(){if(v!==view){bumpSlide(v==="list"?"mgt-view-in-right":"mgt-view-in-left");}setView(v);}}
+                onClick={function(){if(v!==view){const ORD=["timeline","list","plan"];bumpSlide(ORD.indexOf(v)>ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");}setView(v);}}
                 style={mkBtn({background:view===v?S.accent:"var(--app-btn-grey)",textTransform:"capitalize",minHeight:40})}>{v}</button>
             );})}<button
               onClick={openWalkin}
