@@ -60,7 +60,7 @@ const __statusAnims = {};
 // module-level component the node persists, so `transition: left/width` eases a
 // reposition (seated-shift / reshuffle) and the wipe/fill overlays + long-press
 // work reliably. Former closures are now props.
-function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", onEdit, onManual, setQuickStatus }) {
+function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
   const d = liveBarDur(b, nowMins);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -110,6 +110,71 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   const didLong = useRef(false);
   const touchStartPos = useRef(null);
 
+  // ── v17.0.0 correction: drag & drop to another table row ──────────────────
+  // Mouse: vertical movement > 6px starts the drag (below it, click→edit wins).
+  // Touch: the 400ms long-press opens quick-status as before; KEEP HOLDING to
+  // ~800ms (unmoved) and the popup is dismissed — the block lifts and follows
+  // the finger. Dropping on a row calls onDropOnTable(bookingId, tableId); App
+  // decides move vs swap. Vertical offset lives in local state (translateY);
+  // the horizontal position (time) never changes.
+  const dragRef = useRef(null);            // {y0, pid, el, active}
+  const [dragDy, setDragDy] = useState(null);
+  const dragHoldTimer = useRef(null);      // touch: the 800ms drag-mode timer
+  const preventScrollRef = useRef(null);   // native non-passive touchmove blocker
+
+  function beginDrag(el, pid) {
+    dragRef.current = { ...(dragRef.current || {}), active: true };
+    didLong.current = true;                // suppress the click→edit on release
+    // Capturing on the block itself is safe (the PlanView gotcha was capturing
+    // on a PARENT, which redirects child clicks) — and needed so a fast mouse
+    // that leaves the block mid-drag keeps sending us moves.
+    try { el.setPointerCapture(pid); } catch (_e) { /* no-op */ }
+  }
+  function onDragPointerDown(e) {
+    if (!onDropOnTable || !tableAtY) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    dragRef.current = { y0: e.clientY, pid: e.pointerId, el: e.currentTarget, active: false };
+    if (e.pointerType !== "mouse") {
+      clearTimeout(dragHoldTimer.current);
+      dragHoldTimer.current = setTimeout(() => {
+        const d = dragRef.current;
+        if (!d || d.active) return;
+        setQuickStatus(null);              // the 400ms popup opened — drag wins
+        beginDrag(d.el, d.pid);
+        // React 17+ roots attach touchmove passively — a native non-passive
+        // listener is the only way to stop the page scrolling mid-drag.
+        const prevent = (ev) => { ev.preventDefault(); };
+        d.el.addEventListener("touchmove", prevent, { passive: false });
+        preventScrollRef.current = { el: d.el, fn: prevent };
+      }, 800);
+    }
+  }
+  function onDragPointerMove(e) {
+    const d = dragRef.current;
+    if (!d) return;
+    if (!d.active) {
+      if (e.pointerType === "mouse" && Math.abs(e.clientY - d.y0) > 6) beginDrag(e.currentTarget, d.pid);
+      else return;
+    }
+    setDragDy(e.clientY - d.y0);
+    if (setDragHover) setDragHover(tableAtY(e.clientY));
+  }
+  function endDrag(e, commit) {
+    clearTimeout(dragHoldTimer.current);
+    if (preventScrollRef.current) {
+      preventScrollRef.current.el.removeEventListener("touchmove", preventScrollRef.current.fn);
+      preventScrollRef.current = null;
+    }
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (d && d.active) {
+      const target = commit ? tableAtY(e.clientY) : null;
+      if (target && target !== homeTable) onDropOnTable(b.id, target);
+    }
+    setDragDy(null);
+    if (setDragHover) setDragHover(null);
+  }
+
   // v15.8.0: status-change overlay. `anim` ('wipe' Confirmed→Seated / 'fill'
   // Seated→Completed) is detected at the TimelineView level and passed in; the
   // overlay of the OLD colour animates away (keyframe on mount), revealing the new
@@ -144,6 +209,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     if (dx > 8 || dy > 8) {
       clearTimeout(pressTimer.current);
       pressTimer.current = null;
+      // moving before the 800ms drag-hold fires = a scroll, not a drag
+      if (!(dragRef.current && dragRef.current.active)) clearTimeout(dragHoldTimer.current);
     }
   }
   function onTouchEnd(e) {
@@ -171,20 +238,27 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
       onContextMenu={onCtx}
+      onPointerDown={onDragPointerDown}
+      onPointerMove={onDragPointerMove}
+      onPointerUp={(e) => endDrag(e, true)}
+      onPointerCancel={(e) => endDrag(e, false)}
       style={{
         position: "absolute", top: 3, height: ROW_H - 8 + "px",
         left, width: w,
         background: bgc, borderRadius: 10, overflow: "hidden",
         display: "flex", alignItems: "center", boxSizing: "border-box",
-        cursor: "pointer",
+        cursor: dragDy != null ? "grabbing" : "pointer",
         border: border || "1px solid rgba(255,255,255,0.2)",
         WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
-        boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
+        boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" : "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
+        // v17.0.0: while dragging, the inline transform/zIndex/opacity lift the
+        // block and follow the pointer (inline transform beats the hover class).
+        ...(dragDy != null ? { transform: "translateY(" + dragDy + "px)", zIndex: 30, opacity: 0.85 } : null),
         // v15.8.0: reposition eases (seated-shift / reshuffle). v15.8.1: `transform`
         // re-added so the .mgt-hover-scale lift eases again — the inline transition had
         // been overriding the class's `transform 120ms`, making the hover scale instant.
         // The seated ghost outline mirrors this exact transition so the two lift together.
-        transition: "left 320ms ease, width 320ms ease, transform 120ms ease"
+        transition: dragDy != null ? "none" : "left 320ms ease, width 320ms ease, transform 120ms ease"
       }}
     >
       {animOverlay}
@@ -258,6 +332,7 @@ export function TimelineView({
   autoOptimizer = true,
   setAutoOptimizer = () => {},
   currency = "€", // v17.0.0: settings/general deposit marker
+  onDropOnTable = null, // v17.0.0 correction: drag&drop move/swap handler (App)
   onReshuffle = () => {},
   onOpenSettings = () => {},
   onOpenSearch = () => {}
@@ -265,6 +340,8 @@ export function TimelineView({
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
   const [quickStatus, setQuickStatus] = useState(null);
+  // v17.0.0 correction: the table row a drag currently hovers (highlight).
+  const [dragHover, setDragHover] = useState(null);
   const isToday = date === new Date().toISOString().slice(0, 10);
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const gridW = Math.max(320, totalMins * zoom * 1.2);
@@ -543,6 +620,18 @@ export function TimelineView({
   // outlines (showing original duration for seated bookings — the dashed
   // border helps staff see how long the guest was originally booked for vs.
   // how long they've actually stayed), and the actual booking blocks.
+  // v17.0.0 correction: map a pointer's clientY to the table row under it —
+  // rows are exactly ROW_H tall inside the grid body (flipRef.current), after
+  // the 24px header strip. Returns null outside the table rows (header /
+  // unassigned row / off-grid) so a drop there is a no-op snap-back.
+  function tableForClientY(clientY) {
+    const el = flipRef.current;
+    if (!el) return null;
+    const top = el.getBoundingClientRect().top + 24;
+    const idx = Math.floor((clientY - top) / ROW_H);
+    return idx >= 0 && idx < TIMELINE_TABLES.length ? TIMELINE_TABLES[idx].id : null;
+  }
+
   const gridRows = TIMELINE_TABLES.map((tbl) => {
     const id = tbl.id;
     const rows = day.filter((b) => (b.tables || []).includes(id));
@@ -553,7 +642,9 @@ export function TimelineView({
         style={{
           height: ROW_H + "px", position: "relative",
           borderBottom: "2px solid var(--tl-row-border)",
-          boxSizing: "border-box"
+          boxSizing: "border-box",
+          // drag&drop target highlight (subtle accent tint while hovered)
+          background: dragHover === id ? "var(--bg-ac-hover)" : undefined
         }}
       >
         <GridLines />
@@ -591,7 +682,7 @@ export function TimelineView({
           return (
             <Fragment key={b.id}>
               {ghost}
-              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
+              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
             </Fragment>
           );
         })}
@@ -607,7 +698,7 @@ export function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
     </div>
   ) : null;
 

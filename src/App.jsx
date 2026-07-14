@@ -24,14 +24,14 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES
 } from "./lib/constants";
 
 import {
   getDur, toMins, genId,
   histEntry, diffBooking,
   isLocked, isActive, statusOrder,
-  getBlockSlots, canAssign,
+  getBlockSlots, canAssign, getBusy, overlaps,
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
@@ -475,6 +475,9 @@ function BookingApp(){
   // v15.6.1: transient banner shown when the post-sync reconciliation resolves
   // a same-table overlap that arrived via an offline multi-device merge.
   const [syncFix, setSyncFix] = useState(false);
+  // v17.0.0 correction: drag&drop feedback toast — {text, good} or null.
+  const [dragMsg, setDragMsg] = useState(null);
+  const dragMsgTimer = useRef(null);
   const [manualTarget, setManualTarget] = useState(null);
   const [dismissedIneff, setDismissedIneff] = useState(null);
   const formRef=useRef(EMPTY_FORM);
@@ -1371,6 +1374,54 @@ function BookingApp(){
     setError("");
     if(ok) flash();
   }
+  // ── v17.0.0 correction: Timeline drag & drop (move / swap tables) ─────────
+  // Drop a dragged block on another table row: a FREE row = move the booking
+  // onto that single table (capacity-guarded); a row with ONE overlapping
+  // booking = swap the two bookings' FULL table sets (Patryk-confirmed, the
+  // Swap-busy semantics). Both written bookings become _manual+_locked so the
+  // optimizer never undoes a hand-placed drag. Refusals surface via the
+  // dragMsg floating toast; success reuses flash() (gated on `ok`, v15.4.0).
+  function flashDragMsg(text,good){setDragMsg({text:text,good:!!good});clearTimeout(dragMsgTimer.current);dragMsgTimer.current=setTimeout(function(){setDragMsg(null);},3500);}
+  function dropOnTable(id,targetId){
+    const src=liveBookings.find(function(b){return b.id===id;});
+    if(!src||src.date!==viewDate||!isActive(src)) return;
+    const cur=src.tables||[];
+    if(cur.length===1&&cur[0]===targetId) return; // dropped back on its own row
+    const size=src.size||2;
+    const cap=(ALL_TABLES.find(function(t){return t.id===targetId;})||{}).capacity||0;
+    const s=toMins(src.time);
+    const e=Math.max(occupancyEnd(src,nowMins),s+1);
+    const blockSlots=getBlockSlots(tableBlocks,src.date);
+    if(getBusy(blockSlots,s,e).has(targetId)){flashDragMsg("Table "+targetId+" is blocked then.");return;}
+    // Overlapping occupants on the target row (completed = free, the v16.0.0 rule).
+    const occ=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&isActive(b)&&b.status!=="completed"&&(b.tables||[]).includes(targetId)&&overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins));});
+    const user=getUser();
+    if(occ.length===0){
+      // free row → move onto the single target table
+      if(cap<size){flashDragMsg("Table "+targetId+" seats "+cap+" — party of "+size+".");return;}
+      const ok=saveBookings(function(prev){return prev.map(function(b){
+        if(b.id!==id) return b;
+        return Object.assign({},b,{tables:[targetId],_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+targetId+" (drag)",user)])});
+      });});
+      if(ok) flashDragMsg(src.name+" moved to table "+targetId+".",true);
+      return;
+    }
+    const ids={};occ.forEach(function(b){ids[b.id]=true;});
+    if(Object.keys(ids).length>1){flashDragMsg("Several bookings sit on "+targetId+" then — use Manual assign.");return;}
+    const other=occ[0];
+    if(cur.length===0){flashDragMsg("Table "+targetId+" is occupied then — drop on a free row, or assign tables first.");return;}
+    // swap full table sets; validate BOTH against everyone else + blocks
+    const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
+    const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins),os+1);
+    const slots=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&b.id!==other.id&&isActive(b)&&b.status!=="completed"&&(b.tables||[]).length;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins)};}).concat(blockSlots);
+    if(!canAssign(newSrc,slots,s,e)||!canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){flashDragMsg("That swap clashes with another booking — use Manual assign.");return;}
+    const ok=saveBookings(function(prev){return prev.map(function(b){
+      if(b.id===id) return Object.assign({},b,{tables:newSrc,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+other.name+" ("+(cur.join("+")||"none")+" → "+newSrc.join("+")+")",user)])});
+      if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
+      return b;
+    });});
+    if(ok) flashDragMsg(src.name+" ⇄ "+other.name+" — tables swapped.",true);
+  }
   function delBooking(id){const target=bookings.find(function(x){return x.id===id;});
     // v16.3.0: deleting a recurring OCCURRENCE parks its date on the rule's
     // skipDates so the generator never resurrects it. Done BEFORE the booking
@@ -1847,6 +1898,10 @@ function BookingApp(){
         onClick={function(e){e.stopPropagation();undoCancel();}}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({fontSize:12,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button></div>},
+    {key:"dragmsg",on:!!dragMsg,node:<div
+      style={dragMsg&&dragMsg.good
+        ?{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}
+        :{background:"var(--warn-bg)",border:"2px solid var(--warn-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--warn-text)",boxShadow:toastShadow}}>{dragMsg?dragMsg.text:""}</div>},
     {key:"reshuffled",on:reshuffled,node:<div
       style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>},
     {key:"load",on:loadBannerShown,node:<div
@@ -1963,6 +2018,7 @@ function BookingApp(){
     onEdit={openEdit}
     onManual={function(id){setManualTarget(id);}}
     onStatus={updateStatus}
+    onDropOnTable={dropOnTable}
     blocks={tableBlocks}
     onBlock={function(id){setBlockTarget(id);}}
     nowMins={nowMins}
