@@ -3999,3 +3999,63 @@ fields bled through); now a new near-opaque `--bg-ac-menu` token (light/dark 0.9
 `.mgt-ac-row` class → `:hover` background `--bg-ac-hover` (accent tint, both themes, behind the
 hover-capability media guard) so the cursor's target row is visible. New tokens + one CSS rule in
 `index.html`; both dropdowns in `BookingFormModal.jsx`. Verified live in light + dark.
+
+---
+
+## v17.0.0 — Pending status · Anonymized delete · Plan (floor) view · Configurability pass (2026-07-13/14)
+
+**Scope:** four features, one branch (`feat/v17.0.0-pending-plan-configurability`), one commit per
+phase (the v16.0.0 workflow). Major bump: a 5th booking status, a 3rd main view, a 6th settings node,
+a new Security-Rules pair. Files: `App.jsx`, `booking-logic.js`, `constants.js`, `customers.js`,
+`index.html`, `database.rules.json`, `useLayout.js`, `useWalkin.js`, new `useGeneralSettings.js`,
+new `PlanView.jsx` / `FloorPlanEditor.jsx` / `QuickStatusPopup.jsx`, plus ~10 touched components.
+Build: gz ≈210.5 kB (from ≈203.9 at v16.4.0). All phases verified live in DEV.
+
+**Phase 1 — PENDING status.** Full-booking semantics (occupies its table, optimizer places it,
+counts as upcoming, flags running-late — Patryk-confirmed "same as confirmed"). Forward status is
+>Confirmed ONLY; Cancel stays reachable (the decline flow). Colors: confirmed recolored to accent
+blue, pending takes the yellow (they clashed — confirmed WAS amber/yellow); new
+`--status-pending-*`/`--block-pending` tokens. Form: "Save pending" (new bookings, left footer) +
+"Save&confirm" (editing a persisted-pending booking; slides out RIGHT via new `mgt-slide-*-r`
+keyframes when the draft status leaves pending). `statusOverrideRef` carries the intent through the
+kitchen-confirm round-trip; doSave applies it to a CLONE of the form so diff/history/flash see it
+uniformly. Timeline RMB + List buttons + keyboard S/C gated; chips/no-show include pending;
+statusOrder gains pending; DaySheet prints "(pending)".
+
+**Phase 2 — Anonymized customer delete.** `deleteCustomer` MAPS instead of filtering: bookings stay
+for statistics as name "Data removed" (phone/notes/history wiped, noShow KEPT, `anonymized:true`
+whitelisted in sanitize); waitlist entries still deleted. `searchBookings`/`searchGuestsByName` skip
+anonymized (phone-keyed paths already exclude them). Side benefit: the whole-DB empty-array-guard
+edge case is gone (a map never changes the count).
+
+**Phase 3 — settings/general (6th settings node).** `useGeneralSettings.js` (useBookingDefaults
+pattern; revGuard CAS `generalRev` — **the rules pair is Patryk's console step, DEV then PROD,
+app-first**). Knobs + consumers: restaurantName (header + day sheet), currency (deposit surfaces),
+phonePrefix (phone-field seeds + `cleanPhoneOf` treats a bare untouched prefix as "no phone"),
+regularMin (form chip + Customers filter), lateCollapseMax (LateBanner), waitMatchWin (waitlist ±
+window), undoSecs (undo toast). Settings → General gains "Restaurant" (blur-commit text fields) +
+"Preferences" (4 steppers) collapsibles.
+
+**Phase 4 — floorPlan config + editor.** `settings/layout.floorPlan` — `{v, room:{w,h},
+tables:{id:{x,y,shape:round|square|rect,w,h,rot,chairs:{top,right,bottom,left}}}, walls[], doors[]}`;
+sanitizeFloorPlan keeps stored entries, auto-places missing tables (deterministic zone-grouped grid),
+drops removed ids; rides the existing layoutRev CAS; **NOT in layoutSignature** (plan edits never
+kill IS_MGT_LAYOUT); rename remaps floorPlan keys. `FloorPlanEditor.jsx` (Settings → Layout →
+"Floor plan"): snap-10 SVG canvas — drag tables/doors (write on pointer-up), two-tap walls, one-tap
+doors, per-selection inspector (shape/size/rotation/per-side chairs + capacity-mismatch warning),
+room steppers. Exports the chair geometry + TableGlyph/DoorGlyph (multi-export exception) for PlanView.
+
+**Phase 5 — Plan view.** `PlanView.jsx`, the 3rd view (button between List and Walk-in; slide
+direction follows the T·L·P order; global `P` key). Time slider (15-min steps; now on today —
+follows the clock until touched — opening time otherwise) drives occupancy fills: seated green ·
+confirmed blue · pending yellow · free neutral · blocked grey-dashed; completed never occupies;
+seated occupies until at least now. Tap → day-queue popover (row → openEdit; free table today →
+"Walk-in here", `openWalkin(tableId)` pre-select — string-guarded, the header button passes the
+click event). RMB/450ms hold → the shared `QuickStatusPopup.jsx` (extracted VERBATIM from
+TimelineView) targeting current-else-next. Wheel/pinch zoom + drag pan + double-tap reset;
+freeing-soon "~Nm" pill at now. **Live-QA fix:** `setPointerCapture` on the canvas pointer-down
+redirected the subsequent `click` to the svg and silently killed the table-tap popover — removed
+(gotcha recorded in CLAUDE.md).
+
+**Deploy:** app-first rolling-safe EXCEPT the `general`/`generalRev` rules pair (Patryk's manual
+console step per `database.rules.README.md` — old rules ignore the new node until then).
