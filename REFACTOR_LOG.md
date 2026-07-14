@@ -4174,3 +4174,26 @@ Three items, one commit. Files: `index.html`, `src/App.jsx`, `src/lib/booking-lo
    `--block-confirmed` rgba(234,88,12,0.88); text `#c2410c` light / `#fdba74` dark.
 
 Build clean. Verified live in DEV.
+
+**Corrections round 5 (same version, same branch, pre-merge — Patryk's fifth review, 2026-07-14).**
+Two items, one commit. Files: `index.html`, `src/lib/booking-logic.js`.
+
+1. **Drag combo ranking — minimal footprint + honor the coded preference rules.** Round 4's
+   "pure optimizer order" produced `1A+1B+7+3+4` (cap 14, FIVE tables) for an 8-top dropped on 7 —
+   too many tables, and it ignored the layout's i4/i1-over-i2/i3 attach preference. `dropOnTable`'s
+   `rankCombosContaining` (booking-logic.js) is now sorted for a MANUAL drop, not a global
+   optimize: **(1) fewest tables** (the "not more tables than necessary" fix), **(2) the coded
+   `PRIORITIES.comboRules` preference — matched BAND-AGNOSTICALLY (key only, party size ignored)**
+   so a drop honors the i4(w10) > i1(w9) > i2/i3(w7) attach ordering even for a party of 8 (the
+   rule's optimizer band is 9–12; a manual drop consults the preference regardless), **(3) least
+   capacity**, then id for determinism. The optimizer's zone/location tiebreak is dropped — the
+   human already chose the location by dropping. Settings → Layout → Table priorities edits flow
+   through live (reads `PRIORITIES`). New private `_comboPriKey` = `_comboPri` without the size gate;
+   the optimizer's own `_comboPri` (size-gated) is untouched. Verified against the real modules and
+   live: 8-on-7 → `1A+1B+7+i4` (cap 11, 4 tables), fallback order i4→i1→i2→i3; 8-on-2 → `2+3+4`
+   (cap 8, 3 tables); a member-of-a-perfect-combo drop reproduces the optimizer's natural choice.
+2. **Confirmed → muted terracotta rgb(191,106,40)** (Patryk's exact RGB; round 4's orange-600 read
+   too hot). `--block-confirmed` rgba(191,106,40,0.92); text `#9a5216` light / `#e0a56a` dark.
+   Verified live in List (chip on white) and Timeline (block) — distinct from pending's yellow.
+
+Build clean. Both verified live in DEV.

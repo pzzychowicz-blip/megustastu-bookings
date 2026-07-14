@@ -185,14 +185,35 @@ function _comboLoc(c){if(isAllOut(c.ids)) return 0;if(isAllIn(c.ids)) return 1;r
 // resort), else -weight (more negative sorts earlier). No match → 0.
 function _comboPri(c,size){var k=c.ids.slice().sort().join("|");var rules=PRIORITIES.comboRules;for(var i=0;i<rules.length;i++){var r=rules[i];if(r.key===k&&size>=r.min&&size<=r.max) return r.avoid?100:-r.weight;}return 0;}
 
-// v17.0.0 correction round 4: the drag&drop candidate ranking. Every combo
-// containing `tableId` that seats `size`, sorted in EXACTLY findBest's combo
-// order (pure optimizer order, Patryk-confirmed) — _comboPri → location →
-// indoor anchors → capacity → length. Availability filtering (blocked/seated
-// members) is the caller's job; this is pure ranking.
+// v17.0.0 correction rounds 4–5: the drag&drop candidate ranking. Every combo
+// containing `tableId` that seats `size`, ranked for a MANUAL drop — NOT the
+// optimizer's global order (round 4 used that and produced a bloated combo).
+// The user pointed at a table, so:
+//   1. FEWEST tables first — "don't assign more tables than necessary" (the
+//      reported bug: an 8-top on 7 took a 5-table combo);
+//   2. then the coded PREFERENCE rules (PRIORITIES.comboRules — editable in
+//      Settings → Layout → Table priorities), so within one footprint the
+//      preferred attach wins (e.g. 1A+1B+7+i4/i1 over +i2/+i3). The rule match
+//      is BAND-AGNOSTIC here (key only, size ignored) — a drop honors the
+//      preference regardless of the rule's optimizer size-band, per Patryk;
+//   3. then least capacity (fewest wasted seats), then id for determinism.
+// The zone/location tiebreak is deliberately dropped: the human already chose
+// the location by dropping. Availability filtering (blocked/seated members)
+// stays the caller's job. Respecting Settings edits falls out for free — the
+// weights/avoid flags come live from PRIORITIES.
+function _comboPriKey(c){
+  var k=c.ids.slice().sort().join("|");var rules=PRIORITIES.comboRules;
+  for(var i=0;i<rules.length;i++){if(rules[i].key===k) return rules[i].avoid?100:-rules[i].weight;}
+  return 0;
+}
 export function rankCombosContaining(tableId,size){
   return VALID_COMBOS.filter(function(c){return c.ids.includes(tableId)&&c.cap>=size;})
-    .sort(function(a,b){var pa=_comboPri(a,size),pb=_comboPri(b,size);if(pa!==pb) return pa-pb;var la=_comboLoc(a),lb=_comboLoc(b);if(la!==lb) return la-lb;if(la===2){var ia=_indoorPri(a),ib=_indoorPri(b);if(ia!==ib) return ib-ia;}return a.cap-b.cap||a.ids.length-b.ids.length;});
+    .sort(function(a,b){
+      if(a.ids.length!==b.ids.length) return a.ids.length-b.ids.length;
+      var pa=_comboPriKey(a),pb=_comboPriKey(b);if(pa!==pb) return pa-pb;
+      if(a.cap!==b.cap) return a.cap-b.cap;
+      return a.ids.join("|")<b.ids.join("|")?-1:1;
+    });
 }
 
 // ── Best-table finders ────────────────────────────────────────────────────────

@@ -35,17 +35,17 @@
         /* Status chips — bg + border share a hue (RGB triplet, composed in
            constants.js as rgba(var(--…-rgb), a)); text is a solid token. */
         /* v17.0.0: confirmed left the amber family so the new PENDING status
-           could take the yellow. Correction round 4 (Patryk's pick from the
-           orange-palette proposals): confirmed = BURNT ORANGE (orange-600) —
-           deep enough to sit clearly apart from pending's yellow. */
-        --status-confirmed-rgb: 234, 88, 12;   --status-confirmed-text: #c2410c;
+           could take the yellow. Correction round 5 (Patryk's exact RGB):
+           confirmed = muted terracotta rgb(191,106,40) — softer than the
+           orange-600 of round 4, still clearly apart from pending's yellow. */
+        --status-confirmed-rgb: 191, 106, 40;  --status-confirmed-text: #9a5216;
         --status-pending-rgb: 250, 204, 21;    --status-pending-text: #92400e;
         --status-seated-rgb: 34, 197, 94;      --status-seated-text: #166534;
         --status-completed-rgb: 148, 163, 184; --status-completed-text: #64748b;
         --status-cancelled-rgb: 239, 68, 68;   --status-cancelled-text: #991b1b;
         /* Timeline block fills / status buttons — saturated, white text;
            theme-invariant (read on light + dark), defined once here. */
-        --block-confirmed: rgba(234, 88, 12, 0.88);
+        --block-confirmed: rgba(191, 106, 40, 0.92);
         --block-pending: rgba(212, 165, 10, 0.85);
         --block-seated: rgba(34, 160, 80, 0.85);
         --block-completed: rgba(140, 140, 150, 0.7);
@@ -177,7 +177,7 @@
         /* Status chip text -> light variants for dark surfaces. Tint RGB and
            the block/table/button tokens are theme-invariant (inherited from
            :root); only the chip text needs to flip. */
-        --status-confirmed-text: #fdba74;
+        --status-confirmed-text: #e0a56a;
         --status-pending-text: #fcd34d;
         --status-seated-text: #86efac;
         --status-completed-text: #cbd5e1;
