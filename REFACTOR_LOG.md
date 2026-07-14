@@ -4059,3 +4059,39 @@ redirected the subsequent `click` to the svg and silently killed the table-tap p
 
 **Deploy:** app-first rolling-safe EXCEPT the `general`/`generalRev` rules pair (Patryk's manual
 console step per `database.rules.README.md` — old rules ignore the new node until then).
+
+**Corrections round (same version, same branch, pre-merge — Patryk's live review, 2026-07-14).**
+7 items (one skipped after code inspection — the waitlist button's orange never changed), 3 commits:
+
+*Commit A — colors & small UI.* (1) **Confirmed recolored accent-blue → navy/indigo** (chips
+`67,56,202` / text `#3730a3` light · `#a5b4fc` dark; blocks `rgba(55,48,163,.88)`) — the v17 accent
+blue made too many blue surfaces, List especially; while in there, fixed the **stale dark-theme
+`--status-confirmed-text` (still pre-v17 amber)** and added the missing dark `--status-pending-text`.
+(2) New `--fp-outline`/`--fp-chair-outline` tokens (both themes) — floor-plan tables/chairs blended
+into the light-mode canvas (TableGlyph strokes + PlanView FREE_STROKE). (3) ConnectionStatus popover
+bg `--bg-sheet` → `--bg-ac-menu` (near-opaque, the autocomplete-dropdown opacity). (4) PlanView
+blocked table = the Timeline BlockBar identity — red 45° stripe SVG pattern (`--tl-blocked-a/b`)
+instead of grey-dashed. (5) App container `maxWidth` 1000 → **1600** (wasted desktop side margins).
+
+*Commit B — floor-plan editor.* Walls fully editable: drag the body to move, drag the endpoint
+handles (rendered when selected) to reshape — new `wallA`/`wallB`/`wallBody` types on the existing
+startDrag/dragPos machinery; inspector shows live length. Doors switch opening side: `flip` boolean
+(sanitizeFloorPlan whitelists it) mirrors arc+hinge via `scale(-1,1)` in DoorGlyph (PlanView
+inherits); "Opens: left/right" inspector toggle. **Units declared centimeters** (" cm" on every
+size stepper + a grid-50cm/snap-10cm caption).
+
+*Commit C — Timeline drag & drop table swap.* Drag a booking block vertically to another table row.
+Gesture: mouse = 6px vertical threshold (below it click→edit wins); touch = the 400ms long-press
+opens quick-status as before, KEEP HOLDING to ~800ms → popup dismissed, block lifts (translateY
+follows the pointer, target row highlights via `--bg-ac-hover`); a native NON-passive `touchmove`
+listener blocks page scroll mid-drag (React 17+ roots attach touchmove passively — `preventDefault`
+in the React handler is a no-op). Drop → App's `dropOnTable(id, targetId)`: free row = **move** onto
+that single table (capacity-guarded, multi-table bookings collapse onto it); ONE overlapping
+booking = **swap full table sets** (both `_manual:true,_locked:true` + history entries,
+`canAssign`-validated against everyone else + tableBlocks — invalid swaps refuse and write
+nothing); blocked target / several distinct occupants / unassigned-onto-occupied all refuse.
+Feedback via a new `dragMsg` floating toast (warn-styled refusals, suggest-styled successes) in the
+one-at-a-time statusToasts slot; success gated on the saveBookings `ok` boolean (v15.4.0 rule).
+Completed = free everywhere (the v16.0.0 availability rule) — a drop onto a row with only a
+completed booking is a plain move. Capturing the pointer on the block ITSELF is safe (the PlanView
+gotcha was capturing on a parent).
