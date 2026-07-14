@@ -31,7 +31,7 @@ import {
   getDur, toMins, genId,
   histEntry, diffBooking,
   isLocked, isActive, statusOrder,
-  getBlockSlots, canAssign, getBusy, overlaps,
+  getBlockSlots, canAssign, getBusy, overlaps, comboCapBest,
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
@@ -233,6 +233,19 @@ function readThemePref(){
     if(v==="light") return false;
   }catch(e){}
   return undefined;
+}
+
+// v17.0.0 correction: per-device max app width (px). localStorage like the
+// theme — screen size is a device property, not restaurant config. The 1.08
+// hover-scale lift overflowed the viewport at 1600 on smaller monitors, so
+// the width is now a Settings→General stepper (900–2400, step 100).
+const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400, APP_WIDTH_DEFAULT=1600;
+function readAppWidth(){
+  try{
+    const v=parseInt(localStorage.getItem("mgt-appwidth"),10);
+    if(Number.isFinite(v)&&v>=APP_WIDTH_MIN&&v<=APP_WIDTH_MAX) return v;
+  }catch(e){}
+  return APP_WIDTH_DEFAULT;
 }
 
 // ── Console boot banner ──────────────────────────────────────────────────────
@@ -622,6 +635,13 @@ function BookingApp(){
     const next=!isDark;
     try{localStorage.setItem("mgt-theme",next?"dark":"light");}catch(e){}
     setThemePref(next);
+  }
+  // v17.0.0 correction: per-device app width (see readAppWidth above).
+  const [appWidth,setAppWidth]=useState(readAppWidth);
+  function onSetAppWidth(next){
+    const v=Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,next));
+    try{localStorage.setItem("mgt-appwidth",String(v));}catch(e){}
+    setAppWidth(v);
   }
   // v14 deployment fix: history entries must attribute to the logged-in user
   // (their email), not the generic "staff" stub used in standalone preview.
@@ -1412,6 +1432,11 @@ function BookingApp(){
     if(cur.length===0){flashDragMsg("Table "+targetId+" is occupied then — drop on a free row, or assign tables first.");return;}
     // swap full table sets; validate BOTH against everyone else + blocks
     const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
+    // v17.0.0 correction: the Manual-assign capacity rule (comboCapBest ≥ size)
+    // applies to BOTH sides of a swap — an 8-top must never land on a 2-seater.
+    if(comboCapBest(newSrc)<size){flashDragMsg("That swap would seat "+size+" at "+newSrc.join("+")+" (seats "+comboCapBest(newSrc)+").");return;}
+    const otherSize=other.size||2;
+    if(comboCapBest(newOther)<otherSize){flashDragMsg("That swap would seat "+other.name+"'s "+otherSize+" at "+newOther.join("+")+" (seats "+comboCapBest(newOther)+").");return;}
     const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins),os+1);
     const slots=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&b.id!==other.id&&isActive(b)&&b.status!=="completed"&&(b.tables||[]).length;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins)};}).concat(blockSlots);
     if(!canAssign(newSrc,slots,s,e)||!canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){flashDragMsg("That swap clashes with another booking — use Manual assign.");return;}
@@ -2110,7 +2135,7 @@ function BookingApp(){
 
   return (
     <div
-      style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1600,margin:"0 auto"}}>{/* v17.0.0 correction: 1000 wasted big side margins on desktop */}<div
+      style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:appWidth,margin:"0 auto"}}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list","plan"].map(function(v){return (
               <button
                 key={v}
@@ -2211,6 +2236,8 @@ function BookingApp(){
             appVersion={__APP_SIGNATURE__.version}
             isDark={isDark}
             onToggleDark={onToggleDark}
+            appWidth={appWidth}
+            onSetAppWidth={onSetAppWidth}
             weekHours={weekHours}
             onSaveDayHours={saveDayHours}
             onSaveAllDays={saveAllDays}

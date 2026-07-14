@@ -18,11 +18,16 @@
 //   onNoShow(id)   — App's doCancelBooking(id, true)
 //   onClose()      — clear the parent's popup state
 
+import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BTN } from "../lib/constants";
 
 export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClose }) {
   if (!booking) return null;
-  return (
+  // v17.0.0 correction: portalled to <body>. The popup mounts inside SlideView,
+  // whose transform (while a view-slide runs/settles) turns this position:fixed
+  // scrim into a CONTAINING-BLOCK-relative box — on a wide timeline it centered
+  // on the scroller, not the screen. A body portal always centers on the viewport.
+  return createPortal(
     <div
       onClick={onClose}
       className="mgt-scrim-in"
@@ -90,6 +95,7 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
           ) : null}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

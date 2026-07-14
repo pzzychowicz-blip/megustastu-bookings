@@ -4095,3 +4095,34 @@ one-at-a-time statusToasts slot; success gated on the saveBookings `ok` boolean 
 Completed = free everywhere (the v16.0.0 availability rule) — a drop onto a row with only a
 completed booking is a plain move. Capturing the pointer on the block ITSELF is safe (the PlanView
 gotcha was capturing on a parent).
+
+**Corrections round 2 (same version, same branch, pre-merge — Patryk's second review, 2026-07-14).**
+Four items, one commit. Files: `index.html`, `src/App.jsx`, `src/components/QuickStatusPopup.jsx`,
+`src/components/Settings.jsx`.
+
+1. **Adjustable app width** — the fixed `maxWidth:1600` (round 1's item 8) overflowed screens
+   narrower than 1600 once a `.mgt-hover-scale` lift ran at the edge. Now per-device:
+   `localStorage["mgt-appwidth"]` (900–2400, step 100, default 1600 — the theme pattern, NOT a
+   Firebase settings node; screen size is a device property), read by `readAppWidth()` next to
+   `readThemePref()`, applied as the container's `maxWidth`, edited via a new "App width"
+   MiniStepper row under Dark mode in Settings → General (`appWidth`/`onSetAppWidth` threaded
+   App → SettingsContent → GeneralTabContent).
+2. **Quick-status popup centered on screen** — `QuickStatusPopup` now renders through
+   `createPortal(..., document.body)`. Its `position:fixed` scrim mounted under SlideView, whose
+   transform (while a view-slide runs/settles) makes fixed positioning CONTAINING-BLOCK-relative —
+   on a wide timeline the popup centered on the scroller, not the viewport. Gotcha recorded in
+   CLAUDE.md: any fixed overlay under SlideView needs a body portal.
+3. **Drag&drop swap capacity rule** — the swap branch of `dropOnTable` validated only conflicts
+   (`canAssign`), never capacity, so an 8-top could swap onto a 2-seater. Now both sides must pass
+   the Manual-assign rule `comboCapBest(newSet) ≥ size` before the conflict check; refusals name
+   the shortfall ("That swap would seat 8 at 5A (seats 2)."). Verified live: Adam (8, on 2+3+4)
+   dropped on 5A refuses with that exact toast; a legal Henry ⇄ Franek swap still commits and
+   persists (checked post-reload).
+4. **Confirmed/pending recolor (Patryk's exact RGBA picks)** — round 1's navy read too heavy:
+   `--status-confirmed-rgb: 255,160,45` (orange; text `#c2410c` light / `#ffb257` dark),
+   `--status-pending-rgb: 250,226,20`, `--block-confirmed: rgba(255,160,45,0.92)`.
+   `--block-pending` keeps its darkened gold (white block text needs the darker fill).
+
+All verified live in DEV (popup screenshot-centered at the viewport midpoint; width stepper
+1600→1500 applied + persisted to localStorage; swap refusal + legal swap both exercised via
+dispatched PointerEvents). Build clean.
