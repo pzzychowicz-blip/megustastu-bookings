@@ -185,6 +185,16 @@ function _comboLoc(c){if(isAllOut(c.ids)) return 0;if(isAllIn(c.ids)) return 1;r
 // resort), else -weight (more negative sorts earlier). No match → 0.
 function _comboPri(c,size){var k=c.ids.slice().sort().join("|");var rules=PRIORITIES.comboRules;for(var i=0;i<rules.length;i++){var r=rules[i];if(r.key===k&&size>=r.min&&size<=r.max) return r.avoid?100:-r.weight;}return 0;}
 
+// v17.0.0 correction round 4: the drag&drop candidate ranking. Every combo
+// containing `tableId` that seats `size`, sorted in EXACTLY findBest's combo
+// order (pure optimizer order, Patryk-confirmed) — _comboPri → location →
+// indoor anchors → capacity → length. Availability filtering (blocked/seated
+// members) is the caller's job; this is pure ranking.
+export function rankCombosContaining(tableId,size){
+  return VALID_COMBOS.filter(function(c){return c.ids.includes(tableId)&&c.cap>=size;})
+    .sort(function(a,b){var pa=_comboPri(a,size),pb=_comboPri(b,size);if(pa!==pb) return pa-pb;var la=_comboLoc(a),lb=_comboLoc(b);if(la!==lb) return la-lb;if(la===2){var ia=_indoorPri(a),ib=_indoorPri(b);if(ia!==ib) return ib-ia;}return a.cap-b.cap||a.ids.length-b.ids.length;});
+}
+
 // ── Best-table finders ────────────────────────────────────────────────────────
 export function findBest(size,pref,s,e,slots){
   var sg=ALL_TABLES.filter(function(t){return t.capacity>=size&&comboOk([t.id],pref)&&canAssign([t.id],slots,s,e);});

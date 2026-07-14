@@ -30,6 +30,7 @@
 // Blur budget: no backdrop-filter here — popovers use the opaque popup tokens.
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { S, STATUS_COLORS, BLOCK_BG, hoursFor } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorPlanEditor";
@@ -193,7 +194,10 @@ export function PlanView({
       .filter((b) => (b.tables || []).indexOf(id) >= 0)
       .sort((a, b) => toMins(a.time) - toMins(b.time));
     const freeNow = !occupying[id] && !isBlocked(id);
-    return (
+    // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
+    // SlideView's transform makes an in-tree position:fixed scrim center on
+    // the container, not the viewport.
+    return createPortal(
       <div onClick={() => setTablePop(null)} className="mgt-scrim-in"
         style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--tl-popup-scrim)" }}>
         <div onClick={(e) => e.stopPropagation()} className="mgt-card-in"
@@ -219,7 +223,8 @@ export function PlanView({
               style={mkBtn({ marginTop: 8, minHeight: 40, padding: "8px 16px", background: "var(--app-walkin)" })}>Walk-in here</button>
           ) : null}
         </div>
-      </div>
+      </div>,
+      document.body
     );
   })() : null;
 

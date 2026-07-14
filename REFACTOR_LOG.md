@@ -4151,3 +4151,26 @@ Four items, one commit. Files: `index.html`, `src/App.jsx`, `src/components/Sett
    rgba(13,148,136,0.88); confirmed text `#0f766e` light / `#5eead4` dark.
 
 Build clean (gz ≈214.9 kB). All verified live in DEV.
+
+**Corrections round 4 (same version, same branch, pre-merge — Patryk's fourth review, 2026-07-14).**
+Three items, one commit. Files: `index.html`, `src/App.jsx`, `src/lib/booking-logic.js`,
+`src/components/PlanView.jsx`.
+
+1. **Plan LMB popover centered** — the table-tap day-queue popover had the same
+   SlideView-transform bug as the quick-status popup (an in-tree `position:fixed` scrim centers on
+   the transformed container, not the viewport); portalled to `<body>` via `createPortal`, same as
+   round 2's QuickStatusPopup fix.
+2. **Drag & drop picks combos like the Optimizer (Patryk-confirmed "pure optimizer order")** —
+   new exported `rankCombosContaining(tableId, size)` (booking-logic.js): every VALID_COMBO
+   containing the target that seats the party, sorted with EXACTLY findBest's combo comparator
+   (`_comboPri` → location → indoor anchors → cap → length) instead of raw capacity — Adam (8)
+   dropped on 7 now takes the optimizer's choice for that spot rather than the smallest-cap combo
+   (the reported 1A+1B+7+i2 pick). The displacement stage now WALKS the ranked candidates and
+   commits the first whose trial pass re-seats every displaced booking conflict-free (a stranding
+   top pick falls through to the next set instead of refusing outright); seated members still
+   exclude a combo, and the final fallback is the refusal toast.
+3. **Confirmed → Burnt Orange rgba(234,88,12)** (orange-600; Patryk's pick from the orange-palette
+   proposals — teal out, deep orange sits clearly apart from pending's yellow).
+   `--block-confirmed` rgba(234,88,12,0.88); text `#c2410c` light / `#fdba74` dark.
+
+Build clean. Verified live in DEV.

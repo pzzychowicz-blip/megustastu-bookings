@@ -24,7 +24,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, VALID_COMBOS
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES
 } from "./lib/constants";
 
 import {
@@ -37,7 +37,7 @@ import {
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
   checkInefficent, verifyClean, findConflicts,
   nowTime,
-  trialFits, toTime, lateState, freeingSoon
+  trialFits, toTime, lateState, freeingSoon, rankCombosContaining
 } from "./lib/booking-logic";
 
 import { validateReminderDraft } from "./lib/reminders";
@@ -1431,17 +1431,20 @@ function BookingApp(){
     const isOver=function(b){return overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins));};
     const seatedOn=new Set();
     dayActive.forEach(function(b){if(b.status==="seated"&&isOver(b))(b.tables||[]).forEach(function(t){seatedOn.add(t);});});
-    // 1. Desired table set at the target.
+    // 1. Candidate table sets at the target, in PURE optimizer order (round 4,
+    //    Patryk-confirmed): the single table if it seats the party, else every
+    //    VALID_COMBO containing the target that does — ranked exactly like
+    //    findBest ranks combos (rankCombosContaining), NOT by raw capacity.
     const cap1=(ALL_TABLES.find(function(t){return t.id===targetId;})||{}).capacity||0;
-    let desired=null;
-    if(cap1>=size) desired=[targetId];
-    else{
-      const cands=VALID_COMBOS.filter(function(c){return c.ids.includes(targetId)&&c.cap>=size&&!c.ids.some(function(t){return busyBlocked.has(t)||seatedOn.has(t);});});
-      cands.sort(function(a,b){return (a.cap-b.cap)||(a.ids.length-b.ids.length);});
-      if(cands.length>0) desired=cands[0].ids.slice();
-    }
-    if(!desired){flashDragMsg("Party of "+size+" won't fit at "+targetId+", even with joined tables.");return;}
-    const occ=dayActive.filter(function(b){return isOver(b)&&(b.tables||[]).some(function(t){return desired.includes(t);});});
+    const candSets=cap1>=size
+      ?[[targetId]]
+      :rankCombosContaining(targetId,size)
+        .filter(function(c){return !c.ids.some(function(t){return busyBlocked.has(t)||seatedOn.has(t);});})
+        .map(function(c){return c.ids.slice();});
+    if(candSets.length===0){flashDragMsg("Party of "+size+" won't fit at "+targetId+", even with joined tables.");return;}
+    const occOf=function(set){return dayActive.filter(function(b){return isOver(b)&&(b.tables||[]).some(function(t){return set.includes(t);});});};
+    const desired=candSets[0];
+    const occ=occOf(desired);
     const user=getUser();
     // 2. Free set → plain move.
     if(occ.length===0){
@@ -1472,27 +1475,47 @@ function BookingApp(){
       }
     }
     // 4. Displacement — the manualAssign Swap-busy recipe, with a trial gate.
+    //    Round 4: walk the optimizer-ranked candidates in order and commit the
+    //    FIRST whose trial re-seats every displaced booking conflict-free —
+    //    a stranding top pick falls through to the next set, not to a refusal.
+    const mkTransform=function(dSet,dOcc){
+      const occIds=new Set(dOcc.map(function(b){return b.id;}));
+      return function(list){
+        const updated=list.map(function(b){
+          if(b.id===id) return Object.assign({},b,{tables:dSet,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+dSet.join("+")+" (drag)",user)])});
+          if(occIds.has(b.id)){
+            const remaining=(b.tables||[]).filter(function(t){return !dSet.includes(t);});
+            return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});
+          }
+          return b;
+        });
+        return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
+      };
+    };
+    for(let ci=0;ci<candSets.length;ci++){
+      const dSet=candSets[ci];
+      const dOcc=ci===0?occ:occOf(dSet);
+      if(dOcc.some(function(b){return b.status==="seated";})) continue; // seated = immovable (only reachable via the single-table set)
+      if(dOcc.length===0){
+        // a lower-ranked but FREE set (only reachable past a failed higher pick)
+        const ok=saveBookings(function(prev){return prev.map(function(b){
+          if(b.id!==id) return b;
+          return Object.assign({},b,{tables:dSet,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+dSet.join("+")+" (drag)",user)])});
+        });});
+        if(ok) flashDragMsg(src.name+" moved to "+dSet.join("+")+".",true);
+        return;
+      }
+      const transform=mkTransform(dSet,dOcc);
+      const trial=transform(bookings);
+      const stranded=dOcc.find(function(o){const t=trial.find(function(x){return x.id===o.id;});return !t||(t.tables||[]).length===0||t._conflict;});
+      if(stranded) continue;
+      const ok=saveBookings(transform);
+      if(ok) flashDragMsg(src.name+" moved to "+dSet.join("+")+" — "+dOcc.map(function(o){return o.name;}).join(", ")+" reassigned.",true);
+      return;
+    }
     const seatedOcc=occ.find(function(b){return b.status==="seated";});
     if(seatedOcc){flashDragMsg(seatedOcc.name+" is seated on "+targetId+"'s tables — can't move them.");return;}
-    const occIds=new Set(occ.map(function(b){return b.id;}));
-    const transform=function(list){
-      const updated=list.map(function(b){
-        if(b.id===id) return Object.assign({},b,{tables:desired,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+desired.join("+")+" (drag)",user)])});
-        if(occIds.has(b.id)){
-          const remaining=(b.tables||[]).filter(function(t){return !desired.includes(t);});
-          return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});
-        }
-        return b;
-      });
-      return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
-    };
-    // Trial against current data: every displaced booking must come out
-    // re-seated and conflict-free, or the whole drop refuses (no stranding).
-    const trial=transform(bookings);
-    const stranded=occ.find(function(o){const t=trial.find(function(x){return x.id===o.id;});return !t||(t.tables||[]).length===0||t._conflict;});
-    if(stranded){flashDragMsg("Can't re-seat "+stranded.name+" elsewhere — use Manual assign.");return;}
-    const ok=saveBookings(transform);
-    if(ok) flashDragMsg(src.name+" moved to "+desired.join("+")+" — "+occ.map(function(o){return o.name;}).join(", ")+" reassigned.",true);
+    flashDragMsg("Can't re-seat the parties there without stranding one — use Manual assign.");
   }
   function delBooking(id){const target=bookings.find(function(x){return x.id===id;});
     // v16.3.0: deleting a recurring OCCURRENCE parks its date on the rule's
