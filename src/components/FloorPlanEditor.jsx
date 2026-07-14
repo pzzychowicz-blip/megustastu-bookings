@@ -65,7 +65,7 @@ export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDas
       onPointerDown={onPointerDown} onClick={onClick} onContextMenu={onContextMenu}
       style={{ cursor: onPointerDown ? "grab" : (onClick ? "pointer" : "default"), ...style }}>
       {chairPositions(entry).map(function(c, i){
-        return <circle key={i} cx={c.cx} cy={c.cy} r={6} fill={chairFill} stroke="var(--border-soft)" strokeWidth={1} />;
+        return <circle key={i} cx={c.cx} cy={c.cy} r={6} fill={chairFill} stroke="var(--fp-chair-outline)" strokeWidth={1.5} />;
       })}
       {entry.shape === "round"
         ? <circle cx={0} cy={0} r={w / 2} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} />
@@ -339,7 +339,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             if(!e) return null;
             const selT = sel && sel.type === "table" && sel.key === t.id;
             return <TableGlyph key={t.id} id={t.id} entry={e}
-              fill="var(--bg-card)" stroke={selT ? "var(--accent)" : "var(--border-input)"} strokeWidth={selT ? 3 : 2}
+              fill="var(--bg-card)" stroke={selT ? "var(--accent)" : "var(--fp-outline)"} strokeWidth={selT ? 3 : 2}
               onPointerDown={function(ev){ startDrag(ev, "table", t.id, e); }} />;
           })}
         </svg>

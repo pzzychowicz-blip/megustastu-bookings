@@ -38,7 +38,7 @@ import { mkBtn } from "./atoms";
 
 // Neutral (free) table fill — theme tokens, matches the editor's look.
 const FREE_FILL = "var(--bg-card)";
-const FREE_STROKE = "var(--border-input)";
+const FREE_STROKE = "var(--fp-outline)";
 
 export function PlanView({
   bookings, date, layout, blocks = [],
@@ -178,7 +178,9 @@ export function PlanView({
   function clearPress() { if (pressRef.current) { clearTimeout(pressRef.current); pressRef.current = null; } }
 
   function fillFor(id) {
-    if (isBlocked(id)) return { fill: "var(--block-completed)", stroke: "var(--text-muted)", dash: "6 5" };
+    // v17.0.0 correction: blocked = the Timeline BlockBar identity (red 45°
+    // stripes, --tl-blocked-a/b), not grey-dashed — one "blocked" look app-wide.
+    if (isBlocked(id)) return { fill: "url(#pv-blocked)", stroke: "var(--tl-blocked-badge-border)", dash: undefined };
     const b = occupying[id];
     if (!b) return { fill: FREE_FILL, stroke: FREE_STROKE, dash: undefined };
     return { fill: BLOCK_BG[b.status] || BLOCK_BG.confirmed, stroke: "rgba(255,255,255,0.5)", dash: undefined };
@@ -255,6 +257,13 @@ export function PlanView({
           onPointerDown={bgPointerDown} onPointerMove={bgPointerMove}
           onPointerUp={bgPointerUp} onPointerCancel={bgPointerUp}
           onDoubleClick={resetView}>
+          {/* the Timeline table-block stripe pattern (45°, --tl-blocked-a/b) */}
+          <defs>
+            <pattern id="pv-blocked" width={11.3} height={11.3} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width={11.3} height={11.3} fill="var(--tl-blocked-a)" />
+              <rect width={5.65} height={11.3} fill="var(--tl-blocked-b)" />
+            </pattern>
+          </defs>
           <g transform={"translate(" + view.tx + "," + view.ty + ") scale(" + view.k + ")"}>
             {(fp.walls || []).map((wl, i) => (
               <line key={"w" + i} x1={wl.x1} y1={wl.y1} x2={wl.x2} y2={wl.y2} stroke="var(--text-muted)" strokeWidth={7} strokeLinecap="round" />
