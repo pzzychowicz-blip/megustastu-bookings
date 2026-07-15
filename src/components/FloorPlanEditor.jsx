@@ -89,6 +89,11 @@ export function DoorGlyph({ door, selected, onPointerDown, onClick }){
       onPointerDown={onPointerDown} onClick={onClick}
       style={{ cursor: onPointerDown ? "grab" : "default" }}>
       <line x1={-w / 2} y1={0} x2={w / 2} y2={0} stroke={selected ? "var(--accent)" : "var(--text-muted)"} strokeWidth={5} strokeLinecap="round" />
+      {/* v17.0.0 round 9 (Patryk): invisible fat hit-band over the 5cm bar —
+          on a touch screen the painted strokes were a few px and selection
+          rarely caught. 44cm tall, slightly wider than the bar; pointer events
+          bubble to the g's handlers. */}
+      <rect x={-w / 2 - 10} y={-22} width={w + 20} height={44} fill="transparent" pointerEvents="fill" />
       <g transform={door.flip ? "scale(-1,1)" : undefined}>
         {/* swing arc from the hinge (left end pre-flip) */}
         <path d={"M " + (w / 2) + " 0 A " + w + " " + w + " 0 0 0 " + (-w / 2) + " " + (-w) + ""}
@@ -415,16 +420,25 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             return (
               <g key={"w" + i}>
                 <line x1={wl.x1} y1={wl.y1} x2={wl.x2} y2={wl.y2}
-                  stroke={selWall ? "var(--accent)" : "var(--text-muted)"} strokeWidth={7} strokeLinecap="round"
+                  stroke={selWall ? "var(--accent)" : "var(--text-muted)"} strokeWidth={7} strokeLinecap="round" />
+                {/* v17.0.0 round 9 (Patryk): invisible FAT hit-line — the visible
+                    7-unit stroke is 7 CM, ~5px on screen, near-impossible to tap.
+                    The 40cm transparent band carries the pointer handler instead;
+                    tables render later (on top) so they still win overlaps. */}
+                <line x1={wl.x1} y1={wl.y1} x2={wl.x2} y2={wl.y2}
+                  stroke="transparent" strokeWidth={40} strokeLinecap="round" pointerEvents="stroke"
                   style={{ cursor: mode === "select" ? "grab" : "pointer" }}
                   onPointerDown={function(e){ startDrag(e, "wallBody", i, { x: wl0.x1, y: wl0.y1 }, { ax: wl0.x1, ay: wl0.y1 }); }} />
                 {selWall ? (
                   <>
-                    {/* v17.0.0 correction: draggable endpoint handles */}
-                    <circle cx={wl.x1} cy={wl.y1} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2}
+                    {/* v17.0.0 correction: draggable endpoint handles (round 9:
+                        each visible r=9 dot gets an invisible r=24 hit circle) */}
+                    <circle cx={wl.x1} cy={wl.y1} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2} />
+                    <circle cx={wl.x1} cy={wl.y1} r={24} fill="transparent" pointerEvents="fill"
                       style={{ cursor: "move" }}
                       onPointerDown={function(e){ startDrag(e, "wallA", i, { x: wl0.x1, y: wl0.y1 }); }} />
-                    <circle cx={wl.x2} cy={wl.y2} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2}
+                    <circle cx={wl.x2} cy={wl.y2} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2} />
+                    <circle cx={wl.x2} cy={wl.y2} r={24} fill="transparent" pointerEvents="fill"
                       style={{ cursor: "move" }}
                       onPointerDown={function(e){ startDrag(e, "wallB", i, { x: wl0.x2, y: wl0.y2 }); }} />
                   </>

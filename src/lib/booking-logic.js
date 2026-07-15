@@ -210,7 +210,20 @@ function _comboPriKey(c){
   return found?best:0;
 }
 export function rankCombosContaining(tableId,size){
-  return VALID_COMBOS.filter(function(c){return c.ids.includes(tableId)&&c.cap>=size;})
+  // v17.0.0 round 9 (Patryk): two hard EXCLUSIONS for a manual drop — the
+  // recurring "more tables than necessary" bug (a 4-top dropped on standalone
+  // i1 took a whole cross-room mega, because every combo containing i1 IS one
+  // and fewest-tables can't help).
+  //   1. avoid-flagged combos are excluded, not just sorted last (sorted-last
+  //      is meaningless when the avoided combo is the only candidate).
+  //      _comboPriKey===100 ⟺ every rule matching the key is avoid (a
+  //      coexisting preference rule wins the min and un-hides it — deliberate).
+  //   2. DRAG_MAX_WASTE: a drop may conscript at most 4 unused seats
+  //      (cap − size ≤ 4, Patryk-picked). 4-on-i1 → refuses (best mega wastes
+  //      7); 8-on-7 → still 1A+1B+7+i4 (wastes 3, the round-5 contract).
+  // Bigger joins stay reachable via Manual assign — the explicit override.
+  var DRAG_MAX_WASTE=4;
+  return VALID_COMBOS.filter(function(c){return c.ids.includes(tableId)&&c.cap>=size&&c.cap-size<=DRAG_MAX_WASTE&&_comboPriKey(c)!==100;})
     .sort(function(a,b){
       if(a.ids.length!==b.ids.length) return a.ids.length-b.ids.length;
       var pa=_comboPriKey(a),pb=_comboPriKey(b);if(pa!==pb) return pa-pb;

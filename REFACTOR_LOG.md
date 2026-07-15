@@ -4344,3 +4344,38 @@ Verified live in DEV: the 🔍/⚙ pair holds its position across Timeline/List/
 per-view copies are gone; the plan's `<g>` transform stays `translate(0,0)` through the full
 RMB → close → mouse-move sequence (it used to jump), while a normal LMB drag still pans and a
 left-tap still opens the table popover. Build clean.
+
+---
+
+**v17.0.0 corrections round 9 (same version, same branch, pre-merge — 2026-07-15).**
+Patryk's ninth review — two items.
+
+Files: `src/lib/booking-logic.js`, `src/components/FloorPlanEditor.jsx`, `CLAUDE.md`,
+`REFACTOR_LOG.md`.
+
+1. **Drag&drop over-joining, root-caused and fixed for good.** A 4-top dragged from 7 to i1
+   took `i1+i2+i3+i4`. Why: i1 is standalone (cap 2), so EVERY `VALID_COMBO` containing i1
+   is a cross-room mega — "fewest tables first" can't help, and the `avoid:true` flag on
+   `i1|i2|i3|i4` only sorted it last (meaningless in a candidate list where it's first or
+   only). Removing the avoided combo alone just promoted the next mega (`1A+1B+7+i1`, cap
+   11 for 4). `rankCombosContaining` now applies two HARD exclusions:
+   (a) avoid-flagged combos are dropped entirely (`_comboPriKey===100` ⟺ every matching
+   rule is avoid; a coexisting preference rule un-hides it — deliberate);
+   (b) `DRAG_MAX_WASTE = 4` — a manual drop may conscript at most 4 unused seats
+   (`cap − size ≤ 4`; Patryk chose "max 4 empty seats" over half-empty / same-group-only
+   via AskUserQuestion). Bigger joins remain reachable via Manual assign.
+   Ranking matrix (offline, Vite SSR): i1/4 → none (refuse) · i1/6 → none · i1/10 →
+   `1A+1B+7+i1`… (legit big party) · 7/8 → `1A+1B+7+i4` · 2/8 → `2+3+4` (round-5 contract
+   intact) · i2/3 → `i2+i3` · 1A/5 → `1A+1B`. Verified LIVE in DEV with a real 4-top on 7:
+   drag to i1 → toast "Party of 4 won't fit at i1, even with joined tables.", booking
+   unmoved; drag to free 2 → "moved to 2+3" (minimal join, waste 1).
+
+2. **Floor-plan editor: walls/doors selectable by finger.** The painted strokes are 5–7
+   SVG user units = 5–7 **cm**, ≈4–6 px at typical render scale — a touch rarely landed.
+   Invisible fat hit-targets now carry the pointer handlers, visible geometry unchanged:
+   walls get a 40 cm transparent hit-line (`pointerEvents="stroke"`) and the selected-wall
+   endpoint dots get r=24 transparent hit-circles; `DoorGlyph` gets a 44 cm-tall
+   transparent rect spanning the bar (events bubble to the glyph's handlers — PlanView's
+   handler-less use is unaffected). Tables render after walls/doors, so they still win
+   overlapping taps. Verified live: a click ~10 px off the wall line selects the wall; a
+   click ~10 px off the door bar selects the door (beating the wall band beneath it).
