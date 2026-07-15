@@ -12,6 +12,7 @@
 
 import { useState } from "react";
 import { Section, Collapsible, Toggle } from "./atoms";
+import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
 import { contiguousRuns, comboKey } from "../lib/constants";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
@@ -135,8 +136,14 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         cc[comboKey(k.split("|").map(rmap))] = layout.comboCaps[k];
       });
       const pri = (layout.priorities && typeof layout.priorities === "object") ? layout.priorities : {};
+      // v17.0.0: floorPlan entries are keyed by table id — remap too, so the
+      // table keeps its position/shape/chairs across a rename.
+      const fp = (layout.floorPlan && typeof layout.floorPlan === "object") ? layout.floorPlan : null;
+      const fpTables = {};
+      if (fp && fp.tables) Object.keys(fp.tables).forEach(function (k) { fpTables[rmap(k)] = fp.tables[k]; });
       onSaveLayout({
         ...layout,
+        ...(fp ? { floorPlan: { ...fp, tables: fpTables } } : {}),
         tables: tables.map(function (t) { return t.id === oldId ? { ...t, id: nid } : t; }),
         joinGroups: (layout.joinGroups || []).map(function (g) { return g.map(rmap); }),
         comboCaps: cc,
@@ -773,6 +780,15 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           <button onClick={addSwap} className="mgt-hover-scale"
             style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add swap rule</button>
         </div>
+      </Collapsible>
+      {/* v17.0.0: Floor plan — the Plan view's geometry (settings/layout.floorPlan).
+          Drag tables/doors, draw walls, per-table shape/size/rotation/chairs. */}
+      <Collapsible
+        title="Floor plan"
+        subtitle="Arrange tables, walls and doors to mirror the room — the Plan view draws this map."
+        summary={Object.keys((layout.floorPlan && layout.floorPlan.tables) || {}).length + " placed"}
+      >
+        <FloorPlanEditor layout={layout} onSaveLayout={onSaveLayout} />
       </Collapsible>
       <Section style={{ marginBottom: 8 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>

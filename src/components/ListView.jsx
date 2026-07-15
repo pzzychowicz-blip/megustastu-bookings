@@ -46,35 +46,11 @@ export function ListView({
   late = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {},
   showFinished = false, onToggleFinished = () => {},
-  onOpenSearch = () => {}
+  currency = "€"
 }) {
-  // v16.4.0: List view has no legend, so the global-search 🔍 (previously
-  // Timeline-legend-only) gets a right-aligned home above the cards here —
-  // byte-for-byte the timeline button's chrome (TimelineView.jsx). Shown even on
-  // an empty day (you may search precisely because today is empty).
-  const searchBar = (
-    <div style={{ display: "flex", justifyContent: "flex-end" }}>
-      <button
-        onClick={onOpenSearch}
-        title="Find a booking"
-        aria-label="Find a booking"
-        className="mgt-hover-scale"
-        style={{
-          background: "var(--cog-bg)",
-          border: "1px solid var(--cog-border)",
-          borderRadius: 10, width: 34, height: 34,
-          cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0, padding: 0,
-          fontSize: 15, lineHeight: 1,
-          color: S.text,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
-        }}
-      >
-        🔍
-      </button>
-    </div>
-  );
+  // v17.0.0 round 8 (Patryk): the 🔍/⚙ pair moved OUT to App's date-nav row
+  // (ViewTools.jsx) — one home for all three views. List keeps no chrome of its
+  // own again; the `searchBar` element and its two buttons are gone.
   const day = bookings
     .filter((b) => b.date === date)
     .sort((a, b) => {
@@ -122,7 +98,6 @@ export function ListView({
   if (!day.length) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {searchBar}
         <div style={{ textAlign: "center", padding: "48px 0", color: S.text, fontSize: 15 }}>
           No bookings for this date.
         </div>
@@ -152,15 +127,18 @@ export function ListView({
         const lateSt = late[b.id] || null;
         const sc = STATUS_COLORS[b.status];
         const useStatusColor = b.status === "seated" || b.status === "completed" || b.status === "cancelled";
+        // v17.0.0: a pending card keeps the strong (upcoming) background but
+        // carries the yellow status border — the spec's List marker for pending.
+        const isPending = b.status === "pending";
         const cardBg = useStatusColor ? "var(--bg-card-dim)" : "var(--bg-card-strong)";
         const cardBrd = warn
           ? (warn.overdue ? "var(--card-overdue-border)" : "var(--card-warn-border)")
           : lateSt
-            ? "var(--card-warn-border)"
+            ? "var(--card-late-border)"   // v17.0.0 round 10: yellow, not the amber due-soon edge
             : b._conflict
               ? "var(--card-conflict-border)"
-              : useStatusColor ? sc.border : "var(--border-card-plain)";
-        const cardBrdW = (warn || lateSt) ? "3px" : useStatusColor ? "3px" : "1px";
+              : (useStatusColor || isPending) ? sc.border : "var(--border-card-plain)";
+        const cardBrdW = (warn || lateSt) ? "3px" : (useStatusColor || isPending) ? "3px" : "1px";
 
         const durationTag = b.status === "seated" ? (
           <SmallTag label={elapsedMin + " min"} style={{ background: "#166534", color: "var(--text-on-accent)", border: "none" }} />
@@ -211,7 +189,7 @@ export function ListView({
         ) : null;
         // v16.3.0: deposit chip (suggest/green tokens — a prepaid booking).
         const depositTag = (Number(b.deposit) || 0) > 0 ? (
-          <SmallTag label={"€" + b.deposit + " deposit"} style={{ background: "var(--suggest-bg)", color: "var(--success-text)", border: "1px solid var(--suggest-border)" }} />
+          <SmallTag label={(currency || "€") + b.deposit + " deposit"} style={{ background: "var(--suggest-bg)", color: "var(--success-text)", border: "1px solid var(--suggest-border)" }} />
         ) : null;
 
         const notesEl = b.notes ? (
@@ -230,7 +208,9 @@ export function ListView({
 
         // v14.4.0: Cancel + Delete are pulled into a right-aligned group (Cancel
         // then Delete); the remaining status changers stay in the left group.
-        const statusBtns = ["confirmed", "seated", "completed"]
+        // v17.0.0: a pending card's only forward status is Confirmed (the
+        // right-group Cancel button stays — the decline flow).
+        const statusBtns = (b.status === "pending" ? ["confirmed"] : ["confirmed", "seated", "completed"])
           .filter((s) => s !== b.status)
           .map((s) => (
             <button
@@ -329,7 +309,6 @@ export function ListView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {searchBar}
       <div ref={flipRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {active.map(renderCard)}
       </div>

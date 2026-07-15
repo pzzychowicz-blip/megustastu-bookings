@@ -42,7 +42,7 @@ import {
   optimizerActiveFor
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone } from "../lib/customers";
-import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
@@ -52,9 +52,10 @@ export function BookingFormModal({
   form, setForm, editId, error,
   bookings, liveBookings, tableBlocks,
   autoOptimizer, isMobile,
-  onSave, onClose, onClearSwap, onBookAgain,
+  onSave, onSavePending, onSaveConfirm, onClose, onClearSwap, onBookAgain,
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel,
   onAddToWaitlist, standingEnabled,
+  currency = "€", regularMin = 2, // v17.0.0: settings/general
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
   // Pre-E1, these all lived inline in BookingApp's body. Moved here because
@@ -148,7 +149,7 @@ export function BookingFormModal({
   const regularChip=custMatch&&custMatch.regularCount>=1?<button
     key="reg" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("regular");}}
-    style={Object.assign({},chipBase,{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",color:"var(--success-text)"})}>{(custMatch.regularCount>=2?"Regular · "+custMatch.regularCount+" past visits":"1 past visit")+(histWhich==="regular"?" ▾":" ▸")}</button>:null;
+    style={Object.assign({},chipBase,{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",color:"var(--success-text)"})}>{(custMatch.regularCount>=(regularMin||2)?"Regular · "+custMatch.regularCount+" past visits":custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":""))+(histWhich==="regular"?" ▾":" ▸")}</button>:null;
   const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<button
     key="ns" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("noshow");}}
@@ -358,7 +359,7 @@ export function BookingFormModal({
 
   const quickStatusBtns=editId?<Section style={{position:"relative"}}>{statusFlash?(
         <div key={statusFlash.k} className="mgt-wipe-ltr" style={{position:"absolute",inset:0,borderRadius:16,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
-      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600,marginRight:4}}>Status:</span>{["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return (
+      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600,marginRight:4}}>Status:</span>{(form.status==="pending"?["confirmed"]:["confirmed","seated","completed","cancelled"]).filter(function(s){return s!==form.status;}).map(function(s){return (
         <button
           key={s}
           className="mgt-hover-scale"
@@ -421,10 +422,27 @@ export function BookingFormModal({
   // errorEl rides above the buttons so a save/availability error stays visible
   // without scrolling. marginTop dropped — the footer region's borderTop+padding
   // provides the separation now.
+  // v17.0.0: pending flow. New bookings get a left-aligned "Save pending"
+  // (saves the booking with status=pending — still awaiting confirmation).
+  // Editing a booking whose PERSISTED status is pending gets "Save&confirm"
+  // to the right of Save booking; it slides out to the RIGHT (Presence,
+  // mgt-slide-*-r) the moment the draft status leaves "pending" (the >Confirmed
+  // status button), per spec.
+  const origPendingBooking=editId?bookings.find(function(b){return b.id===editId&&b.status==="pending";}):null;
   const footerEl=(
     <>
       {errorEl}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}</div><div style={{display:"flex",gap:8}}><button
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{(function(){
+        if(editId) return null;
+        const canSave=!!form.date;
+        return (
+          <button
+            disabled={!canSave}
+            onClick={onSavePending}
+            className="mgt-hover-scale"
+            style={{background:canSave?BLOCK_BG.pending:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(212,165,10,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save pending</button>
+        );
+      })()}</div><div style={{display:"flex",gap:8}}><button
         className="mgt-hover-scale"
         style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
         onClick={function(){onClose();}}>Cancel</button>{(function(){
@@ -439,7 +457,15 @@ export function BookingFormModal({
             className="mgt-hover-scale"
             style={{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
         );
-      })()}</div></div>
+      })()}{origPendingBooking?(
+        <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" outMs={190} tag="span">
+          <button
+            disabled={!form.date}
+            onClick={onSaveConfirm}
+            className="mgt-hover-scale"
+            style={{background:form.date?"rgba(22,101,52,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"0 2px 8px rgba(22,101,52,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save&confirm</button>
+        </Presence>
+      ):null}</div></div>
     </>
   );
 
@@ -497,7 +523,7 @@ export function BookingFormModal({
           rows={2}
           placeholder="Allergies, special requests..."
           className="mgt-hover-scale"
-          style={Object.assign({},inp(),{resize:"vertical"})} /></Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none. */}<Fld label="Deposit (€)"><input
+          style={Object.assign({},inp(),{resize:"vertical"})} /></Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none. */}<Fld label={"Deposit (" + (currency || "€") + ")"}><input
           type="number"
           min={0}
           step={5}

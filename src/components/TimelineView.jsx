@@ -44,7 +44,7 @@ import {
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
-import { CogIcon } from "./Settings";
+import { QuickStatusPopup } from "./QuickStatusPopup";
 
 // v15.8.0: module-level status-change animation state (survives the inline Block
 // remount + any TimelineView remount during the save flow). Single timeline, so
@@ -59,7 +59,7 @@ const __statusAnims = {};
 // module-level component the node persists, so `transition: left/width` eases a
 // reposition (seated-shift / reshuffle) and the wipe/fill overlays + long-press
 // work reliably. Former closures are now props.
-function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, freeMin = null, onEdit, onManual, setQuickStatus }) {
+function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
   const d = liveBarDur(b, nowMins);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -71,7 +71,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // warnings keep precedence (they carry the more urgent red tier).
   const border = warn
     ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
-    : (late ? "3px solid var(--tl-block-warn-soon)" : "none");
+    : (late ? "3px solid var(--tl-block-late)" : "none");
   const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
@@ -81,7 +81,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     + (isLocked(b) ? " [L]" : "")
     + (hasPrefT ? " ★" : "")
     + (noShows >= 2 ? " ⚠" : "")
-    + ((Number(b.deposit) || 0) > 0 ? " €" : "")   // v16.3.0: deposit marker
+    + ((Number(b.deposit) || 0) > 0 ? " " + currency : "")   // v16.3.0 deposit marker (v17.0.0: currency from settings/general)
     + (warn && warn.overdue ? " !!" : "");
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
   // name. The show/hide decision (`showChip`) is made ONCE at the TimelineView
@@ -108,6 +108,84 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   const pressTimer = useRef(null);
   const didLong = useRef(false);
   const touchStartPos = useRef(null);
+
+  // ── v17.0.0 correction: drag & drop to another table row ──────────────────
+  // Mouse: vertical movement > 6px starts the drag (below it, click→edit wins).
+  // Touch: the 400ms long-press opens quick-status as before; KEEP HOLDING to
+  // ~800ms (unmoved) and the popup is dismissed — the block lifts and follows
+  // the finger. Dropping on a row calls onDropOnTable(bookingId, tableId); App
+  // decides move vs swap. Vertical offset lives in local state (translateY);
+  // the horizontal position (time) never changes.
+  const dragRef = useRef(null);            // {y0, pid, el, active, lastY}
+  const [dragDy, setDragDy] = useState(null);
+  const dragHoldTimer = useRef(null);      // touch: the 800ms drag-mode timer
+  const preventScrollRef = useRef(null);   // native non-passive touchmove blocker
+  const dragRafRef = useRef(0);            // v17.0.0 review fix #4: coalesce moves to one render/frame
+
+  function beginDrag(el, pid) {
+    dragRef.current = { ...(dragRef.current || {}), active: true };
+    didLong.current = true;                // suppress the click→edit on release
+    // Capturing on the block itself is safe (the PlanView gotcha was capturing
+    // on a PARENT, which redirects child clicks) — and needed so a fast mouse
+    // that leaves the block mid-drag keeps sending us moves.
+    try { el.setPointerCapture(pid); } catch (_e) { /* no-op */ }
+  }
+  function onDragPointerDown(e) {
+    if (!onDropOnTable || !tableAtY) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    dragRef.current = { y0: e.clientY, pid: e.pointerId, el: e.currentTarget, active: false };
+    if (e.pointerType !== "mouse") {
+      clearTimeout(dragHoldTimer.current);
+      dragHoldTimer.current = setTimeout(() => {
+        const d = dragRef.current;
+        if (!d || d.active) return;
+        setQuickStatus(null);              // the 400ms popup opened — drag wins
+        beginDrag(d.el, d.pid);
+        // React 17+ roots attach touchmove passively — a native non-passive
+        // listener is the only way to stop the page scrolling mid-drag.
+        const prevent = (ev) => { ev.preventDefault(); };
+        d.el.addEventListener("touchmove", prevent, { passive: false });
+        preventScrollRef.current = { el: d.el, fn: prevent };
+      }, 800);
+    }
+  }
+  function onDragPointerMove(e) {
+    const d = dragRef.current;
+    if (!d) return;
+    if (!d.active) {
+      if (e.pointerType === "mouse" && Math.abs(e.clientY - d.y0) > 6) beginDrag(e.currentTarget, d.pid);
+      else return;
+    }
+    // v17.0.0 review fix #4: coalesce the render+hover work to one rAF/frame —
+    // a raw pointermove fires far more often than the display refreshes, and
+    // each one setState-d. (A drag only runs while the tab is visible, so the
+    // "rAF never fires when hidden" trap doesn't apply here.)
+    d.lastY = e.clientY;
+    if (dragRafRef.current) return;
+    dragRafRef.current = requestAnimationFrame(function () {
+      dragRafRef.current = 0;
+      const dd = dragRef.current;
+      if (!dd || !dd.active) return;
+      setDragDy(dd.lastY - dd.y0);
+      if (setDragHover) setDragHover(tableAtY(dd.lastY));
+    });
+  }
+  function endDrag(e, commit) {
+    clearTimeout(dragHoldTimer.current);
+    if (dragRafRef.current) { cancelAnimationFrame(dragRafRef.current); dragRafRef.current = 0; }
+    if (preventScrollRef.current) {
+      preventScrollRef.current.el.removeEventListener("touchmove", preventScrollRef.current.fn);
+      preventScrollRef.current = null;
+    }
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (d && d.active) {
+      const target = commit ? tableAtY(e.clientY) : null;
+      if (target && target !== homeTable) onDropOnTable(b.id, target);
+    }
+    setDragDy(null);
+    if (setDragHover) setDragHover(null);
+  }
 
   // v15.8.0: status-change overlay. `anim` ('wipe' Confirmed→Seated / 'fill'
   // Seated→Completed) is detected at the TimelineView level and passed in; the
@@ -143,6 +221,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     if (dx > 8 || dy > 8) {
       clearTimeout(pressTimer.current);
       pressTimer.current = null;
+      // moving before the 800ms drag-hold fires = a scroll, not a drag
+      if (!(dragRef.current && dragRef.current.active)) clearTimeout(dragHoldTimer.current);
     }
   }
   function onTouchEnd(e) {
@@ -151,8 +231,13 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     if (didLong.current) e.preventDefault();
   }
   // v15.8.0: right-click opens the same quick-action menu as long-press/tap.
+  // v17.0.0 round 7 (Android fix): the native LONG-PRESS also fires contextmenu
+  // (~500ms, MagicOS/Chrome) — mid-hold it must not reopen the popup the 800ms
+  // drag-arm just dismissed, and must not cancel the pointer stream. A pending
+  // or active drag (dragRef set) swallows it.
   function onCtx(e) {
     e.preventDefault();
+    if (dragRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     setQuickStatus({ booking: b, x: rect.left, y: rect.top, w: rect.width, h: rect.height });
   }
@@ -170,20 +255,33 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
       onContextMenu={onCtx}
+      onPointerDown={onDragPointerDown}
+      onPointerMove={onDragPointerMove}
+      onPointerUp={(e) => endDrag(e, true)}
+      onPointerCancel={(e) => endDrag(e, false)}
       style={{
         position: "absolute", top: 3, height: ROW_H - 8 + "px",
         left, width: w,
         background: bgc, borderRadius: 10, overflow: "hidden",
         display: "flex", alignItems: "center", boxSizing: "border-box",
-        cursor: "pointer",
+        cursor: dragDy != null ? "grabbing" : "pointer",
         border: border || "1px solid rgba(255,255,255,0.2)",
         WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
-        boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
+        // v17.0.0 round 7 (Android fix): without this, the browser claims any
+        // vertical touch movement on a block for page scroll and fires
+        // pointercancel BEFORE the 800ms drag-hold arms — drag never started on
+        // MagicOS/Chrome. pan-x keeps horizontal timeline scrolling from a block
+        // while reserving vertical gestures for the drag.
+        touchAction: "pan-x",
+        boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" : "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
+        // v17.0.0: while dragging, the inline transform/zIndex/opacity lift the
+        // block and follow the pointer (inline transform beats the hover class).
+        ...(dragDy != null ? { transform: "translateY(" + dragDy + "px)", zIndex: 30, opacity: 0.85 } : null),
         // v15.8.0: reposition eases (seated-shift / reshuffle). v15.8.1: `transform`
         // re-added so the .mgt-hover-scale lift eases again — the inline transition had
         // been overriding the class's `transform 120ms`, making the hover scale instant.
         // The seated ghost outline mirrors this exact transition so the two lift together.
-        transition: "left 320ms ease, width 320ms ease, transform 120ms ease"
+        transition: dragDy != null ? "none" : "left 320ms ease, width 320ms ease, transform 120ms ease"
       }}
     >
       {animOverlay}
@@ -256,13 +354,15 @@ export function TimelineView({
   scrollPosRef,
   autoOptimizer = true,
   setAutoOptimizer = () => {},
+  currency = "€", // v17.0.0: settings/general deposit marker
+  onDropOnTable = null, // v17.0.0 correction: drag&drop move/swap handler (App)
   onReshuffle = () => {},
-  onOpenSettings = () => {},
-  onOpenSearch = () => {}
 }) {
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
   const [quickStatus, setQuickStatus] = useState(null);
+  // v17.0.0 correction: the table row a drag currently hovers (highlight).
+  const [dragHover, setDragHover] = useState(null);
   const isToday = date === new Date().toISOString().slice(0, 10);
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const gridW = Math.max(320, totalMins * zoom * 1.2);
@@ -338,7 +438,8 @@ export function TimelineView({
   // status change (seated/completed durations shrink/stretch) can never kill
   // the other bookings' chips (the reported bug). Each flip animates per block
   // via Presence.
-  const confirmedDay = day.filter((b) => b.status === "confirmed");
+  // v17.0.0: pending joins the chip family (treated same as confirmed).
+  const confirmedDay = day.filter((b) => b.status === "confirmed" || b.status === "pending");
   const chipsOn = confirmedDay.length > 0 && confirmedDay.every((b) => liveBarDur(b, nowMins) * pxPerMin >= 140);
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
@@ -540,6 +641,18 @@ export function TimelineView({
   // outlines (showing original duration for seated bookings — the dashed
   // border helps staff see how long the guest was originally booked for vs.
   // how long they've actually stayed), and the actual booking blocks.
+  // v17.0.0 correction: map a pointer's clientY to the table row under it —
+  // rows are exactly ROW_H tall inside the grid body (flipRef.current), after
+  // the 24px header strip. Returns null outside the table rows (header /
+  // unassigned row / off-grid) so a drop there is a no-op snap-back.
+  function tableForClientY(clientY) {
+    const el = flipRef.current;
+    if (!el) return null;
+    const top = el.getBoundingClientRect().top + 24;
+    const idx = Math.floor((clientY - top) / ROW_H);
+    return idx >= 0 && idx < TIMELINE_TABLES.length ? TIMELINE_TABLES[idx].id : null;
+  }
+
   const gridRows = TIMELINE_TABLES.map((tbl) => {
     const id = tbl.id;
     const rows = day.filter((b) => (b.tables || []).includes(id));
@@ -550,7 +663,9 @@ export function TimelineView({
         style={{
           height: ROW_H + "px", position: "relative",
           borderBottom: "2px solid var(--tl-row-border)",
-          boxSizing: "border-box"
+          boxSizing: "border-box",
+          // drag&drop target highlight (subtle accent tint while hovered)
+          background: dragHover === id ? "var(--bg-ac-hover)" : undefined
         }}
       >
         <GridLines />
@@ -588,7 +703,7 @@ export function TimelineView({
           return (
             <Fragment key={b.id}>
               {ghost}
-              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />
+              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
             </Fragment>
           );
         })}
@@ -604,7 +719,7 @@ export function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && b.status === "confirmed"} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
     </div>
   ) : null;
 
@@ -785,76 +900,15 @@ export function TimelineView({
   );
 
   // ── Quick-status popup (long-press → choose new status) ──────────────────
+  // v17.0.0: the popup body moved VERBATIM to QuickStatusPopup.jsx so PlanView
+  // shares the same status-gating (pending → Confirmed/Cancel; late no-show).
   const quickPopup = quickStatus ? (
-    <div
-      onClick={() => setQuickStatus(null)}
-      className="mgt-scrim-in"
-      style={{
-        position: "fixed", inset: 0, zIndex: 300,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: "var(--tl-popup-scrim)"
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="mgt-card-in"
-        style={{
-          background: "var(--tl-popup-bg)", borderRadius: 20,
-          border: "1px solid " + S.border,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
-          padding: "20px 24px",
-          minWidth: 240, maxWidth: 320, zIndex: 301
-        }}
-      >
-        <div style={{ fontSize: 20, fontWeight: 700, color: S.text, marginBottom: 16 }}>
-          {quickStatus.booking.name}
-        </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {["confirmed", "seated", "completed", "cancelled"]
-            .filter((st) => st !== quickStatus.booking.status)
-            .map((st) => (
-              <button
-                key={st}
-                className="mgt-hover-scale"
-                style={{
-                  background: BLOCK_BG[st], border: "none",
-                  borderRadius: 12, padding: "10px 18px",
-                  fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
-                  cursor: "pointer", textTransform: "capitalize",
-                  minHeight: 44, flex: "1 1 auto"
-                }}
-                onClick={() => {
-                  onStatus(quickStatus.booking.id, st);
-                  setQuickStatus(null);
-                }}
-              >
-                {st}
-              </button>
-            ))}
-          {/* v16.1.0: one-tap No show for a confirmed booking past the
-              no-show threshold (App's lateMap). Cancels + sets the noShow
-              flag via the existing doCancelBooking path. */}
-          {quickStatus.booking.status === "confirmed" && late[quickStatus.booking.id] === "noshow" ? (
-            <button
-              className="mgt-hover-scale"
-              style={{
-                background: BTN.orange, border: "none",
-                borderRadius: 12, padding: "10px 18px",
-                fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
-                cursor: "pointer",
-                minHeight: 44, flex: "1 1 auto"
-              }}
-              onClick={() => {
-                onNoShow(quickStatus.booking.id);
-                setQuickStatus(null);
-              }}
-            >
-              No show
-            </button>
-          ) : null}
-        </div>
-      </div>
-    </div>
+    <QuickStatusPopup
+      booking={quickStatus.booking}
+      late={late}
+      onStatus={onStatus}
+      onNoShow={onNoShow}
+      onClose={() => setQuickStatus(null)} />
   ) : null;
 
   // ── Final assembly ───────────────────────────────────────────────────────
@@ -896,46 +950,8 @@ export function TimelineView({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", flex: "1 1 auto", minWidth: 0 }}>
           {legendEls}
         </div>
-        {/* v16.3.0: search + settings grouped at the legend's right. The 🔍
-            button matches the cog's 34×34 chrome exactly (was in the header). */}
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-          <button
-            onClick={onOpenSearch}
-            title="Find a booking"
-            aria-label="Find a booking"
-            className="mgt-hover-scale"
-            style={{
-              background: "var(--cog-bg)",
-              border: "1px solid var(--cog-border)",
-              borderRadius: 10, width: 34, height: 34,
-              cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              flexShrink: 0, padding: 0,
-              fontSize: 15, lineHeight: 1,
-              color: S.text,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
-            }}
-          >
-            🔍
-          </button>
-          <button
-            onClick={onOpenSettings}
-            title="Settings & keyboard shortcuts"
-            className="mgt-hover-scale"
-            style={{
-              background: "var(--cog-bg)",
-              border: "1px solid var(--cog-border)",
-              borderRadius: 10, width: 34, height: 34,
-              cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              flexShrink: 0, padding: 0,
-              color: S.text,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
-            }}
-          >
-            <CogIcon />
-          </button>
-        </div>
+        {/* v17.0.0 round 8: the 🔍/⚙ pair moved OUT to App's date-nav row
+            (ViewTools.jsx) so it sits in one place for all three views. */}
       </div>
       <div style={{ marginTop: 6, fontSize: 11, color: S.muted }}>
         tap booking to edit  ·  = assign  ·  hold to change status  ·  tap table label to block

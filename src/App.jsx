@@ -24,20 +24,20 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES
 } from "./lib/constants";
 
 import {
   getDur, toMins, genId,
   histEntry, diffBooking,
   isLocked, isActive, statusOrder,
-  getBlockSlots, canAssign,
+  getBlockSlots, canAssign, getBusy, overlaps, comboCapBest,
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
   checkInefficent, verifyClean, findConflicts,
   nowTime,
-  trialFits, toTime, lateState, freeingSoon
+  trialFits, toTime, lateState, freeingSoon, rankCombosContaining, comboExistsFor
 } from "./lib/booking-logic";
 
 import { validateReminderDraft } from "./lib/reminders";
@@ -78,8 +78,10 @@ import { ReminderEditor }          from "./components/ReminderEditor";
 import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
+import { ViewTools }    from "./components/ViewTools";
 import { WeekView }     from "./components/WeekView";
 import { LateBanner }   from "./components/LateBanner";
+import { OverlapBanner } from "./components/OverlapBanner";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 
 // ── Phase B5 (v15-refactor): Final modal & screen extraction ──────────────
@@ -143,6 +145,11 @@ import { useOptimizerSettings } from "./hooks/useOptimizerSettings";
 // size→duration tiers (feeds getDur via the DUR_TIERS live binding) + the
 // running-late thresholds (feed the lateMap derivation below).
 import { useBookingDefaults } from "./hooks/useBookingDefaults";
+// v17.0.0: `useGeneralSettings` owns the 6th settings node (settings/general):
+// restaurant name, currency symbol, phone prefix, Regular threshold, late-
+// banner collapse threshold, waitlist match window, undo-toast duration —
+// the ex-hard-coded literals from the multi-tenancy configurability pass.
+import { useGeneralSettings } from "./hooks/useGeneralSettings";
 import { useLayout } from "./hooks/useLayout";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
@@ -187,6 +194,7 @@ import { useRecurring } from "./hooks/useRecurring";
 import { WaitlistPanel } from "./components/WaitlistPanel";
 import { WaitAvailBanner } from "./components/WaitAvailBanner";
 import { SearchPanel } from "./components/SearchPanel";
+import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
 
 
@@ -197,7 +205,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"16.4.0",
+  version:"17.0.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -227,6 +235,23 @@ function readThemePref(){
     if(v==="light") return false;
   }catch(e){}
   return undefined;
+}
+
+// v17.0.0 correction: per-device max app width (px). localStorage like the
+// theme — screen size is a device property, not restaurant config. The 1.08
+// hover-scale lift overflowed the viewport at a fixed 1600 on smaller
+// monitors, so the width is a Settings→General stepper (900–2400, step 50).
+// Round 3: no stored value → default to THIS screen's width minus 150px
+// margins each side (rounded to 50), so the app fills the browser out of the
+// box without ever overflowing it.
+const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400;
+function readAppWidth(){
+  try{
+    const v=parseInt(localStorage.getItem("mgt-appwidth"),10);
+    if(Number.isFinite(v)&&v>=APP_WIDTH_MIN&&v<=APP_WIDTH_MAX) return v;
+  }catch(e){}
+  const w=Math.round((window.innerWidth-300)/50)*50;
+  return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,w));
 }
 
 // ── Console boot banner ──────────────────────────────────────────────────────
@@ -469,9 +494,17 @@ function BookingApp(){
   // v15.6.1: transient banner shown when the post-sync reconciliation resolves
   // a same-table overlap that arrived via an offline multi-device merge.
   const [syncFix, setSyncFix] = useState(false);
+  // v17.0.0 correction: drag&drop feedback toast — {text, good} or null.
+  const [dragMsg, setDragMsg] = useState(null);
+  const dragMsgTimer = useRef(null);
   const [manualTarget, setManualTarget] = useState(null);
   const [dismissedIneff, setDismissedIneff] = useState(null);
   const formRef=useRef(EMPTY_FORM);
+  // v17.0.0: status override for the pending flow — set by save("pending"/
+  // "confirmed") ("Save pending" / "Save&confirm" buttons) and read by doSave.
+  // A ref (not an arg) because the kitchen-confirm modal + its Enter shortcut
+  // call doSave() with no args after the modal round-trip.
+  const statusOverrideRef=useRef(null);
   const [swapAffected, setSwapAffected] = useState(null);
   const [confirmKitchen, setConfirmKitchen] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -511,6 +544,14 @@ function BookingApp(){
   const { optimizerSettings, saveOptimizerSettings } = useOptimizerSettings();
   // v16.1.0: booking defaults — duration tiers + running-late thresholds.
   const { bookingDefaults, saveBookingDefaults } = useBookingDefaults();
+  // v17.0.0: settings/general (6th settings node) — see the import note.
+  const { generalSettings, saveGeneralSettings } = useGeneralSettings();
+  // A phone value that is empty, a bare "+", or exactly the untouched prefix
+  // seed counts as "no phone" (the prefix is a typing convenience, not data).
+  function cleanPhoneOf(p){
+    const t=p==null?"":String(p).trim();
+    return (t===""||t==="+"||t===generalSettings.phonePrefix)?"":t;
+  }
   const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins, cutoffMins: optimizerSettings.cutoff*60, autoSwitch: optimizerSettings.autoSwitch });
   // ── Persistence hook ────────────────────────────────────────────────────────
   // Owns bookings/tableBlocks state, Firebase listeners, savers, and the
@@ -601,6 +642,13 @@ function BookingApp(){
     try{localStorage.setItem("mgt-theme",next?"dark":"light");}catch(e){}
     setThemePref(next);
   }
+  // v17.0.0 correction: per-device app width (see readAppWidth above).
+  const [appWidth,setAppWidth]=useState(readAppWidth);
+  function onSetAppWidth(next){
+    const v=Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,next));
+    try{localStorage.setItem("mgt-appwidth",String(v));}catch(e){}
+    setAppWidth(v);
+  }
   // v14 deployment fix: history entries must attribute to the logged-in user
   // (their email), not the generic "staff" stub used in standalone preview.
   // "staff" remains as a fallback for the rare case where auth.currentUser
@@ -639,7 +687,7 @@ function BookingApp(){
     }else{
       setSelectedListId(null);setShowFinished(false);
     }
-    setLateDismissed(function(prev){return prev.size?new Set():prev;});setWaitNotifyDismissed(function(prev){return prev.size?new Set():prev;});
+    setLateDismissed(function(prev){return prev.size?new Set():prev;});setOverlapDismissed(function(prev){return prev.size?new Set():prev;});setWaitNotifyDismissed(function(prev){return prev.size?new Set():prev;});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[viewDate]);
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
@@ -710,6 +758,12 @@ function BookingApp(){
   })();
   function dismissLateRow(id){
     setLateDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
+  }
+  // v17.0.0 round 7 — same ✕-dismiss mechanism for the Overlap banner (the
+  // Running-late pattern applied app-wide). Session-only; keyed by seated id.
+  const [overlapDismissed,setOverlapDismissed]=useState(function(){return new Set();});
+  function dismissOverlapRow(id){
+    setOverlapDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
   }
   // v16.3.0 — Table-turn prediction: today's seated bookings whose scheduled end
   // is within the next freeSoonWindow min (freeingSoon, booking-logic.js). Gated
@@ -830,8 +884,10 @@ function BookingApp(){
           const t=tryFit(w.prefTime);
           if(t){next[w.id]={tables:t,time:w.prefTime};return;}
         }
-        scanLo=Math.max(scanLo,Math.ceil((sm-90)/15)*15);
-        scanHi=Math.min(scanHi,sm+90);
+        // v17.0.0: the ± window is editable (settings/general waitMatchWin).
+        const win=generalSettings.waitMatchWin||90;
+        scanLo=Math.max(scanLo,Math.ceil((sm-win)/15)*15);
+        scanHi=Math.min(scanHi,sm+win);
       }
       for(let m=scanLo;m<=scanHi&&m<24*60;m+=15){
         const t=tryFit(toTime(m));
@@ -849,7 +905,7 @@ function BookingApp(){
     // (persistent + actionable), not a 6-second toast — so the prev-set diff that
     // fired the old toast is gone. waitAvail alone drives the banner.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter]);
+  },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter,generalSettings.waitMatchWin]);
 
   // ── v16.3.0: Recurring-booking generator ────────────────────────────────────
   // For each ACTIVE rule, materialise its occurrences across the rolling horizon
@@ -919,7 +975,7 @@ function BookingApp(){
     const avail=waitAvail[w.id];
     setForm(Object.assign({},EMPTY_FORM,{
       name:w.name||"",
-      phone:w.phone||"+",
+      phone:w.phone||generalSettings.phonePrefix,
       date:w.date,
       time:(avail&&avail.time)||w.prefTime||"",
       size:w.size||2,
@@ -936,7 +992,7 @@ function BookingApp(){
     const f=formRef.current;
     addToWaitlist({
       name:f.name||"",
-      phone:f.phone&&f.phone.trim()!=="+"?f.phone.trim():"",
+      phone:cleanPhoneOf(f.phone),
       size:Number(f.size)||2,
       date:f.date||viewDate,
       prefTime:f.time||null,
@@ -951,7 +1007,7 @@ function BookingApp(){
     const wf=walkinForm||{};
     addToWaitlist({
       name:wf.name||"",
-      phone:wf.phone&&String(wf.phone).trim()!=="+"?String(wf.phone).trim():"",
+      phone:cleanPhoneOf(wf.phone),
       size:Number(wf.size)||2,
       date:new Date().toISOString().slice(0,10),
       prefTime:wf.time||null,
@@ -1005,15 +1061,26 @@ function BookingApp(){
       setTimeout(function(){URL.revokeObjectURL(url);},1000);
     }catch(e){setWriteWarning("Couldn't create the backup file on this device.");}
   }
+  // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
+  // bookings remain for statistics (covers, day/range stats, phone-less
+  // no-show tile) as name "Data removed" with phone/notes/history wiped and
+  // the noShow flag KEPT (Patryk-confirmed scope). The `anonymized` flag
+  // excludes them from every name-search/autocomplete path (customers.js).
+  // Waitlist entries are still fully deleted (personal data, not statistics).
+  // Side benefit: the old whole-DB edge (filter → empty array refused by the
+  // write-guard) is gone — a map never changes the booking count.
   function deleteCustomer(phoneKey){
     const key=normalizePhone(phoneKey);
     if(!key) return;
-    saveBookings(function(prev){return prev.filter(function(b){return normalizePhone(b.phone)!==key;});});
+    saveBookings(function(prev){return prev.map(function(b){
+      if(normalizePhone(b.phone)!==key) return b;
+      return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],anonymized:true});
+    });});
     saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
   }
 
-  function openNew(){pendingWaitlistRef.current=null;setForm(Object.assign({},EMPTY_FORM,{date:viewDate}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){pendingWaitlistRef.current=null;setForm({name:b.name,phone:b.phone||"+",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openNew(){pendingWaitlistRef.current=null;setForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  function openEdit(b){pendingWaitlistRef.current=null;setForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -1028,7 +1095,7 @@ function BookingApp(){
     const schedTime=sourceBooking.scheduledTime||sourceBooking.time||"13:00";
     setForm(Object.assign({},EMPTY_FORM,{
       name:sourceBooking.name||"",
-      phone:sourceBooking.phone||"+",
+      phone:sourceBooking.phone||generalSettings.phonePrefix,
       date:"",
       time:schedTime,
       size:sourceBooking.size||2,
@@ -1069,7 +1136,11 @@ function BookingApp(){
   });
 
   function doSave(){
-    const f=formRef.current;
+    // v17.0.0: apply the pending/confirm status override to a CLONE of the form
+    // so every downstream read (status write, diffBooking history, completed-
+    // duration gate, flash condition) sees the effective status uniformly.
+    const so=statusOverrideRef.current;
+    const f=so?Object.assign({},formRef.current,{status:so}):formRef.current;
     try{
       if(!f.name||!f.name.trim()){setError("Customer name is required.");return;}
       // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
@@ -1084,7 +1155,7 @@ function BookingApp(){
       if(sm<fh.open*60||sm>fh.close*60){setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
       const size=Number(f.size)||2;
       const dur=f.customDur||getDur(size);
-      const cleanPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";
+      const cleanPhone=cleanPhoneOf(f.phone);
       const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
@@ -1216,8 +1287,9 @@ function BookingApp(){
           const rule=addRule({name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes});
           recStampId=rule.id;
         }
-        // v14 p1: scheduledTime=f.time on creation (new bookings always start confirmed).
-        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:"confirmed",tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,history:[createHist]};
+        // v14 p1: scheduledTime=f.time on creation. v17.0.0: new bookings start
+        // confirmed, OR pending via the "Save pending" button (status override).
+        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,history:[createHist]};
         // v15.7.0: build the next state as a PURE transform of `prev` (see the edit
         // path above) so the new-booking save joins the optimistic-show + auto-retry
         // path. `newId`/`nb` are computed once (stable id) → a held/rejected write
@@ -1263,7 +1335,10 @@ function BookingApp(){
       }
     }catch(err){setError("Error: "+err.message);}
   }
-  function save(){
+  function save(statusOverride){
+    // v17.0.0: record the override FIRST — the kitchen-confirm path re-enters
+    // doSave() without args, so the intent must survive the modal round-trip.
+    statusOverrideRef.current=statusOverride||null;
     const f=formRef.current;
     if(!f.time) return doSave();
     const size=Number(f.size)||2;const d=f.customDur||getDur(size);
@@ -1330,6 +1405,153 @@ function BookingApp(){
     });});
     setError("");
     if(ok) flash();
+  }
+  // ── v17.0.0 correction: Timeline drag & drop (move / swap / displace) ─────
+  // Drop a dragged block on another table row. Round 3 semantics (Patryk):
+  //   1. pick the table SET the party takes at the target — the single table
+  //      if it seats them, else the smallest VALID_COMBO containing the target
+  //      that does (skipping combos with a blocked member or a seated party);
+  //   2. set free → plain move onto it;
+  //   3. exactly one overlapping booking → try the round-1 full-set SWAP first
+  //      (capacity both ways + canAssign);
+  //   4. else DISPLACE: strip the desired tables from the occupants, unlock
+  //      them, give the dragged booking the set, re-optimize (the manualAssign
+  //      Swap-busy recipe) — but commit ONLY if a trial pass re-seats every
+  //      displaced booking (no stranding; refusal toast otherwise).
+  // The dragged booking becomes _manual+_locked so the optimizer never undoes
+  // a hand-placed drag. Refusals surface via the dragMsg floating toast;
+  // success messages are gated on the saveBookings `ok` boolean (v15.4.0).
+  function flashDragMsg(text,good){setDragMsg({text:text,good:!!good});clearTimeout(dragMsgTimer.current);dragMsgTimer.current=setTimeout(function(){setDragMsg(null);},3500);}
+  function dropOnTable(id,targetId){
+    const src=liveBookings.find(function(b){return b.id===id;});
+    if(!src||src.date!==viewDate||!isActive(src)) return;
+    const cur=src.tables||[];
+    if(cur.length===1&&cur[0]===targetId) return; // dropped back on its own row
+    const size=src.size||2;
+    const s=toMins(src.time);
+    const e=Math.max(occupancyEnd(src,nowMins),s+1);
+    const blockSlots=getBlockSlots(tableBlocks,src.date);
+    const busyBlocked=getBusy(blockSlots,s,e);
+    if(busyBlocked.has(targetId)){flashDragMsg("Table "+targetId+" is blocked then.");return;}
+    // Day's other active bookings (completed = free, the v16.0.0 rule) + the
+    // tables held by SEATED parties over the span — those are immovable.
+    const dayActive=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&isActive(b)&&b.status!=="completed";});
+    const isOver=function(b){return overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins));};
+    const seatedOn=new Set();
+    dayActive.forEach(function(b){if(b.status==="seated"&&isOver(b))(b.tables||[]).forEach(function(t){seatedOn.add(t);});});
+    // 1. Candidate table sets at the target, in PURE optimizer order (round 4,
+    //    Patryk-confirmed): the single table if it seats the party, else every
+    //    VALID_COMBO containing the target that does — ranked exactly like
+    //    findBest ranks combos (rankCombosContaining), NOT by raw capacity.
+    const cap1=(ALL_TABLES.find(function(t){return t.id===targetId;})||{}).capacity||0;
+    // v17.0.0 review fix #1: cap the candidate walk. Step 4 runs a full
+    // bookingsAfterAction TRIAL per candidate (optimise can be 70–500ms when a
+    // day has unplaceable bookings); an unbounded ~20-combo walk on a busy day
+    // could freeze the UI for seconds before the refusal toast. The top few
+    // ranked combos are the only realistic placements; deeper ones would strand
+    // more parties anyway.
+    const MAX_CAND=8;
+    const ranked=cap1>=size?[]:rankCombosContaining(targetId,size);
+    const candSets=cap1>=size
+      ?[[targetId]]
+      :ranked
+        .filter(function(c){return !c.ids.some(function(t){return busyBlocked.has(t)||seatedOn.has(t);});})
+        .map(function(c){return c.ids.slice();})
+        .slice(0,MAX_CAND);
+    // /code-review #2: name the ACTUAL reason (only reachable when cap1<size —
+    // a fitting single table always yields a candidate). "Won't fit" was a lie
+    // when a big-enough combo exists but the drag's waste/avoid rules excluded
+    // it: that's a "use Manual assign", not a dead end.
+    if(candSets.length===0){
+      flashDragMsg(ranked.length>0
+        ? "The tables needed to join with "+targetId+" are busy or blocked then."
+        : comboExistsFor(targetId,size)
+          ? "Party of "+size+" would need too many tables joined at "+targetId+" — use Manual assign."
+          : "Party of "+size+" won't fit at "+targetId+", even with joined tables.");
+      return;
+    }
+    const occOf=function(set){return dayActive.filter(function(b){return isOver(b)&&(b.tables||[]).some(function(t){return set.includes(t);});});};
+    const desired=candSets[0];
+    const occ=occOf(desired);
+    const user=getUser();
+    // 2. Free set → plain move.
+    if(occ.length===0){
+      const ok=saveBookings(function(prev){return prev.map(function(b){
+        if(b.id!==id) return b;
+        return Object.assign({},b,{tables:desired,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+desired.join("+")+" (drag)",user)])});
+      });});
+      if(ok) flashDragMsg(src.name+" moved to "+desired.join("+")+".",true);
+      return;
+    }
+    // 3. Exactly one occupant → try the straight full-set swap first.
+    if(occ.length===1&&cur.length>0&&occ[0].status!=="seated"){
+      const other=occ[0];
+      const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
+      const otherSize=other.size||2;
+      if(comboCapBest(newSrc)>=size&&comboCapBest(newOther)>=otherSize){
+        const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins),os+1);
+        const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins)};}).concat(blockSlots);
+        if(canAssign(newSrc,slots,s,e)&&canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){
+          const ok=saveBookings(function(prev){return prev.map(function(b){
+            if(b.id===id) return Object.assign({},b,{tables:newSrc,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+other.name+" ("+(cur.join("+")||"none")+" → "+newSrc.join("+")+")",user)])});
+            if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
+            return b;
+          });});
+          if(ok) flashDragMsg(src.name+" ⇄ "+other.name+" — tables swapped.",true);
+          return;
+        }
+      }
+    }
+    // 4. Displacement — the manualAssign Swap-busy recipe, with a trial gate.
+    //    Round 4: walk the optimizer-ranked candidates in order and commit the
+    //    FIRST whose trial re-seats every displaced booking conflict-free —
+    //    a stranding top pick falls through to the next set, not to a refusal.
+    const mkTransform=function(dSet,dOcc){
+      const occIds=new Set(dOcc.map(function(b){return b.id;}));
+      return function(list){
+        const updated=list.map(function(b){
+          if(b.id===id) return Object.assign({},b,{tables:dSet,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+dSet.join("+")+" (drag)",user)])});
+          if(occIds.has(b.id)){
+            const remaining=(b.tables||[]).filter(function(t){return !dSet.includes(t);});
+            return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});
+          }
+          return b;
+        });
+        return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
+      };
+    };
+    for(let ci=0;ci<candSets.length;ci++){
+      const dSet=candSets[ci];
+      const dOcc=ci===0?occ:occOf(dSet);
+      if(dOcc.some(function(b){return b.status==="seated";})) continue; // seated = immovable (only reachable via the single-table set)
+      if(dOcc.length===0){
+        // a lower-ranked but FREE set (only reachable past a failed higher pick)
+        const ok=saveBookings(function(prev){return prev.map(function(b){
+          if(b.id!==id) return b;
+          return Object.assign({},b,{tables:dSet,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+dSet.join("+")+" (drag)",user)])});
+        });});
+        if(ok) flashDragMsg(src.name+" moved to "+dSet.join("+")+".",true);
+        return;
+      }
+      const transform=mkTransform(dSet,dOcc);
+      // v17.0.0 review note #2: the trial runs against the CURRENT `bookings`,
+      // while the committed write re-applies `transform` to whatever fresh
+      // `prev` saveBookings hands it. `transform` itself re-runs
+      // bookingsAfterAction (the optimizer) on that fresh data, so the COMMIT is
+      // always internally consistent; a concurrent remote echo can at worst
+      // leave a displaced booking table-less (visible in the unassigned row) or
+      // overlapping (the v15.6.1 reconciliation effect then self-heals). No
+      // silent data loss — acceptable for a rare cross-device race.
+      const trial=transform(bookings);
+      const stranded=dOcc.find(function(o){const t=trial.find(function(x){return x.id===o.id;});return !t||(t.tables||[]).length===0||t._conflict;});
+      if(stranded) continue;
+      const ok=saveBookings(transform);
+      if(ok) flashDragMsg(src.name+" moved to "+dSet.join("+")+" — "+dOcc.map(function(o){return o.name;}).join(", ")+" reassigned.",true);
+      return;
+    }
+    const seatedOcc=occ.find(function(b){return b.status==="seated";});
+    if(seatedOcc){flashDragMsg(seatedOcc.name+" is seated on "+targetId+"'s tables — can't move them.");return;}
+    flashDragMsg("Can't re-seat the parties there without stranding one — use Manual assign.");
   }
   function delBooking(id){const target=bookings.find(function(x){return x.id===id;});
     // v16.3.0: deleting a recurring OCCURRENCE parks its date on the rule's
@@ -1581,14 +1803,20 @@ function BookingApp(){
         if(sel){
           if(k==="a"||k==="A"){e.preventDefault();K.setManualTarget(sel.id);return;}
           if(k==="e"||k==="E"){e.preventDefault();K.openEdit(sel);return;}
-          if(k==="s"||k==="S"){e.preventDefault();K.updateStatus(sel.id,"seated");return;}
+          // v17.0.0: a PENDING card can only be confirmed (or cancelled) — S/C
+          // are no-ops on it, matching the List/RMB button gating.
+          if(k==="s"||k==="S"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"seated");return;}
           if((k==="c"||k==="C")&&e.shiftKey){e.preventDefault();K.updateStatus(sel.id,"cancelled");return;}
-          if(k==="c"||k==="C"){e.preventDefault();K.updateStatus(sel.id,"completed");return;}
+          if(k==="c"||k==="C"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"completed");return;}
           if(k==="d"||k==="D"){e.preventDefault();K.setConfirmDel(sel.id);return;}
         }
       }
-      if(k==="t"||k==="T"){e.preventDefault();if(K.view!=="timeline"){K.bumpSlide("mgt-view-in-left");}K.setView("timeline");return;}
-      if(k==="l"||k==="L"){e.preventDefault();if(K.view!=="list"){K.bumpSlide("mgt-view-in-right");}K.setView("list");return;}
+      // v17.0.0: three views — slide direction follows the view order (T·L·P).
+      const VIEW_ORD=["timeline","list","plan"];
+      const goView=function(v){if(K.view!==v){K.bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(K.view)?"mgt-view-in-right":"mgt-view-in-left");}K.setView(v);};
+      if(k==="t"||k==="T"){e.preventDefault();goView("timeline");return;}
+      if(k==="l"||k==="L"){e.preventDefault();goView("list");return;}
+      if(k==="p"||k==="P"){e.preventDefault();goView("plan");return;}
       if(k==="d"||k==="D"){e.preventDefault();K.goToDate(new Date().toISOString().slice(0,10));return;}
       if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
@@ -1687,7 +1915,7 @@ function BookingApp(){
       if(snapshot){
         if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
         setUndoInfo({snapshot:snapshot,noShow:!!noShow});
-        undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},10000);
+        undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
       }
     }
   }
@@ -1789,22 +2017,26 @@ function BookingApp(){
   // the same grid cell (gridArea 1/1) so the swap is a crossfade in place.
   const statusToasts=[
     {key:"resync",on:resyncing,node:<div
-      style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.</div>},
+      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.</div>},
     {key:"reconnect",on:reconnectShown,node:<div
-      style={{background:"var(--app-reconnect-bg)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:toastShadow}}>✓ Reconnected — changes synced.</div>},
+      style={{background:"linear-gradient(var(--app-reconnect-bg),var(--app-reconnect-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:toastShadow}}>✓ Reconnected — changes synced.</div>},
     {key:"syncfix",on:syncFix,node:<div
-      style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
+      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
     {key:"waitadded",on:waitAddedShown,node:<div
-      style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
+      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
     {key:"undo",on:!!undoInfo,node:<div
-      style={{background:"var(--bg-sheet)",border:"2px solid var(--border-sheet)",borderRadius:14,padding:"8px 10px 8px 14px",fontSize:13,fontWeight:600,color:"var(--text-primary)",boxShadow:toastShadow,display:"flex",alignItems:"center",gap:10,pointerEvents:"auto"}}><span>{undoInfo&&undoInfo.noShow?"Marked no-show":"Booking cancelled"}</span><button
+      style={{background:"linear-gradient(var(--bg-sheet),var(--bg-sheet)),var(--bg-ac-menu)",border:"2px solid var(--border-sheet)",borderRadius:14,padding:"8px 10px 8px 14px",fontSize:13,fontWeight:600,color:"var(--text-primary)",boxShadow:toastShadow,display:"flex",alignItems:"center",gap:10,pointerEvents:"auto"}}><span>{undoInfo&&undoInfo.noShow?"Marked no-show":"Booking cancelled"}</span><button
         onClick={function(e){e.stopPropagation();undoCancel();}}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({fontSize:12,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button></div>},
+    {key:"dragmsg",on:!!dragMsg,node:<div
+      style={dragMsg&&dragMsg.good
+        ?{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}
+        :{background:"linear-gradient(var(--warn-bg),var(--warn-bg)),var(--bg-ac-menu)",border:"2px solid var(--warn-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--warn-text)",boxShadow:toastShadow}}>{dragMsg?dragMsg.text:""}</div>},
     {key:"reshuffled",on:reshuffled,node:<div
-      style={{background:"var(--app-saved-bg)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>},
+      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>},
     {key:"load",on:loadBannerShown,node:<div
-      style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>{"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."}</div>},
+      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>{"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."}</div>},
   ];
   const topToastKey=(statusToasts.find(function(t){return t.on;})||{}).key;
   // Floating layer — absolutely positioned over the TOP-CENTRE of mainView so the
@@ -1828,7 +2060,7 @@ function BookingApp(){
             className="mgt-hover-scale"
             style={mkBtn({fontSize:12,background:"var(--app-btn-slate-dim)",minHeight:32,padding:"4px 12px"})}
             onClick={function(){setWriteWarning(null);}}>Dismiss</button></div>:null;
-  const ineffShow=!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer);
+  const ineffShow=!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer)&&bookingDefaults.reshuffleSuggestEnabled;
   const ineffBanner=ineffShow?<div
     style={{background:"var(--warn-bg)",border:"2px solid var(--warn-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--warn-text)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>Tables could be reshuffled for better efficiency.</span><div style={{display:"flex",gap:6}}><button
         onClick={function(){setDismissedIneff(viewDate);}}
@@ -1839,29 +2071,19 @@ function BookingApp(){
         style={{background:BTN.orange,color:"var(--text-on-accent)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:600,minHeight:36,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div></div>:null;
 
   // Overlap warnings banner — shows when one or more seated guests are overstaying
-  // into the start time of a booking on the same table. Each row shows a one-tap
-  // Reassign button that reroutes the crowded-out booking to a free table without
-  // disturbing anyone else. Visible regardless of view (timeline or list).
-  const overlapEntries=Object.keys(overlapWarnings).map(function(sbId){
-    const w=overlapWarnings[sbId];
-    const sb=bookings.find(function(b){return b.id===sbId;});
-    if(!sb) return null;
-    const rowBg=w.overdue?"var(--danger-bg)":"var(--warn-bg)";
-    const rowBrd=w.overdue?"var(--danger-border)":"var(--warn-border)";
-    const rowTxt=w.overdue?"var(--danger-text)":"var(--warn-text)";
-    const msg=sb.name+" (overstaying) → "+w.next+" at "+w.nextTime+(w.overdue?" — overdue":" — in "+w.gap+" min");
-    return (
-      <div
-        key={sbId}
-        style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",padding:"8px 12px",borderRadius:12,background:rowBg,border:"1px solid "+rowBrd,marginTop:6}}><span
-          style={{fontSize:13,color:rowTxt,fontWeight:600,flex:"1 1 auto",minWidth:0}}>{msg}</span><button
-          onClick={function(){reassignBooking(w.nextId);}}
-          className="mgt-hover-scale"
-          style={mkBtn({fontSize:12,minHeight:32,padding:"4px 12px",background:BTN.orange})}>{"Reassign "+w.next}</button></div>
-    );
-  }).filter(Boolean);
-  const overlapBanner=overlapEntries.length?<div
-    style={{background:"var(--app-overlap-bg)",border:"2px solid var(--app-overlap-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><div style={{fontSize:13,fontWeight:700,color:"var(--warn-text)",marginBottom:2}}>Overlap warnings</div>{overlapEntries}</div>:null;
+  // into the start time of a booking on the same table (one-tap Reassign per row).
+  // v17.0.0 round 7: converted to the Running-late (LateBanner) pattern —
+  // OverlapBanner.jsx (collapsible count header + per-row ✕ dismiss) — gated on
+  // the Settings master switch. The map is dismiss-filtered HERE (lateBannerMap
+  // pattern) so the outer Reveal collapses when the last row is dismissed.
+  const overlapBannerMap=(function(){
+    if(!bookingDefaults.overlapWarnEnabled) return {};
+    if(overlapDismissed.size===0) return overlapWarnings;
+    const map={};
+    Object.keys(overlapWarnings).forEach(function(id){if(!overlapDismissed.has(id)) map[id]=overlapWarnings[id];});
+    return map;
+  })();
+  const hasOverlap=Object.keys(overlapBannerMap).length>0;
 
   // v16.1.0 — Running-late banner (sibling of the overlap banner): amber rows
   // for today's late confirmed bookings. At the "noshow" stage each row gains
@@ -1896,13 +2118,28 @@ function BookingApp(){
     onRemove={removeFromWaitlist}
     onClose={function(){setShowWaitlist(false);}} />:null}</ModalPresence>;
 
-  const mainView=view==="timeline"
+  // v17.0.0: the Plan (floor) view — reads settings/layout.floorPlan via the
+  // `layout` state; quick-status + edit + walk-in ride the existing handlers.
+  const planView=<PlanView
+    bookings={bookings}
+    date={viewDate}
+    layout={layout}
+    blocks={tableBlocks}
+    nowMins={nowMins}
+    late={lateMap}
+    freeing={freeingMap}
+    onEdit={openEdit}
+    onStatus={updateStatus}
+    onNoShow={function(id){doCancelBooking(id,true);}}
+    onWalkin={function(tableId){openWalkin(tableId);}} />;
+  const mainView=view==="plan"?planView:view==="timeline"
     ?<TimelineView
     bookings={bookings}
     date={viewDate}
     onEdit={openEdit}
     onManual={function(id){setManualTarget(id);}}
     onStatus={updateStatus}
+    onDropOnTable={dropOnTable}
     blocks={tableBlocks}
     onBlock={function(id){setBlockTarget(id);}}
     nowMins={nowMins}
@@ -1918,8 +2155,7 @@ function BookingApp(){
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={function(){setConfirmReshuffle(true);}}
-    onOpenSettings={function(){setShowSettings(true);}}
-    onOpenSearch={function(){setShowSearch(true);}} />
+    currency={generalSettings.currency} />
     :<ListView
     bookings={bookings}
     date={viewDate}
@@ -1935,7 +2171,8 @@ function BookingApp(){
     onSelect={setSelectedListId}
     showFinished={showFinished}
     onToggleFinished={toggleShowFinished}
-    onOpenSearch={function(){setShowSearch(true);}} />;
+    currency={generalSettings.currency} />;
+
 
 
   const summaryPanel=<Summary
@@ -1951,7 +2188,7 @@ function BookingApp(){
     onPrint={function(){window.print();}} />;
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
-  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} />;
+  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} />;
 
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
@@ -1991,12 +2228,12 @@ function BookingApp(){
 
   return (
     <div
-      style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:1000,margin:"0 auto"}}><div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>Me Gustas Tú</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list"].map(function(v){return (
+      style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:appWidth,margin:"0 auto"}}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list","plan"].map(function(v){return (
               <button
                 key={v}
                 className="mgt-hover-scale"
-                onClick={function(){if(v!==view){bumpSlide(v==="list"?"mgt-view-in-right":"mgt-view-in-left");}setView(v);}}
+                onClick={function(){if(v!==view){const ORD=["timeline","list","plan"];bumpSlide(ORD.indexOf(v)>ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");}setView(v);}}
                 style={mkBtn({background:view===v?S.accent:"var(--app-btn-grey)",textTransform:"capitalize",minHeight:40})}>{v}</button>
             );})}<button
               onClick={openWalkin}
@@ -2030,7 +2267,14 @@ function BookingApp(){
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={overlapEntries.length>0}>{overlapBanner}</Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div>{/* v17.0.0 round 8: 🔍 + ⚙ live HERE (right of Summary) for every
+              view — Timeline's legend and List's card-header each used to carry
+              their own copy and Plan had none. minHeight 40 aligns them with the
+              date controls; marginLeft:auto keeps them right-aligned when the
+              mobile full-width Summary wraps them onto their own line. */}
+            <div style={{display:"flex",alignItems:"center",minHeight:40,marginLeft:"auto",flexShrink:0}}><ViewTools
+              onOpenSearch={function(){setShowSearch(true);}}
+              onOpenSettings={function(){setShowSettings(true);}} /></div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
@@ -2040,7 +2284,11 @@ function BookingApp(){
               tableBlocks={tableBlocks}
               autoOptimizer={autoOptimizer}
               isMobile={isMobile}
-              onSave={save}
+              currency={generalSettings.currency}
+              regularMin={generalSettings.regularMin}
+              onSave={function(){save();}}
+              onSavePending={function(){save("pending");}}
+              onSaveConfirm={function(){save("confirmed");}}
               onClose={function(){setShowForm(false);}}
               onClearSwap={function(){setSwapAffected(null);}}
               onBookAgain={bookAgain}
@@ -2088,6 +2336,8 @@ function BookingApp(){
             appVersion={__APP_SIGNATURE__.version}
             isDark={isDark}
             onToggleDark={onToggleDark}
+            appWidth={appWidth}
+            onSetAppWidth={onSetAppWidth}
             weekHours={weekHours}
             onSaveDayHours={saveDayHours}
             onSaveAllDays={saveAllDays}
@@ -2100,6 +2350,8 @@ function BookingApp(){
             onSaveOptimizer={saveOptimizerSettings}
             bookingDefaults={bookingDefaults}
             onSaveBookingDefaults={saveBookingDefaults}
+            generalSettings={generalSettings}
+            onSaveGeneralSettings={saveGeneralSettings}
             onBackup={doBackup}
             recurring={recurring}
             onSetRecurringEnabled={setRecurringEnabled}

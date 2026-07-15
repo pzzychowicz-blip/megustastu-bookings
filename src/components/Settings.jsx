@@ -29,7 +29,7 @@ import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp } from "./atoms";
 import { BTN } from "../lib/constants";
 
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
@@ -149,6 +149,27 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }
   );
 }
 
+// v17.0.0: blur-commit text field for the Restaurant section (settings/general).
+// Local draft while typing; commits on blur or Enter so every keystroke isn't a
+// revGuard CAS write. The draft re-syncs when the committed value changes (a
+// remote save from another device). mkInp returns a STYLE OBJECT (Bookings
+// convention — no prop passthrough).
+function GsTextField({ label, value, onCommit, width }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => { setDraft(value); }, [value]);
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => { if (draft !== value) onCommit(draft); }}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+        style={{ ...mkInp(), width: width || 180, boxSizing: "border-box" }} />
+    </div>
+  );
+}
+
 // v15.0.0: compact stepper for the per-weekday hours editor (no label row, so 7
 // rows stay scannable). Same disabled / hover-scale contract as HourStepper.
 const MINI_STEP_BTN = {
@@ -213,7 +234,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
@@ -236,6 +257,11 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
     ? bookingDefaults
     : { tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }], restDur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20, freeSoonEnabled: true };
   const tiers = Array.isArray(bd.tiers) ? bd.tiers : [];
+  // v17.0.0: general settings (settings/general). Defensive fallback mirrors
+  // the hook's DEFAULT_GENERAL_SETTINGS seed.
+  const gs = generalSettings && typeof generalSettings === "object"
+    ? generalSettings
+    : { restaurantName: "Me Gustas Tú", currency: "€", phonePrefix: "+", regularMin: 2, lateCollapseMax: 2, waitMatchWin: 90, undoSecs: 10 };
   const minsLabel = (n) => n + " min";
   const guestsLabel = (n) => "≤ " + n;
   // Tier-list edits: the hook's sanitizer re-sorts/dedupes/clamps, so these
@@ -310,7 +336,45 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           </div>
           <Toggle on={isDark} onClick={onToggleDark} />
         </div>
+        {/* v17.0.0 correction: per-device max app width. The 1.08 hover lift
+            overflowed the viewport when the fixed 1600 exceeded the screen —
+            now tunable per device (localStorage, same contract as the theme). */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>App width</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Maximum content width on this device. Lower it if the app overflows your screen.
+            </div>
+          </div>
+          <MiniStepper value={appWidth} fmt={(v) => v + " px"}
+            disableDec={appWidth <= 900} disableInc={appWidth >= 2400}
+            onDec={() => onSetAppWidth(appWidth - 50)} onInc={() => onSetAppWidth(appWidth + 50)} />
+        </div>
       </Section>
+      {/* v17.0.0: Restaurant identity — name / currency / phone prefix.
+          Firebase-shared (settings/general, the 6th settings node). Text
+          fields commit on BLUR (or Enter) so every keystroke isn't a CAS
+          write; the hook's sanitizer trims/caps and restores a default on
+          an emptied field. */}
+      <Collapsible
+        title="Restaurant"
+        subtitle="Name, currency and phone prefix. Shared across all devices."
+        summary={gs.restaurantName}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+          <GsTextField label="Restaurant name" value={gs.restaurantName} width={260}
+            onCommit={(v) => onSaveGeneralSettings({ restaurantName: v })} />
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+            <GsTextField label="Currency symbol" value={gs.currency} width={80}
+              onCommit={(v) => onSaveGeneralSettings({ currency: v })} />
+            <GsTextField label="Phone prefix" value={gs.phonePrefix} width={100}
+              onCommit={(v) => onSaveGeneralSettings({ phonePrefix: v })} />
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>
+            The name shows in the header and on the printed day sheet; the currency on deposits; the prefix seeds the phone field on new bookings.
+          </div>
+        </div>
+      </Collapsible>
       {/* v14.4.0 / v15.0.0: Per-weekday opening-hours editor — Firebase-shared
           (settings/operatingHours). Each day sets its own booking window + timeline
           range, or is marked Closed. "copy → all" pushes one day's config to all 7.
@@ -474,6 +538,29 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           </div>
         )}</AutoHeight>
       </Section>
+      {/* v17.0.0 round 7: Alert banners — master switches for the other in-flow
+          banners, matching the Running-late toggle above (Patryk: every banner
+          adjustable the same way). Firebase-shared (settings/bookingDefaults). */}
+      <Section style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Overlap warnings</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Warn when an overstaying seated party runs into the next booking on its table, with a one-tap reassign. Shared across all devices.
+            </div>
+          </div>
+          <Toggle on={bd.overlapWarnEnabled !== false} onClick={() => onSaveBookingDefaults({ overlapWarnEnabled: bd.overlapWarnEnabled === false })} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Reshuffle suggestions</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Suggest a table reshuffle when the day's layout could seat parties more efficiently. Shared across all devices.
+            </div>
+          </div>
+          <Toggle on={bd.reshuffleSuggestEnabled !== false} onClick={() => onSaveBookingDefaults({ reshuffleSuggestEnabled: bd.reshuffleSuggestEnabled === false })} />
+        </div>
+      </Section>
       {/* v16.3.0: Table turns — predict which seated tables free up in the next
           ~15 min (Summary "freeing soon" line + timeline countdown pills).
           Firebase-shared (settings/bookingDefaults). */}
@@ -548,6 +635,32 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, weekHours,
           )}</AutoHeight>
         </Section>
       ) : null}
+      {/* v17.0.0: Preferences — the remaining ex-hard-coded knobs from the
+          configurability pass. Firebase-shared (settings/general). */}
+      <Collapsible
+        title="Preferences"
+        subtitle="Regulars threshold, late-banner collapse, waitlist match window, undo timing. Shared across all devices."
+        summary={"Regular at " + gs.regularMin + "+"}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
+          <HourStepper label="“Regular” from (completed visits)" value={gs.regularMin} fmt={(n) => String(n)}
+            disableDec={gs.regularMin <= 1} disableInc={gs.regularMin >= 50}
+            onDec={() => onSaveGeneralSettings({ regularMin: gs.regularMin - 1 })}
+            onInc={() => onSaveGeneralSettings({ regularMin: gs.regularMin + 1 })} />
+          <HourStepper label="Collapse the late banner above" value={gs.lateCollapseMax} fmt={(n) => n + " late"}
+            disableDec={gs.lateCollapseMax <= 1} disableInc={gs.lateCollapseMax >= 20}
+            onDec={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax - 1 })}
+            onInc={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax + 1 })} />
+          <HourStepper label="Waitlist match window (± wanted time)" value={gs.waitMatchWin} fmt={(n) => "±" + n + " min"}
+            disableDec={gs.waitMatchWin <= 15} disableInc={gs.waitMatchWin >= 240}
+            onDec={() => onSaveGeneralSettings({ waitMatchWin: gs.waitMatchWin - 15 })}
+            onInc={() => onSaveGeneralSettings({ waitMatchWin: gs.waitMatchWin + 15 })} />
+          <HourStepper label="Undo toast stays for" value={gs.undoSecs} fmt={(n) => n + " s"}
+            disableDec={gs.undoSecs <= 5} disableInc={gs.undoSecs >= 60}
+            onDec={() => onSaveGeneralSettings({ undoSecs: gs.undoSecs - 5 })}
+            onInc={() => onSaveGeneralSettings({ undoSecs: gs.undoSecs + 5 })} />
+        </div>
+      </Collapsible>
       {/* v16.3.0 correction: Backup lives at the BOTTOM of the General tab —
           download a JSON snapshot of every collection + all settings to this
           device (the Firebase free plan has no auto-backups). */}
@@ -588,6 +701,8 @@ export function SettingsContent({
   appVersion,
   isDark,
   onToggleDark,
+  appWidth,
+  onSetAppWidth,
   weekHours,
   onSaveDayHours,
   onSaveAllDays,
@@ -600,6 +715,8 @@ export function SettingsContent({
   onSaveOptimizer,
   bookingDefaults,
   onSaveBookingDefaults,
+  generalSettings,
+  onSaveGeneralSettings,
   onBackup,
   recurring,
   onSetRecurringEnabled,
@@ -619,12 +736,12 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
   } else if (tab === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} />;
   } else if (tab === "customers") {
     // v16.0.0: customer management (phone-derived index; delete-all-data).
-    content = <CustomersTabContent bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} />;
+    content = <CustomersTabContent bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent

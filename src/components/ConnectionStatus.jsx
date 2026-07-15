@@ -112,7 +112,7 @@ export function ConnectionStatus({ connected, userEmail }) {
             zIndex: 30,
             minWidth: 220,
             padding: 12,
-            background: "var(--bg-sheet)",
+            background: "var(--bg-ac-menu)",
             border: "1px solid var(--border-card)",
             borderRadius: 12,
             boxShadow: "var(--shadow-sheet)",

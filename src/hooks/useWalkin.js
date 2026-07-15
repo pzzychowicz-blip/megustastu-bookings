@@ -69,7 +69,14 @@ export function useWalkin({
     let max=0;bookings.forEach(function(b){if(b.date===today&&b.name&&b.name.indexOf("Walk-in ")===0){const n=parseInt(b.name.slice(8));if(n>max) max=n;}});
     return max+1;
   }
-  function openWalkin(){setWalkinForm({size:2,notes:"",tables:[],time:nowTime(),customDur:null});setWalkinError("");setShowWalkin(true);}
+  // v17.0.0: optional table pre-select — the Plan view's "Walk-in here" passes
+  // the tapped table's id. STRING-guarded because the header button wires
+  // onClick={openWalkin}, which passes the click event as the first arg.
+  function openWalkin(preTableId){
+    const pre=typeof preTableId==="string"&&preTableId?[preTableId]:[];
+    setWalkinForm({size:2,notes:"",tables:pre,time:nowTime(),customDur:null});
+    setWalkinError("");setShowWalkin(true);
+  }
   // doSaveWalkin: actual write. Builds a sanitised booking object with
   // status:"seated", _manual:true, _locked:true (walk-ins are always
   // hand-assigned and never reshuffled), and appends it. Also forces

@@ -45,7 +45,9 @@ export function getDur(s){var ts=DUR_TIERS.tiers||[];for(var i=0;i<ts.length;i++
 // consumer of the raw minutes must account for it).
 export function lateState(b,todayStr,nowMins,cfg){
   if(!cfg||!cfg.lateEnabled) return null;
-  if(!b||b.status!=="confirmed"||b.date!==todayStr) return null;
+  // v17.0.0: PENDING flags late too (Patryk-confirmed "same as confirmed") —
+  // an unconfirmed request past its time needs staff attention just the same.
+  if(!b||(b.status!=="confirmed"&&b.status!=="pending")||b.date!==todayStr) return null;
   var lateBy=lateMins(b,nowMins);
   if(lateBy>=cfg.lateNoShowMin) return "noshow";
   if(lateBy>=cfg.lateWarnMin) return "warn";
@@ -96,6 +98,10 @@ export function sanitize(b){if(!b||typeof b!=="object") return null;var t=b.time
   // skipDates so a deleted occurrence is never regenerated.
   recurringId:b.recurringId||null,
   recurringDate:b.recurringDate||null,
+  // v17.0.0: "Delete customer" anonymizes instead of deleting — the booking
+  // stays for statistics as name "Data removed" (phone/notes/history wiped,
+  // noShow kept). The flag excludes it from the name-search/autocomplete paths.
+  anonymized:!!b.anonymized,
   // v15.5.0: per-booking revision stamp for the per-node write model. Carried
   // through sanitise so it survives reads (this whitelist would otherwise drop
   // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.
@@ -178,6 +184,60 @@ function _comboLoc(c){if(isAllOut(c.ids)) return 0;if(isAllIn(c.ids)) return 1;r
 // _comboPri: first comboRule matching (key, size band) wins — avoid → +100 (last
 // resort), else -weight (more negative sorts earlier). No match → 0.
 function _comboPri(c,size){var k=c.ids.slice().sort().join("|");var rules=PRIORITIES.comboRules;for(var i=0;i<rules.length;i++){var r=rules[i];if(r.key===k&&size>=r.min&&size<=r.max) return r.avoid?100:-r.weight;}return 0;}
+
+// v17.0.0 correction rounds 4–5: the drag&drop candidate ranking. Every combo
+// containing `tableId` that seats `size`, ranked for a MANUAL drop — NOT the
+// optimizer's global order (round 4 used that and produced a bloated combo).
+// The user pointed at a table, so:
+//   1. FEWEST tables first — "don't assign more tables than necessary" (the
+//      reported bug: an 8-top on 7 took a 5-table combo);
+//   2. then the coded PREFERENCE rules (PRIORITIES.comboRules — editable in
+//      Settings → Layout → Table priorities), so within one footprint the
+//      preferred attach wins (e.g. 1A+1B+7+i4/i1 over +i2/+i3). The rule match
+//      is BAND-AGNOSTIC here (key only, size ignored) — a drop honors the
+//      preference regardless of the rule's optimizer size-band, per Patryk;
+//   3. then least capacity (fewest wasted seats), then id for determinism.
+// The zone/location tiebreak is deliberately dropped: the human already chose
+// the location by dropping. Availability filtering (blocked/seated members)
+// stays the caller's job. Respecting Settings edits falls out for free — the
+// weights/avoid flags come live from PRIORITIES.
+function _comboPriKey(c){
+  // v17.0.0 review fix: pick the STRONGEST-preference matching rule (lowest
+  // value — most negative sorts earliest), not the first in array order, so
+  // two rules sharing a key can't make drag ranking depend on rule ordering.
+  var k=c.ids.slice().sort().join("|");var rules=PRIORITIES.comboRules;var best=0,found=false;
+  for(var i=0;i<rules.length;i++){if(rules[i].key===k){var v=rules[i].avoid?100:-rules[i].weight;if(!found||v<best){best=v;found=true;}}}
+  return found?best:0;
+}
+// /code-review #2: does ANY declared combo containing tableId seat `size`,
+// ignoring the drag-only filters below? Lets a refusal tell "this party can
+// never sit here" apart from "the drag rules won't join that many tables —
+// Manual assign will".
+export function comboExistsFor(tableId,size){
+  return VALID_COMBOS.some(function(c){return c.ids.includes(tableId)&&c.cap>=size;});
+}
+export function rankCombosContaining(tableId,size){
+  // v17.0.0 round 9 (Patryk): two hard EXCLUSIONS for a manual drop — the
+  // recurring "more tables than necessary" bug (a 4-top dropped on standalone
+  // i1 took a whole cross-room mega, because every combo containing i1 IS one
+  // and fewest-tables can't help).
+  //   1. avoid-flagged combos are excluded, not just sorted last (sorted-last
+  //      is meaningless when the avoided combo is the only candidate).
+  //      _comboPriKey===100 ⟺ every rule matching the key is avoid (a
+  //      coexisting preference rule wins the min and un-hides it — deliberate).
+  //   2. DRAG_MAX_WASTE: a drop may conscript at most 4 unused seats
+  //      (cap − size ≤ 4, Patryk-picked). 4-on-i1 → refuses (best mega wastes
+  //      7); 8-on-7 → still 1A+1B+7+i4 (wastes 3, the round-5 contract).
+  // Bigger joins stay reachable via Manual assign — the explicit override.
+  var DRAG_MAX_WASTE=4;
+  return VALID_COMBOS.filter(function(c){return c.ids.includes(tableId)&&c.cap>=size&&c.cap-size<=DRAG_MAX_WASTE&&_comboPriKey(c)!==100;})
+    .sort(function(a,b){
+      if(a.ids.length!==b.ids.length) return a.ids.length-b.ids.length;
+      var pa=_comboPriKey(a),pb=_comboPriKey(b);if(pa!==pb) return pa-pb;
+      if(a.cap!==b.cap) return a.cap-b.cap;
+      return a.ids.join("|")<b.ids.join("|")?-1:1;
+    });
+}
 
 // ── Best-table finders ────────────────────────────────────────────────────────
 export function findBest(size,pref,s,e,slots){
@@ -567,9 +627,10 @@ export function checkInefficent(bookings,date){
 export function nowTime(){var d=new Date();return toTime(d.getHours()*60+d.getMinutes());}
 
 // Sort priority for the day-list view: seated first (most operationally
-// urgent), then confirmed (upcoming), completed (already left), cancelled.
+// urgent), then confirmed (upcoming), pending (awaiting confirmation, v17.0.0),
+// completed (already left), cancelled.
 // Previously inlined in ListView. Pure function of the status string.
-export function statusOrder(s){return s==="seated"?0:s==="confirmed"?1:s==="completed"?2:3;}
+export function statusOrder(s){return s==="seated"?0:s==="confirmed"?1:s==="pending"?2:s==="completed"?3:4;}
 
 // Position-percentage helper for the timeline grid — converts a clock-minutes
 // value into a CSS `left` percentage relative to the open–close span. The
@@ -686,7 +747,7 @@ export function daySummary(bookings,date,splitHour){
     if(!byHour[h]) byHour[h]={covers:0,count:0};
     byHour[h].covers+=size;byHour[h].count+=1;
     if(h<splitHour){aCovers+=size;aCount+=1;}else{eCovers+=size;eCount+=1;}
-    if(b.status==="seated"){seatedCount+=1;seatedCovers+=size;}else if(b.status==="confirmed"){upcomingCount+=1;}
+    if(b.status==="seated"){seatedCount+=1;seatedCovers+=size;}else if(b.status==="confirmed"||b.status==="pending"){upcomingCount+=1;} // v17.0.0: pending counts as upcoming
   });
   var hours=Object.keys(byHour).map(Number).sort(function(a,b){return a-b;}).map(function(h){
     return {hour:h,covers:byHour[h].covers,count:byHour[h].count};

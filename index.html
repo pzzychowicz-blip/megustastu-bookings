@@ -34,13 +34,20 @@
         --accent: #007aff;
         /* Status chips — bg + border share a hue (RGB triplet, composed in
            constants.js as rgba(var(--…-rgb), a)); text is a solid token. */
-        --status-confirmed-rgb: 250, 204, 21;  --status-confirmed-text: #92400e;
+        /* v17.0.0: confirmed left the amber family so the new PENDING status
+           could take the yellow. Correction round 6 (Option B, coordinated
+           matched-intensity pair): confirmed = amber rgb(217,119,6) + pending =
+           amber-yellow rgb(234,179,8) — both rich enough to match seated/
+           cancelled weight, white block text crisp, separated by depth. */
+        --status-confirmed-rgb: 217, 119, 6;   --status-confirmed-text: #92400e;
+        --status-pending-rgb: 234, 179, 8;     --status-pending-text: #854d0e;
         --status-seated-rgb: 34, 197, 94;      --status-seated-text: #166534;
         --status-completed-rgb: 148, 163, 184; --status-completed-text: #64748b;
         --status-cancelled-rgb: 239, 68, 68;   --status-cancelled-text: #991b1b;
         /* Timeline block fills / status buttons — saturated, white text;
            theme-invariant (read on light + dark), defined once here. */
-        --block-confirmed: rgba(180, 130, 40, 0.85);
+        --block-confirmed: rgba(217, 119, 6, 0.92);
+        --block-pending: rgba(234, 179, 8, 0.92);
         --block-seated: rgba(34, 160, 80, 0.85);
         --block-completed: rgba(140, 140, 150, 0.7);
         --block-cancelled: rgba(200, 80, 80, 0.8);
@@ -115,12 +122,24 @@
         --tl-unassigned-border: rgba(220, 60, 60, 0.4); /* dashed unassigned divider */
         --tl-block-warn: #dc2626;                        /* booking overdue border */
         --tl-block-warn-soon: #f59e0b;                   /* booking due-soon border */
+        /* v17.0.0 round 10 (Patryk): the RUNNING-LATE border used to reuse
+           --tl-block-warn-soon (amber #f59e0b), which since the round-6 recolor
+           sits right next to the confirmed block fill (amber-600) — the border
+           vanished into its own block. Late gets its own bright-yellow token;
+           the overstay "due soon" border stays amber (it paints on SEATED/green
+           blocks, where amber reads fine). */
+        --tl-block-late: #fde047;                        /* running-late border (yellow-300) */
         --tl-blocked-a: #991b1b;                          /* table-block stripe colours */
         --tl-blocked-b: #7f1d1d;
         --tl-blocked-badge: rgba(153, 27, 27, 0.85);     /* "blocked" label-col badge bg */
         --tl-blocked-badge-border: rgba(153, 27, 27, 0.5);
         --tl-popup-bg: #eef1f7;                           /* quick-status popup card */
         --tl-popup-scrim: rgba(0, 0, 0, 0.18);
+        /* v17.0.0 correction: floor-plan glyph outlines — the light-mode tables/
+           chairs blended into the canvas; strokes need real contrast per theme. */
+        --fp-outline: rgba(70, 75, 90, 0.55);
+        --fp-chair-outline: rgba(70, 75, 90, 0.4);
+        --fp-grid: rgba(70, 75, 90, 0.22);               /* floor-plan minor grid (round 6) */
         --cog-bg: rgba(120, 130, 150, 0.4);              /* settings cog button */
         --cog-border: rgba(255, 255, 255, 0.45);
         /* ── v14.2.4: ListView cards ── */
@@ -128,6 +147,7 @@
         --bg-card-dim: rgba(255, 255, 255, 0.35);        /* seated/completed/cancelled card */
         --border-card-plain: rgba(255, 255, 255, 0.4);   /* plain card border */
         --card-warn-border: rgba(245, 158, 11, 0.5);     /* due-soon card edge */
+        --card-late-border: rgba(250, 204, 21, 0.95);    /* running-late card edge — YELLOW like the timeline border, not amber (v17.0.0 round 10; yellow-400 for light-bg contrast) */
         --card-overdue-border: rgba(220, 60, 60, 0.5);   /* overdue card edge */
         --card-conflict-border: rgba(252, 165, 165, 0.5);/* no-table-assigned card edge */
         --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.5);
@@ -167,7 +187,8 @@
         /* Status chip text -> light variants for dark surfaces. Tint RGB and
            the block/table/button tokens are theme-invariant (inherited from
            :root); only the chip text needs to flip. */
-        --status-confirmed-text: #fcd34d;
+        --status-confirmed-text: #fcd9a0;
+        --status-pending-text: #fde047;
         --status-seated-text: #86efac;
         --status-completed-text: #cbd5e1;
         --status-cancelled-text: #fca5a5;
@@ -199,6 +220,9 @@
            (saturated, white text — read on both); only scrim/card/bg flip */
         --tl-popup-bg: rgba(44, 44, 46, 0.95);
         --tl-popup-scrim: rgba(0, 0, 0, 0.45);
+        --fp-outline: rgba(200, 205, 220, 0.4);
+        --fp-chair-outline: rgba(200, 205, 220, 0.3);
+        --fp-grid: rgba(200, 205, 220, 0.18);
         --cog-bg: rgba(255, 255, 255, 0.1);
         --cog-border: rgba(255, 255, 255, 0.14);
         /* ── v14.2.4: ListView cards (dark) ── */
@@ -206,6 +230,9 @@
         --bg-card-dim: rgba(255, 255, 255, 0.04);
         --border-card-plain: rgba(255, 255, 255, 0.1);
         /* warn/overdue/conflict card edges read on both themes — kept from :root */
+        /* …except the late edge: yellow-300 pops on a dark card (light uses
+           yellow-400 — one shade deeper for white-card contrast, still yellow). */
+        --card-late-border: rgba(253, 224, 71, 0.8);
         --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
         --border-sheet: rgba(255, 255, 255, 0.12);
         --border-soft: rgba(255, 255, 255, 0.1);
@@ -341,6 +368,12 @@
       @keyframes mgt-slide-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-12px); } }
       .mgt-slide-in  { animation: mgt-slide-in  180ms linear both; display: inline-flex; }
       .mgt-slide-out { animation: mgt-slide-out 180ms linear both; display: inline-flex; }
+      /* v17.0.0: rightward mirror — the form's Save&confirm button slides out to
+         the RIGHT (Patryk-specified direction; same timing as the Today button). */
+      @keyframes mgt-slide-in-r  { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+      @keyframes mgt-slide-out-r { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(12px); } }
+      .mgt-slide-in-r  { animation: mgt-slide-in-r  180ms linear both; display: inline-flex; }
+      .mgt-slide-out-r { animation: mgt-slide-out-r 180ms linear both; display: inline-flex; }
 
       /* Press feedback (ease-out, v15.8.0 cont.4) — Follow / − / 1× / + AND utility
          buttons (Clear / Reset / Done). Uses brightness (not transform) so it never
