@@ -4458,7 +4458,12 @@ Files: `src/components/FloorPlanEditor.jsx`, `src/lib/booking-logic.js`, `src/Ap
    other wall's body. The selected wall's handles now render after every wall body, so
    they always win.
 
-Build clean; ranking matrix + refusal branches verified offline via a Vite SSR module
-load. Live re-verification of the three UI paths was blocked by a transient
-browser-tooling outage (the classifier went down mid-task) — see the round-10 note about
-the iOS path still needing Patryk's iPad.
+Build clean. Verified offline (Vite SSR module load): the ranking matrix is unchanged and
+the three refusal branches resolve correctly (i1/4 + i1/6 → Manual-assign, i1/30 →
+won't-fit). Verified LIVE in DEV: dragging the 4-top onto i1 now toasts "would need too
+many tables joined at i1 — use Manual assign" (was the false "won't fit"), and a drop on
+free 2 still commits "moved to 2+3"; selecting a wall by its fat band renders both r=24
+endpoint handles AFTER every hit-band in document order (#3); and a TOUCH drag survives a
+pointerleave and keeps tracking (it used to commit there) while a MOUSE leave still
+commits (#1). The iOS floor-plan drag itself still needs Patryk's iPad — the round-10
+change it depends on can't be exercised in Chrome.
