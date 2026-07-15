@@ -4425,3 +4425,40 @@ Verified live in DEV, both themes, List + Timeline.
 
 FYI recorded: Patryk applied the new Firebase rules (`general`/`generalRev`) to **DEV and
 PROD** on 2026-07-15, ahead of the merge — rolling-safe, nothing outstanding rules-side.
+
+---
+
+**v17.0.0 /code-review fixes, round 10 (same version, same branch, pre-merge — 2026-07-15).**
+Review of rounds 8–10 (`6edc85f..c274979`): no critical issues; all 3 suggestions applied.
+
+Files: `src/components/FloorPlanEditor.jsx`, `src/lib/booking-logic.js`, `src/App.jsx`.
+
+1. (#1, correctness) **Touch drag could commit early via `onPointerLeave`.** Round 10 made
+   `setPointerCapture` mouse-only, so a touch pointer is now implicitly captured to the
+   small glyph `<g>` rather than the `<svg>`. A finger that outruns the glyph between
+   frames fires a boundary event at the capture target, and React's synthetic leave
+   propagation would reach the svg's `onPointerLeave={onUp}` → drag committed mid-gesture
+   at the current snap. (Pre-round-10 the capture target was the whole svg, so this
+   couldn't happen — the bug was introduced by the iOS fix.) `onPointerLeave` is now
+   MOUSE-only; a captured touch can't meaningfully leave, and a genuine abort arrives as
+   `pointercancel` (handled).
+2. (#2, UX) **Refusal toast names the real reason.** "Party of N won't fit at X, even with
+   joined tables" was false when a big-enough combo exists but the round-9 waste/avoid
+   filters excluded it — that's a "use Manual assign", not a dead end. New exported
+   `comboExistsFor(tableId,size)` (booking-logic) = does ANY declared combo containing the
+   table seat the party, ignoring the drag-only filters. `dropOnTable` now picks between
+   three messages: joins-are-busy ("the tables needed to join with X are busy or blocked
+   then" — ranked candidates existed but all were blocked/seated), too-many-tables ("would
+   need too many tables joined at X — use Manual assign"), and the true won't-fit. Only
+   reachable when the target single doesn't seat the party. Verified offline: i1/4 + i1/6
+   → Manual-assign message; i1/30 → won't-fit; every OK case unchanged.
+3. (#3, edge case) **Wall endpoint handles render in a second pass.** Walls paint in array
+   order, so a neighbouring wall's 40cm hit-band (round 9) painted OVER the selected
+   wall's r=24 endpoint hit-circles — at a corner, grabbing an endpoint could drag the
+   other wall's body. The selected wall's handles now render after every wall body, so
+   they always win.
+
+Build clean; ranking matrix + refusal branches verified offline via a Vite SSR module
+load. Live re-verification of the three UI paths was blocked by a transient
+browser-tooling outage (the classifier went down mid-task) — see the round-10 note about
+the iOS path still needing Patryk's iPad.

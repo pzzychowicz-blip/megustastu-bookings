@@ -209,6 +209,13 @@ function _comboPriKey(c){
   for(var i=0;i<rules.length;i++){if(rules[i].key===k){var v=rules[i].avoid?100:-rules[i].weight;if(!found||v<best){best=v;found=true;}}}
   return found?best:0;
 }
+// /code-review #2: does ANY declared combo containing tableId seat `size`,
+// ignoring the drag-only filters below? Lets a refusal tell "this party can
+// never sit here" apart from "the drag rules won't join that many tables —
+// Manual assign will".
+export function comboExistsFor(tableId,size){
+  return VALID_COMBOS.some(function(c){return c.ids.includes(tableId)&&c.cap>=size;});
+}
 export function rankCombosContaining(tableId,size){
   // v17.0.0 round 9 (Patryk): two hard EXCLUSIONS for a manual drop — the
   // recurring "more tables than necessary" bug (a 4-top dropped on standalone

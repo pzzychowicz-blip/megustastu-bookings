@@ -421,7 +421,16 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
           (round 10; the svg's own copy stays for Chrome/Android). */}
       <div ref={wrapRef} style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)", touchAction: "none" }}>
         <svg ref={svgRef} viewBox={zoom.x + " " + zoom.y + " " + vbW + " " + vbH} style={{ display: "block", width: "100%", touchAction: "none", cursor: zoom.k > 1 && mode === "select" ? "grab" : "default" }}
-          onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} onPointerCancel={onUp}>
+          onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+          onPointerLeave={function(e){
+            // /code-review #1: MOUSE only. Since round 10 a touch pointer is
+            // implicitly captured to the small glyph <g> (not the svg), so a
+            // finger that outruns the glyph between frames fires a leave at the
+            // capture target — which would commit the drag mid-gesture. A
+            // captured touch can't meaningfully "leave"; a real abort arrives
+            // as pointercancel, which is handled above.
+            if(e.pointerType === "mouse") onUp(e);
+          }}>
           {/* grid: minor 50 cm + stronger major every 250 cm (v17.0.0 round 6 — more visible) */}
           <defs>
             <pattern id="fp-grid" width={50} height={50} patternUnits="userSpaceOnUse">
@@ -449,23 +458,34 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
                   stroke="transparent" strokeWidth={40} strokeLinecap="round" pointerEvents="stroke"
                   style={{ cursor: mode === "select" ? "grab" : "pointer" }}
                   onPointerDown={function(e){ startDrag(e, "wallBody", i, { x: wl0.x1, y: wl0.y1 }, { ax: wl0.x1, ay: wl0.y1 }); }} />
-                {selWall ? (
-                  <>
-                    {/* v17.0.0 correction: draggable endpoint handles (round 9:
-                        each visible r=9 dot gets an invisible r=24 hit circle) */}
-                    <circle cx={wl.x1} cy={wl.y1} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2} />
-                    <circle cx={wl.x1} cy={wl.y1} r={24} fill="transparent" pointerEvents="fill"
-                      style={{ cursor: "move" }}
-                      onPointerDown={function(e){ startDrag(e, "wallA", i, { x: wl0.x1, y: wl0.y1 }); }} />
-                    <circle cx={wl.x2} cy={wl.y2} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2} />
-                    <circle cx={wl.x2} cy={wl.y2} r={24} fill="transparent" pointerEvents="fill"
-                      style={{ cursor: "move" }}
-                      onPointerDown={function(e){ startDrag(e, "wallB", i, { x: wl0.x2, y: wl0.y2 }); }} />
-                  </>
-                ) : null}
               </g>
             );
           })}
+          {/* /code-review #3: the SELECTED wall's endpoint handles render in a
+              SECOND pass, after every wall body — otherwise a neighbouring
+              wall's 40cm hit-band (painted later, in array order) sits on top of
+              them and a corner endpoint grabs the wrong wall instead. */}
+          {(function(){
+            if(!sel || sel.type !== "wall") return null;
+            const i = sel.key;
+            const wl0 = fp.walls[i];
+            if(!wl0) return null;
+            const wl = wallOf(i);
+            return (
+              <g key="wsel">
+                {/* v17.0.0 correction: draggable endpoint handles (round 9:
+                    each visible r=9 dot gets an invisible r=24 hit circle) */}
+                <circle cx={wl.x1} cy={wl.y1} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2} />
+                <circle cx={wl.x1} cy={wl.y1} r={24} fill="transparent" pointerEvents="fill"
+                  style={{ cursor: "move" }}
+                  onPointerDown={function(e){ startDrag(e, "wallA", i, { x: wl0.x1, y: wl0.y1 }); }} />
+                <circle cx={wl.x2} cy={wl.y2} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2} />
+                <circle cx={wl.x2} cy={wl.y2} r={24} fill="transparent" pointerEvents="fill"
+                  style={{ cursor: "move" }}
+                  onPointerDown={function(e){ startDrag(e, "wallB", i, { x: wl0.x2, y: wl0.y2 }); }} />
+              </g>
+            );
+          })()}
           {wallStart ? (
             <>
               <circle cx={wallStart.x} cy={wallStart.y} r={5} fill="var(--accent)" />

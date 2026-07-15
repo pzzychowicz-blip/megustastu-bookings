@@ -37,7 +37,7 @@ import {
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
   checkInefficent, verifyClean, findConflicts,
   nowTime,
-  trialFits, toTime, lateState, freeingSoon, rankCombosContaining
+  trialFits, toTime, lateState, freeingSoon, rankCombosContaining, comboExistsFor
 } from "./lib/booking-logic";
 
 import { validateReminderDraft } from "./lib/reminders";
@@ -1451,13 +1451,25 @@ function BookingApp(){
     // ranked combos are the only realistic placements; deeper ones would strand
     // more parties anyway.
     const MAX_CAND=8;
+    const ranked=cap1>=size?[]:rankCombosContaining(targetId,size);
     const candSets=cap1>=size
       ?[[targetId]]
-      :rankCombosContaining(targetId,size)
+      :ranked
         .filter(function(c){return !c.ids.some(function(t){return busyBlocked.has(t)||seatedOn.has(t);});})
         .map(function(c){return c.ids.slice();})
         .slice(0,MAX_CAND);
-    if(candSets.length===0){flashDragMsg("Party of "+size+" won't fit at "+targetId+", even with joined tables.");return;}
+    // /code-review #2: name the ACTUAL reason (only reachable when cap1<size —
+    // a fitting single table always yields a candidate). "Won't fit" was a lie
+    // when a big-enough combo exists but the drag's waste/avoid rules excluded
+    // it: that's a "use Manual assign", not a dead end.
+    if(candSets.length===0){
+      flashDragMsg(ranked.length>0
+        ? "The tables needed to join with "+targetId+" are busy or blocked then."
+        : comboExistsFor(targetId,size)
+          ? "Party of "+size+" would need too many tables joined at "+targetId+" — use Manual assign."
+          : "Party of "+size+" won't fit at "+targetId+", even with joined tables.");
+      return;
+    }
     const occOf=function(set){return dayActive.filter(function(b){return isOver(b)&&(b.tables||[]).some(function(t){return set.includes(t);});});};
     const desired=candSets[0];
     const occ=occOf(desired);
