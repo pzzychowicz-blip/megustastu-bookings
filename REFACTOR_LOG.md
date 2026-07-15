@@ -4418,5 +4418,10 @@ Files: `index.html`, `src/components/TimelineView.jsx`, `src/components/ListView
    takes) also moves + commits, with the wrapper's computed `touch-action` = `none`.
    The iOS fix itself needs Patryk's iPad to confirm.
 
+Follow-up (same round, Patryk): the List card's LIGHT late edge (rgba(202,138,4)) still
+read as amber — replaced with true yellow both themes: light rgba(250,204,21,.95)
+(yellow-400, one shade deeper for white-card contrast), dark rgba(253,224,71,.8).
+Verified live in DEV, both themes, List + Timeline.
+
 FYI recorded: Patryk applied the new Firebase rules (`general`/`generalRev`) to **DEV and
 PROD** on 2026-07-15, ahead of the merge — rolling-safe, nothing outstanding rules-side.

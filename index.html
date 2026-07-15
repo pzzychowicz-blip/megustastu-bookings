@@ -147,7 +147,7 @@
         --bg-card-dim: rgba(255, 255, 255, 0.35);        /* seated/completed/cancelled card */
         --border-card-plain: rgba(255, 255, 255, 0.4);   /* plain card border */
         --card-warn-border: rgba(245, 158, 11, 0.5);     /* due-soon card edge */
-        --card-late-border: rgba(202, 138, 4, 0.85);     /* running-late card edge (v17.0.0 round 10) */
+        --card-late-border: rgba(250, 204, 21, 0.95);    /* running-late card edge — YELLOW like the timeline border, not amber (v17.0.0 round 10; yellow-400 for light-bg contrast) */
         --card-overdue-border: rgba(220, 60, 60, 0.5);   /* overdue card edge */
         --card-conflict-border: rgba(252, 165, 165, 0.5);/* no-table-assigned card edge */
         --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.5);
@@ -230,9 +230,9 @@
         --bg-card-dim: rgba(255, 255, 255, 0.04);
         --border-card-plain: rgba(255, 255, 255, 0.1);
         /* warn/overdue/conflict card edges read on both themes — kept from :root */
-        /* …except the late edge: the light value is a deep yellow (a pale one
-           disappears on a white card); on a dark card it needs the bright one. */
-        --card-late-border: rgba(253, 224, 71, 0.7);
+        /* …except the late edge: yellow-300 pops on a dark card (light uses
+           yellow-400 — one shade deeper for white-card contrast, still yellow). */
+        --card-late-border: rgba(253, 224, 71, 0.8);
         --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
         --border-sheet: rgba(255, 255, 255, 0.12);
         --border-soft: rgba(255, 255, 255, 0.1);
