@@ -144,6 +144,21 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
 
   function commitFp(next){ onSaveLayout({ ...layout, floorPlan: next }); }
 
+  // v17.0.0 round 7 (iOS fix): iOS Safari IGNORES touch-action on SVG elements,
+  // so the inline `touchAction:"none"` below does nothing there — the first
+  // touchmove scrolled the Settings modal instead, the browser fired
+  // pointercancel, and every drag died ("drag and drop does nothing" on iPad).
+  // A NATIVE non-passive touchmove listener that preventDefault()s while the
+  // finger is on the canvas keeps the gesture ours (the Timeline drag's React-
+  // 17-passive-root lesson: preventDefault in a React touch handler is a no-op).
+  useEffect(function(){
+    const svg = svgRef.current;
+    if(!svg) return;
+    const block = function(ev){ ev.preventDefault(); };
+    svg.addEventListener("touchmove", block, { passive: false });
+    return function(){ svg.removeEventListener("touchmove", block); };
+  }, []);
+
   // Client → floor-plan coordinates (viewBox scaling + zoom window).
   function toFp(e){
     const svg = svgRef.current;

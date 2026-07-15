@@ -538,6 +538,29 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           </div>
         )}</AutoHeight>
       </Section>
+      {/* v17.0.0 round 7: Alert banners — master switches for the other in-flow
+          banners, matching the Running-late toggle above (Patryk: every banner
+          adjustable the same way). Firebase-shared (settings/bookingDefaults). */}
+      <Section style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Overlap warnings</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Warn when an overstaying seated party runs into the next booking on its table, with a one-tap reassign. Shared across all devices.
+            </div>
+          </div>
+          <Toggle on={bd.overlapWarnEnabled !== false} onClick={() => onSaveBookingDefaults({ overlapWarnEnabled: bd.overlapWarnEnabled === false })} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Reshuffle suggestions</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Suggest a table reshuffle when the day's layout could seat parties more efficiently. Shared across all devices.
+            </div>
+          </div>
+          <Toggle on={bd.reshuffleSuggestEnabled !== false} onClick={() => onSaveBookingDefaults({ reshuffleSuggestEnabled: bd.reshuffleSuggestEnabled === false })} />
+        </div>
+      </Section>
       {/* v16.3.0: Table turns — predict which seated tables free up in the next
           ~15 min (Summary "freeing soon" line + timeline countdown pills).
           Firebase-shared (settings/bookingDefaults). */}

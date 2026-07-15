@@ -4232,3 +4232,40 @@ tangerine (which sat lighter than the other statuses): Confirmed = amber `rgb(21
 `rgb(234,179,8)` (`--block-pending` .92; text `#854d0e` / `#fde047`). Both carry crisp white block
 text and sit at the seated-green / cancelled-red weight; the depth gap keeps the two warm statuses
 distinct. Verified live in DEV.
+
+**Corrections round 7 (same version, same branch, pre-merge — Patryk's seventh review, 2026-07-15).**
+Five items, one commit. Files: `src/components/OverlapBanner.jsx` (NEW), `src/App.jsx`,
+`src/components/Settings.jsx`, `src/components/ListView.jsx`, `src/components/TimelineView.jsx`,
+`src/components/FloorPlanEditor.jsx`, `src/hooks/useBookingDefaults.js`.
+
+1. **Overlap warnings → the Running-late pattern + Settings switches for all alert banners.**
+   New `OverlapBanner.jsx` (a LateBanner clone): collapsible count header ("Overlap warnings · N",
+   default-collapsed above the shared lateCollapseMax), Reveal-eased rows via useRevealRows,
+   per-row Reassign + ✕ dismiss (`overlapDismissed` session Set in App, day-change reset, the
+   lateDismissed pattern — timeline/list keep the unfiltered overlapWarnings). Two new
+   settings/bookingDefaults master switches, default on, rolling-safe (`overlapWarnEnabled`,
+   `reshuffleSuggestEnabled`) + a new "Alert banners" Section in Settings → General with both
+   toggles; `ineffShow` additionally gates on the reshuffle switch. NB the banner's row plumbing
+   is byte-equivalent to the old inline rows (same overlapWarnings map/fields); rows verified by
+   pattern (LateBanner) — live overstay QA is Patryk's.
+2. **Floating status toasts opaque** — all 9 toast backgrounds (resync/reconnect/syncFix/waitAdd/
+   undo/dragMsg×2/reshuffled/load) now layer their tint over the near-opaque autocomplete-menu
+   token: `linear-gradient(var(--tint),var(--tint)), var(--bg-ac-menu)` — same effective opacity
+   as the ConnectionStatus popover, so grid content no longer ghosts through.
+3. **Settings from List view** — ListView's action row is now 🔍 then ⚙ (byte-for-byte the
+   Timeline legend buttons; new onOpenSettings prop). Verified live: cog opens Settings from List.
+4. **iOS floor-plan drag fix** — iOS Safari ignores `touch-action` on SVG elements, so the
+   editor's inline `touchAction:"none"` did nothing on iPad: the first touchmove scrolled the
+   Settings modal, fired pointercancel, and every glyph drag died. A NATIVE non-passive
+   `touchmove` listener on the svg (`{passive:false}`, preventDefault) keeps the gesture — the
+   React-17-passive-root lesson applied to SVG.
+5. **Android timeline-drag fix (Honor Pad X8a / MagicOS 10)** — two causes: (a) blocks had no
+   touch-action, so the browser claimed any vertical movement for scrolling and fired
+   pointercancel BEFORE the 800ms drag-hold armed → `touchAction:"pan-x"` on TimelineBlock
+   (horizontal timeline scroll from a block still works; vertical belongs to the drag); (b) the
+   native long-press contextmenu (~500ms) re-opened the quick-status popup mid-hold → `onCtx`
+   now swallows contextmenu while `dragRef` is set.
+
+Build clean; toasts/List-cog/Settings toggles verified live in DEV. The two device fixes are
+code-level (root causes confirmed against browser docs/known engine behaviour) — on-device
+verification on the iPad + Honor Pad is Patryk's review step.

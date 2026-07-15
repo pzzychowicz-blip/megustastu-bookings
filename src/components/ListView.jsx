@@ -33,6 +33,7 @@ import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
+import { CogIcon } from "./Settings";
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
 // that changes status plays a colour wipe of its OLD status colour. Keyed by id,
@@ -47,14 +48,17 @@ export function ListView({
   selectedId = null, onSelect = () => {},
   showFinished = false, onToggleFinished = () => {},
   currency = "€",
-  onOpenSearch = () => {}
+  onOpenSearch = () => {},
+  onOpenSettings = () => {}
 }) {
   // v16.4.0: List view has no legend, so the global-search 🔍 (previously
   // Timeline-legend-only) gets a right-aligned home above the cards here —
   // byte-for-byte the timeline button's chrome (TimelineView.jsx). Shown even on
   // an empty day (you may search precisely because today is empty).
+  // v17.0.0 round 7 (Patryk): the Settings cog joins it — same 🔍-then-⚙ order
+  // as the Timeline legend, so Settings is reachable from List by touch too.
   const searchBar = (
-    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "center" }}>
       <button
         onClick={onOpenSearch}
         title="Find a booking"
@@ -73,6 +77,23 @@ export function ListView({
         }}
       >
         🔍
+      </button>
+      <button
+        onClick={onOpenSettings}
+        title="Settings & keyboard shortcuts"
+        className="mgt-hover-scale"
+        style={{
+          background: "var(--cog-bg)",
+          border: "1px solid var(--cog-border)",
+          borderRadius: 10, width: 34, height: 34,
+          cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0, padding: 0,
+          color: S.text,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
+        }}
+      >
+        <CogIcon />
       </button>
     </div>
   );

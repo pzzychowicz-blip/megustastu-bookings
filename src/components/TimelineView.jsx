@@ -219,8 +219,13 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     if (didLong.current) e.preventDefault();
   }
   // v15.8.0: right-click opens the same quick-action menu as long-press/tap.
+  // v17.0.0 round 7 (Android fix): the native LONG-PRESS also fires contextmenu
+  // (~500ms, MagicOS/Chrome) — mid-hold it must not reopen the popup the 800ms
+  // drag-arm just dismissed, and must not cancel the pointer stream. A pending
+  // or active drag (dragRef set) swallows it.
   function onCtx(e) {
     e.preventDefault();
+    if (dragRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     setQuickStatus({ booking: b, x: rect.left, y: rect.top, w: rect.width, h: rect.height });
   }
@@ -250,6 +255,12 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         cursor: dragDy != null ? "grabbing" : "pointer",
         border: border || "1px solid rgba(255,255,255,0.2)",
         WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
+        // v17.0.0 round 7 (Android fix): without this, the browser claims any
+        // vertical touch movement on a block for page scroll and fires
+        // pointercancel BEFORE the 800ms drag-hold arms — drag never started on
+        // MagicOS/Chrome. pan-x keeps horizontal timeline scrolling from a block
+        // while reserving vertical gestures for the drag.
+        touchAction: "pan-x",
         boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" : "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
         // v17.0.0: while dragging, the inline transform/zIndex/opacity lift the
         // block and follow the pointer (inline transform beats the hover class).

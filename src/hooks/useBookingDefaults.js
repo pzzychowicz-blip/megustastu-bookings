@@ -50,7 +50,11 @@ export const DEFAULT_BOOKING_DEFAULTS = {
   freeSoonEnabled: true,
   // v16.3.0 correction: how far ahead (minutes) the "freeing soon" prediction
   // looks. Editable via the Table-turns stepper; 5–60 in 5-min steps.
-  freeSoonWindow: 15
+  freeSoonWindow: 15,
+  // v17.0.0 round 7: master switches for the other alert banners (the Running-
+  // late pattern applied app-wide). Default on; rolling-safe field adds.
+  overlapWarnEnabled: true,
+  reshuffleSuggestEnabled: true
 };
 
 // Clamp helpers. Durations snap to the 15-min grid (the app's quarter-hour
@@ -107,7 +111,10 @@ function sanitizeBookingDefaults(raw){
     // v16.3.0: default true when absent (rolling-safe — an old node has no field).
     freeSoonEnabled: src.freeSoonEnabled !== false,
     // v16.3.0 correction: prediction window (min), 5–60 step 5, default 15.
-    freeSoonWindow: clampStep(src.freeSoonWindow, d.freeSoonWindow, 5, 60, 5)
+    freeSoonWindow: clampStep(src.freeSoonWindow, d.freeSoonWindow, 5, 60, 5),
+    // v17.0.0 round 7: banner master switches (absent = on, rolling-safe).
+    overlapWarnEnabled: src.overlapWarnEnabled !== false,
+    reshuffleSuggestEnabled: src.reshuffleSuggestEnabled !== false
   };
   // invariant: warn strictly before the no-show offer
   if(out.lateNoShowMin <= out.lateWarnMin) out.lateNoShowMin = out.lateWarnMin + 5;
