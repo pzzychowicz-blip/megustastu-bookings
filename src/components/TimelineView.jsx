@@ -71,7 +71,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // warnings keep precedence (they carry the more urgent red tier).
   const border = warn
     ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
-    : (late ? "3px solid var(--tl-block-warn-soon)" : "none");
+    : (late ? "3px solid var(--tl-block-late)" : "none");
   const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.

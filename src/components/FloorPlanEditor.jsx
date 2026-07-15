@@ -150,18 +150,29 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
   function commitFp(next){ onSaveLayout({ ...layout, floorPlan: next }); }
 
   // v17.0.0 round 7 (iOS fix): iOS Safari IGNORES touch-action on SVG elements,
-  // so the inline `touchAction:"none"` below does nothing there — the first
-  // touchmove scrolled the Settings modal instead, the browser fired
+  // so the inline `touchAction:"none"` on the <svg> does nothing there — the
+  // first touchmove scrolled the Settings modal instead, the browser fired
   // pointercancel, and every drag died ("drag and drop does nothing" on iPad).
   // A NATIVE non-passive touchmove listener that preventDefault()s while the
   // finger is on the canvas keeps the gesture ours (the Timeline drag's React-
   // 17-passive-root lesson: preventDefault in a React touch handler is a no-op).
+  //
+  // v17.0.0 round 10 (Patryk: still dead on iOS — select works, move doesn't;
+  // fine on Android): round 7 hung BOTH defences off the <svg> itself, and
+  // WebKit's touch handling for SVG is exactly what's unreliable here. Both move
+  // to the HTML WRAPPER div (`wrapRef`), which WebKit treats like any other
+  // element: `touchAction:"none"` there is honoured and covers the descendant
+  // SVG (the effective touch-action walks the ancestor chain), and the
+  // non-passive touchmove listener sits on a plain <div> whose event region
+  // WebKit registers normally. The <svg>'s own touchAction:"none" stays as the
+  // Chrome/Android path. See the gotcha row.
+  const wrapRef = useRef(null);
   useEffect(function(){
-    const svg = svgRef.current;
-    if(!svg) return;
+    const wrap = wrapRef.current;
+    if(!wrap) return;
     const block = function(ev){ ev.preventDefault(); };
-    svg.addEventListener("touchmove", block, { passive: false });
-    return function(){ svg.removeEventListener("touchmove", block); };
+    wrap.addEventListener("touchmove", block, { passive: false });
+    return function(){ wrap.removeEventListener("touchmove", block); };
   }, []);
 
   // Client → floor-plan coordinates (viewBox scaling + zoom window).
@@ -189,7 +200,14 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
     setSel({ type: type.indexOf("wall") === 0 ? "wall" : type, key: key });
     const p = toFp(e);
     dragRef.current = { type: type, key: key, dx: cur.x - p.x, dy: cur.y - p.y, ...(extra || {}) };
-    try{ e.currentTarget.ownerSVGElement.setPointerCapture(e.pointerId); }catch(_e){}
+    // v17.0.0 round 10: capture for MOUSE only. A touch pointer is implicitly
+    // captured to the pointerdown target by the spec, so the moves bubble to the
+    // svg's onPointerMove either way — while an explicit setPointerCapture on an
+    // SVG element is the shakiest path in WebKit. Nothing to gain, a known
+    // engine quirk to lose.
+    if(e.pointerType === "mouse"){
+      try{ e.currentTarget.ownerSVGElement.setPointerCapture(e.pointerId); }catch(_e){}
+    }
   }
   function onMove(e){
     if(panRef.current){
@@ -399,9 +417,11 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             : "Tap an element to edit it; drag tables and doors to move them."}
         </span>
       </div>
-      <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)" }}>
+      {/* touchAction on the WRAPPER, not just the svg — WebKit honours it here
+          (round 10; the svg's own copy stays for Chrome/Android). */}
+      <div ref={wrapRef} style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)", touchAction: "none" }}>
         <svg ref={svgRef} viewBox={zoom.x + " " + zoom.y + " " + vbW + " " + vbH} style={{ display: "block", width: "100%", touchAction: "none", cursor: zoom.k > 1 && mode === "select" ? "grab" : "default" }}
-          onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
+          onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} onPointerCancel={onUp}>
           {/* grid: minor 50 cm + stronger major every 250 cm (v17.0.0 round 6 — more visible) */}
           <defs>
             <pattern id="fp-grid" width={50} height={50} patternUnits="userSpaceOnUse">

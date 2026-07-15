@@ -4379,3 +4379,44 @@ Files: `src/lib/booking-logic.js`, `src/components/FloorPlanEditor.jsx`, `CLAUDE
    handler-less use is unaffected). Tables render after walls/doors, so they still win
    overlapping taps. Verified live: a click ~10 px off the wall line selects the wall; a
    click ~10 px off the door bar selects the door (beating the wall band beneath it).
+
+---
+
+**v17.0.0 corrections round 10 (same version, same branch, pre-merge — 2026-07-15).**
+Patryk's tenth review — two fixes + one FYI.
+
+Files: `index.html`, `src/components/TimelineView.jsx`, `src/components/ListView.jsx`,
+`src/components/FloorPlanEditor.jsx`, `CLAUDE.md`, `REFACTOR_LOG.md`.
+
+1. **Running-late border is yellow now, not amber.** It reused `--tl-block-warn-soon`
+   (#f59e0b) — fine when confirmed was blue, but since the round-6 recolor confirmed
+   blocks are amber-600 (217,119,6), so the "late" border blended into its own block.
+   New dedicated tokens: `--tl-block-late: #fde047` (yellow-300, both themes) for the
+   timeline block border, and `--card-late-border` for the List card edge (light
+   `rgba(202,138,4,.85)` — a pale yellow is invisible on a white card; dark
+   `rgba(253,224,71,.7)`). The overstay **due-soon** border deliberately KEEPS amber:
+   it paints on seated (green) blocks, where amber reads fine and carries the distinct
+   "guest overstaying" meaning. Verified live in DEV, both themes: late block border
+   computes `rgb(253,224,71)` over the `rgba(217,119,6,.92)` fill.
+
+2. **iOS floor-plan drag (select works, move doesn't; Android fine).** Round 7 diagnosed
+   the cause correctly (WebKit ignores `touch-action` on SVG → the modal scrolls → the
+   browser fires pointercancel → the drag dies) but hung BOTH defences off the `<svg>`
+   itself — the very element whose touch handling WebKit mishandles. Round 10 moves them
+   to the HTML wrapper, which WebKit treats like any other element:
+   `touchAction:"none"` on the wrapping `<div>` (the effective touch-action walks the
+   ancestor chain, so it covers the descendant SVG) and the non-passive `touchmove`
+   preventDefault listener now attaches to that div (`wrapRef`). Additionally
+   `setPointerCapture` is now **mouse-only** — a touch pointer is implicitly captured to
+   the pointerdown target by spec, so moves bubble to the svg's `onPointerMove` regardless,
+   while an explicit capture on an SVG element is WebKit's shakiest path (nothing to gain,
+   a known quirk to lose); and `onPointerCancel` now cleans up so a cancelled gesture
+   can't strand `dragRef`. The svg keeps its own `touchAction:"none"` for Chrome/Android.
+   **Verification limit — no iOS device here.** Verified in DEV/Chrome that neither path
+   regressed: a mouse drag of table 5A moves + commits (70,60 → 160,110), and a synthetic
+   TOUCH-pointer drag (events on the child `<g>`, no capture — the exact path iOS now
+   takes) also moves + commits, with the wrapper's computed `touch-action` = `none`.
+   The iOS fix itself needs Patryk's iPad to confirm.
+
+FYI recorded: Patryk applied the new Firebase rules (`general`/`generalRev`) to **DEV and
+PROD** on 2026-07-15, ahead of the merge — rolling-safe, nothing outstanding rules-side.

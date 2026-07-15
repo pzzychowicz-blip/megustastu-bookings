@@ -134,7 +134,7 @@ export function ListView({
         const cardBrd = warn
           ? (warn.overdue ? "var(--card-overdue-border)" : "var(--card-warn-border)")
           : lateSt
-            ? "var(--card-warn-border)"
+            ? "var(--card-late-border)"   // v17.0.0 round 10: yellow, not the amber due-soon edge
             : b._conflict
               ? "var(--card-conflict-border)"
               : (useStatusColor || isPending) ? sc.border : "var(--border-card-plain)";

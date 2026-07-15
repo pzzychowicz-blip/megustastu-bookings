@@ -122,6 +122,13 @@
         --tl-unassigned-border: rgba(220, 60, 60, 0.4); /* dashed unassigned divider */
         --tl-block-warn: #dc2626;                        /* booking overdue border */
         --tl-block-warn-soon: #f59e0b;                   /* booking due-soon border */
+        /* v17.0.0 round 10 (Patryk): the RUNNING-LATE border used to reuse
+           --tl-block-warn-soon (amber #f59e0b), which since the round-6 recolor
+           sits right next to the confirmed block fill (amber-600) — the border
+           vanished into its own block. Late gets its own bright-yellow token;
+           the overstay "due soon" border stays amber (it paints on SEATED/green
+           blocks, where amber reads fine). */
+        --tl-block-late: #fde047;                        /* running-late border (yellow-300) */
         --tl-blocked-a: #991b1b;                          /* table-block stripe colours */
         --tl-blocked-b: #7f1d1d;
         --tl-blocked-badge: rgba(153, 27, 27, 0.85);     /* "blocked" label-col badge bg */
@@ -140,6 +147,7 @@
         --bg-card-dim: rgba(255, 255, 255, 0.35);        /* seated/completed/cancelled card */
         --border-card-plain: rgba(255, 255, 255, 0.4);   /* plain card border */
         --card-warn-border: rgba(245, 158, 11, 0.5);     /* due-soon card edge */
+        --card-late-border: rgba(202, 138, 4, 0.85);     /* running-late card edge (v17.0.0 round 10) */
         --card-overdue-border: rgba(220, 60, 60, 0.5);   /* overdue card edge */
         --card-conflict-border: rgba(252, 165, 165, 0.5);/* no-table-assigned card edge */
         --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.5);
@@ -222,6 +230,9 @@
         --bg-card-dim: rgba(255, 255, 255, 0.04);
         --border-card-plain: rgba(255, 255, 255, 0.1);
         /* warn/overdue/conflict card edges read on both themes — kept from :root */
+        /* …except the late edge: the light value is a deep yellow (a pale one
+           disappears on a white card); on a dark card it needs the bright one. */
+        --card-late-border: rgba(253, 224, 71, 0.7);
         --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
         --border-sheet: rgba(255, 255, 255, 0.12);
         --border-soft: rgba(255, 255, 255, 0.1);
