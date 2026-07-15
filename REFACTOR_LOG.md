@@ -4307,3 +4307,40 @@ walk-in's 90-min minimum window — a deliberate floor; the knob already exists 
 looser). Build clean; ranking + no-dangling-refs verified. Live banner/drag re-verification in the
 Preview pane was blocked by a transient tool outage — structurally verified (build + identical
 scaffolding); worth a glance on next preview.
+
+---
+
+**v17.0.0 corrections round 8 (same version, same branch, pre-merge — 2026-07-15).**
+Patryk's eighth review — two items.
+
+Files: `src/components/PlanView.jsx`, `src/components/ViewTools.jsx` (new),
+`src/components/TimelineView.jsx`, `src/components/ListView.jsx`, `src/App.jsx`,
+`CLAUDE.md`, `REFACTOR_LOG.md`.
+
+1. **PlanView: closing the RMB popup no longer pans the plan.** Reported as "the click that
+   closes the popup is also treated as a tap used for navigating across the plan". Root cause
+   was NOT the closing click at all: the quick-status popup is portalled to `<body>`, so the
+   RMB **press** armed a pan on the svg (`bgPointerDown` armed on any button) and its
+   **pointerup** landed on the portalled scrim instead — the svg never saw the release, so
+   `panRef` stayed armed. The next mouse move over the canvas (no button held) then panned by
+   the full delta from the old RMB point, so the plan lurched right after the popup closed.
+   Fixed at both ends: `bgPointerDown` bails on a non-primary mouse button (an RMB never arms
+   a pan), and `bgPointerMove` bails + clears `panRef` when `e.buttons === 0` (a mouse can't
+   pan with nothing held) — belt-and-braces for any release the svg misses. Touch/pinch paths
+   untouched (both guards are `pointerType === "mouse"` only).
+   New gotcha row: **a portalled scrim swallows the pointerup** — never rely on pointerup
+   alone to disarm a gesture.
+
+2. **🔍 + ⚙ moved to App's date-nav row** (`ViewTools.jsx`, new). The pair lived in the
+   Timeline legend and, since v16.4.0, in a duplicate List card-header copy; Plan had neither.
+   Both copies deleted and the pair mounted once in App, right of the Summary panel
+   (`minHeight:40` aligns it with the date controls; `marginLeft:auto` keeps it right-aligned
+   when the mobile full-width Summary wraps it onto its own line) — so the two buttons are in
+   the same place in all three views. `onOpenSearch`/`onOpenSettings` props dropped from
+   TimelineView + ListView (App wires ViewTools directly); the 34×34 `--cog-bg` chrome is
+   unchanged.
+
+Verified live in DEV: the 🔍/⚙ pair holds its position across Timeline/List/Plan and the
+per-view copies are gone; the plan's `<g>` transform stays `translate(0,0)` through the full
+RMB → close → mouse-move sequence (it used to jump), while a normal LMB drag still pans and a
+left-tap still opens the table popover. Build clean.

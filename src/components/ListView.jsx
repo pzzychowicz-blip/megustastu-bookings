@@ -33,7 +33,6 @@ import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
-import { CogIcon } from "./Settings";
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
 // that changes status plays a colour wipe of its OLD status colour. Keyed by id,
@@ -47,56 +46,11 @@ export function ListView({
   late = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {},
   showFinished = false, onToggleFinished = () => {},
-  currency = "€",
-  onOpenSearch = () => {},
-  onOpenSettings = () => {}
+  currency = "€"
 }) {
-  // v16.4.0: List view has no legend, so the global-search 🔍 (previously
-  // Timeline-legend-only) gets a right-aligned home above the cards here —
-  // byte-for-byte the timeline button's chrome (TimelineView.jsx). Shown even on
-  // an empty day (you may search precisely because today is empty).
-  // v17.0.0 round 7 (Patryk): the Settings cog joins it — same 🔍-then-⚙ order
-  // as the Timeline legend, so Settings is reachable from List by touch too.
-  const searchBar = (
-    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "center" }}>
-      <button
-        onClick={onOpenSearch}
-        title="Find a booking"
-        aria-label="Find a booking"
-        className="mgt-hover-scale"
-        style={{
-          background: "var(--cog-bg)",
-          border: "1px solid var(--cog-border)",
-          borderRadius: 10, width: 34, height: 34,
-          cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0, padding: 0,
-          fontSize: 15, lineHeight: 1,
-          color: S.text,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
-        }}
-      >
-        🔍
-      </button>
-      <button
-        onClick={onOpenSettings}
-        title="Settings & keyboard shortcuts"
-        className="mgt-hover-scale"
-        style={{
-          background: "var(--cog-bg)",
-          border: "1px solid var(--cog-border)",
-          borderRadius: 10, width: 34, height: 34,
-          cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0, padding: 0,
-          color: S.text,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
-        }}
-      >
-        <CogIcon />
-      </button>
-    </div>
-  );
+  // v17.0.0 round 8 (Patryk): the 🔍/⚙ pair moved OUT to App's date-nav row
+  // (ViewTools.jsx) — one home for all three views. List keeps no chrome of its
+  // own again; the `searchBar` element and its two buttons are gone.
   const day = bookings
     .filter((b) => b.date === date)
     .sort((a, b) => {
@@ -144,7 +98,6 @@ export function ListView({
   if (!day.length) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {searchBar}
         <div style={{ textAlign: "center", padding: "48px 0", color: S.text, fontSize: 15 }}>
           No bookings for this date.
         </div>
@@ -356,7 +309,6 @@ export function ListView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {searchBar}
       <div ref={flipRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {active.map(renderCard)}
       </div>

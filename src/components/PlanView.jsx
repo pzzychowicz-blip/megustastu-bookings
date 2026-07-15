@@ -127,6 +127,14 @@ export function PlanView({
     });
   }
   function bgPointerDown(e) {
+    // v17.0.0 round 8 (Patryk): a NON-PRIMARY button never arms a pan. The RMB
+    // press used to arm one, and its pointerUP then landed on the popup's scrim
+    // (portalled above) — so the svg never saw the release and panRef stayed
+    // armed. The next mouse move over the canvas (no button held) panned the
+    // plan by the whole delta from that old RMB point: closing the popup read
+    // as a stray "tap" that dragged the floor. Pair with the buttons===0 bail
+    // in bgPointerMove so a stale ref can never pan.
+    if (e.pointerType === "mouse" && e.button !== 0) return;
     pointersRef.current[e.pointerId] = { x: e.clientX, y: e.clientY };
     const pts = Object.values(pointersRef.current);
     if (pts.length === 2) {
@@ -142,6 +150,9 @@ export function PlanView({
     // Panning tracks fine while the pointer stays over the canvas.
   }
   function bgPointerMove(e) {
+    // A mouse move with NO button held can never be a pan — belt-and-braces for
+    // any release the svg misses (a pointerup swallowed by a portalled scrim).
+    if (e.pointerType === "mouse" && e.buttons === 0) { panRef.current = null; return; }
     if (pointersRef.current[e.pointerId]) pointersRef.current[e.pointerId] = { x: e.clientX, y: e.clientY };
     const pts = Object.values(pointersRef.current);
     if (pinchRef.current && pts.length === 2) {
