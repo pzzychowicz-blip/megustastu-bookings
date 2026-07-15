@@ -1443,11 +1443,19 @@ function BookingApp(){
     //    VALID_COMBO containing the target that does — ranked exactly like
     //    findBest ranks combos (rankCombosContaining), NOT by raw capacity.
     const cap1=(ALL_TABLES.find(function(t){return t.id===targetId;})||{}).capacity||0;
+    // v17.0.0 review fix #1: cap the candidate walk. Step 4 runs a full
+    // bookingsAfterAction TRIAL per candidate (optimise can be 70–500ms when a
+    // day has unplaceable bookings); an unbounded ~20-combo walk on a busy day
+    // could freeze the UI for seconds before the refusal toast. The top few
+    // ranked combos are the only realistic placements; deeper ones would strand
+    // more parties anyway.
+    const MAX_CAND=8;
     const candSets=cap1>=size
       ?[[targetId]]
       :rankCombosContaining(targetId,size)
         .filter(function(c){return !c.ids.some(function(t){return busyBlocked.has(t)||seatedOn.has(t);});})
-        .map(function(c){return c.ids.slice();});
+        .map(function(c){return c.ids.slice();})
+        .slice(0,MAX_CAND);
     if(candSets.length===0){flashDragMsg("Party of "+size+" won't fit at "+targetId+", even with joined tables.");return;}
     const occOf=function(set){return dayActive.filter(function(b){return isOver(b)&&(b.tables||[]).some(function(t){return set.includes(t);});});};
     const desired=candSets[0];
@@ -1513,6 +1521,14 @@ function BookingApp(){
         return;
       }
       const transform=mkTransform(dSet,dOcc);
+      // v17.0.0 review note #2: the trial runs against the CURRENT `bookings`,
+      // while the committed write re-applies `transform` to whatever fresh
+      // `prev` saveBookings hands it. `transform` itself re-runs
+      // bookingsAfterAction (the optimizer) on that fresh data, so the COMMIT is
+      // always internally consistent; a concurrent remote echo can at worst
+      // leave a displaced booking table-less (visible in the unassigned row) or
+      // overlapping (the v15.6.1 reconciliation effect then self-heals). No
+      // silent data loss — acceptable for a rare cross-device race.
       const trial=transform(bookings);
       const stranded=dOcc.find(function(o){const t=trial.find(function(x){return x.id===o.id;});return !t||(t.tables||[]).length===0||t._conflict;});
       if(stranded) continue;

@@ -4269,3 +4269,41 @@ Five items, one commit. Files: `src/components/OverlapBanner.jsx` (NEW), `src/Ap
 Build clean; toasts/List-cog/Settings toggles verified live in DEV. The two device fixes are
 code-level (root causes confirmed against browser docs/known engine behaviour) — on-device
 verification on the iPad + Honor Pad is Patryk's review step.
+
+**v17.0.0 /code-review fixes (same version, same branch, pre-merge — 2026-07-15).**
+Six fixes from the full-branch review. Files: `src/App.jsx`, `src/lib/booking-logic.js`,
+`src/components/TimelineView.jsx`, `src/hooks/useLayout.js`, `src/components/BannerRows.jsx` (NEW),
+`src/components/LateBanner.jsx`, `src/components/OverlapBanner.jsx`.
+
+1. (#1) **Bounded the drag-displacement trial walk** — `dropOnTable` caps `candSets` at
+   `MAX_CAND=8`. Each step-4 candidate runs a full `bookingsAfterAction` trial (optimise = 70–500ms
+   on a day with unplaceable bookings); the old unbounded ~20-combo walk could freeze the UI for
+   seconds before a refusal. Ranking unchanged for the realistic top placements (offline-verified:
+   8-on-7 → 1A+1B+7+i4…, 8-on-2 → 2+3+4).
+2. (#2) **Documented the trial-vs-commit boundary** — the trial runs on current `bookings`, the
+   committed `transform` re-runs the optimizer on fresh `prev`, so the commit is always internally
+   consistent; a rare cross-device echo can at worst leave a displaced booking unassigned (visible)
+   or overlapping (v15.6.1 reconciliation self-heals). Comment only.
+3. (#4) **rAF-throttled the timeline drag move** — `onDragPointerMove` coalesces to one
+   setState/hover per frame via `dragRafRef` (cancelled in `endDrag`); pointermove fired far more
+   often than the display refreshes. Drag only runs while visible, so the hidden-tab rAF trap
+   doesn't apply.
+4. (#5) **Order-independent combo-rule match** — `_comboPriKey` now takes the STRONGEST-preference
+   matching rule (min value) instead of the first in array order, so two rules sharing a key can't
+   make drag ranking depend on rule ordering. No-op for the MGT seed (no duplicate keys).
+5. (#7) **Clamp floor-plan glyphs inside the room** — tables are drawn CENTERED on (x,y), so the
+   old `[0,room]` centre clamp let half the glyph render outside. New `clampCenter` clamps by the
+   glyph half-extent (a table larger than the room falls back to room-centre). Tightens on read —
+   an edge-stored table shifts inward next load.
+6. (#6) **Extracted the shared banner shell** — `BannerRows.jsx` owns the amber container +
+   collapsible count header + outer/per-row Reveal (useRevealRows); `LateBanner` and `OverlapBanner`
+   now supply only `title` + a `renderRow(id)` render-prop. ~140 duplicated lines → one shell.
+   Structure is byte-equivalent to the old inline scaffolding.
+
+Not applied (deliberate — the review flagged these as trade-offs, not defects): #3 (blocks'
+`touch-action:"pan-x"` creates scroll dead-zones over blocks — but it IS the working Android fix;
+changing it risks regressing the just-fixed drag on hardware we can't test here) and #8 (the Plan
+walk-in's 90-min minimum window — a deliberate floor; the knob already exists if staff want it
+looser). Build clean; ranking + no-dangling-refs verified. Live banner/drag re-verification in the
+Preview pane was blocked by a transient tool outage — structurally verified (build + identical
+scaffolding); worth a glance on next preview.

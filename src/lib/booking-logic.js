@@ -202,9 +202,12 @@ function _comboPri(c,size){var k=c.ids.slice().sort().join("|");var rules=PRIORI
 // stays the caller's job. Respecting Settings edits falls out for free — the
 // weights/avoid flags come live from PRIORITIES.
 function _comboPriKey(c){
-  var k=c.ids.slice().sort().join("|");var rules=PRIORITIES.comboRules;
-  for(var i=0;i<rules.length;i++){if(rules[i].key===k) return rules[i].avoid?100:-rules[i].weight;}
-  return 0;
+  // v17.0.0 review fix: pick the STRONGEST-preference matching rule (lowest
+  // value — most negative sorts earliest), not the first in array order, so
+  // two rules sharing a key can't make drag ranking depend on rule ordering.
+  var k=c.ids.slice().sort().join("|");var rules=PRIORITIES.comboRules;var best=0,found=false;
+  for(var i=0;i<rules.length;i++){if(rules[i].key===k){var v=rules[i].avoid?100:-rules[i].weight;if(!found||v<best){best=v;found=true;}}}
+  return found?best:0;
 }
 export function rankCombosContaining(tableId,size){
   return VALID_COMBOS.filter(function(c){return c.ids.includes(tableId)&&c.cap>=size;})

@@ -117,10 +117,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // the finger. Dropping on a row calls onDropOnTable(bookingId, tableId); App
   // decides move vs swap. Vertical offset lives in local state (translateY);
   // the horizontal position (time) never changes.
-  const dragRef = useRef(null);            // {y0, pid, el, active}
+  const dragRef = useRef(null);            // {y0, pid, el, active, lastY}
   const [dragDy, setDragDy] = useState(null);
   const dragHoldTimer = useRef(null);      // touch: the 800ms drag-mode timer
   const preventScrollRef = useRef(null);   // native non-passive touchmove blocker
+  const dragRafRef = useRef(0);            // v17.0.0 review fix #4: coalesce moves to one render/frame
 
   function beginDrag(el, pid) {
     dragRef.current = { ...(dragRef.current || {}), active: true };
@@ -156,11 +157,23 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       if (e.pointerType === "mouse" && Math.abs(e.clientY - d.y0) > 6) beginDrag(e.currentTarget, d.pid);
       else return;
     }
-    setDragDy(e.clientY - d.y0);
-    if (setDragHover) setDragHover(tableAtY(e.clientY));
+    // v17.0.0 review fix #4: coalesce the render+hover work to one rAF/frame —
+    // a raw pointermove fires far more often than the display refreshes, and
+    // each one setState-d. (A drag only runs while the tab is visible, so the
+    // "rAF never fires when hidden" trap doesn't apply here.)
+    d.lastY = e.clientY;
+    if (dragRafRef.current) return;
+    dragRafRef.current = requestAnimationFrame(function () {
+      dragRafRef.current = 0;
+      const dd = dragRef.current;
+      if (!dd || !dd.active) return;
+      setDragDy(dd.lastY - dd.y0);
+      if (setDragHover) setDragHover(tableAtY(dd.lastY));
+    });
   }
   function endDrag(e, commit) {
     clearTimeout(dragHoldTimer.current);
+    if (dragRafRef.current) { cancelAnimationFrame(dragRafRef.current); dragRafRef.current = 0; }
     if (preventScrollRef.current) {
       preventScrollRef.current.el.removeEventListener("touchmove", preventScrollRef.current.fn);
       preventScrollRef.current = null;

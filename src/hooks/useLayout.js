@@ -53,6 +53,14 @@ function fpNum(n, def, min, max){
   if(!Number.isFinite(v)) v = def;
   return Math.max(min, Math.min(max, v));
 }
+// v17.0.0 review fix #7: a table is drawn CENTERED on (x,y), so clamping the
+// centre to [0,room] let half the glyph render outside the room border. Clamp
+// the centre by the glyph's half-extent instead; a table larger than the room
+// falls back to the room centre.
+function clampCenter(v, half, span){
+  if(half * 2 >= span) return Math.round(span / 2);
+  return Math.max(half, Math.min(span - half, v));
+}
 function defaultChairs(capacity, shape){
   // Split capacity top/bottom for square/rect (round renders the total evenly
   // around the rim, but keeps the same per-side model for uniform editing).
@@ -87,12 +95,14 @@ export function sanitizeFloorPlan(raw, tables){
     if(e && typeof e === "object"){
       const shape = (e.shape === "round" || e.shape === "rect") ? e.shape : "square";
       const w = fpNum(e.w, 60, 30, 400), h = fpNum(e.h, 60, 30, 400);
+      const hEff = (shape === "square" || shape === "round") ? w : h;
       const rawCh = e.chairs && typeof e.chairs === "object" ? e.chairs : null;
       const chairs = rawCh
         ? { top: fpNum(rawCh.top, 0, 0, 12), right: fpNum(rawCh.right, 0, 0, 12), bottom: fpNum(rawCh.bottom, 0, 0, 12), left: fpNum(rawCh.left, 0, 0, 12) }
         : defaultChairs(t.capacity, shape);
       outT[t.id] = {
-        x: fpNum(e.x, 60, 0, room.w), y: fpNum(e.y, 60, 0, room.h),
+        x: clampCenter(fpNum(e.x, Math.round(room.w / 2), 0, room.w), w / 2, room.w),
+        y: clampCenter(fpNum(e.y, Math.round(room.h / 2), 0, room.h), hEff / 2, room.h),
         shape: shape, w: w, h: shape === "square" || shape === "round" ? w : h,
         rot: fpNum(e.rot, 0, 0, 359),
         chairs: chairs
