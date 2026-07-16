@@ -31,6 +31,7 @@ import { db } from "../firebase";
 import { EMPTY_FORM } from "../lib/constants";
 import { matchCustomerByPhone, normalizePhone, DEFAULT_TEMPLATES, intentBannerVisible } from "../lib/whatsapp";
 import { backendEnabled, sendViaBackend } from "../lib/wa-backend";
+import { WA_SANDBOX } from "../lib/waSandbox";
 import { clearCollapseSection } from "./useCollapseState";
 
 export function useWhatsApp({
@@ -73,7 +74,15 @@ export function useWhatsApp({
   const messagesMapRef = useRef({});
 
   // ── Listeners (read-only; never write back) ────────────────────────────────
+  // PROD-leak guard (17.0.0-wa-sandbox): every listener is WA_SANDBOX-gated.
+  // A build of the wa-sandbox BRANCH without VITE_FB_TARGET=dev (e.g. a Vercel
+  // preview deployment on the MAIN project) connects to PROD Firebase — without
+  // this gate the templates listener would SEED DEFAULT_TEMPLATES into the PROD
+  // `templates` node on first load (a real prod write; happened 2026-07-16).
+  // With the gate, a non-sandbox build attaches nothing and writes nothing
+  // (the inbox UI is hidden by the same flag in App.jsx).
   useEffect(() => {
+    if (!WA_SANDBOX) return;
     const unsub = onValue(ref(db, "conversations"), (snap) => {
       const val = snap.val();
       const raw = val ? (Array.isArray(val) ? val.filter(Boolean) : Object.values(val)) : [];
@@ -89,6 +98,7 @@ export function useWhatsApp({
     return unsub;
   }, []);
   useEffect(() => {
+    if (!WA_SANDBOX) return;
     const unsub = onValue(ref(db, "messages"), (snap) => {
       const val = snap.val() || {};
       const map = {};
@@ -107,6 +117,7 @@ export function useWhatsApp({
     return unsub;
   }, []);
   useEffect(() => {
+    if (!WA_SANDBOX) return;
     const unsub = onValue(ref(db, "templates"), (snap) => {
       const val = snap.val();
       if (val) {

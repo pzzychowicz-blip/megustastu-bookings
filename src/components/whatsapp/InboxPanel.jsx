@@ -42,6 +42,10 @@ export function InboxPanel({
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify,
   onBulkArchive, onBulkUnarchive, onBulkDelete,
   query, setQuery, needsAction, setNeedsAction,
+  // Sandbox-only: opens the 🧪 simulator ON TOP of this panel (the WaSimulator
+  // Overlay mounts after InboxPanel in App's tree, so it stacks above at the
+  // same z-index). null in any non-sandbox build → no button renders.
+  onOpenSim = null,
 }) {
   const winW = useWinW();
   const twoPane = winW >= INBOX_TWO_PANE_BREAKPOINT;
@@ -299,6 +303,12 @@ export function InboxPanel({
             </div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
+            {/* 🧪 simulator opener (sandbox builds only) — lives next to the
+                quick-reply Templates button per Patryk (2026-07-16); the sim
+                opens on top of this window. */}
+            {onOpenSim ? (
+              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ minHeight: 36, padding: "6px 12px", background: "var(--btn-default)" }), { display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, lineHeight: 1 })}>🧪</button>
+            ) : null}
             <button onClick={() => setShowTpl(true)} title="Templates" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ minHeight: 36, padding: "6px 12px", background: "var(--btn-default)" }), { display: "flex", alignItems: "center", justifyContent: "center" })}><TemplatesIcon size={17} /></button>
             <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={mkBtn({ fontSize: 18, minHeight: 36, padding: "4px 12px", background: "var(--btn-default)" })}>✕</button>
           </div>

@@ -10,15 +10,9 @@
 // Props:
 //   onOpenSearch()   — App's setShowSearch(true)
 //   onOpenSettings() — App's setShowSettings(true)
-//   onOpenSim()      — WhatsApp sandbox only: opens the simulator panel. A 🧪
-//                      button renders between 🔍 and ⚙ ONLY when WA_SANDBOX
-//                      (dev server / deployed sandbox build) AND the prop is
-//                      passed — real prod builds never show it. (Moved here
-//                      from the Timeline legend at the 17.0.0 sandbox sync.)
 
 import { CogIcon } from "./Settings";
 import { S } from "../lib/constants";
-import { WA_SANDBOX } from "../lib/waSandbox";
 
 const BTN_STYLE = {
   background: "var(--cog-bg)",
@@ -31,7 +25,7 @@ const BTN_STYLE = {
   boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
 };
 
-export function ViewTools({ onOpenSearch = () => {}, onOpenSettings = () => {}, onOpenSim = null }) {
+export function ViewTools({ onOpenSearch = () => {}, onOpenSettings = () => {} }) {
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
       <button
@@ -43,16 +37,6 @@ export function ViewTools({ onOpenSearch = () => {}, onOpenSettings = () => {}, 
       >
         🔍
       </button>
-      {WA_SANDBOX && onOpenSim ? (
-        <button
-          onClick={onOpenSim}
-          title="WhatsApp simulator (sandbox only)"
-          className="mgt-hover-scale"
-          style={{ ...BTN_STYLE, fontSize: 16, lineHeight: 1 }}
-        >
-          🧪
-        </button>
-      ) : null}
       <button
         onClick={onOpenSettings}
         title="Settings & keyboard shortcuts"
