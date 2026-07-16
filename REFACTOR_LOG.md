@@ -3925,3 +3925,545 @@ deferred scans' deps couldn't see a `settings/operatingHours` change from anothe
 form was open (hoursFor reads a live binding — no React dep changes) → a `hoursSig` string
 ("open-close"/"closed") added to formAvail/kitchenSugg/walk-in scan deps, so an hours edit
 re-checks availability instead of leaving a stale banner until the next input nudge.
+
+---
+
+## v16.4.0 — floor-ops corrections & name-based guest search (2026-07-11)
+
+Eight items on a single branch off the merged v16.3.0 `main`. All pure client changes → rolling
+deploy (no Firebase rules / shape change). Build clean; main-bundle gz ≈203.9 kB (from ≈202).
+
+**Files:** `src/App.jsx` (keyboard handler, ListView mount, version), `src/components/LateBanner.jsx`,
+`src/components/BookingFormModal.jsx`, `src/components/ManualModal.jsx`, `src/components/ListView.jsx`,
+`src/components/CustomersSettings.jsx`, `src/lib/customers.js`, `CLAUDE.md`.
+
+1. **Running-late banner collapsed by default when > 2 late** (`LateBanner.jsx`) — `open` init is now
+   `useState(() => Object.keys(lateMap).length <= 2)` (was `true`). ≤2 stays expanded; a long late
+   list starts collapsed so it doesn't shove the grid down. Initial-only (won't auto-re-collapse
+   mid-session). Verified live: 8 late → banner rendered collapsed.
+2. **Shift+D and `?` are GLOBAL shortcuts** (`App.jsx` keyboard `handler`) — both moved from BELOW the
+   `if(anyModal) return;` guard to just after `if(typing) return;`, so they fire even while a modal is
+   open and NEVER close it (they only toggle theme / open Settings; `?` layers Settings on top). No
+   form/pref shortcut uses D or ?, so nothing is shadowed; the typing guard still lets you type the
+   chars into a field. Verified live: Shift+D flips theme with the form open (form stays); `?` opens
+   Settings over an open Manual modal and Escape reveals the Manual modal intact (selection preserved).
+3. **DEV Firebase login saved to memory** (no code) — `dev-firebase-login.md`; "always start the local
+   server logged in." Password entry stays the user's step (prohibited category); rely on the persisted
+   session.
+4. **Name-based guest search — per-booking, NO merging** (`customers.js` + `BookingFormModal.jsx`) —
+   new pure `searchGuestsByName(bookings, index, query, limit)` returns a unified dropdown list: phone
+   customers collapse by phone (verified single identity), but phone-LESS guests are ONE ROW PER
+   BOOKING (never merged — two same-name phone-less people can't collapse into one). The booking form's
+   NAME field gains an autocomplete mirroring the phone dropdown (new bookings only; each row shows
+   phone-or-"no phone" + last date so duplicates are distinguishable); `pickGuest` fills name (+ phone
+   when present) + Book-Again prefill. Verified live: typing "Mar" listed two separate "Marco · no
+   phone" rows.
+5. **"Regular" label only at 2+ completed visits** (`BookingFormModal.jsx`) — the recognition chip now
+   reads `"Regular · N past visits"` at `regularCount>=2` and `"1 past visit"` (no "Regular") at
+   exactly 1; still teal + clickable disclosure. (CustomersSettings' Regulars filter already defaults
+   to 2.) Verified live: a 1-visit guest showed "1 past visit".
+6. **Swap-busy panel readability** (`ManualModal.jsx`) — the active Swap-busy header was pale peach +
+   `--warn-text` (low contrast, esp. dark). Now a saturated orange fill (`rgba(249,115,22,0.85)`) with
+   WHITE title/subtitle (`--text-on-accent`), matching the swap-cell / "Swap & Assign" orange family.
+   Verified live: white text reads cleanly on orange.
+7. **List-view 🔍 search button** (`ListView.jsx` + `App.jsx`) — new `onOpenSearch` prop renders a
+   right-aligned 🔍 (byte-for-byte the timeline legend button) above the cards, shown even on empty
+   days (the `!day.length` early return was restructured). Wired to `setShowSearch(true)`. List view
+   had no button chrome before; Settings there stays keyboard-only (`?`). Verified live: 🔍 opens the
+   global SearchPanel.
+8. **Phone-less no-show count stat** (`customers.js` reuse + `CustomersSettings.jsx`) — a 4th totals
+   tile ("N no-show, no phone", rendered only when > 0) counts `!hasRealPhone(b.phone) && isNoShow(b)`
+   bookings. Count only — never aggregated into an identity (consistent with item 4's no-merge rule).
+   Verified live: tile showed "6 no-show, no phone".
+
+**/code-review (same version):** one finding fixed — **ListView rules-of-hooks crash (pre-existing,
+latent since v15.8.0):** the `!day.length` early return sat ABOVE the `useState`/`useEffect`/`useFlip`
+hooks block, so adding a day's FIRST booking while viewing that empty day in List view (no remount —
+`slide.k` only bumps on date/view change) changed the hook count between renders → React "Rendered
+more hooks" crash. The hooks block (+ the `active`/`finished` derivations it needs) now runs BEFORE
+the early return. Verified live: empty 2026-09-15 in List → + New → Save rendered the first card
+cleanly (and delete → back to empty, also clean); zero console errors. **Second finding also
+fixed:** the name-dropdown's exact-match self-close filter hid ALL phone-less rows once the name was
+fully typed — forfeiting their Book-Again prefill, and with two same-name phone-less guests you
+couldn't switch rows. The filter now self-hides only an exactly-applied PHONE-customer row
+(name+phone both match the form); phone-less rows always stay listed (picking still closes the
+dropdown via setNameFocus(false)). Verified live: exact-typed "Marco" kept all three phone-less
+Marco rows visible + pickable. Remaining nit accepted as-is: the swap-busy orange literals follow
+the TableGrid saturated-fill exception.
+
+**UI polish follow-up (same version, Patryk):** (1) **Swap-busy orange desaturated ~30%** — the
+v16.4.0 `rgb(249,115,22)` read too vivid; now `rgb(215,121,56)` (HSL S 95%→66%, same hue/lightness),
+softer but still white-text-readable in both themes. (2) **Autocomplete dropdowns less transparent +
+hover affordance** — the booking-form phone AND name pickers used `--bg-sheet` (light 0.72 → form
+fields bled through); now a new near-opaque `--bg-ac-menu` token (light/dark 0.98). Rows gained a
+`.mgt-ac-row` class → `:hover` background `--bg-ac-hover` (accent tint, both themes, behind the
+hover-capability media guard) so the cursor's target row is visible. New tokens + one CSS rule in
+`index.html`; both dropdowns in `BookingFormModal.jsx`. Verified live in light + dark.
+
+---
+
+## v17.0.0 — Pending status · Anonymized delete · Plan (floor) view · Configurability pass (2026-07-13/14)
+
+**Scope:** four features, one branch (`feat/v17.0.0-pending-plan-configurability`), one commit per
+phase (the v16.0.0 workflow). Major bump: a 5th booking status, a 3rd main view, a 6th settings node,
+a new Security-Rules pair. Files: `App.jsx`, `booking-logic.js`, `constants.js`, `customers.js`,
+`index.html`, `database.rules.json`, `useLayout.js`, `useWalkin.js`, new `useGeneralSettings.js`,
+new `PlanView.jsx` / `FloorPlanEditor.jsx` / `QuickStatusPopup.jsx`, plus ~10 touched components.
+Build: gz ≈210.5 kB (from ≈203.9 at v16.4.0). All phases verified live in DEV.
+
+**Phase 1 — PENDING status.** Full-booking semantics (occupies its table, optimizer places it,
+counts as upcoming, flags running-late — Patryk-confirmed "same as confirmed"). Forward status is
+>Confirmed ONLY; Cancel stays reachable (the decline flow). Colors: confirmed recolored to accent
+blue, pending takes the yellow (they clashed — confirmed WAS amber/yellow); new
+`--status-pending-*`/`--block-pending` tokens. Form: "Save pending" (new bookings, left footer) +
+"Save&confirm" (editing a persisted-pending booking; slides out RIGHT via new `mgt-slide-*-r`
+keyframes when the draft status leaves pending). `statusOverrideRef` carries the intent through the
+kitchen-confirm round-trip; doSave applies it to a CLONE of the form so diff/history/flash see it
+uniformly. Timeline RMB + List buttons + keyboard S/C gated; chips/no-show include pending;
+statusOrder gains pending; DaySheet prints "(pending)".
+
+**Phase 2 — Anonymized customer delete.** `deleteCustomer` MAPS instead of filtering: bookings stay
+for statistics as name "Data removed" (phone/notes/history wiped, noShow KEPT, `anonymized:true`
+whitelisted in sanitize); waitlist entries still deleted. `searchBookings`/`searchGuestsByName` skip
+anonymized (phone-keyed paths already exclude them). Side benefit: the whole-DB empty-array-guard
+edge case is gone (a map never changes the count).
+
+**Phase 3 — settings/general (6th settings node).** `useGeneralSettings.js` (useBookingDefaults
+pattern; revGuard CAS `generalRev` — **the rules pair is Patryk's console step, DEV then PROD,
+app-first**). Knobs + consumers: restaurantName (header + day sheet), currency (deposit surfaces),
+phonePrefix (phone-field seeds + `cleanPhoneOf` treats a bare untouched prefix as "no phone"),
+regularMin (form chip + Customers filter), lateCollapseMax (LateBanner), waitMatchWin (waitlist ±
+window), undoSecs (undo toast). Settings → General gains "Restaurant" (blur-commit text fields) +
+"Preferences" (4 steppers) collapsibles.
+
+**Phase 4 — floorPlan config + editor.** `settings/layout.floorPlan` — `{v, room:{w,h},
+tables:{id:{x,y,shape:round|square|rect,w,h,rot,chairs:{top,right,bottom,left}}}, walls[], doors[]}`;
+sanitizeFloorPlan keeps stored entries, auto-places missing tables (deterministic zone-grouped grid),
+drops removed ids; rides the existing layoutRev CAS; **NOT in layoutSignature** (plan edits never
+kill IS_MGT_LAYOUT); rename remaps floorPlan keys. `FloorPlanEditor.jsx` (Settings → Layout →
+"Floor plan"): snap-10 SVG canvas — drag tables/doors (write on pointer-up), two-tap walls, one-tap
+doors, per-selection inspector (shape/size/rotation/per-side chairs + capacity-mismatch warning),
+room steppers. Exports the chair geometry + TableGlyph/DoorGlyph (multi-export exception) for PlanView.
+
+**Phase 5 — Plan view.** `PlanView.jsx`, the 3rd view (button between List and Walk-in; slide
+direction follows the T·L·P order; global `P` key). Time slider (15-min steps; now on today —
+follows the clock until touched — opening time otherwise) drives occupancy fills: seated green ·
+confirmed blue · pending yellow · free neutral · blocked grey-dashed; completed never occupies;
+seated occupies until at least now. Tap → day-queue popover (row → openEdit; free table today →
+"Walk-in here", `openWalkin(tableId)` pre-select — string-guarded, the header button passes the
+click event). RMB/450ms hold → the shared `QuickStatusPopup.jsx` (extracted VERBATIM from
+TimelineView) targeting current-else-next. Wheel/pinch zoom + drag pan + double-tap reset;
+freeing-soon "~Nm" pill at now. **Live-QA fix:** `setPointerCapture` on the canvas pointer-down
+redirected the subsequent `click` to the svg and silently killed the table-tap popover — removed
+(gotcha recorded in CLAUDE.md).
+
+**Deploy:** app-first rolling-safe EXCEPT the `general`/`generalRev` rules pair (Patryk's manual
+console step per `database.rules.README.md` — old rules ignore the new node until then).
+
+**Corrections round (same version, same branch, pre-merge — Patryk's live review, 2026-07-14).**
+7 items (one skipped after code inspection — the waitlist button's orange never changed), 3 commits:
+
+*Commit A — colors & small UI.* (1) **Confirmed recolored accent-blue → navy/indigo** (chips
+`67,56,202` / text `#3730a3` light · `#a5b4fc` dark; blocks `rgba(55,48,163,.88)`) — the v17 accent
+blue made too many blue surfaces, List especially; while in there, fixed the **stale dark-theme
+`--status-confirmed-text` (still pre-v17 amber)** and added the missing dark `--status-pending-text`.
+(2) New `--fp-outline`/`--fp-chair-outline` tokens (both themes) — floor-plan tables/chairs blended
+into the light-mode canvas (TableGlyph strokes + PlanView FREE_STROKE). (3) ConnectionStatus popover
+bg `--bg-sheet` → `--bg-ac-menu` (near-opaque, the autocomplete-dropdown opacity). (4) PlanView
+blocked table = the Timeline BlockBar identity — red 45° stripe SVG pattern (`--tl-blocked-a/b`)
+instead of grey-dashed. (5) App container `maxWidth` 1000 → **1600** (wasted desktop side margins).
+
+*Commit B — floor-plan editor.* Walls fully editable: drag the body to move, drag the endpoint
+handles (rendered when selected) to reshape — new `wallA`/`wallB`/`wallBody` types on the existing
+startDrag/dragPos machinery; inspector shows live length. Doors switch opening side: `flip` boolean
+(sanitizeFloorPlan whitelists it) mirrors arc+hinge via `scale(-1,1)` in DoorGlyph (PlanView
+inherits); "Opens: left/right" inspector toggle. **Units declared centimeters** (" cm" on every
+size stepper + a grid-50cm/snap-10cm caption).
+
+*Commit C — Timeline drag & drop table swap.* Drag a booking block vertically to another table row.
+Gesture: mouse = 6px vertical threshold (below it click→edit wins); touch = the 400ms long-press
+opens quick-status as before, KEEP HOLDING to ~800ms → popup dismissed, block lifts (translateY
+follows the pointer, target row highlights via `--bg-ac-hover`); a native NON-passive `touchmove`
+listener blocks page scroll mid-drag (React 17+ roots attach touchmove passively — `preventDefault`
+in the React handler is a no-op). Drop → App's `dropOnTable(id, targetId)`: free row = **move** onto
+that single table (capacity-guarded, multi-table bookings collapse onto it); ONE overlapping
+booking = **swap full table sets** (both `_manual:true,_locked:true` + history entries,
+`canAssign`-validated against everyone else + tableBlocks — invalid swaps refuse and write
+nothing); blocked target / several distinct occupants / unassigned-onto-occupied all refuse.
+Feedback via a new `dragMsg` floating toast (warn-styled refusals, suggest-styled successes) in the
+one-at-a-time statusToasts slot; success gated on the saveBookings `ok` boolean (v15.4.0 rule).
+Completed = free everywhere (the v16.0.0 availability rule) — a drop onto a row with only a
+completed booking is a plain move. Capturing the pointer on the block ITSELF is safe (the PlanView
+gotcha was capturing on a parent).
+
+**Corrections round 2 (same version, same branch, pre-merge — Patryk's second review, 2026-07-14).**
+Four items, one commit. Files: `index.html`, `src/App.jsx`, `src/components/QuickStatusPopup.jsx`,
+`src/components/Settings.jsx`.
+
+1. **Adjustable app width** — the fixed `maxWidth:1600` (round 1's item 8) overflowed screens
+   narrower than 1600 once a `.mgt-hover-scale` lift ran at the edge. Now per-device:
+   `localStorage["mgt-appwidth"]` (900–2400, step 100, default 1600 — the theme pattern, NOT a
+   Firebase settings node; screen size is a device property), read by `readAppWidth()` next to
+   `readThemePref()`, applied as the container's `maxWidth`, edited via a new "App width"
+   MiniStepper row under Dark mode in Settings → General (`appWidth`/`onSetAppWidth` threaded
+   App → SettingsContent → GeneralTabContent).
+2. **Quick-status popup centered on screen** — `QuickStatusPopup` now renders through
+   `createPortal(..., document.body)`. Its `position:fixed` scrim mounted under SlideView, whose
+   transform (while a view-slide runs/settles) makes fixed positioning CONTAINING-BLOCK-relative —
+   on a wide timeline the popup centered on the scroller, not the viewport. Gotcha recorded in
+   CLAUDE.md: any fixed overlay under SlideView needs a body portal.
+3. **Drag&drop swap capacity rule** — the swap branch of `dropOnTable` validated only conflicts
+   (`canAssign`), never capacity, so an 8-top could swap onto a 2-seater. Now both sides must pass
+   the Manual-assign rule `comboCapBest(newSet) ≥ size` before the conflict check; refusals name
+   the shortfall ("That swap would seat 8 at 5A (seats 2)."). Verified live: Adam (8, on 2+3+4)
+   dropped on 5A refuses with that exact toast; a legal Henry ⇄ Franek swap still commits and
+   persists (checked post-reload).
+4. **Confirmed/pending recolor (Patryk's exact RGBA picks)** — round 1's navy read too heavy:
+   `--status-confirmed-rgb: 255,160,45` (orange; text `#c2410c` light / `#ffb257` dark),
+   `--status-pending-rgb: 250,226,20`, `--block-confirmed: rgba(255,160,45,0.92)`.
+   `--block-pending` keeps its darkened gold (white block text needs the darker fill).
+
+All verified live in DEV (popup screenshot-centered at the viewport midpoint; width stepper
+1600→1500 applied + persisted to localStorage; swap refusal + legal swap both exercised via
+dispatched PointerEvents). Build clean.
+
+**Corrections round 3 (same version, same branch, pre-merge — Patryk's third review, 2026-07-14).**
+Four items, one commit. Files: `index.html`, `src/App.jsx`, `src/components/Settings.jsx`.
+
+1. **App width: step 50 + screen-relative default** — the stepper moves in 50px; with no stored
+   value the default is now `window.innerWidth − 300` (a 150px margin each side), rounded to 50 and
+   clamped to 900–2400 — so a fresh device fills its browser without overflowing it.
+2. **Plan-view popup centering** — free (verified, no code): PlanView mounts the same
+   `QuickStatusPopup` that round 2 portalled to `<body>`, so RMB on a Plan table now centers on the
+   viewport too.
+3. **Drag & drop displacement (Patryk-confirmed "auto-reassign")** — `dropOnTable` reworked:
+   pick the table SET the party needs at the target (the single table if it seats them, else the
+   smallest `VALID_COMBO` containing the target whose members aren't blocked or seated-occupied);
+   free set → plain move; exactly one occupant → the round-2 full-set swap first; otherwise
+   DISPLACE via the `manualAssign` Swap-busy recipe (strip the desired tables from occupants,
+   unlock them, `bookingsAfterAction` re-seats them) — gated on a TRIAL pass against current data:
+   commit only if every displaced booking comes out re-seated and conflict-free, else refuse with
+   a toast ("Can't re-seat X elsewhere — use Manual assign"). Seated occupants always refuse.
+   Verified live both directions: Adam (8) dropped on 5A → "moved to 5A+5B+6 — Stefan, Alan test
+   reassigned" (both re-seated on 2/3); dragged back to row 2 → exact original layout restored.
+4. **Confirmed → teal rgba(13,148,136) · pending back to rgba(250,204,21)** (Patryk's pick from
+   proposals; navy too heavy, orange too close to pending's yellow). `--block-confirmed`
+   rgba(13,148,136,0.88); confirmed text `#0f766e` light / `#5eead4` dark.
+
+Build clean (gz ≈214.9 kB). All verified live in DEV.
+
+**Corrections round 4 (same version, same branch, pre-merge — Patryk's fourth review, 2026-07-14).**
+Three items, one commit. Files: `index.html`, `src/App.jsx`, `src/lib/booking-logic.js`,
+`src/components/PlanView.jsx`.
+
+1. **Plan LMB popover centered** — the table-tap day-queue popover had the same
+   SlideView-transform bug as the quick-status popup (an in-tree `position:fixed` scrim centers on
+   the transformed container, not the viewport); portalled to `<body>` via `createPortal`, same as
+   round 2's QuickStatusPopup fix.
+2. **Drag & drop picks combos like the Optimizer (Patryk-confirmed "pure optimizer order")** —
+   new exported `rankCombosContaining(tableId, size)` (booking-logic.js): every VALID_COMBO
+   containing the target that seats the party, sorted with EXACTLY findBest's combo comparator
+   (`_comboPri` → location → indoor anchors → cap → length) instead of raw capacity — Adam (8)
+   dropped on 7 now takes the optimizer's choice for that spot rather than the smallest-cap combo
+   (the reported 1A+1B+7+i2 pick). The displacement stage now WALKS the ranked candidates and
+   commits the first whose trial pass re-seats every displaced booking conflict-free (a stranding
+   top pick falls through to the next set instead of refusing outright); seated members still
+   exclude a combo, and the final fallback is the refusal toast.
+3. **Confirmed → Burnt Orange rgba(234,88,12)** (orange-600; Patryk's pick from the orange-palette
+   proposals — teal out, deep orange sits clearly apart from pending's yellow).
+   `--block-confirmed` rgba(234,88,12,0.88); text `#c2410c` light / `#fdba74` dark.
+
+Build clean. Verified live in DEV.
+
+**Corrections round 5 (same version, same branch, pre-merge — Patryk's fifth review, 2026-07-14).**
+Two items, one commit. Files: `index.html`, `src/lib/booking-logic.js`.
+
+1. **Drag combo ranking — minimal footprint + honor the coded preference rules.** Round 4's
+   "pure optimizer order" produced `1A+1B+7+3+4` (cap 14, FIVE tables) for an 8-top dropped on 7 —
+   too many tables, and it ignored the layout's i4/i1-over-i2/i3 attach preference. `dropOnTable`'s
+   `rankCombosContaining` (booking-logic.js) is now sorted for a MANUAL drop, not a global
+   optimize: **(1) fewest tables** (the "not more tables than necessary" fix), **(2) the coded
+   `PRIORITIES.comboRules` preference — matched BAND-AGNOSTICALLY (key only, party size ignored)**
+   so a drop honors the i4(w10) > i1(w9) > i2/i3(w7) attach ordering even for a party of 8 (the
+   rule's optimizer band is 9–12; a manual drop consults the preference regardless), **(3) least
+   capacity**, then id for determinism. The optimizer's zone/location tiebreak is dropped — the
+   human already chose the location by dropping. Settings → Layout → Table priorities edits flow
+   through live (reads `PRIORITIES`). New private `_comboPriKey` = `_comboPri` without the size gate;
+   the optimizer's own `_comboPri` (size-gated) is untouched. Verified against the real modules and
+   live: 8-on-7 → `1A+1B+7+i4` (cap 11, 4 tables), fallback order i4→i1→i2→i3; 8-on-2 → `2+3+4`
+   (cap 8, 3 tables); a member-of-a-perfect-combo drop reproduces the optimizer's natural choice.
+2. **Confirmed → muted terracotta rgb(191,106,40)** (Patryk's exact RGB; round 4's orange-600 read
+   too hot). `--block-confirmed` rgba(191,106,40,0.92); text `#9a5216` light / `#e0a56a` dark.
+   Verified live in List (chip on white) and Timeline (block) — distinct from pending's yellow.
+
+Build clean. Both verified live in DEV.
+
+**Corrections round 6 (same version, same branch, pre-merge — Patryk's sixth review, 2026-07-14).**
+Three items, one commit. Files: `index.html`, `src/components/PlanView.jsx`,
+`src/components/FloorPlanEditor.jsx`.
+
+1. **PlanView LMB popover — walk-in availability + centering + pinch damping.** (a) "Walk-in here"
+   now only shows when the table can actually seat one now: free at the slider AND
+   `(nextBusy − slider) ≥ getDur(2)`, where `nextBusy` = the earliest of {next confirmed/pending
+   start on the table > slider, next block start, close}. A table free now but booked in 10 min no
+   longer offers a dead-end walk-in. Verified live: Table 6 offers it at 15:15 (hours free) but not
+   at 23:45 (75 min to close < 90). (b) The button is wrapped in a flex/justify-center row (was
+   left-aligned). (c) Pinch zoom dampened to 50% sensitivity — `k = k0·(1 + (d/d0 − 1)·0.5)` —
+   the raw finger-distance ratio felt hair-trigger.
+2. **FloorPlanEditor — zoom controls + pan + clearer grid.** viewBox-window zoom state `{k,x,y}`
+   (k 1–4); a −/percentage/+/Reset control group in the toolbar; `toFp` maps through the zoom
+   window; empty-canvas drag PANS when zoomed (`panRef`, clamped to the room; a clean no-move tap
+   still deselects). Grid is now a minor 50 cm pattern (`--fp-grid`, new token both themes) plus a
+   stronger major 250 cm pattern (`--fp-outline`) over a `--bg-card` fill — far more visible than
+   the old 0.5-width `--border-soft` lines. Verified live: zoom 100→156%, viewBox panned
+   `162,126` → `266,230`, no crash; grid clearly readable in light mode.
+3. **Confirmed → soft tangerine rgb(245,156,88)** (Patryk's exact RGB). `--block-confirmed`
+   rgba(245,156,88,0.95); text `#b45309` light / `#f9c08a` dark. NB it is lighter/more pastel than
+   the other status colours (seated green 34,197,94 / cancelled red 239,68,68 sit at ~500-level),
+   so the timeline block's white text is borderline — a coordinated-palette suggestion was offered
+   alongside this commit for Patryk to weigh.
+
+Build clean. All verified live in DEV.
+
+**Corrections round 6 colour follow-up (same commit series — Patryk picked Option B from the swatch widget).**
+Confirmed and Pending are now a coordinated matched-intensity pair, replacing the round-6 pastel
+tangerine (which sat lighter than the other statuses): Confirmed = amber `rgb(217,119,6)`
+(`--block-confirmed` .92; text `#92400e` light / `#fcd9a0` dark), Pending = amber-yellow
+`rgb(234,179,8)` (`--block-pending` .92; text `#854d0e` / `#fde047`). Both carry crisp white block
+text and sit at the seated-green / cancelled-red weight; the depth gap keeps the two warm statuses
+distinct. Verified live in DEV.
+
+**Corrections round 7 (same version, same branch, pre-merge — Patryk's seventh review, 2026-07-15).**
+Five items, one commit. Files: `src/components/OverlapBanner.jsx` (NEW), `src/App.jsx`,
+`src/components/Settings.jsx`, `src/components/ListView.jsx`, `src/components/TimelineView.jsx`,
+`src/components/FloorPlanEditor.jsx`, `src/hooks/useBookingDefaults.js`.
+
+1. **Overlap warnings → the Running-late pattern + Settings switches for all alert banners.**
+   New `OverlapBanner.jsx` (a LateBanner clone): collapsible count header ("Overlap warnings · N",
+   default-collapsed above the shared lateCollapseMax), Reveal-eased rows via useRevealRows,
+   per-row Reassign + ✕ dismiss (`overlapDismissed` session Set in App, day-change reset, the
+   lateDismissed pattern — timeline/list keep the unfiltered overlapWarnings). Two new
+   settings/bookingDefaults master switches, default on, rolling-safe (`overlapWarnEnabled`,
+   `reshuffleSuggestEnabled`) + a new "Alert banners" Section in Settings → General with both
+   toggles; `ineffShow` additionally gates on the reshuffle switch. NB the banner's row plumbing
+   is byte-equivalent to the old inline rows (same overlapWarnings map/fields); rows verified by
+   pattern (LateBanner) — live overstay QA is Patryk's.
+2. **Floating status toasts opaque** — all 9 toast backgrounds (resync/reconnect/syncFix/waitAdd/
+   undo/dragMsg×2/reshuffled/load) now layer their tint over the near-opaque autocomplete-menu
+   token: `linear-gradient(var(--tint),var(--tint)), var(--bg-ac-menu)` — same effective opacity
+   as the ConnectionStatus popover, so grid content no longer ghosts through.
+3. **Settings from List view** — ListView's action row is now 🔍 then ⚙ (byte-for-byte the
+   Timeline legend buttons; new onOpenSettings prop). Verified live: cog opens Settings from List.
+4. **iOS floor-plan drag fix** — iOS Safari ignores `touch-action` on SVG elements, so the
+   editor's inline `touchAction:"none"` did nothing on iPad: the first touchmove scrolled the
+   Settings modal, fired pointercancel, and every glyph drag died. A NATIVE non-passive
+   `touchmove` listener on the svg (`{passive:false}`, preventDefault) keeps the gesture — the
+   React-17-passive-root lesson applied to SVG.
+5. **Android timeline-drag fix (Honor Pad X8a / MagicOS 10)** — two causes: (a) blocks had no
+   touch-action, so the browser claimed any vertical movement for scrolling and fired
+   pointercancel BEFORE the 800ms drag-hold armed → `touchAction:"pan-x"` on TimelineBlock
+   (horizontal timeline scroll from a block still works; vertical belongs to the drag); (b) the
+   native long-press contextmenu (~500ms) re-opened the quick-status popup mid-hold → `onCtx`
+   now swallows contextmenu while `dragRef` is set.
+
+Build clean; toasts/List-cog/Settings toggles verified live in DEV. The two device fixes are
+code-level (root causes confirmed against browser docs/known engine behaviour) — on-device
+verification on the iPad + Honor Pad is Patryk's review step.
+
+**v17.0.0 /code-review fixes (same version, same branch, pre-merge — 2026-07-15).**
+Six fixes from the full-branch review. Files: `src/App.jsx`, `src/lib/booking-logic.js`,
+`src/components/TimelineView.jsx`, `src/hooks/useLayout.js`, `src/components/BannerRows.jsx` (NEW),
+`src/components/LateBanner.jsx`, `src/components/OverlapBanner.jsx`.
+
+1. (#1) **Bounded the drag-displacement trial walk** — `dropOnTable` caps `candSets` at
+   `MAX_CAND=8`. Each step-4 candidate runs a full `bookingsAfterAction` trial (optimise = 70–500ms
+   on a day with unplaceable bookings); the old unbounded ~20-combo walk could freeze the UI for
+   seconds before a refusal. Ranking unchanged for the realistic top placements (offline-verified:
+   8-on-7 → 1A+1B+7+i4…, 8-on-2 → 2+3+4).
+2. (#2) **Documented the trial-vs-commit boundary** — the trial runs on current `bookings`, the
+   committed `transform` re-runs the optimizer on fresh `prev`, so the commit is always internally
+   consistent; a rare cross-device echo can at worst leave a displaced booking unassigned (visible)
+   or overlapping (v15.6.1 reconciliation self-heals). Comment only.
+3. (#4) **rAF-throttled the timeline drag move** — `onDragPointerMove` coalesces to one
+   setState/hover per frame via `dragRafRef` (cancelled in `endDrag`); pointermove fired far more
+   often than the display refreshes. Drag only runs while visible, so the hidden-tab rAF trap
+   doesn't apply.
+4. (#5) **Order-independent combo-rule match** — `_comboPriKey` now takes the STRONGEST-preference
+   matching rule (min value) instead of the first in array order, so two rules sharing a key can't
+   make drag ranking depend on rule ordering. No-op for the MGT seed (no duplicate keys).
+5. (#7) **Clamp floor-plan glyphs inside the room** — tables are drawn CENTERED on (x,y), so the
+   old `[0,room]` centre clamp let half the glyph render outside. New `clampCenter` clamps by the
+   glyph half-extent (a table larger than the room falls back to room-centre). Tightens on read —
+   an edge-stored table shifts inward next load.
+6. (#6) **Extracted the shared banner shell** — `BannerRows.jsx` owns the amber container +
+   collapsible count header + outer/per-row Reveal (useRevealRows); `LateBanner` and `OverlapBanner`
+   now supply only `title` + a `renderRow(id)` render-prop. ~140 duplicated lines → one shell.
+   Structure is byte-equivalent to the old inline scaffolding.
+
+Not applied (deliberate — the review flagged these as trade-offs, not defects): #3 (blocks'
+`touch-action:"pan-x"` creates scroll dead-zones over blocks — but it IS the working Android fix;
+changing it risks regressing the just-fixed drag on hardware we can't test here) and #8 (the Plan
+walk-in's 90-min minimum window — a deliberate floor; the knob already exists if staff want it
+looser). Build clean; ranking + no-dangling-refs verified. Live banner/drag re-verification in the
+Preview pane was blocked by a transient tool outage — structurally verified (build + identical
+scaffolding); worth a glance on next preview.
+
+---
+
+**v17.0.0 corrections round 8 (same version, same branch, pre-merge — 2026-07-15).**
+Patryk's eighth review — two items.
+
+Files: `src/components/PlanView.jsx`, `src/components/ViewTools.jsx` (new),
+`src/components/TimelineView.jsx`, `src/components/ListView.jsx`, `src/App.jsx`,
+`CLAUDE.md`, `REFACTOR_LOG.md`.
+
+1. **PlanView: closing the RMB popup no longer pans the plan.** Reported as "the click that
+   closes the popup is also treated as a tap used for navigating across the plan". Root cause
+   was NOT the closing click at all: the quick-status popup is portalled to `<body>`, so the
+   RMB **press** armed a pan on the svg (`bgPointerDown` armed on any button) and its
+   **pointerup** landed on the portalled scrim instead — the svg never saw the release, so
+   `panRef` stayed armed. The next mouse move over the canvas (no button held) then panned by
+   the full delta from the old RMB point, so the plan lurched right after the popup closed.
+   Fixed at both ends: `bgPointerDown` bails on a non-primary mouse button (an RMB never arms
+   a pan), and `bgPointerMove` bails + clears `panRef` when `e.buttons === 0` (a mouse can't
+   pan with nothing held) — belt-and-braces for any release the svg misses. Touch/pinch paths
+   untouched (both guards are `pointerType === "mouse"` only).
+   New gotcha row: **a portalled scrim swallows the pointerup** — never rely on pointerup
+   alone to disarm a gesture.
+
+2. **🔍 + ⚙ moved to App's date-nav row** (`ViewTools.jsx`, new). The pair lived in the
+   Timeline legend and, since v16.4.0, in a duplicate List card-header copy; Plan had neither.
+   Both copies deleted and the pair mounted once in App, right of the Summary panel
+   (`minHeight:40` aligns it with the date controls; `marginLeft:auto` keeps it right-aligned
+   when the mobile full-width Summary wraps it onto its own line) — so the two buttons are in
+   the same place in all three views. `onOpenSearch`/`onOpenSettings` props dropped from
+   TimelineView + ListView (App wires ViewTools directly); the 34×34 `--cog-bg` chrome is
+   unchanged.
+
+Verified live in DEV: the 🔍/⚙ pair holds its position across Timeline/List/Plan and the
+per-view copies are gone; the plan's `<g>` transform stays `translate(0,0)` through the full
+RMB → close → mouse-move sequence (it used to jump), while a normal LMB drag still pans and a
+left-tap still opens the table popover. Build clean.
+
+---
+
+**v17.0.0 corrections round 9 (same version, same branch, pre-merge — 2026-07-15).**
+Patryk's ninth review — two items.
+
+Files: `src/lib/booking-logic.js`, `src/components/FloorPlanEditor.jsx`, `CLAUDE.md`,
+`REFACTOR_LOG.md`.
+
+1. **Drag&drop over-joining, root-caused and fixed for good.** A 4-top dragged from 7 to i1
+   took `i1+i2+i3+i4`. Why: i1 is standalone (cap 2), so EVERY `VALID_COMBO` containing i1
+   is a cross-room mega — "fewest tables first" can't help, and the `avoid:true` flag on
+   `i1|i2|i3|i4` only sorted it last (meaningless in a candidate list where it's first or
+   only). Removing the avoided combo alone just promoted the next mega (`1A+1B+7+i1`, cap
+   11 for 4). `rankCombosContaining` now applies two HARD exclusions:
+   (a) avoid-flagged combos are dropped entirely (`_comboPriKey===100` ⟺ every matching
+   rule is avoid; a coexisting preference rule un-hides it — deliberate);
+   (b) `DRAG_MAX_WASTE = 4` — a manual drop may conscript at most 4 unused seats
+   (`cap − size ≤ 4`; Patryk chose "max 4 empty seats" over half-empty / same-group-only
+   via AskUserQuestion). Bigger joins remain reachable via Manual assign.
+   Ranking matrix (offline, Vite SSR): i1/4 → none (refuse) · i1/6 → none · i1/10 →
+   `1A+1B+7+i1`… (legit big party) · 7/8 → `1A+1B+7+i4` · 2/8 → `2+3+4` (round-5 contract
+   intact) · i2/3 → `i2+i3` · 1A/5 → `1A+1B`. Verified LIVE in DEV with a real 4-top on 7:
+   drag to i1 → toast "Party of 4 won't fit at i1, even with joined tables.", booking
+   unmoved; drag to free 2 → "moved to 2+3" (minimal join, waste 1).
+
+2. **Floor-plan editor: walls/doors selectable by finger.** The painted strokes are 5–7
+   SVG user units = 5–7 **cm**, ≈4–6 px at typical render scale — a touch rarely landed.
+   Invisible fat hit-targets now carry the pointer handlers, visible geometry unchanged:
+   walls get a 40 cm transparent hit-line (`pointerEvents="stroke"`) and the selected-wall
+   endpoint dots get r=24 transparent hit-circles; `DoorGlyph` gets a 44 cm-tall
+   transparent rect spanning the bar (events bubble to the glyph's handlers — PlanView's
+   handler-less use is unaffected). Tables render after walls/doors, so they still win
+   overlapping taps. Verified live: a click ~10 px off the wall line selects the wall; a
+   click ~10 px off the door bar selects the door (beating the wall band beneath it).
+
+---
+
+**v17.0.0 corrections round 10 (same version, same branch, pre-merge — 2026-07-15).**
+Patryk's tenth review — two fixes + one FYI.
+
+Files: `index.html`, `src/components/TimelineView.jsx`, `src/components/ListView.jsx`,
+`src/components/FloorPlanEditor.jsx`, `CLAUDE.md`, `REFACTOR_LOG.md`.
+
+1. **Running-late border is yellow now, not amber.** It reused `--tl-block-warn-soon`
+   (#f59e0b) — fine when confirmed was blue, but since the round-6 recolor confirmed
+   blocks are amber-600 (217,119,6), so the "late" border blended into its own block.
+   New dedicated tokens: `--tl-block-late: #fde047` (yellow-300, both themes) for the
+   timeline block border, and `--card-late-border` for the List card edge (light
+   `rgba(202,138,4,.85)` — a pale yellow is invisible on a white card; dark
+   `rgba(253,224,71,.7)`). The overstay **due-soon** border deliberately KEEPS amber:
+   it paints on seated (green) blocks, where amber reads fine and carries the distinct
+   "guest overstaying" meaning. Verified live in DEV, both themes: late block border
+   computes `rgb(253,224,71)` over the `rgba(217,119,6,.92)` fill.
+
+2. **iOS floor-plan drag (select works, move doesn't; Android fine).** Round 7 diagnosed
+   the cause correctly (WebKit ignores `touch-action` on SVG → the modal scrolls → the
+   browser fires pointercancel → the drag dies) but hung BOTH defences off the `<svg>`
+   itself — the very element whose touch handling WebKit mishandles. Round 10 moves them
+   to the HTML wrapper, which WebKit treats like any other element:
+   `touchAction:"none"` on the wrapping `<div>` (the effective touch-action walks the
+   ancestor chain, so it covers the descendant SVG) and the non-passive `touchmove`
+   preventDefault listener now attaches to that div (`wrapRef`). Additionally
+   `setPointerCapture` is now **mouse-only** — a touch pointer is implicitly captured to
+   the pointerdown target by spec, so moves bubble to the svg's `onPointerMove` regardless,
+   while an explicit capture on an SVG element is WebKit's shakiest path (nothing to gain,
+   a known quirk to lose); and `onPointerCancel` now cleans up so a cancelled gesture
+   can't strand `dragRef`. The svg keeps its own `touchAction:"none"` for Chrome/Android.
+   **Verification limit — no iOS device here.** Verified in DEV/Chrome that neither path
+   regressed: a mouse drag of table 5A moves + commits (70,60 → 160,110), and a synthetic
+   TOUCH-pointer drag (events on the child `<g>`, no capture — the exact path iOS now
+   takes) also moves + commits, with the wrapper's computed `touch-action` = `none`.
+   The iOS fix itself needs Patryk's iPad to confirm.
+
+Follow-up (same round, Patryk): the List card's LIGHT late edge (rgba(202,138,4)) still
+read as amber — replaced with true yellow both themes: light rgba(250,204,21,.95)
+(yellow-400, one shade deeper for white-card contrast), dark rgba(253,224,71,.8).
+Verified live in DEV, both themes, List + Timeline.
+
+FYI recorded: Patryk applied the new Firebase rules (`general`/`generalRev`) to **DEV and
+PROD** on 2026-07-15, ahead of the merge — rolling-safe, nothing outstanding rules-side.
+
+---
+
+**v17.0.0 /code-review fixes, round 10 (same version, same branch, pre-merge — 2026-07-15).**
+Review of rounds 8–10 (`6edc85f..c274979`): no critical issues; all 3 suggestions applied.
+
+Files: `src/components/FloorPlanEditor.jsx`, `src/lib/booking-logic.js`, `src/App.jsx`.
+
+1. (#1, correctness) **Touch drag could commit early via `onPointerLeave`.** Round 10 made
+   `setPointerCapture` mouse-only, so a touch pointer is now implicitly captured to the
+   small glyph `<g>` rather than the `<svg>`. A finger that outruns the glyph between
+   frames fires a boundary event at the capture target, and React's synthetic leave
+   propagation would reach the svg's `onPointerLeave={onUp}` → drag committed mid-gesture
+   at the current snap. (Pre-round-10 the capture target was the whole svg, so this
+   couldn't happen — the bug was introduced by the iOS fix.) `onPointerLeave` is now
+   MOUSE-only; a captured touch can't meaningfully leave, and a genuine abort arrives as
+   `pointercancel` (handled).
+2. (#2, UX) **Refusal toast names the real reason.** "Party of N won't fit at X, even with
+   joined tables" was false when a big-enough combo exists but the round-9 waste/avoid
+   filters excluded it — that's a "use Manual assign", not a dead end. New exported
+   `comboExistsFor(tableId,size)` (booking-logic) = does ANY declared combo containing the
+   table seat the party, ignoring the drag-only filters. `dropOnTable` now picks between
+   three messages: joins-are-busy ("the tables needed to join with X are busy or blocked
+   then" — ranked candidates existed but all were blocked/seated), too-many-tables ("would
+   need too many tables joined at X — use Manual assign"), and the true won't-fit. Only
+   reachable when the target single doesn't seat the party. Verified offline: i1/4 + i1/6
+   → Manual-assign message; i1/30 → won't-fit; every OK case unchanged.
+3. (#3, edge case) **Wall endpoint handles render in a second pass.** Walls paint in array
+   order, so a neighbouring wall's 40cm hit-band (round 9) painted OVER the selected
+   wall's r=24 endpoint hit-circles — at a corner, grabbing an endpoint could drag the
+   other wall's body. The selected wall's handles now render after every wall body, so
+   they always win.
+
+Build clean. Verified offline (Vite SSR module load): the ranking matrix is unchanged and
+the three refusal branches resolve correctly (i1/4 + i1/6 → Manual-assign, i1/30 →
+won't-fit). Verified LIVE in DEV: dragging the 4-top onto i1 now toasts "would need too
+many tables joined at i1 — use Manual assign" (was the false "won't fit"), and a drop on
+free 2 still commits "moved to 2+3"; selecting a wall by its fat band renders both r=24
+endpoint handles AFTER every hit-band in document order (#3); and a TOUCH drag survives a
+pointerleave and keeps tracking (it used to commit there) while a MOUSE leave still
+commits (#1). The iOS floor-plan drag itself still needs Patryk's iPad — the round-10
+change it depends on can't be exercised in Chrome.

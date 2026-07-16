@@ -41,8 +41,8 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   optimizerActiveFor
 } from "../lib/booking-logic";
-import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, matchCustomerByPhone } from "../lib/customers";
-import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone } from "../lib/customers";
+import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
@@ -52,9 +52,10 @@ export function BookingFormModal({
   form, setForm, editId, error,
   bookings, liveBookings, tableBlocks,
   autoOptimizer, isMobile,
-  onSave, onClose, onClearSwap, onBookAgain,
+  onSave, onSavePending, onSaveConfirm, onClose, onClearSwap, onBookAgain,
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel,
   onAddToWaitlist, standingEnabled,
+  currency = "€", regularMin = 2, // v17.0.0: settings/general
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
   // Pre-E1, these all lived inline in BookingApp's body. Moved here because
@@ -100,6 +101,36 @@ export function BookingFormModal({
     });
     setPhoneFocus(false);
   }
+  // v16.4.0: NAME-field autocomplete — searches guests by name across BOTH tiers
+  // (phone customers + phone-less bookings, per-booking, NEVER merged — see
+  // searchGuestsByName). Mirrors the phone dropdown; only shown for NEW bookings
+  // (an edit already has its customer). A phone-less pick fills only the name.
+  const [nameFocus,setNameFocus]=useState(false);
+  const nameMatches=(nameFocus&&!editId&&String(form.name||"").trim().length>=2)
+    ?searchGuestsByName(bookings,custIdx,form.name,6).filter(function(r){
+      // Hide an exact already-applied PHONE-customer selection (name+phone both
+      // match = this row is what's in the form) so a refocused dropdown isn't
+      // noise. Phone-LESS rows are deliberately NOT self-hidden (/code-review):
+      // an exact-typed name would hide ALL of them and forfeit their Book-Again
+      // prefill — and with two same-name phone-less guests you couldn't switch
+      // rows. Picking still closes the dropdown via setNameFocus(false).
+      return !(!r.isPhoneless&&r.name===form.name&&normalizePhone(form.phone)===r.phone);
+    })
+    :[];
+  function pickGuest(r){
+    const latest=r.latest;
+    setForm(function(f){
+      const next={name:r.name};
+      if(!r.isPhoneless) next.phone=r.rawPhone;
+      if(!editId&&latest){ // Book-Again-style prefill (new bookings only)
+        next.size=latest.size||f.size;
+        next.preference=latest.preference||f.preference;
+        next.preferredTables=Array.isArray(latest.preferredTables)?latest.preferredTables:f.preferredTables;
+      }
+      return Object.assign({},f,next);
+    });
+    setNameFocus(false);
+  }
   // Recognition chips: teal "Regular · X past visits" (the WA module's visual
   // language) + no-show chips — neutral at 1, amber warning at 2+.
   // v16.0.0 follow-up: the chips are CLICKABLE (buttons, ▸/▾ suffix) and reveal
@@ -118,7 +149,7 @@ export function BookingFormModal({
   const regularChip=custMatch&&custMatch.regularCount>=1?<button
     key="reg" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("regular");}}
-    style={Object.assign({},chipBase,{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",color:"var(--success-text)"})}>{"Regular · "+custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":"")+(histWhich==="regular"?" ▾":" ▸")}</button>:null;
+    style={Object.assign({},chipBase,{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",color:"var(--success-text)"})}>{(custMatch.regularCount>=(regularMin||2)?"Regular · "+custMatch.regularCount+" past visits":custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":""))+(histWhich==="regular"?" ▾":" ▸")}</button>:null;
   const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<button
     key="ns" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("noshow");}}
@@ -146,12 +177,24 @@ export function BookingFormModal({
   // Dropdown rows use onMouseDown/onTouchStart (fire BEFORE the input's blur)
   // so the tap lands before phoneFocus flips false. Opaque sheet token per the
   // popover rule (a translucent card reads see-through over form content).
-  const phoneDropdown=phoneMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-sheet)",border:"1px solid var(--border-sheet)",borderRadius:12,boxShadow:"var(--shadow-sheet)",overflow:"hidden"}}>{phoneMatches.map(function(c){return (
+  const phoneDropdown=phoneMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-ac-menu)",border:"1px solid var(--border-sheet)",borderRadius:12,boxShadow:"var(--shadow-sheet)",overflow:"hidden"}}>{phoneMatches.map(function(c){return (
     <div
       key={c.phone}
+      className="mgt-ac-row"
       onMouseDown={function(e){e.preventDefault();pickCustomer(c);}}
       onTouchStart={function(e){e.preventDefault();pickCustomer(c);}}
       style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize:11,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{c.visits>0?<span style={{fontSize:10,fontWeight:700,color:"var(--success-text)",background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:8,padding:"2px 6px"}}>{c.visits+" visit"+(c.visits!==1?"s":"")}</span>:null}{c.noShowCount>0?<span style={{fontSize:10,fontWeight:700,color:"var(--warn-text)",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:8,padding:"2px 6px"}}>{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</span>:null}</div></div>
+  );})}</div>:null;
+  // v16.4.0: name-search dropdown — same opaque-sheet chrome as phoneDropdown.
+  // Each row shows the phone (or "no phone") + last date so two same-name
+  // phone-less guests are visually distinguishable (they are separate rows).
+  const nameDropdown=nameMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-ac-menu)",border:"1px solid var(--border-sheet)",borderRadius:12,boxShadow:"var(--shadow-sheet)",overflow:"hidden"}}>{nameMatches.map(function(r){return (
+    <div
+      key={r.key}
+      className="mgt-ac-row"
+      onMouseDown={function(e){e.preventDefault();pickGuest(r);}}
+      onTouchStart={function(e){e.preventDefault();pickGuest(r);}}
+      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize:11,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")}</div></div>{r.isPhoneless?<span style={{fontSize:10,fontWeight:700,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:8,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
   );})}</div>:null;
 
   const formCols=isMobile?"1fr":"1fr 1fr";
@@ -316,7 +359,7 @@ export function BookingFormModal({
 
   const quickStatusBtns=editId?<Section style={{position:"relative"}}>{statusFlash?(
         <div key={statusFlash.k} className="mgt-wipe-ltr" style={{position:"absolute",inset:0,borderRadius:16,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
-      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600,marginRight:4}}>Status:</span>{["confirmed","seated","completed","cancelled"].filter(function(s){return s!==form.status;}).map(function(s){return (
+      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600,marginRight:4}}>Status:</span>{(form.status==="pending"?["confirmed"]:["confirmed","seated","completed","cancelled"]).filter(function(s){return s!==form.status;}).map(function(s){return (
         <button
           key={s}
           className="mgt-hover-scale"
@@ -379,10 +422,27 @@ export function BookingFormModal({
   // errorEl rides above the buttons so a save/availability error stays visible
   // without scrolling. marginTop dropped — the footer region's borderTop+padding
   // provides the separation now.
+  // v17.0.0: pending flow. New bookings get a left-aligned "Save pending"
+  // (saves the booking with status=pending — still awaiting confirmation).
+  // Editing a booking whose PERSISTED status is pending gets "Save&confirm"
+  // to the right of Save booking; it slides out to the RIGHT (Presence,
+  // mgt-slide-*-r) the moment the draft status leaves "pending" (the >Confirmed
+  // status button), per spec.
+  const origPendingBooking=editId?bookings.find(function(b){return b.id===editId&&b.status==="pending";}):null;
   const footerEl=(
     <>
       {errorEl}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}</div><div style={{display:"flex",gap:8}}><button
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{(function(){
+        if(editId) return null;
+        const canSave=!!form.date;
+        return (
+          <button
+            disabled={!canSave}
+            onClick={onSavePending}
+            className="mgt-hover-scale"
+            style={{background:canSave?BLOCK_BG.pending:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(212,165,10,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save pending</button>
+        );
+      })()}</div><div style={{display:"flex",gap:8}}><button
         className="mgt-hover-scale"
         style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
         onClick={function(){onClose();}}>Cancel</button>{(function(){
@@ -397,19 +457,29 @@ export function BookingFormModal({
             className="mgt-hover-scale"
             style={{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
         );
-      })()}</div></div>
+      })()}{origPendingBooking?(
+        <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" outMs={190} tag="span">
+          <button
+            disabled={!form.date}
+            onClick={onSaveConfirm}
+            className="mgt-hover-scale"
+            style={{background:form.date?"rgba(22,101,52,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"0 2px 8px rgba(22,101,52,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save&confirm</button>
+        </Presence>
+      ):null}</div></div>
     </>
   );
 
   // ── The form modal itself ──
   return (
     <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><div style={{textAlign:"center",marginBottom:16}}><div
-        style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:12,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking")}</div></div>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><input
+        style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:12,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking")}</div></div>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><div style={{position:"relative"}}><input
             value={form.name}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
+            onFocus={function(){setNameFocus(true);}}
+            onBlur={function(){setNameFocus(false);}}
             placeholder="Full name"
             className="mgt-hover-scale"
-            style={inp()} /></Fld><Fld label="Phone number"><div style={{position:"relative"}}><input
+            style={inp()} />{nameDropdown}</div></Fld><Fld label="Phone number"><div style={{position:"relative"}}><input
             type="tel"
             value={form.phone}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{phone:e.target.value});});}}
@@ -453,7 +523,7 @@ export function BookingFormModal({
           rows={2}
           placeholder="Allergies, special requests..."
           className="mgt-hover-scale"
-          style={Object.assign({},inp(),{resize:"vertical"})} /></Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none. */}<Fld label="Deposit (€)"><input
+          style={Object.assign({},inp(),{resize:"vertical"})} /></Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none. */}<Fld label={"Deposit (" + (currency || "€") + ")"}><input
           type="number"
           min={0}
           step={5}

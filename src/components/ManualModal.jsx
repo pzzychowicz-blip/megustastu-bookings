@@ -121,10 +121,15 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
       : "Capacity: " + cap + (cap >= needed ? " (fits " + needed + " pax)" : " — need " + needed + " pax");
   const isSwapping = affectedBookings.length > 0;
   const assignLabel = isSwapping ? "Swap & Assign" : "Assign";
-  const swapBg = swapBusy ? "rgba(255,237,213,0.6)" : S.bg;
-  const swapBrd = "2px solid " + (swapBusy ? "rgba(253,186,116,0.6)" : "rgba(255,255,255,0.5)");
-  const swapTitleClr = swapBusy ? "var(--warn-text)" : S.text;
-  const swapSubClr = swapBusy ? "var(--warn-text)" : S.text;
+  // v16.4.0 (Patryk): active swap-busy panel was pale peach + warn-text — low
+  // contrast (esp. dark). Now an orange fill with WHITE text so it reads cleanly
+  // in both themes. Follow-up: the original rgb(249,115,22) read too saturated —
+  // desaturated ~30% (HSL S 95%→66%) to rgb(215,121,56), softer but still clearly
+  // in the swap-cell / "Swap & Assign" orange family.
+  const swapBg = swapBusy ? "rgba(215,121,56,0.85)" : S.bg;
+  const swapBrd = "2px solid " + (swapBusy ? "rgba(215,121,56,0.95)" : "rgba(255,255,255,0.5)");
+  const swapTitleClr = swapBusy ? "var(--text-on-accent)" : S.text;
+  const swapSubClr = swapBusy ? "var(--text-on-accent)" : S.text;
 
   // Internal keyboard shortcuts. The deps array intentionally includes
   // `affectedBookings` and `onSave` even though they may change every render

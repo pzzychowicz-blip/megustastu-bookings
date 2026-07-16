@@ -45,8 +45,12 @@ export function ListView({
   nowMins = 0, warnings = {},
   late = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {},
-  showFinished = false, onToggleFinished = () => {}
+  showFinished = false, onToggleFinished = () => {},
+  currency = "€"
 }) {
+  // v17.0.0 round 8 (Patryk): the 🔍/⚙ pair moved OUT to App's date-nav row
+  // (ViewTools.jsx) — one home for all three views. List keeps no chrome of its
+  // own again; the `searchBar` element and its two buttons are gone.
   const day = bookings
     .filter((b) => b.date === date)
     .sort((a, b) => {
@@ -56,14 +60,6 @@ export function ListView({
       return a.time.localeCompare(b.time);
     });
 
-  if (!day.length) {
-    return (
-      <div style={{ textAlign: "center", padding: "48px 0", color: S.text, fontSize: 15 }}>
-        No bookings for this date.
-      </div>
-    );
-  }
-
   // statusOrder already sorts completed/cancelled last, so splitting here
   // preserves the exact visual order the inline list had.
   const active = day.filter((b) => b.status !== "completed" && b.status !== "cancelled");
@@ -71,6 +67,10 @@ export function ListView({
 
   // v15.8.0: detect status changes → stamp a wipe of the OLD colour; FLIP the
   // active list so a re-sorted card eases to its new position instead of jumping.
+  // v16.4.0 /code-review: this hooks block MUST run before the empty-day early
+  // return below (rules of hooks) — it used to sit after it, so adding the
+  // day's FIRST booking without a remount (no slide bump) changed the hook
+  // count between renders and crashed the view.
   const [, bumpAnim] = useState(0);
   useEffect(function () {
     const prev = __listPrev;
@@ -95,6 +95,16 @@ export function ListView({
   }
   const flipRef = useFlip([active.map(function (b) { return b.id; }).join(",")]);
 
+  if (!day.length) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ textAlign: "center", padding: "48px 0", color: S.text, fontSize: 15 }}>
+          No bookings for this date.
+        </div>
+      </div>
+    );
+  }
+
   // v16.0.0: repeat no-show offender map (2+ past no-shows on this phone,
   // counted across ALL dates — the full bookings prop, not just `day`).
   const nsMap = noShowMap(bookings);
@@ -117,15 +127,18 @@ export function ListView({
         const lateSt = late[b.id] || null;
         const sc = STATUS_COLORS[b.status];
         const useStatusColor = b.status === "seated" || b.status === "completed" || b.status === "cancelled";
+        // v17.0.0: a pending card keeps the strong (upcoming) background but
+        // carries the yellow status border — the spec's List marker for pending.
+        const isPending = b.status === "pending";
         const cardBg = useStatusColor ? "var(--bg-card-dim)" : "var(--bg-card-strong)";
         const cardBrd = warn
           ? (warn.overdue ? "var(--card-overdue-border)" : "var(--card-warn-border)")
           : lateSt
-            ? "var(--card-warn-border)"
+            ? "var(--card-late-border)"   // v17.0.0 round 10: yellow, not the amber due-soon edge
             : b._conflict
               ? "var(--card-conflict-border)"
-              : useStatusColor ? sc.border : "var(--border-card-plain)";
-        const cardBrdW = (warn || lateSt) ? "3px" : useStatusColor ? "3px" : "1px";
+              : (useStatusColor || isPending) ? sc.border : "var(--border-card-plain)";
+        const cardBrdW = (warn || lateSt) ? "3px" : (useStatusColor || isPending) ? "3px" : "1px";
 
         const durationTag = b.status === "seated" ? (
           <SmallTag label={elapsedMin + " min"} style={{ background: "#166534", color: "var(--text-on-accent)", border: "none" }} />
@@ -176,7 +189,7 @@ export function ListView({
         ) : null;
         // v16.3.0: deposit chip (suggest/green tokens — a prepaid booking).
         const depositTag = (Number(b.deposit) || 0) > 0 ? (
-          <SmallTag label={"€" + b.deposit + " deposit"} style={{ background: "var(--suggest-bg)", color: "var(--success-text)", border: "1px solid var(--suggest-border)" }} />
+          <SmallTag label={(currency || "€") + b.deposit + " deposit"} style={{ background: "var(--suggest-bg)", color: "var(--success-text)", border: "1px solid var(--suggest-border)" }} />
         ) : null;
 
         const notesEl = b.notes ? (
@@ -195,7 +208,9 @@ export function ListView({
 
         // v14.4.0: Cancel + Delete are pulled into a right-aligned group (Cancel
         // then Delete); the remaining status changers stay in the left group.
-        const statusBtns = ["confirmed", "seated", "completed"]
+        // v17.0.0: a pending card's only forward status is Confirmed (the
+        // right-group Cancel button stays — the decline flow).
+        const statusBtns = (b.status === "pending" ? ["confirmed"] : ["confirmed", "seated", "completed"])
           .filter((s) => s !== b.status)
           .map((s) => (
             <button

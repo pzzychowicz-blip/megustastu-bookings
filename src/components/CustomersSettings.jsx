@@ -3,12 +3,14 @@
 // v16.0.0 — Settings → Customers tab body. Customer management over the
 // phone-derived customer index (src/lib/customers.js — customers ARE the
 // bookings, no separate collection): search by name or phone, per-customer
-// booking history, and GDPR-style "delete customer & all data" (= delete every
-// booking carrying that phone + their waitlist entries; the parent owns the
-// actual write — see onDeleteCustomer).
+// booking history, and GDPR-style "delete customer & all data". v17.0.0: the
+// delete ANONYMIZES instead of removing — every booking carrying that phone
+// stays for statistics as name "Data removed" (phone/notes/history wiped,
+// noShow kept, `anonymized` flag set); waitlist entries are still deleted.
+// The parent owns the actual write — see onDeleteCustomer.
 //
 // Deletion is armed-confirm (two taps) with an explicit "permanent, no
-// backups" warning — Firebase free plan has no rollback.
+// backups" warning — Firebase free plan has no rollback of the wiped fields.
 //
 // Props (threaded App → SettingsContent → here, the LayoutSettings pattern):
 //   bookings              — full bookings list
@@ -16,12 +18,12 @@
 //   onDeleteCustomer(key) — normalized-phone key; parent deletes bookings +
 //                           waitlist entries and reports the outcome
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { S, BTN, STATUS_COLORS } from "../lib/constants";
-import { customerIndex, searchCustomers, normalizePhone, formatPhone } from "../lib/customers";
+import { customerIndex, searchCustomers, normalizePhone, formatPhone, hasRealPhone, isNoShow } from "../lib/customers";
 import { Section, Reveal, mkInp, mkBtn } from "./atoms";
 
-export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
+export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2 }) {
   const [query, setQuery] = useState("");
   const [openKey, setOpenKey] = useState(null);   // expanded customer
   const [armedKey, setArmedKey] = useState(null); // delete armed for this key
@@ -29,7 +31,12 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
   // v16.3.0 follow-up (Patryk): "Regular" threshold — minimum completed visits
   // for the Regulars filter, adjustable via a stepper (session-only view
   // preference, like `filter` itself). Default 2.
-  const [regularMin, setRegularMin] = useState(2);
+  // v17.0.0: the initial threshold comes from settings/general (regularMin);
+  // the in-tab stepper still adjusts it per-session, and a remote settings
+  // change re-syncs it (clobbering a session tweak is acceptable — the setting
+  // IS the intended value).
+  const [regularMin, setRegularMin] = useState(regularMinDefault);
+  useEffect(function () { setRegularMin(regularMinDefault); }, [regularMinDefault]);
 
   const idx = customerIndex(bookings);
   const all = Object.keys(idx).map(function (k) { return idx[k]; });
@@ -37,6 +44,10 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
   const totalCustomers = all.length;
   const totalVisits = all.reduce(function (a, c) { return a + c.visits; }, 0);
   const noShowCustomers = all.filter(function (c) { return c.noShowCount > 0; }).length;
+  // v16.4.0: phone-less no-shows aren't in the phone-keyed index at all — count
+  // them (count only, never aggregated into an identity: two same-name phone-less
+  // people are different people) so they're not fully invisible.
+  const phonelessNoShowCount = (bookings || []).filter(function (b) { return b && !hasRealPhone(b.phone) && isNoShow(b); }).length;
   // v16.3.0: quick filters (applied only when NOT searching — a query overrides).
   const base = filter === "regulars"
     ? all.filter(function (c) { return c.visits >= regularMin; }).sort(function (a, b) { return b.visits - a.visits || (b.latestDate || "").localeCompare(a.latestDate || ""); })
@@ -84,7 +95,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
             <div style={{ fontSize: 12, fontWeight: 700, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
             {historyRows}
             <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-              {armed ? <span style={{ fontSize: 12, fontWeight: 700, color: "var(--danger-text)" }}>Permanently deletes everything for this customer — no backups. Tap again to confirm.</span> : null}
+              {armed ? <span style={{ fontSize: 12, fontWeight: 700, color: "var(--danger-text)" }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymized as “Data removed” for statistics. Tap again to confirm.</span> : null}
               <button
                 className="mgt-hover-scale mgt-press"
                 style={mkBtn({ fontSize: 12, minHeight: 36, background: BTN.del, opacity: armed ? 1 : 0.85 })}
@@ -130,6 +141,12 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
             <div style={{ fontSize: 18, fontWeight: 700, color: "var(--warn-text)" }}>{noShowCustomers}</div>
             <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>with a no-show</div>
           </div>
+          {phonelessNoShowCount > 0 ? (
+            <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 10 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--warn-text)" }}>{phonelessNoShowCount}</div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>no-show, no phone</div>
+            </div>
+          ) : null}
         </div>
         <input
           value={query}
@@ -159,7 +176,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer }) {
             </span>
           ) : null}
         </div>
-        <div style={{ fontSize: 11, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number across all bookings. Deleting a customer permanently removes every booking and waitlist entry with their number.</div>
+        <div style={{ fontSize: 11, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number across all bookings. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymized as “Data removed” for statistics.</div>
       </Section>
       {rows.length ? rows : <div style={{ textAlign: "center", padding: "20px 0", color: S.muted, fontSize: 13 }}>{query.trim() ? "No customers match." : "No customers yet — bookings with a phone number appear here."}</div>}
     </div>
