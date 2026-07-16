@@ -314,14 +314,8 @@ export function InboxPanel({
           </div>
         </div>
         {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav.
-            The select-mode toggle sits left of the search box (both tabs). */}
+            Order (Patryk, 2026-07-16): search box, then Select, then Needs action. */}
         <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <button
-            onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
-            title={selectMode ? "Exit selection" : "Select conversations"}
-            className="mgt-hover-scale mgt-press"
-            style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: 10, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color 160ms linear, color 160ms linear" }}
-          ><SelectIcon size={17} /></button>
           <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
             <input
               ref={searchRef}
@@ -332,6 +326,12 @@ export function InboxPanel({
             />
             {query ? <button onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}>✕</button> : null}
           </div>
+          <button
+            onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
+            title={selectMode ? "Exit selection" : "Select conversations"}
+            className="mgt-hover-scale mgt-press"
+            style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: 10, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color 160ms linear, color 160ms linear" }}
+          ><SelectIcon size={17} /></button>
           <button
             onClick={() => setNeedsAction((v) => !v)}
             title="Show only conversations that need a response"
