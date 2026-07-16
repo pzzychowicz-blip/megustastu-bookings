@@ -314,18 +314,9 @@ export function InboxPanel({
           </div>
         </div>
         {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav.
-            Order (Patryk, 2026-07-16): search box, then Select, then Needs action. */}
+            Order (Patryk, 2026-07-16): Select, then Needs action, then the
+            search box (search sits on the right). */}
         <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
-            <input
-              ref={searchRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name, number or message…"
-              style={Object.assign({}, mkInp(), { fontSize: 13, padding: "8px 12px", paddingRight: query ? 30 : 12 })}
-            />
-            {query ? <button onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}>✕</button> : null}
-          </div>
           <button
             onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
             title={selectMode ? "Exit selection" : "Select conversations"}
@@ -338,6 +329,16 @@ export function InboxPanel({
             className="mgt-hover-scale mgt-press"
             style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: 10, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
           >● Needs action</button>
+          <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name, number or message…"
+              style={Object.assign({}, mkInp(), { fontSize: 13, padding: "8px 12px", paddingRight: query ? 30 : 12 })}
+            />
+            {query ? <button onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}>✕</button> : null}
+          </div>
         </div>
         {/* Bulk action bar — only in select mode. Actions depend on the tab:
             Inbox → Archive; Archived → Restore + Delete (delete behind one
