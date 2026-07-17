@@ -36,18 +36,11 @@ import { BTN } from "../lib/constants";
 const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
-// Single source of truth for the Settings tabs. SettingsContent renders it AND
-// App.jsx's ←/→ keyboard nav derives its cycle order from it (imported there).
-// Add or reorder tabs HERE ONLY — a hand-copied id list elsewhere is exactly
-// how the "arrow keys skip the new Customers tab" bug happened when the 5th
-// tab shipped. Never duplicate this list.
-export const SETTINGS_TABS = [
-  { id: "general",   label: "General" },
-  { id: "layout",    label: "Layout" },
-  { id: "customers", label: "Customers" },
-  { id: "reminders", label: "Reminders" },
-  { id: "shortcuts", label: "Shortcuts" },
-];
+// v17.1.0: the list (and CogIcon) moved to SettingsChrome.jsx so App/ViewTools
+// can import them WITHOUT pulling this whole (now lazy-loaded) module into the
+// startup chunk. Re-exported here for back-compat; still exactly ONE list.
+import { SETTINGS_TABS } from "./SettingsChrome";
+export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
 // Reusable enough for future modals to import; lives here for now because
@@ -234,7 +227,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
@@ -349,6 +342,18 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <MiniStepper value={appWidth} fmt={(v) => v + " px"}
             disableDec={appWidth <= 900} disableInc={appWidth >= 2400}
             onDec={() => onSetAppWidth(appWidth - 50)} onInc={() => onSetAppWidth(appWidth + 50)} />
+        </div>
+        {/* v17.1.0: per-device animation kill-switch for weak tablets — applies
+            the same instant-transitions rule as the OS reduced-motion setting
+            (index.html; useFlip honors it in JS). localStorage, theme pattern. */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Reduce animations</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Turns off transitions and wipes on this device. Helps on slower tablets.
+            </div>
+          </div>
+          <Toggle on={reduceMotion} onClick={onToggleReduceMotion} />
         </div>
       </Section>
       {/* v17.0.0: Restaurant identity — name / currency / phone prefix.
@@ -639,7 +644,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           configurability pass. Firebase-shared (settings/general). */}
       <Collapsible
         title="Preferences"
-        subtitle="Regulars threshold, late-banner collapse, waitlist match window, undo timing. Shared across all devices."
+        subtitle="Regulars threshold, banner collapse, waitlist match window, undo timing. Shared across all devices."
         summary={"Regular at " + gs.regularMin + "+"}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
@@ -647,7 +652,8 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
             disableDec={gs.regularMin <= 1} disableInc={gs.regularMin >= 50}
             onDec={() => onSaveGeneralSettings({ regularMin: gs.regularMin - 1 })}
             onInc={() => onSaveGeneralSettings({ regularMin: gs.regularMin + 1 })} />
-          <HourStepper label="Collapse the late banner above" value={gs.lateCollapseMax} fmt={(n) => n + " late"}
+          {/* v17.1.0: one threshold for ALL three rows banners (late / overlap / waitlist). */}
+          <HourStepper label="Collapse banners above" value={gs.lateCollapseMax} fmt={(n) => n + (n === 1 ? " row" : " rows")}
             disableDec={gs.lateCollapseMax <= 1} disableInc={gs.lateCollapseMax >= 20}
             onDec={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax - 1 })}
             onInc={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax + 1 })} />
@@ -703,6 +709,8 @@ export function SettingsContent({
   onToggleDark,
   appWidth,
   onSetAppWidth,
+  reduceMotion,
+  onToggleReduceMotion,
   weekHours,
   onSaveDayHours,
   onSaveAllDays,
@@ -736,7 +744,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
   } else if (tab === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} />;
   } else if (tab === "customers") {
@@ -771,22 +779,4 @@ export function SettingsContent({
   );
 }
 
-// ── Cog (gear) icon — 20×20 SVG, used as Settings trigger ───────────────────
-// Stroke inherits from the parent button's `color` via currentColor, so the
-// trigger button controls its own colour.
-export function CogIcon() {
-  return (
-    <svg
-      width={20} height={20}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx={12} cy={12} r={3} />
-      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-    </svg>
-  );
-}
+// CogIcon moved to SettingsChrome.jsx (v17.1.0 — see the re-export above).

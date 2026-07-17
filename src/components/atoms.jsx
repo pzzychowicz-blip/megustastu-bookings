@@ -364,7 +364,12 @@ export function useFlip(deps) {
       const top = el.getBoundingClientRect().top;
       next.set(id, top);
       const prev = prevTops.current.get(id);
-      if (prev != null && prev !== top && typeof el.animate === "function") {
+      // v17.1.0: WAAPI animations aren't touched by the CSS reduced-motion
+      // kill-switch — honor both the OS setting and the per-device
+      // "Reduce animations" toggle (data-motion, index.html) here in JS.
+      const reduceMotion = document.documentElement.dataset.motion === "reduce"
+        || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      if (!reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
         el.animate(
           [{ transform: "translateY(" + (prev - top) + "px)" }, { transform: "translateY(0)" }],
           { duration: 320, easing: "ease" }

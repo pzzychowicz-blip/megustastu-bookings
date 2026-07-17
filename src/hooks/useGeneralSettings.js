@@ -12,8 +12,11 @@
 //                    convenience, e.g. "+34".
 //   regularMin     — visits needed for the "Regular" label (was 2): the form's
 //                    Regular chip AND the Customers-tab Regulars filter initial.
-//   lateCollapseMax— the Running-late banner starts COLLAPSED when more than
-//                    this many bookings are late (was 2, LateBanner open init).
+//   lateCollapseMax— a rows banner (Running-late, Overlap warnings, Waitlist
+//                    "table free" — all on the BannerRows shell) starts
+//                    COLLAPSED when it has more than this many rows (was 2,
+//                    LateBanner open init; applied to all three in v17.1.0 —
+//                    field name kept for back-compat, no data migration).
 //   waitMatchWin   — the waitlist matcher's ± window (minutes) around the
 //                    wanted time (was ±90 in the waitAvail effect).
 //   undoSecs       — how long the undo-after-cancel toast stays (was 10 s).

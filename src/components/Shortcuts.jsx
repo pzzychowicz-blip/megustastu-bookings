@@ -57,11 +57,12 @@ const SHORTCUT_SECTIONS = [
     { keys: ["M"],       label: "Open More (Week / Month)" },
     { keys: ["/"],       label: "Find a booking (any date)" },
     { keys: ["⇧D"], label: "Toggle dark / light mode" },
+    { keys: ["⇧+", "⇧−"], label: "Adjust app width (±50 px)" },
     { keys: ["?"],       label: "Show this help" },
   ]},
   { title: "Timeline", rows: [
     { keys: ["F"],       label: "Toggle Follow (today only)" },
-    { keys: ["+", "="],  label: "Zoom in" },
+    { keys: ["="],       label: "Zoom in (unshifted — ⇧+ is app width)" },
     { keys: ["−"],       label: "Zoom out" },
     { keys: ["0"],       label: "Reset zoom to 1×" },
     { keys: ["O"],       label: "Toggle Optimizer (today)" },

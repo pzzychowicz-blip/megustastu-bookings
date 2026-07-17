@@ -19,6 +19,7 @@
 //
 // v14.6.0.
 
+import { useMemo, memo } from "react";
 import { daySummary } from "../lib/booking-logic";
 import { BTN, TOTAL_SEATS, hoursFor } from "../lib/constants";
 import { mkBtn, Reveal } from "./atoms";
@@ -42,8 +43,14 @@ function freeingParts(freeing){
   return parts;
 }
 
-export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, onToggle, onOpenWeek, onPrint }) {
-  const s = daySummary(bookings, date, splitHour);
+// v17.1.0 perf: React.memo — Summary sits in the always-visible date-nav row,
+// so it used to re-render on every BookingApp render. Function props are App's
+// stable VA wrappers; hoursSig/layoutSig are identity-only props that bust the
+// memo on an hours/layout edit (hoursFor + TOTAL_SEATS are live bindings).
+export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, onToggle, onOpenWeek, onPrint }) {
+  // v17.1.0 perf: Summary lives in the always-visible date-nav row, so this
+  // used to walk all bookings on EVERY BookingApp render; memoized.
+  const s = useMemo(() => daySummary(bookings, date, splitHour), [bookings, date, splitHour]);
   const hasData = s.totalBookings > 0;
   // v15.0.0: per-weekday hours. The Afternoon/Evening split is ONE global value, so
   // on a day whose window excludes it (or a closed day) the two shift chips are
@@ -174,7 +181,7 @@ export function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, ope
       </Reveal>
     </div>
   );
-}
+});
 
 // One shift total (Afternoon / Evening): label + cover count + booking count.
 function ShiftChip({ label, covers, count }) {

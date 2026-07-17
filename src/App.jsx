@@ -11,7 +11,7 @@
  * Author:  Patryk Zychowicz
  * Contact: pz.zychowicz@gmail.com
  */
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, lazy, Suspense } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 
@@ -66,7 +66,13 @@ import { BlockModal }  from "./components/BlockModal";
 // needs SettingsContent). ReminderEditor (modal at z-index 250)
 // gets its own file because it's a top-level modal, mirroring how
 // ManualModal and BlockModal were treated in B2.
-import { SettingsContent, SETTINGS_TABS } from "./components/Settings";
+// v17.1.0 (Tier 3 code-splitting): the Settings modal tree (5 tab bodies +
+// the floor-plan editor) is the largest UI subtree that is NOT needed at
+// startup — it now loads as a lazy chunk on first open. SETTINGS_TABS (the
+// keyboard-nav tab cycle) comes from the light SettingsChrome module so this
+// file keeps no static dependency on Settings.jsx.
+import { SETTINGS_TABS } from "./components/SettingsChrome";
+const SettingsContent = lazy(function(){return import("./components/Settings").then(function(m){return {default:m.SettingsContent};});});
 import { ReminderEditor }          from "./components/ReminderEditor";
 
 // ── Phase B4 (v15-refactor): Timeline + List views ────────────────────────
@@ -79,7 +85,7 @@ import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
 import { ViewTools }    from "./components/ViewTools";
-import { WeekView }     from "./components/WeekView";
+const WeekView = lazy(function(){return import("./components/WeekView").then(function(m){return {default:m.WeekView};});}); // v17.1.0: lazy (opened on demand)
 import { LateBanner }   from "./components/LateBanner";
 import { OverlapBanner } from "./components/OverlapBanner";
 import { ConnectionStatus } from "./components/ConnectionStatus";
@@ -193,7 +199,7 @@ import { useWaitlist } from "./hooks/useWaitlist";
 import { useRecurring } from "./hooks/useRecurring";
 import { WaitlistPanel } from "./components/WaitlistPanel";
 import { WaitAvailBanner } from "./components/WaitAvailBanner";
-import { SearchPanel } from "./components/SearchPanel";
+const SearchPanel = lazy(function(){return import("./components/SearchPanel").then(function(m){return {default:m.SearchPanel};});}); // v17.1.0: lazy (opened on demand)
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
 
@@ -205,7 +211,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.0.0",
+  version:"17.1.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -649,6 +655,24 @@ function BookingApp(){
     try{localStorage.setItem("mgt-appwidth",String(v));}catch(e){}
     setAppWidth(v);
   }
+  // v17.1.0: per-device "Reduce animations" (Settings → General). Theme
+  // pattern: localStorage["mgt-reduce-motion"]="1" + <html data-motion> —
+  // the no-flash script in index.html reads the SAME key pre-mount, the CSS
+  // kill-switch keys on the attribute, and atoms.jsx's useFlip checks it for
+  // WAAPI animations. Keep all three in sync.
+  const [reduceMotion,setReduceMotion]=useState(function(){
+    try{return localStorage.getItem("mgt-reduce-motion")==="1";}catch(e){return false;}
+  });
+  function onToggleReduceMotion(){
+    const next=!reduceMotion;
+    try{
+      if(next) localStorage.setItem("mgt-reduce-motion","1");
+      else localStorage.removeItem("mgt-reduce-motion");
+    }catch(e){}
+    if(next) document.documentElement.dataset.motion="reduce";
+    else delete document.documentElement.dataset.motion;
+    setReduceMotion(next);
+  }
   // v14 deployment fix: history entries must attribute to the logged-in user
   // (their email), not the generic "staff" stub used in standalone preview.
   // "staff" remains as a fallback for the rare case where auth.currentUser
@@ -663,9 +687,9 @@ function BookingApp(){
   // ListView's internal sort so the focus ring and the keyboard target match.
   // v15.1.0: completed/cancelled cards are excluded while the "Completed &
   // cancelled" disclosure is collapsed — hidden cards must not be keyboard targets.
-  const listDaySorted=bookings
+  const listDaySorted=useMemo(function(){return bookings
     .filter(function(b){return b.date===viewDate&&(showFinished||(b.status!=="completed"&&b.status!=="cancelled"));})
-    .sort(function(a,b){const sa=statusOrder(a.status),sb=statusOrder(b.status);if(sa!==sb) return sa-sb;return a.time.localeCompare(b.time);});
+    .sort(function(a,b){const sa=statusOrder(a.status),sb=statusOrder(b.status);if(sa!==sb) return sa-sb;return a.time.localeCompare(b.time);});},[bookings,viewDate,showFinished]);
   // Clear the List focus when the day changes — the focused booking won't be
   // on the new day. (A status change that drops a booking from view just leaves
   // selectedListId pointing at a missing id → shortcuts no-op until it's re-set.)
@@ -702,7 +726,9 @@ function BookingApp(){
   }
 
   // Overlap warnings: seated bookings whose live end is within 15 min of next booking on same table
-  const overlapWarnings=(function(){
+  // v17.1.0 perf: useMemo (was a per-render IIFE) — a fresh object every render
+  // would defeat the React.memo on the views it feeds.
+  const overlapWarnings=useMemo(function(){
     const today=new Date().toISOString().slice(0,10);
     if(viewDate!==today) return {};
     const warnings={};
@@ -726,15 +752,15 @@ function BookingApp(){
       }
     });
     return warnings;
-  })();
+  },[bookings,nowMins,viewDate]);
 
   // v16.1.0 — Running-late map: {id: "warn"|"noshow"} for TODAY'S confirmed
   // bookings past their start time (lateState, booking-logic.js). "warn" =
   // amber highlight (lateWarnMin+); "noshow" additionally offers the one-tap
   // "No show" (lateNoShowMin+). Thresholds + master switch live in
-  // settings/bookingDefaults. Recomputed per render (nowMins ticks every 15s);
-  // trivially cheap, so no memo — matches the overlapWarnings IIFE above.
-  const lateMap=(function(){
+  // settings/bookingDefaults. v17.1.0 perf: useMemo (stable ref for the views'
+  // React.memo — cheapness was never the point, identity is).
+  const lateMap=useMemo(function(){
     const today=new Date().toISOString().slice(0,10);
     if(viewDate!==today) return {};
     const map={};
@@ -743,19 +769,19 @@ function BookingApp(){
       if(st) map[b.id]=st;
     });
     return map;
-  })();
+  },[bookings,nowMins,viewDate,bookingDefaults]);
   // v16.3.0: per-row ✕ dismiss on the Running-late banner. Session-only (never
   // persisted); lives HERE (not in LateBanner) because the whole banner's outer
   // Reveal must collapse once the last row is dismissed. lateMap itself stays
   // UNFILTERED — the list/timeline amber highlights keep showing for a dismissed
   // row; only the banner (lateBannerMap) hides it. Reset on day change (below).
   const [lateDismissed,setLateDismissed]=useState(function(){return new Set();});
-  const lateBannerMap=(function(){
+  const lateBannerMap=useMemo(function(){
     if(lateDismissed.size===0) return lateMap;
     const map={};
     Object.keys(lateMap).forEach(function(id){if(!lateDismissed.has(id)) map[id]=lateMap[id];});
     return map;
-  })();
+  },[lateMap,lateDismissed]);
   function dismissLateRow(id){
     setLateDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
   }
@@ -772,16 +798,16 @@ function BookingApp(){
   //   freeingMap  — {bookingId: inMin}, for the timeline countdown pills.
   // Today-only + recomputed per render (nowMins ticks every 15s) — the lateMap
   // pattern; trivially cheap.
-  const freeingList=(function(){
+  const freeingList=useMemo(function(){
     const today=new Date().toISOString().slice(0,10);
     if(viewDate!==today||!bookingDefaults.freeSoonEnabled) return [];
     return freeingSoon(bookings,today,nowMins,bookingDefaults.freeSoonWindow||15);
-  })();
-  const freeingMap=(function(){
+  },[bookings,nowMins,viewDate,bookingDefaults]);
+  const freeingMap=useMemo(function(){
     const map={};
     freeingList.forEach(function(f){map[f.id]=f.inMin;});
     return map;
-  })();
+  },[freeingList]);
 
   function flash(){setReshuffled(true);setTimeout(function(){setReshuffled(false);},3000);}
   function flashSyncFix(){setSyncFix(true);setTimeout(function(){setSyncFix(false);},4000);}
@@ -1625,7 +1651,9 @@ function BookingApp(){
     // v15.8.0 cont.4: keyboard nav routes through the same slide path as the buttons.
     goToDate:goToDate,bumpSlide:bumpSlide,
     // v16.2.0: Shift+D theme toggle.
-    onToggleDark:onToggleDark
+    onToggleDark:onToggleDark,
+    // v17.1.0: Shift +/− app-width nudge (global, like Shift+D).
+    onSetAppWidth:onSetAppWidth,appWidth:appWidth
   };
   useEffect(function(){
     function isTyping(el){if(!el) return false;const t=el.tagName;return t==="INPUT"||t==="TEXTAREA"||t==="SELECT"||el.isContentEditable;}
@@ -1698,6 +1726,13 @@ function BookingApp(){
       // or ?, so nothing is shadowed. The `typing` guard above still lets you
       // type "D"/"?" into a field. `?` opens Settings ON TOP of any open modal.
       if((k==="d"||k==="D")&&e.shiftKey){e.preventDefault();K.onToggleDark();return;}
+      // v17.1.0: Shift +/− adjusts the per-device app width (±50px, 900–2400) —
+      // global like Shift+D, so it works with Settings open (the stepper tracks
+      // live). Matches BOTH key values per pair: "+" IS Shift+"=" on most
+      // layouts and Shift+"-" yields "_". Deliberate side effect: Shift+"="
+      // no longer zooms the timeline (unshifted "="/"-" still do).
+      if(e.shiftKey&&(k==="+"||k==="=")){e.preventDefault();K.onSetAppWidth(K.appWidth+50);return;}
+      if(e.shiftKey&&(k==="_"||k==="-")){e.preventDefault();K.onSetAppWidth(K.appWidth-50);return;}
       if(k==="?"){e.preventDefault();K.setShowSettings(true);return;}
       // ── v14 p7: Settings tab-cycle with ←/→ ──
       // Active only when Settings is the top layer (reminderEditor and
@@ -2076,13 +2111,13 @@ function BookingApp(){
   // OverlapBanner.jsx (collapsible count header + per-row ✕ dismiss) — gated on
   // the Settings master switch. The map is dismiss-filtered HERE (lateBannerMap
   // pattern) so the outer Reveal collapses when the last row is dismissed.
-  const overlapBannerMap=(function(){
+  const overlapBannerMap=useMemo(function(){
     if(!bookingDefaults.overlapWarnEnabled) return {};
     if(overlapDismissed.size===0) return overlapWarnings;
     const map={};
     Object.keys(overlapWarnings).forEach(function(id){if(!overlapDismissed.has(id)) map[id]=overlapWarnings[id];});
     return map;
-  })();
+  },[bookingDefaults,overlapWarnings,overlapDismissed]);
   const hasOverlap=Object.keys(overlapBannerMap).length>0;
 
   // v16.1.0 — Running-late banner (sibling of the overlap banner): amber rows
@@ -2100,14 +2135,16 @@ function BookingApp(){
   // ── v16.0.0: viewed day's waitlist (badge button + panel) ───────────────────
   // First-come-first-served order; dayWaitAvail turns the badge orange when a
   // table currently fits at least one waiting party.
-  const dayWaiting=waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===viewDate;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);});
+  const dayWaiting=useMemo(function(){return waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===viewDate;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);});},[waitlist,viewDate]);
   const dayWaitAvail=dayWaiting.some(function(w){return !!waitAvail[w.id];});
   // v16.3.0 — WaitAvailBanner rows: TODAY'S waiting parties for whom a table
   // currently fits (waitAvail) AND not ✕-dismissed this session. Today-only —
   // a future-date fit isn't operationally urgent (it stays in the panel + badge).
-  const todayStr2=new Date().toISOString().slice(0,10);
-  const waitBannerEntries=(viewDate===todayStr2?dayWaiting:waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===todayStr2;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);}))
-    .filter(function(w){return !!waitAvail[w.id]&&!waitNotifyDismissed.has(w.id);});
+  const waitBannerEntries=useMemo(function(){
+    const todayStr2=new Date().toISOString().slice(0,10);
+    return (viewDate===todayStr2?dayWaiting:waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===todayStr2;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);}))
+      .filter(function(w){return !!waitAvail[w.id]&&!waitNotifyDismissed.has(w.id);});
+  },[dayWaiting,waitlist,viewDate,waitAvail,waitNotifyDismissed]);
   function dismissWaitRow(id){setWaitNotifyDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});}
   const hasWaitBanner=waitBannerEntries.length>0;
   const waitlistModal=<ModalPresence show={showWaitlist}>{showWaitlist?<WaitlistPanel
@@ -2117,6 +2154,36 @@ function BookingApp(){
     onBook={bookFromWaitlist}
     onRemove={removeFromWaitlist}
     onClose={function(){setShowWaitlist(false);}} />:null}</ModalPresence>;
+
+  // ── v17.1.0 perf: stable view-callback identities (the kbRef pattern) ──────
+  // The three main views (+ Summary / DaySheet) are React.memo'd, so any inline
+  // closure prop would mint a new identity every BookingApp render and defeat
+  // the memo — while a custom comparator that IGNORES function props would
+  // freeze stale closures (the trap CLAUDE.md forbids). Instead: the real
+  // per-render handlers live on a ref (refreshed every render, so they always
+  // close over fresh state), and the props are ONE-TIME wrapper functions that
+  // read the ref at event time — stable identity, always-fresh behavior.
+  const viewActionsRef=useRef({});
+  viewActionsRef.current={openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId};
+  const [VA]=useState(function(){
+    const R=viewActionsRef;
+    return {
+      onEdit:function(b){R.current.openEdit(b);},
+      onStatus:function(id,s){R.current.updateStatus(id,s);},
+      onNoShow:function(id){R.current.doCancelBooking(id,true);},
+      onDropOnTable:function(id,targetId){return R.current.dropOnTable(id,targetId);},
+      onWalkin:function(tableId){R.current.openWalkin(tableId);},
+      onManual:function(id){R.current.setManualTarget(id);},
+      onBlock:function(id){R.current.setBlockTarget(id);},
+      onDelete:function(id){R.current.setConfirmDel(id);},
+      onReshuffle:function(){R.current.setConfirmReshuffle(true);},
+      onToggleFinished:function(next){R.current.toggleShowFinished(next);},
+      onSelect:function(id){R.current.setSelectedListId(id);},
+      onSummaryToggle:function(){R.current.setSummaryOpen(function(o){return !o;});},
+      onOpenWeek:function(){R.current.setShowWeek(true);},
+      onPrint:function(){window.print();}
+    };
+  });
 
   // v17.0.0: the Plan (floor) view — reads settings/layout.floorPlan via the
   // `layout` state; quick-status + edit + walk-in ride the existing handlers.
@@ -2128,25 +2195,31 @@ function BookingApp(){
     nowMins={nowMins}
     late={lateMap}
     freeing={freeingMap}
-    onEdit={openEdit}
-    onStatus={updateStatus}
-    onNoShow={function(id){doCancelBooking(id,true);}}
-    onWalkin={function(tableId){openWalkin(tableId);}} />;
+    onEdit={VA.onEdit}
+    onStatus={VA.onStatus}
+    onNoShow={VA.onNoShow}
+    onWalkin={VA.onWalkin}
+    hoursSig={weekHours} />;
+  // v17.1.0 perf note: hoursSig / layoutSig are identity-only props — the views
+  // read OPEN/GRID_CLOSE/QUARTER_HOURS/TIMELINE_TABLES/TOTAL_SEATS as LIVE
+  // module bindings, which React.memo cannot see. Passing the weekHours/layout
+  // state objects makes an hours or layout edit bust the memo so the views
+  // repaint with the new bindings.
   const mainView=view==="plan"?planView:view==="timeline"
     ?<TimelineView
     bookings={bookings}
     date={viewDate}
-    onEdit={openEdit}
-    onManual={function(id){setManualTarget(id);}}
-    onStatus={updateStatus}
-    onDropOnTable={dropOnTable}
+    onEdit={VA.onEdit}
+    onManual={VA.onManual}
+    onStatus={VA.onStatus}
+    onDropOnTable={VA.onDropOnTable}
     blocks={tableBlocks}
-    onBlock={function(id){setBlockTarget(id);}}
+    onBlock={VA.onBlock}
     nowMins={nowMins}
     warnings={overlapWarnings}
     late={lateMap}
     freeing={freeingMap}
-    onNoShow={function(id){doCancelBooking(id,true);}}
+    onNoShow={VA.onNoShow}
     zoom={timelineZoom}
     setZoom={setTimelineZoom}
     scrollPosRef={timelineScrollRef}
@@ -2154,23 +2227,25 @@ function BookingApp(){
     setFollowNow={setFollowNow}
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
-    onReshuffle={function(){setConfirmReshuffle(true);}}
+    onReshuffle={VA.onReshuffle}
+    hoursSig={weekHours}
+    layoutSig={layout}
     currency={generalSettings.currency} />
     :<ListView
     bookings={bookings}
     date={viewDate}
-    onEdit={openEdit}
-    onStatus={updateStatus}
-    onDelete={function(id){setConfirmDel(id);}}
-    onManual={function(id){setManualTarget(id);}}
+    onEdit={VA.onEdit}
+    onStatus={VA.onStatus}
+    onDelete={VA.onDelete}
+    onManual={VA.onManual}
     nowMins={nowMins}
     warnings={overlapWarnings}
     late={lateMap}
-    onNoShow={function(id){doCancelBooking(id,true);}}
+    onNoShow={VA.onNoShow}
     selectedId={selectedListId}
-    onSelect={setSelectedListId}
+    onSelect={VA.onSelect}
     showFinished={showFinished}
-    onToggleFinished={toggleShowFinished}
+    onToggleFinished={VA.onToggleFinished}
     currency={generalSettings.currency} />;
 
 
@@ -2183,9 +2258,11 @@ function BookingApp(){
     isToday={viewDate===new Date().toISOString().slice(0,10)}
     open={summaryOpen}
     freeing={freeingList}
-    onToggle={function(){setSummaryOpen(function(o){return !o;});}}
-    onOpenWeek={function(){setShowWeek(true);}}
-    onPrint={function(){window.print();}} />;
+    hoursSig={weekHours}
+    layoutSig={layout}
+    onToggle={VA.onSummaryToggle}
+    onOpenWeek={VA.onOpenWeek}
+    onPrint={VA.onPrint} />;
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
   const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} />;
@@ -2220,11 +2297,14 @@ function BookingApp(){
     onClose={function(){setShowWalkin(false);}}
     onAddToWaitlist={addWalkinToWaitlist} />:null}</ModalPresence>;
 
-  const weekModal=<ModalPresence show={showWeek}>{showWeek?<WeekView
+  // v17.1.0: Suspense INSIDE the ModalPresence (fallback null) so the open/close
+  // animation contract is untouched — on first open the lazy chunk pops in a
+  // frame or two later; every later open is instant (module cached).
+  const weekModal=<ModalPresence show={showWeek}>{showWeek?<Suspense fallback={null}><WeekView
     bookings={bookings}
     viewDate={viewDate}
     onPick={function(d){setViewDate(d);setShowWeek(false);}}
-    onClose={function(){setShowWeek(false);}} />:null}</ModalPresence>;
+    onClose={function(){setShowWeek(false);}} /></Suspense>:null}</ModalPresence>;
 
   return (
     <div
@@ -2274,7 +2354,7 @@ function BookingApp(){
               mobile full-width Summary wraps them onto their own line. */}
             <div style={{display:"flex",alignItems:"center",minHeight:40,marginLeft:"auto",flexShrink:0}}><ViewTools
               onOpenSearch={function(){setShowSearch(true);}}
-              onOpenSettings={function(){setShowSettings(true);}} /></div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+              onOpenSettings={function(){setShowSettings(true);}} /></div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} collapseMax={generalSettings.lateCollapseMax} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
@@ -2297,7 +2377,7 @@ function BookingApp(){
               onOpenHistory={function(){setShowHistory(true);}}
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} />:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}
@@ -2332,12 +2412,14 @@ function BookingApp(){
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"8px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setShowSettings(false);setSettingsTab("general");}}>Close</button></div>}><div style={{textAlign:"center",marginBottom:14}}><div
-              style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"var(--app-btn-grey-strong)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Settings</div></div><SettingsContent
+              style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:12,background:"var(--app-btn-grey-strong)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Settings</div></div><Suspense fallback={null}><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
             isDark={isDark}
             onToggleDark={onToggleDark}
             appWidth={appWidth}
             onSetAppWidth={onSetAppWidth}
+            reduceMotion={reduceMotion}
+            onToggleReduceMotion={onToggleReduceMotion}
             weekHours={weekHours}
             onSaveDayHours={saveDayHours}
             onSaveAllDays={saveAllDays}
@@ -2369,7 +2451,7 @@ function BookingApp(){
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
             onDeleteReminder={deleteReminder}
-            onToggleReminder={toggleReminderActive} /></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
+            onToggleReminder={toggleReminderActive} /></Suspense></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
         // window.confirm which is blocked in sandboxed preview environments).
         // Renders on top of Settings in DOM order so it visually covers the list.
         confirmReminderDel?<Overlay onClose={function(){setConfirmReminderDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
