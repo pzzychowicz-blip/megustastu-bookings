@@ -230,6 +230,11 @@ export const PlanView = memo(function PlanView({
       ...day.filter((b) => (b.status === "confirmed" || b.status === "pending") && (b.tables || []).indexOf(id) >= 0 && toMins(b.time) > slider).map((b) => toMins(b.time)),
       ...blockSlots.filter((sl) => sl.tables.indexOf(id) >= 0 && sl.s > slider).map((sl) => sl.s)
     );
+    // NB getDur reads the DUR_TIERS live binding, which neither `layout` nor
+    // `hoursSig` covers — after a Settings duration-tier edit this gate can be
+    // stale for up to ONE MINUTE (the next nowMins tick busts the memo).
+    // Accepted (/code-review #5): self-healing, cosmetic, not worth a third
+    // sig prop.
     const canWalkin = freeNow && isToday && (nextBusy - slider) >= getDur(2);
     // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
     // SlideView's transform makes an in-tree position:fixed scrim center on

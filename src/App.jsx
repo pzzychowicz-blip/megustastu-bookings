@@ -72,7 +72,36 @@ import { BlockModal }  from "./components/BlockModal";
 // keyboard-nav tab cycle) comes from the light SettingsChrome module so this
 // file keeps no static dependency on Settings.jsx.
 import { SETTINGS_TABS } from "./components/SettingsChrome";
-const SettingsContent = lazy(function(){return import("./components/Settings").then(function(m){return {default:m.SettingsContent};});});
+
+// v17.1.0 /code-review fix #1 — resilient lazy loader. A rejected chunk fetch
+// almost always means the deployment changed under an open tab (Vercel serves
+// only the CURRENT build's hashed assets, so after a deploy the old URLs 404 —
+// and tablets here stay open for days). Without this, the first tap on ⚙/M//"/"
+// after a deploy would hit an unhandled rejection with no error boundary and
+// blank the whole app mid-service. On failure: reload ONCE to pick up the new
+// build (sessionStorage flag prevents a reload loop if the network is really
+// down) and render a readable fallback meanwhile. A successful load clears the
+// flag so a LATER genuine failure can reload again.
+function lazyChunk(load,name){
+  return lazy(function(){
+    return load().then(function(m){
+      try{sessionStorage.removeItem("mgt-chunk-reload");}catch(e){}
+      return m;
+    }).catch(function(err){
+      console.error("[chunk] failed to load "+name,err);
+      try{
+        if(!sessionStorage.getItem("mgt-chunk-reload")){
+          sessionStorage.setItem("mgt-chunk-reload","1");
+          window.location.reload();
+        }
+      }catch(e){}
+      return {default:function ChunkLoadError(){
+        return <div style={{padding:16,fontSize:13,fontWeight:600,color:"var(--danger-text)"}}>Couldn’t load this screen — the app may have been updated. Please reload.</div>;
+      }};
+    });
+  });
+}
+const SettingsContent = lazyChunk(function(){return import("./components/Settings").then(function(m){return {default:m.SettingsContent};});},"Settings");
 import { ReminderEditor }          from "./components/ReminderEditor";
 
 // ── Phase B4 (v15-refactor): Timeline + List views ────────────────────────
@@ -85,7 +114,7 @@ import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
 import { ViewTools }    from "./components/ViewTools";
-const WeekView = lazy(function(){return import("./components/WeekView").then(function(m){return {default:m.WeekView};});}); // v17.1.0: lazy (opened on demand)
+const WeekView = lazyChunk(function(){return import("./components/WeekView").then(function(m){return {default:m.WeekView};});},"WeekView"); // v17.1.0: lazy (opened on demand)
 import { LateBanner }   from "./components/LateBanner";
 import { OverlapBanner } from "./components/OverlapBanner";
 import { ConnectionStatus } from "./components/ConnectionStatus";
@@ -199,7 +228,7 @@ import { useWaitlist } from "./hooks/useWaitlist";
 import { useRecurring } from "./hooks/useRecurring";
 import { WaitlistPanel } from "./components/WaitlistPanel";
 import { WaitAvailBanner } from "./components/WaitAvailBanner";
-const SearchPanel = lazy(function(){return import("./components/SearchPanel").then(function(m){return {default:m.SearchPanel};});}); // v17.1.0: lazy (opened on demand)
+const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel").then(function(m){return {default:m.SearchPanel};});},"SearchPanel"); // v17.1.0: lazy (opened on demand)
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
 
@@ -251,6 +280,13 @@ function readThemePref(){
 // margins each side (rounded to 50), so the app fills the browser out of the
 // box without ever overflowing it.
 const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400;
+
+// v17.1.0 /code-review fix #3 — stable empty results for the memoized
+// derivations' early-exit paths (non-today / feature-off). A fresh {}/[] per
+// compute is a NEW identity every minute tick, which busts the views'
+// React.memo for zero visual change; these shared consts keep it stable.
+const EMPTY_OBJ=Object.freeze({});
+const EMPTY_ARR=Object.freeze([]);
 function readAppWidth(){
   try{
     const v=parseInt(localStorage.getItem("mgt-appwidth"),10);
@@ -730,7 +766,7 @@ function BookingApp(){
   // would defeat the React.memo on the views it feeds.
   const overlapWarnings=useMemo(function(){
     const today=new Date().toISOString().slice(0,10);
-    if(viewDate!==today) return {};
+    if(viewDate!==today) return EMPTY_OBJ;
     const warnings={};
     const active=bookings.filter(function(b){return b.date===today&&b.status!=="cancelled"&&b.status!=="completed"&&(b.tables||[]).length>0;});
     const seated=active.filter(function(b){return b.status==="seated";});
@@ -762,7 +798,7 @@ function BookingApp(){
   // React.memo — cheapness was never the point, identity is).
   const lateMap=useMemo(function(){
     const today=new Date().toISOString().slice(0,10);
-    if(viewDate!==today) return {};
+    if(viewDate!==today) return EMPTY_OBJ;
     const map={};
     bookings.forEach(function(b){
       const st=lateState(b,today,nowMins,bookingDefaults);
@@ -800,10 +836,11 @@ function BookingApp(){
   // pattern; trivially cheap.
   const freeingList=useMemo(function(){
     const today=new Date().toISOString().slice(0,10);
-    if(viewDate!==today||!bookingDefaults.freeSoonEnabled) return [];
+    if(viewDate!==today||!bookingDefaults.freeSoonEnabled) return EMPTY_ARR;
     return freeingSoon(bookings,today,nowMins,bookingDefaults.freeSoonWindow||15);
   },[bookings,nowMins,viewDate,bookingDefaults]);
   const freeingMap=useMemo(function(){
+    if(freeingList.length===0) return EMPTY_OBJ;
     const map={};
     freeingList.forEach(function(f){map[f.id]=f.inMin;});
     return map;
@@ -1728,10 +1765,13 @@ function BookingApp(){
       if((k==="d"||k==="D")&&e.shiftKey){e.preventDefault();K.onToggleDark();return;}
       // v17.1.0: Shift +/− adjusts the per-device app width (±50px, 900–2400) —
       // global like Shift+D, so it works with Settings open (the stepper tracks
-      // live). Matches BOTH key values per pair: "+" IS Shift+"=" on most
-      // layouts and Shift+"-" yields "_". Deliberate side effect: Shift+"="
-      // no longer zooms the timeline (unshifted "="/"-" still do).
-      if(e.shiftKey&&(k==="+"||k==="=")){e.preventDefault();K.onSetAppWidth(K.appWidth+50);return;}
+      // live). Matches EVERY key value the physical +/− keys produce under
+      // Shift across layouts: US Shift+"=" → "+"; ES/DE Shift+the-plus-key →
+      // "*" (/code-review fix #2 — without it, width-INCREASE was dead on the
+      // restaurant's Spanish keyboards); Shift+"-" → "_" everywhere. Deliberate
+      // side effect: Shift+"=" no longer zooms the timeline (unshifted "="/"-"
+      // still do).
+      if(e.shiftKey&&(k==="+"||k==="="||k==="*")){e.preventDefault();K.onSetAppWidth(K.appWidth+50);return;}
       if(e.shiftKey&&(k==="_"||k==="-")){e.preventDefault();K.onSetAppWidth(K.appWidth-50);return;}
       if(k==="?"){e.preventDefault();K.setShowSettings(true);return;}
       // ── v14 p7: Settings tab-cycle with ←/→ ──
@@ -2112,7 +2152,7 @@ function BookingApp(){
   // the Settings master switch. The map is dismiss-filtered HERE (lateBannerMap
   // pattern) so the outer Reveal collapses when the last row is dismissed.
   const overlapBannerMap=useMemo(function(){
-    if(!bookingDefaults.overlapWarnEnabled) return {};
+    if(!bookingDefaults.overlapWarnEnabled) return EMPTY_OBJ;
     if(overlapDismissed.size===0) return overlapWarnings;
     const map={};
     Object.keys(overlapWarnings).forEach(function(id){if(!overlapDismissed.has(id)) map[id]=overlapWarnings[id];});

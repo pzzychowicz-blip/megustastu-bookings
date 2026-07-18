@@ -4576,3 +4576,32 @@ with Book/✕; Running-late banner (1 ≤ threshold) starts open. A2 verified ±
 min-clamp, persistence, live stepper tracking with Settings open, and unshifted "=" still
 zooming. A3 verified in the exact rounding window (above). Tier 1/2 verified with the DOM
 tag + render-counter probes (removed after). `npm run build` clean; gz sizes above.
+
+**v17.1.0 /code-review fixes (same version, same branch, pre-push — 2026-07-18).**
+Review of `e94323a..HEAD` (the whole release): no critical issues; 5 suggestions, all applied.
+
+1. (#1, reliability) **Resilient lazy loading** — the Tier 3 dynamic imports had no failure
+   path: after a Vercel deploy the old hashed chunk URLs 404, and a tablet left open across
+   the deploy would blank the whole app on its first ⚙/M/"/" tap (no error boundary). New
+   `lazyChunk(load,name)` wrapper (App.jsx): on rejection it reloads ONCE (sessionStorage
+   `mgt-chunk-reload` guards against a loop when the network is genuinely down) and renders
+   a readable "app updated — please reload" fallback meanwhile; a successful load clears
+   the flag. All three lazy components use it.
+2. (#2, UX/correctness) **Shift+width shortcut works on Spanish/German keyboards** — on
+   ES/DE layouts Shift+the-physical-plus-key produces "*" (not "+"), so width-INCREASE was
+   dead on the restaurant's actual hardware; `k==="*"` added to the increase match.
+   Verified live (synthetic shift+"*" → 900→950).
+3. (#3, perf) **Stable empty identities** — `EMPTY_OBJ`/`EMPTY_ARR` module consts returned
+   from the early-exit paths of overlapWarnings/lateMap/freeingList/freeingMap/
+   overlapBannerMap, so non-today / feature-off recomputes no longer mint a new {}/[] per
+   minute tick and needlessly bust the views' React.memo.
+4. (#4, perf) **useFlip's reduce-motion check hoisted** out of the per-element loop
+   (matchMedia once per flip pass, not per element).
+5. (#5, accepted with comment) PlanView's `canWalkin` reads the DUR_TIERS live binding —
+   a duration-tier edit can leave the gate stale ≤1 min until the next nowMins tick;
+   documented at the call site as accepted (self-healing, not worth a third sig prop).
+
+Verified live in DEV: shift+"*" bumps width; Settings/WeekView/SearchPanel all still load
+through the lazyChunk wrapper (happy path exercises the new .then chain; reload flag stays
+clear); console clean; `npm run build` clean (main 183.46 kB gz). The chunk-FAILURE branch
+is not exercisable under the Vite dev server (no hashed-chunk 404s) — code-reviewed only.
