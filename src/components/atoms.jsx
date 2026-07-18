@@ -358,13 +358,19 @@ export function useFlip(deps) {
   useLayoutEffect(function () {
     const container = ref.current;
     if (!container) return;
+    // v17.1.0: WAAPI animations aren't touched by the CSS reduced-motion
+    // kill-switch — honor both the OS setting and the per-device "Reduce
+    // animations" toggle (data-motion, index.html) here in JS. Computed ONCE
+    // per flip pass (/code-review fix #4 — it was inside the per-element loop).
+    const reduceMotion = document.documentElement.dataset.motion === "reduce"
+      || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
     const next = new Map();
     container.querySelectorAll("[data-flip-id]").forEach(function (el) {
       const id = el.getAttribute("data-flip-id");
       const top = el.getBoundingClientRect().top;
       next.set(id, top);
       const prev = prevTops.current.get(id);
-      if (prev != null && prev !== top && typeof el.animate === "function") {
+      if (!reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
         el.animate(
           [{ transform: "translateY(" + (prev - top) + "px)" }, { transform: "translateY(0)" }],
           { duration: 320, easing: "ease" }

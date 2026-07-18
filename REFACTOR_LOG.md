@@ -4467,3 +4467,141 @@ endpoint handles AFTER every hit-band in document order (#3); and a TOUCH drag s
 pointerleave and keeps tracking (it used to commit there) while a MOUSE leave still
 commits (#1). The iOS floor-plan drag itself still needs Patryk's iPad — the round-10
 change it depends on can't be exercised in Chrome.
+
+---
+
+## v17.1.0 — Performance release + 3 functional fixes (2026-07-17)
+
+**Branch:** `claude/bookings-v17-perf-fixes-4a3d24` · one version, one PR. Primary goal
+(Patryk): responsiveness on weak hardware (Honor pad Android tablet) while staying smooth
+on M4 MacBooks. All four proposed perf tiers approved via AskUserQuestion, plus three
+functional fixes. Behavioural changes: the three fixes + faster UI; no data/rules/shape
+change → rolling deploy.
+
+### A. Functional fixes
+
+1. **"Collapse banners above" now governs ALL three rows banners.** `WaitAvailBanner`
+   migrated onto the shared `BannerRows` shell (it still duplicated the collapsible
+   scaffolding with a hard-coded open state); `BannerRows` gained optional token props
+   (`bg`/`border`/`textColor`, defaults = the amber warn family) so the waitlist banner
+   keeps its green suggest identity. App passes `collapseMax={generalSettings.lateCollapseMax}`;
+   Settings label "Collapse the late banner above" → "Collapse banners above" (fmt "N rows",
+   singular-aware). Field name `lateCollapseMax` kept — no data migration.
+2. **Shift +/− keyboard shortcut for App width** (±50 px, clamped 900–2400). Global like
+   ⇧D (works with Settings open — the stepper tracks live). Matches both key values per
+   pair ("+" IS Shift+"=" on most layouts; Shift+"-" yields "_"). Deliberate side effect:
+   Shift+"=" no longer zooms the timeline (unshifted "="/"-" still do) — noted in
+   Shortcuts.jsx.
+3. **Plan-view status bug (Patryk's report — CONFIRMED and fixed).** A seated overstayer's
+   occupancy end was `nowMins+1`, but the auto-following slider is `clampSlider(nowMins)`
+   — rounded to NEAREST 15, so up to ~7 min AHEAD of now. The moment a seated booking
+   passed its scheduled end, `slider < e` failed → the table flipped free/next-booking in
+   Plan while Timeline/List still showed it seated. Fix: `e = Math.max(e, clampSlider(nowMins)+1)`
+   (PlanView.jsx) — covers the rounded "now"; sliding into the future still frees the table.
+   Verified live at slider 15:30 / now 15:25 (the exact bug window): table stays green.
+
+### B. Performance (four tiers, all approved)
+
+**Tier 1 — DOM-churn quick wins.**
+- `GridLines` + `BlockBar` hoisted to module scope in TimelineView (BlockBar's `totalMins`
+  closure → prop). They were inline components → NEW component type every render → React
+  remounted ~40 grid-line divs × 13 rows (500+ DOM nodes) on EVERY render — every form
+  keystroke, every minute tick. Same bug class as the v15.8.0 TimelineBlock hoist.
+  Verified live: 600 tagged grid-line DOM nodes survive re-renders intact.
+- `noShowMap(bookings)` memoized in TimelineView + ListView (walks EVERY booking ever —
+  grows with history; ListView's copy also moved above the empty-day early return per the
+  v16.4.0 rules-of-hooks lesson). `daySummary` memoized in Summary (always-visible row);
+  `customerIndex` memoized in CustomersSettings.
+
+**Tier 2 — view isolation (the big win).**
+- `React.memo` on TimelineView, ListView, PlanView, Summary, DaySheet.
+- **Stable callback identities** via the kbRef ref-mirror pattern: `viewActionsRef`
+  (refreshed every render with the real handlers) + a ONE-TIME `VA` wrapper object whose
+  functions read the ref at event time. Never a comparator that ignores function props
+  (stale-closure trap). All view mounts now pass `VA.*`.
+- Every object/array prop minted per render was memoized so the memo actually works:
+  `overlapWarnings`, `lateMap`, `lateBannerMap`, `overlapBannerMap`, `freeingList`/
+  `freeingMap`, `listDaySorted`, `dayWaiting`, `waitBannerEntries` (all `useMemo` now).
+- **Live-binding gotcha:** the views read OPEN/GRID_CLOSE/QUARTER_HOURS/TIMELINE_TABLES/
+  TOTAL_SEATS as live module bindings React.memo can't see — so TimelineView/PlanView/
+  Summary take identity-only `hoursSig={weekHours}` / `layoutSig={layout}` props that bust
+  the memo on an hours/layout edit. Any future memoized consumer of live bindings needs
+  the same.
+- Verified live with a temporary render counter: opening the booking form + typing 10
+  characters left the TimelineView render count UNCHANGED (was 11 full re-renders before);
+  minute ticks and booking changes still re-render (counter advanced across minute
+  boundaries). NB `nowMins` only changes per MINUTE (the 15 s interval re-sets the same
+  value inside a minute and React bails) — so the "every 15 s re-render" was really
+  every-minute; still true post-memo.
+
+**Tier 3 — code splitting (startup parse on slow tablets).**
+- `React.lazy` for `SettingsContent` (all 5 tab bodies + the floor-plan editor),
+  `WeekView`, `SearchPanel`; `<Suspense fallback={null}>` INSIDE each ModalPresence so
+  the open/close animation contract is untouched.
+- New **`FloorGlyphs.jsx`**: `chairPositions`/`TableGlyph`/`DoorGlyph` extracted from
+  FloorPlanEditor so PlanView (main chunk) doesn't drag the editor in; FloorPlanEditor
+  re-exports them (back-compat).
+- New **`SettingsChrome.jsx`**: `SETTINGS_TABS` (still the ONE list — App's ←/→ nav +
+  the TabBar both read it) + `CogIcon` (ViewTools) — the light exports App needs eagerly,
+  so App keeps no static dependency on Settings.jsx. Settings.jsx re-exports both.
+- Build: main chunk 216.70 → 183.22 kB gz (+ shared atoms chunk 15.97 loaded at startup;
+  net startup ≈ −17.5 kB gz and less parse/exec) · lazy: Settings 19.35 · WeekView 3.18 ·
+  SearchPanel 1.17 kB gz.
+
+**Tier 4 — per-device "Reduce animations" toggle.**
+- Settings → General (under App width): `Toggle` → `localStorage["mgt-reduce-motion"]="1"`
+  + `<html data-motion="reduce">` (theme pattern — per-device, NOT a settings node).
+- index.html: the prefers-reduced-motion kill-switch block duplicated for
+  `:root[data-motion="reduce"]` (the `!important`s beat every inline transition, incl. the
+  timeline grid-width zoom ease and the status wipes); the no-flash script stamps the
+  attribute pre-mount. `useFlip` (atoms.jsx) now checks the attribute + the OS media query
+  in JS — WAAPI animations aren't touched by CSS.
+
+### Files
+
+`App.jsx` (version 17.1.0 · A2 shortcut · VA layer · useMemo derivations · lazy imports ·
+reduce-motion state) · `BannerRows.jsx` · `WaitAvailBanner.jsx` · `Settings.jsx` ·
+`SettingsChrome.jsx` (new) · `FloorGlyphs.jsx` (new) · `FloorPlanEditor.jsx` ·
+`PlanView.jsx` · `TimelineView.jsx` · `ListView.jsx` · `Summary.jsx` · `DaySheet.jsx` ·
+`CustomersSettings.jsx` · `ViewTools.jsx` · `Shortcuts.jsx` · `atoms.jsx` · `index.html` ·
+`useGeneralSettings.js` (comment).
+
+### Verification
+
+Live in DEV (worktree dev server — NB `preview_start` launches from the main checkout by
+default; a `dev-worktree` launch.json entry with `npm --prefix <worktree>` was added):
+A1 staged 3 fitting waitlist entries (+ the full no-tables → Add-to-waitlist flow as a
+side effect) → banner starts COLLAPSED at count 3 > threshold, expands to 3 green rows
+with Book/✕; Running-late banner (1 ≤ threshold) starts open. A2 verified ±50 stepping,
+min-clamp, persistence, live stepper tracking with Settings open, and unshifted "=" still
+zooming. A3 verified in the exact rounding window (above). Tier 1/2 verified with the DOM
+tag + render-counter probes (removed after). `npm run build` clean; gz sizes above.
+
+**v17.1.0 /code-review fixes (same version, same branch, pre-push — 2026-07-18).**
+Review of `e94323a..HEAD` (the whole release): no critical issues; 5 suggestions, all applied.
+
+1. (#1, reliability) **Resilient lazy loading** — the Tier 3 dynamic imports had no failure
+   path: after a Vercel deploy the old hashed chunk URLs 404, and a tablet left open across
+   the deploy would blank the whole app on its first ⚙/M/"/" tap (no error boundary). New
+   `lazyChunk(load,name)` wrapper (App.jsx): on rejection it reloads ONCE (sessionStorage
+   `mgt-chunk-reload` guards against a loop when the network is genuinely down) and renders
+   a readable "app updated — please reload" fallback meanwhile; a successful load clears
+   the flag. All three lazy components use it.
+2. (#2, UX/correctness) **Shift+width shortcut works on Spanish/German keyboards** — on
+   ES/DE layouts Shift+the-physical-plus-key produces "*" (not "+"), so width-INCREASE was
+   dead on the restaurant's actual hardware; `k==="*"` added to the increase match.
+   Verified live (synthetic shift+"*" → 900→950).
+3. (#3, perf) **Stable empty identities** — `EMPTY_OBJ`/`EMPTY_ARR` module consts returned
+   from the early-exit paths of overlapWarnings/lateMap/freeingList/freeingMap/
+   overlapBannerMap, so non-today / feature-off recomputes no longer mint a new {}/[] per
+   minute tick and needlessly bust the views' React.memo.
+4. (#4, perf) **useFlip's reduce-motion check hoisted** out of the per-element loop
+   (matchMedia once per flip pass, not per element).
+5. (#5, accepted with comment) PlanView's `canWalkin` reads the DUR_TIERS live binding —
+   a duration-tier edit can leave the gate stale ≤1 min until the next nowMins tick;
+   documented at the call site as accepted (self-healing, not worth a third sig prop).
+
+Verified live in DEV: shift+"*" bumps width; Settings/WeekView/SearchPanel all still load
+through the lazyChunk wrapper (happy path exercises the new .then chain; reload flag stays
+clear); console clean; `npm run build` clean (main 183.46 kB gz). The chunk-FAILURE branch
+is not exercisable under the Vite dev server (no hashed-chunk 404s) — code-reviewed only.

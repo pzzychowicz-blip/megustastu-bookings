@@ -11,7 +11,7 @@
 //   onOpenSearch()   — App's setShowSearch(true)
 //   onOpenSettings() — App's setShowSettings(true)
 
-import { CogIcon } from "./Settings";
+import { CogIcon } from "./SettingsChrome"; // v17.1.0: light import — Settings.jsx is lazy-loaded now
 import { S } from "../lib/constants";
 
 const BTN_STYLE = {

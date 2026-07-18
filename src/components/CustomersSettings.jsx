@@ -18,7 +18,7 @@
 //   onDeleteCustomer(key) — normalized-phone key; parent deletes bookings +
 //                           waitlist entries and reports the outcome
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { S, BTN, STATUS_COLORS } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, hasRealPhone, isNoShow } from "../lib/customers";
 import { Section, Reveal, mkInp, mkBtn } from "./atoms";
@@ -38,7 +38,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   const [regularMin, setRegularMin] = useState(regularMinDefault);
   useEffect(function () { setRegularMin(regularMinDefault); }, [regularMinDefault]);
 
-  const idx = customerIndex(bookings);
+  const idx = useMemo(() => customerIndex(bookings), [bookings]); // v17.1.0 perf: walks every booking
   const all = Object.keys(idx).map(function (k) { return idx[k]; });
   // v16.3.0: insight totals (pure derivation over the whole index).
   const totalCustomers = all.length;

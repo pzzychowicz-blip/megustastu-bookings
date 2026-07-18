@@ -29,11 +29,11 @@
 //
 // Blur budget: no backdrop-filter here — popovers use the opaque popup tokens.
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { S, STATUS_COLORS, BLOCK_BG, hoursFor } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
-import { TableGlyph, DoorGlyph } from "./FloorPlanEditor";
+import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { mkBtn } from "./atoms";
 
@@ -41,7 +41,12 @@ import { mkBtn } from "./atoms";
 const FREE_FILL = "var(--bg-card)";
 const FREE_STROKE = "var(--fp-outline)";
 
-export function PlanView({
+// v17.1.0 perf: React.memo — function props are App's stable VA wrappers.
+// `layout` (the whole config object) is already a prop, so a layout edit busts
+// the memo naturally; `hoursSig` (the parent's weekHours state) is an
+// identity-only prop that busts it on an operating-hours edit, because
+// hoursFor(date) reads a live module binding the memo can't see.
+export const PlanView = memo(function PlanView({
   bookings, date, layout, blocks = [],
   nowMins = 0, late = {}, freeing = {},
   onEdit, onStatus, onNoShow, onWalkin = () => {}
@@ -72,7 +77,15 @@ export function PlanView({
     let e = s + (b.duration || 90);
     // A seated party occupies until AT LEAST now (overstayers included) — the
     // occupancyEnd/v15.1.1 semantics, applied to the slider timeline.
-    if (b.status === "seated" && isToday) e = Math.max(e, nowMins + 1);
+    // v17.1.0 fix: extend to the SLIDER's 15-min granularity, not raw now —
+    // the auto-following slider is clampSlider(nowMins) (rounded to NEAREST
+    // 15), so it can sit up to ~7 min AHEAD of now; with e = nowMins+1 an
+    // overstayer dropped out of `occupying` the moment it passed its scheduled
+    // end (slider < e failed) and the table flipped free/next-booking in Plan
+    // while Timeline/List still showed it seated. clampSlider(nowMins)+1
+    // always covers the rounded "now" position; sliding into the future still
+    // frees the table correctly.
+    if (b.status === "seated" && isToday) e = Math.max(e, clampSlider(nowMins) + 1);
     if (slider >= s && slider < e) {
       (b.tables || []).forEach((id) => {
         const cur = occupying[id];
@@ -217,6 +230,11 @@ export function PlanView({
       ...day.filter((b) => (b.status === "confirmed" || b.status === "pending") && (b.tables || []).indexOf(id) >= 0 && toMins(b.time) > slider).map((b) => toMins(b.time)),
       ...blockSlots.filter((sl) => sl.tables.indexOf(id) >= 0 && sl.s > slider).map((sl) => sl.s)
     );
+    // NB getDur reads the DUR_TIERS live binding, which neither `layout` nor
+    // `hoursSig` covers — after a Settings duration-tier edit this gate can be
+    // stale for up to ONE MINUTE (the next nowMins tick busts the memo).
+    // Accepted (/code-review #5): self-healing, cosmetic, not worth a third
+    // sig prop.
     const canWalkin = freeNow && isToday && (nextBusy - slider) >= getDur(2);
     // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
     // SlideView's transform makes an in-tree position:fixed scrim center on
@@ -337,3 +355,4 @@ export function PlanView({
     </div>
   );
 }
+);

@@ -28,7 +28,7 @@
 // exclude the hidden cards while the disclosure is closed. The card JSX is
 // unchanged, just hoisted into renderCard() so both groups share it.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, memo } from "react";
 import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
@@ -40,7 +40,9 @@ import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
 let __listPrev = null;
 const __listAnims = {};
 
-export function ListView({
+// v17.1.0 perf: React.memo — all function props are App's stable VA wrappers,
+// data props change identity only on real change (memoized in BookingApp).
+export const ListView = memo(function ListView({
   bookings, date, onEdit, onStatus, onDelete, onManual,
   nowMins = 0, warnings = {},
   late = {}, onNoShow = () => {},
@@ -95,6 +97,12 @@ export function ListView({
   }
   const flipRef = useFlip([active.map(function (b) { return b.id; }).join(",")]);
 
+  // v16.0.0: repeat no-show offender map (2+ past no-shows on this phone,
+  // counted across ALL dates — the full bookings prop, not just `day`).
+  // v17.1.0 perf: memoized (walks every booking ever) + moved above the
+  // empty-day early return (rules of hooks — the v16.4.0 lesson).
+  const nsMap = useMemo(() => noShowMap(bookings), [bookings]);
+
   if (!day.length) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -104,10 +112,6 @@ export function ListView({
       </div>
     );
   }
-
-  // v16.0.0: repeat no-show offender map (2+ past no-shows on this phone,
-  // counted across ALL dates — the full bookings prop, not just `day`).
-  const nsMap = noShowMap(bookings);
 
   function renderCard(b) {
         // v14 p1 (Issue 2 fix): end-time label is pinned to the scheduled plan
@@ -328,3 +332,4 @@ export function ListView({
     </div>
   );
 }
+);
