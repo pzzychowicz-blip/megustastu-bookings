@@ -457,13 +457,26 @@
       }
 
       /* Accessibility + weak-hardware opt-out: collapse every animation/transition
-         to ~instant when the OS requests reduced motion. */
+         to ~instant when the OS requests reduced motion.
+         v17.1.0: ALSO applied when the per-device "Reduce animations" toggle
+         (Settings → General; localStorage["mgt-reduce-motion"]="1") stamps
+         data-motion="reduce" on <html> — the manual kill-switch for weak
+         tablets. The !important beats every inline `transition:`/`animation:`
+         style, incl. the timeline grid-width zoom ease and the status wipes.
+         useFlip (WAAPI, atoms.jsx) checks the same attribute in JS. */
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after {
           animation-duration: 0.001ms !important;
           animation-delay: 0ms !important;
           transition-duration: 0.001ms !important;
         }
+      }
+      :root[data-motion="reduce"] *,
+      :root[data-motion="reduce"] *::before,
+      :root[data-motion="reduce"] *::after {
+        animation-duration: 0.001ms !important;
+        animation-delay: 0ms !important;
+        transition-duration: 0.001ms !important;
       }
 
       /* v16.3.0: printable day sheet (DaySheet.jsx). Hidden on screen; on print,
@@ -493,6 +506,12 @@
                 && window.matchMedia
                 && window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.dataset.theme = dark ? "dark" : "light";
+          // v17.1.0: per-device "Reduce animations" (Settings → General) —
+          // stamped pre-mount so no animation plays before React applies it.
+          // Same key convention as the Settings Toggle in src/App.jsx.
+          if (localStorage.getItem("mgt-reduce-motion") === "1") {
+            document.documentElement.dataset.motion = "reduce";
+          }
         } catch (e) { /* keep default data-theme="light" */ }
       })();
     </script>

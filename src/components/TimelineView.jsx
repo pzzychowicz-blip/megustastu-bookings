@@ -5,13 +5,14 @@
 // tap the "=" handle on a block to manually assign tables, long-press to
 // change status, tap a table label on the left to block / unblock.
 //
-// Sub-components defined inline (close over parent state, must stay inside):
-//   • GridLines — vertical hour / quarter-hour lines, drawn into each row.
-//   • Block     — one booking, with touch handlers for long-press status
-//                 popup (400ms hold) and short-tap edit. Holds its own
-//                 timer / drag-detection refs (per-instance).
-//   • BlockBar  — one table-block (date+from+to range) drawn as a striped
-//                 red bar with a "blocked" caption.
+// Sub-components (ALL module-scope as of v17.1.0 — an inline component is a
+// new type every render and React remounts its whole subtree):
+//   • GridLines     — vertical hour / quarter-hour lines, drawn into each row.
+//   • TimelineBlock — one booking, with touch handlers for long-press status
+//                     popup (400ms hold) and short-tap edit. Holds its own
+//                     timer / drag-detection refs (per-instance).
+//   • BlockBar      — one table-block (date+from+to range) drawn as a striped
+//                     red bar with a "blocked" caption.
 //
 // Follow-now mode (today only) auto-scrolls the grid so the current minute
 // sits ~30 min from the left edge, and bumps zoom to 4× if it's below that.
@@ -35,7 +36,7 @@
 //     idle — fixes the previous "Follow"/"Follow" duplicate that relied on
 //     colour alone to convey state.
 
-import { useState, useRef, useEffect, Fragment } from "react";
+import { useState, useRef, useEffect, useMemo, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG,
@@ -345,7 +346,66 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   );
 }
 
-export function TimelineView({
+// ── GridLines / BlockBar — hoisted to module scope (v17.1.0 perf) ────────────
+// These were inline components inside TimelineView, which made React see a NEW
+// component TYPE every render — so their entire subtrees (≈40 grid-line divs ×
+// 13 rows) were UNMOUNTED and REBUILT on every render (every form keystroke,
+// every 15s tick). Same bug class as the v15.8.0 TimelineBlock hoist. Both read
+// the live bindings (QUARTER_HOURS / OPEN / GRID_CLOSE via pct) at render time,
+// so hoisting preserves the operating-hours reactivity; BlockBar's former
+// `totalMins` closure is now a prop.
+function GridLines() {
+  return (
+    <div style={{ position: "absolute", inset: 0 }}>
+      {QUARTER_HOURS.map((m) => {
+        const isH = m % 60 === 0;
+        return (
+          <div
+            key={m}
+            style={{
+              position: "absolute", top: 0, bottom: 0, left: pct(m),
+              borderLeft: isH ? "2px solid var(--tl-gridline-hour)" : "0.5px solid var(--tl-gridline-quarter)",
+              opacity: 1
+            }}
+          />
+        );
+      })}
+      <div style={{
+        position: "absolute", top: 0, bottom: 0, right: 0,
+        borderLeft: "2px solid var(--tl-gridline-hour)"
+      }} />
+    </div>
+  );
+}
+
+function BlockBar({ bl, totalMins }) {
+  const bS = bl.allDay ? OPEN * 60 : toMins(bl.from);
+  const bE = bl.allDay ? GRID_CLOSE * 60 : toMins(bl.to);
+  const left = pct(bS);
+  const w = Math.max(((bE - bS) / totalMins) * 100, 0.5) + "%";
+  return (
+    <div style={{
+      position: "absolute", top: 1, height: ROW_H - 4 + "px",
+      left, width: w,
+      background: "repeating-linear-gradient(45deg,var(--tl-blocked-a),var(--tl-blocked-a) 4px,var(--tl-blocked-b) 4px,var(--tl-blocked-b) 8px)",
+      borderRadius: 4, opacity: 0.6,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      pointerEvents: "none"
+    }}>
+      <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-on-accent)", textTransform: "uppercase", letterSpacing: 1 }}>
+        blocked
+      </span>
+    </div>
+  );
+}
+
+// v17.1.0 perf: React.memo — BookingApp re-renders on every form keystroke /
+// banner tick, and the timeline is its heaviest subtree. All function props are
+// the stable VA wrappers (App.jsx viewActionsRef pattern); `hoursSig` and
+// `layoutSig` are identity-only props that bust the memo when the operating
+// hours or table layout change (this component reads OPEN/GRID_CLOSE/
+// QUARTER_HOURS/TIMELINE_TABLES as live module bindings the memo can't see).
+export const TimelineView = memo(function TimelineView({
   bookings, date, onEdit, onManual, onStatus,
   blocks = [], onBlock, nowMins = 0, warnings = {},
   late = {}, freeing = {}, onNoShow = () => {},
@@ -370,7 +430,9 @@ export function TimelineView({
   // lower bound — minWidth:100% can stretch wider — so the hide errs
   // conservative) + the repeat-no-show map (full bookings list, all dates).
   const pxPerMin = gridW / totalMins;
-  const nsMap = noShowMap(bookings);
+  // v17.1.0 perf: noShowMap walks EVERY booking (all dates — grows with
+  // history); memo on the bookings ref so it no longer reruns per render.
+  const nsMap = useMemo(() => noShowMap(bookings), [bookings]);
 
   // ── Follow-now scroll synchronisation ────────────────────────────────────
   // When followNow is on (today only), keep the current minute ~30 min from
@@ -488,56 +550,10 @@ export function TimelineView({
     return a && a.until > Date.now() ? a.type : null;
   }
 
-  // ── Sub-components (close over parent state — must stay inline) ─────────
-  function GridLines() {
-    return (
-      <div style={{ position: "absolute", inset: 0 }}>
-        {QUARTER_HOURS.map((m) => {
-          const isH = m % 60 === 0;
-          return (
-            <div
-              key={m}
-              style={{
-                position: "absolute", top: 0, bottom: 0, left: pct(m),
-                borderLeft: isH ? "2px solid var(--tl-gridline-hour)" : "0.5px solid var(--tl-gridline-quarter)",
-                opacity: 1
-              }}
-            />
-          );
-        })}
-        <div style={{
-          position: "absolute", top: 0, bottom: 0, right: 0,
-          borderLeft: "2px solid var(--tl-gridline-hour)"
-        }} />
-      </div>
-    );
-  }
-
-  // Block is HOISTED to module scope (top of file) so its DOM node persists
-  // across TimelineView re-renders — that's what lets the left/width reposition
-  // transition + the status wipe/fill overlays + long-press refs work. Rendered
-  // below as <TimelineBlock …> with its former closure values passed as props.
-
-  function BlockBar({ bl }) {
-    const bS = bl.allDay ? OPEN * 60 : toMins(bl.from);
-    const bE = bl.allDay ? GRID_CLOSE * 60 : toMins(bl.to);
-    const left = pct(bS);
-    const w = Math.max(((bE - bS) / totalMins) * 100, 0.5) + "%";
-    return (
-      <div style={{
-        position: "absolute", top: 1, height: ROW_H - 4 + "px",
-        left, width: w,
-        background: "repeating-linear-gradient(45deg,var(--tl-blocked-a),var(--tl-blocked-a) 4px,var(--tl-blocked-b) 4px,var(--tl-blocked-b) 8px)",
-        borderRadius: 4, opacity: 0.6,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        pointerEvents: "none"
-      }}>
-        <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-on-accent)", textTransform: "uppercase", letterSpacing: 1 }}>
-          blocked
-        </span>
-      </div>
-    );
-  }
+  // GridLines / BlockBar / TimelineBlock are all HOISTED to module scope (top
+  // of file) so their DOM nodes persist across TimelineView re-renders — the
+  // v15.8.0 TimelineBlock lesson, extended to the grid chrome in v17.1.0
+  // (inline component = new type every render = full subtree remount).
 
   // ── Header lines + labels (drawn once at top of grid column) ─────────────
   // v14.4.1: map over QUARTER_HOURS only (NOT concat([GRID_CLOSE*60])). The
@@ -669,7 +685,7 @@ export function TimelineView({
         }}
       >
         <GridLines />
-        {tblBlocks.map((bl, i) => <BlockBar key={"blk" + i} bl={bl} />)}
+        {tblBlocks.map((bl, i) => <BlockBar key={"blk" + i} bl={bl} totalMins={totalMins} />)}
         {/* v15.8.1: render each seated booking's dashed "ghost" (original-duration
             outline) IMMEDIATELY BEFORE its block, so the ghost mirrors EVERY cell
             effect: (1) reposition — same left/width + transform transition; (2) vertical
@@ -961,3 +977,4 @@ export function TimelineView({
     </div>
   );
 }
+);

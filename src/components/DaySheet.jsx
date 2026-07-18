@@ -16,7 +16,7 @@
 //
 // Props: bookings, date, splitHour, waitlist, blocks, restaurantName, currency (v17.0.0 — settings/general)
 
-import { useMemo } from "react";
+import { useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { daySummary } from "../lib/booking-logic";
 
@@ -29,7 +29,9 @@ function weekdayOf(dateStr) {
 const cell = { border: "1px solid #999", padding: "5px 7px", fontSize: 12, textAlign: "left", verticalAlign: "top", color: "#000" };
 const th = Object.assign({}, cell, { fontWeight: 700, background: "#eee" });
 
-export function DaySheet({ bookings, date, splitHour, waitlist, blocks, restaurantName, currency }) {
+// v17.1.0 perf: React.memo — always-mounted (print-only DOM) so it used to
+// re-render on every BookingApp render; props are state objects + primitives.
+export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, waitlist, blocks, restaurantName, currency }) {
   // /code-review: the sheet is PERMANENTLY mounted (display:none) and BookingApp
   // re-renders every 15s tick — memoise the filter/sort/summary passes so they
   // run only when the underlying data (not the clock) changes. This is the
@@ -117,3 +119,4 @@ export function DaySheet({ bookings, date, splitHour, waitlist, blocks, restaura
     document.body
   );
 }
+);
