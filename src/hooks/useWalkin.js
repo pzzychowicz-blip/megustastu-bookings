@@ -74,7 +74,11 @@ export function useWalkin({
   // onClick={openWalkin}, which passes the click event as the first arg.
   function openWalkin(preTableId){
     const pre=typeof preTableId==="string"&&preTableId?[preTableId]:[];
-    setWalkinForm({size:2,notes:"",tables:pre,time:nowTime(),customDur:null});
+    // v17.1.1: `_pre` marks the Plan-view "Walk-in here" path — the host chose
+    // the table BEFORE the form, so editing the guest count must NOT deselect
+    // it (WalkinForm's size steppers keep `tables` when the flag is set; the
+    // normal Walk-in-button path keeps the old reset-on-size-change).
+    setWalkinForm({size:2,notes:"",tables:pre,time:nowTime(),customDur:null,_pre:pre.length>0});
     setWalkinError("");setShowWalkin(true);
   }
   // doSaveWalkin: actual write. Builds a sanitised booking object with
