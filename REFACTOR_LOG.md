@@ -4605,3 +4605,58 @@ Verified live in DEV: shift+"*" bumps width; Settings/WeekView/SearchPanel all s
 through the lazyChunk wrapper (happy path exercises the new .then chain; reload flag stays
 clear); console clean; `npm run build` clean (main 183.46 kB gz). The chunk-FAILURE branch
 is not exercisable under the Vite dev server (no hashed-chunk 404s) — code-reviewed only.
+
+---
+
+## v17.1.1 — Plan-view table patch (delay · seated walk-in · pre-select keep · fill fade) (2026-07-19)
+
+**Scope:** small patch session (branch `claude/plan-view-table-bugs-7aaf07`), four Patryk-reported
+Plan-view/walk-in issues. Files: `PlanView.jsx`, `FloorGlyphs.jsx`, `WalkinForm.jsx`,
+`TableGrid.jsx`, `useWalkin.js`, `App.jsx` (version). Behaviour changes: all four intended.
+
+1. **Plan status change showed with a delay (root-caused).** Quick-status → Seated runs the
+   seated-shift (booking time → now, e.g. "14:03"), but the auto-following slider is
+   `clampSlider(nowMins)` — rounded to the NEAREST 15 — so it can sit BELOW the shifted time
+   (14:00 < 14:03) for up to ~7 min; `slider >= s` failed and the table stayed free-coloured
+   (Timeline/List showed seated instantly — hence "delay only in Plan"). Fix: a seated
+   booking's occupancy START also clamps to the slider grid —
+   `s = Math.min(s, clampSlider(nowMins))` (today only), the mirror of the v17.1.0 overstay
+   end-clamp.
+2. **Seated-occupied table now offers "Walk-in here"** (`seatedTakeover` in the tap popover) —
+   in practice the seated party is on its way out and the walk-in takes over; staff completes
+   the old booking as they seat the new one. Guarded: today only, not blocked, the same
+   next-booking window gate, and NO confirmed/pending booking overlapping the slider on that
+   table (occupying keeps one booking per table — a seated occupant must not mask a due-now
+   confirmed party).
+3. **Plan-path walk-in keeps its pre-selected table across guest-count edits.** `openWalkin`
+   stamps the draft `_pre:true` when opened with a table; the size steppers keep `tables`
+   when the flag is set (the plain Walk-in-button path still resets so auto-fit re-runs —
+   the ONLY-from-Plan behaviour Patryk asked for). Support fixes: `wToggle` allows
+   deselecting a selected-but-busy table (the takeover pre-select is busy by definition);
+   TableGrid paints a selected+blocked cell as selected (label/cursor/hover follow the
+   orange fill that already won).
+4. **Plan table colour changes fade like the timeline** — new optional `shapeStyle` prop on
+   `TableGlyph` (FloorGlyphs.jsx); PlanView passes
+   `transition: fill 360ms ease-out, stroke 360ms ease-out`, the exact timing of the
+   Seated→Completed `.mgt-fade-overlay`. The reduce-motion kill-switch (!important) still
+   zeroes it; the editor passes nothing (unchanged).
+
+**Session infra:** worktree dev server via a `dev-worktree` launch entry
+(`npm --prefix <worktree> run dev -- --port 5173` — port 5173 so the persisted DEV Firebase
+session survives; cache-busted fetch confirmed the worktree checkout is served).
+
+**Verified live in DEV:** (2) tap seated 1A → "Walk-in here" present; (3) form opens with
+"Selected: 1A", + stepper → 3 guests, selection retained; (4) computed style shows
+`fill 0.36s ease-out` on every table shape; (1) code-path exercised (quick-status Seated →
+table green instantly at the clamped slider); the exact mid-day rounding window isn't
+manufacturable at test time (00:50 local) — verified by construction. `npm run build` clean;
+main 183.57 kB gz (+0.1).
+
+**/code-review fixes (same version, pre-commit).** 3 observations, all applied: (#1) comment
+clarifying the seated start-clamp can only pull back to the rounded CURRENT time (never paints
+the viewed past); (#2) call-site comment that the blocked url(#pv-blocked) pattern fill can't
+CSS-interpolate, so entering/leaving a block snaps (accepted); (#3) `_pre` is now CLEARED at
+every site that discards the pre-selection — the Clear button, the time input, the suggestion
+chips and the AvailBanner onTapTime — so after any of those the form behaves exactly like the
+plain Walk-in-button path (the flag no longer outlives the selection it described). Build
+clean; main 183.59 kB gz.
