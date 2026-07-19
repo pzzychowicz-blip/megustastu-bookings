@@ -240,7 +240,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.1.1",
+  version:"17.1.2",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -708,6 +708,20 @@ function BookingApp(){
     if(next) document.documentElement.dataset.motion="reduce";
     else delete document.documentElement.dataset.motion;
     setReduceMotion(next);
+  }
+  // v17.1.2: per-device "Plan zoom & pan" (Settings → General). Theme pattern:
+  // localStorage["mgt-plan-gestures"]="0" only when OFF (absent = on, the
+  // default) — gates PlanView's wheel/pinch zoom, drag pan and double-tap reset.
+  const [planGestures,setPlanGestures]=useState(function(){
+    try{return localStorage.getItem("mgt-plan-gestures")!=="0";}catch(e){return true;}
+  });
+  function onTogglePlanGestures(){
+    const next=!planGestures;
+    try{
+      if(next) localStorage.removeItem("mgt-plan-gestures");
+      else localStorage.setItem("mgt-plan-gestures","0");
+    }catch(e){}
+    setPlanGestures(next);
   }
   // v14 deployment fix: history entries must attribute to the logged-in user
   // (their email), not the generic "staff" stub used in standalone preview.
@@ -2125,7 +2139,7 @@ function BookingApp(){
   // Inner = a 1-cell grid so leaving+entering toasts overlap (crossfade in place).
   const floatingToasts=<div
     style={{position:"absolute",top:0,left:0,right:0,zIndex:60,display:"flex",justifyContent:"center",alignItems:"flex-start",padding:"7px 12px 0",pointerEvents:"none"}}><div
-    style={{width:"100%",maxWidth:360,display:"grid",justifyItems:"center",textAlign:"center"}}>{statusToasts.map(function(t){return <Toast key={t.key} show={t.key===topToastKey} style={{gridArea:"1 / 1",width:"100%"}}>{t.node}</Toast>;})}</div></div>;
+    style={{width:"100%",maxWidth:360,display:"grid",justifyItems:"center",textAlign:"center"}}>{statusToasts.map(function(t){return <Toast key={t.key} show={t.key===topToastKey} style={{gridArea:"1 / 1",width:"fit-content",justifySelf:"center"}}>{t.node}</Toast>;})}{/* v17.1.2: fit-content — the Undo pill (and every toast) hugs its text instead of stretching the full 360px column; long text still wraps at the container's maxWidth */}</div></div>;
 
   // In-flow persistent banners (wrapped in <Reveal> at the render site).
   const offlineBanner=!isOnline?<div
@@ -2239,6 +2253,7 @@ function BookingApp(){
     onStatus={VA.onStatus}
     onNoShow={VA.onNoShow}
     onWalkin={VA.onWalkin}
+    gesturesEnabled={planGestures}
     hoursSig={weekHours} />;
   // v17.1.0 perf note: hoursSig / layoutSig are identity-only props — the views
   // read OPEN/GRID_CLOSE/QUARTER_HOURS/TIMELINE_TABLES/TOTAL_SEATS as LIVE
@@ -2460,6 +2475,8 @@ function BookingApp(){
             onSetAppWidth={onSetAppWidth}
             reduceMotion={reduceMotion}
             onToggleReduceMotion={onToggleReduceMotion}
+            planGestures={planGestures}
+            onTogglePlanGestures={onTogglePlanGestures}
             weekHours={weekHours}
             onSaveDayHours={saveDayHours}
             onSaveAllDays={saveAllDays}
