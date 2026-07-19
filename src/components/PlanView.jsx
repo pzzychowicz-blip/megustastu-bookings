@@ -23,7 +23,8 @@
 //   • RMB / long-press a table → the shared QuickStatusPopup targeting the
 //     booking occupying it at the slider time, else the next upcoming one
 //     (current-else-next, Patryk-confirmed).
-//   • wheel / pinch zooms, background drag pans, double-tap/click resets.
+//   • wheel / pinch zooms, background drag pans, double-tap/click resets —
+//     all gated on `gesturesEnabled` (v17.1.2 per-device Settings toggle).
 //   • seated tables show the v16.3.0 freeing-soon countdown ("~Nm") when the
 //     slider sits at NOW (predictions are a "right now" read).
 //
@@ -49,7 +50,10 @@ const FREE_STROKE = "var(--fp-outline)";
 export const PlanView = memo(function PlanView({
   bookings, date, layout, blocks = [],
   nowMins = 0, late = {}, freeing = {},
-  onEdit, onStatus, onNoShow, onWalkin = () => {}
+  onEdit, onStatus, onNoShow, onWalkin = () => {},
+  // v17.1.2: per-device master switch for zoom/pan/double-tap-reset (Settings →
+  // General "Plan zoom & pan", localStorage-backed in App — scalar, memo-safe).
+  gesturesEnabled = true
 }) {
   const fp = (layout && layout.floorPlan) || { room: { w: 900, h: 600 }, tables: {}, walls: [], doors: [] };
   const tables = (layout && Array.isArray(layout.tables)) ? layout.tables : [];
@@ -143,6 +147,7 @@ export const PlanView = memo(function PlanView({
     return { x: (e.clientX - r.left) * (fp.room.w / r.width), y: (e.clientY - r.top) * (fp.room.h / r.height) };
   }
   function onWheel(e) {
+    if (!gesturesEnabled) return; // no preventDefault → the page scrolls normally
     e.preventDefault();
     const p = toSvg(e);
     setView((v) => {
@@ -161,6 +166,7 @@ export const PlanView = memo(function PlanView({
     // as a stray "tap" that dragged the floor. Pair with the buttons===0 bail
     // in bgPointerMove so a stale ref can never pan.
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (!gesturesEnabled) return; // v17.1.2: no pan/pinch arming — taps untouched (movedRef stays false)
     pointersRef.current[e.pointerId] = { x: e.clientX, y: e.clientY };
     const pts = Object.values(pointersRef.current);
     if (pts.length === 2) {
@@ -176,6 +182,7 @@ export const PlanView = memo(function PlanView({
     // Panning tracks fine while the pointer stays over the canvas.
   }
   function bgPointerMove(e) {
+    if (!gesturesEnabled) return;
     // A mouse move with NO button held can never be a pan — belt-and-braces for
     // any release the svg misses (a pointerup swallowed by a portalled scrim).
     if (e.pointerType === "mouse" && e.buttons === 0) { panRef.current = null; return; }
@@ -206,6 +213,20 @@ export const PlanView = memo(function PlanView({
     clearPress();
   }
   function resetView() { setView({ k: 1, tx: 0, ty: 0 }); }
+  // Turning gestures OFF resets the view — a zoomed/panned plan must not get
+  // stuck with no gesture left to un-zoom it — AND clears every gesture ref:
+  // movedRef is only ever reset in bgPointerDown (which now bails when off), so
+  // a stale `true` from a drag made just before the toggle would suppress the
+  // table-tap onClick (`!movedRef.current`) forever (/code-review catch).
+  useEffect(() => {
+    if (!gesturesEnabled) {
+      setView({ k: 1, tx: 0, ty: 0 });
+      movedRef.current = false;
+      panRef.current = null;
+      pinchRef.current = null;
+      pointersRef.current = {};
+    }
+  }, [gesturesEnabled]);
 
   // touch long-press → quick status (RMB parity for tablets, the timeline's 400ms).
   function startPress(id) {
@@ -234,17 +255,10 @@ export const PlanView = memo(function PlanView({
       .filter((b) => (b.tables || []).indexOf(id) >= 0)
       .sort((a, b) => toMins(a.time) - toMins(b.time));
     const occ = occupying[id];
+    // v17.1.2 (Patryk): a table with ANY current occupant — including a seated
+    // party — never offers "Walk-in here" (the v17.1.1 "seated-takeover" was
+    // removed: an occupied table must not take another walk-in at that time).
     const freeNow = !occ && !isBlocked(id);
-    // v17.1.1 (Patryk): a table whose CURRENT occupant is a SEATED party can
-    // also be offered a walk-in — in practice the seated party is on its way
-    // out and the walk-in takes over (the walk-in form opens with the table
-    // pre-selected; staff completes the old booking as they seat the new one).
-    // Guard: only when NO confirmed/pending booking also overlaps the slider
-    // on this table (occupying keeps just ONE booking per table — the seated
-    // one would mask a due-now confirmed party).
-    const seatedTakeover = occ && occ.status === "seated" && !isBlocked(id) &&
-      !day.some((b) => (b.status === "confirmed" || b.status === "pending") &&
-        (b.tables || []).indexOf(id) >= 0 && slider >= toMins(b.time) && slider < toMins(b.time) + (b.duration || 90));
     // v17.0.0 correction round 6: only OFFER a walk-in when the table can
     // actually seat one now — free at the slider AND a real window before the
     // next booking/block/close (≥ a minimal walk-in duration). A table free now
@@ -259,7 +273,7 @@ export const PlanView = memo(function PlanView({
     // stale for up to ONE MINUTE (the next nowMins tick busts the memo).
     // Accepted (/code-review #5): self-healing, cosmetic, not worth a third
     // sig prop.
-    const canWalkin = (freeNow || seatedTakeover) && isToday && (nextBusy - slider) >= getDur(2);
+    const canWalkin = freeNow && isToday && (nextBusy - slider) >= getDur(2);
     // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
     // SlideView's transform makes an in-tree position:fixed scrim center on
     // the container, not the viewport.
@@ -325,11 +339,11 @@ export const PlanView = memo(function PlanView({
       ) : null}
       <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)" }}>
         <svg ref={svgRef} viewBox={"0 0 " + fp.room.w + " " + fp.room.h}
-          style={{ display: "block", width: "100%", touchAction: "none" }}
+          style={{ display: "block", width: "100%", touchAction: gesturesEnabled ? "none" : "auto" }}
           onWheel={onWheel}
           onPointerDown={bgPointerDown} onPointerMove={bgPointerMove}
           onPointerUp={bgPointerUp} onPointerCancel={bgPointerUp}
-          onDoubleClick={resetView}>
+          onDoubleClick={gesturesEnabled ? resetView : undefined}>
           {/* the Timeline table-block stripe pattern (45°, --tl-blocked-a/b) */}
           <defs>
             <pattern id="pv-blocked" width={11.3} height={11.3} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -375,7 +389,7 @@ export const PlanView = memo(function PlanView({
         </svg>
       </div>
       <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 8, textAlign: "center" }}>
-        tap a table for its bookings · right-click / hold for quick status · scroll or pinch to zoom, drag to pan, double-tap to reset
+        {"tap a table for its bookings · right-click / hold for quick status" + (gesturesEnabled ? " · scroll or pinch to zoom, drag to pan, double-tap to reset" : "")}
       </div>
       {popover}
       {quick ? (

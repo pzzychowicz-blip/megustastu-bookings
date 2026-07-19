@@ -4660,3 +4660,51 @@ every site that discards the pre-selection — the Clear button, the time input,
 chips and the AvailBanner onTapTime — so after any of those the form behaves exactly like the
 plain Walk-in-button path (the flag no longer outlives the selection it described). Build
 clean; main 183.59 kB gz.
+
+---
+
+## v17.1.2 — Plan-view patch: seated-takeover removal · gesture toggle · toast fit (2026-07-19)
+
+**Branch:** `claude/bookings-plan-view-patch-e1693f`. Rolling-safe, client-only — no Firebase
+rules/shape change. Three Patryk-reported fixes.
+
+**Files:** `PlanView.jsx` · `App.jsx` · `Settings.jsx` · `CLAUDE.md` · `REFACTOR_LOG.md`.
+
+1. **Seated-takeover REMOVED** (PlanView tap popover). The v17.1.1 "Walk-in here on a
+   seated table" proved wrong in service — an occupied table must never take another walk-in
+   at that time (Patryk-confirmed FULL removal via AskUserQuestion, over the
+   "only-when-overstaying" alternative). `canWalkin` is back to
+   `freeNow && isToday && (nextBusy - slider) >= getDur(2)`; the `seatedTakeover` const and
+   its guard are gone. The v17.1.1 support fixes (`_pre` lifecycle, `wToggle`
+   deselect-before-busy, TableGrid selected-wins-over-blocked) STAY — they still serve the
+   free-table Plan pre-select path.
+2. **"Plan zoom & pan" per-device toggle** (Settings → General, under "Reduce animations").
+   Theme pattern: `localStorage["mgt-plan-gestures"]="0"` only when OFF (absent = on);
+   `planGestures` state + `onTogglePlanGestures` in App, threaded to Settings and to
+   PlanView as the scalar `gesturesEnabled` prop (memo-safe). OFF behaviour: `onWheel`
+   bails BEFORE preventDefault (the page scrolls normally over the canvas), pan/pinch never
+   arm in `bgPointerDown`/`bgPointerMove` (table taps + long-press quick-status untouched —
+   `movedRef` stays false), `onDoubleClick` unset, svg `touchAction:"auto"`, an effect
+   resets the view to 1× (a zoomed plan must not get stuck with no gesture to un-zoom it),
+   and the footer hint drops the gesture segment.
+3. **Floating toasts fit their content.** The per-`Toast` wrapper in `floatingToasts` was
+   `width:"100%"` inside the 360px column — every toast (the "Booking cancelled · Undo"
+   pill worst) stretched full width. Now `width:"fit-content"` + `justifySelf:"center"`;
+   long-text toasts still wrap at the container's `maxWidth:360`.
+
+**Verified live in DEV** (worktree served via the `dev-worktree` launch entry on port 5173,
+re-pointed from the stale magical-kilby path; cache-busted `__MGT_BUILD__` check): (1) the
+exact reported scenario — Table 2 with a seated 20:20 walk-in — shows the queue with NO
+"Walk-in here"; free Table 4 still offers it. (2) toggle OFF → wheel no-ops
+(`transform` stays `scale(1)`), `touchAction:auto`, hint shortened, a pre-existing 1.15×
+zoom reset; table tap still opens the popover; survives a reload (`"0"` persisted); toggle
+back ON → wheel zooms (1.15→1.32) and double-click resets. (3) the "Marked no-show · Undo"
+toast hugs its content (screenshot). `npm run build` clean; main 183.69 kB gz (+0.1).
+
+**/code-review fix (same version, pre-push).** 1 confirmed finding, applied: with gestures
+OFF, `bgPointerDown` bails BEFORE the `movedRef.current = false` reset — and nothing else
+ever clears `movedRef` (bgPointerUp doesn't) — so a drag made just before toggling off left
+a stale `true` that suppressed the table-tap onClick (`!movedRef.current`) FOREVER while
+off. The disable effect now clears ALL gesture refs (movedRef/panRef/pinchRef/pointersRef)
+alongside the view reset. Reproduced + verified live in DEV (ON → drag pans → OFF → tap
+still opens the popover). Build clean; main 183.71 kB gz.

@@ -227,7 +227,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, planGestures = true, onTogglePlanGestures = () => {}, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
@@ -354,6 +354,17 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
             </div>
           </div>
           <Toggle on={reduceMotion} onClick={onToggleReduceMotion} />
+        </div>
+        {/* v17.1.2: per-device Plan-view gesture switch (localStorage, theme
+            pattern) — gates wheel/pinch zoom, drag pan and double-tap reset. */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Plan zoom &amp; pan</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Scroll/pinch to zoom, drag to pan and double-tap to reset in the Plan view, on this device.
+            </div>
+          </div>
+          <Toggle on={planGestures} onClick={onTogglePlanGestures} />
         </div>
       </Section>
       {/* v17.0.0: Restaurant identity — name / currency / phone prefix.
@@ -711,6 +722,8 @@ export function SettingsContent({
   onSetAppWidth,
   reduceMotion,
   onToggleReduceMotion,
+  planGestures,
+  onTogglePlanGestures,
   weekHours,
   onSaveDayHours,
   onSaveAllDays,
@@ -744,7 +757,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
   } else if (tab === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} />;
   } else if (tab === "customers") {
