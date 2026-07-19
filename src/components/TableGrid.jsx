@@ -61,19 +61,22 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
               else if (blocked) { bg = "rgba(220,60,60,0.75)"; clr = "#fff";  brd = "2px solid rgba(220,60,60,0.8)"; }
               else if (isBusyT) { bg = "rgba(250,204,21,0.7)"; clr = "#fff";  brd = "2px solid rgba(250,204,21,0.8)"; }
               else              { bg = "rgba(255,255,255,0.4)"; clr = S.text; brd = "2px solid " + tc.bg; }
-              const label = blocked ? "busy" : isBusyT ? "swap" : isSel ? "selected" : "cap " + t.cap;
+              // v17.1.1: isSel first — a Plan-view pre-selected table can be
+              // selected AND busy; it paints orange (isSel wins above), so the
+              // label must agree.
+              const label = isSel ? "selected" : blocked ? "busy" : isBusyT ? "swap" : "cap " + t.cap;
               const subClr = isSel || blocked || isBusyT ? "rgba(255,255,255,0.8)" : S.text;
               return (
                 <button
                   key={t.id}
                   onClick={() => toggle(t.id)}
-                  className={blocked ? undefined : "mgt-hover-scale"}
+                  className={blocked && !isSel ? undefined : "mgt-hover-scale"}
                   style={{
                     width: 64, height: 52, padding: 0, borderRadius: 12,
                     border: brd, background: bg, color: clr,
                     fontWeight: 600, fontSize: 14,
-                    cursor: blocked ? "not-allowed" : "pointer",
-                    opacity: blocked ? 0.5 : 1,
+                    cursor: blocked && !isSel ? "not-allowed" : "pointer",
+                    opacity: blocked && !isSel ? 0.5 : 1,
                     display: "flex", flexDirection: "column",
                     alignItems: "center", justifyContent: "center",
                     gap: 2, boxSizing: "border-box",

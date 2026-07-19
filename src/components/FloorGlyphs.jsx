@@ -41,7 +41,11 @@ export function chairPositions(entry){
 // rotates so text stays horizontal at any table rotation. `fill`/`stroke`
 // carry the occupancy colour in PlanView; the editor passes neutrals.
 // Extra children (countdown pills etc.) render above the label.
-export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDasharray, labelSuffix = "", chairFill = "var(--bg-stepper)", children, onPointerDown, onClick, onContextMenu, style }){
+// `shapeStyle` (v17.1.1) — optional style for the table SHAPE itself (PlanView
+// passes a fill/stroke transition so an occupancy change fades like the
+// timeline's Seated→Completed overlay, 360ms ease-out; the reduce-motion
+// kill-switch in index.html still zeroes it via !important).
+export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDasharray, labelSuffix = "", chairFill = "var(--bg-stepper)", children, onPointerDown, onClick, onContextMenu, style, shapeStyle }){
   const w = entry.w, h = entry.shape === "rect" ? entry.h : entry.w;
   const t = TBL[isIn(id) ? "ind" : "out"];
   const label = id + labelSuffix;
@@ -54,8 +58,8 @@ export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDas
         return <circle key={i} cx={c.cx} cy={c.cy} r={6} fill={chairFill} stroke="var(--fp-chair-outline)" strokeWidth={1.5} />;
       })}
       {entry.shape === "round"
-        ? <circle cx={0} cy={0} r={w / 2} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} />
-        : <rect x={-w / 2} y={-h / 2} width={w} height={h} rx={entry.shape === "square" ? 10 : 12} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} />}
+        ? <circle cx={0} cy={0} r={w / 2} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} style={shapeStyle} />
+        : <rect x={-w / 2} y={-h / 2} width={w} height={h} rx={entry.shape === "square" ? 10 : 12} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} style={shapeStyle} />}
       <g transform={"rotate(" + (-(entry.rot || 0)) + ")"}>
         <rect x={-lw / 2} y={-9} width={lw} height={18} rx={9} fill={t.bg} stroke={t.border} strokeWidth={1} />
         <text x={0} y={4} textAnchor="middle" fontSize={11} fontWeight={700} fill="var(--text-on-accent)" style={{ pointerEvents: "none", userSelect: "none" }}>{label}</text>

@@ -73,7 +73,7 @@ export const PlanView = memo(function PlanView({
   const occupying = {};   // tableId → booking occupying it at `slider`
   day.forEach((b) => {
     if (b.status === "completed") return; // completed = table free, everywhere
-    const s = toMins(b.time);
+    let s = toMins(b.time);
     let e = s + (b.duration || 90);
     // A seated party occupies until AT LEAST now (overstayers included) — the
     // occupancyEnd/v15.1.1 semantics, applied to the slider timeline.
@@ -85,7 +85,20 @@ export const PlanView = memo(function PlanView({
     // while Timeline/List still showed it seated. clampSlider(nowMins)+1
     // always covers the rounded "now" position; sliding into the future still
     // frees the table correctly.
-    if (b.status === "seated" && isToday) e = Math.max(e, clampSlider(nowMins) + 1);
+    // v17.1.1 fix: clamp the START to the slider grid too. Seating a booking
+    // runs the seated-shift (time → now, e.g. "14:03"), but the auto-following
+    // slider is clampSlider(nowMins) — rounded to the NEAREST 15, so it can sit
+    // BELOW the shifted time (14:00 < 14:03) for up to ~7 min. `slider >= s`
+    // failed and the table stayed free-coloured right after a quick-status
+    // Seated — the "Plan shows the status change with a delay" bug. A seated
+    // party is at the table NOW, so occupancy starts no later than the rounded
+    // "now" position. NB the clamp only ever pulls the start back to the
+    // rounded CURRENT time — dragging the slider into the viewed past (before
+    // the party sat down) still shows the table free.
+    if (b.status === "seated" && isToday) {
+      s = Math.min(s, clampSlider(nowMins));
+      e = Math.max(e, clampSlider(nowMins) + 1);
+    }
     if (slider >= s && slider < e) {
       (b.tables || []).forEach((id) => {
         const cur = occupying[id];
@@ -220,7 +233,18 @@ export const PlanView = memo(function PlanView({
     const queue = day
       .filter((b) => (b.tables || []).indexOf(id) >= 0)
       .sort((a, b) => toMins(a.time) - toMins(b.time));
-    const freeNow = !occupying[id] && !isBlocked(id);
+    const occ = occupying[id];
+    const freeNow = !occ && !isBlocked(id);
+    // v17.1.1 (Patryk): a table whose CURRENT occupant is a SEATED party can
+    // also be offered a walk-in — in practice the seated party is on its way
+    // out and the walk-in takes over (the walk-in form opens with the table
+    // pre-selected; staff completes the old booking as they seat the new one).
+    // Guard: only when NO confirmed/pending booking also overlaps the slider
+    // on this table (occupying keeps just ONE booking per table — the seated
+    // one would mask a due-now confirmed party).
+    const seatedTakeover = occ && occ.status === "seated" && !isBlocked(id) &&
+      !day.some((b) => (b.status === "confirmed" || b.status === "pending") &&
+        (b.tables || []).indexOf(id) >= 0 && slider >= toMins(b.time) && slider < toMins(b.time) + (b.duration || 90));
     // v17.0.0 correction round 6: only OFFER a walk-in when the table can
     // actually seat one now — free at the slider AND a real window before the
     // next booking/block/close (≥ a minimal walk-in duration). A table free now
@@ -235,7 +259,7 @@ export const PlanView = memo(function PlanView({
     // stale for up to ONE MINUTE (the next nowMins tick busts the memo).
     // Accepted (/code-review #5): self-healing, cosmetic, not worth a third
     // sig prop.
-    const canWalkin = freeNow && isToday && (nextBusy - slider) >= getDur(2);
+    const canWalkin = (freeNow || seatedTakeover) && isToday && (nextBusy - slider) >= getDur(2);
     // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
     // SlideView's transform makes an in-tree position:fixed scrim center on
     // the container, not the viewport.
@@ -326,6 +350,11 @@ export const PlanView = memo(function PlanView({
               return (
                 <TableGlyph key={t.id} id={t.id} entry={e}
                   fill={f.fill} stroke={f.stroke} strokeWidth={2} strokeDasharray={f.dash}
+                  // v17.1.1: occupancy colour changes fade with the timeline's
+                  // Seated→Completed timing (.mgt-fade-overlay). CSS can't
+                  // interpolate the blocked url(#pv-blocked) pattern fill, so
+                  // entering/leaving a table block snaps — accepted.
+                  shapeStyle={{ transition: "fill 360ms ease-out, stroke 360ms ease-out" }}
                   onClick={() => { if (!movedRef.current) setTablePop(t.id); }}
                   onPointerDown={(ev) => { if (ev.pointerType === "touch") startPress(t.id); }}
                   onContextMenu={(ev) => {

@@ -117,12 +117,15 @@ export function WalkinForm({
   // accumulate redundant tables once `wSize` is met. Refuses i1+i4 without
   // i2 AND i3 (the indoor cluster must be physically contiguous).
   function wToggle(id) {
-    if (wBusy.has(id)) return;
     const sel = wf.tables || [];
+    // v17.1.1: DESELECT before the busy check — the Plan-view seated-takeover
+    // pre-select can put a currently-busy table in the selection, and the host
+    // must still be able to remove it.
     if (sel.includes(id)) {
       setDraft({ ...wf, tables: sel.filter((x) => x !== id) });
       return;
     }
+    if (wBusy.has(id)) return;
     let next = sel.concat([id]);
     let h1 = next.includes("i1"), h4 = next.includes("i4");
     let h2 = next.includes("i2"), h3 = next.includes("i3");
@@ -152,7 +155,7 @@ export function WalkinForm({
       key="clr"
       className="mgt-hover-scale mgt-press"
       style={mkBtn({ fontSize: 12, padding: "6px 12px", background: BTN.clear })}
-      onClick={() => setDraft({ ...wf, tables: [] })}
+      onClick={() => setDraft({ ...wf, tables: [], _pre: false })}
     >
       Clear
     </button>
@@ -180,7 +183,7 @@ export function WalkinForm({
       <span
         key={r.timeStr}
         className="mgt-hover-scale"
-        onClick={() => setDraft({ ...wf, tables: [], time: r.timeStr })}
+        onClick={() => setDraft({ ...wf, tables: [], time: r.timeStr, _pre: false })}
         style={{
           cursor: "pointer", padding: "3px 8px", borderRadius: 6,
           fontWeight: 600, fontSize: 12,
@@ -359,7 +362,10 @@ export function WalkinForm({
             <input
               type="time"
               value={wTime}
-              onChange={(e) => setDraft({ ...wf, tables: [], time: e.target.value })}
+              // v17.1.1 review #3: a time edit discards the Plan pre-selection
+              // (tables reset), so `_pre` is cleared too — from here on the
+              // form behaves exactly like the plain Walk-in-button path.
+              onChange={(e) => setDraft({ ...wf, tables: [], time: e.target.value, _pre: false })}
               min={String(th.open).padStart(2, "0") + ":00"}
               max={th.close >= 24 ? "23:59" : String(th.close).padStart(2, "0") + ":00"}
               className="mgt-hover-scale"
@@ -376,7 +382,10 @@ export function WalkinForm({
                   setDraft({
                     ...wf,
                     size: Math.max(1, (Number(wf.size) || 2) - 1),
-                    tables: []
+                    // v17.1.1: the Plan-view "Walk-in here" path (`_pre`) keeps
+                    // the host-chosen table across guest-count edits; the plain
+                    // Walk-in-button path still resets so auto-fit re-runs.
+                    tables: wf._pre ? (wf.tables || []) : []
                   });
                 }}
               >
@@ -391,7 +400,7 @@ export function WalkinForm({
                   setDraft({
                     ...wf,
                     size: Math.min(25, (Number(wf.size) || 2) + 1),
-                    tables: []
+                    tables: wf._pre ? (wf.tables || []) : [] // v17.1.1: see the − stepper
                   });
                 }}
               >
@@ -499,7 +508,7 @@ export function WalkinForm({
             msg={"No tables available at " + wTime + "."}
             sugg={wAutoCheck}
             warn
-            onTapTime={(t) => setDraft({ ...wf, tables: [], time: t })}
+            onTapTime={(t) => setDraft({ ...wf, tables: [], time: t, _pre: false })}
           />
           {/* v16.0.0: nothing fits right now → offer the waitlist (today's date,
               current draft time as the wanted time). */}
