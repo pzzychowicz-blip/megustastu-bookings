@@ -56,9 +56,10 @@ export function useWalkin({
   bookings, saveBookings,
   setViewDate, getUser,
   confirmKitchen, setConfirmKitchen,
+  defaultWalkinSize = 2, // v17.2.0: settings/general starting party size
 }){
   const [showWalkin, setShowWalkin] = useState(false);
-  const [walkinForm, setWalkinForm] = useState({size:2,notes:"",tables:[],time:""});
+  const [walkinForm, setWalkinForm] = useState({size:defaultWalkinSize,notes:"",tables:[],time:""});
   const [walkinError, setWalkinError] = useState("");
   // Today-scoped "Walk-in N" numbering. Scans bookings for names
   // matching the "Walk-in " prefix on today's date and returns max+1.
@@ -78,7 +79,7 @@ export function useWalkin({
     // the table BEFORE the form, so editing the guest count must NOT deselect
     // it (WalkinForm's size steppers keep `tables` when the flag is set; the
     // normal Walk-in-button path keeps the old reset-on-size-change).
-    setWalkinForm({size:2,notes:"",tables:pre,time:nowTime(),customDur:null,_pre:pre.length>0});
+    setWalkinForm({size:defaultWalkinSize,notes:"",tables:pre,time:nowTime(),customDur:null,_pre:pre.length>0});
     setWalkinError("");setShowWalkin(true);
   }
   // doSaveWalkin: actual write. Builds a sanitised booking object with

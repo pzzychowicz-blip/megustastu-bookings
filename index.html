@@ -330,6 +330,17 @@
            Same hover-capability guard as .mgt-hover-scale (no sticky-hover on touch);
            the ghost's own inline `transition: transform 120ms` eases it. */
         .mgt-tlghost:has(+ .mgt-hover-scale:hover) { transform: scale(1.08); }
+        /* v17.2.0: timeline group hover-lift — a multi-table booking renders one
+           block per table row, each its own element, so :hover alone lifts only
+           the hovered cell. TimelineBlock's mouseenter/leave toggles this class
+           on EVERY cell sharing the booking's data-bk id (DOM class, no React
+           state). Transform-only on purpose: the blocks' inline background/
+           shadow/radius win anyway (the Fix-2 specificity rule), and the same
+           media guard keeps touch devices lift-free. The blocks' inline
+           `transition: … transform 120ms ease` eases it. zIndex mirrors the
+           :hover rule so lifted cells paint over their row neighbours. */
+        .mgt-group-hover { transform: scale(1.08); z-index: 2; }
+        .mgt-tlghost:has(+ .mgt-group-hover) { transform: scale(1.08); }
       }
       /* v15.8.0: floating status toasts (Reconnected / Syncing / Loaded /
          Reshuffled / Sync-fix) live in an absolute layer over the mainView

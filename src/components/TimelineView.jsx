@@ -15,7 +15,8 @@
 //                     red bar with a "blocked" caption.
 //
 // Follow-now mode (today only) auto-scrolls the grid so the current minute
-// sits ~30 min from the left edge, and bumps zoom to 4× if it's below that.
+// sits `followLeadMins` from the left edge, and bumps zoom to `followZoom` if
+// it's below that (both per-device Settings since v17.2.0; were 30 min / 4×).
 // `scrollPosRef` (a ref owned by BookingApp) persists scroll position across
 // renders without triggering re-renders on scroll — this is why the scroll
 // handler writes directly to the ref rather than calling setState.
@@ -246,11 +247,26 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     if (didLong.current) return;
     onEdit(b);
   }
+  // v17.2.0: group hover-lift — a multi-table booking renders one cell per row;
+  // toggle .mgt-group-hover (index.html, hover-capable media guard) on ALL cells
+  // sharing this booking's data-bk so they lift together. DOM-class approach on
+  // purpose: React state here would re-render the whole memoized timeline per
+  // hover. Booking ids are path-safe ([0-9a-z] + the r…_date recurring shape) —
+  // no selector escaping needed. mouseenter/leave don't fire on touch taps
+  // (and the CSS is guarded anyway), so touch behaviour is unchanged.
+  function setGroupHover(on) {
+    document.querySelectorAll('[data-bk="' + b.id + '"]').forEach(function (el) {
+      el.classList.toggle("mgt-group-hover", on);
+    });
+  }
 
   return (
     <div
       className="mgt-hover-scale"
       data-flip-id={flipId || undefined}
+      data-bk={b.id}
+      onMouseEnter={() => setGroupHover(true)}
+      onMouseLeave={() => setGroupHover(false)}
       onClick={handleClick}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
@@ -410,6 +426,10 @@ export const TimelineView = memo(function TimelineView({
   blocks = [], onBlock, nowMins = 0, warnings = {},
   late = {}, freeing = {}, onNoShow = () => {},
   zoom = 1, setZoom,
+  // v17.2.0: per-device Timeline settings (App's tlSettings — scalars, memo-safe).
+  followZoom = 4,      // zoom the Follow button jumps to (was hard-coded 4)
+  followLeadMins = 30, // minutes of past shown behind the now-line while Following
+  maxZoom = 5,         // the + button's ceiling (was hard-coded 5)
   followNow, setFollowNow,
   scrollPosRef,
   autoOptimizer = true,
@@ -467,7 +487,7 @@ export const TimelineView = memo(function TimelineView({
   useEffect(() => {
     if (!scrollRef.current) return undefined;
     if (followNow && isToday && nowMins >= OPEN * 60 && nowMins <= GRID_CLOSE * 60) {
-      const targetMins = Math.max(OPEN * 60, nowMins - 30);
+      const targetMins = Math.max(OPEN * 60, nowMins - followLeadMins);
       const fraction = (targetMins - OPEN * 60) / totalMins;
       centerNow(fraction);
       if (scrollPosRef) scrollPosRef.current = fraction * gridW;
@@ -475,7 +495,7 @@ export const TimelineView = memo(function TimelineView({
       scrollRef.current.scrollLeft = scrollPosRef.current;
     }
     return () => cancelAnimationFrame(followRafRef.current);
-  }, [followNow, isToday, nowMins, gridW]);
+  }, [followNow, isToday, nowMins, gridW, followLeadMins]);
 
   function onGridScroll() {
     if (scrollRef.current && scrollPosRef) {
@@ -808,7 +828,7 @@ export const TimelineView = memo(function TimelineView({
       onClick={() => {
         if (!followNow) {
           setFollowNow(true);
-          if (zoom < 4) setZoom(4);
+          if (zoom < followZoom) setZoom(followZoom);
         } else {
           setFollowNow(false);
         }
@@ -835,15 +855,27 @@ export const TimelineView = memo(function TimelineView({
       >
         -
       </button>
+      {/* v17.2.0 follow-up: the reset label grows "1x" → "Nx → 1x" when zoomed —
+          the widening used to SNAP and shove the whole toolbar group sideways.
+          The "Nx → " prefix now rides a horizontal Reveal (the start-time-chip
+          pattern) so the button width eases in/out instead of jumping. The
+          constant "1x" tail keeps the button's identity while collapsed. */}
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 32, padding: "4px 10px", fontSize: 11, background: zoom === 1 ? "var(--btn-default)" : BTN.nav })}
+        style={mkBtn({ minHeight: 32, padding: "4px 10px", fontSize: 11, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
       >
-        {zoom === 1 ? "1x" : zoom + "x → 1x"}
+        {/* NB the child must be NULL (not an empty span) at 1× — Reveal caches its
+            last truthy children for the exit ease; an always-mounted span would
+            overwrite that cache with empty text and the collapse would animate a
+            blank box (the text snapping away instead of easing out). */}
+        <Reveal horizontal show={zoom !== 1}>
+          {zoom !== 1 ? <span style={{ whiteSpace: "pre" }}>{zoom + "x → "}</span> : null}
+        </Reveal>
+        1x
       </button>
       <button
-        onClick={() => setZoom((z) => Math.min(5, z + 0.5))}
+        onClick={() => setZoom((z) => Math.min(maxZoom, z + 0.5))}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 32, minWidth: 32, padding: "4px 10px", fontSize: 16, background: BTN.nav })}
       >
