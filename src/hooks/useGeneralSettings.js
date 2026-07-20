@@ -22,7 +22,8 @@
 //   undoSecs       — how long the undo-after-cancel toast stays (was 10 s).
 //
 // Model: { v, restaurantName, currency, phonePrefix, regularMin,
-// lateCollapseMax, waitMatchWin, undoSecs }. `v:1` is the presence marker
+// lateCollapseMax, waitMatchWin, undoSecs, defaultBookingSize,
+// defaultWalkinSize (v17.2.0) }. `v:1` is the presence marker
 // (the v15.9.0 priorities lesson). Seed = the historical literals, so an
 // absent node is a no-op. Write-guard mirrors useBookingDefaults: `loaded`
 // ref + revGuard CAS (generalRev) — the v16.0.0 rule of law for new nodes.
@@ -42,7 +43,12 @@ export const DEFAULT_GENERAL_SETTINGS = {
   regularMin: 2,
   lateCollapseMax: 2,
   waitMatchWin: 90,
-  undoSecs: 10
+  undoSecs: 10,
+  // v17.2.0: starting party size of a NEW booking form / walk-in form (were
+  // hard-coded 2 in EMPTY_FORM's consumer + useWalkin). Restaurant-wide
+  // preference, so shared here — not per-device.
+  defaultBookingSize: 2,
+  defaultWalkinSize: 2
 };
 
 function clampStep(n, def, min, max, step){
@@ -73,7 +79,9 @@ function sanitizeGeneral(raw){
     regularMin: clampStep(src.regularMin, d.regularMin, 1, 50, 1),
     lateCollapseMax: clampStep(src.lateCollapseMax, d.lateCollapseMax, 1, 20, 1),
     waitMatchWin: clampStep(src.waitMatchWin, d.waitMatchWin, 15, 240, 15),
-    undoSecs: clampStep(src.undoSecs, d.undoSecs, 5, 60, 5)
+    undoSecs: clampStep(src.undoSecs, d.undoSecs, 5, 60, 5),
+    defaultBookingSize: clampStep(src.defaultBookingSize, d.defaultBookingSize, 1, 20, 1),
+    defaultWalkinSize: clampStep(src.defaultWalkinSize, d.defaultWalkinSize, 1, 20, 1)
   };
 }
 

@@ -4708,3 +4708,77 @@ a stale `true` that suppressed the table-tap onClick (`!movedRef.current`) FOREV
 off. The disable effect now clears ALL gesture refs (movedRef/panRef/pinchRef/pointersRef)
 alongside the view reset. Reproduced + verified live in DEV (ON → drag pans → OFF → tap
 still opens the popover). Build clean; main 183.71 kB gz.
+
+---
+
+## v17.2.0 — Timeline zoom/follow settings · default party sizes · group hover-lift (2026-07-20)
+
+**Scope:** configurability patch (Patryk's ask) + one Timeline UX fix. Files: `App.jsx`,
+`TimelineView.jsx`, `Settings.jsx`, `useGeneralSettings.js`, `useWalkin.js`, `index.html`.
+Rolling-safe — no Firebase rules/shape change (the two new settings/general fields are
+sanitized additions to the existing revGuard node; absent = the historical 2/2).
+
+1. **Per-device Timeline zoom/follow settings** (Settings → General, a "Timeline zoom"
+   block under "Plan zoom & pan"; localStorage theme pattern, key absent = default —
+   Patryk chose per-device via AskUserQuestion: zoom comfort is screen-dependent).
+   Four keys, read by `readTlSettings()`/`TL_SETTING_BOUNDS` (App.jsx module scope):
+   - `mgt-tl-defaultzoom` — zoom on app open (was hard-coded 1; `timelineZoom` now
+     initializes from it), 1–max ×, step 0.5;
+   - `mgt-tl-followzoom` — zoom the Follow button jumps to (was 4), 1–max ×;
+   - `mgt-tl-followlead` — minutes of past shown behind the now-line while Following
+     (was 30 in the follow effect's `nowMins - 30`), 0–120 min step 15;
+   - `mgt-tl-maxzoom` — the + button's ceiling (was 5), 2–10 ×.
+   Threaded to `TimelineView` as SCALAR props (`followZoom`/`followLeadMins`/`maxZoom` —
+   memo-safe) + the keyboard handlers (`f` follow, `=`/`-` zoom) via `K.tlFollowZoom`/
+   `K.tlMaxZoom`. `onSetTlSetting` clamps/steps, removes the key at default, and lowering
+   maxZoom clamps followZoom/defaultZoom AND the live `timelineZoom` down with it (an
+   unreachable zoom must not stick — the v17.1.2 gesture-toggle lesson).
+2. **Shared default party sizes** (`settings/general` — Patryk chose Firebase-shared:
+   restaurant-wide preference, not per-device): `defaultBookingSize`/`defaultWalkinSize`
+   (both seed 2 = the historical literals, clamp 1–20). Consumers: `openNew` merges
+   `size:` into its `EMPTY_FORM` spread (the constant itself untouched — edit/bookAgain
+   set their own size); `useWalkin` takes a `defaultWalkinSize` arg for its form init +
+   `openWalkin` reset. Two steppers in Settings → Preferences.
+3. **Timeline group hover-lift.** A multi-table booking renders one block per table row,
+   each its own `.mgt-hover-scale` — hover lifted only one cell. Now `TimelineBlock`
+   carries `data-bk={b.id}` + mouseenter/leave that toggle a new `.mgt-group-hover` class
+   on ALL cells sharing the id (DOM classList, deliberately NO React state — a per-hover
+   re-render of the memoized timeline is wasteful). CSS in index.html inside the same
+   `@media (hover:hover) and (pointer:fine)` guard: transform-only `scale(1.08)` +
+   `z-index:2` (inline bg/shadow win anyway per the Fix-2 specificity rule) + a
+   `.mgt-tlghost:has(+ .mgt-group-hover)` rule so seated ghosts lift in lockstep. Touch
+   unaffected (guarded CSS; enter/leave don't fire on taps).
+
+Also part of the app-scan ask: remaining hard-coded values were reviewed; internal
+constants (retry counts, stale gap, chip px thresholds, the 15-min grid) deliberately left
+alone — structural, not preferences. Patryk picked exactly the knobs above.
+
+**Verified live in DEV** (worktree served via the re-pointed `dev-worktree` launch entry on
+port 5173; `__MGT_BUILD__` 17.2.0): default zoom 3 applies on reload ("3x → 1x"); the +
+button stops at a stored 3.5× max; Follow with followZoom 2 jumps 1×→2×; the now-line sits
+EXACTLY 60 min from the left edge with followlead=60 (measured in-page against pxPerMin);
+lowering Max zoom 3.5→2 clamps the default-zoom stepper + localStorage down with it; the
+Preferences steppers set booking 4 / walk-in 3 and the two forms open at 4 and 3; both
+cells of a 1A+1B booking scale to matrix(1.08) together on hover of either and clear on
+leave. Console error-free. `npm run build` clean; main 184.34 kB gz (+0.63 over v17.1.2).
+
+**Follow-up (same version): zoom-reset button width ease.** The reset label grows
+"1x" → "Nx → 1x" on any zoom change, and the widening SNAPPED — shoving the whole
+Follow/−/+ toolbar group sideways. The "Nx → " prefix now rides a horizontal `Reveal`
+(the v16.1.1 start-time-chip pattern; button `display:inline-flex`), so the width eases
+280ms both ways; the constant "1x" tail keeps the button identity while collapsed.
+Verified live in DEV (fronted pane: smooth 38→64→77px ramp; NB an occluded Preview pane
+throttles rAF/timers and made the first sampling runs look broken — environment, not code).
+
+**/code-review (same version, on the uncommitted diff).** 1 confirmed finding, applied:
+the Reveal child was an ALWAYS-mounted `<span>{zoom!==1 ? … : null}</span>` — a truthy
+empty span at 1×, which overwrote Reveal's cached-last-children (`last.current`) on
+collapse, so the prefix text snapped away and the exit eased a BLANK box (the entrance
+eased, the exit didn't). Fixed to pass `null` at 1× (`{zoom!==1 ? <span…/> : null}`) so
+the cache keeps the "Nx → " text through the 280ms collapse — the standard Reveal exit
+contract. Verified live in DEV (collapsed label reads "1x", expanded "1.5x → 1x" at 73px,
+cached text retained during the exit). Everything else clean: the settings plumbing reuses
+the established per-device (App-width) and settings/general (Preferences stepper) patterns,
+scalar props keep the TimelineView memo intact, and the stale-closure burst-click quirk in
+`onSetTlSetting` matches the pre-existing `onSetAppWidth` stepper contract (one step per
+render — fine for human taps). Build clean; main 184.38 kB gz.

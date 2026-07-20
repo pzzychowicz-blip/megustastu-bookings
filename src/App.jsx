@@ -256,7 +256,7 @@ const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
   // Sandbox build marker — WhatsApp module under local test, NOT a release.
   // The formal version bump happens on "give me the deployment version".
-  version:"17.1.2-wa-sandbox",
+  version:"17.2.0-wa-sandbox",
   sandbox:"WhatsApp inbox + simulator (localhost only)",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
@@ -311,6 +311,37 @@ function readAppWidth(){
   }catch(e){}
   const w=Math.round((window.innerWidth-300)/50)*50;
   return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,w));
+}
+
+// v17.2.0: per-device Timeline zoom/follow settings (theme pattern — key absent
+// = default). Four localStorage keys: mgt-tl-followzoom (zoom the Follow button
+// jumps to, was hard-coded 4), mgt-tl-defaultzoom (zoom on app open, was 1),
+// mgt-tl-followlead (minutes of past shown behind the now-line while Following,
+// was 30) and mgt-tl-maxzoom (the + button's ceiling, was 5). Per-device on
+// purpose — zoom comfort depends on the device's screen, like App width.
+const TL_SETTING_BOUNDS={
+  followZoom:{key:"mgt-tl-followzoom",def:4,min:1,max:10,step:0.5},
+  defaultZoom:{key:"mgt-tl-defaultzoom",def:1,min:1,max:10,step:0.5},
+  followLead:{key:"mgt-tl-followlead",def:30,min:0,max:120,step:15},
+  maxZoom:{key:"mgt-tl-maxzoom",def:5,min:2,max:10,step:0.5}
+};
+function readTlNum(b){
+  try{
+    const v=parseFloat(localStorage.getItem(b.key));
+    if(Number.isFinite(v)&&v>=b.min&&v<=b.max&&Math.round(v/b.step)*b.step===v) return v;
+  }catch(e){}
+  return b.def;
+}
+function readTlSettings(){
+  const B=TL_SETTING_BOUNDS;
+  const maxZoom=readTlNum(B.maxZoom);
+  // followZoom/defaultZoom can never exceed the configured max zoom.
+  return {
+    maxZoom:maxZoom,
+    followZoom:Math.min(maxZoom,readTlNum(B.followZoom)),
+    defaultZoom:Math.min(maxZoom,readTlNum(B.defaultZoom)),
+    followLead:readTlNum(B.followLead)
+  };
 }
 
 // ── Console boot banner ──────────────────────────────────────────────────────
@@ -537,7 +568,8 @@ function BookingApp(){
   // ListView) so listDaySorted can exclude the hidden cards while collapsed —
   // keeps ↑/↓ focus and the per-card shortcuts in lockstep with what's visible.
   const [showFinished, setShowFinished] = useState(false);
-  const [timelineZoom, setTimelineZoom] = useState(1);
+  // v17.2.0: initial zoom = the per-device "Default zoom" setting (was 1).
+  const [timelineZoom, setTimelineZoom] = useState(() => readTlSettings().defaultZoom);
   const timelineScrollRef=useRef(0);
   const [followNow, setFollowNow] = useState(false);
   const [blockTarget, setBlockTarget] = useState(null);
@@ -798,6 +830,34 @@ function BookingApp(){
       else localStorage.setItem("mgt-plan-gestures","0");
     }catch(e){}
     setPlanGestures(next);
+  }
+  // v17.2.0: per-device Timeline zoom/follow settings (see readTlSettings above).
+  // Stored one value per key; a value equal to its default removes the key.
+  // Lowering maxZoom clamps followZoom/defaultZoom (and the live zoom) with it.
+  const [tlSettings,setTlSettings]=useState(readTlSettings);
+  function persistTl(name,v){
+    const b=TL_SETTING_BOUNDS[name];
+    try{
+      if(v===b.def) localStorage.removeItem(b.key);
+      else localStorage.setItem(b.key,String(v));
+    }catch(e){}
+  }
+  function onSetTlSetting(name,next){
+    const b=TL_SETTING_BOUNDS[name];
+    if(!b) return;
+    let v=Math.max(b.min,Math.min(b.max,Math.round(next/b.step)*b.step));
+    const out=Object.assign({},tlSettings);
+    if(name==="maxZoom"){
+      out.maxZoom=v;
+      if(out.followZoom>v){out.followZoom=v;persistTl("followZoom",v);}
+      if(out.defaultZoom>v){out.defaultZoom=v;persistTl("defaultZoom",v);}
+      setTimelineZoom(function(z){return Math.min(z,v);});
+    }else{
+      if((name==="followZoom"||name==="defaultZoom")&&v>tlSettings.maxZoom) v=tlSettings.maxZoom;
+      out[name]=v;
+    }
+    persistTl(name,v);
+    setTlSettings(out);
   }
   // v14 deployment fix: history entries must attribute to the logged-in user
   // (their email), not the generic "staff" stub used in standalone preview.
@@ -1232,7 +1292,7 @@ function BookingApp(){
     saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
   }
 
-  function openNew(){pendingWaitlistRef.current=null;setForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  function openNew(){pendingWaitlistRef.current=null;setForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
   function openEdit(b){pendingWaitlistRef.current=null;setForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
@@ -1286,6 +1346,7 @@ function BookingApp(){
     bookings, saveBookings,
     setViewDate, getUser,
     confirmKitchen, setConfirmKitchen,
+    defaultWalkinSize: generalSettings.defaultWalkinSize,
   });
 
   function doSave(){
@@ -1751,7 +1812,7 @@ function BookingApp(){
   const kbRef=useRef({});
   kbRef.current={
     view:view,setView:setView,viewDate:viewDate,setViewDate:setViewDate,
-    timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoom,
+    timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoom,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
     followNow:followNow,setFollowNow:setFollowNow,
     autoOptimizer:autoOptimizer,setAutoOptimizer:setAutoOptimizer,
     showForm:showForm,setShowForm:setShowForm,editId:editId,form:form,setForm:setForm,setSwapAffected:setSwapAffected,
@@ -2017,12 +2078,12 @@ function BookingApp(){
         if(k==="f"||k==="F"){
           if(isToday){
             e.preventDefault();
-            if(!K.followNow){K.setFollowNow(true);if(K.timelineZoom<4) K.setTimelineZoom(4);}
+            if(!K.followNow){K.setFollowNow(true);if(K.timelineZoom<K.tlFollowZoom) K.setTimelineZoom(K.tlFollowZoom);}
             else{K.setFollowNow(false);}
           }
           return;
         }
-        if(k==="+"||k==="="){e.preventDefault();K.setTimelineZoom(function(z){return Math.min(5,z+0.5);});return;}
+        if(k==="+"||k==="="){e.preventDefault();K.setTimelineZoom(function(z){return Math.min(K.tlMaxZoom,z+0.5);});return;}
         if(k==="-"){e.preventDefault();K.setTimelineZoom(function(z){return Math.max(1,z-0.5);});return;}
         if(k==="0"){e.preventDefault();K.setTimelineZoom(1);K.setFollowNow(false);return;}
         if(k==="o"||k==="O"){
@@ -2374,6 +2435,9 @@ function BookingApp(){
     onNoShow={VA.onNoShow}
     zoom={timelineZoom}
     setZoom={setTimelineZoom}
+    followZoom={tlSettings.followZoom}
+    followLeadMins={tlSettings.followLead}
+    maxZoom={tlSettings.maxZoom}
     scrollPosRef={timelineScrollRef}
     followNow={followNow}
     setFollowNow={setFollowNow}
@@ -2581,6 +2645,8 @@ function BookingApp(){
             onToggleReduceMotion={onToggleReduceMotion}
             planGestures={planGestures}
             onTogglePlanGestures={onTogglePlanGestures}
+            tlSettings={tlSettings}
+            onSetTlSetting={onSetTlSetting}
             weekHours={weekHours}
             onSaveDayHours={saveDayHours}
             onSaveAllDays={saveAllDays}

@@ -227,7 +227,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, planGestures = true, onTogglePlanGestures = () => {}, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, planGestures = true, onTogglePlanGestures = () => {}, tlSettings = null, onSetTlSetting = () => {}, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
@@ -254,7 +254,11 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
   // the hook's DEFAULT_GENERAL_SETTINGS seed.
   const gs = generalSettings && typeof generalSettings === "object"
     ? generalSettings
-    : { restaurantName: "Me Gustas Tú", currency: "€", phonePrefix: "+", regularMin: 2, lateCollapseMax: 2, waitMatchWin: 90, undoSecs: 10 };
+    : { restaurantName: "Me Gustas Tú", currency: "€", phonePrefix: "+", regularMin: 2, lateCollapseMax: 2, waitMatchWin: 90, undoSecs: 10, defaultBookingSize: 2, defaultWalkinSize: 2 };
+  // v17.2.0: per-device Timeline zoom/follow settings (App's tlSettings).
+  const tl = tlSettings && typeof tlSettings === "object"
+    ? tlSettings
+    : { followZoom: 4, defaultZoom: 1, followLead: 30, maxZoom: 5 };
   const minsLabel = (n) => n + " min";
   const guestsLabel = (n) => "≤ " + n;
   // Tier-list edits: the hook's sanitizer re-sorts/dedupes/clamps, so these
@@ -365,6 +369,48 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
             </div>
           </div>
           <Toggle on={planGestures} onClick={onTogglePlanGestures} />
+        </div>
+        {/* v17.2.0: per-device Timeline zoom/follow settings (localStorage,
+            theme pattern — App's tlSettings/onSetTlSetting). Zoom values step
+            0.5; the Follow/default zooms are capped by Max zoom (App clamps
+            them down when Max zoom is lowered). */}
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div style={{ textAlign: "left", marginBottom: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Timeline zoom</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Zoom and Follow behaviour of the timeline, on this device.
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", textAlign: "left" }}>Zoom when opening the app</div>
+              <MiniStepper value={tl.defaultZoom} fmt={(v) => v + "×"}
+                disableDec={tl.defaultZoom <= 1} disableInc={tl.defaultZoom >= tl.maxZoom}
+                onDec={() => onSetTlSetting("defaultZoom", tl.defaultZoom - 0.5)}
+                onInc={() => onSetTlSetting("defaultZoom", tl.defaultZoom + 0.5)} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", textAlign: "left" }}>Zoom when Follow turns on</div>
+              <MiniStepper value={tl.followZoom} fmt={(v) => v + "×"}
+                disableDec={tl.followZoom <= 1} disableInc={tl.followZoom >= tl.maxZoom}
+                onDec={() => onSetTlSetting("followZoom", tl.followZoom - 0.5)}
+                onInc={() => onSetTlSetting("followZoom", tl.followZoom + 0.5)} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", textAlign: "left" }}>Time shown behind the now-line</div>
+              <MiniStepper value={tl.followLead} fmt={(v) => v + " min"}
+                disableDec={tl.followLead <= 0} disableInc={tl.followLead >= 120}
+                onDec={() => onSetTlSetting("followLead", tl.followLead - 15)}
+                onInc={() => onSetTlSetting("followLead", tl.followLead + 15)} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", textAlign: "left" }}>Maximum zoom (+ button)</div>
+              <MiniStepper value={tl.maxZoom} fmt={(v) => v + "×"}
+                disableDec={tl.maxZoom <= 2} disableInc={tl.maxZoom >= 10}
+                onDec={() => onSetTlSetting("maxZoom", tl.maxZoom - 0.5)}
+                onInc={() => onSetTlSetting("maxZoom", tl.maxZoom + 0.5)} />
+            </div>
+          </div>
         </div>
       </Section>
       {/* v17.0.0: Restaurant identity — name / currency / phone prefix.
@@ -676,6 +722,17 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
             disableDec={gs.undoSecs <= 5} disableInc={gs.undoSecs >= 60}
             onDec={() => onSaveGeneralSettings({ undoSecs: gs.undoSecs - 5 })}
             onInc={() => onSaveGeneralSettings({ undoSecs: gs.undoSecs + 5 })} />
+          {/* v17.2.0: starting party sizes of the new-booking / walk-in forms
+              (were hard-coded 2). Only the form's INITIAL value — steppers in
+              the forms still adjust per booking. */}
+          <HourStepper label="New booking starts at" value={gs.defaultBookingSize} fmt={(n) => n + (n === 1 ? " guest" : " guests")}
+            disableDec={gs.defaultBookingSize <= 1} disableInc={gs.defaultBookingSize >= 20}
+            onDec={() => onSaveGeneralSettings({ defaultBookingSize: gs.defaultBookingSize - 1 })}
+            onInc={() => onSaveGeneralSettings({ defaultBookingSize: gs.defaultBookingSize + 1 })} />
+          <HourStepper label="Walk-in starts at" value={gs.defaultWalkinSize} fmt={(n) => n + (n === 1 ? " guest" : " guests")}
+            disableDec={gs.defaultWalkinSize <= 1} disableInc={gs.defaultWalkinSize >= 20}
+            onDec={() => onSaveGeneralSettings({ defaultWalkinSize: gs.defaultWalkinSize - 1 })}
+            onInc={() => onSaveGeneralSettings({ defaultWalkinSize: gs.defaultWalkinSize + 1 })} />
         </div>
       </Collapsible>
       {/* v16.3.0 correction: Backup lives at the BOTTOM of the General tab —
@@ -724,6 +781,8 @@ export function SettingsContent({
   onToggleReduceMotion,
   planGestures,
   onTogglePlanGestures,
+  tlSettings,
+  onSetTlSetting,
   weekHours,
   onSaveDayHours,
   onSaveAllDays,
@@ -757,7 +816,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
   } else if (tab === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} />;
   } else if (tab === "customers") {
