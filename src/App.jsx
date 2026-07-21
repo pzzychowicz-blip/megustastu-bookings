@@ -164,6 +164,7 @@ import { useThemeMode } from "./hooks/useThemeMode";
 // savers BookingApp consumes. Args: {autoOptimizer, nowMins} — both now
 // sourced from D3 hooks below; hook signature unchanged.
 import { usePersistence } from "./hooks/usePersistence";
+import { usePresence } from "./hooks/usePresence";
 
 // ── v14.4.0 / v15.0.0: Operating-hours subsystem (Settings → General) ───────────
 // `useOperatingHours(viewDate)` owns the editable PER-WEEKDAY schedule, persisted
@@ -256,7 +257,7 @@ const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
   // Sandbox build marker — WhatsApp module under local test, NOT a release.
   // The formal version bump happens on "give me the deployment version".
-  version:"17.2.0-wa-sandbox",
+  version:"17.3.0-wa-sandbox",
   sandbox:"WhatsApp inbox + simulator (localhost only)",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
@@ -667,9 +668,12 @@ function BookingApp(){
     bookings, tableBlocks,
     saveBookings, saveBlocks,
     isOnline, writeWarning, setWriteWarning,
-    loadBannerShown, reconnectShown, resyncing,
+    loadBannerShown, reconnectShown, resyncing, bookingsReady,
     firstLoadCount,
   } = usePersistence({ autoOptimizer, nowMins });
+  // v17.3.0: real-time device presence (connection-dot popover). Ephemeral node,
+  // exempt from the CAS rule — see ./hooks/usePresence.js.
+  const { devices: presenceDevices, myKey: presenceKey } = usePresence();
   // ── v14.4.0 / v15.0.0: Operating hours (Firebase settings/operatingHours, shared) ──
   // Now PER-WEEKDAY. The hook applies the ACTIVE view-day's hours to constants.js's
   // live OPEN/CLOSE/GRID_CLOSE on each render (keyed to viewDate); `weekHours` drives
@@ -2263,6 +2267,8 @@ function BookingApp(){
   // top one changes, the old floats out as the new floats in; they overlap in
   // the same grid cell (gridArea 1/1) so the swap is a crossfade in place.
   const statusToasts=[
+    {key:"loading",on:!bookingsReady,node:<div
+      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Loading bookings…</div>},
     {key:"resync",on:resyncing,node:<div
       style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.</div>},
     {key:"reconnect",on:reconnectShown,node:<div
@@ -2547,7 +2553,7 @@ function BookingApp(){
               style={{position:"relative",background:"var(--wa-green)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button>:null}<button
               onClick={function(){signOut(auth);}}
               className="mgt-hover-scale"
-              style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button><ConnectionStatus connected={isOnline} userEmail={auth.currentUser&&auth.currentUser.email} /></div></div><div
+              style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button><ConnectionStatus connected={isOnline} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} /></div></div><div
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
