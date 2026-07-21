@@ -78,6 +78,25 @@ export function BookingFormModal({
   // (new bookings only) pre-fills size/preference from the latest booking, the
   // same fields Book Again pre-fills.
   const [phoneFocus,setPhoneFocus]=useState(false);
+  // v17.3.0: tap-vs-scroll disambiguation for the autocomplete rows. Now that the
+  // dropdowns scroll (maxHeight), selecting on `onTouchStart` made a swipe-scroll
+  // immediately pick a row — rows past the fold were unreachable on touch. Instead
+  // we RECORD the touch start, only select on `onTouchEnd` if the finger barely
+  // moved (a tap, not a scroll), and suppress the synthesized mouse event that
+  // follows a touch. `acRowSelect(fn)` returns the shared handler bundle so both
+  // dropdowns reuse it. React makes touch listeners passive, so we never rely on
+  // preventDefault — native scroll is left free.
+  const acTouch=useRef({x:0,y:0,scroll:false,ts:0});
+  function acRowHandlers(select){
+    return {
+      // Desktop: mousedown beats the input's blur (which would unmount the list).
+      // Guard: ignore the synthesized mousedown that follows a touch (within 600ms).
+      onMouseDown:function(e){ if(Date.now()-acTouch.current.ts<600) return; e.preventDefault(); select(); },
+      onTouchStart:function(e){ const t=e.touches&&e.touches[0]; acTouch.current={x:t?t.clientX:0,y:t?t.clientY:0,scroll:false,ts:Date.now()}; },
+      onTouchMove:function(e){ const t=e.touches&&e.touches[0]; if(t&&(Math.abs(t.clientX-acTouch.current.x)+Math.abs(t.clientY-acTouch.current.y))>12) acTouch.current.scroll=true; },
+      onTouchEnd:function(e){ acTouch.current.ts=Date.now(); if(!acTouch.current.scroll) select(); },
+    };
+  }
   // v16.3.0 perf: memoised — rebuilt only when the bookings list changes, not on
   // every keystroke (the form draft lives in the parent, so EVERY field edit
   // re-renders this component).
@@ -181,8 +200,7 @@ export function BookingFormModal({
     <div
       key={c.phone}
       className="mgt-ac-row"
-      onMouseDown={function(e){e.preventDefault();pickCustomer(c);}}
-      onTouchStart={function(e){e.preventDefault();pickCustomer(c);}}
+      {...acRowHandlers(function(){pickCustomer(c);})}
       style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize:11,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{c.visits>0?<span style={{fontSize:10,fontWeight:700,color:"var(--success-text)",background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:8,padding:"2px 6px"}}>{c.visits+" visit"+(c.visits!==1?"s":"")}</span>:null}{c.noShowCount>0?<span style={{fontSize:10,fontWeight:700,color:"var(--warn-text)",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:8,padding:"2px 6px"}}>{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</span>:null}</div></div>
   );})}</div>:null;
   // v16.4.0: name-search dropdown — same opaque-sheet chrome as phoneDropdown.
@@ -192,8 +210,7 @@ export function BookingFormModal({
     <div
       key={r.key}
       className="mgt-ac-row"
-      onMouseDown={function(e){e.preventDefault();pickGuest(r);}}
-      onTouchStart={function(e){e.preventDefault();pickGuest(r);}}
+      {...acRowHandlers(function(){pickGuest(r);})}
       style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize:11,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")}</div></div>{r.isPhoneless?<span style={{fontSize:10,fontWeight:700,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:8,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
   );})}</div>:null;
 

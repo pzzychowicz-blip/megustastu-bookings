@@ -4835,3 +4835,20 @@ toast, usePresence wiring, version → 17.3.0), `CLAUDE.md`, `REFACTOR_LOG.md`.
   the throttled-socket reloads self-converged to 1 within ~8s (server-side onDisconnect).
 
 Build clean; main chunk **185.81 kB gz** (+1.43 kB over the v17.2.0 baseline).
+
+**/code-review fixes (same version):** (a) **usePresence reconnect** — the `.info/connected`
+listener never cleared `myRefRef.current` on disconnect, so after the server's onDisconnect
+removed a device's child, the reconnect's re-register guard (`if(myRefRef.current) return`)
+blocked writing a fresh child — the device VANISHED from `presence` for the rest of the
+session (sleep/wake, offline blip; likely in this tablet environment). Fixed by nulling the
+ref on `.info/connected: false` so the next connect re-registers. Verified live: an offline→
+online cycle re-registered with a NEW push-key (exactly one entry), where before the fix the
+node stayed empty. (b) **Autocomplete rows unreachable on touch** — rows selected on
+`onTouchStart`, so once the lists became scrollable a swipe-scroll immediately picked a row
+(React makes touch listeners passive, so the `preventDefault` couldn't even block native
+scroll). Replaced with a shared `acRowHandlers(select)` bundle: RECORD the touch on
+`onTouchStart`, select on `onTouchEnd` only if the finger barely moved (<12px = a tap, not a
+scroll), `onTouchMove` flags a scroll, and `onMouseDown` (desktop, beats the input blur)
+suppresses the synthesized post-touch mouse event within 600ms. Desktop mouse selection
+re-verified live (row click fills name+phone, closes the list); the tap-vs-scroll branch is
+standard and left to manual QA on a device. Build clean; main **185.96 kB gz**.

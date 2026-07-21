@@ -51,8 +51,15 @@ export function usePresence(){
     const email=(auth.currentUser&&auth.currentUser.email)||"unknown";
     let active=true;
     const unsub=onValue(ref(db,".info/connected"),function(snap){
-      if(snap.val()!==true) return;              // only write once actually connected
       if(!active) return;
+      if(snap.val()!==true){
+        // Disconnected — the server fires our onDisconnect and removes this child.
+        // CLEAR the ref so the NEXT connect re-registers a fresh child; without this
+        // the guard below would block re-registration and the device would vanish
+        // from `presence` for the rest of the session (sleep/wake, offline blip).
+        myRefRef.current=null;
+        return;
+      }
       if(myRefRef.current) return;                // already registered this connection
       const myRef=push(ref(db,"presence"));
       myRefRef.current=myRef;
