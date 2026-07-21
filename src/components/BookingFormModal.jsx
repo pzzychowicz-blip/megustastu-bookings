@@ -83,7 +83,7 @@ export function BookingFormModal({
   // re-renders this component).
   const custIdx=useMemo(function(){return customerIndex(bookings);},[bookings]);
   const phoneMatches=phoneFocus&&hasRealPhone(form.phone)
-    ?searchCustomers(custIdx,form.phone,5).filter(function(c){
+    ?searchCustomers(custIdx,form.phone,20).filter(function(c){
       // hide an exact already-applied selection so the dropdown closes itself
       return !(normalizePhone(form.phone)===c.phone&&form.name===c.name);
     })
@@ -107,7 +107,7 @@ export function BookingFormModal({
   // (an edit already has its customer). A phone-less pick fills only the name.
   const [nameFocus,setNameFocus]=useState(false);
   const nameMatches=(nameFocus&&!editId&&String(form.name||"").trim().length>=2)
-    ?searchGuestsByName(bookings,custIdx,form.name,6).filter(function(r){
+    ?searchGuestsByName(bookings,custIdx,form.name,20).filter(function(r){
       // Hide an exact already-applied PHONE-customer selection (name+phone both
       // match = this row is what's in the form) so a refocused dropdown isn't
       // noise. Phone-LESS rows are deliberately NOT self-hidden (/code-review):
@@ -177,7 +177,7 @@ export function BookingFormModal({
   // Dropdown rows use onMouseDown/onTouchStart (fire BEFORE the input's blur)
   // so the tap lands before phoneFocus flips false. Opaque sheet token per the
   // popover rule (a translucent card reads see-through over form content).
-  const phoneDropdown=phoneMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-ac-menu)",border:"1px solid var(--border-sheet)",borderRadius:12,boxShadow:"var(--shadow-sheet)",overflow:"hidden"}}>{phoneMatches.map(function(c){return (
+  const phoneDropdown=phoneMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-ac-menu)",border:"1px solid var(--border-sheet)",borderRadius:12,boxShadow:"var(--shadow-sheet)",overflowX:"hidden",overflowY:"auto",maxHeight:264}}>{phoneMatches.map(function(c){return (
     <div
       key={c.phone}
       className="mgt-ac-row"
@@ -188,7 +188,7 @@ export function BookingFormModal({
   // v16.4.0: name-search dropdown — same opaque-sheet chrome as phoneDropdown.
   // Each row shows the phone (or "no phone") + last date so two same-name
   // phone-less guests are visually distinguishable (they are separate rows).
-  const nameDropdown=nameMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-ac-menu)",border:"1px solid var(--border-sheet)",borderRadius:12,boxShadow:"var(--shadow-sheet)",overflow:"hidden"}}>{nameMatches.map(function(r){return (
+  const nameDropdown=nameMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-ac-menu)",border:"1px solid var(--border-sheet)",borderRadius:12,boxShadow:"var(--shadow-sheet)",overflowX:"hidden",overflowY:"auto",maxHeight:264}}>{nameMatches.map(function(r){return (
     <div
       key={r.key}
       className="mgt-ac-row"

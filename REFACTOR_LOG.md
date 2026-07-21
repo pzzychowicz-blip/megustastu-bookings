@@ -4782,3 +4782,56 @@ the established per-device (App-width) and settings/general (Preferences stepper
 scalar props keep the TimelineView memo intact, and the stale-closure burst-click quirk in
 `onSetTlSetting` matches the pre-existing `onSetAppWidth` stepper contract (one step per
 render — fine for human taps). Build clean; main 184.38 kB gz.
+
+---
+
+## v17.3.0 — Loading toast · scrollable autocomplete · device presence (2026-07-21)
+
+Three staff-facing QoL fixes, one branch. Rolling-safe: **no Firebase rules/shape/console
+step** (the new `presence` node inherits the top-level `.write: auth != null` with no
+`.validate`).
+
+**Files changed:** `src/hooks/usePersistence.js` (new `bookingsReady` state), NEW
+`src/hooks/usePresence.js`, `src/components/ConnectionStatus.jsx` (device list),
+`src/components/BookingFormModal.jsx` (dropdown caps + scroll), `src/App.jsx` (loading
+toast, usePresence wiring, version → 17.3.0), `CLAUDE.md`, `REFACTOR_LOG.md`.
+
+**Behavioural change:** Yes (3 additive features; no change to existing flows).
+
+1. **"⟳ Loading bookings…" floating toast.** After the app shell paints, `bookings` is
+   `[]` until the first Firebase snapshot lands — a real gap on a poor connection that
+   looked "ready but empty". `usePersistence` gains a `bookingsReady` state (false until
+   the first `bookings` `onValue`, also set in `resync()`'s success `.then`), and App adds
+   a `loading` entry as the FIRST element of `statusToasts` (`on:!bookingsReady`). Since
+   `topToastKey` picks the first `on:true`, the loading pill shows until data arrives, then
+   the existing green "Firebase connected — N loaded" toast takes over. Reuses the existing
+   floating-toast layer (offline-token shell), so it never reflows the grid.
+
+2. **Scrollable autocomplete dropdowns.** The phone (`searchCustomers(...,5)`) and name
+   (`searchGuestsByName(...,6)`) dropdowns hard-capped their lists with `overflow:hidden`.
+   Caps raised to 20 and both containers switched to `overflowX:hidden,overflowY:auto` +
+   `maxHeight:264` (≈5 rows) — ~5 rows visible, the rest reachable by scroll (better on
+   small screens). No row-markup change.
+
+3. **Device presence in the connection popover.** NEW `usePresence.js` hook: on
+   `.info/connected` it pushes ONE ephemeral child `presence/{pushKey}` = {email,
+   ua:deviceLabel(), since:serverTimestamp} with `onDisconnect().remove()` (self-cleans on
+   tab-close/sleep/drop), and subscribes to `presence` → returns {devices[], myKey}.
+   `ConnectionStatus` renders a new "Connected devices (N)" section below "Signed in as":
+   per device email · device label · "since" (relative, computed at open — no ticking
+   clock), current device tagged "This device", list scrolls at `maxHeight:200`, sorted
+   this-device-first then most-recent. EXEMPT from the CAS/revGuard rule (ephemeral,
+   per-connection, disjoint path — see CLAUDE.md "Rule of law" exception).
+
+**Verification (live in DEV, worktree served, `__MGT_BUILD__.version==="17.3.0"`):**
+- Loading toast: forced a genuine pre-snapshot window via a temporary WebSocket throttle in
+  index.html (reverted after) → "⟳ Loading bookings…" showed top-center during the gap;
+  on a clean load it never sticks (cleared once the snapshot arrived). Console error-free.
+- Dropdowns: seeded 7 test customers sharing a `611` phone prefix → 9 rows rendered,
+  container clamped to 264px with `overflowY:auto`, scrollHeight 405 > clientHeight 264
+  (scrollable); ~5.5 rows visible in the screenshot. Test data cleaned up afterward.
+- Presence: opened a 2nd tab → popover live-updated to "Connected devices (2)" with the new
+  Mac·Chrome row + "since"; closed it → back to (1) via onDisconnect. Stale entries left by
+  the throttled-socket reloads self-converged to 1 within ~8s (server-side onDisconnect).
+
+Build clean; main chunk **185.81 kB gz** (+1.43 kB over the v17.2.0 baseline).

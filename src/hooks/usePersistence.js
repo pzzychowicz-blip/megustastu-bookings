@@ -63,6 +63,12 @@ function bookingChanged(a,b){return contentKey(a)!==contentKey(b);}
 export function usePersistence({ autoOptimizer, nowMins }){
   const [bookings, setBookings] = useState([]);
   const [tableBlocks, setTableBlocks] = useState([]);
+  // v17.3.0: has the FIRST bookings snapshot arrived from Firebase? Drives the
+  // "⟳ Loading bookings…" floating toast in App — before this flips true the
+  // screen shows an empty [] state that looks ready but isn't (a real gap on a
+  // poor connection). Distinct from `bookingsLoaded` (a ref, no re-render) and
+  // from `loadBannerShown` (the 6s post-load green banner).
+  const [bookingsReady, setBookingsReady] = useState(false);
   // ── Firebase write-guard system ─────────────────────────────────────────────
   // These refs track whether we've received AT LEAST ONE onValue callback from
   // Firebase for each path. Until that's happened, React state is [] / {}
@@ -171,6 +177,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       arrayShapeRef.current=Array.isArray(bVal); // v15.5.0: keep the migration/shape gate fresh
       const bArr=bVal?sanitizeAll(bVal):[];
       setBookings(bArr);
+      setBookingsReady(true); // v17.3.0: a resync pull also proves data is present
       if(firstLoadCount.current===null) firstLoadCount.current=bArr.length;
       const tVal=snaps[1].val();
       if(tVal){const a=Array.isArray(tVal)?tVal:Object.values(tVal);setTableBlocks(a.filter(Boolean));}
@@ -385,6 +392,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
         setLoadBannerShown(true);
       }
       bookingsLoaded.current=true;
+      setBookingsReady(true); // v17.3.0: first snapshot landed — drop the loading toast
       clearStale(); // v15.2.0: a live server snapshot proves the local data is current
       // v15.5.0: one-time lazy migration legacy-array → per-booking child nodes.
       // Write the keyed object once; the echo comes back as an object so isArrayShape
@@ -545,7 +553,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
     bookings, tableBlocks,
     saveBookings, saveBlocks,
     isOnline, writeWarning, setWriteWarning,
-    loadBannerShown, reconnectShown, resyncing,
+    loadBannerShown, reconnectShown, resyncing, bookingsReady,
     // firstLoadCount is exposed as a ref because the load-banner JSX in
     // BookingApp reads .current to show the booking count from the first
     // successful Firebase load. It must remain a ref (not state) so
