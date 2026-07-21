@@ -15,6 +15,9 @@
 // Props:
 //   connected  (bool)    — isOnline from usePersistence()
 //   userEmail  (string)  — currently signed-in user's email
+//   devices    (array)   — v17.3.0: live presence list from usePresence()
+//                          [{key,email,ua,since}] — all connected tabs/devices
+//   myKey      (string)  — v17.3.0: this connection's presence key ("This device")
 //
 // v16.2.0 review fix: the anchor side is MEASURED at open time, not guessed
 // from isMobile. The dot's x position depends on header flex-wrap, not on
@@ -27,10 +30,22 @@
 import { useEffect, useRef, useState } from "react";
 import { S } from "../lib/constants";
 
-// Rendered popover width: minWidth 220 + 2×12 padding + 2×1 border.
-const POPOVER_W = 246;
+// Rendered popover width: minWidth 260 + 2×12 padding + 2×1 border.
+const POPOVER_W = 286;
 
-export function ConnectionStatus({ connected, userEmail }) {
+// v17.3.0: compact "connected since" — a relative string computed at render time
+// (the popover only opens on click, so no ticking clock is needed).
+function sinceText(ts) {
+  if (!ts) return "";
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return mins + "m ago";
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + "h ago";
+  return Math.floor(hrs / 24) + "d ago";
+}
+
+export function ConnectionStatus({ connected, userEmail, devices, myKey }) {
   const [open, setOpen] = useState(false);
   const [alignRight, setAlignRight] = useState(true);
   const wrapRef = useRef(null);
@@ -67,6 +82,12 @@ export function ConnectionStatus({ connected, userEmail }) {
   const dotColor = connected ? "var(--status-online)" : "var(--status-offline)";
   const dotGlow = connected ? "var(--status-online-glow)" : "var(--status-offline-glow)";
   const statusText = connected ? "Connected" : "Connection lost";
+  // v17.3.0: this device first, then most-recently-connected — so "This device"
+  // sits at the top of the list.
+  const deviceList = (devices || []).slice().sort(function (a, b) {
+    if ((a.key === myKey) !== (b.key === myKey)) return a.key === myKey ? -1 : 1;
+    return (b.since || 0) - (a.since || 0);
+  });
 
   return (
     <div ref={wrapRef} style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
@@ -110,7 +131,7 @@ export function ConnectionStatus({ connected, userEmail }) {
             right: alignRight ? 0 : "auto",
             left: alignRight ? "auto" : 0,
             zIndex: 30,
-            minWidth: 220,
+            minWidth: 260,
             padding: 12,
             background: "var(--bg-ac-menu)",
             border: "1px solid var(--border-card)",
@@ -144,6 +165,45 @@ export function ConnectionStatus({ connected, userEmail }) {
               {userEmail || "—"}
             </div>
           </div>
+          {deviceList.length ? (
+            <div style={{ borderTop: "1px solid var(--border-soft)", marginTop: 8, paddingTop: 8 }}>
+              <div style={{ fontSize: 11, marginBottom: 6, color: S.muted }}>
+                {"Connected device" + (deviceList.length === 1 ? "" : "s") + " (" + deviceList.length + ")"}
+              </div>
+              <div style={{ maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                {deviceList.map(function (d) {
+                  const mine = d.key === myKey;
+                  return (
+                    <div key={d.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span
+                        style={{
+                          display: "inline-block", width: 7, height: 7, borderRadius: "50%",
+                          background: "var(--status-online)", flexShrink: 0,
+                        }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: S.text, wordBreak: "break-all" }}>{d.email}</div>
+                        <div style={{ fontSize: 11, color: S.muted }}>
+                          {d.ua + (sinceText(d.since) ? "  ·  " + sinceText(d.since) : "")}
+                        </div>
+                      </div>
+                      {mine ? (
+                        <span
+                          style={{
+                            fontSize: 10, fontWeight: 700, color: "var(--success-text)",
+                            background: "var(--suggest-bg)", border: "1px solid var(--suggest-border)",
+                            borderRadius: 8, padding: "2px 6px", flexShrink: 0, whiteSpace: "nowrap",
+                          }}
+                        >
+                          This device
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
