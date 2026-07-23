@@ -4852,3 +4852,86 @@ scroll), `onTouchMove` flags a scroll, and `onMouseDown` (desktop, beats the inp
 suppresses the synthesized post-touch mouse event within 600ms. Desktop mouse selection
 re-verified live (row click fills name+phone, closes the list); the tap-vs-scroll branch is
 standard and left to manual QA on a device. Build clean; main **185.96 kB gz**.
+
+---
+
+## v17.3.1 — Find-a-booking scrolls the focused List card into view (2026-07-23)
+
+**Scope:** patch, client-only. No Firebase/rules/shape change (rolling deploy).
+
+**Files:** `src/App.jsx` (+`listFocusReq` state/`bumpListFocus`, 3 bump sites, `focusReq`
+prop, version), `src/components/ListView.jsx` (+`focusReq` prop + scroll effect).
+
+**Problem (Patryk):** picking a booking in Find a booking jumps to its day, switches to List
+and paints the accent focus ring — but the view stays scrolled at the top of the list, so on
+a busy day the selected card sits below the fold and the jump reads as "nothing happened".
+The List view had NO scroll-into-view logic at all (`grep scrollIntoView` → 0 hits), so the
+same gap hit ↑/↓ keyboard card navigation once the day overflowed the viewport.
+
+**Design — a scroll REQUEST counter, not "scroll on selection change".** A plain *click* on a
+card also sets `selectedListId`, and scrolling the page under the user's cursor/finger there
+would be wrong. So App owns `listFocusReq` (an integer) bumped ONLY at the three
+*programmatic* selection sites — the `SearchPanel onPick` same-day branch, the
+`pendingSelectRef` consumption inside the `[viewDate]` effect (the cross-day jump), and the
+↑/↓ handler (via `kbRef`) — and passes it to ListView as a scalar prop (memo-safe, the
+v17.2.0 `tlSettings` convention). ListView's effect keys on `[focusReq]`, finds the card by
+its EXISTING `data-flip-id` (no second id attribute; booking ids are path-safe `[0-9a-z]`)
+and calls `scrollIntoView({block:"center"})`, `behavior:"auto"` when
+`documentElement.dataset.motion==="reduce"` (the v17.1.0 Reduce-animations contract) else
+`"smooth"`. Hooks sit ABOVE the empty-day early return (the v16.4.0 hook-count lesson).
+
+**Timing gotcha (found live, not in review):** a single rAF scroll is NOT enough — the target
+is rarely in its final position on the first frame. A cross-day jump plays through
+`SlideView`, and a completed/cancelled target has to wait for the finished fold's ~300ms
+`Reveal` to expand; in one live run the card landed on-screen but off-centre, and in another
+the scroll never happened at all (a mount cancelled mid-animation). The effect now re-scrolls
+on a short schedule (rAF + 120/300/550/850ms) that outlasts both animations; each repeat
+re-targets the same card and the last one wins. All timers cleared on cleanup.
+
+**Verification (live in DEV, worktree served, `__MGT_BUILD__.version==="17.3.1"`)** — on
+2026-07-10 (16 active + 8 finished cards, ~2.9k px of list):
+- cross-day search pick (completed "Harry") → card centred at top 340 of an 819px viewport;
+- same-day pick of an active card ("Marcos", last before the fold) → scrolled to max, card
+  visible at 609; same-day pick into the finished fold → centred at 340;
+- ↑/↓ nav walks the list keeping the focused card centred/visible;
+- **clicking** a card from scrollTop 0 leaves the scroll at 0 (ring applied, no yank);
+- Reduce animations ON → scroll is instant (final position at 60ms), still centred.
+Console error-free. Build clean; main chunk **186.15 kB gz** (+0.19 kB over v17.3.0).
+
+**Follow-up (same version) — click neutral space to deselect.** The focus ring persisted until
+another card was picked or the day changed; Patryk asked for a click on any neutral space to
+clear it. A mount-only `mousedown` + `touchstart` listener in App (sibling of the keyboard
+effect, reading the SAME `kbRef` so it registers once) clears `selectedListId` when the event
+target has no `closest("[data-flip-id]")` ancestor — i.e. anywhere outside a booking card,
+including its own action buttons. Guarded on `view==="list"` and on the keyboard handler's
+`anyModal` expression, so a modal opened FROM a card (Edit / = Tables) can't drop the
+selection its own actions operate on, and the SearchPanel row that sets the selection (its
+mousedown lands while `showSearch` is still true) is likewise exempt. Verified live:
+background mousedown clears the ring; card click/mousedown keeps it; ↑/↓ selection persists;
+a search pick still lands selected + centred. Build clean; main **186.32 kB gz**.
+
+**Follow-up #2 (same version) — Esc clears the List selection.** The keyboard counterpart of
+the neutral-space click: a final branch at the END of the Escape z-order chain (App's keydown
+handler) clears `selectedListId` when `view==="list"` and nothing modal is open. Last in the
+chain by design — with a modal up, Esc still closes the modal and LEAVES the selection intact
+(the card's own Edit/= Tables flow), so it takes a second Esc to deselect. `Shortcuts.jsx`'s
+Esc row relabelled "Close current window (or clear the List selection)". Verified live after a
+full reload (HMR does NOT re-run a `[]`-dep effect, so the stale keydown listener survives an
+edit — re-check keyboard changes on a reloaded page): search pick → Esc clears the ring → ↑/↓
+re-selects; with the Manual modal open, Esc #1 closes it with the ring intact and Esc #2
+clears; Esc in Timeline view is a no-op. Build clean; main **186.34 kB gz**.
+
+**/code-review fixes (same version):** (a) **Deselect-on-touch fired on SCROLL** — the
+neutral-space handler also listened on `touchstart`, so the first frame of a swipe-scroll
+(the finger landing on the list background) wiped the selection on a tablet; the v17.3.0
+autocomplete lesson exactly. Dropped the `touchstart` listener entirely: a tap on a
+touchscreen still emits the compatibility `mousedown`, a scroll gesture does not — so taps
+deselect and scrolling doesn't. (b) **`data-flip-id` is not List-exclusive** — TimelineView
+tags its blocks with the same attribute AND the same booking ids, so the document-wide
+`querySelector` could resolve to a timeline block (e.g. mid view-transition) and scroll to the
+wrong element. The lookup is now scoped to a new `rootRef` on ListView's own root div.
+Re-verified live (search jump, fold path, ↑/↓, click, Esc, modal precedence). NB the DEV
+Browser pane was `visibilityState:"hidden"` for this round — a hidden tab runs NO smooth
+scroll at all and throttles timers to ~1s, so the checks were re-run with the reduce-motion
+(`behavior:"auto"`) path; the smooth path was verified earlier with the pane visible. Build
+clean; main **186.32 kB gz**.
