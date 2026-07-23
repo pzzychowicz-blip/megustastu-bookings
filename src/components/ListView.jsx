@@ -28,7 +28,7 @@
 // exclude the hidden cards while the disclosure is closed. The card JSX is
 // unchanged, just hoisted into renderCard() so both groups share it.
 
-import { useEffect, useMemo, useState, memo } from "react";
+import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
@@ -46,7 +46,7 @@ export const ListView = memo(function ListView({
   bookings, date, onEdit, onStatus, onDelete, onManual,
   nowMins = 0, warnings = {},
   late = {}, onNoShow = () => {},
-  selectedId = null, onSelect = () => {},
+  selectedId = null, onSelect = () => {}, focusReq = 0,
   showFinished = false, onToggleFinished = () => {},
   currency = "€"
 }) {
@@ -96,12 +96,45 @@ export const ListView = memo(function ListView({
     return a && a.until > Date.now() ? a.from : null;
   }
   const flipRef = useFlip([active.map(function (b) { return b.id; }).join(",")]);
+  // v17.3.1: the List's own root — the scroll-into-view lookup below is scoped
+  // to it (TimelineView tags its blocks with the same data-flip-id values).
+  const rootRef = useRef(null);
 
   // v16.0.0: repeat no-show offender map (2+ past no-shows on this phone,
   // counted across ALL dates — the full bookings prop, not just `day`).
   // v17.1.0 perf: memoized (walks every booking ever) + moved above the
   // empty-day early return (rules of hooks — the v16.4.0 lesson).
   const nsMap = useMemo(() => noShowMap(bookings), [bookings]);
+
+  // v17.3.1: scroll the focused card into view on a PROGRAMMATIC selection —
+  // a search-jump (SearchPanel → App's pendingSelectRef / same-day branch) or
+  // ↑/↓ keyboard nav. Keyed on App's `focusReq` counter, NOT on `selectedId`,
+  // so clicking a card never yanks the page under the finger/cursor.
+  // The card element is found by its existing `data-flip-id` (booking ids are
+  // path-safe [0-9a-z], so the attribute selector is safe to build) — scoped to
+  // the List's OWN root, because TimelineView tags its blocks with the same
+  // attribute and the same ids, and a document-wide query could pick one of
+  // those up (e.g. mid view-transition) and scroll to the wrong element.
+  // Timing: the target is often NOT in its final position on the first frame —
+  // a day-change jump plays through SlideView, and a completed/cancelled target
+  // has to wait for the finished fold's ~300ms Reveal to expand (verified live:
+  // a single rAF scroll lands the card on screen but off-centre, and a mount
+  // that gets cancelled mid-animation can miss entirely). So re-scroll on a
+  // short schedule that outlasts both animations; each repeat just re-targets
+  // the same card, and the last one wins.
+  useEffect(function () {
+    if (!focusReq || !selectedId) return;
+    const behavior = document.documentElement.dataset.motion === "reduce" ? "auto" : "smooth";
+    function go() {
+      const root = rootRef.current;
+      const el = root ? root.querySelector('[data-flip-id="' + selectedId + '"]') : null;
+      if (el) el.scrollIntoView({ block: "center", behavior: behavior });
+    }
+    const raf = requestAnimationFrame(go);
+    const timers = [120, 300, 550, 850].map(function (ms) { return setTimeout(go, ms); });
+    return function () { cancelAnimationFrame(raf); timers.forEach(clearTimeout); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusReq]);
 
   if (!day.length) {
     return (
@@ -312,7 +345,7 @@ export const ListView = memo(function ListView({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div ref={rootRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div ref={flipRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {active.map(renderCard)}
       </div>

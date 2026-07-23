@@ -241,7 +241,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.3.0",
+  version:"17.3.1",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -589,6 +589,12 @@ function BookingApp(){
   const [showSettings, setShowSettings] = useState(false);
   const [showSearch, setShowSearch] = useState(false); // v16.3.0: global booking search panel
   const pendingSelectRef = useRef(null); // v16.3.0: booking id to focus in the List after a search-jump changes the day
+  // v17.3.1: scroll-into-view REQUEST counter for the List's focused card. A
+  // plain click on a card must NOT scroll the page, so ListView scrolls on this
+  // counter changing (bumped only at the PROGRAMMATIC selection sites — the
+  // search-jump and the ↑/↓ keyboard nav), never on `selectedListId` alone.
+  const [listFocusReq, setListFocusReq] = useState(0);
+  function bumpListFocus(){ setListFocusReq(function(n){return n+1;}); }
   // v14.6.0: Summary panel expand/collapse (toggled by click or the g shortcut).
   const [summaryOpen, setSummaryOpen] = useState(false);
   // v14.7.0: Week View popover (opened from the Summary panel's Week button).
@@ -822,6 +828,7 @@ function BookingApp(){
       setSelectedListId(pend);
       const b=bookings.find(function(x){return x.id===pend;});
       setShowFinished(!!(b&&(b.status==="completed"||b.status==="cancelled")));
+      bumpListFocus(); // v17.3.1: scroll the jumped-to card into view
     }else{
       setSelectedListId(null);setShowFinished(false);
     }
@@ -1755,6 +1762,7 @@ function BookingApp(){
     bookings:bookings,
     // v14.4.0: List-view selection + the handlers its A/E/S/C/Delete shortcuts call.
     listDay:listDaySorted,selectedListId:selectedListId,setSelectedListId:setSelectedListId,
+    bumpListFocus:bumpListFocus, // v17.3.1: ↑/↓ scrolls the focused card into view
     openEdit:openEdit,updateStatus:updateStatus,
     // v14.4.0: N → new reminder while the Settings Reminders tab is open.
     openNewReminder:openNewReminder,
@@ -1798,6 +1806,10 @@ function BookingApp(){
         if(K.showWalkin){e.preventDefault();K.setShowWalkin(false);return;}
         if(K.showWeek){e.preventDefault();K.setShowWeek(false);return;}
         if(K.showForm){e.preventDefault();K.setShowForm(false);return;}
+        // v17.3.1: nothing modal is open — Esc drops the List selection (the
+        // keyboard counterpart of clicking neutral space). LAST in the chain, so
+        // Esc still closes a modal first when one is up.
+        if(K.view==="list"&&K.selectedListId){e.preventDefault();K.setSelectedListId(null);return;}
         return;
       }
       // ── Enter: primary action of topmost modal ──
@@ -1951,6 +1963,7 @@ function BookingApp(){
           const idx=list.findIndex(function(b){return b.id===K.selectedListId;});
           const ni=idx<0?(k==="ArrowDown"?0:list.length-1):(k==="ArrowDown"?Math.min(list.length-1,idx+1):Math.max(0,idx-1));
           K.setSelectedListId(list[ni].id);
+          K.bumpListFocus();
           return;
         }
         const sel=K.selectedListId?list.find(function(b){return b.id===K.selectedListId;}):null;
@@ -2006,6 +2019,31 @@ function BookingApp(){
     }
     window.addEventListener("keydown",handler);
     return function(){window.removeEventListener("keydown",handler);};
+  },[]);
+
+  // v17.3.1: click on neutral space (anywhere outside a booking card) clears the
+  // List selection — the focus ring is a keyboard/search target, so leaving it
+  // stuck after the user has moved on is confusing. Reads the same kbRef as the
+  // keyboard handler so the listener can be registered ONCE (mount-only).
+  // Guards: List view only, and never while a modal is open (a card's Edit /
+  // Tables modal must not drop the selection its own actions act on).
+  useEffect(function(){
+    function onDown(e){
+      const K=kbRef.current;
+      if(K.view!=="list"||!K.selectedListId) return;
+      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
+      if(anyModal) return;
+      const t=e.target;
+      if(t&&t.closest&&t.closest("[data-flip-id]")) return; // inside a card (incl. its buttons)
+      K.setSelectedListId(null);
+    }
+    // MOUSEDOWN ONLY — deliberately no touchstart. A tap on a touchscreen still
+    // fires the compatibility mousedown, so taps are covered; a swipe-SCROLL
+    // does not, so scrolling the list no longer wipes the selection (the
+    // v17.3.0 autocomplete lesson: a touchstart-driven action can't tell a tap
+    // from the first frame of a scroll).
+    window.addEventListener("mousedown",onDown);
+    return function(){window.removeEventListener("mousedown",onDown);};
   },[]);
 
   function updateStatus(id,status){
@@ -2368,6 +2406,7 @@ function BookingApp(){
     late={lateMap}
     onNoShow={VA.onNoShow}
     selectedId={selectedListId}
+    focusReq={listFocusReq}
     onSelect={VA.onSelect}
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
@@ -2502,7 +2541,7 @@ function BookingApp(){
               onOpenHistory={function(){setShowHistory(true);}}
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}

@@ -103,7 +103,7 @@ const SHORTCUT_SECTIONS = [
     { keys: ["N"],       label: "New reminder (Reminders tab)" },
   ]},
   { title: "Universal", rows: [
-    { keys: ["Esc"],     label: "Close current window" },
+    { keys: ["Esc"],     label: "Close current window (or clear the List selection)" },
     { keys: ["Enter"],   label: "Confirm primary action" },
   ]},
 ];
