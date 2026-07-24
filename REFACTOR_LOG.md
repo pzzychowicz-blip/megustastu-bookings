@@ -5236,3 +5236,30 @@ UNCHANGED (sha256-Q6OfSak…) — the head edits don't touch the no-flash script
 lint 0 errors; 51/51 tests; DEV boots v17.4.0 with the manifest served and
 ZERO service workers registered (prod-only gate confirmed). Install + offline
 behaviour on a real tablet = post-deploy verification (Patryk).
+
+### v17.4.0 part 2 — General undo: delete + edit join cancel/no-show
+
+**Files: `src/App.jsx`, `src/components/StatusToasts.jsx`, `CLAUDE.md` · feature #3 from the shortlist (Patryk-picked via AskUserQuestion).**
+
+The v16.3.0 cancel/no-show snapshot+toast pattern is generalised to **three**
+undoable actions. `undoInfo` gains a `kind` (`"cancel"|"delete"|"edit"`); a new
+`armUndo(snapshot, kind, noShow)` parks the pre-action object (single slot — a
+newer action replaces it, undoSecs timer unchanged) and `undoCancel` becomes
+the shared **`undoLastAction`**, whose existing `exists ? map : concat` restore
+shape covers all three kinds unchanged: a DELETE is gone from `prev` → concat
+re-adds it; a CANCEL/EDIT is present → map swaps the snapshot back in. History
+note follows the kind ("deletion undone" / "edit undone" / "cancellation
+undone"), and the toast label follows it too ("Booking deleted" / "Booking
+updated" / "Booking cancelled" / "Marked no-show"). Call sites: `delBooking`
+arms with the pre-delete `target`; `doSaveEdit` arms with the pre-edit `orig`
+(gated on the save `ok`, so a refused write never offers a bogus undo).
+
+**Recurring-occurrence note:** an undone DELETE deliberately leaves the rule's
+`skipDate` in place — the restored occurrence keeps its deterministic id, so
+the generator can't duplicate it; the skipDate merely stops a regeneration it
+no longer needs to perform.
+
+**Verification:** build clean (186.97 kB gz); 51/51 tests; lint 0 errors. Live
+DEV QA: delete → "Booking deleted" toast + Undo → booking restored; edit
+(20:30 → 16:45) → "Booking updated" toast + Undo → time reverted; BOTH survived
+a full reload (real Firebase writes, not local-only state); console clean.

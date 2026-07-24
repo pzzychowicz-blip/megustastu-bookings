@@ -695,7 +695,7 @@ function BookingApp(){
   const waitAvailRef = useRef({});
   const [waitAddedShown, setWaitAddedShown] = useState(false);
   const [waitNotifyDismissed, setWaitNotifyDismissed] = useState(function(){return new Set();}); // v16.3.0: session-only ✕-dismissed waitlist-free rows
-  const [undoInfo, setUndoInfo] = useState(null);   // v16.3.0: {snapshot, noShow} pending undo after a cancel/no-show
+  const [undoInfo, setUndoInfo] = useState(null);   // v17.4.0: {snapshot, kind:"cancel"|"delete"|"edit", noShow} — general undo (was cancel/no-show-only, v16.3.0)
   const undoTimerRef = useRef(null);                // 10s auto-clear timer for the undo toast
   const pendingWaitlistRef = useRef(null); // entry id being converted via Book
   // Derived: bookings with seated-today durations synced to live time.
@@ -1337,7 +1337,15 @@ function BookingApp(){
         }
         const clearM=!!f._clearManual;
         const wasSeatedLocked=orig&&isLocked(orig)&&!mt.length;
-        const editHist=orig?histEntry("edited: "+diffBooking(orig,f,size),getUser()):histEntry("edited",getUser());
+        // v17.4.0: the diff string is computed ONCE — it feeds the history entry
+        // AND the undo gate below. diffBooking returns the sentinel "saved (no
+        // field changes)" when nothing moved, which is exactly when undo must
+        // NOT be armed (saveBookings still returns true for an empty patch —
+        // persist() skips the write but reports dispatched — so `ok` alone
+        // would offer an Undo for a save that changed nothing).
+        const editDiff=orig?diffBooking(orig,f,size):"";
+        const editChanged=!!orig&&editDiff!=="saved (no field changes)";
+        const editHist=orig?histEntry("edited: "+editDiff,getUser()):histEntry("edited",getUser());
         // v14 p1: scheduledTime resolution.
         // - If user manually changed time in the form (f.time !== orig.time), that
         //   is an explicit reschedule → scheduledTime follows the new time.
@@ -1402,6 +1410,9 @@ function BookingApp(){
         // for a not-yet-persisted write — matches quick-action honesty).
         const ok=saveBookings(buildNextMemo);
         if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash();
+        // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
+        // (undo swaps it back in wholesale, incl. tables/status/duration).
+        if(ok&&editChanged) armUndo(orig,"edit",false);
         setShowForm(false);setViewDate(f.date);
   }
   function doSaveNew(f,v){
@@ -1735,7 +1746,12 @@ function BookingApp(){
       const okSkip=addSkipDate(target.recurringId,target.recurringDate,true);
       if(!okSkip){setWriteWarning("Still syncing standing bookings — try deleting again in a moment.");setConfirmDel(null);return;}
     }
-    const ok=saveBookings(function(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);if(ok) flash();}
+    const ok=saveBookings(function(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);
+    // v17.4.0: deletes are undoable too (general undo). The recurring skipDate
+    // added above deliberately STAYS on undo — the restored occurrence keeps
+    // its deterministic id, so the generator never duplicates it, and the
+    // skipDate just stops a REGENERATION it no longer needs to do.
+    if(ok){flash();armUndo(target,"delete",false);}}
 
   // v17.3.3: the global keyboard shortcuts (precedence rules, every key) and
   // the v17.3.1 neutral-space List-deselect mousedown listener were extracted
@@ -1845,25 +1861,41 @@ function BookingApp(){
     setConfirmCancel(null);
     if(ok){
       flash();
-      if(snapshot){
-        if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
-        setUndoInfo({snapshot:snapshot,noShow:!!noShow});
-        undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
-      }
+      armUndo(snapshot,"cancel",!!noShow);
     }
   }
-  // v16.3.0: restore the last-cancelled booking from its snapshot. Re-applies the
-  // pre-cancel object (status/tables/notes/noShow) + a history note, then runs
-  // bookingsAfterAction so the table re-places (if it was taken meanwhile, the
-  // optimizer/reconciliation resolves or flags it — accepted). Gated on `ok`.
-  function undoCancel(){
+  // v17.4.0 — GENERAL undo: the v16.3.0 cancel/no-show snapshot+toast pattern
+  // now also covers DELETE and form EDIT. armUndo parks one pending snapshot
+  // ({snapshot, kind:"cancel"|"delete"|"edit", noShow}) — single slot, a newer
+  // action replaces it — and the shared undoLastAction restores it: the
+  // exists?map:concat shape naturally covers all three kinds (delete → the
+  // booking is gone from prev → concat re-adds it; cancel/edit → map swaps the
+  // snapshot back in), then bookingsAfterAction re-places tables (if a table
+  // was taken meanwhile, the optimizer/reconciliation resolves or flags it —
+  // accepted, same as v16.3.0). Gated on the save `ok`.
+  //
+  // SCOPE (deliberate, v17.4.0): undo restores THE SNAPSHOTTED BOOKING ONLY.
+  // If the original action's bookingsAfterAction pass also moved OTHER
+  // bookings (a reshuffle), those moves are NOT reversed — with the optimizer
+  // ON the re-run usually re-places them, with it OFF they keep their new
+  // tables. Undo is "put this booking back", not a transactional rollback of
+  // the whole floor. The undo pill's `undoNote` says "tables re-optimised"
+  // when a reshuffle happened, so staff know the floor moved.
+  function armUndo(snapshot,kind,noShow){
+    if(!snapshot) return;
+    if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoInfo({snapshot:snapshot,kind:kind,noShow:!!noShow});
+    undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
+  }
+  function undoLastAction(){
     const info=undoInfo;
     if(!info||!info.snapshot) return;
     const user=getUser();
     const snap=info.snapshot;
+    const note=info.kind==="delete"?"deletion undone":info.kind==="edit"?"edit undone":"cancellation undone";
     const ok=saveBookings(function(b){
       const exists=b.some(function(x){return x.id===snap.id;});
-      const restored=Object.assign({},snap,{history:(snap.history||[]).concat([histEntry("cancellation undone",user)])});
+      const restored=Object.assign({},snap,{history:(snap.history||[]).concat([histEntry(note,user)])});
       const updated=exists?b.map(function(x){return x.id===snap.id?restored:x;}):b.concat([restored]);
       return bookingsAfterAction(updated,snap.date,tableBlocks,snap.id,false,autoOptimizer);
     });
@@ -2217,7 +2249,8 @@ function BookingApp(){
                 syncFix={syncFix}
                 waitAddedShown={waitAddedShown}
                 undoInfo={undoInfo}
-                onUndo={undoCancel}
+                onUndo={undoLastAction}
+                undoNote={reshuffled&&optimizerActiveFor(viewDate,autoOptimizer)?"tables re-optimised":""}
                 dragMsg={dragMsg}
                 reshuffled={reshuffled}
                 reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
