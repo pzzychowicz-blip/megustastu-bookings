@@ -4935,3 +4935,45 @@ Browser pane was `visibilityState:"hidden"` for this round — a hidden tab runs
 scroll at all and throttles timers to ~1s, so the checks were re-run with the reduce-motion
 (`behavior:"auto"`) path; the smooth path was verified earlier with the pane visible. Build
 clean; main **186.32 kB gz**.
+
+## v17.3.2 — Tech-debt quick wins: memoized efficiency scan + icon-button a11y (2026-07-24)
+
+**Scope:** patch, client-only. No Firebase/rules/shape change (rolling deploy). First
+increment of a tech-debt remediation plan (`/engineering:tech-debt` scan) — the low-effort
+perf + accessibility items; security-headers and a test-harness/CI are planned as separate
+follow-up branches.
+
+**Files:** `src/App.jsx` (memoize `inefficient`; `aria-label`+`title` on the date ‹/›
+chevrons and the ⏳ waitlist badge; version → 17.3.2), `src/components/WeekView.jsx`
+(`aria-label`+`title` on the Week/Month ‹/› chevrons).
+
+**Problem 1 — per-render optimizer scan.** `const inefficient=bookings.length>0&&
+checkInefficent(bookings,viewDate)` ran on EVERY BookingApp render. `checkInefficent`
+(booking-logic.js) filters the day's active non-locked bookings and calls `findBest` for each
+(each `findBest` walks ALL_TABLES + VALID_COMBOS with `canAssign`), so on a busy day it re-ran
+an O(N·combos) scan on every keystroke in the booking form — the form draft lives in
+BookingApp, so typing re-renders the whole component. It was the one heavy derivation the
+v17.1.0 memoization pass (which wrapped `liveBookings`/`overlapWarnings`/`lateMap`/`freeingList`
+for exactly this reason) missed. **Fix:** `useMemo(…,[bookings,viewDate])` — same shape as its
+siblings, identical value/behaviour (`inefficient` still feeds only `ineffShow`).
+
+**Problem 2 — unlabeled icon-only controls.** The date-nav ‹/› chevrons render their glyph via
+`dangerouslySetInnerHTML` (a bare `&#8249;`/`&#8250;` entity) with no accessible name, so a
+screen reader announced only "button". Same for the WeekView Week/Month chevrons and the ⏳
+waitlist badge (announced as the raw hourglass emoji + a number). **Fix:** added `aria-label`
+(and a matching `title` hover-tooltip — the pattern already used in `Settings.jsx`/`ListView.jsx`/
+`ViewTools.jsx`/`ConnectionStatus.jsx`) to each: "Previous/Next day", "Previous/Next
+week|month" (mode-aware in WeekView), and a descriptive waitlist label ("Waitlist — N waiting[,
+a table is free now]"). `ViewTools` (🔍/⚙) and `ConnectionStatus` (the dot) already carried both
+attributes — left untouched. The header's text buttons (Walk-in / + New / Log out / Today /
+view toggles) already have accessible text and needed nothing.
+
+**Not changed (deferred, Patryk's call):** the runtime viewport meta still sets
+`user-scalable=no,maximum-scale=1` (App.jsx) which disables pinch-zoom (WCAG 1.4.4) — a
+deliberate POS choice, flagged in the scan but not altered without confirmation.
+
+**Verification:** `npm run build` clean; DEV dev-server (worktree, port 5173) confirmed
+`__MGT_BUILD__.version==="17.3.2"`, the date chevrons expose `aria-label`/`title` in the a11y
+tree, ViewTools/ConnectionStatus labels intact, console error-free. Main chunk **186.42 kB gz**
+(+~0.1 over the v17.3.1 186.32 baseline — the added comment/labels; the memo is net-neutral in
+bundle size, a runtime win).
