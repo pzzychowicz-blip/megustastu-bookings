@@ -241,7 +241,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.3.1",
+  version:"17.3.2",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -799,7 +799,11 @@ function BookingApp(){
   // is unavailable at the moment of the write.
   function getUser(){return (auth.currentUser&&auth.currentUser.email)||"staff";}
 
-  const inefficient=bookings.length>0&&checkInefficent(bookings,viewDate);
+  // v17.3.2 perf: memoized like overlapWarnings/lateMap (v17.1.0). This ran
+  // checkInefficent (a findBest scan per non-locked booking) on EVERY BookingApp
+  // render — i.e. every form keystroke, since the form draft lives here — the one
+  // heavy derivation the v17.1.0 useMemo pass missed. Keyed on [bookings,viewDate].
+  const inefficient=useMemo(function(){return bookings.length>0&&checkInefficent(bookings,viewDate);},[bookings,viewDate]);
 
   // v14.4.0: the day's bookings in the SAME order ListView renders them
   // (status group, then time). Drives ↑/↓ keyboard navigation of selectedListId
@@ -2493,10 +2497,14 @@ function BookingApp(){
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
+              aria-label="Previous day"
+              title="Previous day (←)"
               dangerouslySetInnerHTML={{__html:"&#8249;"}} /><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
+              aria-label="Next day"
+              title="Next day (→)"
               dangerouslySetInnerHTML={{__html:"&#8250;"}} /><input
               type="date"
               value={viewDate}
@@ -2510,6 +2518,8 @@ function BookingApp(){
               Orange = a table currently fits someone waiting; slate = just waiting. */}
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
+              aria-label={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
+              title={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div>{/* v17.0.0 round 8: 🔍 + ⚙ live HERE (right of Summary) for every
               view — Timeline's legend and List's card-header each used to carry

@@ -4935,3 +4935,145 @@ Browser pane was `visibilityState:"hidden"` for this round — a hidden tab runs
 scroll at all and throttles timers to ~1s, so the checks were re-run with the reduce-motion
 (`behavior:"auto"`) path; the smooth path was verified earlier with the pane visible. Build
 clean; main **186.32 kB gz**.
+
+## v17.3.2 — Tech-debt quick wins: memoized efficiency scan + icon-button a11y (2026-07-24)
+
+**Scope:** patch, client-only. No Firebase/rules/shape change (rolling deploy). First
+increment of a tech-debt remediation plan (`/engineering:tech-debt` scan) — the low-effort
+perf + accessibility items; security-headers and a test-harness/CI are planned as separate
+follow-up branches.
+
+**Files:** `src/App.jsx` (memoize `inefficient`; `aria-label`+`title` on the date ‹/›
+chevrons and the ⏳ waitlist badge; version → 17.3.2), `src/components/WeekView.jsx`
+(`aria-label`+`title` on the Week/Month ‹/› chevrons).
+
+**Problem 1 — per-render optimizer scan.** `const inefficient=bookings.length>0&&
+checkInefficent(bookings,viewDate)` ran on EVERY BookingApp render. `checkInefficent`
+(booking-logic.js) filters the day's active non-locked bookings and calls `findBest` for each
+(each `findBest` walks ALL_TABLES + VALID_COMBOS with `canAssign`), so on a busy day it re-ran
+an O(N·combos) scan on every keystroke in the booking form — the form draft lives in
+BookingApp, so typing re-renders the whole component. It was the one heavy derivation the
+v17.1.0 memoization pass (which wrapped `liveBookings`/`overlapWarnings`/`lateMap`/`freeingList`
+for exactly this reason) missed. **Fix:** `useMemo(…,[bookings,viewDate])` — same shape as its
+siblings, identical value/behaviour (`inefficient` still feeds only `ineffShow`).
+
+**Problem 2 — unlabeled icon-only controls.** The date-nav ‹/› chevrons render their glyph via
+`dangerouslySetInnerHTML` (a bare `&#8249;`/`&#8250;` entity) with no accessible name, so a
+screen reader announced only "button". Same for the WeekView Week/Month chevrons and the ⏳
+waitlist badge (announced as the raw hourglass emoji + a number). **Fix:** added `aria-label`
+(and a matching `title` hover-tooltip — the pattern already used in `Settings.jsx`/`ListView.jsx`/
+`ViewTools.jsx`/`ConnectionStatus.jsx`) to each: "Previous/Next day", "Previous/Next
+week|month" (mode-aware in WeekView), and a descriptive waitlist label ("Waitlist — N waiting[,
+a table is free now]"). `ViewTools` (🔍/⚙) and `ConnectionStatus` (the dot) already carried both
+attributes — left untouched. The header's text buttons (Walk-in / + New / Log out / Today /
+view toggles) already have accessible text and needed nothing.
+
+**Not changed (deferred, Patryk's call):** the runtime viewport meta still sets
+`user-scalable=no,maximum-scale=1` (App.jsx) which disables pinch-zoom (WCAG 1.4.4) — a
+deliberate POS choice, flagged in the scan but not altered without confirmation.
+
+**Verification:** `npm run build` clean; DEV dev-server (worktree, port 5173) confirmed
+`__MGT_BUILD__.version==="17.3.2"`, the date chevrons expose `aria-label`/`title` in the a11y
+tree, ViewTools/ConnectionStatus labels intact, console error-free. Main chunk **186.42 kB gz**
+(+~0.1 over the v17.3.1 186.32 baseline — the added comment/labels; the memo is net-neutral in
+bundle size, a runtime win).
+
+## Tech-debt Phase 2 — HTTP security headers + CSP (report-only) (2026-07-24)
+
+**Scope:** chore / infra. No app version bump, no app-code change, no Firebase
+rules/shape change. Second increment of the `/engineering:tech-debt` remediation plan.
+
+**Files:** `vercel.json` (new — response headers), `SECURITY.md` (new — operational doc).
+
+**Problem:** the deployed app sent **no security headers** (no CSP, no
+`X-Frame-Options`, no `X-Content-Type-Options`, no `Referrer-Policy`, no HSTS,
+no `Permissions-Policy`), and there was no `vercel.json` at all. Standard web
+hardening was simply absent.
+
+**Change — `vercel.json`** sets headers on every route (`source:"/(.*)"`; Vercel
+applies them to the DEPLOYED site only — `npm run dev` on localhost is
+unaffected):
+- **Enforced (safe):** `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Strict-Transport-Security: max-age=31536000`, and a `Permissions-Policy` that
+  disables camera/microphone/geolocation/payment/usb + opts out of FLoC.
+- **Report-only CSP:** a full `Content-Security-Policy-Report-Only` (does NOT
+  block yet — logs violations to the console so the policy can be verified on a
+  real deploy before enforcing, per the plan). Key choices: the **one inline
+  `<script>`** (the no-flash theme init in `index.html`) is pinned by **SHA-256
+  hash** (`sha256-Q6Of…`) so `script-src` stays `'self'`+hash and never needs
+  `'unsafe-inline'`; `style-src` keeps `'unsafe-inline'` (the app is
+  inline-style-based — unavoidable, low-risk); `connect-src` allows Firebase
+  RTDB (`*.firebasedatabase.app`/`*.firebaseio.com`, https+wss) and Auth
+  (`*.googleapis.com`); `object-src 'none'`, `base-uri 'self'`,
+  `frame-ancestors 'none'`, etc.
+
+**`SECURITY.md`** documents: the header table + CSP rationale; the exact command
+to **recompute the inline-script hash** if `index.html`'s no-flash script ever
+changes; the deliberate **report-only → enforce** flip procedure; and the two
+console/policy action items that are NOT code — **verify Firebase Email/Password
+self-signup is disabled** (the #1 access-control item, since the RTDB rules are
+`auth != null` for the whole DB), an optional **UID allowlist** rules tightening,
+and a **PII/GDPR retention** stance to confirm (anonymize-on-delete exists; no
+auto-purge).
+
+**Verification:** `vercel.json` validated as well-formed JSON; all 13 CSP
+directives parse; the pinned `sha256-…` confirmed to match the current
+`dist/index.html` inline script byte-for-byte. Response-header verification on a
+live Vercel preview + watching the report-only console is a deploy-time step
+(documented in `SECURITY.md`), as is the Firebase-console signup check.
+
+## Tech-debt Phase 3 — Vitest test-harness + CI (2026-07-24)
+
+**Scope:** chore / tooling. No app version bump, no app-code change, no Firebase
+rules/shape change. Third and final increment of the `/engineering:tech-debt`
+remediation plan.
+
+**Files:** `package.json` (+`vitest` devDep, `test`/`test:watch` scripts),
+`package-lock.json`, `tests/booking-logic.test.js` (new), `tests/customers.test.js`
+(new), `.github/workflows/ci.yml` (new).
+
+**Problem:** `src/lib/booking-logic.js` — the pure optimizer "brain", refined
+across ~10 documented correctness rounds — had **zero tests**, and nothing ran
+`build`/`lint`/`test` automatically on a PR. A regression in the optimizer or
+the phone-identity layer could ship unnoticed.
+
+**Change — Vitest (4.x) + 51 tests, 2 files.** Node-env, no DOM. Importing
+`booking-logic.js` pulls in `constants.js`, whose module-load
+`setLayout(DEFAULT_LAYOUT)` seeds the real MGT layout, so tests assert PRODUCTION
+behaviour (28 seats; 13:00–22:00; ≤4→90/else 120; size-2 avoids 7; size 3–4
+prefers 7; `DRAG_MAX_WASTE` 4). Fixtures use a fixed FUTURE date so
+`optimizerActiveFor` is always true and `syncLiveDurations` (seated-today only)
+never perturbs them.
+- `tests/booking-logic.test.js` (37): primitives (toMins/toTime/overlaps/genId),
+  getDur tiers, statusOrder, comboCap/comboCapBest, sanitize (+deposit clamp),
+  diffBooking, lateState/lateMins, freeingSoon (window + overstayer exclusion),
+  canAssign/getBusy/getBlockSlots, findBest (the MGT single/combo contracts),
+  findFreeSlot, optimise/applyOpt/bookingsAfterAction (assign, no-overlap,
+  unplaceable-conflict, OFF-path preservation), verifyClean/findConflicts,
+  applySeatedShift, rankCombosContaining/comboExistsFor (the drag `DRAG_MAX_WASTE`
+  and "exists-but-won't-drag" contracts), daySummary, rangeStats.
+- `tests/customers.test.js` (14): normalizePhone/formatPhone/hasRealPhone,
+  isNoShow (flag OR legacy history), matchCustomerByPhone (aggregation +
+  exclude-linked), customerIndex/noShowMap, searchBookings (upcoming-first,
+  anonymized excluded), searchCustomers, and searchGuestsByName's **no-merge**
+  rule (phone customers collapse by phone; phone-less guests get one row each;
+  anonymized skipped).
+
+**CI — `.github/workflows/ci.yml`** runs on every PR + push to main: `npm ci`,
+`npm run build`, `npm test` (all GATING), and `npm run lint` **non-blocking**.
+Lint is non-blocking because the repo carries **~68 pre-existing eslint errors**
+(20 `no-unused-vars`, 8 `react-refresh/only-export-components`, 4
+`react-hooks/rules-of-hooks`, …) that predate this harness — `npm run lint` has
+been exiting 1 all along; making it gate would red every PR on day one. Surfaced
+as a follow-up cleanup item; once cleared, drop the step's `continue-on-error`.
+
+**Verification:** `npm test` → 51 passed (2 files, ~130ms); one initial failure
+was a wrong test expectation (a booking 25 min out correctly excluded by the
+15-min freeingSoon window) — the fixture was corrected, the code was right.
+`npm run build` clean. `npx eslint tests/` → 0 problems (the new files don't add
+to the lint debt). **Audit note:** `npm audit --omit=dev` reports a
+`websocket-driver` advisory — a PRE-EXISTING firebase transitive in its
+Node-only path, NOT in the Vite browser bundle; the Vitest devDep added no
+production-tree vulnerability. Not auto-fixed (a forced firebase bump could
+break the build).
