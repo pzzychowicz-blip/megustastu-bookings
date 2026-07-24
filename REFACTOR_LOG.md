@@ -5098,3 +5098,31 @@ blocking). SECURITY.md updated: enforcement recorded, the hash-recompute note
 upgraded to "breaks prod if stale", an emergency-rollback recipe added
 (rename back to report-only), and the self-signup action item marked verified
 DONE (Patryk, 2026-07-24).
+
+## v17.3.3 — De-monolith #1: keyboard shortcuts → useKeyboardShortcuts (2026-07-24)
+
+**Branch `feat/v17.3.3-keyboard-hook` · files: `src/App.jsx`, NEW `src/hooks/useKeyboardShortcuts.js`, `CLAUDE.md` · behavioural change: none.**
+
+First extraction of the tech-debt plan's "Later — incremental App.jsx
+de-monolith", done behind the v17.3.2 test net. The ~285-line kbRef machinery
+(the global keydown handler + the v17.3.1 neutral-space List-deselect
+mousedown, both mount-once window listeners reading a latest-values ref) moved
+VERBATIM to `src/hooks/useKeyboardShortcuts.js` (.js — pure logic). App now
+passes ONE ctx object per render (the exact former `kbRef.current` literal);
+SUMMARY_KEY/WEEK_KEY + the `SETTINGS_TABS`/`validateReminderDraft` imports
+moved with the handler (App.jsx no longer needs either import). ONE deliberate
+deviation: the ref refresh is now `useEffect(function(){kbRef.current=ctx;})`
+(dep-less, runs after every commit) instead of the in-render write — same
+freshness for event listeners (events only fire between commits), but
+lint-clean (`react-hooks/refs`); App.jsx drops from 31 → 30 pre-existing lint
+errors, the new hook has 0. App.jsx 2662 → 2384 lines (−278).
+
+**Verification:** build clean (186.53 kB gz); `npm test` 51/51; AST balance —
+useRef 10 = 9+1, useEffect 10 → 8+3 (+1 = the documented ctx-refresh effect),
+useState/useMemo unchanged; zero internal-symbol leakage (kbRef/SUMMARY_KEY/
+WEEK_KEY/isTyping have no code refs left in App.jsx). Live DEV QA: "/" opens
+search, Esc closes it (z-order chain), "?" opens Settings over the app, ←/→
+cycles Settings tabs, Esc closes + resets tab, "l"/"t" switch views, Shift+D
+toggles dark/light and back. Console hook-order errors observed during the
+edit session are HMR artifacts (old in-render module vs new module hot-swap);
+a full reload boots v17.3.3 clean.
