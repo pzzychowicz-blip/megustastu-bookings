@@ -5022,3 +5022,58 @@ directives parse; the pinned `sha256-…` confirmed to match the current
 `dist/index.html` inline script byte-for-byte. Response-header verification on a
 live Vercel preview + watching the report-only console is a deploy-time step
 (documented in `SECURITY.md`), as is the Firebase-console signup check.
+
+## Tech-debt Phase 3 — Vitest test-harness + CI (2026-07-24)
+
+**Scope:** chore / tooling. No app version bump, no app-code change, no Firebase
+rules/shape change. Third and final increment of the `/engineering:tech-debt`
+remediation plan.
+
+**Files:** `package.json` (+`vitest` devDep, `test`/`test:watch` scripts),
+`package-lock.json`, `tests/booking-logic.test.js` (new), `tests/customers.test.js`
+(new), `.github/workflows/ci.yml` (new).
+
+**Problem:** `src/lib/booking-logic.js` — the pure optimizer "brain", refined
+across ~10 documented correctness rounds — had **zero tests**, and nothing ran
+`build`/`lint`/`test` automatically on a PR. A regression in the optimizer or
+the phone-identity layer could ship unnoticed.
+
+**Change — Vitest (4.x) + 51 tests, 2 files.** Node-env, no DOM. Importing
+`booking-logic.js` pulls in `constants.js`, whose module-load
+`setLayout(DEFAULT_LAYOUT)` seeds the real MGT layout, so tests assert PRODUCTION
+behaviour (28 seats; 13:00–22:00; ≤4→90/else 120; size-2 avoids 7; size 3–4
+prefers 7; `DRAG_MAX_WASTE` 4). Fixtures use a fixed FUTURE date so
+`optimizerActiveFor` is always true and `syncLiveDurations` (seated-today only)
+never perturbs them.
+- `tests/booking-logic.test.js` (37): primitives (toMins/toTime/overlaps/genId),
+  getDur tiers, statusOrder, comboCap/comboCapBest, sanitize (+deposit clamp),
+  diffBooking, lateState/lateMins, freeingSoon (window + overstayer exclusion),
+  canAssign/getBusy/getBlockSlots, findBest (the MGT single/combo contracts),
+  findFreeSlot, optimise/applyOpt/bookingsAfterAction (assign, no-overlap,
+  unplaceable-conflict, OFF-path preservation), verifyClean/findConflicts,
+  applySeatedShift, rankCombosContaining/comboExistsFor (the drag `DRAG_MAX_WASTE`
+  and "exists-but-won't-drag" contracts), daySummary, rangeStats.
+- `tests/customers.test.js` (14): normalizePhone/formatPhone/hasRealPhone,
+  isNoShow (flag OR legacy history), matchCustomerByPhone (aggregation +
+  exclude-linked), customerIndex/noShowMap, searchBookings (upcoming-first,
+  anonymized excluded), searchCustomers, and searchGuestsByName's **no-merge**
+  rule (phone customers collapse by phone; phone-less guests get one row each;
+  anonymized skipped).
+
+**CI — `.github/workflows/ci.yml`** runs on every PR + push to main: `npm ci`,
+`npm run build`, `npm test` (all GATING), and `npm run lint` **non-blocking**.
+Lint is non-blocking because the repo carries **~68 pre-existing eslint errors**
+(20 `no-unused-vars`, 8 `react-refresh/only-export-components`, 4
+`react-hooks/rules-of-hooks`, …) that predate this harness — `npm run lint` has
+been exiting 1 all along; making it gate would red every PR on day one. Surfaced
+as a follow-up cleanup item; once cleared, drop the step's `continue-on-error`.
+
+**Verification:** `npm test` → 51 passed (2 files, ~130ms); one initial failure
+was a wrong test expectation (a booking 25 min out correctly excluded by the
+15-min freeingSoon window) — the fixture was corrected, the code was right.
+`npm run build` clean. `npx eslint tests/` → 0 problems (the new files don't add
+to the lint debt). **Audit note:** `npm audit --omit=dev` reports a
+`websocket-driver` advisory — a PRE-EXISTING firebase transitive in its
+Node-only path, NOT in the Vite browser bundle; the Vitest devDep added no
+production-tree vulnerability. Not auto-fixed (a forced firebase bump could
+break the build).

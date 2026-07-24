@@ -1,0 +1,31 @@
+name: CI
+
+# Runs on every PR and on pushes to main. Gates on a clean production build and
+# a green test suite (tests/*.test.js). Lint runs for visibility but does NOT
+# block: the repo carries ~68 pre-existing eslint errors (mostly no-unused-vars
+# + react-refresh/only-export-components) that predate the test harness — a
+# separate cleanup, tracked in the tech-debt plan. Once that's cleared, drop the
+# `continue-on-error` below to make lint a hard gate too.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Build (production)
+        run: npm run build
+      - name: Test
+        run: npm test
+      - name: Lint (non-blocking — pre-existing errors, see the note above)
+        run: npm run lint
+        continue-on-error: true
