@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#007AFF"/>
+  <rect x="96" y="150" width="320" height="36" rx="18" fill="#fff" opacity="0.95"/>
+  <rect x="136" y="186" width="28" height="150" rx="12" fill="#fff" opacity="0.95"/>
+  <rect x="348" y="186" width="28" height="150" rx="12" fill="#fff" opacity="0.95"/>
+  <text x="256" y="432" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="120" font-weight="800" fill="#ffffff" text-anchor="middle">MGT</text>
+</svg>

@@ -5212,3 +5212,27 @@ busy/Assign) and BlockModal (the two hook-order fixes) open and close
 normally. Noted in passing (pre-existing, untouched): BlockModal's "To"
 initialises to GRID_CLOSE 26 → "26:00", invalid for <input type=time>, so it
 shows blank when close is past midnight.
+
+## v17.4.0 — PWA install + offline shell (2026-07-24)
+
+**Branch `feat/v17.4.0-pwa` (stacked on the lint cleanup) · files: `public/manifest.webmanifest` + `public/sw.js` + icons (`icon.svg`, `icon-192/512.png`, full-bleed `apple-touch-icon.png`), `index.html` (head links/meta), `src/main.jsx` (prod-only SW registration), `CLAUDE.md` · feature #1 from the shortlist (Patryk-picked via AskUserQuestion).**
+
+Makes the app installable on the restaurant tablets + resilient to flaky wifi.
+Manifest: standalone display, accent theme colour, PNG 192/512 + SVG any
+(icons drawn fresh — a table glyph + "MGT" on the shared accent; rasterised
+via qlmanage/sips). SW (`public/sw.js`): navigations NETWORK-FIRST with cache
+fallback (a deploy can never serve a stale shell — the lazyChunk-404 class),
+`/assets/*` + static files cache-first (content-hashed = immutable),
+cache-name rotation on activate, and **cross-origin requests (Firebase
+RTDB/Auth) are never intercepted** — the SDK's own offline queue and the
+write-guard/CAS machinery stay untouched. Registration lives in `main.jsx`
+gated on `import.meta.env.PROD` (dev would cache-shadow Vite's module graph)
+— NOT an inline index.html script, because the enforced CSP pins exactly one
+inline-script hash.
+
+**Verification:** `node --check sw.js`; build clean (186.84 kB gz) with
+sw.js/manifest/icons present in dist; the CSP inline-script hash recomputed
+UNCHANGED (sha256-Q6OfSak…) — the head edits don't touch the no-flash script;
+lint 0 errors; 51/51 tests; DEV boots v17.4.0 with the manifest served and
+ZERO service workers registered (prod-only gate confirmed). Install + offline
+behaviour on a real tablet = post-deploy verification (Patryk).
