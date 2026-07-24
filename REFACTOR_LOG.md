@@ -4977,3 +4977,48 @@ deliberate POS choice, flagged in the scan but not altered without confirmation.
 tree, ViewTools/ConnectionStatus labels intact, console error-free. Main chunk **186.42 kB gz**
 (+~0.1 over the v17.3.1 186.32 baseline — the added comment/labels; the memo is net-neutral in
 bundle size, a runtime win).
+
+## Tech-debt Phase 2 — HTTP security headers + CSP (report-only) (2026-07-24)
+
+**Scope:** chore / infra. No app version bump, no app-code change, no Firebase
+rules/shape change. Second increment of the `/engineering:tech-debt` remediation plan.
+
+**Files:** `vercel.json` (new — response headers), `SECURITY.md` (new — operational doc).
+
+**Problem:** the deployed app sent **no security headers** (no CSP, no
+`X-Frame-Options`, no `X-Content-Type-Options`, no `Referrer-Policy`, no HSTS,
+no `Permissions-Policy`), and there was no `vercel.json` at all. Standard web
+hardening was simply absent.
+
+**Change — `vercel.json`** sets headers on every route (`source:"/(.*)"`; Vercel
+applies them to the DEPLOYED site only — `npm run dev` on localhost is
+unaffected):
+- **Enforced (safe):** `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Strict-Transport-Security: max-age=31536000`, and a `Permissions-Policy` that
+  disables camera/microphone/geolocation/payment/usb + opts out of FLoC.
+- **Report-only CSP:** a full `Content-Security-Policy-Report-Only` (does NOT
+  block yet — logs violations to the console so the policy can be verified on a
+  real deploy before enforcing, per the plan). Key choices: the **one inline
+  `<script>`** (the no-flash theme init in `index.html`) is pinned by **SHA-256
+  hash** (`sha256-Q6Of…`) so `script-src` stays `'self'`+hash and never needs
+  `'unsafe-inline'`; `style-src` keeps `'unsafe-inline'` (the app is
+  inline-style-based — unavoidable, low-risk); `connect-src` allows Firebase
+  RTDB (`*.firebasedatabase.app`/`*.firebaseio.com`, https+wss) and Auth
+  (`*.googleapis.com`); `object-src 'none'`, `base-uri 'self'`,
+  `frame-ancestors 'none'`, etc.
+
+**`SECURITY.md`** documents: the header table + CSP rationale; the exact command
+to **recompute the inline-script hash** if `index.html`'s no-flash script ever
+changes; the deliberate **report-only → enforce** flip procedure; and the two
+console/policy action items that are NOT code — **verify Firebase Email/Password
+self-signup is disabled** (the #1 access-control item, since the RTDB rules are
+`auth != null` for the whole DB), an optional **UID allowlist** rules tightening,
+and a **PII/GDPR retention** stance to confirm (anonymize-on-delete exists; no
+auto-purge).
+
+**Verification:** `vercel.json` validated as well-formed JSON; all 13 CSP
+directives parse; the pinned `sha256-…` confirmed to match the current
+`dist/index.html` inline script byte-for-byte. Response-header verification on a
+live Vercel preview + watching the report-only console is a deploy-time step
+(documented in `SECURITY.md`), as is the Firebase-console signup check.
