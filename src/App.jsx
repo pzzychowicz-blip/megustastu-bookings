@@ -47,7 +47,10 @@ import { normalizePhone } from "./lib/customers";
 // First component file in the codebase using JSX syntax. App.jsx now also
 // uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
 // compatibility no longer applies — both files share a single style.
-import { Overlay, mkBtn, Reveal, Toast, Presence, ModalPresence, SlideView } from "./components/atoms";
+import { Overlay, mkBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
+// v17.3.4: the two notification-layout render units (state stays in BookingApp).
+import { StatusToasts } from "./components/StatusToasts";
+import { AppBanners } from "./components/AppBanners";
 
 
 // ── Phase B2 (v15-refactor): secondary modals ─────────────────────────────
@@ -242,7 +245,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.3.3",
+  version:"17.3.4",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1918,75 +1921,14 @@ function BookingApp(){
 
   // ── Notification banners (v15.8.0) ──────────────────────────────────────────
   // Two families so the grid stops "jumping" when a banner appears/disappears:
-  //  • TRANSIENT status toasts (reconnect / syncing / loaded / reshuffled /
-  //    sync-fix) float in a fixed bottom layer (floatingToasts, below) — they
-  //    never reflow the grid. Slide-up+fade via .mgt-toast; they auto-hide via
-  //    their own state, and a floating toast vanishing moves nothing.
-  //  • PERSISTENT/actionable banners (offline / write-error / inefficiency /
-  //    overlap / reminders) stay in flow but ease open/closed via the Reveal
-  //    atom (graceful height animation). See CLAUDE.md "Notification layout".
-  const toastShadow="0 6px 20px rgba(0,0,0,0.18)";
-  // v15.8.0: the 5 status toasts share ONE slot — only the highest-priority
-  // active one is shown (order below), so they never stack vertically. When the
-  // top one changes, the old floats out as the new floats in; they overlap in
-  // the same grid cell (gridArea 1/1) so the swap is a crossfade in place.
-  const statusToasts=[
-    {key:"loading",on:!bookingsReady,node:<div
-      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Loading bookings…</div>},
-    {key:"resync",on:resyncing,node:<div
-      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.</div>},
-    {key:"reconnect",on:reconnectShown,node:<div
-      style={{background:"linear-gradient(var(--app-reconnect-bg),var(--app-reconnect-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:toastShadow}}>✓ Reconnected — changes synced.</div>},
-    {key:"syncfix",on:syncFix,node:<div
-      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
-    {key:"waitadded",on:waitAddedShown,node:<div
-      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
-    {key:"undo",on:!!undoInfo,node:<div
-      style={{background:"linear-gradient(var(--bg-sheet),var(--bg-sheet)),var(--bg-ac-menu)",border:"2px solid var(--border-sheet)",borderRadius:14,padding:"8px 10px 8px 14px",fontSize:13,fontWeight:600,color:"var(--text-primary)",boxShadow:toastShadow,display:"flex",alignItems:"center",gap:10,pointerEvents:"auto"}}><span>{undoInfo&&undoInfo.noShow?"Marked no-show":"Booking cancelled"}</span><button
-        onClick={function(e){e.stopPropagation();undoCancel();}}
-        className="mgt-hover-scale mgt-press"
-        style={mkBtn({fontSize:12,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button></div>},
-    {key:"dragmsg",on:!!dragMsg,node:<div
-      style={dragMsg&&dragMsg.good
-        ?{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}
-        :{background:"linear-gradient(var(--warn-bg),var(--warn-bg)),var(--bg-ac-menu)",border:"2px solid var(--warn-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--warn-text)",boxShadow:toastShadow}}>{dragMsg?dragMsg.text:""}</div>},
-    {key:"reshuffled",on:reshuffled,node:<div
-      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>},
-    {key:"load",on:loadBannerShown,node:<div
-      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>{"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."}</div>},
-  ];
-  const topToastKey=(statusToasts.find(function(t){return t.on;})||{}).key;
-  // Floating layer — absolutely positioned over the TOP-CENTRE of mainView so the
-  // toast lands in the empty gap of the timeline toolbar (between the
-  // Optimizer/Reshuffle group on the left and the Follow/zoom group on the right)
-  // — more at-a-glance, and it tracks mainView's position. Anchored to a relative
-  // wrapper around mainView at the render site; works in both views. ALWAYS
-  // mounted (each Toast self-manages its in/out lifecycle, so the container must
-  // outlive a toast's out-animation) — empty + pointerEvents:none when idle, so it
-  // never blocks the toolbar/grid taps. z<modal (1000) / <quick-status popup (300).
-  // Inner = a 1-cell grid so leaving+entering toasts overlap (crossfade in place).
-  const floatingToasts=<div
-    style={{position:"absolute",top:0,left:0,right:0,zIndex:60,display:"flex",justifyContent:"center",alignItems:"flex-start",padding:"7px 12px 0",pointerEvents:"none"}}><div
-    style={{width:"100%",maxWidth:360,display:"grid",justifyItems:"center",textAlign:"center"}}>{statusToasts.map(function(t){return <Toast key={t.key} show={t.key===topToastKey} style={{gridArea:"1 / 1",width:"fit-content",justifySelf:"center"}}>{t.node}</Toast>;})}{/* v17.1.2: fit-content — the Undo pill (and every toast) hugs its text instead of stretching the full 360px column; long text still wraps at the container's maxWidth */}</div></div>;
-
-  // In-flow persistent banners (wrapped in <Reveal> at the render site).
-  const offlineBanner=!isOnline?<div
-    style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>⚠ Working offline — your changes are saved locally and will sync when the connection returns. Keep this tab open.</div>:null;
-  const writeWarningBanner=writeWarning?<div
-    style={{background:"var(--danger-bg)",border:"2px solid var(--danger-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--danger-text)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>{"⚠ "+writeWarning}</span><button
-            className="mgt-hover-scale"
-            style={mkBtn({fontSize:12,background:"var(--app-btn-slate-dim)",minHeight:32,padding:"4px 12px"})}
-            onClick={function(){setWriteWarning(null);}}>Dismiss</button></div>:null;
+  //  • TRANSIENT status toasts → the floating StatusToasts component (v17.3.4,
+  //    extracted verbatim; mounted in the relative wrapper around mainView).
+  //  • PERSISTENT/actionable banners stay in flow: the three simple ones
+  //    (offline / write-error / inefficiency) render via AppBanners (v17.3.4),
+  //    the row banners (Overlap / Late / WaitAvail / reminders) were already
+  //    components. All STATE stays here (the Phase D3 locked decision — only
+  //    rendering moved). See CLAUDE.md "Notification layout".
   const ineffShow=!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer)&&bookingDefaults.reshuffleSuggestEnabled;
-  const ineffBanner=ineffShow?<div
-    style={{background:"var(--warn-bg)",border:"2px solid var(--warn-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--warn-text)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>Tables could be reshuffled for better efficiency.</span><div style={{display:"flex",gap:6}}><button
-        onClick={function(){setDismissedIneff(viewDate);}}
-        className="mgt-hover-scale"
-        style={mkBtn({fontSize:13,minHeight:36,padding:"6px 14px",background:BTN.dismiss})}>Dismiss</button><button
-        onClick={function(){setConfirmReshuffle(true);}}
-        className="mgt-hover-scale"
-        style={{background:BTN.orange,color:"var(--text-on-accent)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:600,minHeight:36,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div></div>:null;
-
   // Overlap warnings banner — shows when one or more seated guests are overstaying
   // into the start time of a booking on the same table (one-tap Reassign per row).
   // v17.0.0 round 7: converted to the Running-late (LateBanner) pattern —
@@ -2247,7 +2189,25 @@ function BookingApp(){
               mobile full-width Summary wraps them onto their own line. */}
             <div style={{display:"flex",alignItems:"center",minHeight:40,marginLeft:"auto",flexShrink:0}}><ViewTools
               onOpenSearch={function(){setShowSearch(true);}}
-              onOpenSettings={function(){setShowSettings(true);}} /></div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} collapseMax={generalSettings.lateCollapseMax} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+              onOpenSettings={function(){setShowSettings(true);}} /></div></div><AppBanners
+                isOnline={isOnline}
+                writeWarning={writeWarning}
+                onDismissWarning={function(){setWriteWarning(null);}}
+                ineffShow={ineffShow}
+                onDismissIneff={function(){setDismissedIneff(viewDate);}}
+                onReshuffle={function(){setConfirmReshuffle(true);}} /><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} collapseMax={generalSettings.lateCollapseMax} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}><StatusToasts
+                bookingsReady={bookingsReady}
+                resyncing={resyncing}
+                reconnectShown={reconnectShown}
+                syncFix={syncFix}
+                waitAddedShown={waitAddedShown}
+                undoInfo={undoInfo}
+                onUndo={undoCancel}
+                dragMsg={dragMsg}
+                reshuffled={reshuffled}
+                reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
+                loadShown={loadBannerShown}
+                loadMsg={"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}

@@ -5126,3 +5126,29 @@ cycles Settings tabs, Esc closes + resets tab, "l"/"t" switch views, Shift+D
 toggles dark/light and back. Console hook-order errors observed during the
 edit session are HMR artifacts (old in-render module vs new module hot-swap);
 a full reload boots v17.3.3 clean.
+
+## v17.3.4 — De-monolith #2: notification layer → StatusToasts + AppBanners (2026-07-24)
+
+**Branch `feat/v17.3.4-banners-extract` · files: `src/App.jsx`, NEW `src/components/StatusToasts.jsx` + `src/components/AppBanners.jsx`, `CLAUDE.md` · behavioural change: none.**
+
+Second extraction of the "Later — incremental App.jsx de-monolith". The
+v15.8.0 notification layout's two render families moved out of App.jsx as
+COMPONENTS (rendering only — all state, timers and dismiss logic stay in
+BookingApp per the Phase D3 locked decision, which this deliberately respects):
+(1) **StatusToasts.jsx** — the floating transient-toast layer (statusToasts
+array + topToastKey priority pick + the absolutely-positioned container),
+verbatim; App passes flags/strings + `onUndo` (reshuffledMsg/loadMsg computed
+in App since they read optimizerActiveFor/firstLoadCount). (2) **AppBanners.jsx**
+— the three simple in-flow banners (offline / write-error / inefficiency),
+each in its own Reveal (moved from App's render site into the component);
+`ineffShow` stays computed in App, passed as a boolean. The `Toast` atom
+import left App.jsx (no remaining consumer). App.jsx 2384 → 2345 (−39; total
+de-monolith so far −317).
+
+**Verification:** build clean (186.69 kB gz); 51/51 tests; new files lint 0
+errors (App.jsx stays at 30 pre-existing); no hook moved (the memoized
+derivations overlapBannerMap etc. stay in App — hook counts unchanged). Live
+DEV QA: load toast appears on refresh; cancel → Undo pill renders (Undo button
+present); the red write-warning banner rendered through AppBanners during a
+transient retry-exhaustion and its Dismiss button cleared it with the Reveal
+exit ease; cancel persisted correctly across reload; console clean.
