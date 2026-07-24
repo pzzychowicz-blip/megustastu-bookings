@@ -21,11 +21,13 @@ applies them to the deployed site only — **they do NOT apply to
 | `Strict-Transport-Security` | `max-age=31536000` | Force HTTPS for a year. |
 | `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()` | Disable APIs the app never uses; opt out of FLoC. |
 
-**Report-only** (does not block yet — logs violations to the browser console):
+**Enforced since 2026-07-24** (shipped report-only first per the plan; flipped
+after verifying on production: `curl -I` showed all headers live, the deployed
+inline-script hash matched the pinned `sha256-…` byte-for-byte, and a static
+scan of the built bundle found no `eval`, no worker instantiation, no external
+fonts/images, and every network endpoint covered by `connect-src`):
 
-- `Content-Security-Policy-Report-Only` — a full CSP shipped in **report-only**
-  first, per the plan, so nothing can break in production while we confirm the
-  policy is correct.
+- `Content-Security-Policy` — the full policy below.
 
 ### CSP directives, and why each is what it is
 
@@ -48,8 +50,8 @@ applies them to the deployed site only — **they do NOT apply to
 
 The CSP hash is computed over the **exact bytes** of the inline `<script>` in
 `index.html`. Editing that script (e.g. new localStorage keys) changes the
-hash. While the CSP is report-only a stale hash is harmless (a console warning
-only), but recompute it before enforcing:
+hash. **The CSP is now ENFORCED — a stale hash breaks the theme no-flash script
+in production.** Recompute it in the same PR as any edit to that script:
 
 ```bash
 npm run build
@@ -58,15 +60,13 @@ node -e 'const fs=require("fs"),c=require("crypto");const m=fs.readFileSync("dis
 
 Paste the printed `sha256-…` into `vercel.json`'s `script-src`.
 
-### Flipping report-only → enforce (do this deliberately, later)
+### If the enforced CSP ever blocks something legitimate
 
-1. Deploy; open the app on the Vercel preview/prod with DevTools open.
-2. Exercise it (load, book, seat, offline/reconnect, Settings). Watch the
-   console for **`Content-Security-Policy-Report-Only`** violation messages.
-3. If any legitimate resource is blocked, add its origin to the right directive
-   and redeploy. Repeat until the console is clean.
-4. Rename the header key from `Content-Security-Policy-Report-Only` to
-   `Content-Security-Policy` in `vercel.json` and redeploy — now enforced.
+Symptom: a red `Refused to load/connect …` console error naming the directive.
+Fix: add the origin to that directive in `vercel.json` and redeploy. As an
+emergency rollback, rename the key back to
+`Content-Security-Policy-Report-Only` — the app works again immediately while
+you diagnose.
 
 ---
 
@@ -79,11 +79,11 @@ control who can get an account.
 
 **Action items (Firebase console — no code):**
 
-1. **Verify self-signup is disabled.** In Firebase Console → Authentication →
-   Settings → *User actions*, ensure **"Enable create (sign-up)"** is **OFF** for
-   the Email/Password provider (or the project has no open sign-up path).
-   Without this, anyone can self-register via the Identity Toolkit API and gain
-   full DB access. The app has no sign-up UI, but that does not close the API.
+1. ✅ **Self-signup is disabled** — verified by Patryk, 2026-07-24 (Firebase
+   Console → Authentication → Settings → *User actions*). Without this, anyone
+   could self-register via the Identity Toolkit API and gain full DB access
+   (the app has no sign-up UI, but that alone does not close the API). If the
+   Auth config is ever reset, re-verify this first.
 2. **(Optional, defense-in-depth) UID allowlist.** Tighten the rules to an
    explicit staff list, e.g.
 

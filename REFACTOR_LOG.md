@@ -5077,3 +5077,24 @@ to the lint debt). **Audit note:** `npm audit --omit=dev` reports a
 Node-only path, NOT in the Vite browser bundle; the Vitest devDep added no
 production-tree vulnerability. Not auto-fixed (a forced firebase bump could
 break the build).
+
+## Tech-debt Phase 2b — CSP flipped to ENFORCED (2026-07-24)
+
+**Branch `chore/csp-enforce` · files: `vercel.json`, `SECURITY.md` · behavioural change: none (headers only).**
+
+Post-merge of PR #49, verified on production (headers only — the app itself is
+never loaded by Claude per the locked rule): `curl -I` on
+`megustastu-bookings.vercel.app` showed all six headers live incl. the
+report-only CSP; the deployed `index.html`'s inline no-flash script hashed to
+exactly the pinned `sha256-Q6OfSakPea7e5wX9l4uxXySYOrl6LggkdT39XYRAqeM=`; a
+static scan of the deployed bundle found no `eval`/`new Function`, no worker
+instantiation (the `Worker`/`importScripts` strings are Firebase env-detection
+only), no external fonts/images/CSS, and every network endpoint
+(`identitytoolkit`/`securetoken.googleapis.com`, RTDB https+wss) covered by
+`connect-src`. `apis.google.com/js/api.js` is the OAuth-popup loader — never
+fetched under email/password auth. On that evidence the header key was renamed
+`Content-Security-Policy-Report-Only` → `Content-Security-Policy` (now
+blocking). SECURITY.md updated: enforcement recorded, the hash-recompute note
+upgraded to "breaks prod if stale", an emergency-rollback recipe added
+(rename back to report-only), and the self-signup action item marked verified
+DONE (Patryk, 2026-07-24).
