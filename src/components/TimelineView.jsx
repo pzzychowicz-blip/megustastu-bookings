@@ -130,7 +130,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     // Capturing on the block itself is safe (the PlanView gotcha was capturing
     // on a PARENT, which redirects child clicks) — and needed so a fast mouse
     // that leaves the block mid-drag keeps sending us moves.
-    try { el.setPointerCapture(pid); } catch (_e) { /* no-op */ }
+    try { el.setPointerCapture(pid); } catch { /* no-op */ }
   }
   function onDragPointerDown(e) {
     if (!onDropOnTable || !tableAtY) return;

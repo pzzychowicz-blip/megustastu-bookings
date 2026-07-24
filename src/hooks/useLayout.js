@@ -61,7 +61,7 @@ function clampCenter(v, half, span){
   if(half * 2 >= span) return Math.round(span / 2);
   return Math.max(half, Math.min(span - half, v));
 }
-function defaultChairs(capacity, shape){
+function defaultChairs(capacity){ // (shape param dropped — was unused; callers may still pass it)
   // Split capacity top/bottom for square/rect (round renders the total evenly
   // around the rim, but keeps the same per-side model for uniform editing).
   const top = Math.ceil(capacity / 2);

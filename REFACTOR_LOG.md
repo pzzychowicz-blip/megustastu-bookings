@@ -5176,3 +5176,39 @@ function scopes).
 form closed), EDIT save (19:00 → 20:30 persisted + reshuffle toast), "Save
 pending" override (pending tag on the card), and a validation early-return
 ("Customer name is required" keeps the form open). Console clean.
+
+## Lint cleanup — 68 errors → 0, CI lint becomes a HARD GATE (2026-07-24)
+
+**Branch `chore/lint-cleanup` (stacked on v17.3.5) · files: `eslint.config.js`, `.github/workflows/ci.yml`, `src/App.jsx`, `BlockModal.jsx`, `ManualModal.jsx`, `BookingFormModal.jsx`, `FloorPlanEditor.jsx`, `TimelineView.jsx`, `PlanView.jsx`, `Settings.jsx`, `useLayout.js`, `useReminders.jsx` · behavioural change: none.**
+
+Three buckets:
+1. **Real fixes (34):** `catch(e){}` → `catch{/* ignore */}` (13× — bare catch
+   drops the unused binding; the comment satisfies no-empty); unused catch
+   bindings/params/imports removed (BookingFormModal onTouchEnd `e`,
+   useLayout `defaultChairs` shape param, FloorPlanEditor `chairPositions`
+   import — the re-export still forwards it); dead `seatedShiftHappened`
+   removed from updateStatus (assigned, never read); `--fix` swept 4 stale
+   eslint-disable directives (PlanView/Settings/useReminders). **Two REAL
+   latent bugs fixed — conditional hooks (the v16.4.0 ListView crash class):**
+   `BlockModal`'s `if(!tableId) return null` sat above its 3 useState calls
+   (moved below — derivations are null-safe); `ManualModal`'s `if(!booking)
+   return null` sat above its keyboard useEffect (moved below the effect; a
+   `bk = booking||{}` null-proofs the in-between derivations).
+2. **Config — React-Compiler advisories → WARN (26):** `react-hooks/refs`,
+   `set-state-in-effect`, `purity`, `immutability`, `globals` flag the app's
+   DOCUMENTED architecture (constants.js live module bindings, ref-mirror /
+   latest-values-ref patterns, one-shot setState resets). Downgraded with a
+   rationale comment; still visible (39 warnings) so new code doesn't adopt
+   them casually. `rules-of-hooks`/`exhaustive-deps` keep default severity.
+3. **Config — react-refresh off for the 5 deliberate multi-export files**
+   (atoms / FloorGlyphs / FloorPlanEditor / SettingsChrome / Settings).
+
+**CI:** the lint step's `continue-on-error` is REMOVED — `npm run lint` (0
+errors) now gates every PR alongside build+test.
+
+**Verification:** `npm run lint` → 0 errors / 39 warnings; build clean
+(186.77 kB gz); 51/51 tests; live DEV QA — app boots, ManualModal (Swap
+busy/Assign) and BlockModal (the two hook-order fixes) open and close
+normally. Noted in passing (pre-existing, untouched): BlockModal's "To"
+initialises to GRID_CLOSE 26 → "26:00", invalid for <input type=time>, so it
+shows blank when close is past midnight.

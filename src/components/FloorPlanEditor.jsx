@@ -27,7 +27,7 @@ import { mkBtn } from "./atoms";
 // v17.1.0 (Tier 3 code-splitting): the shared geometry moved to FloorGlyphs.jsx
 // so PlanView (main chunk) no longer pulls this whole editor in. Re-exported
 // here for back-compat with any older import path.
-import { chairPositions, TableGlyph, DoorGlyph } from "./FloorGlyphs";
+import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // chairPositions dropped — unused here (the re-export below still forwards it)
 export { chairPositions, TableGlyph, DoorGlyph } from "./FloorGlyphs";
 
 const SNAP = 10;
@@ -132,7 +132,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
     // SVG element is the shakiest path in WebKit. Nothing to gain, a known
     // engine quirk to lose.
     if(e.pointerType === "mouse"){
-      try{ e.currentTarget.ownerSVGElement.setPointerCapture(e.pointerId); }catch(_e){}
+      try{ e.currentTarget.ownerSVGElement.setPointerCapture(e.pointerId); }catch{/* ignore */}
     }
   }
   function onMove(e){

@@ -94,7 +94,7 @@ export function BookingFormModal({
       onMouseDown:function(e){ if(Date.now()-acTouch.current.ts<600) return; e.preventDefault(); select(); },
       onTouchStart:function(e){ const t=e.touches&&e.touches[0]; acTouch.current={x:t?t.clientX:0,y:t?t.clientY:0,scroll:false,ts:Date.now()}; },
       onTouchMove:function(e){ const t=e.touches&&e.touches[0]; if(t&&(Math.abs(t.clientX-acTouch.current.x)+Math.abs(t.clientY-acTouch.current.y))>12) acTouch.current.scroll=true; },
-      onTouchEnd:function(e){ acTouch.current.ts=Date.now(); if(!acTouch.current.scroll) select(); },
+      onTouchEnd:function(){ acTouch.current.ts=Date.now(); if(!acTouch.current.scroll) select(); },
     };
   }
   // v16.3.0 perf: memoised — rebuilt only when the bookings list changes, not on
