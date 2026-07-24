@@ -245,7 +245,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.3.4",
+  version:"17.3.5",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1286,33 +1286,20 @@ function BookingApp(){
     defaultWalkinSize: generalSettings.defaultWalkinSize,
   });
 
-  function doSave(){
-    // v17.0.0: apply the pending/confirm status override to a CLONE of the form
-    // so every downstream read (status write, diffBooking history, completed-
-    // duration gate, flash condition) sees the effective status uniformly.
-    const so=statusOverrideRef.current;
-    const f=so?Object.assign({},formRef.current,{status:so}):formRef.current;
-    try{
-      if(!f.name||!f.name.trim()){setError("Customer name is required.");return;}
-      // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
-      // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
-      if(!f.date){setError("Please set a date.");return;}
-      if(!f.time){setError("Please set a time.");return;}
-      const sm=toMins(f.time);
-      // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
-      // viewed day, and block a closed day outright.
-      const fh=hoursFor(f.date);
-      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
-      if(sm<fh.open*60||sm>fh.close*60){setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
-      const size=Number(f.size)||2;
-      const dur=f.customDur||getDur(size);
-      const cleanPhone=cleanPhoneOf(f.phone);
-      const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
-      // v16.0.0 follow-up: completed bookings excluded from the busy set — a
-      // completed visit is over, its table is free (mirrors ManualModal +
-      // WalkinForm; the optimizer already ignores completed via isActive).
-      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
-      if(editId){
+  // ── v17.3.5: doSave split (de-monolith #3) ────────────────────────────────────────
+  // The 199-line doSave was split for maintainability (the tech-debt plan's
+  // final "Later" item): doSave() keeps the shared preamble (status-override
+  // clone + all synchronous validations + the manual-table availability guard)
+  // and dispatches to ONE of the two path helpers below — bodies moved
+  // VERBATIM, still inside BookingApp so every closure read (bookings,
+  // liveBookings, editId, swapAffected, tableBlocks, autoOptimizer, nowMins,
+  // saveBookings…) is unchanged. `v` carries the preamble-derived values.
+  // Early setError(...)+return exits inside a helper end the save exactly as
+  // before (doSave has nothing after the dispatch); helper throws are caught
+  // by doSave's try/catch. The v15.7.0 capture-intent-then-replay contract and
+  // the prev-identity buildNextMemo are untouched.
+  function doSaveEdit(f,v){
+    const size=v.size,cleanPhone=v.cleanPhone,mt=v.mt;
         const orig=bookings.find(function(b){return b.id===editId;});
         const origPt=(orig&&Array.isArray(orig.preferredTables))?orig.preferredTables.slice().sort().join(","):"";
         const newPt=Array.isArray(f.preferredTables)?f.preferredTables.slice().sort().join(","):"";
@@ -1416,7 +1403,9 @@ function BookingApp(){
         const ok=saveBookings(buildNextMemo);
         if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash();
         setShowForm(false);setViewDate(f.date);
-      } else {
+  }
+  function doSaveNew(f,v){
+    const size=v.size,dur=v.dur,cleanPhone=v.cleanPhone,mt=v.mt;
         const newId=genId();
         // v14: Book Again flow. When f.returnOf is set, the new booking links
         // back to its source, gets a distinctive "created via Book Again" entry
@@ -1483,7 +1472,35 @@ function BookingApp(){
         // shows optimistically + auto-retries, so the intent stands either way).
         if(pendingWaitlistRef.current){removeFromWaitlist(pendingWaitlistRef.current);pendingWaitlistRef.current=null;}
         setShowForm(false);setViewDate(f.date);
-      }
+  }
+  function doSave(){
+    // v17.0.0: apply the pending/confirm status override to a CLONE of the form
+    // so every downstream read (status write, diffBooking history, completed-
+    // duration gate, flash condition) sees the effective status uniformly.
+    const so=statusOverrideRef.current;
+    const f=so?Object.assign({},formRef.current,{status:so}):formRef.current;
+    try{
+      if(!f.name||!f.name.trim()){setError("Customer name is required.");return;}
+      // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
+      // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
+      if(!f.date){setError("Please set a date.");return;}
+      if(!f.time){setError("Please set a time.");return;}
+      const sm=toMins(f.time);
+      // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
+      // viewed day, and block a closed day outright.
+      const fh=hoursFor(f.date);
+      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
+      if(sm<fh.open*60||sm>fh.close*60){setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
+      const size=Number(f.size)||2;
+      const dur=f.customDur||getDur(size);
+      const cleanPhone=cleanPhoneOf(f.phone);
+      const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
+      // v16.0.0 follow-up: completed bookings excluded from the busy set — a
+      // completed visit is over, its table is free (mirrors ManualModal +
+      // WalkinForm; the optimizer already ignores completed via isActive).
+      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
+      if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
+      else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
     }catch(err){setError("Error: "+err.message);}
   }
   function save(statusOverride){
