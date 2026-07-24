@@ -86,7 +86,7 @@ import { BlockModal }  from "./components/BlockModal";
 function lazyChunk(load,name){
   return lazy(function(){
     return load().then(function(m){
-      try{sessionStorage.removeItem("mgt-chunk-reload");}catch(e){}
+      try{sessionStorage.removeItem("mgt-chunk-reload");}catch{/* ignore */}
       return m;
     }).catch(function(err){
       console.error("[chunk] failed to load "+name,err);
@@ -95,7 +95,7 @@ function lazyChunk(load,name){
           sessionStorage.setItem("mgt-chunk-reload","1");
           window.location.reload();
         }
-      }catch(e){}
+      }catch{/* ignore */}
       return {default:function ChunkLoadError(){
         return <div style={{padding:16,fontSize:13,fontWeight:600,color:"var(--danger-text)"}}>Couldn’t load this screen — the app may have been updated. Please reload.</div>;
       }};
@@ -267,7 +267,7 @@ function readThemePref(){
     const v=localStorage.getItem("mgt-theme");
     if(v==="dark") return true;
     if(v==="light") return false;
-  }catch(e){}
+  }catch{/* ignore */}
   return undefined;
 }
 
@@ -290,7 +290,7 @@ function readAppWidth(){
   try{
     const v=parseInt(localStorage.getItem("mgt-appwidth"),10);
     if(Number.isFinite(v)&&v>=APP_WIDTH_MIN&&v<=APP_WIDTH_MAX) return v;
-  }catch(e){}
+  }catch{/* ignore */}
   const w=Math.round((window.innerWidth-300)/50)*50;
   return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,w));
 }
@@ -311,7 +311,7 @@ function readTlNum(b){
   try{
     const v=parseFloat(localStorage.getItem(b.key));
     if(Number.isFinite(v)&&v>=b.min&&v<=b.max&&Math.round(v/b.step)*b.step===v) return v;
-  }catch(e){}
+  }catch{/* ignore */}
   return b.def;
 }
 function readTlSettings(){
@@ -721,14 +721,14 @@ function BookingApp(){
   const isDark=useThemeMode(themePref);
   function onToggleDark(){
     const next=!isDark;
-    try{localStorage.setItem("mgt-theme",next?"dark":"light");}catch(e){}
+    try{localStorage.setItem("mgt-theme",next?"dark":"light");}catch{/* ignore */}
     setThemePref(next);
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
   function onSetAppWidth(next){
     const v=Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,next));
-    try{localStorage.setItem("mgt-appwidth",String(v));}catch(e){}
+    try{localStorage.setItem("mgt-appwidth",String(v));}catch{/* ignore */}
     setAppWidth(v);
   }
   // v17.1.0: per-device "Reduce animations" (Settings → General). Theme
@@ -737,14 +737,14 @@ function BookingApp(){
   // kill-switch keys on the attribute, and atoms.jsx's useFlip checks it for
   // WAAPI animations. Keep all three in sync.
   const [reduceMotion,setReduceMotion]=useState(function(){
-    try{return localStorage.getItem("mgt-reduce-motion")==="1";}catch(e){return false;}
+    try{return localStorage.getItem("mgt-reduce-motion")==="1";}catch{return false;}
   });
   function onToggleReduceMotion(){
     const next=!reduceMotion;
     try{
       if(next) localStorage.setItem("mgt-reduce-motion","1");
       else localStorage.removeItem("mgt-reduce-motion");
-    }catch(e){}
+    }catch{/* ignore */}
     if(next) document.documentElement.dataset.motion="reduce";
     else delete document.documentElement.dataset.motion;
     setReduceMotion(next);
@@ -753,14 +753,14 @@ function BookingApp(){
   // localStorage["mgt-plan-gestures"]="0" only when OFF (absent = on, the
   // default) — gates PlanView's wheel/pinch zoom, drag pan and double-tap reset.
   const [planGestures,setPlanGestures]=useState(function(){
-    try{return localStorage.getItem("mgt-plan-gestures")!=="0";}catch(e){return true;}
+    try{return localStorage.getItem("mgt-plan-gestures")!=="0";}catch{return true;}
   });
   function onTogglePlanGestures(){
     const next=!planGestures;
     try{
       if(next) localStorage.removeItem("mgt-plan-gestures");
       else localStorage.setItem("mgt-plan-gestures","0");
-    }catch(e){}
+    }catch{/* ignore */}
     setPlanGestures(next);
   }
   // v17.2.0: per-device Timeline zoom/follow settings (see readTlSettings above).
@@ -772,7 +772,7 @@ function BookingApp(){
     try{
       if(v===b.def) localStorage.removeItem(b.key);
       else localStorage.setItem(b.key,String(v));
-    }catch(e){}
+    }catch{/* ignore */}
   }
   function onSetTlSetting(name,next){
     const b=TL_SETTING_BOUNDS[name];
@@ -1209,7 +1209,7 @@ function BookingApp(){
       a.click();
       document.body.removeChild(a);
       setTimeout(function(){URL.revokeObjectURL(url);},1000);
-    }catch(e){setWriteWarning("Couldn't create the backup file on this device.");}
+    }catch{setWriteWarning("Couldn't create the backup file on this device.");}
   }
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
   // bookings remain for statistics (covers, day/range stats, phone-less
@@ -1800,7 +1800,6 @@ function BookingApp(){
       // If the transition triggers a seated-shift, force no-reshuffle by passing
       // autoOptimizerState=false to bookingsAfterAction, so other bookings never
       // move as a side-effect of someone sitting down early/late.
-      let seatedShiftHappened=false;
       const updated=b.map(function(x){
         if(x.id!==id) return x;
         const histEntries=[histEntry("status → "+status,user)];
@@ -1825,7 +1824,6 @@ function BookingApp(){
             // scheduledTime is intentionally NOT updated here — it stays pinned to
             // the confirmed time so Book Again and history reads show the true plan.
             histEntries.push(histEntry("seated "+shift.direction+": time adjusted "+shift.oldTime+" → "+shift.newTime,user));
-            seatedShiftHappened=true;
           }
         }
         extra.history=(x.history||[]).concat(histEntries);

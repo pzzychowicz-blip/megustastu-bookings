@@ -39,12 +39,16 @@ import { TableGrid } from "./TableGrid";
 export function ManualModal({ booking, bookings, onSave, onClose, titleText, blocks = [] }) {
   const [selected, setSelected] = useState(booking && booking.tables ? booking.tables.slice() : []);
   const [swapBusy, setSwapBusy] = useState(false);
-  if (!booking) return null;
+  // Lint cleanup (2026-07-24): the null guard used to sit HERE — above the
+  // keyboard useEffect below — so a mounted instance whose `booking` turned
+  // null would change the hook count (the v16.4.0 ListView crash class). The
+  // guard moved below the effect; `bk` null-proofs the derivations in between.
+  const bk = booking || {};
 
   // ── Derived context (recomputed every render — same as original) ──────────
-  const needed = booking.size || 2;
-  const s = toMins(booking.time || "13:00");
-  const e = s + (booking.duration || 90);
+  const needed = bk.size || 2;
+  const s = toMins(bk.time || "13:00");
+  const e = s + (bk.duration || 90);
   // v16.0.0 follow-up: completed bookings are excluded — a completed visit is
   // over (its guests left; its duration is frozen at the completion moment), so
   // it must neither read as busy NOR be swappable. This is what lets a seated
@@ -52,7 +56,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
   // (previously the two PAST windows overlapped and the grid showed it busy).
   // Matches the optimizer, which already ignores completed via isActive.
   const otherBookings = bookings.filter((b) =>
-    b && b.id !== booking.id && b.date === booking.date && b.status !== "cancelled" && b.status !== "completed" && (b.tables || []).length > 0
+    b && b.id !== bk.id && b.date === bk.date && b.status !== "cancelled" && b.status !== "completed" && (b.tables || []).length > 0
   );
   const otherSlots = otherBookings.map((b) => ({
     tables: b.tables || [],
@@ -62,7 +66,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
     id: b.id,
     name: b.name
   })).concat(
-    getBlockSlots(blocks, booking.date).map((sl) => ({ ...sl, status: "blocked", id: "__block__", name: "Blocked" }))
+    getBlockSlots(blocks, bk.date).map((sl) => ({ ...sl, status: "blocked", id: "__block__", name: "Blocked" }))
   );
   const busy = getBusy(otherSlots, s, e);
   const seatedBusy = new Set();
@@ -166,6 +170,9 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [swapBusy, selected, ok, isSwapping, affectedBookings, onSave]);
+
+  if (!booking) return null; // moved below all hooks — see the note above
+
 
   // v14.4.1: assign/cancel row pinned via Overlay's `footer` slot (marginTop
   // dropped — the footer region's borderTop+padding separates it now).

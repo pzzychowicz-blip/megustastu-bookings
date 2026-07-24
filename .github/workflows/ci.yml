@@ -1,11 +1,11 @@
 name: CI
 
-# Runs on every PR and on pushes to main. Gates on a clean production build and
-# a green test suite (tests/*.test.js). Lint runs for visibility but does NOT
-# block: the repo carries ~68 pre-existing eslint errors (mostly no-unused-vars
-# + react-refresh/only-export-components) that predate the test harness — a
-# separate cleanup, tracked in the tech-debt plan. Once that's cleared, drop the
-# `continue-on-error` below to make lint a hard gate too.
+# Runs on every PR and on pushes to main. Gates on a clean production build, a
+# green test suite (tests/*.test.js), AND a 0-error lint (the ~68-error backlog
+# was cleared 2026-07-24: real fixes for unused vars / empty catches /
+# conditional hooks, plus the react-hooks v6 React-Compiler advisories
+# downgraded to warnings in eslint.config.js — they flag the app's documented
+# live-binding/ref-mirror architecture). Warnings do not block.
 
 on:
   pull_request:
@@ -26,6 +26,5 @@ jobs:
         run: npm run build
       - name: Test
         run: npm test
-      - name: Lint (non-blocking — pre-existing errors, see the note above)
+      - name: Lint (hard gate since the 2026-07-24 cleanup)
         run: npm run lint
-        continue-on-error: true

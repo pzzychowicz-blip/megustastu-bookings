@@ -21,13 +21,17 @@ import { toMins, isIn } from "../lib/booking-logic";
 import { Overlay, Section, Fld, mkBtn, mkInp } from "./atoms";
 
 export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose }) {
-  if (!tableId) return null;
   const existing = blocks.filter((bl) => bl.tableId === tableId && bl.date === date);
   const indoor = isIn(tableId);
   const tc = indoor ? TBL.ind : TBL.out;
   const [mode, setMode] = useState(existing.length > 0 ? "view" : "add");
   const [from, setFrom] = useState(OPEN + ":00");
   const [to, setTo] = useState(GRID_CLOSE + ":00");
+  // Lint cleanup (2026-07-24): the null guard moved BELOW the hooks — an early
+  // return above useState changes the hook count if tableId ever turns null on
+  // a mounted instance (the v16.4.0 ListView crash class). All derivations
+  // above are null-safe.
+  if (!tableId) return null;
 
   function handleSave() {
     if (!from || !to || toMins(to) <= toMins(from)) return;
