@@ -146,6 +146,12 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
       return t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || el.isContentEditable;
     }
     function handler(ev) {
+      // v17.4.0 /code-review: bail when there is no booking. The null guard sits
+      // BELOW this effect (moving it above would change the hook count — the
+      // v16.4.0 ListView crash class), so without this a mounted-but-null
+      // instance would render nothing yet still swallow S and C app-wide via the
+      // unconditional preventDefault below.
+      if (!booking) return;
       if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
       const k = ev.key;
       if (k === "Enter") {
@@ -169,7 +175,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, titleText, blo
     }
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [swapBusy, selected, ok, isSwapping, affectedBookings, onSave]);
+  }, [swapBusy, selected, ok, isSwapping, affectedBookings, onSave, booking]);
 
   if (!booking) return null; // moved below all hooks — see the note above
 

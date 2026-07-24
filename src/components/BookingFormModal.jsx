@@ -36,12 +36,12 @@
 import { useRef, useState, useMemo } from "react";
 import { KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, hoursFor, INDOOR, OUTDOOR } from "../lib/constants";
 import {
-  getDur, toMins, toTime, overlaps,
+  getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes,
   optimizerActiveFor
 } from "../lib/booking-logic";
-import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone } from "../lib/customers";
+import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone, findPhoneOverlaps } from "../lib/customers";
 import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
@@ -198,17 +198,8 @@ export function BookingFormModal({
   // booking being edited. Cheap: one filter over `bookings` keyed on the four
   // fields that can change it.
   const dupPhone=useMemo(function(){
-    if(!hasRealPhone(form.phone)||!form.date||!form.time) return [];
-    const key=normalizePhone(form.phone);
-    const s=toMins(form.time);
-    const e=s+(Number(form.customDur)||getDur(Number(form.size)||2));
-    return bookings.filter(function(b){
-      if(!b||b.id===editId||b.date!==form.date) return false;
-      if(b.status==="cancelled"||b.status==="completed") return false;
-      if(normalizePhone(b.phone)!==key) return false;
-      const bs=toMins(b.time);
-      return overlaps(s,e,bs,bs+(b.duration||90)); // booking-logic's half-open predicate — ONE overlap rule
-    });
+    return findPhoneOverlaps(bookings,{phone:form.phone,date:form.date,time:form.time,
+      size:form.size,dur:form.customDur,excludeId:editId});
   },[bookings,form.phone,form.date,form.time,form.size,form.customDur,editId]);
   const dupWarn=dupPhone.length?<div style={{marginTop:8,padding:"8px 12px",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:10,fontSize:12,fontWeight:600,color:"var(--warn-text)"}}>
     {"⚠ This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}

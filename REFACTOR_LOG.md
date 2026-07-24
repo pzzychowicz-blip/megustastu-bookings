@@ -5316,3 +5316,40 @@ documented at `undoLastAction`. Re-verified live in DEV: no-op edit arms no
 undo; a real reshuffling edit shows "Booking updated · tables re-optimised";
 the warning names the date, fires 1 min inside the window and clears at the
 boundary.
+
+**Review round 2 (same version, pre-merge — Patryk-directed via AskUserQuestion):**
+(1) **Undo now restores what the action MOVED, not just the booking acted on.**
+Two new PURE helpers in booking-logic — `undoSnapshots(prev,next)` (the
+pre-action version of every booking the action changed or removed) and
+`applyUndo(current,snapshots)` — let `undoInfo` carry a SNAPSHOT SET
+(`{snapshots, primaryId, kind, noShow}`). Each action computes its post-state
+once through a prev-identity memo (the doSave pattern, so the delta and the
+dispatched write share ONE optimizer pass) and arms undo with the delta.
+Deliberately bounded: bookings the action never touched are returned by
+identity, so the per-booking diff-write skips them and a concurrent edit
+elsewhere in the day survives — a full-day restore would have widened exactly
+the lost-write window the v15.2.0–v16.0.0 CAS arc closes. `undoLastAction`
+restores VERBATIM (syncLiveDurations only) and NOT through
+`bookingsAfterAction`: its optimizer branch runs whenever
+`optimizerActiveFor()` is true — which is ALWAYS true for a future date
+regardless of the toggle — and would instantly re-apply the moves undo just
+reversed. Only the primary booking gets a history entry (the others were moved
+by the optimizer, and the original reshuffle wrote no history for them either).
+(2) **ManualModal's key handler bails when `booking` is null** — the null guard
+sits below the effect (moving it above would change the hook count), so without
+this a mounted-but-null instance would swallow S and C app-wide.
+(3) **Same-phone rule extracted** to `customers.js` `findPhoneOverlaps` (uses
+booking-logic's `overlaps`/`toMins`/`getDur`; customers.js had no imports and
+booking-logic imports only constants, so the direction stays acyclic).
+(4) **Test suite 51 → 74**: 8 undo-delta cases (change/remove/untouched,
+history+updatedAt churn ignored, table-order equivalence, identity preservation,
+round-trip), 7 findPhoneOverlaps cases (half-open boundary, format variants,
+excluded statuses, explicit duration, sort), 8 optimizer invariants (seated and
+locked walk-ins never reshuffled, completed frees its table, cancelled never
+occupies, idempotence, conflict-free service, blocks respected, zone preference).
+
+**Verification:** build clean (187.52 kB gz); **74/74 tests**; lint 0 errors.
+Live DEV QA of the delta restore — cancelling DeltaA displaced DeltaB from
+table 3 → table 2; Undo returned DeltaA to table 2 AND DeltaB to table 3, a
+state byte-identical to the pre-cancel map, with the two unrelated bookings
+untouched; survived a reload.

@@ -19,6 +19,11 @@
 // Phone normalisation: strip all non-digits except a single leading +.
 // Used for matching customers across bookings (and WA conversations) — the
 // same normaliser must run everywhere so keys line up.
+// v17.4.0: findPhoneOverlaps (bottom of file) needs the interval + duration
+// primitives. customers.js has no other imports and booking-logic imports only
+// from constants, so this direction stays acyclic.
+import { overlaps, toMins, getDur } from "./booking-logic";
+
 export function normalizePhone(p) {
   if (!p) return "";
   const s = String(p).trim();
@@ -218,4 +223,34 @@ export function searchGuestsByName(bookings, index, query, limit) {
   });
   rows.sort(function (a, b) { return (b.latestDate || "").localeCompare(a.latestDate || ""); });
   return rows.slice(0, max);
+}
+
+// ── Same-phone double-booking detection (v17.4.0) ─────────────────────────────
+// Does this customer already have an OVERLAPPING booking on the same date?
+// Identity is the normalized phone (the primitive above — one phone-identity
+// source), and the interval test is booking-logic's exported `overlaps`, so the
+// half-open rule is never re-implemented.
+//
+// Excluded: the booking being edited (`excludeId`), cancelled and completed
+// bookings (a finished earlier visit is not a double-booking), and anything
+// without a real phone. Advisory by design — the caller must NOT block a save
+// on this: a genuine party does book twice (two tables at once, a party
+// splitting), so staff decide.
+//
+// Returns the conflicting bookings, earliest first.
+export function findPhoneOverlaps(bookings, opts) {
+  const o = opts || {};
+  if (!Array.isArray(bookings) || !hasRealPhone(o.phone) || !o.date || !o.time) return [];
+  const key = normalizePhone(o.phone);
+  const s = toMins(o.time);
+  const e = s + (Number(o.dur) || getDur(Number(o.size) || 2));
+  return bookings
+    .filter(function (b) {
+      if (!b || b.id === o.excludeId || b.date !== o.date) return false;
+      if (b.status === "cancelled" || b.status === "completed") return false;
+      if (normalizePhone(b.phone) !== key) return false;
+      const bs = toMins(b.time);
+      return overlaps(s, e, bs, bs + (b.duration || 90));
+    })
+    .sort(function (a, b) { return toMins(a.time) - toMins(b.time); });
 }
