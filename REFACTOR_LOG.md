@@ -5152,3 +5152,27 @@ DEV QA: load toast appears on refresh; cancel → Undo pill renders (Undo button
 present); the red write-warning banner rendered through AppBanners during a
 transient retry-exhaustion and its Dismiss button cleared it with the Reveal
 exit ease; cancel persisted correctly across reload; console clean.
+
+## v17.3.5 — De-monolith #3: doSave split into doSaveEdit / doSaveNew (2026-07-24)
+
+**Branch `feat/v17.3.5-dosave-split` (stacked on v17.3.4) · files: `src/App.jsx`, `CLAUDE.md` · behavioural change: none.**
+
+Final "Later" item from the tech-debt plan. The 199-line `doSave` was split
+IN-FILE (the helpers stay inside BookingApp so every closure read — bookings,
+liveBookings, editId, swapAffected, tableBlocks, autoOptimizer, nowMins,
+saveBookings, addRule, pendingWaitlistRef… — is untouched): `doSave()` keeps
+the shared preamble (status-override clone, all synchronous validations, the
+manual-table availability guard) and dispatches to `doSaveEdit(f,v)` /
+`doSaveNew(f,v)`, whose bodies moved VERBATIM via a scripted line-range move
+(byte-identical bodies; `v` carries the preamble-derived size/dur/cleanPhone/
+mt). Early setError+return exits inside a helper end the save exactly as
+before; helper throws land in doSave's try/catch. The v15.7.0 capture-intent
+contract and the prev-identity `buildNextMemo` are untouched (each helper now
+owns its own memo pair — previously separate block scopes, now separate
+function scopes).
+
+**Verification:** build clean (186.76 kB gz); 51/51 tests; lint unchanged
+(30 pre-existing errors). Live DEV QA of all paths: NEW save (booking created,
+form closed), EDIT save (19:00 → 20:30 persisted + reshuffle toast), "Save
+pending" override (pending tag on the card), and a validation early-return
+("Customer name is required" keeps the form open). Console clean.

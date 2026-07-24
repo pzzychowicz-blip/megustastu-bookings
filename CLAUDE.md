@@ -26,7 +26,7 @@ scannable; archive old per-version sub-notes when a block gets long.
 
 ```
 src/
-├── App.jsx                          orchestration layer (~1315 lines)
+├── App.jsx                          orchestration layer (~2360 lines; v17.3.3–.5 de-monolith: keyboard → useKeyboardShortcuts, toasts/banners → StatusToasts/AppBanners, and doSave split IN-FILE into doSaveEdit/doSaveNew + a validating doSave() orchestrator — bodies verbatim, still closures inside BookingApp)
 ├── firebase.js                      DEV/PROD env switch (import.meta.env.DEV) — DO NOT bypass the split
 ├── hooks/
 │   ├── usePersistence.js            Firebase + write-guards (loaded/empty + v15.2.0 freshness-resync gate + v16.0.0 wake-race fix: a gap trip resets isConnectedRef so resync waits for a FRESH .info/connected) + v15.5.0 per-booking-node diff-write (+ v16.0.0 baseUpdatedAt CAS + StrictMode patch-dedupe; blocks via revGuard) + lazy array→keyed migration + auto-extend + auto-complete-after-close (v15.1.0) + v17.3.0 `bookingsReady` state (false until the FIRST bookings snapshot lands — drives App's "⟳ Loading bookings…" floating toast)
