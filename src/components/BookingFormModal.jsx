@@ -36,7 +36,7 @@
 import { useRef, useState, useMemo } from "react";
 import { KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, hoursFor, INDOOR, OUTDOOR } from "../lib/constants";
 import {
-  getDur, toMins, toTime,
+  getDur, toMins, toTime, overlaps,
   trialFits, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes,
   optimizerActiveFor
@@ -189,9 +189,39 @@ export function BookingFormModal({
     {histList.slice(0,5).map(function(b){return <div key={b.id} style={{padding:"3px 0",borderTop:"1px solid "+histTk.border}}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</div>;})}
     {histList.length>5?<div style={{padding:"3px 0",borderTop:"1px solid "+histTk.border,color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</div>:null}
   </div>:null;
-  const custChips=(regularChip||noShowChip)?<div style={{paddingTop:8}}>
+  // v17.4.0 — SAME-PHONE double-booking warning. Same customer (matched on the
+  // normalized phone, the customers.js identity primitive), same DATE, and the
+  // two time windows OVERLAP → an amber advisory row under the chips. Advisory
+  // only: it never blocks Save — a real party legitimately books twice (two
+  // tables at once, a party splitting), and staff decide. Cancelled/completed
+  // are excluded (a completed earlier visit isn't a double-booking), as is the
+  // booking being edited. Cheap: one filter over `bookings` keyed on the four
+  // fields that can change it.
+  const dupPhone=useMemo(function(){
+    if(!hasRealPhone(form.phone)||!form.date||!form.time) return [];
+    const key=normalizePhone(form.phone);
+    const s=toMins(form.time);
+    const e=s+(Number(form.customDur)||getDur(Number(form.size)||2));
+    return bookings.filter(function(b){
+      if(!b||b.id===editId||b.date!==form.date) return false;
+      if(b.status==="cancelled"||b.status==="completed") return false;
+      if(normalizePhone(b.phone)!==key) return false;
+      const bs=toMins(b.time);
+      return overlaps(s,e,bs,bs+(b.duration||90)); // booking-logic's half-open predicate — ONE overlap rule
+    });
+  },[bookings,form.phone,form.date,form.time,form.size,form.customDur,editId]);
+  const dupWarn=dupPhone.length?<div style={{marginTop:8,padding:"8px 12px",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:10,fontSize:12,fontWeight:600,color:"var(--warn-text)"}}>
+    {"⚠ This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}
+    {dupPhone.slice(0,3).map(function(b){return <div key={b.id} style={{fontWeight:500,paddingTop:2}}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</div>;})}
+    {dupPhone.length>3?<div style={{fontWeight:500,paddingTop:2}}>{"+ "+(dupPhone.length-3)+" more"}</div>:null}
+  </div>:null;
+  // The container stays mounted while ANY of the three can render, so the
+  // dupWarn Reveal below can animate its collapse instead of being torn out
+  // with its parent (it is often the only content, for a first-time guest).
+  const custChips=(regularChip||noShowChip||dupPhone.length)?<div style={{paddingTop:8}}>
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{regularChip}{noShowChip}</div>
     <Reveal show={!!chipHistPanel}>{chipHistPanel}</Reveal>
+    <Reveal show={!!dupWarn}>{dupWarn}</Reveal>
   </div>:null;
   // Dropdown rows use onMouseDown/onTouchStart (fire BEFORE the input's blur)
   // so the tap lands before phoneFocus flips false. Opaque sheet token per the

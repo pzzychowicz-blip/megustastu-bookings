@@ -5213,9 +5213,13 @@ normally. Noted in passing (pre-existing, untouched): BlockModal's "To"
 initialises to GRID_CLOSE 26 → "26:00", invalid for <input type=time>, so it
 shows blank when close is past midnight.
 
-## v17.4.0 — PWA install + offline shell (2026-07-24)
+## v17.4.0 — PWA install + offline shell · general undo · same-phone warning (2026-07-24)
 
-**Branch `feat/v17.4.0-pwa` (stacked on the lint cleanup) · files: `public/manifest.webmanifest` + `public/sw.js` + icons (`icon.svg`, `icon-192/512.png`, full-bleed `apple-touch-icon.png`), `index.html` (head links/meta), `src/main.jsx` (prod-only SW registration), `CLAUDE.md` · feature #1 from the shortlist (Patryk-picked via AskUserQuestion).**
+**Branch `feat/v17.4.0-pwa-undo-dupwarn` — ONE version, three commits (one per feature; the three shortlist items Patryk selected via AskUserQuestion).**
+
+### v17.4.0 part 1 — PWA install + offline shell
+
+**Files: `public/manifest.webmanifest` + `public/sw.js` + icons (`icon.svg`, `icon-192/512.png`, full-bleed `apple-touch-icon.png`), `index.html` (head links/meta), `src/main.jsx` (prod-only SW registration), `CLAUDE.md` · feature #1 from the shortlist (Patryk-picked via AskUserQuestion).**
 
 Makes the app installable on the restaurant tablets + resilient to flaky wifi.
 Manifest: standalone display, accent theme colour, PNG 192/512 + SVG any
@@ -5263,3 +5267,52 @@ no longer needs to perform.
 DEV QA: delete → "Booking deleted" toast + Undo → booking restored; edit
 (20:30 → 16:45) → "Booking updated" toast + Undo → time reverted; BOTH survived
 a full reload (real Firebase writes, not local-only state); console clean.
+
+### v17.4.0 part 3 — Same-phone double-booking warning
+
+**Files: `src/components/BookingFormModal.jsx`, `CLAUDE.md` · feature #4 from the shortlist (Patryk-picked via AskUserQuestion).**
+
+An amber advisory row under the form's recognition chips when the typed phone
+already has an OVERLAPPING booking on the same date: identity via
+`normalizePhone` (the customers.js primitive — one phone-identity source),
+half-open overlap `bs < e && s < be` matching booking-logic, excluding
+cancelled/completed (a finished earlier visit isn't a double-booking) and the
+booking being edited. Lists up to 3 conflicts (time range · pax · tables) with
+a "+N more" tail; wrapped in `Reveal` so it eases in/out like the chip-history
+panel. **Deliberately advisory — it never blocks Save**: a genuine party does
+book twice (two tables at once, a party splitting), so this informs rather
+than prevents. One `useMemo` over `bookings` keyed on
+phone/date/time/size/customDur/editId.
+
+**Verification:** build clean (187.28 kB gz); 51/51 tests; lint 0 errors. Live
+DEV QA: same phone + overlapping time → warning with the conflicting booking's
+details ("18:00–19:30 · 2 pax · 1A"); moving the time clear of the window →
+warning gone; changing to a different phone at an overlapping time → gone (no
+false positives); saving through the warning succeeded and both bookings
+landed on separate tables (1A + 1B). Console clean.
+
+**/code-review round (same version, pre-merge — xhigh pass over v17.3.1→v17.4.0):**
+(a) **sw.js cached error responses as the offline shell** — the navigation
+branch stored EVERY response under "/" with no `res.ok` check (the asset branch
+below it had one), so a single 500 during a deploy would become the permanent
+offline shell. Now gated on `res.ok && res.type === "basic"`; a bad response is
+still returned to the page untouched. (b) **The undo pill swallowed "Tables
+re-optimised."** — undo outranks `reshuffled` in the one-slot toast priority, so
+extending undo to every edit/delete killed the only cue that the optimizer moved
+OTHER bookings. Fixed at the right depth (no priority reshuffle): a new
+`undoNote` prop appends the clause to the pill → "Booking updated · tables
+re-optimised", one slot, both facts. (c) **Undo was armed for a no-op edit** —
+`saveBookings` returns true for an EMPTY patch (persist() skips the write but
+reports dispatched), so opening Edit and pressing Save offered an Undo for a
+change that never happened. Now gated on `diffBooking`'s "saved (no field
+changes)" sentinel, computed once and shared with the history entry. (d) The
+dup-phone banner said "**today**" while the check runs against `form.date` —
+now names the actual date. (e) That check re-implemented the half-open overlap
+predicate; it now calls booking-logic's exported `overlaps()` (ONE overlap
+rule). (f) `custChips` stays mounted while `dupPhone.length`, so the warning's
+Reveal collapse animates instead of being torn out with its parent. Undo's
+SCOPE (restores the snapshotted booking only, not collateral reshuffles) is now
+documented at `undoLastAction`. Re-verified live in DEV: no-op edit arms no
+undo; a real reshuffling edit shows "Booking updated · tables re-optimised";
+the warning names the date, fires 1 min inside the window and clears at the
+boundary.
