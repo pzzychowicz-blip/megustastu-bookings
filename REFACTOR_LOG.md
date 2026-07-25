@@ -5476,8 +5476,22 @@ is OS behaviour, outside the service worker's reach.
 
 Within hours of v17.4.0 reaching production, the app **froze at "⟳ Loading
 bookings…" on both iPhone and iPad**. Desktop was completely unaffected.
-Clearing site data on a device fixed it immediately — which identified the
-v17.4.0 service worker and its caches as the cause.
+Clearing site data on a device fixed it immediately, which points at the
+v17.4.0 service worker and its caches.
+
+**How strong that evidence actually is — recorded honestly, because the first
+write-up of this entry called it "confirmed".** Clearing site data is a blunt
+instrument: it also wipes **IndexedDB** (where Firebase Auth persists its
+session) and localStorage, so it does not uniquely implicate the worker. The
+laptop had the *same* worker installed and was never affected, so the worker
+alone was never sufficient — the differentiator is iOS, which an
+IndexedDB/auth-state theory fits just as well. The worker remains by far the
+most likely cause (it was the release's only boot-path change), and it is being
+withdrawn because it is **unverifiable on the affected devices**, not because
+root cause was proven. **The incident is not closed until both iOS devices have
+been seen loading cleanly after this deploy with no further manual clearing;**
+if either still freezes, the worker was a red herring and the next place to look
+is Firebase auth / IndexedDB state on iOS.
 
 **Diagnosis.** Diffing `src/` for v17.4.0 showed the entire release touched only
 action handlers and the booking form (`App.jsx` undo paths, `BookingFormModal`,
@@ -5502,11 +5516,27 @@ possible pre-deploy verification was the one that broke.**
 installed worker keeps controlling the page forever: deleting `/sw.js` from the
 deploy does not unregister it, so a plain revert would have left every affected
 device broken until someone cleared its data by hand. `public/sw.js` is now a
-worker at the same URL that, once, on `activate`: deletes every cache, calls
-`registration.unregister()`, and navigates open tabs so a frozen device recovers
-without manual intervention. It deliberately has **no `fetch` handler at all**,
-so it intercepts nothing even before activating. `src/main.jsx` no longer
-registers anything, so no new device installs one.
+worker at the same URL that, once, on `activate`, deletes our own caches
+(`mgt-*`) and calls `registration.unregister()`. It deliberately has **no
+`fetch` handler at all**, so it intercepts nothing even before activating.
+`src/main.jsx` no longer registers anything, so no new device installs one.
+
+**What recovery actually looks like — stated precisely, because an earlier
+draft of this entry overstated it.** A browser only re-fetches `/sw.js` when the
+device navigates (or on a periodic check that can be ~24h away for an idle
+registration), so a frozen tab does **not** heal untouched: someone reloads it,
+that reload picks up the kill switch, and because the old worker still served
+that particular load the page may need one further reload before it is clean.
+What the fix removes is the need to dig through Settings and clear website data
+on every device — not the need to reload. An earlier cut also called
+`clients.navigate()` to save that second reload; it was **dropped in review**
+because it fired on healthy devices too (the laptop was never broken, and an
+unsolicited reload destroys a half-typed booking, which is React state and never
+persisted), and because caches are already deleted by that point, so a network
+blip during the forced reload would strand the tab on the browser's offline
+error page with no shell to fall back on. The `caches.delete()` sweep was also
+scoped to our own `mgt-` keys rather than every cache on the origin, since this
+file is meant to stay deployed indefinitely.
 
 **Verified against the real failure state, not a mock.** A harness installed the
 **actual v17.4.0 worker** (from `origin/main`) until it was controlling with a
