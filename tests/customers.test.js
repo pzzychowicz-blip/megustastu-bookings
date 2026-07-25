@@ -9,7 +9,7 @@ import { describe, it, expect } from "vitest";
 import {
   normalizePhone, formatPhone, hasRealPhone, isNoShow,
   matchCustomerByPhone, customerIndex, noShowMap,
-  searchBookings, searchCustomers, searchGuestsByName,
+  searchBookings, searchCustomers, searchGuestsByName, findPhoneOverlaps,
 } from "../src/lib/customers.js";
 
 function bk(o) {
@@ -138,5 +138,61 @@ describe("searchGuestsByName (no-merge rule)", () => {
   });
   it("requires a query of at least 2 chars", () => {
     expect(searchGuestsByName(bks, idx, "a")).toEqual([]);
+  });
+});
+
+// ── v17.4.0: same-phone double-booking rule ───────────────────────────────────
+// Extracted from BookingFormModal so the rule is testable. Advisory only — the
+// caller must never block a save on it (a real party does book twice).
+describe("findPhoneOverlaps", () => {
+  const P = "+34600111222";
+  const existing = bk({ id: "x", phone: P, date: "2099-01-01", time: "19:30", size: 2, duration: 90 }); // 19:30–21:00
+
+  it("flags an overlapping booking for the same phone", () => {
+    const r = findPhoneOverlaps([existing], { phone: P, date: "2099-01-01", time: "20:00", size: 2 });
+    expect(r.map((b) => b.id)).toEqual(["x"]);
+  });
+
+  it("is half-open: touching at the boundary is NOT an overlap", () => {
+    // existing ends 21:00; a 21:00 start must not flag
+    expect(findPhoneOverlaps([existing], { phone: P, date: "2099-01-01", time: "21:00", size: 2 })).toEqual([]);
+    // one minute inside does flag
+    expect(findPhoneOverlaps([existing], { phone: P, date: "2099-01-01", time: "20:59", size: 2 })).toHaveLength(1);
+  });
+
+  it("matches across phone FORMATTING variants", () => {
+    const r = findPhoneOverlaps([existing], { phone: "+34 600 111 222", date: "2099-01-01", time: "20:00", size: 2 });
+    expect(r).toHaveLength(1);
+  });
+
+  it("ignores a different phone, a different date, and the edited booking", () => {
+    const opts = { phone: P, date: "2099-01-01", time: "20:00", size: 2 };
+    expect(findPhoneOverlaps([existing], { ...opts, phone: "+34600999888" })).toEqual([]);
+    expect(findPhoneOverlaps([existing], { ...opts, date: "2099-01-02" })).toEqual([]);
+    expect(findPhoneOverlaps([existing], { ...opts, excludeId: "x" })).toEqual([]);
+  });
+
+  it("ignores cancelled and completed bookings", () => {
+    const opts = { phone: P, date: "2099-01-01", time: "20:00", size: 2 };
+    expect(findPhoneOverlaps([{ ...existing, status: "cancelled" }], opts)).toEqual([]);
+    expect(findPhoneOverlaps([{ ...existing, status: "completed" }], opts)).toEqual([]);
+    // pending and seated DO count — they occupy a table
+    expect(findPhoneOverlaps([{ ...existing, status: "pending" }], opts)).toHaveLength(1);
+    expect(findPhoneOverlaps([{ ...existing, status: "seated" }], opts)).toHaveLength(1);
+  });
+
+  it("returns [] on missing phone/date/time rather than throwing", () => {
+    expect(findPhoneOverlaps([existing], { phone: "", date: "2099-01-01", time: "20:00" })).toEqual([]);
+    expect(findPhoneOverlaps([existing], { phone: P, date: "", time: "20:00" })).toEqual([]);
+    expect(findPhoneOverlaps([existing], { phone: P, date: "2099-01-01", time: "" })).toEqual([]);
+    expect(findPhoneOverlaps(null, { phone: P, date: "2099-01-01", time: "20:00" })).toEqual([]);
+  });
+
+  it("honours an explicit duration and sorts conflicts earliest-first", () => {
+    const early = bk({ id: "e", phone: P, date: "2099-01-01", time: "18:00", duration: 60 }); // 18:00–19:00
+    // a 15-min booking at 18:30 overlaps `early` only
+    expect(findPhoneOverlaps([existing, early], { phone: P, date: "2099-01-01", time: "18:30", dur: 15 }).map((b) => b.id)).toEqual(["e"]);
+    // a long booking spans both — earliest first
+    expect(findPhoneOverlaps([existing, early], { phone: P, date: "2099-01-01", time: "18:30", dur: 240 }).map((b) => b.id)).toEqual(["e", "x"]);
   });
 });

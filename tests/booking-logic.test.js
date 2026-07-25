@@ -18,7 +18,7 @@ import {
   verifyClean, findConflicts, canAssign, getBusy, getBlockSlots,
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
-  isLocked, isActive, isIn, comboOk,
+  isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES } from "../src/lib/constants.js";
 
@@ -338,5 +338,162 @@ describe("rangeStats", () => {
     expect(r.totalCovers).toBe(6);         // 2 + 4
     expect(r.avgParty).toBe(3);
     expect(r.noShows).toBe(1);
+  });
+});
+
+// ── v17.4.0: undo delta helpers ───────────────────────────────────────────────
+// These lock in the "restore what the action moved, and ONLY that" contract:
+// rewriting bookings an action never touched would widen the window in which
+// undo can clobber another device's concurrent edit.
+describe("undoSnapshots / applyUndo", () => {
+  const a = mk({ id: "a", time: "13:00", tables: ["2"] });
+  const b = mk({ id: "b", time: "13:00", tables: ["3"] });
+  const c = mk({ id: "c", time: "20:00", tables: ["4"] });
+
+  it("captures the PRE version of every booking the action changed", () => {
+    const prev = [a, b, c];
+    // the action edited a's size and the optimizer moved b to another table
+    const next = [{ ...a, size: 6 }, { ...b, tables: ["5A"] }, c];
+    const snaps = undoSnapshots(prev, next);
+    expect(snaps.map((x) => x.id).sort()).toEqual(["a", "b"]);
+    expect(snaps.find((x) => x.id === "a").size).toBe(a.size);
+    expect(snaps.find((x) => x.id === "b").tables).toEqual(["3"]);
+  });
+
+  it("captures a booking the action REMOVED (delete path)", () => {
+    const snaps = undoSnapshots([a, b], [b]);
+    expect(snaps.map((x) => x.id)).toEqual(["a"]);
+  });
+
+  it("ignores untouched bookings, and history/updatedAt churn", () => {
+    const prev = [a, b];
+    const next = [
+      { ...a, history: [{ at: "x", by: "y", action: "edited" }], updatedAt: 999 },
+      b,
+    ];
+    expect(undoSnapshots(prev, next)).toEqual([]);
+  });
+
+  it("treats table ORDER as equivalent (a reorder is not a move)", () => {
+    const two = mk({ id: "t", tables: ["1A", "1B"] });
+    expect(undoSnapshots([two], [{ ...two, tables: ["1B", "1A"] }])).toEqual([]);
+  });
+
+  it("applyUndo replaces existing bookings and re-adds deleted ones", () => {
+    const current = [{ ...a, size: 6 }, { ...b, tables: ["5A"] }, c];
+    const out = applyUndo(current, [a, b]);
+    expect(out.find((x) => x.id === "a").size).toBe(a.size);
+    expect(out.find((x) => x.id === "b").tables).toEqual(["3"]);
+    // untouched booking keeps its IDENTITY, so the diff-write skips it
+    expect(out.find((x) => x.id === "c")).toBe(c);
+  });
+
+  it("applyUndo re-adds a booking that is gone from current", () => {
+    const out = applyUndo([b], [a]);
+    expect(out.map((x) => x.id).sort()).toEqual(["a", "b"]);
+  });
+
+  it("applyUndo with no snapshots is a no-op", () => {
+    const cur = [a, b];
+    expect(applyUndo(cur, [])).toBe(cur);
+  });
+
+  it("a seated OVERSTAYER is not swept in when both sides are live-synced", () => {
+    // /code-review regression: bookingsAfterAction runs syncLiveDurations, which
+    // rewrites duration/customDur for a seated overstayer on today. Comparing a
+    // RAW prev against a synced next made that untouched booking look changed.
+    // App's undoDelta syncs the prev side first — modelled here.
+    const t = "2099-06-15";
+    const nowM = 15 * 60;                       // 15:00
+    const over = mk({ id: "ov", status: "seated", date: t, time: "13:00", duration: 90, tables: ["6"] });
+    const target = mk({ id: "tg", date: t, time: "20:00", tables: ["2"] });
+    const prev = [over, target];
+    // the action changed only `target`; the optimizer pass live-synced `over`
+    const next = syncLiveDurations(prev, t, nowM).map((b) =>
+      b.id === "tg" ? { ...b, status: "cancelled" } : b
+    );
+    // RAW prev: the overstayer is a false positive
+    expect(undoSnapshots(prev, next).map((b) => b.id).sort()).toEqual(["ov", "tg"]);
+    // SYNCED prev (what undoDelta does): only the real change survives
+    expect(undoSnapshots(syncLiveDurations(prev, t, nowM), next).map((b) => b.id)).toEqual(["tg"]);
+  });
+
+  it("round-trips: undo of an action restores the exact prior state", () => {
+    const prev = [a, b, c];
+    const next = [{ ...a, size: 6 }, { ...b, tables: ["5A"] }, c];
+    const restored = applyUndo(next, undoSnapshots(prev, next));
+    expect(restored.map((x) => ({ id: x.id, size: x.size, tables: x.tables })))
+      .toEqual(prev.map((x) => ({ id: x.id, size: x.size, tables: x.tables })));
+  });
+});
+
+// ── v17.4.0: optimizer invariants ─────────────────────────────────────────────
+// The heuristics in this file went through ~10 documented correctness rounds.
+// These lock the invariants CLAUDE.md calls out as load-bearing, so a future
+// refactor can't quietly relax one.
+describe("optimizer invariants", () => {
+  it("NEVER reshuffles a seated booking off its tables", () => {
+    const seated = mk({ id: "s", status: "seated", time: "13:00", size: 2, tables: ["7"], date: today });
+    const other = mk({ id: "o", status: "confirmed", time: "13:00", size: 4, tables: [], date: today });
+    const out = applyOpt([seated, other], today, []);
+    expect(out.find((b) => b.id === "s").tables).toEqual(["7"]);
+  });
+
+  it("NEVER reshuffles a locked walk-in", () => {
+    const walkin = mk({ id: "w", time: "13:00", size: 2, tables: ["6"], _manual: true, _locked: true });
+    const other = mk({ id: "o", time: "13:00", size: 6, tables: [] });
+    const out = applyOpt([walkin, other], D, []);
+    expect(out.find((b) => b.id === "w").tables).toEqual(["6"]);
+    expect(isLocked(out.find((b) => b.id === "w"))).toBe(true);
+  });
+
+  it("treats a COMPLETED booking's table as free", () => {
+    // a completed 13:00 booking must not block a new 13:00 booking on its table
+    const done = mk({ id: "d", status: "completed", time: "13:00", size: 2, tables: ["2"] });
+    const fresh = mk({ id: "f", status: "confirmed", time: "13:00", size: 2, tables: [] });
+    const out = applyOpt([done, fresh], D, []);
+    const got = out.find((b) => b.id === "f");
+    expect(got.tables.length).toBeGreaterThan(0);
+    expect(got._conflict).toBeFalsy();
+  });
+
+  it("a cancelled booking never occupies a table", () => {
+    const dead = mk({ id: "c", status: "cancelled", time: "13:00", size: 2, tables: ["2"] });
+    expect(isActive(dead)).toBe(false);
+    const out = applyOpt([dead, mk({ id: "n", time: "13:00", size: 2, tables: [] })], D, []);
+    expect(verifyClean(out, D)).toBe(true);
+  });
+
+  it("is idempotent — optimising an optimised day changes nothing", () => {
+    const day = [
+      mk({ id: "1", time: "13:00", size: 2, tables: [] }),
+      mk({ id: "2", time: "13:00", size: 4, tables: [] }),
+      mk({ id: "3", time: "19:00", size: 6, tables: [] }),
+    ];
+    const once = applyOpt(day, D, []);
+    const twice = applyOpt(once, D, []);
+    expect(twice.map((b) => b.tables.join("+"))).toEqual(once.map((b) => b.tables.join("+")));
+  });
+
+  it("produces a conflict-free day for a realistic service", () => {
+    const day = [2, 4, 2, 6, 3, 2, 4].map((size, i) =>
+      mk({ id: "b" + i, time: i % 2 ? "13:00" : "20:00", size, tables: [] })
+    );
+    const out = applyOpt(day, D, []);
+    expect(verifyClean(out, D)).toBe(true);
+    expect(findConflicts(out, D)).toEqual([]);
+  });
+
+  it("respects a table block — never assigns a blocked table", () => {
+    const blocks = [{ tableId: "7", date: D, allDay: true }];
+    const out = applyOpt([mk({ id: "b", time: "13:00", size: 4, tables: [] })], D, blocks);
+    expect(out[0].tables).not.toContain("7");
+  });
+
+  it("honours an indoor/outdoor preference", () => {
+    const inn = applyOpt([mk({ id: "i", time: "13:00", size: 2, preference: "indoor", tables: [] })], D, []);
+    expect(inn[0].tables.every(isIn)).toBe(true);
+    const out = applyOpt([mk({ id: "o", time: "13:00", size: 2, preference: "outdoor", tables: [] })], D, []);
+    expect(out[0].tables.every((t) => !isIn(t))).toBe(true);
   });
 });

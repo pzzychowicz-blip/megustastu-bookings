@@ -5212,3 +5212,258 @@ busy/Assign) and BlockModal (the two hook-order fixes) open and close
 normally. Noted in passing (pre-existing, untouched): BlockModal's "To"
 initialises to GRID_CLOSE 26 → "26:00", invalid for <input type=time>, so it
 shows blank when close is past midnight.
+
+## v17.4.0 — PWA install + offline shell · general undo · same-phone warning (2026-07-24)
+
+**Branch `feat/v17.4.0-pwa-undo-dupwarn` — ONE version, three commits (one per feature; the three shortlist items Patryk selected via AskUserQuestion).**
+
+### v17.4.0 part 1 — PWA install + offline shell
+
+**Files: `public/manifest.webmanifest` + `public/sw.js` + icons (`icon.svg`, `icon-192/512.png`, full-bleed `apple-touch-icon.png`), `index.html` (head links/meta), `src/main.jsx` (prod-only SW registration), `CLAUDE.md` · feature #1 from the shortlist (Patryk-picked via AskUserQuestion).**
+
+Makes the app installable on the restaurant tablets + resilient to flaky wifi.
+Manifest: standalone display, accent theme colour, PNG 192/512 + SVG any
+(icons drawn fresh — a table glyph + "MGT" on the shared accent; rasterised
+via qlmanage/sips). SW (`public/sw.js`): navigations NETWORK-FIRST with cache
+fallback (a deploy can never serve a stale shell — the lazyChunk-404 class),
+`/assets/*` + static files cache-first (content-hashed = immutable),
+cache-name rotation on activate, and **cross-origin requests (Firebase
+RTDB/Auth) are never intercepted** — the SDK's own offline queue and the
+write-guard/CAS machinery stay untouched. Registration lives in `main.jsx`
+gated on `import.meta.env.PROD` (dev would cache-shadow Vite's module graph)
+— NOT an inline index.html script, because the enforced CSP pins exactly one
+inline-script hash.
+
+**Verification:** `node --check sw.js`; build clean (186.84 kB gz) with
+sw.js/manifest/icons present in dist; the CSP inline-script hash recomputed
+UNCHANGED (sha256-Q6OfSak…) — the head edits don't touch the no-flash script;
+lint 0 errors; 51/51 tests; DEV boots v17.4.0 with the manifest served and
+ZERO service workers registered (prod-only gate confirmed). Install + offline
+behaviour on a real tablet = post-deploy verification (Patryk).
+
+### v17.4.0 part 2 — General undo: delete + edit join cancel/no-show
+
+**Files: `src/App.jsx`, `src/components/StatusToasts.jsx`, `CLAUDE.md` · feature #3 from the shortlist (Patryk-picked via AskUserQuestion).**
+
+The v16.3.0 cancel/no-show snapshot+toast pattern is generalised to **three**
+undoable actions. `undoInfo` gains a `kind` (`"cancel"|"delete"|"edit"`); a new
+`armUndo(snapshot, kind, noShow)` parks the pre-action object (single slot — a
+newer action replaces it, undoSecs timer unchanged) and `undoCancel` becomes
+the shared **`undoLastAction`**, whose existing `exists ? map : concat` restore
+shape covers all three kinds unchanged: a DELETE is gone from `prev` → concat
+re-adds it; a CANCEL/EDIT is present → map swaps the snapshot back in. History
+note follows the kind ("deletion undone" / "edit undone" / "cancellation
+undone"), and the toast label follows it too ("Booking deleted" / "Booking
+updated" / "Booking cancelled" / "Marked no-show"). Call sites: `delBooking`
+arms with the pre-delete `target`; `doSaveEdit` arms with the pre-edit `orig`
+(gated on the save `ok`, so a refused write never offers a bogus undo).
+
+**Recurring-occurrence note:** an undone DELETE deliberately leaves the rule's
+`skipDate` in place — the restored occurrence keeps its deterministic id, so
+the generator can't duplicate it; the skipDate merely stops a regeneration it
+no longer needs to perform.
+
+**Verification:** build clean (186.97 kB gz); 51/51 tests; lint 0 errors. Live
+DEV QA: delete → "Booking deleted" toast + Undo → booking restored; edit
+(20:30 → 16:45) → "Booking updated" toast + Undo → time reverted; BOTH survived
+a full reload (real Firebase writes, not local-only state); console clean.
+
+### v17.4.0 part 3 — Same-phone double-booking warning
+
+**Files: `src/components/BookingFormModal.jsx`, `CLAUDE.md` · feature #4 from the shortlist (Patryk-picked via AskUserQuestion).**
+
+An amber advisory row under the form's recognition chips when the typed phone
+already has an OVERLAPPING booking on the same date: identity via
+`normalizePhone` (the customers.js primitive — one phone-identity source),
+half-open overlap `bs < e && s < be` matching booking-logic, excluding
+cancelled/completed (a finished earlier visit isn't a double-booking) and the
+booking being edited. Lists up to 3 conflicts (time range · pax · tables) with
+a "+N more" tail; wrapped in `Reveal` so it eases in/out like the chip-history
+panel. **Deliberately advisory — it never blocks Save**: a genuine party does
+book twice (two tables at once, a party splitting), so this informs rather
+than prevents. One `useMemo` over `bookings` keyed on
+phone/date/time/size/customDur/editId.
+
+**Verification:** build clean (187.28 kB gz); 51/51 tests; lint 0 errors. Live
+DEV QA: same phone + overlapping time → warning with the conflicting booking's
+details ("18:00–19:30 · 2 pax · 1A"); moving the time clear of the window →
+warning gone; changing to a different phone at an overlapping time → gone (no
+false positives); saving through the warning succeeded and both bookings
+landed on separate tables (1A + 1B). Console clean.
+
+**/code-review round (same version, pre-merge — xhigh pass over v17.3.1→v17.4.0):**
+(a) **sw.js cached error responses as the offline shell** — the navigation
+branch stored EVERY response under "/" with no `res.ok` check (the asset branch
+below it had one), so a single 500 during a deploy would become the permanent
+offline shell. Now gated on `res.ok && res.type === "basic"`; a bad response is
+still returned to the page untouched. (b) **The undo pill swallowed "Tables
+re-optimised."** — undo outranks `reshuffled` in the one-slot toast priority, so
+extending undo to every edit/delete killed the only cue that the optimizer moved
+OTHER bookings. Fixed at the right depth (no priority reshuffle): a new
+`undoNote` prop appends the clause to the pill → "Booking updated · tables
+re-optimised", one slot, both facts. (c) **Undo was armed for a no-op edit** —
+`saveBookings` returns true for an EMPTY patch (persist() skips the write but
+reports dispatched), so opening Edit and pressing Save offered an Undo for a
+change that never happened. Now gated on `diffBooking`'s "saved (no field
+changes)" sentinel, computed once and shared with the history entry. (d) The
+dup-phone banner said "**today**" while the check runs against `form.date` —
+now names the actual date. (e) That check re-implemented the half-open overlap
+predicate; it now calls booking-logic's exported `overlaps()` (ONE overlap
+rule). (f) `custChips` stays mounted while `dupPhone.length`, so the warning's
+Reveal collapse animates instead of being torn out with its parent. Undo's
+SCOPE (restores the snapshotted booking only, not collateral reshuffles) is now
+documented at `undoLastAction`. Re-verified live in DEV: no-op edit arms no
+undo; a real reshuffling edit shows "Booking updated · tables re-optimised";
+the warning names the date, fires 1 min inside the window and clears at the
+boundary.
+
+**Review round 2 (same version, pre-merge — Patryk-directed via AskUserQuestion):**
+(1) **Undo now restores what the action MOVED, not just the booking acted on.**
+Two new PURE helpers in booking-logic — `undoSnapshots(prev,next)` (the
+pre-action version of every booking the action changed or removed) and
+`applyUndo(current,snapshots)` — let `undoInfo` carry a SNAPSHOT SET
+(`{snapshots, primaryId, kind, noShow}`). Each action computes its post-state
+once through a prev-identity memo (the doSave pattern, so the delta and the
+dispatched write share ONE optimizer pass) and arms undo with the delta.
+Deliberately bounded: bookings the action never touched are returned by
+identity, so the per-booking diff-write skips them and a concurrent edit
+elsewhere in the day survives — a full-day restore would have widened exactly
+the lost-write window the v15.2.0–v16.0.0 CAS arc closes. `undoLastAction`
+restores VERBATIM (syncLiveDurations only) and NOT through
+`bookingsAfterAction`: its optimizer branch runs whenever
+`optimizerActiveFor()` is true — which is ALWAYS true for a future date
+regardless of the toggle — and would instantly re-apply the moves undo just
+reversed. Only the primary booking gets a history entry (the others were moved
+by the optimizer, and the original reshuffle wrote no history for them either).
+(2) **ManualModal's key handler bails when `booking` is null** — the null guard
+sits below the effect (moving it above would change the hook count), so without
+this a mounted-but-null instance would swallow S and C app-wide.
+(3) **Same-phone rule extracted** to `customers.js` `findPhoneOverlaps` (uses
+booking-logic's `overlaps`/`toMins`/`getDur`; customers.js had no imports and
+booking-logic imports only constants, so the direction stays acyclic).
+(4) **Test suite 51 → 74**: 8 undo-delta cases (change/remove/untouched,
+history+updatedAt churn ignored, table-order equivalence, identity preservation,
+round-trip), 7 findPhoneOverlaps cases (half-open boundary, format variants,
+excluded statuses, explicit duration, sort), 8 optimizer invariants (seated and
+locked walk-ins never reshuffled, completed frees its table, cancelled never
+occupies, idempotence, conflict-free service, blocks respected, zone preference).
+
+**Verification:** build clean (187.52 kB gz); **74/74 tests**; lint 0 errors.
+Live DEV QA of the delta restore — cancelling DeltaA displaced DeltaB from
+table 3 → table 2; Undo returned DeltaA to table 2 AND DeltaB to table 3, a
+state byte-identical to the pre-cancel map, with the two unrelated bookings
+untouched; survived a reload.
+
+**/code-review round 3 (same version, pre-merge — xhigh pass over the round-2 diff):**
+(a) **A seated OVERSTAYER was being swept into every undo delta.**
+`bookingsAfterAction` runs `syncLiveDurations`, which rewrites
+`duration`/`customDur` for a seated booking on today whose end has passed —
+and both fields are in `UNDO_FIELDS`, so an overstayer the action never touched
+read as "changed" and undo wrote its stale (shorter) duration back, visibly
+shrinking the timeline block. Fixed by comparing like with like: a new
+`undoDelta(prev,post)` syncs the PREV side before diffing, at all three arm
+sites. Regression test asserts BOTH halves (raw prev → false positive; synced
+prev → only the real change). (b) **The `bookingsAfterAction` bypass in
+`undoLastAction` is now recorded in CLAUDE.md** as the ONE documented exception
+to the central-save-path rule, with the reason and a "do not restore
+consistency by adding it back" warning — it was only a code comment before.
+(c) **`memoByPrev(fn)`** replaces the prev-identity memo that had been
+hand-rolled in FOUR places (doSaveEdit, doSaveNew, delBooking,
+doCancelBooking). (d) A test asserted against `["2"].slice(0,0).concat(["3"])`
+instead of the literal `["3"]`.
+
+Investigated and NOT changed (recorded so they are not re-derived): the
+optimizer-invariant tests keyed on wall-clock `today` are in fact
+deterministic — `optimise` contains zero clock references and the seeded
+per-weekday hours are uniform (13:00–22:00, none closed), so there is no
+variance to remove. A suspected stale-delta path when a write is HELD is also
+a non-issue: `armUndo` is gated on the `saveBookings` boolean and a held write
+returns false, so undo is never armed for one. Still open by choice: a verbatim
+restore can strand an overlap on a PAST date (the v15.6.1 reconciler only scans
+dates ≥ today), and `undoSnapshots` keys every booking rather than just the
+action's date.
+
+**Verification:** build clean (187.48 kB gz); **75/75 tests**; lint 0 errors.
+Live DEV QA re-run after the memo extraction touched all four save paths:
+cancelling FixA displaced FixB (1B → 1A); Undo restored a map byte-identical
+to the pre-cancel state.
+
+**Icon redesign (same version, pre-merge — Patryk's review):** the v17.4.0 PWA
+icons were placeholder-grade — a flat `#007AFF` tile whose wordmark was a live
+`<text font-family="-apple-system, Helvetica, Arial">`, so the Android home
+screen and the Chrome tab rendered a *different face* than iOS. The tab favicon
+was worse: a leftover purple lightning bolt with no relationship to the app.
+Rebuilt as a family from one generator, `scripts/gen-icons.py` (a design tool,
+NOT part of `npm run build` — it needs fontTools + Playwright + macOS SF Pro,
+and is committed so the tiles stay reproducible instead of being opaque
+binaries).
+
+* **Lockup** — `MGT` over `Bookings`, the sub-line set to exactly the width of
+  the monogram as asked. Solved from real glyph metrics rather than eyeballed:
+  `Bookings` at 44% of `MGT`'s size with 76/1000 em tracking, and the two lines
+  are aligned **ink-to-ink** (glyph bounding boxes), not by advance width —
+  matching advance widths would leave the side bearings visibly uneven at logo
+  scale. An assert in the generator fails the build if the widths ever drift.
+* **Type is converted to outlines**, killing the cross-platform font bug above.
+  Face is SF Pro Display Heavy — the app's own `--font-app`, so the icon and the
+  UI share a voice.
+* **Gradient** — the four app tokens Patryk picked (pending `#EAB308`, seated
+  `#22C55E`, accent/outdoor `#007AFF`, indoor `#AF52DE`, warmed at the corner by
+  confirmed `#D97706`), interpolated in **OKLCH** and sampled to flat sRGB
+  stops. sRGB interpolation drives amber→green through olive and amber→blue
+  through grey; OKLCH also allows an authored LIGHTNESS ramp, which is what
+  keeps white type legible across the whole tile. Two composition rules did the
+  real work: node positions are placed by **area** (on a square, a 45° ramp puts
+  only `2t²` of the area below `t`, so evenly-spaced stops spend the first
+  quarter on a corner sliver), and the amber is treated as a **corner light
+  source** falling to a deep violet rather than one quarter of a rainbow —
+  yellow cannot be darkened without becoming olive, so flattening it into the
+  ramp is not available. Four rounds of rendered variants; the rejected ones
+  were mud (over-darkened) and candy (evenly-spaced).
+* **Favicon carries the full lockup.** The first cut dropped `Bookings` on the
+  grounds that it silts up at 16px — true, but it made the tab a *different
+  mark* from the home screen, which Patryk rightly flagged as an
+  inconsistency. Fixed the way a foundry cuts an optical size rather than by
+  scaling the same artwork down: a SMALL CUT (`SUB_RATIO_SMALL` 0.49,
+  `GAP_SMALL`, sub-line at full opacity, lockup filling more of the tile) takes
+  the sub-line as large and as tight as the equal-width constraint allows.
+  0.4934 is the hard ceiling — above it `Bookings` is naturally wider than
+  `MGT` and the matching tracking would go negative. Reads clearly from 24px,
+  and a retina tab draws the favicon at 32 device px.
+* **New: `icon-maskable-512.png`** + a `purpose:"maskable"` manifest entry.
+  Without one Android pads the "any" icon inside a white blob; the lockup is
+  scaled to 80% so it clears the circle crop. `apple-touch-icon.png` stays FULL
+  BLEED per the existing rule.
+* **`sw.js`: un-hashed assets moved from cache-first to STALE-WHILE-REVALIDATE**,
+  plus `CACHE_VERSION` v1 → v2. Both were needed and they do different jobs.
+  The bump evicts the v1 installs (which cached the old icons under cache-first
+  and would otherwise never re-fetch). The strategy change is the durable fix:
+  documenting "remember to bump `CACHE_VERSION`" is not a guarantee, it is a
+  manual step whose failure mode is silent and permanent, so the dependency on
+  remembering was removed instead. Icons/manifest/favicon now answer from cache
+  instantly while a background fetch refreshes them, and `/assets/*` stays
+  cache-first (content-hashed, so a hit can never be stale).
+
+  Verified live, not asserted: an isolated harness (worker + icons only, so the
+  production app was never loaded against PROD Firebase) registered the SW,
+  mutated `icon.svg` on disk **without** touching `CACHE_VERSION`, and observed
+  read 1 = 8538 B stale-from-cache → revalidate → read 2 = 8560 B new bytes,
+  cache updated, version still `mgt-shell-v2`. Offline was re-checked with the
+  server killed: still served from cache, so the offline guarantee survived.
+
+PNG quantisation to a 255-colour palette was measured (12× smaller: 203 kB →
+17 kB) and **rejected** — it banded the gradient into visible diagonal stripes.
+Truecolor kept, losslessly re-encoded (-11%).
+
+**Verification:** build clean, bundle unchanged (187.48 kB gz — icons are static
+assets); manifest valid and all four declared icons resolve 200 in DEV; the SVG
+decodes standalone as an `<img>` (proving no font dependency); apple-touch
+verified on black for dark corners; maskable verified under both circle and
+squircle crops; legibility checked at 96/64/48/32 px and in greyscale.
+
+**Scope limit worth stating (v17.4.0 icons):** the above covers the WEB layer —
+tab favicon, manifest re-reads, and any in-page icon fetch. It does NOT cover an
+already-installed home-screen PWA: iOS and Android snapshot the icon at
+add-to-home-screen time and do not reliably re-read it, so the tablets already
+running MGT will keep the old tile until the app is removed and re-added. That
+is OS behaviour, outside the service worker's reach.

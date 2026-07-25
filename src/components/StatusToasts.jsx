@@ -25,8 +25,15 @@
 //  reconnectShown  — "✓ Reconnected" flag
 //  syncFix         — v15.6.1 "Resolved a table conflict after syncing."
 //  waitAddedShown  — v16.0.0 "Added to the waitlist."
-//  undoInfo        — v16.3.0 {snapshot, noShow} | null; drives the Undo pill
-//  onUndo          — undoCancel()
+//  undoInfo        — {snapshot, kind:"cancel"|"delete"|"edit", noShow} | null
+//                    (v17.4.0 general undo); drives the Undo pill + its label
+//  onUndo          — App's undoLastAction()
+//  undoNote        — extra clause appended to the undo label (v17.4.0). The
+//                    undo pill outranks the `reshuffled` toast in the one-slot
+//                    priority below, so without this the "Tables re-optimised."
+//                    confirmation would be swallowed on every edit/delete —
+//                    the only cue that the optimizer moved OTHER bookings.
+//                    App passes it when a reshuffle actually happened.
 //  dragMsg         — v17.0.0 {text, good} | null (timeline drag&drop feedback)
 //  reshuffled      — the post-save flag
 //  reshuffledMsg   — "Tables re-optimised." / "Booking saved." (computed in
@@ -40,7 +47,7 @@ import { BTN } from "../lib/constants";
 
 const toastShadow="0 6px 20px rgba(0,0,0,0.18)";
 
-export function StatusToasts({bookingsReady,resyncing,reconnectShown,syncFix,waitAddedShown,undoInfo,onUndo,dragMsg,reshuffled,reshuffledMsg,loadShown,loadMsg}){
+export function StatusToasts({bookingsReady,resyncing,reconnectShown,syncFix,waitAddedShown,undoInfo,onUndo,undoNote,dragMsg,reshuffled,reshuffledMsg,loadShown,loadMsg}){
   // v15.8.0: the status toasts share ONE slot — only the highest-priority
   // active one is shown (order below), so they never stack vertically. When the
   // top one changes, the old floats out as the new floats in; they overlap in
@@ -57,7 +64,7 @@ export function StatusToasts({bookingsReady,resyncing,reconnectShown,syncFix,wai
     {key:"waitadded",on:waitAddedShown,node:<div
       style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
     {key:"undo",on:!!undoInfo,node:<div
-      style={{background:"linear-gradient(var(--bg-sheet),var(--bg-sheet)),var(--bg-ac-menu)",border:"2px solid var(--border-sheet)",borderRadius:14,padding:"8px 10px 8px 14px",fontSize:13,fontWeight:600,color:"var(--text-primary)",boxShadow:toastShadow,display:"flex",alignItems:"center",gap:10,pointerEvents:"auto"}}><span>{undoInfo&&undoInfo.noShow?"Marked no-show":"Booking cancelled"}</span><button
+      style={{background:"linear-gradient(var(--bg-sheet),var(--bg-sheet)),var(--bg-ac-menu)",border:"2px solid var(--border-sheet)",borderRadius:14,padding:"8px 10px 8px 14px",fontSize:13,fontWeight:600,color:"var(--text-primary)",boxShadow:toastShadow,display:"flex",alignItems:"center",gap:10,pointerEvents:"auto"}}><span>{(!undoInfo?"":undoInfo.noShow?"Marked no-show":undoInfo.kind==="delete"?"Booking deleted":undoInfo.kind==="edit"?"Booking updated":"Booking cancelled")+(undoInfo&&undoNote?" · "+undoNote:"")}</span><button
         onClick={function(e){e.stopPropagation();onUndo();}}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({fontSize:12,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button></div>},
