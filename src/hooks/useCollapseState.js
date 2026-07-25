@@ -25,7 +25,7 @@ export function useCollapseState(phoneKey, section, defaultCollapsed) {
       if (!raw) return defaultCollapsed;
       const obj = JSON.parse(raw);
       return typeof obj[section] === "boolean" ? obj[section] : defaultCollapsed;
-    } catch (e) { return defaultCollapsed; }
+    } catch { return defaultCollapsed; }
   });
   // Re-sync when the conversation (or section) changes — the same component
   // instance is reused across conversations in the two-pane layout.
@@ -35,7 +35,7 @@ export function useCollapseState(phoneKey, section, defaultCollapsed) {
       if (!raw) { setCollapsed(defaultCollapsed); return; }
       const obj = JSON.parse(raw);
       setCollapsed(typeof obj[section] === "boolean" ? obj[section] : defaultCollapsed);
-    } catch (e) { setCollapsed(defaultCollapsed); }
+    } catch { setCollapsed(defaultCollapsed); }
   }, [phoneKey, section, defaultCollapsed]);
   function toggle() {
     const next = !collapsed;
@@ -45,7 +45,7 @@ export function useCollapseState(phoneKey, section, defaultCollapsed) {
       const obj = raw ? JSON.parse(raw) : {};
       obj[section] = next;
       window.localStorage.setItem(key, JSON.stringify(obj));
-    } catch (e) {}
+    } catch { /* ignore */ }
   }
   return [collapsed, toggle];
 }
@@ -61,5 +61,5 @@ export function clearCollapseSection(phoneKey, section) {
     const obj = JSON.parse(raw);
     delete obj[section];
     window.localStorage.setItem(key, JSON.stringify(obj));
-  } catch (e) {}
+  } catch { /* ignore */ }
 }

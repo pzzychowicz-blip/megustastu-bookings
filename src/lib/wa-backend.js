@@ -34,10 +34,10 @@ const FLAG_KEY = "mgt-wa-backend";
 // (see backendInbound), so no public-webhook exposure.
 export function backendEnabled() {
   if (!WA_SANDBOX) return false;
-  try { return localStorage.getItem(FLAG_KEY) === "1"; } catch (e) { return false; }
+  try { return localStorage.getItem(FLAG_KEY) === "1"; } catch { return false; }
 }
 export function setBackendEnabled(on) {
-  try { on ? localStorage.setItem(FLAG_KEY, "1") : localStorage.removeItem(FLAG_KEY); } catch (e) {}
+  try { on ? localStorage.setItem(FLAG_KEY, "1") : localStorage.removeItem(FLAG_KEY); } catch { /* ignore */ }
 }
 
 // Liveness + mode report from the harness (null when it isn't running).
@@ -52,7 +52,7 @@ export async function backendHealth() {
     const res = await fetch(WA_BACKEND_URL + "/health", { signal: ac.signal });
     clearTimeout(t);
     return res.ok ? await res.json() : null;
-  } catch (e) { return null; }
+  } catch { return null; }
 }
 
 // Staff reply through the real endpoint. Throws with a readable message on

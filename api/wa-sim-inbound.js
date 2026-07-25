@@ -32,7 +32,7 @@ function scheduleAfterResponse(promise) {
     const ctx = globalThis[Symbol.for("@vercel/request-context")];
     const waitUntil = ctx && ctx.get && ctx.get() && ctx.get().waitUntil;
     if (typeof waitUntil === "function") waitUntil(promise);
-  } catch (e) { /* no Vercel context — local harness */ }
+  } catch { /* no Vercel context — local harness */ }
 }
 
 function readJsonBody(req) {

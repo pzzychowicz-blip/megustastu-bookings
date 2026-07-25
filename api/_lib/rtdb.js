@@ -60,7 +60,7 @@ export async function verifyStaffToken(idToken) {
 }
 
 export function sanitizeKey(s) {
-  return String(s).replace(/[.#$/\[\]]/g, "_");
+  return String(s).replace(/[.#$/[\]]/g, "_");
 }
 
 // ── Conversations ─────────────────────────────────────────────────────────────
@@ -111,7 +111,7 @@ export async function readOperatingHours() {
   try {
     const snap = await getDb().ref("settings/operatingHours").get();
     return snap.exists() ? snap.val() : null;
-  } catch (e) {
+  } catch {
     return null; // prompt falls back to the default hours line
   }
 }

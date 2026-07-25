@@ -205,7 +205,7 @@ export async function injectSimInbound({ phone, text, name, agoMs = 0 }, afterRe
       await applyParse(r.phoneKey, parse, ts);
     } catch (e) {
       console.warn("[wa-sim] parse failed: " + e.message);
-      try { await applyParse(r.phoneKey, null, ts); } catch (_) {} // clear the indicator
+      try { await applyParse(r.phoneKey, null, ts); } catch { /* ignore */ } // clear the indicator
     }
   })());
   return r;

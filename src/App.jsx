@@ -748,7 +748,7 @@ function BookingApp(){
       list:function(){return Object.keys(SCENARIOS_BY_ID);},
     };
     console.log("%c[waSim] console helpers ready","background:#a855f7;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold;","— __waSim.list(), __waSim.seedBookings(), __waSim.scenario(id)");
-    return function(){try{delete window.__waSim;}catch(e){}};
+    return function(){try{delete window.__waSim;}catch{/* ignore */}};
   },[]);
   // ── Reminders hook ──────────────────────────────────────────────────────────
   // Owns all reminder state, savers, listeners, handlers, and the

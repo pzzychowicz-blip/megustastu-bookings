@@ -63,7 +63,13 @@ function TemplateChips({ templates, convLang, onInsert, scrollLang }) {
   );
 }
 
-export function ReplyComposer({ onSend, disabled, templates, convLang, compact }) {
+// NB (lint cleanup, 17.4.1 sync): this used to take a `compact` prop, but the
+// only thing it could have driven — TemplateChips' `scrollLang` below — is
+// passed UNCONDITIONALLY, so the prop was already dead. Removed rather than
+// re-wired: making scrollLang conditional again would change the layout, which
+// a lint pass must not do. If the pinned-right language switch is wanted back
+// at laptop widths, that's a deliberate UI change — see scrollLang's comment.
+export function ReplyComposer({ onSend, disabled, templates, convLang }) {
   const [txt, setTxt] = useState("");
   const [tplOpen, setTplOpen] = useState(false);
   const areaRef = useRef(null);

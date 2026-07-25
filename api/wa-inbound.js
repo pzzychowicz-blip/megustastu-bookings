@@ -54,7 +54,7 @@ function scheduleAfterResponse(promise) {
     const ctx = globalThis[Symbol.for("@vercel/request-context")];
     const waitUntil = ctx && ctx.get && ctx.get() && ctx.get().waitUntil;
     if (typeof waitUntil === "function") waitUntil(promise);
-  } catch (e) { /* no Vercel context — local harness */ }
+  } catch { /* no Vercel context — local harness */ }
 }
 
 function readRawBody(req) {
@@ -91,7 +91,7 @@ export default async function handler(req, res) {
   let raw;
   try {
     raw = await readRawBody(req);
-  } catch (e) {
+  } catch {
     res.status(400).json({ error: "unreadable body" });
     return;
   }
@@ -102,7 +102,7 @@ export default async function handler(req, res) {
   let payload;
   try {
     payload = JSON.parse(raw.toString("utf8"));
-  } catch (e) {
+  } catch {
     res.status(400).json({ error: "invalid JSON" });
     return;
   }
@@ -202,7 +202,7 @@ export default async function handler(req, res) {
           // mode); never affects the already-sent response. Still clear the
           // "analyzing…" indicator so it can't get stuck on.
           console.error("[wa-inbound] async parse failed:", e.message);
-          try { await applyParse(job.phoneKey, null, job.ts); } catch (_) {}
+          try { await applyParse(job.phoneKey, null, job.ts); } catch { /* ignore */ }
         }
       }
     })());

@@ -153,7 +153,7 @@ export function ConversationView({
       <Reveal show={draftCardShows} style={{ padding: "0 14px" }}>
         <DraftCard conv={conv} onAccept={onAccept} onDismiss={onDismiss} onDismissAcceptedBadge={onDismissAcceptedBadge} compact={compact} />
       </Reveal>
-      <ReplyComposer onSend={onSend} disabled={disabled} templates={templates} convLang={conv.language} compact={compact} />
+      <ReplyComposer onSend={onSend} disabled={disabled} templates={templates} convLang={conv.language} />
     </div>
   );
 }
