@@ -18,8 +18,14 @@
 //
 // CACHE_VERSION: bump when the caching LOGIC changes (not per app release —
 // hashed assets rotate themselves; the shell is network-first anyway).
+//
+// Un-hashed files (icons, manifest, favicon) do NOT need a bump: they are
+// stale-while-revalidate below, so new bytes propagate on their own. The one
+// exception is this very deploy — v1 shipped them CACHE-FIRST, and those
+// installs will never re-fetch, so rotating the cache name is what evicts the
+// old icons. (v17.4.0 icon redesign: v1 -> v2.)
 
-const CACHE_VERSION = "mgt-shell-v1";
+const CACHE_VERSION = "mgt-shell-v2";
 
 self.addEventListener("install", (event) => {
   // Pre-cache the shell entry so the very first offline open works.
@@ -65,8 +71,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Hashed assets + static files: cache-first, populate on miss.
-  if (url.pathname.startsWith("/assets/") || /\.(png|svg|webmanifest|ico)$/.test(url.pathname)) {
+  // Vite's hashed assets: CACHE-FIRST. A content change is a new URL, so a hit
+  // can never be stale and there is nothing to revalidate.
+  if (url.pathname.startsWith("/assets/")) {
     event.respondWith(
       caches.match(req).then(
         (hit) =>
@@ -80,6 +87,43 @@ self.addEventListener("fetch", (event) => {
           })
       )
     );
+    return;
+  }
+
+  // Un-hashed static files — icons, manifest, favicon: STALE-WHILE-REVALIDATE.
+  // These change CONTENT at a FIXED URL, so cache-first would pin whatever an
+  // install first saw until CACHE_VERSION happened to be bumped by hand. That
+  // is a step nobody remembers, and the failure is silent and permanent. Here
+  // the cached copy answers immediately (fast, and still works offline) while a
+  // background fetch refreshes it, so a redesigned icon lands by itself on the
+  // next load with no version bump and no reinstall.
+  if (/\.(png|svg|webmanifest|ico)$/.test(url.pathname)) {
+    event.respondWith(
+      caches.open(CACHE_VERSION).then((cache) =>
+        cache.match(req).then((hit) => {
+          const fresh = fetch(req)
+            .then((res) => {
+              if (res.ok && res.type === "basic") {
+                cache.put(req, res.clone()).catch(() => {});
+              }
+              return res;
+            })
+            // Offline: fall back to the cached copy, else let it fail.
+            .catch(() => hit);
+          // Keep the worker alive for the background refresh when we answered
+          // from cache; the event can already be settled, hence the guard.
+          if (hit) {
+            try {
+              event.waitUntil(fresh);
+            } catch {
+              /* event no longer active — the refresh is best-effort anyway */
+            }
+          }
+          return hit || fresh;
+        })
+      )
+    );
+    return;
   }
   // Anything else same-origin (e.g. Vite dev endpoints): default browser handling.
 });

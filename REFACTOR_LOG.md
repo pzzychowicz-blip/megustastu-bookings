@@ -5387,3 +5387,83 @@ action's date.
 Live DEV QA re-run after the memo extraction touched all four save paths:
 cancelling FixA displaced FixB (1B → 1A); Undo restored a map byte-identical
 to the pre-cancel state.
+
+**Icon redesign (same version, pre-merge — Patryk's review):** the v17.4.0 PWA
+icons were placeholder-grade — a flat `#007AFF` tile whose wordmark was a live
+`<text font-family="-apple-system, Helvetica, Arial">`, so the Android home
+screen and the Chrome tab rendered a *different face* than iOS. The tab favicon
+was worse: a leftover purple lightning bolt with no relationship to the app.
+Rebuilt as a family from one generator, `scripts/gen-icons.py` (a design tool,
+NOT part of `npm run build` — it needs fontTools + Playwright + macOS SF Pro,
+and is committed so the tiles stay reproducible instead of being opaque
+binaries).
+
+* **Lockup** — `MGT` over `Bookings`, the sub-line set to exactly the width of
+  the monogram as asked. Solved from real glyph metrics rather than eyeballed:
+  `Bookings` at 44% of `MGT`'s size with 76/1000 em tracking, and the two lines
+  are aligned **ink-to-ink** (glyph bounding boxes), not by advance width —
+  matching advance widths would leave the side bearings visibly uneven at logo
+  scale. An assert in the generator fails the build if the widths ever drift.
+* **Type is converted to outlines**, killing the cross-platform font bug above.
+  Face is SF Pro Display Heavy — the app's own `--font-app`, so the icon and the
+  UI share a voice.
+* **Gradient** — the four app tokens Patryk picked (pending `#EAB308`, seated
+  `#22C55E`, accent/outdoor `#007AFF`, indoor `#AF52DE`, warmed at the corner by
+  confirmed `#D97706`), interpolated in **OKLCH** and sampled to flat sRGB
+  stops. sRGB interpolation drives amber→green through olive and amber→blue
+  through grey; OKLCH also allows an authored LIGHTNESS ramp, which is what
+  keeps white type legible across the whole tile. Two composition rules did the
+  real work: node positions are placed by **area** (on a square, a 45° ramp puts
+  only `2t²` of the area below `t`, so evenly-spaced stops spend the first
+  quarter on a corner sliver), and the amber is treated as a **corner light
+  source** falling to a deep violet rather than one quarter of a rainbow —
+  yellow cannot be darkened without becoming olive, so flattening it into the
+  ramp is not available. Four rounds of rendered variants; the rejected ones
+  were mud (over-darkened) and candy (evenly-spaced).
+* **Favicon carries the full lockup.** The first cut dropped `Bookings` on the
+  grounds that it silts up at 16px — true, but it made the tab a *different
+  mark* from the home screen, which Patryk rightly flagged as an
+  inconsistency. Fixed the way a foundry cuts an optical size rather than by
+  scaling the same artwork down: a SMALL CUT (`SUB_RATIO_SMALL` 0.49,
+  `GAP_SMALL`, sub-line at full opacity, lockup filling more of the tile) takes
+  the sub-line as large and as tight as the equal-width constraint allows.
+  0.4934 is the hard ceiling — above it `Bookings` is naturally wider than
+  `MGT` and the matching tracking would go negative. Reads clearly from 24px,
+  and a retina tab draws the favicon at 32 device px.
+* **New: `icon-maskable-512.png`** + a `purpose:"maskable"` manifest entry.
+  Without one Android pads the "any" icon inside a white blob; the lockup is
+  scaled to 80% so it clears the circle crop. `apple-touch-icon.png` stays FULL
+  BLEED per the existing rule.
+* **`sw.js`: un-hashed assets moved from cache-first to STALE-WHILE-REVALIDATE**,
+  plus `CACHE_VERSION` v1 → v2. Both were needed and they do different jobs.
+  The bump evicts the v1 installs (which cached the old icons under cache-first
+  and would otherwise never re-fetch). The strategy change is the durable fix:
+  documenting "remember to bump `CACHE_VERSION`" is not a guarantee, it is a
+  manual step whose failure mode is silent and permanent, so the dependency on
+  remembering was removed instead. Icons/manifest/favicon now answer from cache
+  instantly while a background fetch refreshes them, and `/assets/*` stays
+  cache-first (content-hashed, so a hit can never be stale).
+
+  Verified live, not asserted: an isolated harness (worker + icons only, so the
+  production app was never loaded against PROD Firebase) registered the SW,
+  mutated `icon.svg` on disk **without** touching `CACHE_VERSION`, and observed
+  read 1 = 8538 B stale-from-cache → revalidate → read 2 = 8560 B new bytes,
+  cache updated, version still `mgt-shell-v2`. Offline was re-checked with the
+  server killed: still served from cache, so the offline guarantee survived.
+
+PNG quantisation to a 255-colour palette was measured (12× smaller: 203 kB →
+17 kB) and **rejected** — it banded the gradient into visible diagonal stripes.
+Truecolor kept, losslessly re-encoded (-11%).
+
+**Verification:** build clean, bundle unchanged (187.48 kB gz — icons are static
+assets); manifest valid and all four declared icons resolve 200 in DEV; the SVG
+decodes standalone as an `<img>` (proving no font dependency); apple-touch
+verified on black for dark corners; maskable verified under both circle and
+squircle crops; legibility checked at 96/64/48/32 px and in greyscale.
+
+**Scope limit worth stating (v17.4.0 icons):** the above covers the WEB layer —
+tab favicon, manifest re-reads, and any in-page icon fetch. It does NOT cover an
+already-installed home-screen PWA: iOS and Android snapshot the icon at
+add-to-home-screen time and do not reliably re-read it, so the tablets already
+running MGT will keep the old tile until the app is removed and re-added. That
+is OS behaviour, outside the service worker's reach.
