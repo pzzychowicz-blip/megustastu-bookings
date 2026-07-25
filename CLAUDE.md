@@ -242,6 +242,7 @@ Customers are **DERIVED from the bookings list by normalized phone** (`src/lib/c
 ### `bookingsAfterAction` is the central save path
 - Any code path that modifies bookings should pass through `bookingsAfterAction(bookings, viewDate, tableBlocks, savedId, isNew, autoOptimizer)`. Handles optimizer-aware reshuffle + seated-shift on Confirmed→Seated.
 - Direct `saveBookings(arr)` calls without going through this helper risk an inconsistent schedule.
+- **ONE documented exception (v17.4.0): `undoLastAction`.** It restores the undo delta VERBATIM (`applyUndo` + `syncLiveDurations` only) and deliberately does NOT call `bookingsAfterAction` — that helper takes its optimizer branch whenever `optimizerActiveFor(date,…)` is true, which is **always true for a future date regardless of the toggle**, so a reshuffle there would instantly re-apply the very table moves undo just reversed. A conflict introduced by the restore is resolved by the v15.6.1 reconciliation effect (dates ≥ today). Do NOT "restore consistency" by adding the call back — it breaks undo.
 
 ### `formRef.current` vs `form`
 - The booking form has both a state `form` and a mirror ref `formRef`.

@@ -5353,3 +5353,37 @@ Live DEV QA of the delta restore — cancelling DeltaA displaced DeltaB from
 table 3 → table 2; Undo returned DeltaA to table 2 AND DeltaB to table 3, a
 state byte-identical to the pre-cancel map, with the two unrelated bookings
 untouched; survived a reload.
+
+**/code-review round 3 (same version, pre-merge — xhigh pass over the round-2 diff):**
+(a) **A seated OVERSTAYER was being swept into every undo delta.**
+`bookingsAfterAction` runs `syncLiveDurations`, which rewrites
+`duration`/`customDur` for a seated booking on today whose end has passed —
+and both fields are in `UNDO_FIELDS`, so an overstayer the action never touched
+read as "changed" and undo wrote its stale (shorter) duration back, visibly
+shrinking the timeline block. Fixed by comparing like with like: a new
+`undoDelta(prev,post)` syncs the PREV side before diffing, at all three arm
+sites. Regression test asserts BOTH halves (raw prev → false positive; synced
+prev → only the real change). (b) **The `bookingsAfterAction` bypass in
+`undoLastAction` is now recorded in CLAUDE.md** as the ONE documented exception
+to the central-save-path rule, with the reason and a "do not restore
+consistency by adding it back" warning — it was only a code comment before.
+(c) **`memoByPrev(fn)`** replaces the prev-identity memo that had been
+hand-rolled in FOUR places (doSaveEdit, doSaveNew, delBooking,
+doCancelBooking). (d) A test asserted against `["2"].slice(0,0).concat(["3"])`
+instead of the literal `["3"]`.
+
+Investigated and NOT changed (recorded so they are not re-derived): the
+optimizer-invariant tests keyed on wall-clock `today` are in fact
+deterministic — `optimise` contains zero clock references and the seeded
+per-weekday hours are uniform (13:00–22:00, none closed), so there is no
+variance to remove. A suspected stale-delta path when a write is HELD is also
+a non-issue: `armUndo` is gated on the `saveBookings` boolean and a held write
+returns false, so undo is never armed for one. Still open by choice: a verbatim
+restore can strand an overlap on a PAST date (the v15.6.1 reconciler only scans
+dates ≥ today), and `undoSnapshots` keys every booking rather than just the
+action's date.
+
+**Verification:** build clean (187.48 kB gz); **75/75 tests**; lint 0 errors.
+Live DEV QA re-run after the memo extraction touched all four save paths:
+cancelling FixA displaced FixB (1B → 1A); Undo restored a map byte-identical
+to the pre-cancel state.

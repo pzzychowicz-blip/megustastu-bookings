@@ -262,6 +262,16 @@ if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 // Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
 // preference for useThemeMode: true (dark) | false (light) | undefined (follow
 // the OS live). MUST mirror the no-flash inline script in index.html — same
+// v17.4.0 /code-review: prev-identity memo for a save transform. The synchronous
+// guard checks and the immediate saveBookings dispatch call the transform with
+// the SAME `prev` reference, so they share ONE optimizer pass; a retry replay
+// arrives with a FRESH prev and correctly recomputes (the v15.7.0
+// capture-intent-then-replay contract). Was hand-rolled in four places.
+function memoByPrev(fn){
+  let mPrev=null,mFin=null;
+  return function(prev){if(prev===mPrev) return mFin;const r=fn(prev);mPrev=prev;mFin=r;return r;};
+}
+
 // key, same value convention ("dark"/"light").
 function readThemePref(){
   try{
@@ -1391,8 +1401,7 @@ function BookingApp(){
         // `bookings` reference — 2×, 3× under dev StrictMode) share ONE pass. A
         // retry replay gets a FRESH prev ref → recomputes, exactly as the
         // v15.7.0 capture-intent contract requires.
-        let bnPrev=null,bnFin=null;
-        function buildNextMemo(prev){if(prev===bnPrev) return bnFin;const r=buildNext(prev);bnPrev=prev;bnFin=r;return r;}
+        const buildNextMemo=memoByPrev(buildNext);
         const fin=buildNextMemo(bookings);
         if(!mt.length&&needsR&&!prefOnly){
           const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
@@ -1413,7 +1422,7 @@ function BookingApp(){
         if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash();
         // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
         // (undo swaps it back in wholesale, incl. tables/status/duration).
-        if(ok&&editChanged) armUndo(undoSnapshots(bookings,fin),editId,"edit",false);
+        if(ok&&editChanged) armUndo(undoDelta(bookings,fin),editId,"edit",false);
         setShowForm(false);setViewDate(f.date);
   }
   function doSaveNew(f,v){
@@ -1463,8 +1472,7 @@ function BookingApp(){
         function buildNext(prev){return bookingsAfterAction(applyBase(prev).concat([nb]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);}
         // /code-review perf: prev-identity memo — one optimiser pass shared by
         // the guard check + the immediate dispatch (see the edit path above).
-        let bnPrev=null,bnFin=null;
-        function buildNextMemo(prev){if(prev===bnPrev) return bnFin;const r=buildNext(prev);bnPrev=prev;bnFin=r;return r;}
+        const buildNextMemo=memoByPrev(buildNext);
         const base=applyBase(bookings);
         const fin=buildNextMemo(bookings);
         if(!mt.length){
@@ -1749,15 +1757,14 @@ function BookingApp(){
     }
     function delTransform(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);}
     // v17.4.0: prev-identity memo so the undo delta and the write share ONE pass.
-    let dtPrev=null,dtFin=null;
-    function delMemo(prev){if(prev===dtPrev) return dtFin;const r=delTransform(prev);dtPrev=prev;dtFin=r;return r;}
+    const delMemo=memoByPrev(delTransform);
     const postDel=delMemo(bookings);
     const ok=saveBookings(delMemo);setConfirmDel(null);
     // v17.4.0: deletes are undoable too (general undo). The recurring skipDate
     // added above deliberately STAYS on undo — the restored occurrence keeps
     // its deterministic id, so the generator never duplicates it, and the
     // skipDate just stops a REGENERATION it no longer needs to do.
-    if(ok){flash();armUndo(undoSnapshots(bookings,postDel),id,"delete",false);}}
+    if(ok){flash();armUndo(undoDelta(bookings,postDel),id,"delete",false);}}
 
   // v17.3.3: the global keyboard shortcuts (precedence rules, every key) and
   // the v17.3.1 neutral-space List-deselect mousedown listener were extracted
@@ -1865,14 +1872,13 @@ function BookingApp(){
     function cancelTransform(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow){extra.noShow=true;extra.notes=(x.notes?x.notes+"\n":"")+"No show";}return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);}
     // v17.4.0: prev-identity memo (the doSave pattern) so the delta computed for
     // undo and the dispatched write share ONE optimizer pass.
-    let ctPrev=null,ctFin=null;
-    function cancelMemo(prev){if(prev===ctPrev) return ctFin;const r=cancelTransform(prev);ctPrev=prev;ctFin=r;return r;}
+    const cancelMemo=memoByPrev(cancelTransform);
     const post=cancelMemo(bookings);
     const ok=saveBookings(cancelMemo);
     setConfirmCancel(null);
     if(ok){
       flash();
-      armUndo(undoSnapshots(bookings,post),id,"cancel",!!noShow);
+      armUndo(undoDelta(bookings,post),id,"cancel",!!noShow);
     }
   }
   // v17.4.0 — GENERAL undo: the v16.3.0 cancel/no-show snapshot+toast pattern
@@ -1892,6 +1898,17 @@ function BookingApp(){
   // tables. Undo is "put this booking back", not a transactional rollback of
   // the whole floor. The undo pill's `undoNote` says "tables re-optimised"
   // when a reshuffle happened, so staff know the floor moved.
+  // v17.4.0 /code-review: compare like with like. bookingsAfterAction runs
+  // syncLiveDurations, which rewrites `duration`/`customDur` for a SEATED
+  // overstayer on today — both are in UNDO_FIELDS, so an overstayer the action
+  // never touched would otherwise read as "changed", be swept into the delta,
+  // and have its stale (shorter) duration written back on undo. Syncing the
+  // PREV side removes that false positive and keeps the delta bounded to what
+  // the action actually moved.
+  function undoDelta(prev,post){
+    const todayStr=new Date().toISOString().slice(0,10);
+    return undoSnapshots(syncLiveDurations(prev,todayStr,nowMins),post);
+  }
   function armUndo(snapshots,primaryId,kind,noShow){
     if(!snapshots||!snapshots.length) return;
     if(undoTimerRef.current) clearTimeout(undoTimerRef.current);

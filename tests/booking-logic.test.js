@@ -18,7 +18,7 @@ import {
   verifyClean, findConflicts, canAssign, getBusy, getBlockSlots,
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
-  isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo,
+  isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES } from "../src/lib/constants.js";
 
@@ -357,7 +357,7 @@ describe("undoSnapshots / applyUndo", () => {
     const snaps = undoSnapshots(prev, next);
     expect(snaps.map((x) => x.id).sort()).toEqual(["a", "b"]);
     expect(snaps.find((x) => x.id === "a").size).toBe(a.size);
-    expect(snaps.find((x) => x.id === "b").tables).toEqual(["2"].slice(0, 0).concat(["3"]));
+    expect(snaps.find((x) => x.id === "b").tables).toEqual(["3"]);
   });
 
   it("captures a booking the action REMOVED (delete path)", () => {
@@ -396,6 +396,26 @@ describe("undoSnapshots / applyUndo", () => {
   it("applyUndo with no snapshots is a no-op", () => {
     const cur = [a, b];
     expect(applyUndo(cur, [])).toBe(cur);
+  });
+
+  it("a seated OVERSTAYER is not swept in when both sides are live-synced", () => {
+    // /code-review regression: bookingsAfterAction runs syncLiveDurations, which
+    // rewrites duration/customDur for a seated overstayer on today. Comparing a
+    // RAW prev against a synced next made that untouched booking look changed.
+    // App's undoDelta syncs the prev side first — modelled here.
+    const t = "2099-06-15";
+    const nowM = 15 * 60;                       // 15:00
+    const over = mk({ id: "ov", status: "seated", date: t, time: "13:00", duration: 90, tables: ["6"] });
+    const target = mk({ id: "tg", date: t, time: "20:00", tables: ["2"] });
+    const prev = [over, target];
+    // the action changed only `target`; the optimizer pass live-synced `over`
+    const next = syncLiveDurations(prev, t, nowM).map((b) =>
+      b.id === "tg" ? { ...b, status: "cancelled" } : b
+    );
+    // RAW prev: the overstayer is a false positive
+    expect(undoSnapshots(prev, next).map((b) => b.id).sort()).toEqual(["ov", "tg"]);
+    // SYNCED prev (what undoDelta does): only the real change survives
+    expect(undoSnapshots(syncLiveDurations(prev, t, nowM), next).map((b) => b.id)).toEqual(["tg"]);
   });
 
   it("round-trips: undo of an action restores the exact prior state", () => {
