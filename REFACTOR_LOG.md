@@ -5569,3 +5569,74 @@ bundle. Rolling-safe — no Firebase rules/shape change.
 app that a revert cannot undo. Treat registering one as a one-way door, and
 never ship a PROD-only code path to the restaurant's devices without a way to
 run it on one first.
+
+---
+
+## v17.4.2 — App icons: the v2 "booking blocks" mark replaces the wordmark tile (2026-07-25)
+
+**Scope:** the PWA/browser icon family in `public/` + its generator. No app code
+beyond the version bump — no Firebase rules, shape, or behaviour change.
+
+**Files:** `scripts/gen-icons.py` (rewritten), `public/icon.svg`,
+`public/favicon.svg`, `public/icon-192.png`, `public/icon-512.png`,
+`public/apple-touch-icon.png`, `public/icon-maskable-512.png`, `index.html`,
+`public/manifest.webmanifest`, `src/App.jsx` (version), `CLAUDE.md`.
+
+**The mark.** v17.4.0's generated `MGT`/`Bookings` wordmark on an OKLCH rainbow
+sweep is replaced by the design review's option **2a** — three rounded booking
+blocks (accent blue · confirmed amber · seated green) on the frosted-glass tile
+the interface itself is built from. The blocks are a slice of the app's own
+timeline, and the ragged 8 / 15 / 8 left offsets are load-bearing: an asymmetric
+silhouette is what stops it reading as a hamburger menu at 16px. Source assets
+came from the `Logo Approaches` design project (`brand/icon-v2.svg` et al).
+
+**Type is outlined — trivially, because there is no type left.** The family now
+contains zero glyphs, so the v17.4.0 hazard (an SVG `<text>` with `font-family`
+resolving to a different face on every non-Apple platform) cannot recur. The
+gotcha row stays: if type ever returns to the icon it must be converted to
+paths, and the conversion is recoverable from git history at v17.4.1.
+
+**`scripts/gen-icons.py` rewritten, and it now RUNS ON LINUX.** The old script
+needed macOS (`/System/Library/Fonts/SFNS.ttf`) plus fontTools, so it could not
+be executed in a container or on CI — which is exactly how a design and its
+"single source of truth" drift apart. With no type to set, the fontTools /
+SF Pro / OKLCH machinery is gone; what remains is geometry authored on the
+design's 64-unit construction grid plus Playwright rasterisation, needing only
+`pip install playwright pillow`. It was **run in this Linux container to produce
+the shipped bytes**, and its `icon.svg` output is **byte-identical** to the
+design tool's `brand/icon-v2.svg` export — so "the generator reproduces what
+ships" is verifiable rather than asserted. `MGT_CHROMIUM` optionally points it
+at a system Chromium when the pip Playwright's own build is unavailable.
+
+**Per-variant cuts** (each one exists for a platform reason, not for symmetry):
+- `icon.svg` / `favicon.svg` — the rounded tile (rx 116), transparent corners.
+  The favicon is the SAME cut as the app icon: three bars carry no fine detail,
+  so unlike the v17.4.0 wordmark it needs no small-size variant, and one file
+  means the tab and the home screen can never show different marks.
+- `apple-touch-icon.png` — 180px, square, full-bleed, **RGB with no alpha
+  channel at all**. iOS rounds this tile itself and renders transparency BLACK,
+  so the gradient's 98%-opaque first stop sits on a solid base rather than
+  relying on the compositor.
+- `icon-maskable-512.png` — 512px, full-bleed, bars scaled to the centre 80%.
+  Verified geometrically: the furthest bar corner lands ~196px from centre,
+  inside the 204.8px safe radius, so no launcher shape can clip a bar end.
+
+**Cache-busting.** `?v=17.4.2` on `/favicon.svg`, `/manifest.webmanifest` and
+`/apple-touch-icon.png` in `index.html`, and on all four `icons[].src` entries
+in the manifest — a filename is otherwise cached for up to a year. There is no
+service worker to invalidate: `public/sw.js` remains the v17.4.1 kill switch,
+**unchanged**, and nothing registers a worker.
+
+**Known limitation, stated rather than fixed:** an existing **iOS home-screen
+shortcut keeps the tile the OS snapshotted when it was added**. No query string
+changes that — iOS never re-reads the icon for an installed shortcut, so those
+devices need remove + re-add. Browser tabs, Android, and fresh installs all pick
+the new mark up on a normal refresh.
+
+**Untouched:** `public/icons.svg` (an unrelated, unreferenced sprite) and
+`public/sw.js`.
+
+**Verification:** `npm run build` clean; icon family confirmed live on the dev
+server — favicon in the tab, `/manifest.webmanifest` resolving with the new
+`?v=` hrefs, and all four PNGs loading at their URLs with the expected
+dimensions and alpha characteristics.
