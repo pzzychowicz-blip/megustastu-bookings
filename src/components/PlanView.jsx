@@ -69,7 +69,7 @@ export const PlanView = memo(function PlanView({
   const [sliderTouched, setSliderTouched] = useState(false);
   // Re-anchor when the date changes; follow the clock on today until touched.
   useEffect(() => { setSlider(clampSlider(isToday ? nowMins : openM)); setSliderTouched(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [date]);
-  useEffect(() => { if (isToday && !sliderTouched) setSlider(clampSlider(nowMins)); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [nowMins]);
+  useEffect(() => { if (isToday && !sliderTouched) setSlider(clampSlider(nowMins));   }, [nowMins]);
   const atNow = isToday && Math.abs(slider - clampSlider(nowMins)) < 15;
 
   // ── Occupancy at the slider time ────────────────────────────────────────────

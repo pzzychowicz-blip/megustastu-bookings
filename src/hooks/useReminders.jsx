@@ -133,7 +133,7 @@ export function useReminders({ nowMins, setWriteWarning }){
     if(Object.keys(pruned).length!==Object.keys(reminderFires||{}).length){
       saveReminderFires(pruned);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   },[reminderFires]);
   // 30s tick so the banner list re-evaluates between nowMins ticks (which
   // only update on minute boundaries). Without this, a snooze expiring
@@ -141,7 +141,7 @@ export function useReminders({ nowMins, setWriteWarning }){
   useEffect(function(){
     const t=setInterval(function(){setReminderTick(function(x){return x+1;});},30000);
     return function(){clearInterval(t);};
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   },[]);
   // Reminder action handlers.
   function markReminderDone(fireKey){

@@ -41,7 +41,7 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   optimizerActiveFor
 } from "../lib/booking-logic";
-import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone } from "../lib/customers";
+import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone, findPhoneOverlaps } from "../lib/customers";
 import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
@@ -94,7 +94,7 @@ export function BookingFormModal({
       onMouseDown:function(e){ if(Date.now()-acTouch.current.ts<600) return; e.preventDefault(); select(); },
       onTouchStart:function(e){ const t=e.touches&&e.touches[0]; acTouch.current={x:t?t.clientX:0,y:t?t.clientY:0,scroll:false,ts:Date.now()}; },
       onTouchMove:function(e){ const t=e.touches&&e.touches[0]; if(t&&(Math.abs(t.clientX-acTouch.current.x)+Math.abs(t.clientY-acTouch.current.y))>12) acTouch.current.scroll=true; },
-      onTouchEnd:function(e){ acTouch.current.ts=Date.now(); if(!acTouch.current.scroll) select(); },
+      onTouchEnd:function(){ acTouch.current.ts=Date.now(); if(!acTouch.current.scroll) select(); },
     };
   }
   // v16.3.0 perf: memoised — rebuilt only when the bookings list changes, not on
@@ -189,9 +189,30 @@ export function BookingFormModal({
     {histList.slice(0,5).map(function(b){return <div key={b.id} style={{padding:"3px 0",borderTop:"1px solid "+histTk.border}}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</div>;})}
     {histList.length>5?<div style={{padding:"3px 0",borderTop:"1px solid "+histTk.border,color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</div>:null}
   </div>:null;
-  const custChips=(regularChip||noShowChip)?<div style={{paddingTop:8}}>
+  // v17.4.0 — SAME-PHONE double-booking warning. Same customer (matched on the
+  // normalized phone, the customers.js identity primitive), same DATE, and the
+  // two time windows OVERLAP → an amber advisory row under the chips. Advisory
+  // only: it never blocks Save — a real party legitimately books twice (two
+  // tables at once, a party splitting), and staff decide. Cancelled/completed
+  // are excluded (a completed earlier visit isn't a double-booking), as is the
+  // booking being edited. Cheap: one filter over `bookings` keyed on the four
+  // fields that can change it.
+  const dupPhone=useMemo(function(){
+    return findPhoneOverlaps(bookings,{phone:form.phone,date:form.date,time:form.time,
+      size:form.size,dur:form.customDur,excludeId:editId});
+  },[bookings,form.phone,form.date,form.time,form.size,form.customDur,editId]);
+  const dupWarn=dupPhone.length?<div style={{marginTop:8,padding:"8px 12px",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:10,fontSize:12,fontWeight:600,color:"var(--warn-text)"}}>
+    {"⚠ This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}
+    {dupPhone.slice(0,3).map(function(b){return <div key={b.id} style={{fontWeight:500,paddingTop:2}}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</div>;})}
+    {dupPhone.length>3?<div style={{fontWeight:500,paddingTop:2}}>{"+ "+(dupPhone.length-3)+" more"}</div>:null}
+  </div>:null;
+  // The container stays mounted while ANY of the three can render, so the
+  // dupWarn Reveal below can animate its collapse instead of being torn out
+  // with its parent (it is often the only content, for a first-time guest).
+  const custChips=(regularChip||noShowChip||dupPhone.length)?<div style={{paddingTop:8}}>
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{regularChip}{noShowChip}</div>
     <Reveal show={!!chipHistPanel}>{chipHistPanel}</Reveal>
+    <Reveal show={!!dupWarn}>{dupWarn}</Reveal>
   </div>:null;
   // Dropdown rows use onMouseDown/onTouchStart (fire BEFORE the input's blur)
   // so the tap lands before phoneFocus flips false. Opaque sheet token per the

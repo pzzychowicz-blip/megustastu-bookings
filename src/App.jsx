@@ -37,10 +37,10 @@ import {
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
   checkInefficent, verifyClean, findConflicts,
   nowTime,
-  trialFits, toTime, lateState, freeingSoon, rankCombosContaining, comboExistsFor
+  trialFits, toTime, lateState, freeingSoon, rankCombosContaining, comboExistsFor,
+  undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
-import { validateReminderDraft } from "./lib/reminders";
 import { normalizePhone } from "./lib/customers";
 
 
@@ -48,7 +48,10 @@ import { normalizePhone } from "./lib/customers";
 // First component file in the codebase using JSX syntax. App.jsx now also
 // uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
 // compatibility no longer applies — both files share a single style.
-import { Overlay, mkBtn, Reveal, Toast, Presence, ModalPresence, SlideView } from "./components/atoms";
+import { Overlay, mkBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
+// v17.3.4: the two notification-layout render units (state stays in BookingApp).
+import { StatusToasts } from "./components/StatusToasts";
+import { AppBanners } from "./components/AppBanners";
 
 
 // ── Phase B2 (v15-refactor): secondary modals ─────────────────────────────
@@ -69,9 +72,8 @@ import { BlockModal }  from "./components/BlockModal";
 // v17.1.0 (Tier 3 code-splitting): the Settings modal tree (5 tab bodies +
 // the floor-plan editor) is the largest UI subtree that is NOT needed at
 // startup — it now loads as a lazy chunk on first open. SETTINGS_TABS (the
-// keyboard-nav tab cycle) comes from the light SettingsChrome module so this
-// file keeps no static dependency on Settings.jsx.
-import { SETTINGS_TABS } from "./components/SettingsChrome";
+// keyboard-nav tab cycle) is imported by useKeyboardShortcuts.js (v17.3.3) —
+// App.jsx itself keeps no static dependency on the Settings chrome.
 
 // v17.1.0 /code-review fix #1 — resilient lazy loader. A rejected chunk fetch
 // almost always means the deployment changed under an open tab (Vercel serves
@@ -85,7 +87,7 @@ import { SETTINGS_TABS } from "./components/SettingsChrome";
 function lazyChunk(load,name){
   return lazy(function(){
     return load().then(function(m){
-      try{sessionStorage.removeItem("mgt-chunk-reload");}catch(e){}
+      try{sessionStorage.removeItem("mgt-chunk-reload");}catch{/* ignore */}
       return m;
     }).catch(function(err){
       console.error("[chunk] failed to load "+name,err);
@@ -94,7 +96,7 @@ function lazyChunk(load,name){
           sessionStorage.setItem("mgt-chunk-reload","1");
           window.location.reload();
         }
-      }catch(e){}
+      }catch{/* ignore */}
       return {default:function ChunkLoadError(){
         return <div style={{padding:16,fontSize:13,fontWeight:600,color:"var(--danger-text)"}}>Couldn’t load this screen — the app may have been updated. Please reload.</div>;
       }};
@@ -227,6 +229,9 @@ import { useWalkin } from "./hooks/useWalkin";
 // BookingApp effect → `waitAvail` state, derived via trialFits, not persisted.
 import { useWaitlist } from "./hooks/useWaitlist";
 import { useRecurring } from "./hooks/useRecurring";
+// v17.3.3: the global keyboard shortcuts + the neutral-space List-deselect
+// listener (the whole kbRef machinery) live in useKeyboardShortcuts.js now.
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { WaitlistPanel } from "./components/WaitlistPanel";
 import { WaitAvailBanner } from "./components/WaitAvailBanner";
 const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel").then(function(m){return {default:m.SearchPanel};});},"SearchPanel"); // v17.1.0: lazy (opened on demand)
@@ -257,7 +262,7 @@ const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
   // Sandbox build marker — WhatsApp module under local test, NOT a release.
   // The formal version bump happens on "give me the deployment version".
-  version:"17.3.1-wa-sandbox",
+  version:"17.4.1-wa-sandbox",
   sandbox:"WhatsApp inbox + simulator (localhost only)",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
@@ -266,27 +271,31 @@ const __APP_SIGNATURE__={
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 
-// v14.6.0: keyboard shortcut for the Summary panel toggle — "S" for Summary.
-// NB: in List view with a booking focused, S marks it Seated (that check runs
-// first); everywhere else S toggles the Summary. Rebind here + the Shortcuts row.
-const SUMMARY_KEY="s";
-// v14.7.0: shortcut to open the at-a-glance popover (now Week / Month — see
-// WeekView). v14.9.0: rebound "K" → "M" to match the renamed "More" button.
-// In-popover nav (W/M switch view, ←/→ period, ↑/↓ day, T this-period, Enter
-// open) lives in WeekView. Change here + the Shortcuts "M" row to rebind.
-const WEEK_KEY="m";
+// v17.3.3: SUMMARY_KEY ("s") and WEEK_KEY ("m") moved into
+// hooks/useKeyboardShortcuts.js with the handler that reads them — rebind there
+// (+ the Shortcuts rows).
 
 // ── v14.2.0: Dark-mode preference reader ──────────────────────────────────
 // Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
 // preference for useThemeMode: true (dark) | false (light) | undefined (follow
 // the OS live). MUST mirror the no-flash inline script in index.html — same
+// v17.4.0 /code-review: prev-identity memo for a save transform. The synchronous
+// guard checks and the immediate saveBookings dispatch call the transform with
+// the SAME `prev` reference, so they share ONE optimizer pass; a retry replay
+// arrives with a FRESH prev and correctly recomputes (the v15.7.0
+// capture-intent-then-replay contract). Was hand-rolled in four places.
+function memoByPrev(fn){
+  let mPrev=null,mFin=null;
+  return function(prev){if(prev===mPrev) return mFin;const r=fn(prev);mPrev=prev;mFin=r;return r;};
+}
+
 // key, same value convention ("dark"/"light").
 function readThemePref(){
   try{
     const v=localStorage.getItem("mgt-theme");
     if(v==="dark") return true;
     if(v==="light") return false;
-  }catch(e){}
+  }catch{/* ignore */}
   return undefined;
 }
 
@@ -309,7 +318,7 @@ function readAppWidth(){
   try{
     const v=parseInt(localStorage.getItem("mgt-appwidth"),10);
     if(Number.isFinite(v)&&v>=APP_WIDTH_MIN&&v<=APP_WIDTH_MAX) return v;
-  }catch(e){}
+  }catch{/* ignore */}
   const w=Math.round((window.innerWidth-300)/50)*50;
   return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,w));
 }
@@ -330,7 +339,7 @@ function readTlNum(b){
   try{
     const v=parseFloat(localStorage.getItem(b.key));
     if(Number.isFinite(v)&&v>=b.min&&v<=b.max&&Math.round(v/b.step)*b.step===v) return v;
-  }catch(e){}
+  }catch{/* ignore */}
   return b.def;
 }
 function readTlSettings(){
@@ -773,7 +782,7 @@ function BookingApp(){
   const waitAvailRef = useRef({});
   const [waitAddedShown, setWaitAddedShown] = useState(false);
   const [waitNotifyDismissed, setWaitNotifyDismissed] = useState(function(){return new Set();}); // v16.3.0: session-only ✕-dismissed waitlist-free rows
-  const [undoInfo, setUndoInfo] = useState(null);   // v16.3.0: {snapshot, noShow} pending undo after a cancel/no-show
+  const [undoInfo, setUndoInfo] = useState(null);   // v17.4.0: {snapshot, kind:"cancel"|"delete"|"edit", noShow} — general undo (was cancel/no-show-only, v16.3.0)
   const undoTimerRef = useRef(null);                // 10s auto-clear timer for the undo toast
   const pendingWaitlistRef = useRef(null); // entry id being converted via Book
   // Derived: bookings with seated-today durations synced to live time.
@@ -799,14 +808,14 @@ function BookingApp(){
   const isDark=useThemeMode(themePref);
   function onToggleDark(){
     const next=!isDark;
-    try{localStorage.setItem("mgt-theme",next?"dark":"light");}catch(e){}
+    try{localStorage.setItem("mgt-theme",next?"dark":"light");}catch{/* ignore */}
     setThemePref(next);
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
   function onSetAppWidth(next){
     const v=Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,next));
-    try{localStorage.setItem("mgt-appwidth",String(v));}catch(e){}
+    try{localStorage.setItem("mgt-appwidth",String(v));}catch{/* ignore */}
     setAppWidth(v);
   }
   // v17.1.0: per-device "Reduce animations" (Settings → General). Theme
@@ -815,14 +824,14 @@ function BookingApp(){
   // kill-switch keys on the attribute, and atoms.jsx's useFlip checks it for
   // WAAPI animations. Keep all three in sync.
   const [reduceMotion,setReduceMotion]=useState(function(){
-    try{return localStorage.getItem("mgt-reduce-motion")==="1";}catch(e){return false;}
+    try{return localStorage.getItem("mgt-reduce-motion")==="1";}catch{return false;}
   });
   function onToggleReduceMotion(){
     const next=!reduceMotion;
     try{
       if(next) localStorage.setItem("mgt-reduce-motion","1");
       else localStorage.removeItem("mgt-reduce-motion");
-    }catch(e){}
+    }catch{/* ignore */}
     if(next) document.documentElement.dataset.motion="reduce";
     else delete document.documentElement.dataset.motion;
     setReduceMotion(next);
@@ -831,14 +840,14 @@ function BookingApp(){
   // localStorage["mgt-plan-gestures"]="0" only when OFF (absent = on, the
   // default) — gates PlanView's wheel/pinch zoom, drag pan and double-tap reset.
   const [planGestures,setPlanGestures]=useState(function(){
-    try{return localStorage.getItem("mgt-plan-gestures")!=="0";}catch(e){return true;}
+    try{return localStorage.getItem("mgt-plan-gestures")!=="0";}catch{return true;}
   });
   function onTogglePlanGestures(){
     const next=!planGestures;
     try{
       if(next) localStorage.removeItem("mgt-plan-gestures");
       else localStorage.setItem("mgt-plan-gestures","0");
-    }catch(e){}
+    }catch{/* ignore */}
     setPlanGestures(next);
   }
   // v17.2.0: per-device Timeline zoom/follow settings (see readTlSettings above).
@@ -850,7 +859,7 @@ function BookingApp(){
     try{
       if(v===b.def) localStorage.removeItem(b.key);
       else localStorage.setItem(b.key,String(v));
-    }catch(e){}
+    }catch{/* ignore */}
   }
   function onSetTlSetting(name,next){
     const b=TL_SETTING_BOUNDS[name];
@@ -875,7 +884,11 @@ function BookingApp(){
   // is unavailable at the moment of the write.
   function getUser(){return (auth.currentUser&&auth.currentUser.email)||"staff";}
 
-  const inefficient=bookings.length>0&&checkInefficent(bookings,viewDate);
+  // v17.3.2 perf: memoized like overlapWarnings/lateMap (v17.1.0). This ran
+  // checkInefficent (a findBest scan per non-locked booking) on EVERY BookingApp
+  // render — i.e. every form keystroke, since the form draft lives here — the one
+  // heavy derivation the v17.1.0 useMemo pass missed. Keyed on [bookings,viewDate].
+  const inefficient=useMemo(function(){return bookings.length>0&&checkInefficent(bookings,viewDate);},[bookings,viewDate]);
 
   // v14.4.0: the day's bookings in the SAME order ListView renders them
   // (status group, then time). Drives ↑/↓ keyboard navigation of selectedListId
@@ -1283,7 +1296,7 @@ function BookingApp(){
       a.click();
       document.body.removeChild(a);
       setTimeout(function(){URL.revokeObjectURL(url);},1000);
-    }catch(e){setWriteWarning("Couldn't create the backup file on this device.");}
+    }catch{setWriteWarning("Couldn't create the backup file on this device.");}
   }
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
   // bookings remain for statistics (covers, day/range stats, phone-less
@@ -1360,33 +1373,20 @@ function BookingApp(){
     defaultWalkinSize: generalSettings.defaultWalkinSize,
   });
 
-  function doSave(){
-    // v17.0.0: apply the pending/confirm status override to a CLONE of the form
-    // so every downstream read (status write, diffBooking history, completed-
-    // duration gate, flash condition) sees the effective status uniformly.
-    const so=statusOverrideRef.current;
-    const f=so?Object.assign({},formRef.current,{status:so}):formRef.current;
-    try{
-      if(!f.name||!f.name.trim()){setError("Customer name is required.");return;}
-      // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
-      // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
-      if(!f.date){setError("Please set a date.");return;}
-      if(!f.time){setError("Please set a time.");return;}
-      const sm=toMins(f.time);
-      // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
-      // viewed day, and block a closed day outright.
-      const fh=hoursFor(f.date);
-      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
-      if(sm<fh.open*60||sm>fh.close*60){setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
-      const size=Number(f.size)||2;
-      const dur=f.customDur||getDur(size);
-      const cleanPhone=cleanPhoneOf(f.phone);
-      const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
-      // v16.0.0 follow-up: completed bookings excluded from the busy set — a
-      // completed visit is over, its table is free (mirrors ManualModal +
-      // WalkinForm; the optimizer already ignores completed via isActive).
-      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
-      if(editId){
+  // ── v17.3.5: doSave split (de-monolith #3) ────────────────────────────────────────
+  // The 199-line doSave was split for maintainability (the tech-debt plan's
+  // final "Later" item): doSave() keeps the shared preamble (status-override
+  // clone + all synchronous validations + the manual-table availability guard)
+  // and dispatches to ONE of the two path helpers below — bodies moved
+  // VERBATIM, still inside BookingApp so every closure read (bookings,
+  // liveBookings, editId, swapAffected, tableBlocks, autoOptimizer, nowMins,
+  // saveBookings…) is unchanged. `v` carries the preamble-derived values.
+  // Early setError(...)+return exits inside a helper end the save exactly as
+  // before (doSave has nothing after the dispatch); helper throws are caught
+  // by doSave's try/catch. The v15.7.0 capture-intent-then-replay contract and
+  // the prev-identity buildNextMemo are untouched.
+  function doSaveEdit(f,v){
+    const size=v.size,cleanPhone=v.cleanPhone,mt=v.mt;
         const orig=bookings.find(function(b){return b.id===editId;});
         const origPt=(orig&&Array.isArray(orig.preferredTables))?orig.preferredTables.slice().sort().join(","):"";
         const newPt=Array.isArray(f.preferredTables)?f.preferredTables.slice().sort().join(","):"";
@@ -1424,7 +1424,15 @@ function BookingApp(){
         }
         const clearM=!!f._clearManual;
         const wasSeatedLocked=orig&&isLocked(orig)&&!mt.length;
-        const editHist=orig?histEntry("edited: "+diffBooking(orig,f,size),getUser()):histEntry("edited",getUser());
+        // v17.4.0: the diff string is computed ONCE — it feeds the history entry
+        // AND the undo gate below. diffBooking returns the sentinel "saved (no
+        // field changes)" when nothing moved, which is exactly when undo must
+        // NOT be armed (saveBookings still returns true for an empty patch —
+        // persist() skips the write but reports dispatched — so `ok` alone
+        // would offer an Undo for a save that changed nothing).
+        const editDiff=orig?diffBooking(orig,f,size):"";
+        const editChanged=!!orig&&editDiff!=="saved (no field changes)";
+        const editHist=orig?histEntry("edited: "+editDiff,getUser()):histEntry("edited",getUser());
         // v14 p1: scheduledTime resolution.
         // - If user manually changed time in the form (f.time !== orig.time), that
         //   is an explicit reschedule → scheduledTime follows the new time.
@@ -1469,8 +1477,7 @@ function BookingApp(){
         // `bookings` reference — 2×, 3× under dev StrictMode) share ONE pass. A
         // retry replay gets a FRESH prev ref → recomputes, exactly as the
         // v15.7.0 capture-intent contract requires.
-        let bnPrev=null,bnFin=null;
-        function buildNextMemo(prev){if(prev===bnPrev) return bnFin;const r=buildNext(prev);bnPrev=prev;bnFin=r;return r;}
+        const buildNextMemo=memoByPrev(buildNext);
         const fin=buildNextMemo(bookings);
         if(!mt.length&&needsR&&!prefOnly){
           const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
@@ -1492,8 +1499,13 @@ function BookingApp(){
         // changes", auto-mark that request handled — but only on a real save.
         wa.completeModifyApply(editId, ok);
         if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash();
+        // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
+        // (undo swaps it back in wholesale, incl. tables/status/duration).
+        if(ok&&editChanged) armUndo(undoDelta(bookings,fin),editId,"edit",false);
         setShowForm(false);setViewDate(f.date);
-      } else {
+  }
+  function doSaveNew(f,v){
+    const size=v.size,dur=v.dur,cleanPhone=v.cleanPhone,mt=v.mt;
         const newId=genId();
         // v14: Book Again flow. When f.returnOf is set, the new booking links
         // back to its source, gets a distinctive "created via Book Again" entry
@@ -1539,8 +1551,7 @@ function BookingApp(){
         function buildNext(prev){return bookingsAfterAction(applyBase(prev).concat([nb]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);}
         // /code-review perf: prev-identity memo — one optimiser pass shared by
         // the guard check + the immediate dispatch (see the edit path above).
-        let bnPrev=null,bnFin=null;
-        function buildNextMemo(prev){if(prev===bnPrev) return bnFin;const r=buildNext(prev);bnPrev=prev;bnFin=r;return r;}
+        const buildNextMemo=memoByPrev(buildNext);
         const base=applyBase(bookings);
         const fin=buildNextMemo(bookings);
         if(!mt.length){
@@ -1568,7 +1579,35 @@ function BookingApp(){
         // shows optimistically + auto-retries, so the intent stands either way).
         if(pendingWaitlistRef.current){removeFromWaitlist(pendingWaitlistRef.current);pendingWaitlistRef.current=null;}
         setShowForm(false);setViewDate(f.date);
-      }
+  }
+  function doSave(){
+    // v17.0.0: apply the pending/confirm status override to a CLONE of the form
+    // so every downstream read (status write, diffBooking history, completed-
+    // duration gate, flash condition) sees the effective status uniformly.
+    const so=statusOverrideRef.current;
+    const f=so?Object.assign({},formRef.current,{status:so}):formRef.current;
+    try{
+      if(!f.name||!f.name.trim()){setError("Customer name is required.");return;}
+      // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
+      // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
+      if(!f.date){setError("Please set a date.");return;}
+      if(!f.time){setError("Please set a time.");return;}
+      const sm=toMins(f.time);
+      // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
+      // viewed day, and block a closed day outright.
+      const fh=hoursFor(f.date);
+      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
+      if(sm<fh.open*60||sm>fh.close*60){setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
+      const size=Number(f.size)||2;
+      const dur=f.customDur||getDur(size);
+      const cleanPhone=cleanPhoneOf(f.phone);
+      const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
+      // v16.0.0 follow-up: completed bookings excluded from the busy set — a
+      // completed visit is over, its table is free (mirrors ManualModal +
+      // WalkinForm; the optimizer already ignores completed via isActive).
+      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
+      if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
+      else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
     }catch(err){setError("Error: "+err.message);}
   }
   function save(statusOverride){
@@ -1803,25 +1842,24 @@ function BookingApp(){
       const okSkip=addSkipDate(target.recurringId,target.recurringDate,true);
       if(!okSkip){setWriteWarning("Still syncing standing bookings — try deleting again in a moment.");setConfirmDel(null);return;}
     }
-    const ok=saveBookings(function(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);});setConfirmDel(null);if(ok) flash();}
+    function delTransform(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);}
+    // v17.4.0: prev-identity memo so the undo delta and the write share ONE pass.
+    const delMemo=memoByPrev(delTransform);
+    const postDel=delMemo(bookings);
+    const ok=saveBookings(delMemo);setConfirmDel(null);
+    // v17.4.0: deletes are undoable too (general undo). The recurring skipDate
+    // added above deliberately STAYS on undo — the restored occurrence keeps
+    // its deterministic id, so the generator never duplicates it, and the
+    // skipDate just stops a REGENERATION it no longer needs to do.
+    if(ok){flash();armUndo(undoDelta(bookings,postDel),id,"delete",false);}}
 
-  // v14 preview 3: Global keyboard shortcuts. Uses a ref to capture the latest
-  // state and action callbacks on every render so the window-level keydown
-  // listener (mounted once) always sees fresh values without re-subscribing.
-  //
-  // Precedence rules:
-  //   1. Modifier keys (Ctrl / Meta / Alt) — always pass through so browser/OS
-  //      shortcuts (Cmd+F, Ctrl+R, etc.) keep working.
-  //   2. Escape — closes the topmost open modal (matches visual z-order).
-  //   3. Enter — triggers the primary action of the topmost modal. In a
-  //      <textarea> Enter still inserts a newline. The Manual Table Assignment
-  //      modal handles its own Enter internally; globally we skip it.
-  //   4. Letter / symbol / arrow shortcuts — suppressed when focus is on an
-  //      input / textarea / select / contenteditable so typing is never hijacked.
-  //      Suppressed as well while any modal is open, except for A/P/B/H which
-  //      fire only when the Edit Booking modal is the top layer.
-  const kbRef=useRef({});
-  kbRef.current={
+  // v17.3.3: the global keyboard shortcuts (precedence rules, every key) and
+  // the v17.3.1 neutral-space List-deselect mousedown listener were extracted
+  // VERBATIM into hooks/useKeyboardShortcuts.js. This object is the hook's
+  // latest-values context, refreshed every render (the original kbRef pattern —
+  // the hook mounts its window listeners once and reads this through a ref).
+  // Adding a shortcut = add the state/handler HERE and use it in the hook.
+  useKeyboardShortcuts({
     view:view,setView:setView,viewDate:viewDate,setViewDate:setViewDate,
     timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoom,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
     followNow:followNow,setFollowNow:setFollowNow,
@@ -1869,278 +1907,7 @@ function BookingApp(){
     onToggleDark:onToggleDark,
     // v17.1.0: Shift +/− app-width nudge (global, like Shift+D).
     onSetAppWidth:onSetAppWidth,appWidth:appWidth
-  };
-  useEffect(function(){
-    function isTyping(el){if(!el) return false;const t=el.tagName;return t==="INPUT"||t==="TEXTAREA"||t==="SELECT"||el.isContentEditable;}
-    function handler(e){
-      if(e.ctrlKey||e.metaKey||e.altKey) return;
-      const K=kbRef.current;const k=e.key;const typing=isTyping(e.target);
-      // ── Escape: close topmost modal (checked in visual z-order) ──
-      if(k==="Escape"){
-        // v14 p7: reminderEditor sits above Settings (z=250). Close it first.
-        if(K.reminderEditor){e.preventDefault();K.setReminderEditor(null);return;}
-        // v14 p7 fix: delete-confirm renders above Settings in DOM order.
-        if(K.confirmReminderDel){e.preventDefault();K.setConfirmReminderDel(null);return;}
-        // v14 p7 fix: reset tab to 'general' on Esc close — matches the
-        // Close button and backdrop-click onClose behavior.
-        if(K.showSettings){e.preventDefault();K.setShowSettings(false);K.setSettingsTab("general");return;}
-        if(K.showHistory){e.preventDefault();K.setShowHistory(false);return;}
-        if(K.confirmKitchen){e.preventDefault();K.setConfirmKitchen(null);return;}
-        if(K.confirmReshuffle){e.preventDefault();K.setConfirmReshuffle(false);return;}
-        if(K.confirmCancel){e.preventDefault();K.setConfirmCancel(null);return;}
-        if(K.confirmDel){e.preventDefault();K.setConfirmDel(null);return;}
-        if(K.showPrefPicker){e.preventDefault();K.setShowPrefPicker(false);return;}
-        // v16.3.0 correction: Esc dismisses the search panel (its "Done" button).
-        if(K.showSearch){e.preventDefault();K.setShowSearch(false);return;}
-        if(K.blockTarget){e.preventDefault();K.setBlockTarget(null);return;}
-        if(K.manualTarget){e.preventDefault();K.setManualTarget(null);return;}
-        if(K.showWalkin){e.preventDefault();K.setShowWalkin(false);return;}
-        if(K.showWeek){e.preventDefault();K.setShowWeek(false);return;}
-        if(K.showForm){e.preventDefault();K.setShowForm(false);return;}
-        // v17.3.1: nothing modal is open — Esc drops the List selection (the
-        // keyboard counterpart of clicking neutral space). LAST in the chain, so
-        // Esc still closes a modal first when one is up.
-        if(K.view==="list"&&K.selectedListId){e.preventDefault();K.setSelectedListId(null);return;}
-        return;
-      }
-      // ── Enter: primary action of topmost modal ──
-      if(k==="Enter"){
-        // In a textarea Enter always inserts a newline — never save.
-        if(typing&&e.target.tagName==="TEXTAREA") return;
-        // v14 p7: reminderEditor is topmost when open — save if draft is valid.
-        if(K.reminderEditor){
-          if(!validateReminderDraft(K.reminderEditor.draft)){
-            e.preventDefault();K.saveReminderFromEditor();
-          }
-          return;
-        }
-        // v14 p7 fix: delete-confirm Enter → confirm deletion.
-        if(K.confirmReminderDel){e.preventDefault();K.doDeleteReminder(K.confirmReminderDel);return;}
-        // Manual Modal handles its own Enter. Quick-status popup is ambiguous.
-        if(K.manualTarget) return;
-        if(K.confirmKitchen){
-          const isW=K.confirmKitchen==="walkin";
-          e.preventDefault();
-          K.setConfirmKitchen(null);
-          if(isW) K.doSaveWalkin(); else K.doSave();
-          return;
-        }
-        if(K.confirmReshuffle){e.preventDefault();K.setConfirmReshuffle(false);K.forceReshuffle();return;}
-        if(K.confirmDel){e.preventDefault();K.delBooking(K.confirmDel);return;}
-        if(K.showPrefPicker){e.preventDefault();K.setShowPrefPicker(false);return;}
-        if(K.showWalkin){e.preventDefault();K.saveWalkin();return;}
-        if(K.showForm){
-          // Save button is disabled when date is empty → mirror that here.
-          if(K.form&&K.form.date){e.preventDefault();K.save();}
-          return;
-        }
-        return;
-      }
-      // ── Letter / symbol / arrow shortcuts: never hijack typing ──
-      if(typing) return;
-      // v16.4.0 (Patryk): Shift+D (dark toggle) and ? (Settings/shortcuts help)
-      // are GLOBAL — they fire even while a modal is open and NEVER close it.
-      // Placed here (above the settings-arrow / prefPicker / form-letter blocks
-      // and the anyModal guard) so they always win; no form/pref shortcut uses D
-      // or ?, so nothing is shadowed. The `typing` guard above still lets you
-      // type "D"/"?" into a field. `?` opens Settings ON TOP of any open modal.
-      if((k==="d"||k==="D")&&e.shiftKey){e.preventDefault();K.onToggleDark();return;}
-      // v17.1.0: Shift +/− adjusts the per-device app width (±50px, 900–2400) —
-      // global like Shift+D, so it works with Settings open (the stepper tracks
-      // live). Matches EVERY key value the physical +/− keys produce under
-      // Shift across layouts: US Shift+"=" → "+"; ES/DE Shift+the-plus-key →
-      // "*" (/code-review fix #2 — without it, width-INCREASE was dead on the
-      // restaurant's Spanish keyboards); Shift+"-" → "_" everywhere. Deliberate
-      // side effect: Shift+"=" no longer zooms the timeline (unshifted "="/"-"
-      // still do).
-      if(e.shiftKey&&(k==="+"||k==="="||k==="*")){e.preventDefault();K.onSetAppWidth(K.appWidth+50);return;}
-      if(e.shiftKey&&(k==="_"||k==="-")){e.preventDefault();K.onSetAppWidth(K.appWidth-50);return;}
-      if(k==="?"){e.preventDefault();K.setShowSettings(true);return;}
-      // ── v14 p7: Settings tab-cycle with ←/→ ──
-      // Active only when Settings is the top layer (reminderEditor and
-      // confirmReminderDel are sub-modals on top of Settings — when they're
-      // open, arrows should flow to their default behavior or be no-ops).
-      // Takes priority over the global ←/→ day-nav shortcut below.
-      if(K.showSettings&&!K.reminderEditor&&!K.confirmReminderDel){
-        if(k==="ArrowLeft"||k==="ArrowRight"){
-          e.preventDefault();
-          // v16.0.0 follow-up: derived from SETTINGS_TABS (Settings.jsx — the ONE
-          // tab list) so a newly added tab can never be skipped here again. Do
-          // NOT inline a literal id list (that's how Customers got skipped).
-          const TABS=SETTINGS_TABS.map(function(t){return t.id;});
-          let curIdx=TABS.indexOf(K.settingsTab);if(curIdx<0) curIdx=0;
-          const newIdx=k==="ArrowLeft"?(curIdx-1+TABS.length)%TABS.length:(curIdx+1)%TABS.length;
-          K.setSettingsTab(TABS[newIdx]);
-          return;
-        }
-        // v14.4.0: N → new reminder when the Reminders tab is active.
-        if((k==="n"||k==="N")&&K.settingsTab==="reminders"){e.preventDefault();K.openNewReminder();return;}
-      }
-      // ── Edit Booking modal shortcuts ──
-      // Only fire when Edit is the TOP layer (no popup on top of it).
-      // ── Preferred-table picker: captures C (= Clear). Sits ABOVE the
-      //    form-modal block so A/P/B/H don't fire while the picker is open
-      //    (which matches the user-intuitive "only the top modal responds"
-      //    precedence).
-      if(K.showPrefPicker){
-        if(k==="c"||k==="C"){
-          const prefs=Array.isArray(K.form&&K.form.preferredTables)?K.form.preferredTables:[];
-          if(prefs.length>0){
-            e.preventDefault();
-            K.setForm(function(f){return Object.assign({},f,{preferredTables:[]});});
-          }
-        }
-        return; // no other letter shortcuts propagate while picker is up
-      }
-      // ── Edit & New Booking form shortcuts ──
-      //   A / P work in BOTH new and edit (request 1). In new mode, A opens
-      //   Manual with target "__new__" to match the "= Assign" button.
-      //   B / H remain edit-only (new bookings have no history or source).
-      //   C clears the tables assignment — logic mirrors the form's 3 Clear
-      //   buttons: if the user has set manualTables, clear those; else in
-      //   edit mode, if the stored booking has a manual assignment not yet
-      //   marked cleared, set _clearManual:true; else no-op.
-      const topLayer=K.showSettings||K.showHistory||K.confirmKitchen||K.confirmReshuffle||K.confirmCancel||K.confirmDel||K.blockTarget||K.manualTarget||K.reminderEditor||K.confirmReminderDel;
-      if(K.showForm&&!topLayer){
-        if(k==="a"||k==="A"){e.preventDefault();K.setManualTarget(K.editId||"__new__");return;}
-        if(k==="p"||k==="P"){e.preventDefault();K.setShowPrefPicker(true);return;}
-        if(k==="c"||k==="C"){
-          const mtLen=Array.isArray(K.form&&K.form.manualTables)?K.form.manualTables.length:0;
-          if(mtLen>0){
-            e.preventDefault();
-            K.setForm(function(f){return Object.assign({},f,{manualTables:[]});});
-            K.setSwapAffected(null);
-          } else if(K.editId){
-            const cur3=K.bookings.find(function(b){return b.id===K.editId;});
-            const isManual3=cur3&&(cur3._manual||cur3._locked)&&cur3.tables&&cur3.tables.length>0;
-            const alreadyCleared=!!(K.form&&K.form._clearManual);
-            if(isManual3&&!alreadyCleared){
-              e.preventDefault();
-              K.setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});
-              K.setSwapAffected(null);
-            }
-          }
-          return;
-        }
-        if(K.editId){
-          if(k==="b"||k==="B"){
-            const cur=K.bookings.find(function(b){return b.id===K.editId;});
-            if(cur&&(cur.status==="seated"||cur.status==="completed")){e.preventDefault();K.bookAgain(cur);}
-            return;
-          }
-          if(k==="h"||k==="H"){
-            const c2=K.bookings.find(function(b){return b.id===K.editId;});
-            if(c2&&c2.history&&c2.history.length>0){e.preventDefault();K.setShowHistory(true);}
-            return;
-          }
-        }
-      }
-      // ── Global shortcuts: suppressed while any modal is open ──
-      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel||K.showInbox||K.confirmArchive||K.confirmDeleteConv||K.showSim;
-      if(anyModal) return;
-      // v16.3.0: "/" opens the global booking search (typing guard above keeps it
-      // out of form fields; anyModal guard keeps it from re-firing while open).
-      if(k==="/"){e.preventDefault();K.setShowSearch(true);return;}
-      // ── v14.4.0: List-view per-card shortcuts (act on the focused booking) ──
-      // ↑/↓ move the focus ring; A/E/S/C/Shift+C/Delete act on it. Placed before
-      // the global letter shortcuts so Delete wins over "jump to today" ONLY while
-      // a card is focused — with nothing focused, D still jumps to today. ←/→
-      // fall through to the global day-nav below.
-      if(K.view==="list"){
-        const list=K.listDay||[];
-        if(k==="ArrowDown"||k==="ArrowUp"){
-          e.preventDefault();
-          if(!list.length) return;
-          const idx=list.findIndex(function(b){return b.id===K.selectedListId;});
-          const ni=idx<0?(k==="ArrowDown"?0:list.length-1):(k==="ArrowDown"?Math.min(list.length-1,idx+1):Math.max(0,idx-1));
-          K.setSelectedListId(list[ni].id);
-          K.bumpListFocus();
-          return;
-        }
-        const sel=K.selectedListId?list.find(function(b){return b.id===K.selectedListId;}):null;
-        if(sel){
-          if(k==="a"||k==="A"){e.preventDefault();K.setManualTarget(sel.id);return;}
-          if(k==="e"||k==="E"){e.preventDefault();K.openEdit(sel);return;}
-          // v17.0.0: a PENDING card can only be confirmed (or cancelled) — S/C
-          // are no-ops on it, matching the List/RMB button gating.
-          if(k==="s"||k==="S"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"seated");return;}
-          if((k==="c"||k==="C")&&e.shiftKey){e.preventDefault();K.updateStatus(sel.id,"cancelled");return;}
-          if(k==="c"||k==="C"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"completed");return;}
-          if(k==="d"||k==="D"){e.preventDefault();K.setConfirmDel(sel.id);return;}
-        }
-      }
-      // v17.0.0: three views — slide direction follows the view order (T·L·P).
-      const VIEW_ORD=["timeline","list","plan"];
-      const goView=function(v){if(K.view!==v){K.bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(K.view)?"mgt-view-in-right":"mgt-view-in-left");}K.setView(v);};
-      if(k==="t"||k==="T"){e.preventDefault();goView("timeline");return;}
-      if(k==="l"||k==="L"){e.preventDefault();goView("list");return;}
-      if(k==="p"||k==="P"){e.preventDefault();goView("plan");return;}
-      if(k==="d"||k==="D"){e.preventDefault();K.goToDate(new Date().toISOString().slice(0,10));return;}
-      if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
-      if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
-      // WhatsApp sandbox: I → open the inbox ("w" was taken by Walk-in).
-      // WA_SANDBOX-gated like the toolbar button (PROD-leak guard).
-      if((k==="i"||k==="I")&&WA_SANDBOX){e.preventDefault();K.setShowInbox(true);return;}
-      // WhatsApp sandbox: X → open the 🧪 simulator (sandbox builds only).
-      if((k==="x"||k==="X")&&WA_SANDBOX){e.preventDefault();K.setShowSim(true);return;}
-      // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
-      if(k===SUMMARY_KEY||k===SUMMARY_KEY.toUpperCase()){e.preventDefault();K.setSummaryOpen(function(o){return !o;});return;}
-      if(k===WEEK_KEY||k===WEEK_KEY.toUpperCase()){e.preventDefault();K.setShowWeek(true);return;}
-      if(k==="ArrowLeft"){e.preventDefault();const d1=new Date(K.viewDate);d1.setDate(d1.getDate()-1);K.goToDate(d1.toISOString().slice(0,10));return;}
-      if(k==="ArrowRight"){e.preventDefault();const d2=new Date(K.viewDate);d2.setDate(d2.getDate()+1);K.goToDate(d2.toISOString().slice(0,10));return;}
-      // ── Timeline-only shortcuts ──
-      if(K.view==="timeline"){
-        const today=new Date().toISOString().slice(0,10);
-        const isToday=K.viewDate===today;
-        if(k==="f"||k==="F"){
-          if(isToday){
-            e.preventDefault();
-            if(!K.followNow){K.setFollowNow(true);if(K.timelineZoom<K.tlFollowZoom) K.setTimelineZoom(K.tlFollowZoom);}
-            else{K.setFollowNow(false);}
-          }
-          return;
-        }
-        if(k==="+"||k==="="){e.preventDefault();K.setTimelineZoom(function(z){return Math.min(K.tlMaxZoom,z+0.5);});return;}
-        if(k==="-"){e.preventDefault();K.setTimelineZoom(function(z){return Math.max(1,z-0.5);});return;}
-        if(k==="0"){e.preventDefault();K.setTimelineZoom(1);K.setFollowNow(false);return;}
-        if(k==="o"||k==="O"){
-          if(isToday){e.preventDefault();K.setAutoOptimizer(function(p){return !p;});}
-          return;
-        }
-        if(k==="r"||k==="R"){
-          if(isToday&&!K.autoOptimizer){e.preventDefault();K.setConfirmReshuffle(true);}
-          return;
-        }
-      }
-    }
-    window.addEventListener("keydown",handler);
-    return function(){window.removeEventListener("keydown",handler);};
-  },[]);
-
-  // v17.3.1: click on neutral space (anywhere outside a booking card) clears the
-  // List selection — the focus ring is a keyboard/search target, so leaving it
-  // stuck after the user has moved on is confusing. Reads the same kbRef as the
-  // keyboard handler so the listener can be registered ONCE (mount-only).
-  // Guards: List view only, and never while a modal is open (a card's Edit /
-  // Tables modal must not drop the selection its own actions act on).
-  useEffect(function(){
-    function onDown(e){
-      const K=kbRef.current;
-      if(K.view!=="list"||!K.selectedListId) return;
-      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
-      if(anyModal) return;
-      const t=e.target;
-      if(t&&t.closest&&t.closest("[data-flip-id]")) return; // inside a card (incl. its buttons)
-      K.setSelectedListId(null);
-    }
-    // MOUSEDOWN ONLY — deliberately no touchstart. A tap on a touchscreen still
-    // fires the compatibility mousedown, so taps are covered; a swipe-SCROLL
-    // does not, so scrolling the list no longer wipes the selection (the
-    // v17.3.0 autocomplete lesson: a touchstart-driven action can't tell a tap
-    // from the first frame of a scroll).
-    window.addEventListener("mousedown",onDown);
-    return function(){window.removeEventListener("mousedown",onDown);};
-  },[]);
+  });
 
   function updateStatus(id,status){
     if(status==="cancelled"){setConfirmCancel(id);return;}
@@ -2153,7 +1920,6 @@ function BookingApp(){
       // If the transition triggers a seated-shift, force no-reshuffle by passing
       // autoOptimizerState=false to bookingsAfterAction, so other bookings never
       // move as a side-effect of someone sitting down early/late.
-      let seatedShiftHappened=false;
       const updated=b.map(function(x){
         if(x.id!==id) return x;
         const histEntries=[histEntry("status → "+status,user)];
@@ -2178,7 +1944,6 @@ function BookingApp(){
             // scheduledTime is intentionally NOT updated here — it stays pinned to
             // the confirmed time so Book Again and history reads show the true plan.
             histEntries.push(histEntry("seated "+shift.direction+": time adjusted "+shift.oldTime+" → "+shift.newTime,user));
-            seatedShiftHappened=true;
           }
         }
         extra.history=(x.history||[]).concat(histEntries);
@@ -2195,37 +1960,83 @@ function BookingApp(){
     // v16.3.0: snapshot the pre-cancel booking so the undo toast can restore it
     // (status/noShow/notes/tables — the whole object). Single pending slot; a
     // newer cancel replaces it.
-    const snapshot=bookings.find(function(x){return x.id===id;});
-    const ok=saveBookings(function(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow){extra.noShow=true;extra.notes=(x.notes?x.notes+"\n":"")+"No show";}return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);});
+    function cancelTransform(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow){extra.noShow=true;extra.notes=(x.notes?x.notes+"\n":"")+"No show";}return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);}
+    // v17.4.0: prev-identity memo (the doSave pattern) so the delta computed for
+    // undo and the dispatched write share ONE optimizer pass.
+    const cancelMemo=memoByPrev(cancelTransform);
+    const post=cancelMemo(bookings);
+    const ok=saveBookings(cancelMemo);
     wa.autoHandleCancelIntent(id); // a pending WA cancel-intent banner on this booking's conversation auto-handles
     setConfirmCancel(null);
     if(ok){
       flash();
-      if(snapshot){
-        if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
-        setUndoInfo({snapshot:snapshot,noShow:!!noShow});
-        undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
-      }
+      armUndo(undoDelta(bookings,post),id,"cancel",!!noShow);
     }
   }
-  // v16.3.0: restore the last-cancelled booking from its snapshot. Re-applies the
-  // pre-cancel object (status/tables/notes/noShow) + a history note, then runs
-  // bookingsAfterAction so the table re-places (if it was taken meanwhile, the
-  // optimizer/reconciliation resolves or flags it — accepted). Gated on `ok`.
-  function undoCancel(){
+  // v17.4.0 — GENERAL undo: the v16.3.0 cancel/no-show snapshot+toast pattern
+  // now also covers DELETE and form EDIT. armUndo parks one pending snapshot
+  // ({snapshot, kind:"cancel"|"delete"|"edit", noShow}) — single slot, a newer
+  // action replaces it — and the shared undoLastAction restores it: the
+  // exists?map:concat shape naturally covers all three kinds (delete → the
+  // booking is gone from prev → concat re-adds it; cancel/edit → map swaps the
+  // snapshot back in), then bookingsAfterAction re-places tables (if a table
+  // was taken meanwhile, the optimizer/reconciliation resolves or flags it —
+  // accepted, same as v16.3.0). Gated on the save `ok`.
+  //
+  // SCOPE (deliberate, v17.4.0): undo restores THE SNAPSHOTTED BOOKING ONLY.
+  // If the original action's bookingsAfterAction pass also moved OTHER
+  // bookings (a reshuffle), those moves are NOT reversed — with the optimizer
+  // ON the re-run usually re-places them, with it OFF they keep their new
+  // tables. Undo is "put this booking back", not a transactional rollback of
+  // the whole floor. The undo pill's `undoNote` says "tables re-optimised"
+  // when a reshuffle happened, so staff know the floor moved.
+  // v17.4.0 /code-review: compare like with like. bookingsAfterAction runs
+  // syncLiveDurations, which rewrites `duration`/`customDur` for a SEATED
+  // overstayer on today — both are in UNDO_FIELDS, so an overstayer the action
+  // never touched would otherwise read as "changed", be swept into the delta,
+  // and have its stale (shorter) duration written back on undo. Syncing the
+  // PREV side removes that false positive and keeps the delta bounded to what
+  // the action actually moved.
+  function undoDelta(prev,post){
+    const todayStr=new Date().toISOString().slice(0,10);
+    return undoSnapshots(syncLiveDurations(prev,todayStr,nowMins),post);
+  }
+  function armUndo(snapshots,primaryId,kind,noShow){
+    if(!snapshots||!snapshots.length) return;
+    if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoInfo({snapshots:snapshots,primaryId:primaryId,kind:kind,noShow:!!noShow});
+    undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
+  }
+  function undoLastAction(){
     const info=undoInfo;
-    if(!info||!info.snapshot) return;
+    if(!info||!info.snapshots||!info.snapshots.length) return;
     const user=getUser();
-    const snap=info.snapshot;
+    const note=info.kind==="delete"?"deletion undone":info.kind==="edit"?"edit undone":"cancellation undone";
+    const primary=info.snapshots.find(function(s2){return s2.id===info.primaryId;})||info.snapshots[0];
     const ok=saveBookings(function(b){
-      const exists=b.some(function(x){return x.id===snap.id;});
-      const restored=Object.assign({},snap,{history:(snap.history||[]).concat([histEntry("cancellation undone",user)])});
-      const updated=exists?b.map(function(x){return x.id===snap.id?restored:x;}):b.concat([restored]);
-      return bookingsAfterAction(updated,snap.date,tableBlocks,snap.id,false,autoOptimizer);
+      // Only the booking the user acted on gets a history entry — the others
+      // were moved by the optimizer, not by a user action, and the original
+      // reshuffle didn't write history for them either (symmetry).
+      const snaps=info.snapshots.map(function(s2){
+        return s2.id===info.primaryId
+          ?Object.assign({},s2,{history:(s2.history||[]).concat([histEntry(note,user)])})
+          :s2;
+      });
+      // Restore VERBATIM — deliberately NOT through bookingsAfterAction. Its
+      // optimizer branch is taken whenever optimizerActiveFor() is true (which
+      // it ALWAYS is for a future date, regardless of the toggle), and a
+      // reshuffle here would immediately re-apply the very moves undo just
+      // reversed. syncLiveDurations still runs so a seated booking's live
+      // duration stays correct. If a booking created since the action now
+      // collides, the v15.6.1 reconciliation effect resolves it — the same
+      // path that handles offline merges.
+      const today=new Date().toISOString().slice(0,10);
+      return syncLiveDurations(applyUndo(b,snaps),today,nowMins);
     });
     if(ok){
       if(undoTimerRef.current){clearTimeout(undoTimerRef.current);undoTimerRef.current=null;}
       setUndoInfo(null);
+      setViewDate(primary.date);
     }
   }
   function manualAssign(bookingId,tables,locked,affected){
@@ -2292,75 +2103,14 @@ function BookingApp(){
 
   // ── Notification banners (v15.8.0) ──────────────────────────────────────────
   // Two families so the grid stops "jumping" when a banner appears/disappears:
-  //  • TRANSIENT status toasts (reconnect / syncing / loaded / reshuffled /
-  //    sync-fix) float in a fixed bottom layer (floatingToasts, below) — they
-  //    never reflow the grid. Slide-up+fade via .mgt-toast; they auto-hide via
-  //    their own state, and a floating toast vanishing moves nothing.
-  //  • PERSISTENT/actionable banners (offline / write-error / inefficiency /
-  //    overlap / reminders) stay in flow but ease open/closed via the Reveal
-  //    atom (graceful height animation). See CLAUDE.md "Notification layout".
-  const toastShadow="0 6px 20px rgba(0,0,0,0.18)";
-  // v15.8.0: the 5 status toasts share ONE slot — only the highest-priority
-  // active one is shown (order below), so they never stack vertically. When the
-  // top one changes, the old floats out as the new floats in; they overlap in
-  // the same grid cell (gridArea 1/1) so the swap is a crossfade in place.
-  const statusToasts=[
-    {key:"loading",on:!bookingsReady,node:<div
-      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Loading bookings…</div>},
-    {key:"resync",on:resyncing,node:<div
-      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.</div>},
-    {key:"reconnect",on:reconnectShown,node:<div
-      style={{background:"linear-gradient(var(--app-reconnect-bg),var(--app-reconnect-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:toastShadow}}>✓ Reconnected — changes synced.</div>},
-    {key:"syncfix",on:syncFix,node:<div
-      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
-    {key:"waitadded",on:waitAddedShown,node:<div
-      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
-    {key:"undo",on:!!undoInfo,node:<div
-      style={{background:"linear-gradient(var(--bg-sheet),var(--bg-sheet)),var(--bg-ac-menu)",border:"2px solid var(--border-sheet)",borderRadius:14,padding:"8px 10px 8px 14px",fontSize:13,fontWeight:600,color:"var(--text-primary)",boxShadow:toastShadow,display:"flex",alignItems:"center",gap:10,pointerEvents:"auto"}}><span>{undoInfo&&undoInfo.noShow?"Marked no-show":"Booking cancelled"}</span><button
-        onClick={function(e){e.stopPropagation();undoCancel();}}
-        className="mgt-hover-scale mgt-press"
-        style={mkBtn({fontSize:12,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button></div>},
-    {key:"dragmsg",on:!!dragMsg,node:<div
-      style={dragMsg&&dragMsg.good
-        ?{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}
-        :{background:"linear-gradient(var(--warn-bg),var(--warn-bg)),var(--bg-ac-menu)",border:"2px solid var(--warn-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--warn-text)",boxShadow:toastShadow}}>{dragMsg?dragMsg.text:""}</div>},
-    {key:"reshuffled",on:reshuffled,node:<div
-      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}</div>},
-    {key:"load",on:loadBannerShown,node:<div
-      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>{"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."}</div>},
-  ];
-  const topToastKey=(statusToasts.find(function(t){return t.on;})||{}).key;
-  // Floating layer — absolutely positioned over the TOP-CENTRE of mainView so the
-  // toast lands in the empty gap of the timeline toolbar (between the
-  // Optimizer/Reshuffle group on the left and the Follow/zoom group on the right)
-  // — more at-a-glance, and it tracks mainView's position. Anchored to a relative
-  // wrapper around mainView at the render site; works in both views. ALWAYS
-  // mounted (each Toast self-manages its in/out lifecycle, so the container must
-  // outlive a toast's out-animation) — empty + pointerEvents:none when idle, so it
-  // never blocks the toolbar/grid taps. z<modal (1000) / <quick-status popup (300).
-  // Inner = a 1-cell grid so leaving+entering toasts overlap (crossfade in place).
-  const floatingToasts=<div
-    style={{position:"absolute",top:0,left:0,right:0,zIndex:60,display:"flex",justifyContent:"center",alignItems:"flex-start",padding:"7px 12px 0",pointerEvents:"none"}}><div
-    style={{width:"100%",maxWidth:360,display:"grid",justifyItems:"center",textAlign:"center"}}>{statusToasts.map(function(t){return <Toast key={t.key} show={t.key===topToastKey} style={{gridArea:"1 / 1",width:"fit-content",justifySelf:"center"}}>{t.node}</Toast>;})}{/* v17.1.2: fit-content — the Undo pill (and every toast) hugs its text instead of stretching the full 360px column; long text still wraps at the container's maxWidth */}</div></div>;
-
-  // In-flow persistent banners (wrapped in <Reveal> at the render site).
-  const offlineBanner=!isOnline?<div
-    style={{background:"var(--app-offline-bg)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>⚠ Working offline — your changes are saved locally and will sync when the connection returns. Keep this tab open.</div>:null;
-  const writeWarningBanner=writeWarning?<div
-    style={{background:"var(--danger-bg)",border:"2px solid var(--danger-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:700,color:"var(--danger-text)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>{"⚠ "+writeWarning}</span><button
-            className="mgt-hover-scale"
-            style={mkBtn({fontSize:12,background:"var(--app-btn-slate-dim)",minHeight:32,padding:"4px 12px"})}
-            onClick={function(){setWriteWarning(null);}}>Dismiss</button></div>:null;
+  //  • TRANSIENT status toasts → the floating StatusToasts component (v17.3.4,
+  //    extracted verbatim; mounted in the relative wrapper around mainView).
+  //  • PERSISTENT/actionable banners stay in flow: the three simple ones
+  //    (offline / write-error / inefficiency) render via AppBanners (v17.3.4),
+  //    the row banners (Overlap / Late / WaitAvail / reminders) were already
+  //    components. All STATE stays here (the Phase D3 locked decision — only
+  //    rendering moved). See CLAUDE.md "Notification layout".
   const ineffShow=!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer)&&bookingDefaults.reshuffleSuggestEnabled;
-  const ineffBanner=ineffShow?<div
-    style={{background:"var(--warn-bg)",border:"2px solid var(--warn-border)",borderRadius:14,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--warn-text)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}><span>Tables could be reshuffled for better efficiency.</span><div style={{display:"flex",gap:6}}><button
-        onClick={function(){setDismissedIneff(viewDate);}}
-        className="mgt-hover-scale"
-        style={mkBtn({fontSize:13,minHeight:36,padding:"6px 14px",background:BTN.dismiss})}>Dismiss</button><button
-        onClick={function(){setConfirmReshuffle(true);}}
-        className="mgt-hover-scale"
-        style={{background:BTN.orange,color:"var(--text-on-accent)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:600,minHeight:36,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div></div>:null;
-
   // Overlap warnings banner — shows when one or more seated guests are overstaying
   // into the start time of a booking on the same table (one-tap Reassign per row).
   // v17.0.0 round 7: converted to the Running-late (LateBanner) pattern —
@@ -2597,10 +2347,14 @@ function BookingApp(){
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
+              aria-label="Previous day"
+              title="Previous day (←)"
               dangerouslySetInnerHTML={{__html:"&#8249;"}} /><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
+              aria-label="Next day"
+              title="Next day (→)"
               dangerouslySetInnerHTML={{__html:"&#8250;"}} /><input
               type="date"
               value={viewDate}
@@ -2614,6 +2368,8 @@ function BookingApp(){
               Orange = a table currently fits someone waiting; slate = just waiting. */}
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
+              aria-label={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
+              title={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div>{/* v17.0.0 round 8: 🔍 + ⚙ live HERE (right of Summary) for every
               view — Timeline's legend and List's card-header each used to carry
@@ -2622,7 +2378,26 @@ function BookingApp(){
               mobile full-width Summary wraps them onto their own line. */}
             <div style={{display:"flex",alignItems:"center",minHeight:40,marginLeft:"auto",flexShrink:0}}><ViewTools
               onOpenSearch={function(){setShowSearch(true);}}
-              onOpenSettings={function(){setShowSettings(true);}} /></div></div><Reveal show={!isOnline}>{offlineBanner}</Reveal><Reveal show={!!writeWarning}>{writeWarningBanner}</Reveal><Reveal show={ineffShow}>{ineffBanner}</Reveal><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} collapseMax={generalSettings.lateCollapseMax} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}>{floatingToasts}<SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+              onOpenSettings={function(){setShowSettings(true);}} /></div></div><AppBanners
+                isOnline={isOnline}
+                writeWarning={writeWarning}
+                onDismissWarning={function(){setWriteWarning(null);}}
+                ineffShow={ineffShow}
+                onDismissIneff={function(){setDismissedIneff(viewDate);}}
+                onReshuffle={function(){setConfirmReshuffle(true);}} /><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} collapseMax={generalSettings.lateCollapseMax} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}><StatusToasts
+                bookingsReady={bookingsReady}
+                resyncing={resyncing}
+                reconnectShown={reconnectShown}
+                syncFix={syncFix}
+                waitAddedShown={waitAddedShown}
+                undoInfo={undoInfo}
+                onUndo={undoLastAction}
+                undoNote={reshuffled&&optimizerActiveFor(viewDate,autoOptimizer)?"tables re-optimised":""}
+                dragMsg={dragMsg}
+                reshuffled={reshuffled}
+                reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
+                loadShown={loadBannerShown}
+                loadMsg={"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}

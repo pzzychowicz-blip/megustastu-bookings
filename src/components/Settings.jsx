@@ -277,7 +277,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
   // armedTier is an INDEX, so if the tier count changes out from under us (a
   // concurrent remote bookingDefaults save on another device) the armed row would
   // shift — disarm on any count change so a second tap can't hit the wrong tier.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => { disarmTier(); }, [tiers.length]);
   const saveTiers = (next) => onSaveBookingDefaults({ tiers: next });
   const updateTier = (i, patch) => { disarmTier(); saveTiers(tiers.map((t, j) => (j === i ? { ...t, ...patch } : t))); };

@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#007AFF" />
+    <!-- v17.4.0 (PWA): installable on the restaurant tablets. SW registration
+         lives in src/main.jsx (prod-only; an inline script here would break
+         the single-hash CSP). apple-touch-icon is the FULL-BLEED png (iOS
+         rounds it itself; transparent corners would render black). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="MGT Bookings" />
     <title>megustastu-bookings</title>
     <!-- v14.2.0: Dark-mode theming tokens. Light values live in :root; dark
          values override under [data-theme="dark"]. A theme flip = one

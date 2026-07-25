@@ -25,7 +25,7 @@ import {
   ZONE_OF,
   PRIORITIES,
   DUR_TIERS
-} from "./constants";
+} from "./constants.js"; // WA sandbox: explicit ".js" — Node ESM chain, see customers.js
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
 // v16.1.0: default duration reads the DUR_TIERS live binding (settings/
@@ -590,6 +590,60 @@ export function bookingsAfterAction(updatedBks,date,blocks,changedId,forceReassi
     if(b.id===changedId) return Object.assign({},b,{tables:tables||[],_conflict:!tables||!tables.length});
     return Object.assign({},b);
   });
+}
+
+// ── Undo support (v17.4.0) ────────────────────────────────────────────────────
+// An action (edit / delete / cancel) runs bookingsAfterAction, which may ALSO
+// move other bookings' tables when the optimizer reshuffles. Undo therefore has
+// to put back more than the booking the user acted on — but NOT the whole day:
+// rewriting bookings the action never touched would widen the window in which
+// undo can clobber another device's concurrent edit (the lost-write class the
+// v15.2.0–v16.0.0 CAS arc exists to prevent).
+//
+// `undoSnapshots(prev,next)` returns the PRE-action version of exactly those
+// bookings that `next` changed or removed; `applyUndo` puts them back. Both are
+// pure so the contract is unit-tested.
+//
+// The compared field set is deliberately explicit: `updatedAt`/`baseUpdatedAt`
+// are per-write metadata (a server echo must not read as a change), and
+// `history` grows on every write so comparing it would mark everything changed.
+var UNDO_FIELDS=["name","phone","date","time","scheduledTime","size","duration",
+  "originalDuration","customDur","preference","notes","deposit","status","noShow",
+  "tables","_manual","_locked","_conflict","preferredTables","returnOf",
+  "recurringId","recurringDate","anonymized"];
+function undoKey(b){
+  return UNDO_FIELDS.map(function(k){
+    var v=b[k];
+    if(Array.isArray(v)) return v.slice().sort().join("+");
+    return (v===undefined||v===null)?"":String(v);
+  }).join("|");
+}
+export function undoSnapshots(prev,next){
+  var nextById={};
+  (next||[]).forEach(function(b){ if(b&&b.id!=null) nextById[b.id]=b; });
+  var out=[];
+  (prev||[]).forEach(function(b){
+    if(!b||b.id==null) return;
+    var after=nextById[b.id];
+    // removed by the action, or its compared fields changed
+    if(!after||undoKey(after)!==undoKey(b)) out.push(b);
+  });
+  return out;
+}
+// Restore the snapshots into `current`: replace where the booking still exists,
+// re-add where the action deleted it. Bookings not in `snapshots` are returned
+// untouched (identity preserved, so the per-booking diff-write skips them).
+export function applyUndo(current,snapshots){
+  if(!snapshots||!snapshots.length) return current||[];
+  var byId={};
+  snapshots.forEach(function(s){ if(s&&s.id!=null) byId[s.id]=s; });
+  var seen={};
+  var out=(current||[]).map(function(b){
+    if(b&&b.id!=null&&byId[b.id]){ seen[b.id]=true; return byId[b.id]; }
+    return b;
+  });
+  snapshots.forEach(function(s){ if(s&&s.id!=null&&!seen[s.id]) out=out.concat([s]); });
+  return out;
 }
 
 // ── Validation / efficiency check ─────────────────────────────────────────────
