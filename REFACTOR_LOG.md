@@ -5467,3 +5467,105 @@ already-installed home-screen PWA: iOS and Android snapshot the icon at
 add-to-home-screen time and do not reliably re-read it, so the tablets already
 running MGT will keep the old tile until the app is removed and re-added. That
 is OS behaviour, outside the service worker's reach.
+
+---
+
+## v17.4.1 — HOTFIX: withdraw the PWA service worker (2026-07-25)
+
+**Branch `fix/v17.4.1-sw-killswitch`. Production incident.**
+
+Within hours of v17.4.0 reaching production, the app **froze at "⟳ Loading
+bookings…" on both iPhone and iPad**. Desktop was completely unaffected.
+Clearing site data on a device fixed it immediately, which points at the
+v17.4.0 service worker and its caches.
+
+**How strong that evidence actually is — recorded honestly, because the first
+write-up of this entry called it "confirmed".** Clearing site data is a blunt
+instrument: it also wipes **IndexedDB** (where Firebase Auth persists its
+session) and localStorage, so it does not uniquely implicate the worker. The
+laptop had the *same* worker installed and was never affected, so the worker
+alone was never sufficient — the differentiator is iOS, which an
+IndexedDB/auth-state theory fits just as well. The worker remains by far the
+most likely cause (it was the release's only boot-path change), and it is being
+withdrawn because it is **unverifiable on the affected devices**, not because
+root cause was proven. **The incident is not closed until both iOS devices have
+been seen loading cleanly after this deploy with no further manual clearing;**
+if either still freezes, the worker was a red herring and the next place to look
+is Firebase auth / IndexedDB state on iOS.
+
+**Diagnosis.** Diffing `src/` for v17.4.0 showed the entire release touched only
+action handlers and the booking form (`App.jsx` undo paths, `BookingFormModal`,
+`ManualModal`, `StatusToasts`, `booking-logic`, `customers`) — **none of it runs
+during load**. The single boot-path change in the whole version was
+`main.jsx` registering the service worker. Ruled out along the way: no import
+cycle (`booking-logic` imports only from `constants.js`, so the new
+`customers.js → booking-logic` edge is acyclic); CSP/headers correct for
+Firebase (`connect-src` covers `*.firebasedatabase.app` + `wss://`,
+`worker-src 'self'`) and unchanged since v17.3.x. `bookingsReady` flips on the
+line after `sanitizeAll` inside the bookings `onValue`, so the symptom means the
+first snapshot never arrived at all.
+
+**Root cause was NOT established, and the fix does not depend on knowing it.**
+A production-mode build carrying that worker, forced onto the DEV database and
+served locally, loads fine on desktop — so reproducing it needs real iOS plus
+production conditions that cannot be staged here. The worker was PROD-only by
+design (`import.meta.env.PROD`), i.e. **the one component in the release with no
+possible pre-deploy verification was the one that broke.**
+
+**The fix — a kill switch, because a service worker is not revertible.** An
+installed worker keeps controlling the page forever: deleting `/sw.js` from the
+deploy does not unregister it, so a plain revert would have left every affected
+device broken until someone cleared its data by hand. `public/sw.js` is now a
+worker at the same URL that, once, on `activate`, deletes our own caches
+(`mgt-*`) and calls `registration.unregister()`. It deliberately has **no
+`fetch` handler at all**, so it intercepts nothing even before activating.
+`src/main.jsx` no longer registers anything, so no new device installs one.
+
+**What recovery actually looks like — stated precisely, because an earlier
+draft of this entry overstated it.** A browser only re-fetches `/sw.js` when the
+device navigates (or on a periodic check that can be ~24h away for an idle
+registration), so a frozen tab does **not** heal untouched: someone reloads it,
+that reload picks up the kill switch, and because the old worker still served
+that particular load the page may need one further reload before it is clean.
+What the fix removes is the need to dig through Settings and clear website data
+on every device — not the need to reload. An earlier cut also called
+`clients.navigate()` to save that second reload; it was **dropped in review**
+because it fired on healthy devices too (the laptop was never broken, and an
+unsolicited reload destroys a half-typed booking, which is React state and never
+persisted), and because caches are already deleted by that point, so a network
+blip during the forced reload would strand the tab on the browser's offline
+error page with no shell to fall back on. The `caches.delete()` sweep was also
+scoped to our own `mgt-` keys rather than every cache on the origin, since this
+file is meant to stay deployed indefinitely.
+
+**Verified against the real failure state, not a mock.** A harness installed the
+**actual v17.4.0 worker** (from `origin/main`) until it was controlling with a
+populated `mgt-shell-v2` cache, then the kill switch was deployed to the same
+URL: after one update cycle → registrations 0, caches 0, page uncontrolled, tab
+auto-reloaded. The worst case was then exercised deliberately — a page that
+*keeps* re-registering (simulating a device somehow still running a stale bundle
+with the old registration call) — across three passes: registrations stayed 0,
+control was never regained, no reload loop. That mattered because a reload loop
+on the restaurant's tablets mid-service would have been worse than the original
+bug.
+
+**Kept:** the manifest and the whole icon family. They are inert without a
+worker, iOS add-to-home-screen still uses them, and they were never implicated.
+Also kept: general undo and the same-phone warning (both action-path only).
+
+**Docs:** two new gotcha rows — "a shipped service worker CANNOT be withdrawn by
+deleting it" and "a SW must be testable on the target device before it ships" —
+plus a "PWA — WITHDRAWN in v17.4.1" block in CLAUDE.md listing the three
+conditions for ever bringing it back (real-device testing, a kill switch
+deployed from day one, staged rollout). The bar is deliberately high: the
+offline win was small, since the Firebase SDK already owns the offline DATA
+queue and the worker only cached the shell the HTTP cache already handles.
+
+**Verification:** build clean, **0 lint errors** (39 warnings, unchanged
+baseline), **75/75 tests**, no `serviceWorker.register` left anywhere in the
+bundle. Rolling-safe — no Firebase rules/shape change.
+
+**Lesson carried forward:** a service worker is the only client change in this
+app that a revert cannot undo. Treat registering one as a one-way door, and
+never ship a PROD-only code path to the restaurant's devices without a way to
+run it on one first.

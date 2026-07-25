@@ -1,129 +1,82 @@
-// MGT Bookings — service worker (v17.4.0, the PWA offline shell).
+// MGT Bookings — service worker KILL SWITCH (v17.4.1).
 //
-// DELIBERATELY CONSERVATIVE. The one thing this must never do is serve a
-// stale app after a Vercel deploy (the lazyChunk gotcha: a new deploy 404s
-// the OLD hashed asset URLs, so a stale cached index.html would reference
-// assets that no longer exist). Strategy:
+// v17.4.0 shipped an offline-shell service worker. In production it froze the
+// app at "⟳ Loading bookings…" on iPhone AND iPad — the first Firebase snapshot
+// never arrived — while desktop was completely unaffected. Clearing site data
+// on a device fixed it. NOTE the limit of that evidence: clearing site data
+// also wipes IndexedDB (where Firebase Auth keeps its session) and
+// localStorage, so it points AT the worker without proving it; the laptop had
+// the same worker installed and was fine, so the real differentiator is iOS.
+// It was never reproducible locally either — a production-mode build with that
+// worker, pointed at the DEV database, loads fine on desktop. The worker is
+// withdrawn because it is unverifiable on the affected devices, not because
+// root cause was established.
 //
-//  • NAVIGATIONS (the HTML shell): NETWORK-FIRST, cache fallback. Online you
-//    always get the current deploy; offline you get the last-seen shell.
-//  • /assets/* (Vite content-hashed, immutable): CACHE-FIRST. A hash change
-//    is a new URL, so cache-first can never be stale; old entries are pruned
-//    on activate by cache-name rotation.
-//  • Same-origin static files (manifest / icons / favicon): cache-first.
-//  • EVERYTHING ELSE — Firebase RTDB/Auth (googleapis/firebaseio/
-//    firebasedatabase), any cross-origin request: NOT TOUCHED. The SDK owns
-//    its own offline queue/persistence; intercepting it could break the
-//    write-guard/CAS machinery. We simply don't call respondWith().
+// THE FILE CANNOT SIMPLY BE DELETED. An installed service worker keeps
+// controlling the page forever; removing /sw.js from the deploy does not
+// unregister it, and every already-affected device would stay broken until
+// someone cleared its data by hand. The only reliable remote fix is to ship a
+// worker at the SAME URL that removes itself — browsers re-fetch /sw.js on
+// navigation for any live registration, so this reaches them.
 //
-// CACHE_VERSION: bump when the caching LOGIC changes (not per app release —
-// hashed assets rotate themselves; the shell is network-first anyway).
+// What this does, once, then never again: deletes the caches the old worker
+// created, and unregisters itself.
 //
-// Un-hashed files (icons, manifest, favicon) do NOT need a bump: they are
-// stale-while-revalidate below, so new bytes propagate on their own. The one
-// exception is this very deploy — v1 shipped them CACHE-FIRST, and those
-// installs will never re-fetch, so rotating the cache name is what evicts the
-// old icons. (v17.4.0 icon redesign: v1 -> v2.)
+// WHAT IT DELIBERATELY DOES NOT DO: force-reload open tabs. An earlier cut
+// called clients.navigate() so a frozen device would heal without a second
+// reload. That was dropped, for three reasons:
+//   • It fires on HEALTHY devices too — the laptop was never broken but still
+//     has the old worker — where an unsolicited reload destroys whatever is
+//     half-typed in the booking/walk-in form (that draft is React state and is
+//     never persisted).
+//   • Caches are gone by that point, so if the network blips during the forced
+//     reload the tab lands on the browser's offline error page with nothing to
+//     fall back on — strictly worse than leaving it alone.
+//   • It bought very little: a device has to navigate before it even FETCHES
+//     this file, so the user is already reloading. The most it ever saved was
+//     one extra reload.
+// Do not add it back.
+//
+// NOTE THE ABSENCE OF A `fetch` HANDLER. That is deliberate and load-bearing:
+// a worker with no fetch listener intercepts nothing at all, so from the
+// moment this version is picked up the app talks straight to the network even
+// before activation finishes.
+//
+// `src/main.jsx` no longer registers anything, so no NEW device installs a
+// worker. This file exists purely to clean up the ones that already have one.
+// Keep it deployed until every device has been seen working — it is inert on a
+// device that has no registration.
+//
+// Before reintroducing a PWA here, see CLAUDE.md ("PWA — withdrawn in v17.4.1")
+// for the conditions that have to be met first.
 
-const CACHE_VERSION = "mgt-shell-v2";
-
-self.addEventListener("install", (event) => {
-  // Pre-cache the shell entry so the very first offline open works.
-  event.waitUntil(
-    caches.open(CACHE_VERSION).then((c) => c.addAll(["/", "/manifest.webmanifest", "/icon-192.png", "/icon.svg"])).catch(() => {})
-  );
+self.addEventListener("install", () => {
+  // Take over from the broken worker immediately rather than waiting for every
+  // tab to close — on a frozen device the tab is not going to be closed.
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    (async () => {
+      try {
+        const keys = await caches.keys();
+        // Scoped to our own caches ("mgt-shell-v1" / "mgt-shell-v2") rather
+        // than everything on the origin. Nothing else here uses Cache Storage
+        // today, but this file is meant to stay deployed indefinitely, and an
+        // unfiltered wipe would silently eat any cache a future feature adds.
+        await Promise.all(
+          keys.filter((k) => k.startsWith("mgt-")).map((k) => caches.delete(k))
+        );
+      } catch {
+        /* Cache Storage unavailable (iOS quota/private mode) — nothing to drop */
+      }
+
+      try {
+        await self.registration.unregister();
+      } catch {
+        /* already gone */
+      }
+    })()
   );
-});
-
-self.addEventListener("fetch", (event) => {
-  const req = event.request;
-  if (req.method !== "GET") return;
-  const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // Firebase & friends: hands off
-
-  // Navigations: network-first, fall back to the cached shell when offline.
-  // The shell is only REPLACED by a genuinely good response: `res.ok` (not a
-  // 4xx/5xx) and `type === "basic"` (same-origin, not an opaque/redirect
-  // response, which cache.put rejects anyway). Without that check a single
-  // 500 during a deploy would be stored as the offline shell and served to
-  // every later offline launch — the app would "work offline" by showing an
-  // error page. A bad response is still returned to the page untouched.
-  if (req.mode === "navigate") {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res.ok && res.type === "basic") {
-            const copy = res.clone();
-            caches.open(CACHE_VERSION).then((c) => c.put("/", copy)).catch(() => {});
-          }
-          return res;
-        })
-        .catch(() => caches.match("/"))
-    );
-    return;
-  }
-
-  // Vite's hashed assets: CACHE-FIRST. A content change is a new URL, so a hit
-  // can never be stale and there is nothing to revalidate.
-  if (url.pathname.startsWith("/assets/")) {
-    event.respondWith(
-      caches.match(req).then(
-        (hit) =>
-          hit ||
-          fetch(req).then((res) => {
-            if (res.ok) {
-              const copy = res.clone();
-              caches.open(CACHE_VERSION).then((c) => c.put(req, copy)).catch(() => {});
-            }
-            return res;
-          })
-      )
-    );
-    return;
-  }
-
-  // Un-hashed static files — icons, manifest, favicon: STALE-WHILE-REVALIDATE.
-  // These change CONTENT at a FIXED URL, so cache-first would pin whatever an
-  // install first saw until CACHE_VERSION happened to be bumped by hand. That
-  // is a step nobody remembers, and the failure is silent and permanent. Here
-  // the cached copy answers immediately (fast, and still works offline) while a
-  // background fetch refreshes it, so a redesigned icon lands by itself on the
-  // next load with no version bump and no reinstall.
-  if (/\.(png|svg|webmanifest|ico)$/.test(url.pathname)) {
-    event.respondWith(
-      caches.open(CACHE_VERSION).then((cache) =>
-        cache.match(req).then((hit) => {
-          const fresh = fetch(req)
-            .then((res) => {
-              if (res.ok && res.type === "basic") {
-                cache.put(req, res.clone()).catch(() => {});
-              }
-              return res;
-            })
-            // Offline: fall back to the cached copy, else let it fail.
-            .catch(() => hit);
-          // Keep the worker alive for the background refresh when we answered
-          // from cache; the event can already be settled, hence the guard.
-          if (hit) {
-            try {
-              event.waitUntil(fresh);
-            } catch {
-              /* event no longer active — the refresh is best-effort anyway */
-            }
-          }
-          return hit || fresh;
-        })
-      )
-    );
-    return;
-  }
-  // Anything else same-origin (e.g. Vite dev endpoints): default browser handling.
 });
