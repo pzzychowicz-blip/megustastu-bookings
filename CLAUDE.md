@@ -94,7 +94,7 @@ src/
 
 **REFACTOR_LOG.md** at repo root contains the full version history with architectural decisions for each phase (B1–B5, C1–C3, D1–D4, E1+).
 
-**`scripts/gen-icons.py`** (v17.4.0) regenerates the whole PWA icon family in `public/` — `icon.svg` · `icon-192/512.png` · `apple-touch-icon.png` (full-bleed) · `icon-maskable-512.png` · `favicon.svg` — from one source of truth, so the tiles can't drift between sizes. A **design tool, not part of `npm run build`**: it needs `fontTools` + Playwright + macOS SF Pro. Edit the `NODES` gradient ramp or the lockup constants there and re-run it; never hand-edit the generated SVGs. Changing any output also requires a `sw.js` `CACHE_VERSION` bump (gotcha table).
+**`scripts/gen-icons.py`** (v17.4.0) regenerates the whole PWA icon family in `public/` — `icon.svg` · `icon-192/512.png` · `apple-touch-icon.png` (full-bleed) · `icon-maskable-512.png` · `favicon.svg` — from one source of truth, so the tiles can't drift between sizes. A **design tool, not part of `npm run build`**: it needs `fontTools` + Playwright + macOS SF Pro. Edit the `NODES` gradient ramp or the lockup constants there and re-run it; never hand-edit the generated SVGs. No `sw.js` `CACHE_VERSION` bump is needed — the icons are stale-while-revalidate and propagate on their own (gotcha table), though an already-installed home-screen PWA still needs remove + re-add.
 
 ---
 

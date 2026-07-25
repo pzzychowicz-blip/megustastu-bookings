@@ -1,5 +1,5 @@
 """
-MGT Bookings — PWA icon generator (v17.5.0).
+MGT Bookings — PWA icon generator (v17.4.0).
 
 Emits the icon family from ONE source of truth so the tile can never drift
 between sizes. Two craft decisions worth stating:
