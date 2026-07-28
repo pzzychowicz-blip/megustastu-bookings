@@ -117,6 +117,12 @@ import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
 import { ViewTools }    from "./components/ViewTools";
+// v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
+// split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
+// three-step setup popup (SplitMenu).
+import { ViewSwitcher }  from "./components/ViewSwitcher";
+import { SplitLayout }   from "./components/SplitLayout";
+import { SplitMenu }     from "./components/SplitMenu";
 const WeekView = lazyChunk(function(){return import("./components/WeekView").then(function(m){return {default:m.WeekView};});},"WeekView"); // v17.1.0: lazy (opened on demand)
 import { LateBanner }   from "./components/LateBanner";
 import { OverlapBanner } from "./components/OverlapBanner";
@@ -305,6 +311,31 @@ function readAppWidth(){
   }catch{/* ignore */}
   const w=Math.round((window.innerWidth-300)/50)*50;
   return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,w));
+}
+
+// v17.5.0: the persisted Split View, per device. Restored on load so a split
+// survives a reload/redeploy — losing your layout on every refresh would make
+// the feature not worth setting up.
+const SPLIT_KEY="mgt-split";
+// The canonical view order — drives the slide direction on a view switch AND
+// validates a restored split. useKeyboardShortcuts keeps its own VIEW_ORD for
+// the same purpose; keep the two identical if a view is ever added.
+const VIEW_ORD=["timeline","list","plan"];
+// Validate HARD, and return null on anything unexpected: a hand-edited or
+// half-written key must never be able to wedge the app in a broken layout, and
+// the same view appearing twice would collide on the singleton per-view state
+// (timelineZoom / selectedListId / showFinished).
+function readSplit(){
+  try{
+    if(localStorage.getItem("mgt-split-enabled")!=="1") return null;
+    if(typeof window!=="undefined"&&window.innerWidth<600) return null; // tablet/desktop only
+    const s=JSON.parse(localStorage.getItem(SPLIT_KEY)||"null");
+    if(!s||typeof s!=="object") return null;
+    if(VIEW_ORD.indexOf(s.a)===-1||VIEW_ORD.indexOf(s.b)===-1||s.a===s.b) return null;
+    if(s.dir!=="v"&&s.dir!=="h") return null;
+    const r=Number(s.ratio);
+    return {a:s.a,b:s.b,dir:s.dir,ratio:Number.isFinite(r)&&r>=0.2&&r<=0.8?r:0.5};
+  }catch{return null;}
 }
 
 // v17.2.0: per-device Timeline zoom/follow settings (theme pattern — key absent
@@ -807,6 +838,46 @@ function BookingApp(){
     }catch{/* ignore */}
     setNavLocked(next);
   }
+  // v17.5.0: per-device Split View master switch (Settings → General). Default
+  // OFF like navLocked, so only the "1" is stored. While off, the RMB /
+  // press-and-hold gesture on a view button does nothing at all.
+  const [splitEnabled,setSplitEnabled]=useState(function(){
+    try{return localStorage.getItem("mgt-split-enabled")==="1";}catch{return false;}
+  });
+  function onToggleSplitEnabled(){
+    const next=!splitEnabled;
+    try{
+      if(next) localStorage.setItem("mgt-split-enabled","1");
+      else{localStorage.removeItem("mgt-split-enabled");localStorage.removeItem(SPLIT_KEY);}
+    }catch{/* ignore */}
+    setSplitEnabled(next);
+    if(!next) setSplit(null); // turning the feature off must also leave any active split
+  }
+  // The active split, or null for a single view. Restored per-device.
+  const [split,setSplit]=useState(readSplit);
+  const [focusedPane,setFocusedPane]=useState("a");
+  const [splitMenuFor,setSplitMenuFor]=useState(null); // which view's SplitMenu is open
+  // Which view the keyboard acts on: the focused pane's in a split, else `view`.
+  // Declared HERE, not next to the split handlers further down, because
+  // useKeyboardShortcuts' ctx object is built mid-render and a `const` used
+  // before its declaration is a TDZ ReferenceError, not a hoist (the split
+  // handlers below are function declarations, so those genuinely do hoist).
+  const activeView=split?split[focusedPane]:view;
+  // One writer for both the state and the key, so they can't drift.
+  function applySplit(next){
+    setSplit(next);
+    try{
+      if(next) localStorage.setItem(SPLIT_KEY,JSON.stringify(next));
+      else localStorage.removeItem(SPLIT_KEY);
+    }catch{/* ignore */}
+  }
+  // Phones collapse out of a split: the header already wraps to three rows at
+  // <600px, and a Timeline in a ~180px pane is unusable. Also covers a desktop
+  // window dragged narrow.
+  useEffect(function(){
+    if(isMobile&&split) applySplit(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[isMobile]);
   // ── v17.5.0: the fixed shell ────────────────────────────────────────────────
   // Normally <body> is the scrollport (see the mount effect near the top of
   // BookingApp) and the app is a plain `minHeight:100dvh` block that grows.
@@ -816,7 +887,11 @@ function BookingApp(){
   // this flag rather than inventing a second layout.
   // Both contributing settings default off, so the default render path is
   // byte-for-byte what shipped in v17.4.2.
-  const shellFixed = navLocked;
+  // Split View joins the SAME flag rather than getting its own layout: two
+  // independently-scrolling panes need a definite height, which is exactly what
+  // the fixed shell provides. Consequence, stated in CLAUDE.md: entering a
+  // split pins the nav whether or not "Lock navigation" is on.
+  const shellFixed = navLocked || !!split;
   // Body must stop scrolling in that mode or the page gets a second scrollbar
   // outside the fixed shell. Separate from the mount-once effect above (which
   // establishes the baseline) because that effect is declared long before
@@ -1859,7 +1934,12 @@ function BookingApp(){
   // the hook mounts its window listeners once and reads this through a ref).
   // Adding a shortcut = add the state/handler HERE and use it in the hook.
   useKeyboardShortcuts({
-    view:view,setView:setView,viewDate:viewDate,setViewDate:setViewDate,
+    // v17.5.0: in a split, every view-sensitive shortcut (S/C status, ↑/↓ list
+    // nav, the neutral-space and Esc list-deselect, the zoom keys) must act on
+    // the FOCUSED pane, not on the stale single-view `view`. Passing activeView
+    // here means the whole hook is split-aware without touching each branch.
+    view:activeView,setView:setView,goView:pickView,
+    viewDate:viewDate,setViewDate:setViewDate,
     timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoom,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
     followNow:followNow,setFollowNow:setFollowNow,
     autoOptimizer:autoOptimizer,setAutoOptimizer:setAutoOptimizer,
@@ -2212,8 +2292,11 @@ function BookingApp(){
   // module bindings, which React.memo cannot see. Passing the weekHours/layout
   // state objects makes an hours or layout edit bust the memo so the views
   // repaint with the new bindings.
-  const mainView=view==="plan"?planView:view==="timeline"
-    ?<TimelineView
+  // v17.5.0: all three views are now built unconditionally and indexed, because
+  // Split View renders TWO of them. Constructing an element is just
+  // createElement — nothing renders until it's mounted — and `planView` above
+  // has always been built this way, so this costs nothing.
+  const timelineEl=<TimelineView
     bookings={bookings}
     date={viewDate}
     onEdit={VA.onEdit}
@@ -2240,8 +2323,8 @@ function BookingApp(){
     onReshuffle={VA.onReshuffle}
     hoursSig={weekHours}
     layoutSig={layout}
-    currency={generalSettings.currency} />
-    :<ListView
+    currency={generalSettings.currency} />;
+  const listEl=<ListView
     bookings={bookings}
     date={viewDate}
     onEdit={VA.onEdit}
@@ -2258,6 +2341,42 @@ function BookingApp(){
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
     currency={generalSettings.currency} />;
+  const viewEl={timeline:timelineEl,list:listEl,plan:planView};
+  const mainView=viewEl[view];
+
+  // ── v17.5.0: Split View handlers ────────────────────────────────────────────
+  // A plain tap on a view button REPLACES the focused pane; if that view is
+  // already in the other pane the two swap instead, so the same view can never
+  // occupy both (which would collide on the singleton timelineZoom /
+  // selectedListId / showFinished state). Outside a split it's the original
+  // behaviour, slide direction included.
+  function pickView(v){
+    if(split){
+      const other=focusedPane==="a"?"b":"a";
+      if(split[other]===v){applySplit(Object.assign({},split,{a:split.b,b:split.a}));setFocusedPane(other);return;}
+      if(split[focusedPane]===v) return;
+      applySplit(Object.assign({},split,{[focusedPane]:v}));
+      return;
+    }
+    if(v!==view) bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");
+    setView(v);
+  }
+  function confirmSplit(next){
+    setSplitMenuFor(null);
+    applySplit(next);
+    setFocusedPane("a");
+    // Keep the single-view state coherent for anything still reading `view`
+    // (the search-jump, the keyboard fallback) — pane A is the one it invoked on.
+    setView(next.a);
+  }
+  function swapSides(){
+    if(!split) return;
+    applySplit(Object.assign({},split,{a:split.b,b:split.a,ratio:1-split.ratio}));
+    setFocusedPane(focusedPane==="a"?"b":"a");
+  }
+  function toggleSplitDir(){ if(split) applySplit(Object.assign({},split,{dir:split.dir==="v"?"h":"v"})); }
+  function exitSplit(){ if(split){ setView(split[focusedPane]); applySplit(null); } }
+  function setSplitRatio(r){ if(split) applySplit(Object.assign({},split,{ratio:r})); }
 
 
 
@@ -2351,13 +2470,17 @@ function BookingApp(){
         /* v17.5.0: shellFixed → a 100dvh flex column whose inner region scrolls,
            so the header + date rows stay put. Off = the original growing block. */
         shellFixed?{height:"100dvh",overflow:"hidden",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list","plan"].map(function(v){return (
-              <button
-                key={v}
-                className="mgt-hover-scale"
-                onClick={function(){if(v!==view){const ORD=["timeline","list","plan"];bumpSlide(ORD.indexOf(v)>ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");}setView(v);}}
-                style={mkBtn({background:view===v?S.accent:"var(--app-btn-grey)",textTransform:"capitalize",minHeight:40})}>{v}</button>
-            );})}<button
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}><ViewSwitcher
+              view={view}
+              split={split}
+              focusedPane={focusedPane}
+              splitEnabled={splitEnabled}
+              isMobile={isMobile}
+              onPickView={pickView}
+              onOpenSplitMenu={setSplitMenuFor}
+              onSwapSides={swapSides}
+              onToggleDir={toggleSplitDir}
+              onExitSplit={exitSplit} /><button
               onClick={openWalkin}
               className="mgt-hover-scale"
               style={{background:"var(--app-walkin)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Walk-in</button><button
@@ -2408,13 +2531,19 @@ function BookingApp(){
             several open at once (a 3+ row late banner) would eat the viewport.
             When shellFixed is off this div is a plain, style-less wrapper and
             the page scrolls exactly as it always did. */}
-            <div style={shellFixed?{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",display:"flex",flexDirection:"column"}:undefined}><AppBanners
+            <div style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
+              /* With a split the panes own the scrolling, so this region must
+                 NOT scroll — a flex:1 child of an overflowY:auto parent resolves
+                 to CONTENT height, which would collapse a top/bottom split. The
+                 banners therefore pin here (they scroll away in nav-lock-only
+                 mode); they're collapsible and dismissible, so that's affordable. */
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch"}):undefined}><AppBanners
                 isOnline={isOnline}
                 writeWarning={writeWarning}
                 onDismissWarning={function(){setWriteWarning(null);}}
                 ineffShow={ineffShow}
                 onDismissIneff={function(){setDismissedIneff(viewDate);}}
-                onReshuffle={function(){setConfirmReshuffle(true);}} /><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} collapseMax={generalSettings.lateCollapseMax} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}><StatusToasts
+                onReshuffle={function(){setConfirmReshuffle(true);}} /><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} collapseMax={generalSettings.lateCollapseMax} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 resyncing={resyncing}
                 reconnectShown={reconnectShown}
@@ -2427,7 +2556,17 @@ function BookingApp(){
                 reshuffled={reshuffled}
                 reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
                 loadShown={loadBannerShown}
-                loadMsg={"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+                loadMsg={"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir} fill={shellFixed}>{split?<SplitLayout
+                dir={split.dir}
+                ratio={split.ratio}
+                onRatio={setSplitRatio}
+                focused={focusedPane}
+                onFocus={setFocusedPane}
+                paneA={viewEl[split.a]}
+                paneB={viewEl[split.b]} />:mainView}</SlideView></div></div>{splitMenuFor?<SplitMenu
+              view={splitMenuFor}
+              onConfirm={confirmSplit}
+              onClose={function(){setSplitMenuFor(null);}} />:null}<ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
@@ -2495,6 +2634,8 @@ function BookingApp(){
             onToggleReduceMotion={onToggleReduceMotion}
             navLocked={navLocked}
             onToggleNavLock={onToggleNavLock}
+            splitEnabled={splitEnabled}
+            onToggleSplitEnabled={onToggleSplitEnabled}
             planGestures={planGestures}
             onTogglePlanGestures={onTogglePlanGestures}
             tlSettings={tlSettings}

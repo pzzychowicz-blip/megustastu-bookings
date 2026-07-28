@@ -62,6 +62,9 @@ src/
 │   ├── DaySheet.jsx                 v16.3.0 printable day sheet — print-ONLY DOM portalled to <body> (sibling of #root); @media print in index.html hides #root + reveals it; HARD-CODED LIGHT (print stays light); Print button in the Summary body
 │   ├── Summary.jsx                  day-summary panel — covers by hour + shift; lives IN the date-nav row (flex:1, grows downward when expanded) + today-only live status bar (seated·upcoming·seats-filled) (v14.6.0; relocated + status bar v14.8.0; "Summary" word dropped + Week→"More" button v14.9.0)
 │   ├── WeekView.jsx                 "More" at-a-glance popover (from Summary's More button / `M`) — Week list + Month calendar grid (segmented Week/Month toggle, `W`/`M` keys); per-day covers/bookings, tap to jump (v14.7.0 week; Month view v14.9.0)
+│   ├── ViewSwitcher.jsx             v17.5.0 — the T/L/P buttons (extracted from App's inline .map) + the Split View gesture and toolbar. RMB / 450ms press-and-hold opens SplitMenu, matching the timeline/plan quick-status idiom. **The hold timer is cancelled from WINDOW-level pointerup/pointercancel**, not the button's — SplitMenu portals a scrim above the button, so the button's own release may never arrive (the portalled-scrim gotcha). `didLongRef` swallows the trailing click. Both gestures fully inert when `splitEnabled` is off or `isMobile`; in a split BOTH pane views render accent and the focused one carries an inner outline
+│   ├── SplitLayout.jsx              v17.5.0 — the two-pane container (purely presentational: it takes the two already-built view ELEMENTS). Draggable divider (`setPointerCapture` on the divider is safe — it has no child click targets, which is the actual condition of the kills-click gotcha; primary-button-only + `buttons===0` bail), ratio committed on pointer-UP only so localStorage isn't written per frame, double-click resets to 50/50, capture-phase `onPointerDownCapture` sets the focused pane. Only works inside the `shellFixed` layout — both panes are `overflow:auto;minHeight:0` and need a definite-height ancestor chain
+│   ├── SplitMenu.jsx                v17.5.0 — the 3-step split setup popup (add → direction → which second view), on QuickStatusPopup's exact shell (body portal, z=300 scrim, same tokens/radius/44px buttons). Step 3 offers only the two REMAINING views, so the same view can never occupy both panes (which would collide on the singleton timelineZoom / selectedListId / showFinished state)
 │   ├── ViewTools.jsx                v17.0.0 round 8 — the 🔍 Find-a-booking + ⚙ Settings pair, mounted ONCE in App's date-nav row (right of Summary) so it sits in the same place for ALL THREE views; Timeline's legend + List's card-header copies are gone, Plan gains it
 │   ├── WalkinForm.jsx               walk-in entry form (v16.0.0 "Add to waitlist" under the no-tables banner; v17.1.1 the Plan-path pre-selected table (`_pre` draft flag from openWalkin) survives guest-count edits — plain-path steppers still reset tables — and wToggle deselects a selected-but-busy table)
 │   ├── WaitlistPanel.jsx            waitlist Overlay (v16.0.0) — day's entries FCFS, fits-now chip, Book (prefills the booking form) + two-tap Remove
@@ -79,7 +82,7 @@ src/
 │   ├── ConnectionStatus.jsx         Firebase connection dot right of Log out (v16.2.0; ported from MGT Scheduling) — green/red illuminated dot (from usePersistence `isOnline`); click → popover with status line + signed-in email; closes on outside-click/Esc. v17.3.0: also lists ALL connected devices (from usePresence — email · deviceLabel · "since", current tagged "This device", list scrolls at maxHeight 200)
 │   ├── ReminderEditor.jsx           reminder edit modal (z=250)
 │   ├── Reminders.jsx                reminder list tab body
-│   ├── Settings.jsx                 settings modal shell + tabs (General/Layout/Customers/Reminders/Shortcuts — 5th tab v16.0.0); LAZY-loaded as of v17.1.0 (React.lazy chunk with all tab bodies + the floor-plan editor); SETTINGS_TABS + CogIcon live in SettingsChrome.jsx (re-exported here) — still ONE tab list, never duplicate; General = per-weekday hours · optimizer cutoff(0–24)/auto-switch · shifts · booking-duration tiers · running-late thresholds (v16.1.0) · v17.1.0 "Reduce animations" + v17.1.2 "Plan zoom & pan" + v17.5.0 "Lock navigation" (default OFF, so only `"1"` is stored — the inverse of the usual absent-means-default convention) per-device toggles + v17.2.0 "Timeline zoom" per-device steppers (default/Follow/max zoom + follow lead — App's tlSettings/onSetTlSetting) and Preferences party-size steppers, sections collapsible (v15.0.0)
+│   ├── Settings.jsx                 settings modal shell + tabs (General/Layout/Customers/Reminders/Shortcuts — 5th tab v16.0.0); LAZY-loaded as of v17.1.0 (React.lazy chunk with all tab bodies + the floor-plan editor); SETTINGS_TABS + CogIcon live in SettingsChrome.jsx (re-exported here) — still ONE tab list, never duplicate; General = per-weekday hours · optimizer cutoff(0–24)/auto-switch · shifts · booking-duration tiers · running-late thresholds (v16.1.0) · v17.1.0 "Reduce animations" + v17.1.2 "Plan zoom & pan" + v17.5.0 "Lock navigation" and "Split view" (both default OFF, so only `"1"` is stored — the inverse of the usual absent-means-default convention) per-device toggles + v17.2.0 "Timeline zoom" per-device steppers (default/Follow/max zoom + follow lead — App's tlSettings/onSetTlSetting) and Preferences party-size steppers, sections collapsible (v15.0.0)
 │   ├── CustomersSettings.jsx        Customers-tab body (v16.0.0) — search by name/phone over customerIndex, per-row visits/no-show/waitlist chips, expandable booking history, armed-confirm "Delete customer & all data" (parent's deleteCustomer does the writes); v16.4.0 4th totals tile "N no-show, no phone" (count only, shown when >0 — phone-less no-shows aren't in the phone-keyed index; never aggregated into an identity per the no-merge rule)
 │   ├── LayoutSettings.jsx           Layout-tab body (v15.0.0) — FULL layout editor: Tables (add/remove/rename·cap·zone, orphan-booking warning on remove/rename) + collapsible Combos (editable join-groups → auto-combo cap overrides + cross-group mega add/edit/remove) + collapsible Table priorities (v15.9.0 — size bands · combo preferences · anchors/mixed-require · swap rules; rename remaps priorities refs too) + kitchen limit; takes `bookings` for orphan detection
 │   ├── Shortcuts.jsx                keyboard cheatsheet
@@ -272,6 +275,41 @@ height. With `split` on, the banners pin too (a `flex:1` child of an
 `overflowY:auto` parent resolves to CONTENT height, so a top/bottom split would
 collapse); with only `navLocked` on, banners scroll away with the content.
 
+### Split View (v17.5.0)
+Two of Timeline/List/Plan at once, per-device, **default off** (master toggle in
+Settings → General; the RMB / press-and-hold gesture is fully inert while it's
+off). State is `split = {a, b, dir:"v"|"h", ratio}` or `null`, persisted in
+`localStorage["mgt-split"]` through the single `applySplit` writer so state and
+key can't drift. `readSplit` validates HARD and returns `null` on anything
+unexpected — a hand-edited key must never wedge the app in a broken layout.
+
+**Tablet/desktop only** (`winW >= 600`): `readSplit` refuses below that, and an
+effect collapses an active split when the window crosses the breakpoint. The
+header already wraps to three rows on a phone and a Timeline in a ~180px pane is
+unusable.
+
+**The same view can never occupy both panes** — `SplitMenu` step 3 offers only
+the two remaining, and a plain tap on a view button *replaces the focused pane*
+(or swaps, if that view is already in the other one). This is load-bearing, not
+tidiness: `timelineZoom`/`timelineScrollRef`/`followNow`/`selectedListId`/
+`showFinished` are singletons in App, and two instances of one view would fight
+over them.
+
+**All three views are now built unconditionally** (`viewEl` map) because a split
+mounts two. `createElement` without mounting is free, and `planView` was always
+built this way. Every prop is already a value or a stable `VA` wrapper, so no new
+plumbing was needed.
+
+**Keyboard follows the focused pane:** App passes `view: activeView`
+(`split[focusedPane]`) into `useKeyboardShortcuts`, so S/C, ↑/↓, the zoom keys
+and the list-deselect all act on the right half without touching each branch;
+T/L/P delegate to App's `pickView` via `K.goView`. **`activeView` must stay
+declared ABOVE the `useKeyboardShortcuts` call** — the ctx object is built
+mid-render, and a `const` used before its declaration is a TDZ ReferenceError
+(this blanked the app once during development; the split *handlers* are function
+declarations and genuinely do hoist, which is what makes the asymmetry easy to
+miss).
+
 ### Unsaved-changes guard (v17.5.0) — every drafting surface must register
 Three surfaces hold real drafts: the booking form, the walk-in form, and
 `ManualModal`'s table picks. Each snapshots the draft it was **opened** with and
@@ -403,6 +441,7 @@ something is dirty; browsers ignore any custom message string.
 | setPointerCapture kills `click` | Calling `setPointerCapture` in a pointerdown handler redirects the subsequent `click` to the CAPTURING element — child onClick handlers silently never fire (hit live in PlanView's pan logic; the table-tap popover died). Don't capture on a canvas that also needs child clicks; track the pointer without capture, or gate capture on actual movement |
 | A shipped service worker CANNOT be withdrawn by deleting it | An installed SW keeps controlling the page forever; removing `/sw.js` from the deploy does **not** unregister it, and a revert cannot reach the device. The only remote fix is to ship a worker at the SAME URL whose `activate` clears the caches and calls `registration.unregister()` (browsers re-fetch `/sw.js` on navigation for any live registration) — that is what `public/sw.js` is now. This is the single most important thing to understand before ever registering one again: a SW bug is **not** revertible, unlike every other client change in this app |
 | A SW must be testable on the target device before it ships | v17.4.0's worker froze the app at "⟳ Loading bookings…" on **iPhone and iPad** while desktop was fine, and it was never reproducible locally (a PROD-mode build against DEV data loads clean on desktop). It was PROD-only by design, so DEV could not exercise it at all — the one component in the release with no possible pre-deploy verification, which is exactly the one that broke. Don't ship a PROD-only code path to the restaurant's devices without a way to run it on one |
+| A `const` used above its declaration in a render body | Function declarations hoist; `const` does NOT — it throws a TDZ ReferenceError, and in a component body that blanks the whole app with only a generic "An error occurred in \<BookingApp\>" in the console. Hit in v17.5.0: `activeView` was declared next to the split handlers (which hoist fine) but consumed in `useKeyboardShortcuts`' ctx object 400 lines earlier. Anything the kbRef ctx reads must be declared ABOVE that call. Note lint and `npm run build` both pass — only running it catches this |
 | The Esc chain bypasses every `onClose` | `useKeyboardShortcuts`'s Escape branches call the state setters DIRECTLY (`K.setShowForm(false)` …), never the modals' `onClose` props. Any behaviour you attach by wrapping a mount-site `onClose` — a confirm, a cleanup, an analytics ping — is silently skipped on Esc unless you also edit that chain (v17.5.0's unsaved-changes guard). Mobile is the mirror image: `Overlay`'s `mob` branch (`<600px`) renders NO scrim, so backdrop-click doesn't exist there and the footer button is the only exit |
 | `BTN.cancel` is RED | In this app "cancel" means cancel the BOOKING, so `--btn-cancel` is `rgba(220,60,60,.75)`. Do NOT reach for it as a generic dialog "go back" — next to a red primary it reads as two danger buttons. The neutral dialog secondary is `--app-btn-slate` (see `confirmKitchen`'s "Back", v17.5.0's "Keep editing") |
 | SVG `<text>` in a shipped icon | An icon referencing `font-family="-apple-system, …"` renders a DIFFERENT face on every non-Apple platform (the pre-redesign v17.4.0 icon did exactly this — Android and the Chrome tab disagreed with iOS). Icons must carry type as OUTLINES; `scripts/gen-icons.py` does the conversion |

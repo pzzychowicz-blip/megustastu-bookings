@@ -227,7 +227,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, planGestures = true, onTogglePlanGestures = () => {}, navLocked = false, onToggleNavLock = () => {}, tlSettings = null, onSetTlSetting = () => {}, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, planGestures = true, onTogglePlanGestures = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {}, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
@@ -381,6 +381,18 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
             </div>
           </div>
           <Toggle on={navLocked} onClick={onToggleNavLock} />
+        </div>
+        {/* v17.5.0: Split View master switch. While OFF the long-press / RMB
+            gesture on a view button does nothing at all — same shape as "Plan
+            zoom & pan" gating PlanView's gestures. Tablet/desktop only. */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Split view</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Right-click or press and hold a view button (Timeline, List, Plan) to show two views at once, on this device. Tablet and desktop only.
+            </div>
+          </div>
+          <Toggle on={splitEnabled} onClick={onToggleSplitEnabled} />
         </div>
         {/* v17.2.0: per-device Timeline zoom/follow settings (localStorage,
             theme pattern — App's tlSettings/onSetTlSetting). Zoom values step
@@ -793,6 +805,8 @@ export function SettingsContent({
   onToggleReduceMotion,
   planGestures,
   navLocked,
+  splitEnabled,
+  onToggleSplitEnabled,
   onToggleNavLock,
   onTogglePlanGestures,
   tlSettings,
@@ -830,7 +844,7 @@ export function SettingsContent({
 }) {
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
   } else if (tab === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} />;
   } else if (tab === "customers") {

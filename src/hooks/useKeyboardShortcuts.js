@@ -268,8 +268,12 @@ export function useKeyboardShortcuts(ctx){
         }
       }
       // v17.0.0: three views — slide direction follows the view order (T·L·P).
+      // v17.5.0: T/L/P delegate to App's pickView (passed as K.goView) — the
+      // ONE place that knows the split rules (replace the focused pane, or swap
+      // when that view is already in the other one). The local fallback keeps
+      // the original single-view behaviour if the ctx ever lacks it.
       const VIEW_ORD=["timeline","list","plan"];
-      const goView=function(v){if(K.view!==v){K.bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(K.view)?"mgt-view-in-right":"mgt-view-in-left");}K.setView(v);};
+      const goView=K.goView||function(v){if(K.view!==v){K.bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(K.view)?"mgt-view-in-right":"mgt-view-in-left");}K.setView(v);};
       if(k==="t"||k==="T"){e.preventDefault();goView("timeline");return;}
       if(k==="l"||k==="L"){e.preventDefault();goView("list");return;}
       if(k==="p"||k==="P"){e.preventDefault();goView("plan");return;}

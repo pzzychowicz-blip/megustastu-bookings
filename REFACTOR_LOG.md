@@ -5840,3 +5840,78 @@ default", and the default is OFF, so `localStorage["mgt-nav-lock"]` stores only
 `overflow:hidden` with `scrollTop` pinned at 0 (no double scrollbar); a
 "Booking saved." toast still renders below the pinned nav and inside the
 viewport; the Settings toggle flips the whole shell live, with no reload.
+
+### Commit 4 — Split View
+
+**Files:** `src/components/ViewSwitcher.jsx`, `src/components/SplitLayout.jsx`,
+`src/components/SplitMenu.jsx` (all new), `src/App.jsx`,
+`src/hooks/useKeyboardShortcuts.js`, `src/components/Settings.jsx`, `CLAUDE.md`.
+**Bundle:** 672.13 kB / **191.45 kB gz** (+2.32 kB gz over commit 3;
+**+4.03 kB gz for the whole version** vs v17.4.2's 187.42).
+
+**What it is.** Two of Timeline/List/Plan at once, side by side or top/bottom.
+Opened by right-clicking (desktop) or pressing-and-holding 450ms (touch) a view
+button — the same "hold for more" gesture the timeline and plan already use, so
+there's one idiom in the app rather than two. Three-step popup: add → direction →
+which second view. Per-device master toggle in Settings → General, **default off**,
+and while off the gesture is completely inert.
+
+**It rides commit 3's `shellFixed` rather than adding a layout.** Two
+independently-scrolling panes need a definite height, which is exactly what the
+fixed shell provides — so the flag simply widened to `navLocked || !!split`.
+Stated consequence: a split pins the nav whether or not "Lock navigation" is on,
+and with a split the banners pin too (a `flex:1` child of an `overflowY:auto`
+parent resolves to CONTENT height, which would collapse a top/bottom split).
+
+**The same view can never occupy both panes**, and that is correctness rather
+than tidiness: `timelineZoom` / `timelineScrollRef` / `followNow` /
+`selectedListId` / `showFinished` are singletons in App, so two instances of one
+view would fight over them. Enforced in two places — SplitMenu step 3 offers only
+the two remaining views, and a plain tap on a view button replaces the FOCUSED
+pane, swapping instead when that view is already in the other one.
+
+**All three views are now built unconditionally** (a `viewEl` map) because a
+split mounts two. `createElement` without mounting is free, `planView` was
+already built this way, and every prop is a value or a stable `VA` wrapper — so
+no new plumbing.
+
+**The gesture's hard part was cancelling the hold, not starting it.** SplitMenu
+portals its scrim to `<body>`, *above* the button, so once it opens the button's
+own `pointerup` may never fire — the exact class of bug CLAUDE.md records from
+v17.0.0 round 8. The hold timer is therefore cleared from **window-level**
+`pointerup`/`pointercancel` listeners installed for the life of the press, plus
+the usual >8px move cancel; `didLongRef` swallows the trailing click.
+
+**Keyboard follows the focused pane.** App passes `view: activeView`
+(`split[focusedPane]`) into `useKeyboardShortcuts`, so S/C, ↑/↓, the zoom keys
+and the list-deselect all target the right half without editing each branch;
+T/L/P delegate to App's `pickView` through a new `K.goView`, keeping the split
+rules in one place. Deliberately NO Esc branch for split — that chain is already
+16 deep and dropping a deliberate layout on Esc would be surprising; ✕ is the exit.
+
+**A bug worth recording: `activeView` blanked the app.** It was first declared
+next to the other split handlers, ~400 lines BELOW the `useKeyboardShortcuts`
+call that consumes it. The handlers are function declarations and hoist; a
+`const` does not — it throws a TDZ ReferenceError, which rendered nothing but a
+generic "An error occurred in \<BookingApp\>". **Lint and `npm run build` both
+passed.** Only running the app caught it. → new Gotchas row.
+
+**Extras beyond the brief** (all four requested, plus the two named buttons):
+draggable divider committing its ratio on pointer-UP only (so localStorage isn't
+written per animation frame) with double-click reset to 50/50; the split
+persisted per device and restored on load, validated hard so a hand-edited key
+returns `null` rather than wedging the layout; a focused-pane accent ring, set
+from a CAPTURE-phase pointerdown so a child that stops propagation can't swallow
+it; and an explicit ✕ exit. `setPointerCapture` on the divider is safe — it has
+no child click targets, which is the actual condition behind the kills-click
+gotcha.
+
+**Verified on DEV, every path:** all three pairs × both directions; the wizard
+offers only the two remaining views; swap, direction and ✕ all work and persist;
+the divider drag commits (ratio 0.37) and survives a reload exactly; the focus
+ring follows pane clicks; tap-to-replace, tap-to-swap and tap-the-focused-view
+(no-op) all behave, with no duplicate view in any sequence; resizing below 600px
+collapses the split, clears the key and reverts the shell; and with the master
+toggle off the default shell measures `display:block` / `overflow:visible` /
+`minHeight:100dvh` with `<body>` scrolling — v17.4.2 exactly — the RMB gesture
+does nothing, and plain view switching is unchanged.
