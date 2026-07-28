@@ -12,8 +12,11 @@ dist
 dist-ssr
 *.local
 
-# Claude Code session-local files (launch.json, worktrees) — never committed
-.claude/
+# Claude Code session-local files (launch.json, worktrees, local settings) —
+# never committed. Skills ARE committed — they're shared project instructions,
+# like CLAUDE.md, not session-local state.
+.claude/*
+!.claude/skills/
 
 # Editor directories and files
 .vscode/*
