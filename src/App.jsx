@@ -42,6 +42,7 @@ import {
 } from "./lib/booking-logic";
 
 import { normalizePhone } from "./lib/customers";
+import { sameDraft } from "./lib/drafts";
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
@@ -246,7 +247,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.4.2",
+  version:"17.5.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -584,6 +585,23 @@ function BookingApp(){
   const [manualTarget, setManualTarget] = useState(null);
   const [dismissedIneff, setDismissedIneff] = useState(null);
   const formRef=useRef(EMPTY_FORM);
+  // ── v17.5.0: unsaved-changes guard ──────────────────────────────────────────
+  // `formBaseline` holds the draft the form was OPENED with; `openForm` is the
+  // ONE way to seed a fresh draft, so the baseline can never drift out of step
+  // with the four open paths (openNew / openEdit / bookAgain /
+  // bookFromWaitlist). Every OTHER setForm call is a user edit and must NOT
+  // touch the baseline — that is the whole signal.
+  // STATE, not a ref (cf. formRef above, which exists precisely so handlers can
+  // read a FRESH draft): this one is read during render to derive formDirty, so
+  // a ref would be the wrong tool — a ref write wouldn't repaint.
+  const [formBaseline, setFormBaseline] = useState(EMPTY_FORM);
+  function openForm(next){setFormBaseline(next);setForm(next);}
+  // Which surface the discard confirm is asking about: "form" | "walkin" |
+  // "manual" | null. One shared modal, three callers.
+  const [confirmDiscard, setConfirmDiscard] = useState(null);
+  // ManualModal owns its table-pick state internally, so it reports dirtiness
+  // up rather than App reaching in (see its onDirty prop).
+  const [manualDirty, setManualDirty] = useState(false);
   // v17.0.0: status override for the pending flow — set by save("pending"/
   // "confirmed") ("Save pending" / "Save&confirm" buttons) and read by doSave.
   // A ref (not an arg) because the kitchen-confirm modal + its Enter shortcut
@@ -1134,7 +1152,7 @@ function BookingApp(){
   // removes it once the booking is dispatched.
   function bookFromWaitlist(w){
     const avail=waitAvail[w.id];
-    setForm(Object.assign({},EMPTY_FORM,{
+    openForm(Object.assign({},EMPTY_FORM,{
       name:w.name||"",
       phone:w.phone||generalSettings.phonePrefix,
       date:w.date,
@@ -1240,8 +1258,8 @@ function BookingApp(){
     saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
   }
 
-  function openNew(){pendingWaitlistRef.current=null;setForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){pendingWaitlistRef.current=null;setForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openNew(){pendingWaitlistRef.current=null;openForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  function openEdit(b){pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -1254,7 +1272,7 @@ function BookingApp(){
     if(!sourceBooking) return;
     pendingWaitlistRef.current=null;
     const schedTime=sourceBooking.scheduledTime||sourceBooking.time||"13:00";
-    setForm(Object.assign({},EMPTY_FORM,{
+    openForm(Object.assign({},EMPTY_FORM,{
       name:sourceBooking.name||"",
       phone:sourceBooking.phone||generalSettings.phonePrefix,
       date:"",
@@ -1287,7 +1305,7 @@ function BookingApp(){
   const {
     showWalkin, setShowWalkin,
     walkinForm, setWalkinForm,
-    walkinError,
+    walkinError, walkinDirty,
     getNextWalkinNum,
     openWalkin, saveWalkin, doSaveWalkin,
   } = useWalkin({
@@ -1296,6 +1314,41 @@ function BookingApp(){
     confirmKitchen, setConfirmKitchen,
     defaultWalkinSize: generalSettings.defaultWalkinSize,
   });
+
+  // ── v17.5.0: unsaved-changes guard — dirtiness + the guarded close paths ────
+  // Origin: nothing in the app warned before losing a draft. On the tablets a
+  // mis-tap on the modal scrim discarded a half-typed booking silently, and a
+  // stray ⌘R did the same. Three surfaces hold real drafts; each diffs its live
+  // state against the snapshot taken when it opened (see lib/drafts.js).
+  //
+  // Each `requestClose*` is the GUARDED door: clean → close immediately (an
+  // untouched form must never nag, or staff learn to tap through the confirm);
+  // dirty → raise the shared discard modal instead. The RAW setters stay in
+  // place for the deliberate closes (a successful save, add-to-waitlist, the
+  // cancel-booking confirm) — those already represent a decision.
+  const formDirty=showForm&&!sameDraft(form,formBaseline);
+  function requestCloseForm(){if(formDirty) setConfirmDiscard("form");else setShowForm(false);}
+  function requestCloseWalkin(){if(walkinDirty) setConfirmDiscard("walkin");else setShowWalkin(false);}
+  function requestCloseManual(){if(manualDirty) setConfirmDiscard("manual");else setManualTarget(null);}
+  // Commit the discard: shut the surface the modal was asked about.
+  function doDiscard(){
+    const which=confirmDiscard;
+    setConfirmDiscard(null);
+    if(which==="form") setShowForm(false);
+    else if(which==="walkin") setShowWalkin(false);
+    else if(which==="manual") setManualTarget(null);
+  }
+
+  // Tab/window close + reload. Registered ONLY while something is dirty, so the
+  // browser never nags on a clean page. Custom text is not possible — every
+  // modern browser shows its own generic wording and ignores the string.
+  const anyDirty=formDirty||walkinDirty||manualDirty;
+  useEffect(function(){
+    if(!anyDirty) return undefined;
+    function onBeforeUnload(e){e.preventDefault();e.returnValue="";}
+    window.addEventListener("beforeunload",onBeforeUnload);
+    return function(){window.removeEventListener("beforeunload",onBeforeUnload);};
+  },[anyDirty]);
 
   // ── v17.3.5: doSave split (de-monolith #3) ────────────────────────────────────────
   // The 199-line doSave was split for maintainability (the tech-debt plan's
@@ -1815,7 +1868,13 @@ function BookingApp(){
     // v16.2.0: Shift+D theme toggle.
     onToggleDark:onToggleDark,
     // v17.1.0: Shift +/− app-width nudge (global, like Shift+D).
-    onSetAppWidth:onSetAppWidth,appWidth:appWidth
+    onSetAppWidth:onSetAppWidth,appWidth:appWidth,
+    // v17.5.0: the unsaved-changes guard. Esc must route the three drafting
+    // surfaces through requestClose* (it calls the setters directly, so it
+    // would otherwise be a silent back door past the guard), and the discard
+    // confirm needs its own Esc (dismiss) / Enter (discard) branches.
+    confirmDiscard:confirmDiscard,setConfirmDiscard:setConfirmDiscard,doDiscard:doDiscard,
+    requestCloseForm:requestCloseForm,requestCloseWalkin:requestCloseWalkin,requestCloseManual:requestCloseManual
   });
 
   function updateStatus(id,status){
@@ -2194,12 +2253,40 @@ function BookingApp(){
         className="mgt-hover-scale"
         style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
 
+  // v17.5.0: the ONE discard confirm, shared by the booking form, the walk-in
+  // form and ManualModal (requestClose* raise it; doDiscard commits).
+  // Wrapped in a relative z-260 div rather than relying on DOM order: it must
+  // paint above the three z-200 Overlays it guards, and `position:fixed` still
+  // anchors to the viewport inside a plain relative/z-index ancestor (only
+  // transform/filter/perspective would break that). Order-proof by construction.
+  //
+  // "Keep editing" uses --app-btn-slate, NOT BTN.cancel: in this app's
+  // vocabulary "cancel" means cancel the BOOKING, so --btn-cancel is RED. The
+  // delModal footer this is otherwise modelled on can afford that (its safe
+  // option is literally called Cancel); here the safe option sitting next to a
+  // red Discard would read as two danger buttons — the exact mis-tap this
+  // guard exists to prevent. Slate is the house token for a neutral dialog
+  // secondary (see confirmKitchen's "Back").
+  const DISCARD_BODY={
+    form:"The booking you're editing hasn't been saved yet.",
+    walkin:"This walk-in hasn't been saved yet.",
+    manual:"Your table selection hasn't been applied yet."
+  };
+  const discardModal=<div style={{position:"relative",zIndex:260}}><ModalPresence show={!!confirmDiscard}>{confirmDiscard?<Overlay onClose={function(){setConfirmDiscard(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
+        className="mgt-hover-scale"
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+        onClick={function(){setConfirmDiscard(null);}}>Keep editing</button><button
+        onClick={doDiscard}
+        className="mgt-hover-scale"
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Discard</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Discard unsaved changes?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
+
   const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
     booking={manualBooking}
     bookings={manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings}
     blocks={tableBlocks}
     onSave={function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{manualAssign(manualBooking.id,tables,locked,affected);}}}
-    onClose={function(){setManualTarget(null);}} />:null}</ModalPresence>;
+    onDirty={setManualDirty}
+    onClose={requestCloseManual} />:null}</ModalPresence>;
 
   const walkinModal=<ModalPresence show={showWalkin}>{showWalkin?<WalkinForm
     draft={walkinForm}
@@ -2213,7 +2300,7 @@ function BookingApp(){
     isMobile={isMobile}
     nowMins={nowMins}
     onSave={saveWalkin}
-    onClose={function(){setShowWalkin(false);}}
+    onClose={requestCloseWalkin}
     onAddToWaitlist={addWalkinToWaitlist} />:null}</ModalPresence>;
 
   // v17.1.0: Suspense INSIDE the ModalPresence (fallback null) so the open/close
@@ -2313,7 +2400,7 @@ function BookingApp(){
               onSave={function(){save();}}
               onSavePending={function(){save("pending");}}
               onSaveConfirm={function(){save("confirmed");}}
-              onClose={function(){setShowForm(false);}}
+              onClose={requestCloseForm}
               onClearSwap={function(){setSwapAffected(null);}}
               onBookAgain={bookAgain}
               onOpenPrefPicker={function(){setShowPrefPicker(true);}}
@@ -2321,7 +2408,7 @@ function BookingApp(){
               onOpenHistory={function(){setShowHistory(true);}}
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}

@@ -34,7 +34,7 @@ src/
 │   ├── useReminders.jsx             reminder state + listeners + banner JSX (v16.0.0: ref-mirror saves — the set()-in-updater shape is GONE — + revGuard CAS writes)
 │   ├── useNowMins.js                15s clock tick
 │   ├── useAutoOptimizer.js          optimizer thermostat + daily reset (cutoff/auto-switch editable via useOptimizerSettings — v15.0.0)
-│   ├── useWalkin.js                 walk-in state + handlers
+│   ├── useWalkin.js                 walk-in state + handlers (v17.5.0: `walkinBaseline` STATE snapshot set in openWalkin only → returns `walkinDirty` for the unsaved-changes guard)
 │   ├── useWinW.js                   viewport-width hook
 │   ├── useThemeMode.js              dark-mode resolver (localStorage pref → isDark; writes data-theme)
 │   ├── useOperatingHours.js         PER-WEEKDAY open/close + closed days → constants.js live bindings via hoursFor(date)/setActiveDayHours; Firebase settings/operatingHours (v14.4.0; 24h v14.5.0; per-weekday v15.0.0)
@@ -65,7 +65,7 @@ src/
 │   ├── ViewTools.jsx                v17.0.0 round 8 — the 🔍 Find-a-booking + ⚙ Settings pair, mounted ONCE in App's date-nav row (right of Summary) so it sits in the same place for ALL THREE views; Timeline's legend + List's card-header copies are gone, Plan gains it
 │   ├── WalkinForm.jsx               walk-in entry form (v16.0.0 "Add to waitlist" under the no-tables banner; v17.1.1 the Plan-path pre-selected table (`_pre` draft flag from openWalkin) survives guest-count edits — plain-path steppers still reset tables — and wToggle deselects a selected-but-busy table)
 │   ├── WaitlistPanel.jsx            waitlist Overlay (v16.0.0) — day's entries FCFS, fits-now chip, Book (prefills the booking form) + two-tap Remove
-│   ├── ManualModal.jsx              manual table-assign UI (v16.4.0: active Swap-busy panel = saturated orange bg + WHITE title/subtitle for readability, was pale peach + warn-text)
+│   ├── ManualModal.jsx              manual table-assign UI (v16.4.0: active Swap-busy panel = saturated orange bg + WHITE title/subtitle for readability, was pale peach + warn-text; v17.5.0 `onDirty` prop — its table picks are component-local so it REPORTS dirtiness up, with an unmount-only `onDirty(false)` cleanup)
 │   ├── PlanView.jsx                 v17.0.0 — the Plan (floor) view, 3rd main view (T·L·P): renders layout.floorPlan top-down (shared glyphs from FloorPlanEditor); time slider drives occupancy fills (seated/confirmed/pending/free/blocked; v17.1.1 seated occupancy START clamps to the slider grid — the seated-shift time can sit ABOVE the nearest-15-rounded slider, which read as "status change shows late in Plan"); tap → day-queue popover (→ openEdit, "Walk-in here" on FREE-today tables ONLY — the v17.1.1 seated-takeover was REMOVED in v17.1.2: an occupied table never offers a walk-in); RMB/hold → QuickStatusPopup (current-else-next); wheel/pinch zoom + pan + double-tap reset — all gated on the v17.1.2 `gesturesEnabled` prop (per-device Settings toggle; off = touchAction auto, view resets to 1×, hint shortens); freeing-soon pill at now; v17.1.1 fills fade via TableGlyph shapeStyle (360ms ease-out — the timeline Seated→Completed timing)
 │   ├── FloorPlanEditor.jsx          v17.0.0 — drag-&-drop plan editor (Settings→Layout "Floor plan"): snap-10 SVG canvas, drag tables/doors (commit on pointer-up), two-tap walls (then fully editable: body drag + endpoint handles), door flip (Opens left/right), all distances cm; inspector (shape/size/rot/per-side chairs + capacity-mismatch warn). v17.1.0: the shared glyphs moved OUT to FloorGlyphs.jsx (re-exported here) so this whole editor rides the lazy Settings chunk
 │   ├── FloorGlyphs.jsx              v17.1.0 — chairPositions/TableGlyph/DoorGlyph extracted from FloorPlanEditor (multi-export geometry unit) so PlanView (main chunk) shares the shapes WITHOUT pulling the lazy editor into the startup bundle
@@ -88,6 +88,7 @@ src/
     ├── booking-logic.js             pure functions (optimizer, sanitisation, derivations, daySummary); v15.0.0: isIn via ZONE_OF, date-finders read hoursFor(date); v15.9.0: ALL optimizer heuristics data-driven via PRIORITIES (IS_MGT_LAYOUT no longer imported); v16.1.0: getDur reads the DUR_TIERS live binding + lateState(b,today,nowMins,cfg) → null|"warn"|"noshow"
     ├── constants.js                 layout config — DEFAULT_LAYOUT (incl. v15.9.0 priorities seed = the ex-hard-coded MGT heuristics) + setLayout/buildLayout reassign LIVE bindings (ALL_TABLES/INDOOR/OUTDOOR/TIMELINE_TABLES/TOTAL_SEATS/ZONE_OF/TABLE_GROUPS/VALID_COMBOS/CLUSTERS/KITCHEN_TABLE_LIMIT/IS_MGT_LAYOUT/PRIORITIES) + per-weekday hours (WEEK_HOURS/hoursFor/weekRange) + DUR_TIERS/setDurTiers duration tiers (v16.1.0); colours, S/BTN style tokens (v15.0.0)
     ├── reminders.js                 reminder helpers (validate, fire-window, prune)
+    ├── drafts.js                    v17.5.0 — `sameDraft(a,b)` behind the unsaved-changes guard. NOT JSON equality: key order differs between openEdit's literal and openNew's Object.assign spread; `<input type=number>` returns a STRING; `customDur:null`/`deposit:""` are the same nothing; table arrays are sets in spirit. Values normalise to strings, arrays sort, null/undefined/""/false all collapse to "" (tests/drafts.test.js)
     ├── revGuard.js                  revision-CAS writer for whole-node collections (v16.0.0) — attachRev/writeWithRev; every write = atomic update({node, nodeRev: base+1}), Security Rules reject a non-+1 rev; recovery is free via the SDK's rollback echo
     └── customers.js                 phone-identity layer (v16.0.0) — normalizePhone/formatPhone/matchCustomerByPhone (VERBATIM from the WA sandbox's whatsapp.js; complementarity contract: the WA module imports these from HERE on merge) + isNoShow (flag OR legacy history entry — zero-migration backfill) + customerIndex/searchCustomers/noShowMap + v16.4.0 searchGuestsByName (booking-form NAME autocomplete — phone customers by phone + phone-LESS bookings one-row-each, NEVER merged). Customers are DERIVED from bookings — no separate collection.
 ```
@@ -246,6 +247,28 @@ Customers are **DERIVED from the bookings list by normalized phone** (`src/lib/c
 - Direct `saveBookings(arr)` calls without going through this helper risk an inconsistent schedule.
 - **ONE documented exception (v17.4.0): `undoLastAction`.** It restores the undo delta VERBATIM (`applyUndo` + `syncLiveDurations` only) and deliberately does NOT call `bookingsAfterAction` — that helper takes its optimizer branch whenever `optimizerActiveFor(date,…)` is true, which is **always true for a future date regardless of the toggle**, so a reshuffle there would instantly re-apply the very table moves undo just reversed. A conflict introduced by the restore is resolved by the v15.6.1 reconciliation effect (dates ≥ today). Do NOT "restore consistency" by adding the call back — it breaks undo.
 
+### Unsaved-changes guard (v17.5.0) — every drafting surface must register
+Three surfaces hold real drafts: the booking form, the walk-in form, and
+`ManualModal`'s table picks. Each snapshots the draft it was **opened** with and
+diffs the live state against it (`sameDraft`, `src/lib/drafts.js`) — an untouched
+form closes **silently**, because a confirm on every Cancel trains staff to tap
+straight through it. `openForm` (App.jsx) is the ONE door that sets the booking
+form's baseline, so all four open paths (`openNew`/`openEdit`/`bookAgain`/
+`bookFromWaitlist`) stay in step; every *other* `setForm` is a user edit and must
+NOT touch it. Same shape in `useWalkin` (`openWalkin` only). Both baselines are
+**state, not refs** — they're read during render to derive a rendered value.
+`ManualModal` owns its picks and reports up via `onDirty`, with an unmount-only
+cleanup firing `onDirty(false)` so a closed modal can't leave `beforeunload` armed.
+
+**Adding a new drafting surface = three wirings, not one:** (1) snapshot a
+baseline at its open site, (2) point its mount-site `onClose` at a
+`requestClose*`, and (3) **add an Esc branch in `useKeyboardShortcuts`** — that
+chain calls the state setters DIRECTLY and never touches `onClose`, so skipping
+it leaves Esc a silent back door past the guard. Closes that already represent a
+decision (a successful save, add-to-waitlist, the cancel-booking confirm) keep
+the RAW setter and stay unguarded. `beforeunload` is registered only while
+something is dirty; browsers ignore any custom message string.
+
 ### `formRef.current` vs `form`
 - The booking form has both a state `form` and a mirror ref `formRef`.
 - Event handlers and async callbacks read `formRef.current` (always fresh) instead of `form` (potentially stale within the same render cycle).
@@ -355,6 +378,8 @@ Customers are **DERIVED from the bookings list by normalized phone** (`src/lib/c
 | setPointerCapture kills `click` | Calling `setPointerCapture` in a pointerdown handler redirects the subsequent `click` to the CAPTURING element — child onClick handlers silently never fire (hit live in PlanView's pan logic; the table-tap popover died). Don't capture on a canvas that also needs child clicks; track the pointer without capture, or gate capture on actual movement |
 | A shipped service worker CANNOT be withdrawn by deleting it | An installed SW keeps controlling the page forever; removing `/sw.js` from the deploy does **not** unregister it, and a revert cannot reach the device. The only remote fix is to ship a worker at the SAME URL whose `activate` clears the caches and calls `registration.unregister()` (browsers re-fetch `/sw.js` on navigation for any live registration) — that is what `public/sw.js` is now. This is the single most important thing to understand before ever registering one again: a SW bug is **not** revertible, unlike every other client change in this app |
 | A SW must be testable on the target device before it ships | v17.4.0's worker froze the app at "⟳ Loading bookings…" on **iPhone and iPad** while desktop was fine, and it was never reproducible locally (a PROD-mode build against DEV data loads clean on desktop). It was PROD-only by design, so DEV could not exercise it at all — the one component in the release with no possible pre-deploy verification, which is exactly the one that broke. Don't ship a PROD-only code path to the restaurant's devices without a way to run it on one |
+| The Esc chain bypasses every `onClose` | `useKeyboardShortcuts`'s Escape branches call the state setters DIRECTLY (`K.setShowForm(false)` …), never the modals' `onClose` props. Any behaviour you attach by wrapping a mount-site `onClose` — a confirm, a cleanup, an analytics ping — is silently skipped on Esc unless you also edit that chain (v17.5.0's unsaved-changes guard). Mobile is the mirror image: `Overlay`'s `mob` branch (`<600px`) renders NO scrim, so backdrop-click doesn't exist there and the footer button is the only exit |
+| `BTN.cancel` is RED | In this app "cancel" means cancel the BOOKING, so `--btn-cancel` is `rgba(220,60,60,.75)`. Do NOT reach for it as a generic dialog "go back" — next to a red primary it reads as two danger buttons. The neutral dialog secondary is `--app-btn-slate` (see `confirmKitchen`'s "Back", v17.5.0's "Keep editing") |
 | SVG `<text>` in a shipped icon | An icon referencing `font-family="-apple-system, …"` renders a DIFFERENT face on every non-Apple platform (the pre-redesign v17.4.0 icon did exactly this — Android and the Chrome tab disagreed with iOS). Icons must carry type as OUTLINES; `scripts/gen-icons.py` does the conversion |
 
 ---
@@ -377,7 +402,7 @@ Customers are **DERIVED from the bookings list by normalized phone** (`src/lib/c
 
 - **Multi-tenancy** — single-restaurant app; no plans to generalise.
 - **Mobile app** — web-only; mobile is responsive layout (`useWinW` → `isMobile`).
-- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS (`tests/booking-logic.test.js` + `tests/customers.test.js`, 51 tests, `npm test`; CI gates build+test on every PR via `.github/workflows/ci.yml`). Run/extend it when touching `booking-logic.js` or `customers.js`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
+- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS (`tests/booking-logic.test.js` + `tests/customers.test.js` + `tests/drafts.test.js`, 88 tests as of v17.5.0, `npm test`; CI gates build+test+**lint (0 errors, a hard gate)** on every PR via `.github/workflows/ci.yml`). Run/extend it when touching `booking-logic.js`, `customers.js` or `drafts.js`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
 - **TypeScript** — pure JavaScript; no plans to migrate.
 - **Storybook / component dev environment** — components are developed against the live (DEV) app.
 

@@ -5640,3 +5640,87 @@ the new mark up on a normal refresh.
 server — favicon in the tab, `/manifest.webmanifest` resolving with the new
 `?v=` hrefs, and all four PNGs loading at their URLs with the expected
 dimensions and alpha characteristics.
+
+---
+
+## v17.5.0 — Unsaved-changes guard · Plan time strip · lockable nav · Split View (2026-07-28)
+
+Four staff-facing workflow features on one branch, one PR, **one commit each**.
+Every one of them is **off by default**, so an untouched install behaves exactly
+as v17.4.2 did. This entry is extended by each commit as it lands — per the
+one-version-one-entry rule, there is no second dated section for the later three.
+
+**Bundle baseline for the version:** `main` at v17.4.2 = 657.86 kB / **187.42 kB
+gz** (main chunk). Each commit records its own delta below.
+
+### Commit 1 — unsaved-changes guard
+
+**Files:** `src/lib/drafts.js` (new), `tests/drafts.test.js` (new),
+`src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`, `src/hooks/useWalkin.js`,
+`src/components/ManualModal.jsx`, `CLAUDE.md`.
+**Bundle:** 660.50 kB / **188.11 kB gz** (+0.69 kB gz).
+**Tests:** 88 pass (75 existing + 13 new). Lint 0 errors (39 warnings = the
+unchanged pre-existing baseline). Build clean.
+
+**Origin.** Nothing in the app warned before losing a draft — there was no
+`beforeunload` listener anywhere in the repo, and on the tablets a mis-tap on the
+modal scrim discarded a half-typed booking silently. Three surfaces hold real
+drafts: the booking form, the walk-in form, and `ManualModal`'s table selection.
+
+**Baseline-snapshot dirtiness, not a blanket "touched" flag.** Each surface
+snapshots the draft it was OPENED with and diffs the live state against it
+(`sameDraft`, `src/lib/drafts.js`). An untouched form must close **silently** —
+a confirm on every Cancel trains staff to tap straight through it, which is worse
+than no guard at all. `sameDraft` is deliberately not `JSON.stringify` equality:
+key ORDER differs between `openEdit`'s object literal and `openNew`'s
+`Object.assign` spread; `<input type="number">` returns a STRING so a size typed
+back to "2" would read dirty forever; `customDur: null` and `deposit: ""` are the
+same nothing; and the table arrays are sets in spirit, so re-ordering picks is not
+an edit. Values normalise to strings, arrays sort, and null/undefined/""/false all
+collapse to "".
+
+**`openForm` is the only door.** The booking form's baseline is set by ONE helper
+that all four open paths (`openNew` / `openEdit` / `bookAgain` /
+`bookFromWaitlist`) route through, so the baseline can never drift out of step
+with them. Every *other* `setForm` call is a user edit and deliberately does not
+touch it — that is the whole signal. Same shape in `useWalkin` (`openWalkin`
+only). Both baselines are **state, not refs**: they are read during render to
+derive a rendered value, so a ref would be the wrong tool *and* a lint error.
+`ManualModal` keeps its picks internally and REPORTS dirtiness up via a new
+`onDirty` prop, with an unmount-only cleanup firing `onDirty(false)` so a closed
+modal can never leave the parent's flag — and therefore `beforeunload` — armed.
+
+**The Esc chain was the trap.** `useKeyboardShortcuts` calls `K.setShowForm(false)`
+/ `setShowWalkin` / `setManualTarget` **directly** and never touches the modals'
+`onClose` props, so routing the mount-site `onClose` alone would have left Esc a
+silent back door straight past the guard. All three Esc branches now call
+`requestClose*`. Mobile needed no extra work for the opposite reason: `Overlay`'s
+`mob` branch (`<600px`) renders no scrim at all, so the Cancel button — which
+already calls `onClose` — is the only way out there.
+
+**Deliberately unguarded:** the closes that already represent a decision — both
+`doSave` success paths, `addFormToWaitlist`, `addWalkinToWaitlist`, the
+cancel-booking confirm, and `doSaveWalkin`. Verified live: saving a booking closes
+with no prompt and disarms `beforeunload`.
+
+**"Keep editing" is slate, not `BTN.cancel`.** The footer is otherwise modelled on
+`delModal`, but `--btn-cancel` is RED — in this app's vocabulary "cancel" means
+cancel the BOOKING. `delModal` can afford that (its safe option is literally
+called Cancel); here a red safe-option next to a red Discard reads as two danger
+buttons, i.e. exactly the mis-tap this feature exists to prevent. It uses
+`--app-btn-slate`, the house token for a neutral dialog secondary
+(cf. `confirmKitchen`'s "Back").
+
+**Stacking.** The one shared discard modal is wrapped in a `position:relative;
+z-index:260` div rather than depending on DOM order — it must paint above the
+three z-200 `Overlay`s it guards, and `position:fixed` still anchors to the
+viewport inside a plain relative/z-index ancestor (only transform/filter/
+perspective would break that). Esc dismisses it FIRST in the chain (returning to
+the form is the safe direction); Enter takes Discard, matching the other confirms.
+It is also added to both `anyModal` guards so letter shortcuts can't fire beneath it.
+
+**Verified on the DEV dev server**, all paths: untouched form/walk-in/manual close
+silently; dirty ones prompt via Esc, the Cancel button, and the backdrop; "Keep
+editing" returns with the draft intact; Discard closes and the edit is genuinely
+not applied; `beforeunload` is armed only while something is dirty and disarms
+after save or discard; `openEdit`'s different object shape produces no false dirty.

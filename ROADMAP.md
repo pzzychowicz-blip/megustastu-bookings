@@ -47,4 +47,12 @@ session and keeping it in sync.
 
 ## Ideas
 
-_(none logged yet)_
+- **Extend the unsaved-changes guard to the remaining draft surfaces.**
+  v17.5.0 guards the booking form, the walk-in form and `ManualModal`. Still
+  unguarded, by explicit scope decision: the **reminder editor** (`ReminderEditor`
+  has its own z-250 modal, not `Overlay`, and re-implements the scrim click
+  itself), the **Block modal**, and **Settings** drafts (`GsTextField` commits on
+  blur, so closing Settings mid-edit can drop it; `LayoutSettings`' half-typed
+  new table likewise). See CLAUDE.md's "Unsaved-changes guard" section for the
+  three wirings each new surface needs — the Esc branch is the one that's easy
+  to miss.
