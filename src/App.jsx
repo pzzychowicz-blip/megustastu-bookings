@@ -792,6 +792,39 @@ function BookingApp(){
     }catch{/* ignore */}
     setPlanGestures(next);
   }
+  // v17.5.0: per-device "Lock navigation" (Settings → General). Theme pattern,
+  // but INVERTED vs planGestures because the default is OFF — only the non-
+  // default value is ever stored, so localStorage["mgt-nav-lock"]="1" means on
+  // and an absent key means off. Drives the `shellFixed` layout below.
+  const [navLocked,setNavLocked]=useState(function(){
+    try{return localStorage.getItem("mgt-nav-lock")==="1";}catch{return false;}
+  });
+  function onToggleNavLock(){
+    const next=!navLocked;
+    try{
+      if(next) localStorage.setItem("mgt-nav-lock","1");
+      else localStorage.removeItem("mgt-nav-lock");
+    }catch{/* ignore */}
+    setNavLocked(next);
+  }
+  // ── v17.5.0: the fixed shell ────────────────────────────────────────────────
+  // Normally <body> is the scrollport (see the mount effect near the top of
+  // BookingApp) and the app is a plain `minHeight:100dvh` block that grows.
+  // `shellFixed` flips that: the shell becomes a 100dvh flex COLUMN, the header
+  // and date rows become flexShrink:0, and an inner region takes the scroll.
+  // That is the ONE mechanism behind "lock navigation" — and Split View widens
+  // this flag rather than inventing a second layout.
+  // Both contributing settings default off, so the default render path is
+  // byte-for-byte what shipped in v17.4.2.
+  const shellFixed = navLocked;
+  // Body must stop scrolling in that mode or the page gets a second scrollbar
+  // outside the fixed shell. Separate from the mount-once effect above (which
+  // establishes the baseline) because that effect is declared long before
+  // `navLocked` exists — putting navLocked in ITS dep array would be a TDZ error.
+  useEffect(function(){
+    document.body.style.overflow=shellFixed?"hidden":"auto";
+    return function(){document.body.style.overflow="auto";};
+  },[shellFixed]);
   // v17.2.0: per-device Timeline zoom/follow settings (see readTlSettings above).
   // Stored one value per key; a value equal to its default removes the key.
   // Lowering maxZoom clamps followZoom/defaultZoom (and the live zoom) with it.
@@ -2314,8 +2347,11 @@ function BookingApp(){
 
   return (
     <div
-      style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:appWidth,margin:"0 auto"}}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list","plan"].map(function(v){return (
+      style={Object.assign({background:"var(--bg-app)",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
+        /* v17.5.0: shellFixed → a 100dvh flex column whose inner region scrolls,
+           so the header + date rows stay put. Off = the original growing block. */
+        shellFixed?{height:"100dvh",overflow:"hidden",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list","plan"].map(function(v){return (
               <button
                 key={v}
                 className="mgt-hover-scale"
@@ -2331,7 +2367,7 @@ function BookingApp(){
               onClick={function(){signOut(auth);}}
               className="mgt-hover-scale"
               style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button><ConnectionStatus connected={isOnline} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} /></div></div><div
-          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
+          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
@@ -2366,7 +2402,13 @@ function BookingApp(){
               mobile full-width Summary wraps them onto their own line. */}
             <div style={{display:"flex",alignItems:"center",minHeight:40,marginLeft:"auto",flexShrink:0}}><ViewTools
               onOpenSearch={function(){setShowSearch(true);}}
-              onOpenSettings={function(){setShowSettings(true);}} /></div></div><AppBanners
+              onOpenSettings={function(){setShowSettings(true);}} /></div></div>{/* v17.5.0: in the fixed shell everything from here down lives in ONE
+            scroll region, so the two rows above stay pinned. The banners scroll
+            away with the content — they're the pinning scope Patryk chose, and
+            several open at once (a 3+ row late banner) would eat the viewport.
+            When shellFixed is off this div is a plain, style-less wrapper and
+            the page scrolls exactly as it always did. */}
+            <div style={shellFixed?{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",display:"flex",flexDirection:"column"}:undefined}><AppBanners
                 isOnline={isOnline}
                 writeWarning={writeWarning}
                 onDismissWarning={function(){setWriteWarning(null);}}
@@ -2385,7 +2427,7 @@ function BookingApp(){
                 reshuffled={reshuffled}
                 reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
                 loadShown={loadBannerShown}
-                loadMsg={"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+                loadMsg={"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
@@ -2451,6 +2493,8 @@ function BookingApp(){
             onSetAppWidth={onSetAppWidth}
             reduceMotion={reduceMotion}
             onToggleReduceMotion={onToggleReduceMotion}
+            navLocked={navLocked}
+            onToggleNavLock={onToggleNavLock}
             planGestures={planGestures}
             onTogglePlanGestures={onTogglePlanGestures}
             tlSettings={tlSettings}

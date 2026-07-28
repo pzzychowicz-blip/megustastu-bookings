@@ -5788,3 +5788,55 @@ a 22:15 booking fills table 1A amber at 22:15 and frees it at 21:00, in the tail
 the old slider couldn't reach; the Now button re-centres exactly and re-arms
 clock-following; the plan's own pinch/pan still works (the strip is a sibling
 ABOVE the `<svg>`, outside its `touchAction:"none"`).
+
+### Commit 3 — lockable navigation (the `shellFixed` shell)
+
+**Files:** `src/App.jsx`, `src/components/atoms.jsx` (`SlideView` `fill`),
+`src/components/Settings.jsx`, `CLAUDE.md`.
+**Bundle:** 663.94 kB / **189.13 kB gz** (+0.22 kB gz over commit 2).
+
+**Origin.** `<body>` is the scrollport, so on a long List the view buttons, the
+date and `+ New` all scroll off the top and staff have to scroll back up to do
+anything.
+
+**One mechanism, deliberately shared with Split View.** `shellFixed` turns the
+shell into a `height:100dvh; overflow:hidden` flex COLUMN: width-clamp div
+`flex:1;minHeight:0`, header + date rows `flexShrink:0` (pinned), and ONE inner
+region `flex:1;minHeight:0;overflowY:auto` holding the banners and the view.
+Commit 4 widens the flag to `navLocked || !!split` rather than inventing a second
+layout — the two features want exactly the same thing, and only one of them
+should own how it's done.
+
+**Both contributing settings default OFF, and that is verified, not assumed:**
+with the toggle off the outer div measures `display:block`, `overflow:visible`,
+`minHeight:819px` and `<body>` still scrolls — the v17.4.2 layout exactly.
+
+**Two things the structure forced:**
+1. *A separate body-overflow effect.* `<body>` must stop scrolling in fixed mode
+   or the page grows a second scrollbar outside the shell. It can't go in the
+   existing mount-once effect: that effect is declared ~250 lines before
+   `navLocked` exists, so putting `navLocked` in its dep array is a TDZ error
+   (the array is evaluated during render, unlike the body).
+2. *`SlideView` needed a `fill` prop.* It emits a bare `<div>` that collapses to
+   content height inside a flex column. Opt-in, so every existing call site is
+   untouched.
+
+**Scope, as chosen:** header + date-nav pinned; the banners scroll away with the
+content. Several banners open at once (the late banner alone can be 3+ rows)
+would otherwise eat the viewport.
+
+**Honest about the phone case.** Measured at 375×812: the wrapped header, date
+row, Summary and the 🔍/⚙ row pin ~630px of 812, leaving ~250px of content. The
+setting is per-device and off by default, and its Settings copy now says so
+plainly ("Best on a tablet or desktop — on a phone those rows wrap and can take
+most of the screen") rather than the vaguer "costs some height".
+
+**Storage convention is INVERTED here.** The house rule is "key absent =
+default", and the default is OFF, so `localStorage["mgt-nav-lock"]` stores only
+`"1"` (on) and removes the key for off — the mirror image of `planGestures`.
+
+**Verified on DEV:** with the lock on, the header and date rows measure
+`flex 0 0 auto` and do not move while the inner region scrolls; `<body>` is
+`overflow:hidden` with `scrollTop` pinned at 0 (no double scrollbar); a
+"Booking saved." toast still renders below the pinned nav and inside the
+viewport; the Settings toggle flips the whole shell live, with no reload.
