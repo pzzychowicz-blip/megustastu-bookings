@@ -72,6 +72,13 @@ export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", on
 
   function pane(node, key) {
     const isFocused = focused === key;
+    const share = key === "a" ? r : 1 - r;
+    // Hover-lift gutter, sized to THIS pane. A percentage padding resolves
+    // against the containing block (the whole split row), not the pane — so a
+    // flat "4%" would over-pad a narrow pane badly (32px of gutter inside a
+    // 161px pane at the 0.2 minimum). Scaling it by the pane's own share makes
+    // `4 * share` percent of the row exactly 4% of the pane, at any ratio.
+    const gutter = (4 * share) + "%";
     return (
       <div
         // Capture phase: a child that stops propagation must not be able to
@@ -82,6 +89,13 @@ export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", on
           flexGrow: 0, flexShrink: 1,
           minWidth: 0, minHeight: 0,
           overflow: "auto", WebkitOverflowScrolling: "touch",
+          // v17.5.0 correction — hover-lift gutter (see `gutter` above). A
+          // scrolling pane clips at its padding box, and the List cards inside
+          // scale 1.08 on hover (= 4% of card width per side), so without this
+          // the lift is cut off mid-screen at the pane edge. Unlike the
+          // single-view scroll region, a negative margin is not an option here
+          // — it would run under the divider.
+          paddingInline: gutter, paddingBlock: 12,
           borderRadius: 14,
           outline: isFocused ? "2px solid var(--accent)" : "2px solid transparent",
           outlineOffset: -2,

@@ -5915,3 +5915,81 @@ collapses the split, clears the key and reverts the shell; and with the master
 toggle off the default shell measures `display:block` / `overflow:visible` /
 `minHeight:100dvh` with `<body>` scrolling — v17.4.2 exactly — the RMB gesture
 does nothing, and plain view switching is unchanged.
+
+### Commit 5 — corrections: split-menu path, hover-lift clipping, ruler picker
+
+**Files:** `src/components/TimeAxis.jsx` (rewritten), `src/components/SplitMenu.jsx`,
+`src/components/SplitLayout.jsx`, `src/components/PlanView.jsx`, `src/App.jsx`,
+`src/hooks/useKeyboardShortcuts.js`, `index.html`, `CLAUDE.md`.
+**Bundle:** 672.68 kB / **191.69 kB gz** (+0.24 kB gz over commit 4).
+Same version — corrections to what commits 2 and 4 shipped, not new scope.
+
+**1. Split setup is two taps, not three.** The gesture now lands straight on
+"How should it split?"; the old "Add to split view" step re-confirmed an intent
+the gesture had already expressed and just lengthened every use. The Cancel
+button went with it — the scrim click already closed the popup, and Esc now does
+too (first branch of the chain, since the popup sits at z=300 above everything
+else; also added to both `anyModal` guards). A one-line hint names both exits.
+
+**2. The List hover-lift was being clipped — my own documented rule, broken.**
+CLAUDE.md's "`overflow:hidden` around `.mgt-hover-scale` clips the hover lift"
+row was written in commit 1 and violated in commits 3 and 4: the split panes
+(`overflow:auto`), the locked-nav scroll region and the shell all clipped it.
+Measured: a List card is `scale(1.08)` = **4% of its width per side**, so a
+full-width 806px card grows 32px each way. Normally that just bleeds to the
+window edge (scaled edges at −16 and 854 in an 838px viewport); inside a
+container it was cut off **mid-screen**, which is what made it obvious.
+
+The fix has three parts, and the middle one is the interesting one:
+- The shell's `overflow:hidden` is gone. It was only belt-and-braces — html and
+  body are already `overflow:hidden` in this mode, so nothing could scroll there
+  anyway — and it was clipping the bleed.
+- **You cannot pair `overflow-y:auto` with `overflow-x:visible`** (the spec
+  forces the other axis to clip), so the only way to keep the lift is to make
+  the scrollport wider than its content. The scroll region gets
+  `margin-inline:-4%` + `padding-inline:4%`: a scroller clips at its PADDING
+  box, so the content sits exactly where it did while the box is 4% wider each
+  side. In PERCENT this is self-scaling — the lift needs 4% of card width, the
+  card *is* the content box, so 4% is precisely enough at any width. Verified
+  live: region padding box −16…854 against a scaled card at −16.2…854.2.
+- Split panes can't take a negative margin (it would run under the divider), so
+  they use padding only — but scaled by the pane's share (`4 * share + "%"`),
+  because a percentage resolves against the whole split row, not the pane. A
+  flat 4% put a 32px gutter inside a 159px pane at the 0.2 minimum; the scaled
+  version gives 6.4px there and 16px at 0.5, and fits at every ratio tested.
+
+**3. The Plan strip is now a tape-measure ruler.** The block-strip version was
+legible but read as a segmented control, not a picker. Rebuilt to the reference
+Patryk supplied: the ruler scrolls under a FIXED centre marker, snapping to 15
+minutes on idle, with tap-anywhere-to-jump for mouse users. Mirrored ticks top
+and bottom with the hour labels between them — the pair of edges is what makes
+it read as a tape rather than a chart axis; a per-quarter occupancy heat-tint
+behind the ticks (so the rush is visible before you scrub to it); a full-height
+now marker; and a `mgt-detent` squash on the centre line, replayed by
+remounting via `key={selected}`, so scrubbing feels notched. The existing
+`data-motion="reduce"` rule neutralises that animation for free.
+
+Two things worth keeping in mind about it:
+- **`padding-inline: 50%` on the scroller** does double duty: it lets the first
+  and last ticks reach the centre, and it makes the arithmetic collapse — the
+  track position under the marker is exactly `scrollLeft`, so centring a time is
+  the same expression inverted, with no marker measurement. Verified against the
+  DOM: at `scrollLeft` 864 the badge read 22:00 and `xOf(22:00)` is 864.
+- **Scrolling is cheap because React only re-renders on a QUARTER change.** Every
+  selection change re-runs PlanView's occupancy scan and repaints the floor SVG,
+  so a per-pixel update would be visibly janky; snapping the selection to 15-min
+  marks throttles it naturally to a few renders per flick.
+
+The occupancy data is a plain linear pass over the day's bookings marking the
+quarters each one spans — nowhere near the `trialFits`/`findTimes` heavy-scan
+class CLAUDE.md warns about, so it needs no memo or deferral.
+
+**Also:** two byte-identical stray `… 2.js` duplicates of `drafts.js` /
+`drafts.test.js` (a Finder-style copy, untracked) were removed.
+
+**Verified on DEV:** split setup is 2 taps and closes on both scrim and Esc; the
+List lift bleeds to the window edge uncut in single, locked-nav and split modes,
+at split ratios 0.2/0.5/0.8; the ruler snaps exactly, tap-to-jump lands
+(x=600 → 20:45 centred), the Now button re-centres, the detent animation is
+wired, the floor repaints as you scrub, and it all still works inside a narrow
+split pane.

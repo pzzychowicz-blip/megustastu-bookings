@@ -33,7 +33,9 @@
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { S, STATUS_COLORS, BLOCK_BG, hoursFor } from "../lib/constants";
-import { toMins, toTime, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
+// v17.5.0: toTime moved out with the readout — the ruler renders it on its
+// own centre marker now.
+import { toMins, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
@@ -87,6 +89,27 @@ export const PlanView = memo(function PlanView({
 
   // ── Occupancy at the slider time ────────────────────────────────────────────
   const day = bookings.filter((b) => b && b.date === date && b.status !== "cancelled");
+
+  // v17.5.0: per-quarter occupancy for the ruler's heat band — the share of
+  // tables taken at each 15-minute mark, so the rush is visible BEFORE you
+  // scrub to it. Deliberately a plain linear pass (one loop over the day's
+  // bookings, marking the quarters each one spans): nothing here calls
+  // trialFits/findTimes, so it is nowhere near the heavy-scan class CLAUDE.md
+  // warns about, and it needs no memo.
+  const occupancyByQuarter = (() => {
+    const tableCount = tables.length || 1;
+    const acc = {};
+    day.forEach((b) => {
+      if (b.status === "completed") return;   // completed = table free, everywhere
+      const n = (b.tables || []).length;
+      if (!n) return;
+      const s = toMins(b.time);
+      const e = s + (b.duration || 90);
+      for (let m = Math.floor(s / 15) * 15; m < e; m += 15) acc[m] = (acc[m] || 0) + n;
+    });
+    Object.keys(acc).forEach((k) => { acc[k] = Math.min(1, acc[k] / tableCount); });
+    return acc;
+  })();
   const occupying = {};   // tableId → booking occupying it at `slider`
   day.forEach((b) => {
     if (b.status === "completed") return; // completed = table free, everywhere
@@ -335,12 +358,12 @@ export const PlanView = memo(function PlanView({
       borderRadius: 20, border: "1px solid var(--tl-card-border)",
       padding: "10px 12px", boxShadow: "var(--shadow-soft)"
     }}>
-      {/* v17.5.0: readout + Now + legend on one row, the scrollable time-block
-          strip on its own row below. The strip is a SIBLING above the <svg>, so
-          it sits outside the svg's touchAction:"none" and never fights the
-          plan's pan/pinch gestures. */}
+      {/* v17.5.0: Now + legend on one row, the ruler on its own row below. The
+          ruler is a SIBLING above the <svg>, so it sits outside the svg's
+          touchAction:"none" and never fights the plan's pan/pinch gestures.
+          The time readout lives INSIDE the ruler now (on its centre marker,
+          like the reference picker) — repeating it here was just noise. */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: S.text, fontVariantNumeric: "tabular-nums", minWidth: 46 }}>{toTime(slider)}</span>
         {isToday ? (
           <button className="mgt-hover-scale"
             onClick={() => { setSliderTouched(false); setSlider(clampSlider(nowMins)); reCentre(); }}
@@ -354,6 +377,7 @@ export const PlanView = memo(function PlanView({
           onSelect={(m) => { setSliderTouched(true); setSlider(m); }}
           nowMins={nowMins}
           isToday={isToday}
+          occupancy={occupancyByQuarter}
           autoScrollKey={autoScrollKey} />
       )}
       {h.closed ? (

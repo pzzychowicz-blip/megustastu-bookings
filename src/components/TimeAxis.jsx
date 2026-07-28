@@ -1,154 +1,212 @@
 // src/components/TimeAxis.jsx
 //
-// v17.5.0 — a horizontally-scrollable strip of 15-minute time blocks, in the
-// Timeline's visual language. Replaces the Plan view's <input type="range">
-// scrubber: the slider gave no sense of WHERE in the service you were, and read
-// nothing like the timeline grid staff already know.
+// v17.5.0 — the Plan view's time scrubber: a tape-measure ruler that scrolls
+// under a FIXED centre marker. Replaced the original `<input type="range">`,
+// then (v17.5.0 correction) the first attempt at this, which was a row of
+// discrete tappable blocks — legible, but it read as a segmented control
+// rather than a picker and gave no sense of sliding through the service.
 //
-// ── Why this shares the Timeline's span exactly ──────────────────────────────
-// The strip runs OPEN … GRID_CLOSE — the same span TimelineView draws, one hour
-// past closing. That was a deliberate choice (the old slider stopped at CLOSE):
-// because the spans now match, this component can reuse `pct()` and
-// QUARTER_HOURS UNCHANGED, with no range-parametrised variant, and a block here
-// lines up tick-for-tick with the same minute on the timeline. The extra
-// 22:00–23:00 tail is also genuinely useful — it's where a late booking runs out.
+// ── The interaction ──────────────────────────────────────────────────────────
+// Scroll or drag the ruler; whatever sits under the centre marker is selected,
+// snapping to the nearest 15 minutes when you let go. Tapping anywhere on the
+// ruler scrolls that time to the centre (a mouse gets a direct hit instead of
+// having to drag). One continuous gesture, no small targets to aim at — which
+// is what makes this work on the tablets.
+//
+// ── Why scrolling is cheap ───────────────────────────────────────────────────
+// The browser owns the scroll; React re-renders only when the selected QUARTER
+// changes, which is at most a few times a second even during a fast flick. That
+// matters because every selection change re-runs PlanView's occupancy scan and
+// repaints the floor SVG — a per-pixel update would be visibly janky.
+//
+// ── The 50% padding trick ────────────────────────────────────────────────────
+// The scroller carries `padding-inline: 50%`, so the first and last ticks can
+// reach the centre. It also makes the maths fall out: with half a viewport of
+// padding on each side, the track position under the centre marker is exactly
+// `scrollLeft`. So time = OPEN + (scrollLeft / trackW) * span, and centring a
+// time is the same expression inverted — no measurement of the marker needed.
 //
 // ── Live bindings ────────────────────────────────────────────────────────────
-// OPEN / GRID_CLOSE / QUARTER_HOURS and pct() are LIVE module bindings holding
-// the ACTIVE VIEW DAY's hours (useOperatingHours calls setActiveDayHours during
-// render). This component is only ever rendered for the view date, so they
-// agree. They're read at render time here — never captured into a module-scope
-// local, which would freeze them (the constants.js live-binding gotcha).
+// OPEN / GRID_CLOSE / QUARTER_HOURS hold the ACTIVE VIEW DAY's hours and are
+// read at render time — never captured into a module-scope local (the
+// constants.js live-binding gotcha). The span matches TimelineView's exactly
+// (OPEN…GRID_CLOSE), so a mark here is the same minute as on the timeline.
 //
-// NOT memo'd, and deliberately so: it reads those live bindings, which
-// React.memo cannot see, so it would need an hoursSig-style busting prop to be
-// correct. Its parent (PlanView) is memo'd and already takes `hoursSig`, so the
-// repaint gating happens one level up where it can be done right.
-//
-// Module scope is load-bearing: PlanView has no other sub-components, and an
-// inline one would be a NEW component type every render — remounting ~40 tick
-// divs on every 15s nowMins tick and every pan gesture (the v17.1.0
-// GridLines/BlockBar lesson, CLAUDE.md's inline-sub-components row).
+// NOT memo'd, on purpose: it reads those live bindings, which React.memo cannot
+// see. Gating belongs in its memo'd parent, which already takes `hoursSig`.
+// Module scope IS load-bearing — an inline component would remount every tick
+// on each 15s clock tick (the v17.1.0 GridLines lesson).
 
-import { useRef, useLayoutEffect } from "react";
+import { useRef, useLayoutEffect, useEffect } from "react";
 import { OPEN, GRID_CLOSE, QUARTER_HOURS, S } from "../lib/constants";
-import { pct, toTime } from "../lib/booking-logic";
+import { toTime } from "../lib/booking-logic";
 
-// Width of one 15-minute block. 44px is the app's tap-target floor (every
-// mkBtn action button uses minHeight 44), which is what makes the blocks
-// reliably tappable on the tablets — the whole point of replacing a 6px-wide
-// slider thumb. A 13:00–23:00 day is therefore ~1760px and scrolls.
-const QUARTER_PX = 44;
+// Ruler density: one 15-minute step every 24px → an hour is 96px. Wide enough
+// that hour labels never collide, tight enough that a whole service fits in a
+// couple of flicks.
+const PX_PER_QUARTER = 24;
+const H = 62;             // tape height
+const PILL_H = 24;        // the selected-time badge gets its own lane above the tape
+const SNAP_MS = 130;      // idle time after scrolling before we snap
 
-export function TimeAxis({ selected, onSelect, nowMins = 0, isToday = false, autoScrollKey = 0 }) {
+export function TimeAxis({
+  selected, onSelect, nowMins = 0, isToday = false,
+  autoScrollKey = 0,
+  occupancy = null,       // {quarterMins: 0..1} — share of tables busy
+}) {
   const scrollRef = useRef(null);
-  const totalMins = (GRID_CLOSE - OPEN) * 60;
-  const trackW = Math.max(320, QUARTER_HOURS.length * QUARTER_PX);
-  const quarterPctW = (15 / totalMins) * 100;
+  const snapTimer = useRef(null);
+  const snappingRef = useRef(false);   // ignore scroll events we caused ourselves
+  const selRef = useRef(selected);
+  selRef.current = selected;
 
-  // Centre the selected block — but only on a PROGRAMMATIC change (the Now
-  // button, a date change, the clock-follow tick), never when the user just
-  // tapped a block or is mid-scroll. Yanking the strip out from under a finger
-  // is exactly the kind of thing that makes a scrubber feel broken, so the
-  // parent bumps `autoScrollKey` at the programmatic sites and nowhere else.
-  // useLayoutEffect + INSTANT scroll, deliberately not smooth: with
-  // behavior:"smooth" the first paint showed the far right of the strip and
-  // then slid ~1.5s to the right place, which reads as the widget being
-  // broken. A programmatic re-centre should simply already be there.
-  useLayoutEffect(() => {
+  const totalMins = (GRID_CLOSE - OPEN) * 60;
+  const trackW = Math.max(320, QUARTER_HOURS.length * PX_PER_QUARTER);
+  const openM = OPEN * 60;
+
+  const xOf = (m) => ((m - openM) / totalMins) * trackW;
+  const minsAt = (x) => openM + (x / trackW) * totalMins;
+  const clampQ = (m) => Math.max(openM, Math.min(openM + totalMins, Math.round(m / 15) * 15));
+
+  // Centre a time without notifying the parent (this IS the parent's value).
+  function centre(m, smooth) {
     const el = scrollRef.current;
-    if (!el || selected == null) return;
-    const x = ((selected - OPEN * 60) / totalMins) * trackW;
-    el.scrollLeft = Math.max(0, x - el.clientWidth / 2);
+    if (!el) return;
+    snappingRef.current = true;
+    el.scrollTo({ left: xOf(m), behavior: smooth ? "smooth" : "auto" });
+    // Smooth scrolling keeps firing scroll events; let them settle before we
+    // start listening again, or the snap re-arms itself in a loop.
+    window.setTimeout(() => { snappingRef.current = false; }, smooth ? 320 : 60);
+  }
+
+  // Programmatic re-centre only (date change, clock follow, the Now button).
+  // Never on a user scroll — yanking the ruler under a finger is exactly what
+  // makes a scrubber feel broken.
+  useLayoutEffect(() => {
+    centre(selected, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoScrollKey]);
 
-  const nowInRange = isToday && nowMins >= OPEN * 60 && nowMins <= GRID_CLOSE * 60;
+  useEffect(() => () => window.clearTimeout(snapTimer.current), []);
+
+  function onScroll() {
+    if (snappingRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const q = clampQ(minsAt(el.scrollLeft));
+    if (q !== selRef.current) onSelect(q);
+    window.clearTimeout(snapTimer.current);
+    snapTimer.current = window.setTimeout(() => { centre(clampQ(minsAt(el.scrollLeft)), true); }, SNAP_MS);
+  }
+
+  // Tap to jump: the click's x within the track, centred.
+  function onTrackClick(e) {
+    const el = scrollRef.current;
+    if (!el) return;
+    const b = el.getBoundingClientRect();
+    const x = el.scrollLeft + (e.clientX - b.left) - b.width / 2;
+    const q = clampQ(minsAt(x));
+    if (q !== selRef.current) onSelect(q);
+    centre(q, true);
+  }
+
+  const nowInRange = isToday && nowMins >= openM && nowMins <= openM + totalMins;
 
   return (
-    <div
-      ref={scrollRef}
-      style={{
-        overflowX: "auto", overflowY: "hidden",
-        touchAction: "pan-x", WebkitOverflowScrolling: "touch",
-        borderRadius: 10, marginBottom: 8,
-      }}
-    >
-      {/* 58px = 24 header + 26 blocks + a 8px lane at the bottom so the native
-          horizontal scrollbar doesn't paint over the blocks it scrolls. */}
-      <div style={{ width: trackW + "px", minWidth: "100%", position: "relative", height: 58 }}>
-        {/* Hour strip — same 24px header, tokens and centred hour pills as the
-            timeline grid, so the two read as one system. */}
-        <div style={{
-          position: "relative", height: 24, boxSizing: "border-box",
-          background: "var(--tl-header-strip)",
-          borderBottom: "2px solid var(--tl-header-border)",
-          borderRadius: "6px 6px 0 0", overflow: "visible",
-        }}>
-          {QUARTER_HOURS.map((m) => (
-            <div key={"l" + m} style={{
-              position: "absolute", top: 0, bottom: 0, left: pct(m),
-              borderLeft: m % 60 === 0 ? "2px solid var(--tl-gridline-hour)" : "0.5px solid var(--tl-gridline-quarter)",
+    // paddingTop gives the centre badge its own lane ABOVE the tape, so it
+    // never sits on top of a tick or an hour label.
+    <div style={{ position: "relative", marginBottom: 8, paddingTop: PILL_H }}>
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        onClick={onTrackClick}
+        style={{
+          overflowX: "auto", overflowY: "hidden",
+          paddingInline: "50%",               // lets the ends reach the centre
+          touchAction: "pan-x", WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",             // the centre marker IS the affordance
+          cursor: "pointer",
+          background: "var(--bg-soft)",
+          borderRadius: 14,
+          border: "1px solid var(--border-soft)",
+        }}
+      >
+        <div style={{ width: trackW + "px", height: H, position: "relative" }}>
+          {/* Occupancy — a full-height tint behind each quarter rather than a
+              separate bar, so the busy stretches read as shading ON the tape
+              instead of a second chart competing with it. */}
+          {occupancy ? QUARTER_HOURS.map((m) => {
+            const v = occupancy[m] || 0;
+            if (v <= 0) return null;
+            return (
+              <div key={"o" + m} style={{
+                position: "absolute", top: 0, bottom: 0, left: xOf(m), width: PX_PER_QUARTER,
+                background: "rgba(var(--status-confirmed-rgb), " + (0.05 + v * 0.22).toFixed(3) + ")",
+              }} />
+            );
+          }) : null}
+
+          {/* Tape ticks — mirrored top and bottom, tall on the hour. The pair
+              of edges is what makes it read as a tape measure rather than a
+              chart axis. */}
+          {QUARTER_HOURS.map((m) => {
+            const isHour = m % 60 === 0;
+            const x = xOf(m);
+            const col = isHour ? "var(--tl-gridline-hour)" : "var(--tl-gridline-quarter)";
+            const len = isHour ? 13 : 7;
+            const w = isHour ? 2 : 1;
+            return (
+              <div key={"t" + m}>
+                <div style={{ position: "absolute", top: 0, left: x, width: w, height: len, background: col, borderRadius: 1 }} />
+                <div style={{ position: "absolute", bottom: 0, left: x, width: w, height: len, background: col, borderRadius: 1 }} />
+              </div>
+            );
+          })}
+
+          {/* Hour labels, centred between the two tick rows. */}
+          {QUARTER_HOURS.filter((m) => m % 60 === 0).map((m) => (
+            <div key={"h" + m} style={{
+              position: "absolute", left: xOf(m), top: "50%",
+              transform: "translate(-50%,-50%)",
+              fontSize: 12, fontWeight: 600, color: "var(--text-secondary)",
+              fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", pointerEvents: "none",
+            }}>{String(Math.floor(m / 60) % 24).padStart(2, "0") + ":00"}</div>
+          ))}
+
+          {/* Now marker — a full-height accent tick so you can always see where
+              the clock is, even scrubbed far away from it. */}
+          {nowInRange ? (
+            <div style={{
+              position: "absolute", left: xOf(nowMins), top: 0, bottom: 0,
+              width: 2, background: "var(--tl-now-line)",
+              borderRadius: 1, pointerEvents: "none", opacity: 0.9,
             }} />
-          ))}
-          {/* Right edge drawn separately: pct() of the last quarter is not 100%,
-              and QUARTER_HOURS stops one quarter short of GRID_CLOSE. */}
-          <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, borderLeft: "2px solid var(--tl-gridline-hour)" }} />
-          {QUARTER_HOURS.filter((m) => m % 60 === 0 && m < GRID_CLOSE * 60).map((m) => (
-            <span key={"h" + m} style={{
-              position: "absolute", top: 3, left: ((m + 30 - OPEN * 60) / totalMins) * 100 + "%",
-              transform: "translateX(-50%)",
-              fontSize: 10, fontWeight: 600, color: "var(--text-on-accent)",
-              whiteSpace: "nowrap", pointerEvents: "none",
-              background: "var(--tl-hour-pill)", padding: "2px 5px", borderRadius: 6, zIndex: 1,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-            }}>{String(Math.floor(m / 60) % 24).padStart(2, "0") + ":00"}</span>
-          ))}
+          ) : null}
         </div>
-
-        {/* Selectable quarter blocks. Alternating hour BANDS are what make the
-            strip legible at a glance — a flat row of 44px cells with hairline
-            dividers reads as an empty bar in dark mode. Each hour's first block
-            carries a faint label so you can find a time without selecting it. */}
-        {QUARTER_HOURS.map((m) => {
-          const isSel = selected === m;
-          const isHourStart = m % 60 === 0;
-          const bandOdd = Math.floor(m / 60) % 2 === 1;
-          return (
-            <button
-              key={"q" + m}
-              type="button"
-              onClick={() => onSelect(m)}
-              aria-label={toTime(m)}
-              aria-pressed={isSel}
-              title={toTime(m)}
-              className={isSel ? undefined : "mgt-timeaxis-cell"}
-              style={{
-                position: "absolute", top: 26, height: 26,
-                left: pct(m), width: quarterPctW + "%",
-                boxSizing: "border-box", padding: 0, margin: 0, cursor: "pointer",
-                border: "none",
-                borderLeft: isHourStart ? "2px solid var(--tl-gridline-hour)" : "0.5px solid var(--tl-gridline-quarter)",
-                background: isSel ? S.accent : (bandOdd ? "var(--bg-soft)" : "var(--bg-card)"),
-                color: isSel ? "var(--text-on-accent)" : "var(--text-faint)",
-                fontSize: 10, fontWeight: isSel ? 700 : 500,
-                fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
-                borderRadius: isSel ? 6 : 0,
-                zIndex: isSel ? 3 : 1,
-                transition: "background 140ms ease, color 140ms ease",
-                WebkitTapHighlightColor: "transparent",
-              }}
-            >{isSel ? toTime(m) : (isHourStart ? String(Math.floor(m / 60) % 24).padStart(2, "0") : "")}</button>
-          );
-        })}
-
-        {/* Now marker — same tokens as the timeline's, drawn over the blocks. */}
-        {nowInRange ? (
-          <div style={{ position: "absolute", top: 24, height: 26, left: pct(nowMins), zIndex: 4, pointerEvents: "none" }}>
-            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 2, background: "var(--tl-now-line)" }} />
-          </div>
-        ) : null}
       </div>
+
+      {/* The fixed centre marker, outside the scroller so it stays put while
+          the tape moves under it: a badge in its own lane above, and a line
+          straight down through the tape. `key={selected}` remounts the line so
+          the detent squash replays each time a mark passes. */}
+      <div style={{
+        position: "absolute", left: "50%", top: 0, transform: "translateX(-50%)",
+        pointerEvents: "none",
+        background: S.accent, color: "var(--text-on-accent)",
+        fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums",
+        padding: "2px 10px", borderRadius: 8,
+        boxShadow: "0 2px 6px rgba(0,0,0,0.18)", whiteSpace: "nowrap",
+      }}>{toTime(selected)}</div>
+      <div
+        key={selected}
+        className="mgt-detent"
+        style={{
+          position: "absolute", left: "50%", top: PILL_H + 4, height: H - 8,
+          transform: "translateX(-50%)", transformOrigin: "center",
+          width: 2, borderRadius: 1,
+          background: S.accent, pointerEvents: "none",
+        }}
+      />
     </div>
   );
 }

@@ -1986,6 +1986,8 @@ function BookingApp(){
     // surfaces through requestClose* (it calls the setters directly, so it
     // would otherwise be a silent back door past the guard), and the discard
     // confirm needs its own Esc (dismiss) / Enter (discard) branches.
+    // v17.5.0 correction: Esc closes the split-setup popup (it has no Cancel).
+    splitMenuFor:splitMenuFor,setSplitMenuFor:setSplitMenuFor,
     confirmDiscard:confirmDiscard,setConfirmDiscard:setConfirmDiscard,doDiscard:doDiscard,
     requestCloseForm:requestCloseForm,requestCloseWalkin:requestCloseWalkin,requestCloseManual:requestCloseManual
   });
@@ -2468,8 +2470,14 @@ function BookingApp(){
     <div
       style={Object.assign({background:"var(--bg-app)",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
         /* v17.5.0: shellFixed → a 100dvh flex column whose inner region scrolls,
-           so the header + date rows stay put. Off = the original growing block. */
-        shellFixed?{height:"100dvh",overflow:"hidden",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
+           so the header + date rows stay put. Off = the original growing block.
+           v17.5.0 correction: NO overflow:hidden here. It clipped the List
+           cards' .mgt-hover-scale lift (scale 1.08 = 4% of card width per side,
+           ~32px on a full-width card) at the shell edge — visible mid-screen,
+           whereas normally that lift just bleeds to the window edge. It was
+           only ever belt-and-braces: html+body are already overflow:hidden in
+           this mode (see the body effect above), so nothing can scroll here. */
+        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}><ViewSwitcher
               view={view}
               split={split}
@@ -2537,7 +2545,17 @@ function BookingApp(){
                  to CONTENT height, which would collapse a top/bottom split. The
                  banners therefore pin here (they scroll away in nav-lock-only
                  mode); they're collapsible and dismissible, so that's affordable. */
-              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch"}):undefined}><AppBanners
+              /* v17.5.0 correction — the hover-lift gutter. A scroll container
+                 clips at its PADDING box, and CSS can't pair overflow-y:auto
+                 with overflow-x:visible (the spec forces the other axis to
+                 clip), so the only way to keep the List cards' 1.08 lift intact
+                 is to make the scrollport wider than its content. Negative
+                 margin + equal padding does exactly that, and in PERCENT it is
+                 self-scaling: the lift needs 4% of the card width per side, the
+                 card is the content box, so 4% padding is precisely enough at
+                 any width. The negative margin puts the content back where it
+                 was, so card width and position are unchanged from before. */
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><AppBanners
                 isOnline={isOnline}
                 writeWarning={writeWarning}
                 onDismissWarning={function(){setWriteWarning(null);}}

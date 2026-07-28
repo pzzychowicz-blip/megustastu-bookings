@@ -328,15 +328,18 @@
       @media (hover: hover) and (pointer: fine) {
         .mgt-ac-row:hover { background-color: var(--bg-ac-hover); }
       }
-      /* v17.5.0: TimeAxis quarter-blocks (the Plan view's time strip). Same
-         reasoning as .mgt-ac-row — a tint, NOT a .mgt-hover-scale: these cells
-         are a contiguous grid, so scaling one would overlap its neighbours.
-         The hover-capability guard keeps iOS from leaving the last-tapped
-         block stuck highlighted (the v15.1.0 sticky-hover lesson). */
-      .mgt-timeaxis-cell { transition: background-color 140ms ease, color 140ms ease; }
-      @media (hover: hover) and (pointer: fine) {
-        .mgt-timeaxis-cell:hover { background-color: var(--bg-ac-hover); color: var(--text-primary); }
+      /* v17.5.0 correction: TimeAxis is now a ruler/tape picker whose centre
+         marker is fixed while the ruler scrolls under it. This is the "detent"
+         — a brief squash as each 15-minute mark passes the centre, so scrubbing
+         reads as notched rather than free-sliding. Replayed by remounting the
+         element (React key), so it needs no JS timers. The global
+         data-motion="reduce" rule above already neutralises it. */
+      @keyframes mgt-detent {
+        0%   { transform: translateX(-50%) scaleY(1); }
+        40%  { transform: translateX(-50%) scaleY(1.22); }
+        100% { transform: translateX(-50%) scaleY(1); }
       }
+      .mgt-detent { animation: mgt-detent 170ms ease-out; }
       @media (hover: hover) and (pointer: fine) {
         .mgt-hover-scale:hover:not(:disabled) {
           transform: scale(1.08);

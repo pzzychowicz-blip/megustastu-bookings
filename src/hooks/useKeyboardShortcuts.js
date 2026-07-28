@@ -59,6 +59,10 @@ export function useKeyboardShortcuts(ctx){
       const K=kbRef.current;const k=e.key;const typing=isTyping(e.target);
       // ── Escape: close topmost modal (checked in visual z-order) ──
       if(k==="Escape"){
+        // v17.5.0 correction: the split-setup popup sits at z=300, above even
+        // the discard confirm, so it goes first. It has no Cancel button by
+        // design — the scrim click and this branch are the two ways out.
+        if(K.splitMenuFor){e.preventDefault();K.setSplitMenuFor(null);return;}
         // v17.5.0: the discard confirm is topmost whenever it's up (z=260) —
         // Esc dismisses it and returns you to the form you were editing, which
         // is the safe direction. It must be FIRST: the surfaces below it are
@@ -234,7 +238,7 @@ export function useKeyboardShortcuts(ctx){
         }
       }
       // ── Global shortcuts: suppressed while any modal is open ──
-      const anyModal=K.confirmDiscard||K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
+      const anyModal=K.splitMenuFor||K.confirmDiscard||K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
       if(anyModal) return;
       // v16.3.0: "/" opens the global booking search (typing guard above keeps it
       // out of form fields; anyModal guard keeps it from re-firing while open).
@@ -324,7 +328,7 @@ export function useKeyboardShortcuts(ctx){
     function onDown(e){
       const K=kbRef.current;
       if(K.view!=="list"||!K.selectedListId) return;
-      const anyModal=K.confirmDiscard||K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
+      const anyModal=K.splitMenuFor||K.confirmDiscard||K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
       if(anyModal) return;
       const t=e.target;
       if(t&&t.closest&&t.closest("[data-flip-id]")) return; // inside a card (incl. its buttons)

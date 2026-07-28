@@ -1,15 +1,21 @@
 // src/components/SplitMenu.jsx
 //
-// v17.5.0 — the three-step popup that builds a Split View, opened by
+// v17.5.0 — the two-step popup that builds a Split View, opened by
 // right-clicking (desktop) or pressing-and-holding (touch) one of the
 // Timeline / List / Plan buttons.
 //
-//   1. "Add to split view"      — confirm the intent
-//   2. "Split how?"             — side by side / top and bottom
-//   3. "Add which view?"        — the two REMAINING views, never the invoking
+//   1. "How should it split?"   — side by side / top and bottom
+//   2. "Add which view?"        — the two REMAINING views, never the invoking
 //                                 one, so the same view can't appear twice
 //                                 (which would collide on the singleton
 //                                 timelineZoom / selectedListId state)
+//
+// v17.5.0 correction: the original step 1 was a bare "Add to split view"
+// confirm. Opening the popup IS the intent — re-confirming it just added a tap
+// to every single use, so the gesture now lands straight on the direction
+// choice. The Cancel button went with it: the scrim click already closes, and
+// Esc closes too (handled in useKeyboardShortcuts' chain, above every other
+// branch — this sits at z=300, over everything).
 //
 // Shell is QuickStatusPopup's, deliberately: same body portal, same z=300
 // scrim, same tokens, radius, min/max width and 44px buttons. Long-press
@@ -22,24 +28,20 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { S, BTN } from "../lib/constants";
+import { S } from "../lib/constants";
 import { mkBtn } from "./atoms";
 
 const LABEL = { timeline: "Timeline", list: "List", plan: "Plan" };
 const ORDER = ["timeline", "list", "plan"];
 
 export function SplitMenu({ view, onConfirm, onClose }) {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1);   // 1 = direction, 2 = second view
   const [dir, setDir] = useState(null);
   if (!view) return null;
 
   const others = ORDER.filter((v) => v !== view);
-  const title = step === 1 ? "Split view"
-    : step === 2 ? "How should it split?"
-      : "Which view goes alongside?";
-  const sub = step === 1 ? "Show " + LABEL[view] + " alongside a second view."
-    : step === 2 ? LABEL[view] + " plus one more."
-      : LABEL[view] + " and…";
+  const title = step === 1 ? "How should it split?" : "Which view goes alongside?";
+  const sub = step === 1 ? LABEL[view] + " plus one more." : LABEL[view] + " and…";
 
   const row = { display: "flex", gap: 8, flexWrap: "wrap" };
   const btn = (extra) => mkBtn(Object.assign({ minHeight: 44, padding: "10px 16px", flex: "1 1 auto" }, extra));
@@ -70,33 +72,22 @@ export function SplitMenu({ view, onConfirm, onClose }) {
 
         {step === 1 ? (
           <div style={row}>
-            <button className="mgt-hover-scale" style={btn({ background: S.accent })}
-              onClick={() => setStep(2)}>Add to split view</button>
-          </div>
-        ) : null}
-
-        {step === 2 ? (
-          <div style={row}>
             <button className="mgt-hover-scale" style={btn({ background: "var(--app-btn-grey)" })}
-              onClick={() => { setDir("v"); setStep(3); }}>◧ Side by side</button>
+              onClick={() => { setDir("v"); setStep(2); }}>◧ Side by side</button>
             <button className="mgt-hover-scale" style={btn({ background: "var(--app-btn-grey)" })}
-              onClick={() => { setDir("h"); setStep(3); }}>⬓ Top and bottom</button>
+              onClick={() => { setDir("h"); setStep(2); }}>⬓ Top and bottom</button>
           </div>
-        ) : null}
-
-        {step === 3 ? (
+        ) : (
           <div style={row}>
             {others.map((v) => (
               <button key={v} className="mgt-hover-scale" style={btn({ background: S.accent })}
                 onClick={() => onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 })}>{LABEL[v]}</button>
             ))}
           </div>
-        ) : null}
+        )}
 
-        <div style={{ marginTop: 10 }}>
-          <button className="mgt-hover-scale"
-            style={mkBtn({ minHeight: 40, padding: "8px 14px", width: "100%", background: BTN.nav })}
-            onClick={onClose}>Cancel</button>
+        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 12, textAlign: "center" }}>
+          tap outside or press Esc to close
         </div>
       </div>
     </div>,
