@@ -1,6 +1,6 @@
 ---
 name: mgt-workflow
-description: The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings) — covers both session-start context bootstrapping AND git/branching/versioning. Load this at the START of every session in this repo (even before any coding task is clear) to run a cheap staleness check and decide whether last session's thread summary is worth reading. ALSO load it before making any edit under src/, and before any commit, push, branch, PR, or version bump — the branch name and whether you're even allowed to start depend on decisions made before the first edit, not just at commit time. Also triggers on "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", or anytime the user references prior context, branch naming, __APP_SIGNATURE__, or REFACTOR_LOG.md. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
+description: The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings) — covers session-start context bootstrapping, git/branching/versioning, AND keeping ROADMAP.md (the pending-work/deferred-features/ideas file) in sync. Load this at the START of every session in this repo (even before any coding task is clear) to run a cheap staleness check and decide whether last session's thread summary is worth reading. ALSO load it before making any edit under src/, before any commit, push, branch, PR, or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and whether ROADMAP.md needs an update all depend on decisions made before the first edit and at task close, not just at commit time. Also triggers on "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or anytime the user references prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, or ROADMAP.md. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
 ---
 
 # MGT Bookings — workflow contract
@@ -158,7 +158,35 @@ that's still open (addressing review feedback, a QA fix before merge), *extend* 
 existing version's entry rather than appending a new dated section. A new section
 implies a new version bump, which contradicts §3.
 
-## 6. Hard rules (non-negotiable, not situational)
+## 6. ROADMAP.md upkeep — this skill owns it
+
+`ROADMAP.md` (repo root) holds **pending work only**: deferred features, follow-ups,
+ideas. It must contain *nothing else* — no shipped-version history (that's
+`REFACTOR_LOG.md`), no design rationale (that's `CLAUDE.md`). Keeping it accurate is
+this skill's job, not something to do only when asked.
+
+**Check it at two points:**
+
+1. **When a task finishes** (the change is committed, or ready for a PR per §4) —
+   ask whether it resolves, replaces, or makes obsolete anything currently listed in
+   `ROADMAP.md`. If so, **delete that entry in the same commit/PR** — don't leave a
+   completed item sitting in a pending-work file. If the item has details worth
+   preserving, that's what the `REFACTOR_LOG.md` entry (§5) is for, not ROADMAP.md.
+2. **When new deferred work surfaces** — the user defers an idea ("not now, but..."),
+   you identify a follow-up that's out of scope for the current change, or a
+   feature gets designed but not built — add a short entry under the right heading
+   (`Deferred`, `Designed, not implemented`, or `Ideas`). Keep entries terse: enough
+   to act on later, not a full design doc (link out to a design-summary file if one
+   exists, as the WhatsApp Phase 1b entry does).
+
+**Don't** let this become a running commentary — a task that doesn't touch pending
+work or introduce new deferred work leaves `ROADMAP.md` untouched. And don't move
+shipped-history detail *into* CLAUDE.md's Gotchas/Critical-patterns sections just to
+avoid deleting it from ROADMAP.md — evergreen lessons belong there regardless of
+ROADMAP's lifecycle, but the "this is still pending" framing does not survive
+shipping.
+
+## 7. Hard rules (non-negotiable, not situational)
 
 - **Never bundle multiple versions on one branch.** One version per branch, one
   branch per PR, always.
@@ -179,7 +207,7 @@ implies a new version bump, which contradicts §3.
   inspecting or testing, even read-only exploration should stay mindful of which
   environment a given action targets.
 
-## 7. Known trigger phrases (already defined elsewhere — don't redefine)
+## 8. Known trigger phrases (already defined elsewhere — don't redefine)
 
 These phrases have specific, already-documented behavior — recognize them and act
 per CLAUDE.md, don't improvise a new interpretation:
@@ -196,7 +224,7 @@ per CLAUDE.md, don't improvise a new interpretation:
 
 ## When this skill doesn't apply
 
-Sections 1-7 govern the moment work is actually about to land in `src/` with intent
+Sections 1-8 govern the moment work is actually about to land in `src/` with intent
 to ship — pure exploration, reading code, or answering "how does X work" doesn't need
 the branch/PR machinery. **§0 (session bootstrap) is the exception: it's cheap by
 design and worth running even in a pure Q&A session**, since knowing whether you're
@@ -205,8 +233,10 @@ missing context is useful regardless of what the session turns into.
 **Tooling-only changes** (`.claude/` skills/settings/hooks, CI config, this file
 itself) that never touch `src/` don't get an `__APP_SIGNATURE__` bump or a
 REFACTOR_LOG entry — those two are specifically about the shipped app's version
-history, not the dev environment. §4-7 still apply in spirit (branch off main, PR,
-Patryk merges) — only §3's version bump and §5's log entry are skipped.
+history, not the dev environment. §4, §7, §8 still apply in spirit (branch off main,
+PR, Patryk merges) — only §3's version bump and §5's log entry are skipped. §6
+(ROADMAP.md upkeep) still applies regardless — a tooling-only change can still
+resolve or introduce pending work.
 
 **Worktree sessions:** it's fine to *explore, read, and edit* on a harness-created
 `claude/…` branch without renaming it first — that's the environment's own naming,
