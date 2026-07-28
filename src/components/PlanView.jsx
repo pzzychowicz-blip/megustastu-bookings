@@ -36,6 +36,7 @@ import { S, STATUS_COLORS, BLOCK_BG, hoursFor } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
+import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
 import { mkBtn } from "./atoms";
 
 // Neutral (free) table fill — theme tokens, matches the editor's look.
@@ -61,15 +62,27 @@ export const PlanView = memo(function PlanView({
   const todayStr = new Date().toISOString().slice(0, 10);
   const isToday = date === todayStr;
   const openM = (h.closed ? 13 : h.open) * 60;
-  const closeM = (h.closed ? 22 : h.close) * 60;
+  // v17.5.0: the upper bound is now GRID_CLOSE (one hour past closing), not
+  // CLOSE — matching the Timeline axis exactly, which is what lets TimeAxis
+  // reuse pct()/QUARTER_HOURS unchanged. It also lets you scrub into the tail
+  // where a late booking actually runs out, which the old slider couldn't reach.
+  const closeM = (h.closed ? 23 : h.gridClose) * 60;
 
-  // ── Time slider (defaults: now on today, opening time otherwise) ───────────
+  // ── Time scrubber (defaults: now on today, opening time otherwise) ─────────
+  // Absolute minutes-since-midnight, snapped to the NEAREST 15 — the rounding
+  // direction is load-bearing for the seated-start clamp in the occupancy scan
+  // below, so don't switch it to floor/ceil.
   const clampSlider = (m) => Math.max(openM, Math.min(closeM, Math.round(m / 15) * 15));
   const [slider, setSlider] = useState(() => clampSlider(isToday ? nowMins : openM));
   const [sliderTouched, setSliderTouched] = useState(false);
+  // v17.5.0: bumped ONLY at the programmatic scrub sites (date change, clock
+  // follow, the Now button) so TimeAxis re-centres then — and never yanks the
+  // strip while the user is scrolling it or tapping a block.
+  const [autoScrollKey, setAutoScrollKey] = useState(0);
+  const reCentre = () => setAutoScrollKey((k) => k + 1);
   // Re-anchor when the date changes; follow the clock on today until touched.
-  useEffect(() => { setSlider(clampSlider(isToday ? nowMins : openM)); setSliderTouched(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [date]);
-  useEffect(() => { if (isToday && !sliderTouched) setSlider(clampSlider(nowMins));   }, [nowMins]);
+  useEffect(() => { setSlider(clampSlider(isToday ? nowMins : openM)); setSliderTouched(false); reCentre(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [date]);
+  useEffect(() => { if (isToday && !sliderTouched) { setSlider(clampSlider(nowMins)); reCentre(); } }, [nowMins]);
   const atNow = isToday && Math.abs(slider - clampSlider(nowMins)) < 15;
 
   // ── Occupancy at the slider time ────────────────────────────────────────────
@@ -322,18 +335,27 @@ export const PlanView = memo(function PlanView({
       borderRadius: 20, border: "1px solid var(--tl-card-border)",
       padding: "10px 12px", boxShadow: "var(--shadow-soft)"
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+      {/* v17.5.0: readout + Now + legend on one row, the scrollable time-block
+          strip on its own row below. The strip is a SIBLING above the <svg>, so
+          it sits outside the svg's touchAction:"none" and never fights the
+          plan's pan/pinch gestures. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: S.text, fontVariantNumeric: "tabular-nums", minWidth: 46 }}>{toTime(slider)}</span>
-        <input type="range" min={openM} max={closeM} step={15} value={slider}
-          onChange={(e) => { setSliderTouched(true); setSlider(Number(e.target.value)); }}
-          style={{ flex: "1 1 160px", accentColor: "var(--accent)", minWidth: 120 }} />
         {isToday ? (
           <button className="mgt-hover-scale"
-            onClick={() => { setSliderTouched(false); setSlider(clampSlider(nowMins)); }}
+            onClick={() => { setSliderTouched(false); setSlider(clampSlider(nowMins)); reCentre(); }}
             style={mkBtn({ fontSize: 11, minHeight: 28, padding: "3px 10px", background: atNow ? S.accent : "var(--app-btn-grey)" })}>Now</button>
         ) : null}
         <span style={{ display: "inline-flex", gap: 4, marginLeft: "auto" }}>{legend}</span>
       </div>
+      {h.closed ? null : (
+        <TimeAxis
+          selected={slider}
+          onSelect={(m) => { setSliderTouched(true); setSlider(m); }}
+          nowMins={nowMins}
+          isToday={isToday}
+          autoScrollKey={autoScrollKey} />
+      )}
       {h.closed ? (
         <div style={{ textAlign: "center", padding: "10px 0", fontSize: 13, fontWeight: 700, color: "var(--warn-text)" }}>Closed on this day.</div>
       ) : null}
@@ -389,7 +411,7 @@ export const PlanView = memo(function PlanView({
         </svg>
       </div>
       <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 8, textAlign: "center" }}>
-        {"tap a table for its bookings · right-click / hold for quick status" + (gesturesEnabled ? " · scroll or pinch to zoom, drag to pan, double-tap to reset" : "")}
+        {"scrub the time strip above · tap a table for its bookings · right-click / hold for quick status" + (gesturesEnabled ? " · scroll or pinch to zoom, drag to pan, double-tap to reset" : "")}
       </div>
       {popover}
       {quick ? (

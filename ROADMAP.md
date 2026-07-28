@@ -47,6 +47,16 @@ session and keeping it in sync.
 
 ## Ideas
 
+- **Unify TimelineView's grid header with `TimeAxis`.** v17.5.0 added
+  `src/components/TimeAxis.jsx` for the Plan view, drawing the same 24px hour
+  strip / quarter ticks / centred hour pills / now marker as `TimelineView`'s
+  grid header — deliberately as a second implementation rather than a refactor,
+  because TimelineView's scroll-follow (`centerNow`'s fraction-per-frame loop),
+  FLIP reordering, drag-and-drop and zoom are heavily tuned and entangled with
+  that markup. Both now span OPEN…GRID_CLOSE and both use `pct()`, so the
+  extraction is straightforward whenever it's worth doing; the risk is all in
+  TimelineView, not in the shared piece.
+
 - **Extend the unsaved-changes guard to the remaining draft surfaces.**
   v17.5.0 guards the booking form, the walk-in form and `ManualModal`. Still
   unguarded, by explicit scope decision: the **reminder editor** (`ReminderEditor`

@@ -5724,3 +5724,67 @@ silently; dirty ones prompt via Esc, the Cancel button, and the backdrop; "Keep
 editing" returns with the draft intact; Discard closes and the edit is genuinely
 not applied; `beforeunload` is armed only while something is dirty and disarms
 after save or discard; `openEdit`'s different object shape produces no false dirty.
+
+### Commit 2 — Plan view: time blocks replace the slider
+
+**Files:** `src/components/TimeAxis.jsx` (new), `src/components/PlanView.jsx`,
+`index.html` (one hover rule), `CLAUDE.md`, `ROADMAP.md`.
+**Bundle:** 663.14 kB / **188.91 kB gz** (+0.80 kB gz over commit 1).
+
+**Origin.** The Plan view scrubbed time with an `<input type="range">`. It read
+nothing like the timeline grid staff already know, gave no sense of *where* in
+the service you were, and its ~6px thumb is a poor tablet target.
+
+**The range now matches the Timeline exactly — and that is the whole trick.**
+The strip spans `OPEN … GRID_CLOSE`, not `OPEN … CLOSE` as the slider did. Because
+the spans are identical, `TimeAxis` reuses **`pct()` and `QUARTER_HOURS`
+unchanged** — no range-parametrised variant of `pct` was needed, which was the
+main risk this change carried — and a block lines up tick-for-tick with the same
+minute on the timeline. The extra hour is independently useful: it's where a late
+booking actually runs out, and the slider could never reach it. `clampSlider`'s
+upper bound moved with it; its round-to-**nearest**-15 is untouched, because the
+seated-start clamp in the occupancy scan depends on that direction.
+
+**Fixed scale, no zoom controls** — 44px per 15-minute block (the app's
+tap-target floor, the same `minHeight:44` every action button uses), so a
+13:00–23:00 day is ~1760px and scrolls. Plan already owns a pinch-zoom on the
+floor SVG; a second zoom concept in the same view would be a UX hazard.
+
+**Two things found by looking at it on the dev server, not by reading the code:**
+1. *The strip was invisible.* A flat row of 44px cells with hairline dividers and
+   `--bg-soft` reads as an empty bar in dark mode. Fixed with alternating hour
+   BANDS plus a faint hour label on each hour's first block, so you can find a
+   time without selecting one.
+2. *It animated in from the wrong end.* With `scrollTo({behavior:"smooth"})` the
+   first paint showed the far right of the strip and then slid ~1.5s to the
+   selection — measured: `scrollLeft` 1456 settling to 391. Now
+   `useLayoutEffect` + an instant `scrollLeft`, so a programmatic re-centre is
+   simply already there. Verified exact afterwards: 17:36 wall clock → 17:30
+   selected → `scrollLeft` 391 = computed 391.
+
+**Re-centring is opt-in per site.** `autoScrollKey` is bumped ONLY at the
+programmatic scrub sites (date change, the clock-follow tick, the Now button) —
+never on a block tap or a user scroll, because yanking the strip out from under a
+finger is what makes a scrubber feel broken.
+
+**The Now button is preserved verbatim** (`setSliderTouched(false)` **and**
+`setSlider(clampSlider(nowMins))`, today-only, accent background at `atNow`); it
+only gains the re-centre call.
+
+**`TimeAxis` is module-scope and deliberately NOT memo'd.** Module scope because
+PlanView has no other sub-components and an inline one would remount ~40 tick
+divs on every 15s tick. Not memo'd because it reads the live `OPEN`/`GRID_CLOSE`/
+`QUARTER_HOURS` bindings that `React.memo` cannot see — the repaint gating
+belongs one level up, in its memo'd parent, which already takes `hoursSig`.
+
+**Not done, on purpose:** refactoring `TimelineView` to consume `TimeAxis`. Its
+scroll-follow, FLIP, drag-and-drop and zoom are heavily tuned and entangled with
+that markup; the two implementations now share a span and `pct()`, so the
+extraction is easy whenever it's worth the risk. → `ROADMAP.md` *Ideas*.
+
+**Verified on DEV:** blocks run to the day's `gridClose` (01:45 on the DEV day's
+13:00–01:00 hours); tapping a block moves the readout and repaints occupancy —
+a 22:15 booking fills table 1A amber at 22:15 and frees it at 21:00, in the tail
+the old slider couldn't reach; the Now button re-centres exactly and re-arms
+clock-following; the plan's own pinch/pan still works (the strip is a sibling
+ABOVE the `<svg>`, outside its `touchAction:"none"`).

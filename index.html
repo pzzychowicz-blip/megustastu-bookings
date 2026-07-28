@@ -328,6 +328,15 @@
       @media (hover: hover) and (pointer: fine) {
         .mgt-ac-row:hover { background-color: var(--bg-ac-hover); }
       }
+      /* v17.5.0: TimeAxis quarter-blocks (the Plan view's time strip). Same
+         reasoning as .mgt-ac-row — a tint, NOT a .mgt-hover-scale: these cells
+         are a contiguous grid, so scaling one would overlap its neighbours.
+         The hover-capability guard keeps iOS from leaving the last-tapped
+         block stuck highlighted (the v15.1.0 sticky-hover lesson). */
+      .mgt-timeaxis-cell { transition: background-color 140ms ease, color 140ms ease; }
+      @media (hover: hover) and (pointer: fine) {
+        .mgt-timeaxis-cell:hover { background-color: var(--bg-ac-hover); color: var(--text-primary); }
+      }
       @media (hover: hover) and (pointer: fine) {
         .mgt-hover-scale:hover:not(:disabled) {
           transform: scale(1.08);
