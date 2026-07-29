@@ -62,6 +62,16 @@ export function useKeyboardShortcuts(ctx){
       const K=kbRef.current;const k=e.key;const typing=isTyping(e.target);
       // ── Escape: close topmost modal (checked in visual z-order) ──
       if(k==="Escape"){
+        // v17.5.0 correction: the split-setup popup sits at z=300, above even
+        // the discard confirm, so it goes first. It has no Cancel button by
+        // design — the scrim click and this branch are the two ways out.
+        if(K.splitMenuFor){e.preventDefault();K.setSplitMenuFor(null);return;}
+        // v17.5.0: the discard confirm is topmost whenever it's up (z=260) —
+        // Esc dismisses it and returns you to the form you were editing, which
+        // is the safe direction. It must be FIRST: the surfaces below it are
+        // exactly the ones that raised it, so any earlier branch would close
+        // the form out from under the confirm.
+        if(K.confirmDiscard){e.preventDefault();K.setConfirmDiscard(null);return;}
         // v14 p7: reminderEditor sits above Settings (z=250). Close it first.
         if(K.reminderEditor){e.preventDefault();K.setReminderEditor(null);return;}
         // v14 p7 fix: delete-confirm renders above Settings in DOM order.
@@ -78,10 +88,16 @@ export function useKeyboardShortcuts(ctx){
         // v16.3.0 correction: Esc dismisses the search panel (its "Done" button).
         if(K.showSearch){e.preventDefault();K.setShowSearch(false);return;}
         if(K.blockTarget){e.preventDefault();K.setBlockTarget(null);return;}
-        if(K.manualTarget){e.preventDefault();K.setManualTarget(null);return;}
-        if(K.showWalkin){e.preventDefault();K.setShowWalkin(false);return;}
+        // v17.5.0: these three hold user drafts, so Esc goes through the GUARDED
+        // close (clean → closes as before; dirty → raises the discard confirm).
+        // This chain calls the setters directly and never touches the modals'
+        // onClose props, so it has to be guarded here in its own right —
+        // routing the mount-site onClose alone would leave Esc a silent
+        // back door straight past the guard.
+        if(K.manualTarget){e.preventDefault();K.requestCloseManual();return;}
+        if(K.showWalkin){e.preventDefault();K.requestCloseWalkin();return;}
         if(K.showWeek){e.preventDefault();K.setShowWeek(false);return;}
-        if(K.showForm){e.preventDefault();K.setShowForm(false);return;}
+        if(K.showForm){e.preventDefault();K.requestCloseForm();return;}
         // v17.3.1: nothing modal is open — Esc drops the List selection (the
         // keyboard counterpart of clicking neutral space). LAST in the chain, so
         // Esc still closes a modal first when one is up.
@@ -92,6 +108,10 @@ export function useKeyboardShortcuts(ctx){
       if(k==="Enter"){
         // In a textarea Enter always inserts a newline — never save.
         if(typing&&e.target.tagName==="TEXTAREA") return;
+        // v17.5.0: discard confirm is topmost — Enter takes its primary action,
+        // matching confirmDel / confirmCancel / confirmReminderDel. Esc (above)
+        // is the "keep editing" escape hatch.
+        if(K.confirmDiscard){e.preventDefault();K.doDiscard();return;}
         // v14 p7: reminderEditor is topmost when open — save if draft is valid.
         if(K.reminderEditor){
           if(!validateReminderDraft(K.reminderEditor.draft)){
@@ -223,7 +243,7 @@ export function useKeyboardShortcuts(ctx){
       // ── Global shortcuts: suppressed while any modal is open ──
       // WA sandbox: the four WhatsApp surfaces join the modal set so I/X and the
       // other letter keys stay inert while the Inbox/Simulator is up.
-      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel||K.showInbox||K.confirmArchive||K.confirmDeleteConv||K.showSim;
+      const anyModal=K.splitMenuFor||K.confirmDiscard||K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel||K.showInbox||K.confirmArchive||K.confirmDeleteConv||K.showSim;
       if(anyModal) return;
       // v16.3.0: "/" opens the global booking search (typing guard above keeps it
       // out of form fields; anyModal guard keeps it from re-firing while open).
@@ -257,8 +277,12 @@ export function useKeyboardShortcuts(ctx){
         }
       }
       // v17.0.0: three views — slide direction follows the view order (T·L·P).
+      // v17.5.0: T/L/P delegate to App's pickView (passed as K.goView) — the
+      // ONE place that knows the split rules (replace the focused pane, or swap
+      // when that view is already in the other one). The local fallback keeps
+      // the original single-view behaviour if the ctx ever lacks it.
       const VIEW_ORD=["timeline","list","plan"];
-      const goView=function(v){if(K.view!==v){K.bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(K.view)?"mgt-view-in-right":"mgt-view-in-left");}K.setView(v);};
+      const goView=K.goView||function(v){if(K.view!==v){K.bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(K.view)?"mgt-view-in-right":"mgt-view-in-left");}K.setView(v);};
       if(k==="t"||k==="T"){e.preventDefault();goView("timeline");return;}
       if(k==="l"||k==="L"){e.preventDefault();goView("list");return;}
       if(k==="p"||k==="P"){e.preventDefault();goView("plan");return;}
@@ -314,7 +338,7 @@ export function useKeyboardShortcuts(ctx){
     function onDown(e){
       const K=kbRef.current;
       if(K.view!=="list"||!K.selectedListId) return;
-      const anyModal=K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
+      const anyModal=K.splitMenuFor||K.confirmDiscard||K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
       if(anyModal) return;
       const t=e.target;
       if(t&&t.closest&&t.closest("[data-flip-id]")) return; // inside a card (incl. its buttons)

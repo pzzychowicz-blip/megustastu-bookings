@@ -48,6 +48,7 @@
 
 import { useState } from "react";
 import { KITCHEN_TABLE_LIMIT, hoursFor } from "../lib/constants";
+import { sameDraft } from "../lib/drafts";
 import {
   getDur, genId, histEntry, nowTime, getKitchenLoad
 } from "../lib/booking-logic";
@@ -70,6 +71,16 @@ export function useWalkin({
     let max=0;bookings.forEach(function(b){if(b.date===today&&b.name&&b.name.indexOf("Walk-in ")===0){const n=parseInt(b.name.slice(8));if(n>max) max=n;}});
     return max+1;
   }
+  // v17.5.0 (unsaved-changes guard): the draft this form was OPENED with.
+  // `walkinDirty` below diffs the live draft against it, so an untouched form
+  // closes silently and only real edits raise the discard confirm. Every write
+  // to walkinForm AFTER open is a user edit, so this is set in openWalkin only.
+  // STATE, not a ref: it is read during render to produce a rendered value, so
+  // a ref would be both a lint error and the wrong tool (a ref change wouldn't
+  // repaint). It only ever changes when the form opens, so the extra state
+  // costs nothing.
+  const [walkinBaseline, setWalkinBaseline] = useState(null);
+
   // v17.0.0: optional table pre-select — the Plan view's "Walk-in here" passes
   // the tapped table's id. STRING-guarded because the header button wires
   // onClick={openWalkin}, which passes the click event as the first arg.
@@ -79,7 +90,9 @@ export function useWalkin({
     // the table BEFORE the form, so editing the guest count must NOT deselect
     // it (WalkinForm's size steppers keep `tables` when the flag is set; the
     // normal Walk-in-button path keeps the old reset-on-size-change).
-    setWalkinForm({size:defaultWalkinSize,notes:"",tables:pre,time:nowTime(),customDur:null,_pre:pre.length>0});
+    const fresh={size:defaultWalkinSize,notes:"",tables:pre,time:nowTime(),customDur:null,_pre:pre.length>0};
+    setWalkinBaseline(fresh);
+    setWalkinForm(fresh);
     setWalkinError("");setShowWalkin(true);
   }
   // doSaveWalkin: actual write. Builds a sanitised booking object with
@@ -112,10 +125,14 @@ export function useWalkin({
     setConfirmKitchen(null);doSaveWalkin();
   }
 
+  // v17.5.0: does closing this form lose work? False whenever the form is shut
+  // (a stale draft behind a closed modal must never arm the beforeunload guard).
+  const walkinDirty=showWalkin&&!sameDraft(walkinForm,walkinBaseline);
+
   return {
     showWalkin, setShowWalkin,
     walkinForm, setWalkinForm,
-    walkinError,
+    walkinError, walkinDirty,
     getNextWalkinNum,
     openWalkin, saveWalkin, doSaveWalkin,
   };

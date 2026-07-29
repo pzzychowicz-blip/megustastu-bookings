@@ -38,7 +38,10 @@ export function useWhatsApp({
   bookings,
   setWriteWarning,
   // form / view handoff setters (BookingApp-owned):
-  setForm, setEditId, setError, setSwapAffected, setViewDate,
+  // openForm (NOT setForm) — it seeds prod's v17.5.0 formBaseline alongside the
+  // draft, so an untouched WA-prefilled form still closes without the
+  // unsaved-changes confirm. Every form-open below must go through it.
+  openForm, setEditId, setError, setSwapAffected, setViewDate,
   setShowForm, setConfirmCancel,
   // inbox-shell UI setters (BookingApp-owned):
   setShowInbox, setConfirmArchive, setConfirmDeleteConv, setReturnToInboxKey,
@@ -293,7 +296,7 @@ export function useWhatsApp({
     // Seating preference from the parsed message (indoor/outdoor); "auto" when
     // the customer didn't state one — the default. (See mergeDraft / mockParse.)
     const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : "auto";
-    setForm(Object.assign({}, EMPTY_FORM, { name: prefilledName, phone: prefilledPhone, date, time, size, preference, notes: d.notes || "", status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }));
+    openForm(Object.assign({}, EMPTY_FORM, { name: prefilledName, phone: prefilledPhone, date, time, size, preference, notes: d.notes || "", status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }));
     setEditId(null); setError(""); setSwapAffected(null);
     draftSourceRef.current = conv.phoneKey;
     setReturnToInboxKey(conv.phoneKey);
@@ -407,7 +410,7 @@ export function useWhatsApp({
     if (!conv || !conv.acceptedBookingId) return;
     const booking = bookings.find((b) => b.id === conv.acceptedBookingId);
     if (!booking) return;
-    setForm(Object.assign({}, EMPTY_FORM, {
+    openForm(Object.assign({}, EMPTY_FORM, {
       name: booking.name || "", phone: booking.phone || "+", date: booking.date || "", time: booking.time || "13:00",
       size: booking.size || 2, preference: booking.preference || "auto", notes: booking.notes || "", status: booking.status || "confirmed",
       customDur: booking.customDur || null, manualTables: [], preferredTables: Array.isArray(booking.preferredTables) ? booking.preferredTables.slice() : [], returnOf: null,
@@ -434,7 +437,7 @@ export function useWhatsApp({
     // A modify request that states a seating area overrides the booking's current
     // preference; otherwise ("auto"/unset) keep what the booking already had.
     const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : (booking.preference || "auto");
-    setForm(Object.assign({}, EMPTY_FORM, {
+    openForm(Object.assign({}, EMPTY_FORM, {
       name: booking.name || "", phone: booking.phone || "+", date, time, size,
       preference, notes: booking.notes || "", status: booking.status || "confirmed",
       customDur: booking.customDur || null, manualTables: [], preferredTables: Array.isArray(booking.preferredTables) ? booking.preferredTables.slice() : [], returnOf: null,

@@ -5569,3 +5569,543 @@ bundle. Rolling-safe — no Firebase rules/shape change.
 app that a revert cannot undo. Treat registering one as a one-way door, and
 never ship a PROD-only code path to the restaurant's devices without a way to
 run it on one first.
+
+---
+
+## v17.4.2 — App icons: the v2 "booking blocks" mark replaces the wordmark tile (2026-07-25)
+
+**Scope:** the PWA/browser icon family in `public/` + its generator. No app code
+beyond the version bump — no Firebase rules, shape, or behaviour change.
+
+**Files:** `scripts/gen-icons.py` (rewritten), `public/icon.svg`,
+`public/favicon.svg`, `public/icon-192.png`, `public/icon-512.png`,
+`public/apple-touch-icon.png`, `public/icon-maskable-512.png`, `index.html`,
+`public/manifest.webmanifest`, `src/App.jsx` (version), `CLAUDE.md`.
+
+**The mark.** v17.4.0's generated `MGT`/`Bookings` wordmark on an OKLCH rainbow
+sweep is replaced by the design review's option **2a** — three rounded booking
+blocks (accent blue · confirmed amber · seated green) on the frosted-glass tile
+the interface itself is built from. The blocks are a slice of the app's own
+timeline, and the ragged 8 / 15 / 8 left offsets are load-bearing: an asymmetric
+silhouette is what stops it reading as a hamburger menu at 16px. Source assets
+came from the `Logo Approaches` design project (`brand/icon-v2.svg` et al).
+
+**Type is outlined — trivially, because there is no type left.** The family now
+contains zero glyphs, so the v17.4.0 hazard (an SVG `<text>` with `font-family`
+resolving to a different face on every non-Apple platform) cannot recur. The
+gotcha row stays: if type ever returns to the icon it must be converted to
+paths, and the conversion is recoverable from git history at v17.4.1.
+
+**`scripts/gen-icons.py` rewritten, and it now RUNS ON LINUX.** The old script
+needed macOS (`/System/Library/Fonts/SFNS.ttf`) plus fontTools, so it could not
+be executed in a container or on CI — which is exactly how a design and its
+"single source of truth" drift apart. With no type to set, the fontTools /
+SF Pro / OKLCH machinery is gone; what remains is geometry authored on the
+design's 64-unit construction grid plus Playwright rasterisation, needing only
+`pip install playwright pillow`. It was **run in this Linux container to produce
+the shipped bytes**, and its `icon.svg` output is **byte-identical** to the
+design tool's `brand/icon-v2.svg` export — so "the generator reproduces what
+ships" is verifiable rather than asserted. `MGT_CHROMIUM` optionally points it
+at a system Chromium when the pip Playwright's own build is unavailable.
+
+**Per-variant cuts** (each one exists for a platform reason, not for symmetry):
+- `icon.svg` / `favicon.svg` — the rounded tile (rx 116), transparent corners.
+  The favicon is the SAME cut as the app icon: three bars carry no fine detail,
+  so unlike the v17.4.0 wordmark it needs no small-size variant, and one file
+  means the tab and the home screen can never show different marks.
+- `apple-touch-icon.png` — 180px, square, full-bleed, **RGB with no alpha
+  channel at all**. iOS rounds this tile itself and renders transparency BLACK,
+  so the gradient's 98%-opaque first stop sits on a solid base rather than
+  relying on the compositor.
+- `icon-maskable-512.png` — 512px, full-bleed, bars scaled to the centre 80%.
+  Verified geometrically: the furthest bar corner lands ~196px from centre,
+  inside the 204.8px safe radius, so no launcher shape can clip a bar end.
+
+**Cache-busting.** `?v=17.4.2` on `/favicon.svg`, `/manifest.webmanifest` and
+`/apple-touch-icon.png` in `index.html`, and on all four `icons[].src` entries
+in the manifest — a filename is otherwise cached for up to a year. There is no
+service worker to invalidate: `public/sw.js` remains the v17.4.1 kill switch,
+**unchanged**, and nothing registers a worker.
+
+**Known limitation, stated rather than fixed:** an existing **iOS home-screen
+shortcut keeps the tile the OS snapshotted when it was added**. No query string
+changes that — iOS never re-reads the icon for an installed shortcut, so those
+devices need remove + re-add. Browser tabs, Android, and fresh installs all pick
+the new mark up on a normal refresh.
+
+**Untouched:** `public/icons.svg` (an unrelated, unreferenced sprite) and
+`public/sw.js`.
+
+**Verification:** `npm run build` clean; icon family confirmed live on the dev
+server — favicon in the tab, `/manifest.webmanifest` resolving with the new
+`?v=` hrefs, and all four PNGs loading at their URLs with the expected
+dimensions and alpha characteristics.
+
+---
+
+## v17.5.0 — Unsaved-changes guard · Plan time strip · lockable nav · Split View (2026-07-28)
+
+Four staff-facing workflow features on one branch, one PR, **one commit each**.
+Every one of them is **off by default**, so an untouched install behaves exactly
+as v17.4.2 did. This entry is extended by each commit as it lands — per the
+one-version-one-entry rule, there is no second dated section for the later three.
+
+**Bundle baseline for the version:** `main` at v17.4.2 = 657.86 kB / **187.42 kB
+gz** (main chunk). Each commit records its own delta below.
+
+### Commit 1 — unsaved-changes guard
+
+**Files:** `src/lib/drafts.js` (new), `tests/drafts.test.js` (new),
+`src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`, `src/hooks/useWalkin.js`,
+`src/components/ManualModal.jsx`, `CLAUDE.md`.
+**Bundle:** 660.50 kB / **188.11 kB gz** (+0.69 kB gz).
+**Tests:** 88 pass (75 existing + 13 new). Lint 0 errors (39 warnings = the
+unchanged pre-existing baseline). Build clean.
+
+**Origin.** Nothing in the app warned before losing a draft — there was no
+`beforeunload` listener anywhere in the repo, and on the tablets a mis-tap on the
+modal scrim discarded a half-typed booking silently. Three surfaces hold real
+drafts: the booking form, the walk-in form, and `ManualModal`'s table selection.
+
+**Baseline-snapshot dirtiness, not a blanket "touched" flag.** Each surface
+snapshots the draft it was OPENED with and diffs the live state against it
+(`sameDraft`, `src/lib/drafts.js`). An untouched form must close **silently** —
+a confirm on every Cancel trains staff to tap straight through it, which is worse
+than no guard at all. `sameDraft` is deliberately not `JSON.stringify` equality:
+key ORDER differs between `openEdit`'s object literal and `openNew`'s
+`Object.assign` spread; `<input type="number">` returns a STRING so a size typed
+back to "2" would read dirty forever; `customDur: null` and `deposit: ""` are the
+same nothing; and the table arrays are sets in spirit, so re-ordering picks is not
+an edit. Values normalise to strings, arrays sort, and null/undefined/""/false all
+collapse to "".
+
+**`openForm` is the only door.** The booking form's baseline is set by ONE helper
+that all four open paths (`openNew` / `openEdit` / `bookAgain` /
+`bookFromWaitlist`) route through, so the baseline can never drift out of step
+with them. Every *other* `setForm` call is a user edit and deliberately does not
+touch it — that is the whole signal. Same shape in `useWalkin` (`openWalkin`
+only). Both baselines are **state, not refs**: they are read during render to
+derive a rendered value, so a ref would be the wrong tool *and* a lint error.
+`ManualModal` keeps its picks internally and REPORTS dirtiness up via a new
+`onDirty` prop, with an unmount-only cleanup firing `onDirty(false)` so a closed
+modal can never leave the parent's flag — and therefore `beforeunload` — armed.
+
+**The Esc chain was the trap.** `useKeyboardShortcuts` calls `K.setShowForm(false)`
+/ `setShowWalkin` / `setManualTarget` **directly** and never touches the modals'
+`onClose` props, so routing the mount-site `onClose` alone would have left Esc a
+silent back door straight past the guard. All three Esc branches now call
+`requestClose*`. Mobile needed no extra work for the opposite reason: `Overlay`'s
+`mob` branch (`<600px`) renders no scrim at all, so the Cancel button — which
+already calls `onClose` — is the only way out there.
+
+**Deliberately unguarded:** the closes that already represent a decision — both
+`doSave` success paths, `addFormToWaitlist`, `addWalkinToWaitlist`, the
+cancel-booking confirm, and `doSaveWalkin`. Verified live: saving a booking closes
+with no prompt and disarms `beforeunload`.
+
+**"Keep editing" is slate, not `BTN.cancel`.** The footer is otherwise modelled on
+`delModal`, but `--btn-cancel` is RED — in this app's vocabulary "cancel" means
+cancel the BOOKING. `delModal` can afford that (its safe option is literally
+called Cancel); here a red safe-option next to a red Discard reads as two danger
+buttons, i.e. exactly the mis-tap this feature exists to prevent. It uses
+`--app-btn-slate`, the house token for a neutral dialog secondary
+(cf. `confirmKitchen`'s "Back").
+
+**Stacking.** The one shared discard modal is wrapped in a `position:relative;
+z-index:260` div rather than depending on DOM order — it must paint above the
+three z-200 `Overlay`s it guards, and `position:fixed` still anchors to the
+viewport inside a plain relative/z-index ancestor (only transform/filter/
+perspective would break that). Esc dismisses it FIRST in the chain (returning to
+the form is the safe direction); Enter takes Discard, matching the other confirms.
+It is also added to both `anyModal` guards so letter shortcuts can't fire beneath it.
+
+**Verified on the DEV dev server**, all paths: untouched form/walk-in/manual close
+silently; dirty ones prompt via Esc, the Cancel button, and the backdrop; "Keep
+editing" returns with the draft intact; Discard closes and the edit is genuinely
+not applied; `beforeunload` is armed only while something is dirty and disarms
+after save or discard; `openEdit`'s different object shape produces no false dirty.
+
+### Commit 2 — Plan view: time blocks replace the slider
+
+**Files:** `src/components/TimeAxis.jsx` (new), `src/components/PlanView.jsx`,
+`index.html` (one hover rule), `CLAUDE.md`, `ROADMAP.md`.
+**Bundle:** 663.14 kB / **188.91 kB gz** (+0.80 kB gz over commit 1).
+
+**Origin.** The Plan view scrubbed time with an `<input type="range">`. It read
+nothing like the timeline grid staff already know, gave no sense of *where* in
+the service you were, and its ~6px thumb is a poor tablet target.
+
+**The range now matches the Timeline exactly — and that is the whole trick.**
+The strip spans `OPEN … GRID_CLOSE`, not `OPEN … CLOSE` as the slider did. Because
+the spans are identical, `TimeAxis` reuses **`pct()` and `QUARTER_HOURS`
+unchanged** — no range-parametrised variant of `pct` was needed, which was the
+main risk this change carried — and a block lines up tick-for-tick with the same
+minute on the timeline. The extra hour is independently useful: it's where a late
+booking actually runs out, and the slider could never reach it. `clampSlider`'s
+upper bound moved with it; its round-to-**nearest**-15 is untouched, because the
+seated-start clamp in the occupancy scan depends on that direction.
+
+**Fixed scale, no zoom controls** — 44px per 15-minute block (the app's
+tap-target floor, the same `minHeight:44` every action button uses), so a
+13:00–23:00 day is ~1760px and scrolls. Plan already owns a pinch-zoom on the
+floor SVG; a second zoom concept in the same view would be a UX hazard.
+
+**Two things found by looking at it on the dev server, not by reading the code:**
+1. *The strip was invisible.* A flat row of 44px cells with hairline dividers and
+   `--bg-soft` reads as an empty bar in dark mode. Fixed with alternating hour
+   BANDS plus a faint hour label on each hour's first block, so you can find a
+   time without selecting one.
+2. *It animated in from the wrong end.* With `scrollTo({behavior:"smooth"})` the
+   first paint showed the far right of the strip and then slid ~1.5s to the
+   selection — measured: `scrollLeft` 1456 settling to 391. Now
+   `useLayoutEffect` + an instant `scrollLeft`, so a programmatic re-centre is
+   simply already there. Verified exact afterwards: 17:36 wall clock → 17:30
+   selected → `scrollLeft` 391 = computed 391.
+
+**Re-centring is opt-in per site.** `autoScrollKey` is bumped ONLY at the
+programmatic scrub sites (date change, the clock-follow tick, the Now button) —
+never on a block tap or a user scroll, because yanking the strip out from under a
+finger is what makes a scrubber feel broken.
+
+**The Now button is preserved verbatim** (`setSliderTouched(false)` **and**
+`setSlider(clampSlider(nowMins))`, today-only, accent background at `atNow`); it
+only gains the re-centre call.
+
+**`TimeAxis` is module-scope and deliberately NOT memo'd.** Module scope because
+PlanView has no other sub-components and an inline one would remount ~40 tick
+divs on every 15s tick. Not memo'd because it reads the live `OPEN`/`GRID_CLOSE`/
+`QUARTER_HOURS` bindings that `React.memo` cannot see — the repaint gating
+belongs one level up, in its memo'd parent, which already takes `hoursSig`.
+
+**Not done, on purpose:** refactoring `TimelineView` to consume `TimeAxis`. Its
+scroll-follow, FLIP, drag-and-drop and zoom are heavily tuned and entangled with
+that markup; the two implementations now share a span and `pct()`, so the
+extraction is easy whenever it's worth the risk. → `ROADMAP.md` *Ideas*.
+
+**Verified on DEV:** blocks run to the day's `gridClose` (01:45 on the DEV day's
+13:00–01:00 hours); tapping a block moves the readout and repaints occupancy —
+a 22:15 booking fills table 1A amber at 22:15 and frees it at 21:00, in the tail
+the old slider couldn't reach; the Now button re-centres exactly and re-arms
+clock-following; the plan's own pinch/pan still works (the strip is a sibling
+ABOVE the `<svg>`, outside its `touchAction:"none"`).
+
+### Commit 3 — lockable navigation (the `shellFixed` shell)
+
+**Files:** `src/App.jsx`, `src/components/atoms.jsx` (`SlideView` `fill`),
+`src/components/Settings.jsx`, `CLAUDE.md`.
+**Bundle:** 663.94 kB / **189.13 kB gz** (+0.22 kB gz over commit 2).
+
+**Origin.** `<body>` is the scrollport, so on a long List the view buttons, the
+date and `+ New` all scroll off the top and staff have to scroll back up to do
+anything.
+
+**One mechanism, deliberately shared with Split View.** `shellFixed` turns the
+shell into a `height:100dvh; overflow:hidden` flex COLUMN: width-clamp div
+`flex:1;minHeight:0`, header + date rows `flexShrink:0` (pinned), and ONE inner
+region `flex:1;minHeight:0;overflowY:auto` holding the banners and the view.
+Commit 4 widens the flag to `navLocked || !!split` rather than inventing a second
+layout — the two features want exactly the same thing, and only one of them
+should own how it's done.
+
+**Both contributing settings default OFF, and that is verified, not assumed:**
+with the toggle off the outer div measures `display:block`, `overflow:visible`,
+`minHeight:819px` and `<body>` still scrolls — the v17.4.2 layout exactly.
+
+**Two things the structure forced:**
+1. *A separate body-overflow effect.* `<body>` must stop scrolling in fixed mode
+   or the page grows a second scrollbar outside the shell. It can't go in the
+   existing mount-once effect: that effect is declared ~250 lines before
+   `navLocked` exists, so putting `navLocked` in its dep array is a TDZ error
+   (the array is evaluated during render, unlike the body).
+2. *`SlideView` needed a `fill` prop.* It emits a bare `<div>` that collapses to
+   content height inside a flex column. Opt-in, so every existing call site is
+   untouched.
+
+**Scope, as chosen:** header + date-nav pinned; the banners scroll away with the
+content. Several banners open at once (the late banner alone can be 3+ rows)
+would otherwise eat the viewport.
+
+**Honest about the phone case.** Measured at 375×812: the wrapped header, date
+row, Summary and the 🔍/⚙ row pin ~630px of 812, leaving ~250px of content. The
+setting is per-device and off by default, and its Settings copy now says so
+plainly ("Best on a tablet or desktop — on a phone those rows wrap and can take
+most of the screen") rather than the vaguer "costs some height".
+
+**Storage convention is INVERTED here.** The house rule is "key absent =
+default", and the default is OFF, so `localStorage["mgt-nav-lock"]` stores only
+`"1"` (on) and removes the key for off — the mirror image of `planGestures`.
+
+**Verified on DEV:** with the lock on, the header and date rows measure
+`flex 0 0 auto` and do not move while the inner region scrolls; `<body>` is
+`overflow:hidden` with `scrollTop` pinned at 0 (no double scrollbar); a
+"Booking saved." toast still renders below the pinned nav and inside the
+viewport; the Settings toggle flips the whole shell live, with no reload.
+
+### Commit 4 — Split View
+
+**Files:** `src/components/ViewSwitcher.jsx`, `src/components/SplitLayout.jsx`,
+`src/components/SplitMenu.jsx` (all new), `src/App.jsx`,
+`src/hooks/useKeyboardShortcuts.js`, `src/components/Settings.jsx`, `CLAUDE.md`.
+**Bundle:** 672.13 kB / **191.45 kB gz** (+2.32 kB gz over commit 3;
+**+4.03 kB gz for the whole version** vs v17.4.2's 187.42).
+
+**What it is.** Two of Timeline/List/Plan at once, side by side or top/bottom.
+Opened by right-clicking (desktop) or pressing-and-holding 450ms (touch) a view
+button — the same "hold for more" gesture the timeline and plan already use, so
+there's one idiom in the app rather than two. Three-step popup: add → direction →
+which second view. Per-device master toggle in Settings → General, **default off**,
+and while off the gesture is completely inert.
+
+**It rides commit 3's `shellFixed` rather than adding a layout.** Two
+independently-scrolling panes need a definite height, which is exactly what the
+fixed shell provides — so the flag simply widened to `navLocked || !!split`.
+Stated consequence: a split pins the nav whether or not "Lock navigation" is on,
+and with a split the banners pin too (a `flex:1` child of an `overflowY:auto`
+parent resolves to CONTENT height, which would collapse a top/bottom split).
+
+**The same view can never occupy both panes**, and that is correctness rather
+than tidiness: `timelineZoom` / `timelineScrollRef` / `followNow` /
+`selectedListId` / `showFinished` are singletons in App, so two instances of one
+view would fight over them. Enforced in two places — SplitMenu step 3 offers only
+the two remaining views, and a plain tap on a view button replaces the FOCUSED
+pane, swapping instead when that view is already in the other one.
+
+**All three views are now built unconditionally** (a `viewEl` map) because a
+split mounts two. `createElement` without mounting is free, `planView` was
+already built this way, and every prop is a value or a stable `VA` wrapper — so
+no new plumbing.
+
+**The gesture's hard part was cancelling the hold, not starting it.** SplitMenu
+portals its scrim to `<body>`, *above* the button, so once it opens the button's
+own `pointerup` may never fire — the exact class of bug CLAUDE.md records from
+v17.0.0 round 8. The hold timer is therefore cleared from **window-level**
+`pointerup`/`pointercancel` listeners installed for the life of the press, plus
+the usual >8px move cancel; `didLongRef` swallows the trailing click.
+
+**Keyboard follows the focused pane.** App passes `view: activeView`
+(`split[focusedPane]`) into `useKeyboardShortcuts`, so S/C, ↑/↓, the zoom keys
+and the list-deselect all target the right half without editing each branch;
+T/L/P delegate to App's `pickView` through a new `K.goView`, keeping the split
+rules in one place. Deliberately NO Esc branch for split — that chain is already
+16 deep and dropping a deliberate layout on Esc would be surprising; ✕ is the exit.
+
+**A bug worth recording: `activeView` blanked the app.** It was first declared
+next to the other split handlers, ~400 lines BELOW the `useKeyboardShortcuts`
+call that consumes it. The handlers are function declarations and hoist; a
+`const` does not — it throws a TDZ ReferenceError, which rendered nothing but a
+generic "An error occurred in \<BookingApp\>". **Lint and `npm run build` both
+passed.** Only running the app caught it. → new Gotchas row.
+
+**Extras beyond the brief** (all four requested, plus the two named buttons):
+draggable divider committing its ratio on pointer-UP only (so localStorage isn't
+written per animation frame) with double-click reset to 50/50; the split
+persisted per device and restored on load, validated hard so a hand-edited key
+returns `null` rather than wedging the layout; a focused-pane accent ring, set
+from a CAPTURE-phase pointerdown so a child that stops propagation can't swallow
+it; and an explicit ✕ exit. `setPointerCapture` on the divider is safe — it has
+no child click targets, which is the actual condition behind the kills-click
+gotcha.
+
+**Verified on DEV, every path:** all three pairs × both directions; the wizard
+offers only the two remaining views; swap, direction and ✕ all work and persist;
+the divider drag commits (ratio 0.37) and survives a reload exactly; the focus
+ring follows pane clicks; tap-to-replace, tap-to-swap and tap-the-focused-view
+(no-op) all behave, with no duplicate view in any sequence; resizing below 600px
+collapses the split, clears the key and reverts the shell; and with the master
+toggle off the default shell measures `display:block` / `overflow:visible` /
+`minHeight:100dvh` with `<body>` scrolling — v17.4.2 exactly — the RMB gesture
+does nothing, and plain view switching is unchanged.
+
+### Commit 5 — corrections: split-menu path, hover-lift clipping, ruler picker
+
+**Files:** `src/components/TimeAxis.jsx` (rewritten), `src/components/SplitMenu.jsx`,
+`src/components/SplitLayout.jsx`, `src/components/PlanView.jsx`, `src/App.jsx`,
+`src/hooks/useKeyboardShortcuts.js`, `index.html`, `CLAUDE.md`.
+**Bundle:** 672.68 kB / **191.69 kB gz** (+0.24 kB gz over commit 4).
+Same version — corrections to what commits 2 and 4 shipped, not new scope.
+
+**1. Split setup is two taps, not three.** The gesture now lands straight on
+"How should it split?"; the old "Add to split view" step re-confirmed an intent
+the gesture had already expressed and just lengthened every use. The Cancel
+button went with it — the scrim click already closed the popup, and Esc now does
+too (first branch of the chain, since the popup sits at z=300 above everything
+else; also added to both `anyModal` guards). A one-line hint names both exits.
+
+**2. The List hover-lift was being clipped — my own documented rule, broken.**
+CLAUDE.md's "`overflow:hidden` around `.mgt-hover-scale` clips the hover lift"
+row was written in commit 1 and violated in commits 3 and 4: the split panes
+(`overflow:auto`), the locked-nav scroll region and the shell all clipped it.
+Measured: a List card is `scale(1.08)` = **4% of its width per side**, so a
+full-width 806px card grows 32px each way. Normally that just bleeds to the
+window edge (scaled edges at −16 and 854 in an 838px viewport); inside a
+container it was cut off **mid-screen**, which is what made it obvious.
+
+The fix has three parts, and the middle one is the interesting one:
+- The shell's `overflow:hidden` is gone. It was only belt-and-braces — html and
+  body are already `overflow:hidden` in this mode, so nothing could scroll there
+  anyway — and it was clipping the bleed.
+- **You cannot pair `overflow-y:auto` with `overflow-x:visible`** (the spec
+  forces the other axis to clip), so the only way to keep the lift is to make
+  the scrollport wider than its content. The scroll region gets
+  `margin-inline:-4%` + `padding-inline:4%`: a scroller clips at its PADDING
+  box, so the content sits exactly where it did while the box is 4% wider each
+  side. In PERCENT this is self-scaling — the lift needs 4% of card width, the
+  card *is* the content box, so 4% is precisely enough at any width. Verified
+  live: region padding box −16…854 against a scaled card at −16.2…854.2.
+- Split panes can't take a negative margin (it would run under the divider), so
+  they use padding only — but scaled by the pane's share (`4 * share + "%"`),
+  because a percentage resolves against the whole split row, not the pane. A
+  flat 4% put a 32px gutter inside a 159px pane at the 0.2 minimum; the scaled
+  version gives 6.4px there and 16px at 0.5, and fits at every ratio tested.
+
+**3. The Plan strip is now a tape-measure ruler.** The block-strip version was
+legible but read as a segmented control, not a picker. Rebuilt to the reference
+Patryk supplied: the ruler scrolls under a FIXED centre marker, snapping to 15
+minutes on idle, with tap-anywhere-to-jump for mouse users. Mirrored ticks top
+and bottom with the hour labels between them — the pair of edges is what makes
+it read as a tape rather than a chart axis; a per-quarter occupancy heat-tint
+behind the ticks (so the rush is visible before you scrub to it); a full-height
+now marker; and a `mgt-detent` squash on the centre line, replayed by
+remounting via `key={selected}`, so scrubbing feels notched. The existing
+`data-motion="reduce"` rule neutralises that animation for free.
+
+Two things worth keeping in mind about it:
+- **`padding-inline: 50%` on the scroller** does double duty: it lets the first
+  and last ticks reach the centre, and it makes the arithmetic collapse — the
+  track position under the marker is exactly `scrollLeft`, so centring a time is
+  the same expression inverted, with no marker measurement. Verified against the
+  DOM: at `scrollLeft` 864 the badge read 22:00 and `xOf(22:00)` is 864.
+- **Scrolling is cheap because React only re-renders on a QUARTER change.** Every
+  selection change re-runs PlanView's occupancy scan and repaints the floor SVG,
+  so a per-pixel update would be visibly janky; snapping the selection to 15-min
+  marks throttles it naturally to a few renders per flick.
+
+The occupancy data is a plain linear pass over the day's bookings marking the
+quarters each one spans — nowhere near the `trialFits`/`findTimes` heavy-scan
+class CLAUDE.md warns about, so it needs no memo or deferral.
+
+**Also:** two byte-identical stray `… 2.js` duplicates of `drafts.js` /
+`drafts.test.js` (a Finder-style copy, untracked) were removed.
+
+**Verified on DEV:** split setup is 2 taps and closes on both scrim and Esc; the
+List lift bleeds to the window edge uncut in single, locked-nav and split modes,
+at split ratios 0.2/0.5/0.8; the ruler snaps exactly, tap-to-jump lands
+(x=600 → 20:45 centred), the Now button re-centres, the detent animation is
+wired, the floor repaints as you scrub, and it all still works inside a narrow
+split pane.
+
+### Commit 6 — corrections: top/bottom gutter axis, split on by default, compact Plan header
+
+**Files:** `src/components/SplitLayout.jsx`, `src/components/TimeAxis.jsx`,
+`src/components/PlanView.jsx`, `src/App.jsx`, `CLAUDE.md`.
+**Bundle:** 672.58 kB / **191.67 kB gz** (−0.02 kB gz — the Plan header lost more
+markup than the fixes added).
+
+**1. The hover-lift gutter was fixed on the wrong axis.** Commit 5 scaled the
+pane gutter by `4 * share`, reasoning that a percentage padding resolves against
+the whole split row rather than the pane. True for **side by side** — but in
+**top and bottom** the panes divide the HEIGHT and each one is FULL width, so
+`share` there is a vertical fraction being applied to a horizontal gutter. An
+806px-wide pane got 16px of room for a 31px lift and the List cards clipped
+exactly as before. Now `row ? 4 * share : 4` percent. Re-measured both
+directions: top/bottom 608px pane → 24.3px gutter for a 22.4px need; side by
+side at the 0.2 minimum → 120px pane, 4.9px gutter, 4.4px need. Both fit.
+
+The general rule, now in CLAUDE.md: scale the gutter only in the direction that
+actually divides the width.
+
+**2. Split View's master toggle now defaults ON.** It shipped off in commit 4 on
+Patryk's original call; having used it he asked for it enabled out of the box.
+This also puts the key back on the **house convention** — absent = default, only
+the non-default `"0"` stored — the same shape as `planGestures`. (`navLocked`
+keeps the inverted form; its default genuinely is off.) `readSplit`'s master-
+switch check flipped with it, so a stored split still restores only when the
+feature is on.
+
+**3. The Plan header is ~30px shorter.** The selected-time badge had its own
+24px lane above the tape, with a 6px gap under the Now/legend row — and that row
+was mostly empty space. The badge now sits in that row, right after Now, and the
+tape starts directly under the status chips. Measured: the whole header block
+109px, down from ~139px. `TimeAxis` renders no text of its own beyond the hour
+labels now; its centre marker is purely the accent line (detent unchanged).
+
+**Verified on DEV:** top/bottom and side-by-side both keep the lift intact, at
+ratios 0.2 and 0.5; the split restores with no `mgt-split-enabled` key present
+(proving the new default); the badge sits on the Now row and tracks scrubbing,
+snapping exactly (scrub to 19:00 → `scrollLeft` 576 = computed 576).
+
+### Commit 7 — code-review fixes
+
+**Files:** `src/components/TimeAxis.jsx`, `src/components/SplitLayout.jsx`.
+**Bundle:** 672.81 kB / **191.73 kB gz** (+0.06 kB gz).
+Both defects were found by the `/code-review` pass over the whole version and
+reproduced in the running app before being fixed.
+
+**1. The snap guard swallowed a quick re-scrub.** `centre()` sets
+`snappingRef` so the smooth snap's own scroll events don't re-arm the snap in a
+loop — but it only lifted the guard on a 320ms timer, and `onScroll` early-
+returns for its whole duration. Reproduced: scrub to 16:00, release, scrub to
+20:00 within the window, and the badge *and the floor plan* sat on 16:00 until
+it expired. Any fresh user input on the scroller means the snap is over (a touch
+or a wheel also cancels the browser's own smooth scroll), so `pointerdown` and
+`wheel` now drop the guard immediately. Same reproduction after the fix reads
+20:00 straight away. The guard timer is also tracked in a ref and cleared on
+unmount now, like `snapTimer` already was.
+
+**2. The divider committed render state, not the release point.**
+`endDrag` read `dragRatio` — a `useState` value — from its closure. When a
+`pointermove` and the `pointerup` land in the same React batch the closure still
+holds the *previous* move's ratio, so the divider settles a step behind the
+finger. Now the ratio is derived from the release event itself, falling back to
+`dragRatio` only for `pointercancel` (which carries no meaningful position).
+Verified by dispatching the final move and the release in one task: commits
+0.700, the exact release point, where the old code would have committed 0.600.
+
+**Not fixed, deliberately:** `TimeAxis` wraps each tick pair in a `<div>` that
+exists only to carry a React key (52 surplus nodes a Fragment would remove).
+Cosmetic, and not worth churning the render path over.
+
+### Commit 8 — corrections: subtle focus marks, badge over the marker
+
+Two review corrections, both about visual weight rather than behaviour.
+
+**1. The focused pane is marked by corner brackets, not a full outline.**
+A 2px accent ring all the way round a pane reads as a second border on top of
+every card inside it and competes with the content it is meant to frame. Four
+18px L-brackets at the corners say the same thing at the edges, where there is
+nothing to compete with. They fade on `opacity` (160ms), keeping the ease the
+outline had.
+
+This needed a structural change: an absolutely positioned child of a scroll
+container **scrolls away with the content**, so each pane is now a non-scrolling
+**frame** (carrying the `flexBasis`) wrapping the scroller, with the marks as
+siblings of the scroller. Verified pinned at the pane corners after scrolling
+the pane 500px.
+
+The frame also **deletes the hover-lift gutter bug class** rather than patching
+it again. A percentage padding resolves against the containing block, which is
+now the frame — i.e. exactly the pane — so a flat `paddingInline: 4%` is right
+in both directions at every ratio, and the hand-scaled `4 * share` (wrong for
+top/bottom, fixed in commit 6) is gone. It is now provable rather than tuned:
+card width ≤ 92% of the frame, so the 4% lift always fits inside the 4% gutter.
+Measured at ratio 0.72 side-by-side (712.8px pane → 28.5px gutter, widest card
+needs 26.2) and at 0.667 top/bottom (both panes full width → 40px gutter each,
+where the old formula gave the smaller pane 13px for a 36.8px lift).
+
+**2. The selected-time badge sits over the tape's centre marker.**
+It was left-aligned next to `Now` (commit 6), which put the value nowhere near
+the mark it describes. It now lives in the middle column of a 3-column grid;
+the row and `TimeAxis` are siblings of equal width, so the middle column lands
+exactly on the marker — measured delta **0.00px** at 768, 1280, and inside a
+445px split pane.
+
+The grid moved to `.mgt-plan-headrow` in `index.html` because it needs a media
+query and `PlanView` takes no width prop (and an inline `gridTemplateColumns`
+would out-specify the class). Below 600px there is physically no room for
+`Now` + a centred badge + the legend on one line, so the narrow default is a
+left-aligned single row — which measures **46px against the old layout's 59px**,
+so the phone case gets shorter, not taller. At ≥600px the outer columns
+equalise and the badge centres. Row height at desktop is unchanged at 28px.
+
+**Files:** `SplitLayout.jsx`, `PlanView.jsx`, `index.html`, `CLAUDE.md`.
+**Gates:** 88 tests, 0 lint errors, build 191.73 → **191.90 kB gz** (+0.17).

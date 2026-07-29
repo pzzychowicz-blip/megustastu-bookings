@@ -28,17 +28,35 @@
 // `comboCapBest` from booking-logic.js. Same algorithm, single canonical
 // source. The duplicate in WalkinForm has been replaced with the same import.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { S, BTN } from "../lib/constants";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest
 } from "../lib/booking-logic";
 import { Overlay, Toggle, mkBtn, AutoHeight, Reveal } from "./atoms";
 import { TableGrid } from "./TableGrid";
+import { sameDraft } from "../lib/drafts";
 
-export function ManualModal({ booking, bookings, onSave, onClose, titleText, blocks = [] }) {
+export function ManualModal({ booking, bookings, onSave, onClose, onDirty, titleText, blocks = [] }) {
   const [selected, setSelected] = useState(booking && booking.tables ? booking.tables.slice() : []);
   const [swapBusy, setSwapBusy] = useState(false);
+
+  // v17.5.0 (unsaved-changes guard): the table picks live HERE, not in App, so
+  // dirtiness is REPORTED upward rather than App reaching in. The baseline is
+  // the selection this modal mounted with; going through `sameDraft` (rather
+  // than an ad-hoc array compare) keeps ONE dirtiness rule across all three
+  // guarded surfaces — in particular pick ORDER is irrelevant, so deselecting
+  // and reselecting the same tables is not an edit.
+  const baselineSel = useRef(selected);
+  useEffect(function () {
+    if (onDirty) onDirty(!sameDraft({ tables: selected }, { tables: baselineSel.current }));
+  }, [selected, onDirty]);
+  // Separate unmount-only cleanup: a closed modal must never leave the parent's
+  // flag — and therefore the beforeunload listener — armed. Kept out of the
+  // effect above so a plain selection change doesn't churn false→true.
+  useEffect(function () {
+    return function () { if (onDirty) onDirty(false); };
+  }, [onDirty]);
   // Lint cleanup (2026-07-24): the null guard used to sit HERE — above the
   // keyboard useEffect below — so a mounted instance whose `booking` turned
   // null would change the hook count (the v16.4.0 ListView crash class). The
