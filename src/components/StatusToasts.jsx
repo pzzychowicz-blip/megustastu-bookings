@@ -21,6 +21,14 @@
 //
 // Props (all scalars/strings/small objects — no derivations in here):
 //  bookingsReady   — usePersistence: false until the first bookings snapshot
+//  loadStalled     — v17.5.1: the first read has exceeded the 15s watchdog, so
+//                    the "⟳ Loading bookings…" toast becomes a NAMED failure
+//                    with a Reload button. The two are mutually exclusive.
+//  readError       — v17.5.1 {path,code,message,at} | null — the last listener
+//                    cancellation reported by lib/dbError.js, so the toast can
+//                    print the real Firebase code instead of spinning
+//  hasConnected    — v17.5.1: has a handshake EVER completed? Separates
+//                    "connected but no data" from "never reached the database"
 //  resyncing       — the v15.2.0 freshness-gate banner flag
 //  reconnectShown  — "✓ Reconnected" flag
 //  syncFix         — v15.6.1 "Resolved a table conflict after syncing."
@@ -66,7 +74,7 @@ export function StatusToasts({bookingsReady,loadStalled,readError,hasConnected,r
       <button
         onClick={function(){window.location.reload();}}
         className="mgt-hover-scale mgt-press"
-        style={Object.assign({},mkBtn({bg:BTN.today}),{marginTop:8,fontSize:12,padding:"5px 12px"})}>Reload</button>
+        style={mkBtn({background:BTN.today,marginTop:8,fontSize:12,padding:"5px 12px",minHeight:32})}>Reload</button>
     </div>
   );
   // v15.8.0: the status toasts share ONE slot — only the highest-priority

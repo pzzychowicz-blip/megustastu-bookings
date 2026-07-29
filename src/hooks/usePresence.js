@@ -68,7 +68,7 @@ export function usePresence(){
       // onDisconnect FIRST so a write that races a drop is still cleaned up.
       onDisconnect(myRef).remove();
       set(myRef,{email:email,ua:deviceLabel(),since:serverTimestamp()}).catch(function(){});
-    },dbError(".info/connected"));
+    },dbError(".info/connected (presence)"));
     return function(){
       active=false;
       unsub();

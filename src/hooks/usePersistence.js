@@ -503,8 +503,22 @@ export function usePersistence({ autoOptimizer, nowMins }){
   },[bookingsReady]);
   // Any listener failure anywhere (see lib/dbError.js) is recorded so the UI can
   // name the actual Firebase error code instead of showing a spinner.
+  //
+  // Two guards, both deliberate. (1) DEDUPE on path+code: a persistently failing
+  // listener re-fires its cancel callback on every reconnect attempt, and each
+  // raw setReadError would be a NEW object — i.e. a fresh BookingApp render per
+  // failure, on the device that is already struggling. (2) Never let a failure
+  // on some OTHER node overwrite a `bookings` failure: the stall toast prints
+  // this path, and pointing the next investigation at the wrong node is exactly
+  // how the v17.4.0→v17.5.0 misdiagnosis happened.
   useEffect(function(){
-    return onDbError(function(info){ setReadError(info); });
+    return onDbError(function(info){
+      setReadError(function(prev){
+        if(prev&&prev.path===info.path&&prev.code===info.code) return prev;
+        if(prev&&prev.path==="bookings"&&info.path!=="bookings") return prev;
+        return info;
+      });
+    });
   },[]);
   // v15.2.0: heartbeat + resume detection driving the freshness gate.
   // The heartbeat bumps lastBeatRef every 10s; a gap >STALE_GAP_MS means the
