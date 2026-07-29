@@ -14,7 +14,8 @@
 //   ratio          — 0.2…0.8, pane A's share
 //   onRatio(r)     — committed on pointer-UP only, so localStorage isn't
 //                    written once per animation frame during a drag
-//   focused        — "a" | "b"; drives the ring and which pane the keyboard acts on
+//   focused        — "a" | "b"; drives the corner marks and which pane the
+//                    keyboard acts on
 //   onFocus(pane)  — fired from a CAPTURE-phase pointerdown
 //   paneA / paneB  — the view elements
 
@@ -22,6 +23,22 @@ import { useRef, useState } from "react";
 
 const MIN_RATIO = 0.2;
 const MAX_RATIO = 0.8;
+
+// v17.5.0 correction — the focused pane is marked with four corner brackets
+// instead of a full accent outline. A ring all the way round a pane reads as a
+// second border on top of every card inside it and competes with the content;
+// corners say the same thing at the edges, where there is nothing to compete
+// with. Module scope so the array isn't rebuilt on every drag frame.
+const MARK = 18;        // arm length
+const RING = 2;         // stroke
+const MARK_R = 14;      // matches the scroller's borderRadius so the arc lines up
+const EDGE = RING + "px solid var(--accent)";
+const CORNERS = [
+  { k: "tl", style: { top: 0, left: 0, borderTop: EDGE, borderLeft: EDGE, borderTopLeftRadius: MARK_R } },
+  { k: "tr", style: { top: 0, right: 0, borderTop: EDGE, borderRight: EDGE, borderTopRightRadius: MARK_R } },
+  { k: "bl", style: { bottom: 0, left: 0, borderBottom: EDGE, borderLeft: EDGE, borderBottomLeftRadius: MARK_R } },
+  { k: "br", style: { bottom: 0, right: 0, borderBottom: EDGE, borderRight: EDGE, borderBottomRightRadius: MARK_R } },
+];
 
 export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", onFocus, paneA, paneB }) {
   const wrapRef = useRef(null);
@@ -81,43 +98,48 @@ export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", on
 
   function pane(node, key) {
     const isFocused = focused === key;
-    const share = key === "a" ? r : 1 - r;
-    // Hover-lift gutter, sized to THIS pane's WIDTH. A percentage padding
-    // resolves against the containing block (the whole split row), not the
-    // pane, so it has to be scaled by hand — but ONLY in the direction that
-    // actually divides the width:
-    //   • side by side: the panes split the width, so a pane is `share` of the
-    //     row and the gutter is `4 * share` percent. A flat 4% would put 32px
-    //     of gutter inside a 161px pane at the 0.2 minimum.
-    //   • top and bottom: the panes split the HEIGHT and each is FULL width,
-    //     so the gutter is a flat 4%.
-    // Scaling by `share` in BOTH directions was the v17.5.0 bug — it applied a
-    // vertical fraction to a horizontal gutter, leaving an 806px-wide pane with
-    // 16px of room for a 31px lift, so the List cards clipped in top/bottom.
-    const gutter = (row ? 4 * share : 4) + "%";
     return (
+      // v17.5.0 correction — the pane is now a non-scrolling FRAME wrapping the
+      // scroller, for two reasons:
+      //  1. The focus marks must not scroll away with the content. An absolutely
+      //     positioned child of a scroll container moves with the content; a
+      //     child of the frame stays pinned to the pane's edges.
+      //  2. It makes the hover-lift gutter self-scaling again. A percentage
+      //     padding resolves against the CONTAINING BLOCK, which is now this
+      //     frame (= exactly the pane), so a flat 4% is correct in both split
+      //     directions. It previously resolved against the whole split row and
+      //     had to be hand-scaled by the pane's share — which was only right for
+      //     side-by-side and left top/bottom panes clipping the List cards.
       <div
         // Capture phase: a child that stops propagation must not be able to
         // swallow the focus change.
         onPointerDownCapture={() => { if (onFocus) onFocus(key); }}
         style={{
+          position: "relative",
           flexBasis: (key === "a" ? r : 1 - r) * 100 + "%",
           flexGrow: 0, flexShrink: 1,
           minWidth: 0, minHeight: 0,
-          overflow: "auto", WebkitOverflowScrolling: "touch",
-          // v17.5.0 correction — hover-lift gutter (see `gutter` above). A
-          // scrolling pane clips at its padding box, and the List cards inside
-          // scale 1.08 on hover (= 4% of card width per side), so without this
-          // the lift is cut off mid-screen at the pane edge. Unlike the
-          // single-view scroll region, a negative margin is not an option here
-          // — it would run under the divider.
-          paddingInline: gutter, paddingBlock: 12,
-          borderRadius: 14,
-          outline: isFocused ? "2px solid var(--accent)" : "2px solid transparent",
-          outlineOffset: -2,
-          transition: "outline-color 160ms ease",
+          display: "flex",
         }}
-      >{node}</div>
+      >
+        <div style={{
+          flex: 1, minWidth: 0, minHeight: 0,
+          overflow: "auto", WebkitOverflowScrolling: "touch",
+          // Hover-lift gutter: a scrolling pane clips at its padding box, and
+          // the List cards inside scale 1.08 on hover (= 4% of card width per
+          // side), so without this the lift is cut off at the pane edge.
+          paddingInline: "4%", paddingBlock: 12,
+          borderRadius: 14,
+        }}>{node}</div>
+        {CORNERS.map((c) => (
+          <div key={c.k} style={Object.assign({
+            position: "absolute", width: MARK, height: MARK,
+            pointerEvents: "none",
+            opacity: isFocused ? 1 : 0,
+            transition: "opacity 160ms ease",
+          }, c.style)} />
+        ))}
+      </div>
     );
   }
 

@@ -6064,3 +6064,48 @@ Verified by dispatching the final move and the release in one task: commits
 **Not fixed, deliberately:** `TimeAxis` wraps each tick pair in a `<div>` that
 exists only to carry a React key (52 surplus nodes a Fragment would remove).
 Cosmetic, and not worth churning the render path over.
+
+### Commit 8 — corrections: subtle focus marks, badge over the marker
+
+Two review corrections, both about visual weight rather than behaviour.
+
+**1. The focused pane is marked by corner brackets, not a full outline.**
+A 2px accent ring all the way round a pane reads as a second border on top of
+every card inside it and competes with the content it is meant to frame. Four
+18px L-brackets at the corners say the same thing at the edges, where there is
+nothing to compete with. They fade on `opacity` (160ms), keeping the ease the
+outline had.
+
+This needed a structural change: an absolutely positioned child of a scroll
+container **scrolls away with the content**, so each pane is now a non-scrolling
+**frame** (carrying the `flexBasis`) wrapping the scroller, with the marks as
+siblings of the scroller. Verified pinned at the pane corners after scrolling
+the pane 500px.
+
+The frame also **deletes the hover-lift gutter bug class** rather than patching
+it again. A percentage padding resolves against the containing block, which is
+now the frame — i.e. exactly the pane — so a flat `paddingInline: 4%` is right
+in both directions at every ratio, and the hand-scaled `4 * share` (wrong for
+top/bottom, fixed in commit 6) is gone. It is now provable rather than tuned:
+card width ≤ 92% of the frame, so the 4% lift always fits inside the 4% gutter.
+Measured at ratio 0.72 side-by-side (712.8px pane → 28.5px gutter, widest card
+needs 26.2) and at 0.667 top/bottom (both panes full width → 40px gutter each,
+where the old formula gave the smaller pane 13px for a 36.8px lift).
+
+**2. The selected-time badge sits over the tape's centre marker.**
+It was left-aligned next to `Now` (commit 6), which put the value nowhere near
+the mark it describes. It now lives in the middle column of a 3-column grid;
+the row and `TimeAxis` are siblings of equal width, so the middle column lands
+exactly on the marker — measured delta **0.00px** at 768, 1280, and inside a
+445px split pane.
+
+The grid moved to `.mgt-plan-headrow` in `index.html` because it needs a media
+query and `PlanView` takes no width prop (and an inline `gridTemplateColumns`
+would out-specify the class). Below 600px there is physically no room for
+`Now` + a centred badge + the legend on one line, so the narrow default is a
+left-aligned single row — which measures **46px against the old layout's 59px**,
+so the phone case gets shorter, not taller. At ≥600px the outer columns
+equalise and the badge centres. Row height at desktop is unchanged at 28px.
+
+**Files:** `SplitLayout.jsx`, `PlanView.jsx`, `index.html`, `CLAUDE.md`.
+**Gates:** 88 tests, 0 lint errors, build 191.73 → **191.90 kB gz** (+0.17).

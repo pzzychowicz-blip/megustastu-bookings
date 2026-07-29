@@ -363,20 +363,29 @@ export const PlanView = memo(function PlanView({
           v17.5.0 correction: the accent badge reads the scrubbed time and lives
           HERE rather than on its own lane above the tape — this row was mostly
           empty, so folding it in cost nothing and let the tape start directly
-          under the status chips (~30px saved off the whole header). */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
-        {isToday ? (
-          <button className="mgt-hover-scale"
-            onClick={() => { setSliderTouched(false); setSlider(clampSlider(nowMins)); reCentre(); }}
-            style={mkBtn({ fontSize: 11, minHeight: 28, padding: "3px 10px", background: atNow ? S.accent : "var(--app-btn-grey)" })}>Now</button>
-        ) : null}
+          under the status chips (~30px saved off the whole header).
+          v17.5.0 correction 2: the badge is CENTRED, directly above the tape's
+          fixed centre marker, so it labels the mark it belongs to instead of
+          floating loose on the left. The grid that does it lives in index.html
+          as `.mgt-plan-headrow` — it needs a media query (no room to centre on a
+          phone) and PlanView takes no width prop. A grid rather than an
+          absolutely positioned badge because, unlike an overlay, it can never
+          collide with the legend. */}
+      <div className="mgt-plan-headrow">
+        <span>
+          {isToday ? (
+            <button className="mgt-hover-scale"
+              onClick={() => { setSliderTouched(false); setSlider(clampSlider(nowMins)); reCentre(); }}
+              style={mkBtn({ fontSize: 11, minHeight: 28, padding: "3px 10px", background: atNow ? S.accent : "var(--app-btn-grey)" })}>Now</button>
+          ) : null}
+        </span>
         <span style={{
           background: S.accent, color: "var(--text-on-accent)",
           fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums",
           padding: "3px 10px", borderRadius: 8, whiteSpace: "nowrap",
           boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
         }}>{toTime(slider)}</span>
-        <span style={{ display: "inline-flex", gap: 4, marginLeft: "auto" }}>{legend}</span>
+        <span style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>{legend}</span>
       </div>
       {h.closed ? null : (
         <TimeAxis

@@ -340,6 +340,32 @@
         100% { transform: translateX(-50%) scaleY(1); }
       }
       .mgt-detent { animation: mgt-detent 170ms ease-out; }
+      /* v17.5.0 correction 2: the Plan header row (Now · selected time · status
+         legend). The badge sits in the middle column, directly above TimeAxis's
+         fixed centre marker — the two are siblings of equal width, so 50% of one
+         is 50% of the other, and equal outer columns are what put the middle one
+         dead centre. Mobile-first, because on a phone there is physically no room
+         for all three on one line with the badge centred: the narrow default is
+         the old left-aligned row (one line), and only at >=600px do the outer
+         columns equalise. A media query rather than inline styles because
+         PlanView takes no width prop — and an inline gridTemplateColumns would
+         out-specify the class.
+         600px is the app's phone/tablet breakpoint (App.jsx's `isMobile` and
+         `readSplit`); it lives here a third time because CSS and JS can't share
+         a constant — change all three together. Known limit: a media query sees
+         the VIEWPORT, so a Plan view in a narrow SPLIT PANE keeps the centred
+         template and the legend chips wrap. The badge still lands exactly on the
+         marker, which is the part that matters. */
+      .mgt-plan-headrow {
+        display: grid;
+        grid-template-columns: auto auto minmax(0, 1fr);
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+      @media (min-width: 600px) {
+        .mgt-plan-headrow { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+      }
       @media (hover: hover) and (pointer: fine) {
         .mgt-hover-scale:hover:not(:disabled) {
           transform: scale(1.08);
