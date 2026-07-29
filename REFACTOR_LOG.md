@@ -6033,3 +6033,34 @@ labels now; its centre marker is purely the accent line (detent unchanged).
 ratios 0.2 and 0.5; the split restores with no `mgt-split-enabled` key present
 (proving the new default); the badge sits on the Now row and tracks scrubbing,
 snapping exactly (scrub to 19:00 → `scrollLeft` 576 = computed 576).
+
+### Commit 7 — code-review fixes
+
+**Files:** `src/components/TimeAxis.jsx`, `src/components/SplitLayout.jsx`.
+**Bundle:** 672.81 kB / **191.73 kB gz** (+0.06 kB gz).
+Both defects were found by the `/code-review` pass over the whole version and
+reproduced in the running app before being fixed.
+
+**1. The snap guard swallowed a quick re-scrub.** `centre()` sets
+`snappingRef` so the smooth snap's own scroll events don't re-arm the snap in a
+loop — but it only lifted the guard on a 320ms timer, and `onScroll` early-
+returns for its whole duration. Reproduced: scrub to 16:00, release, scrub to
+20:00 within the window, and the badge *and the floor plan* sat on 16:00 until
+it expired. Any fresh user input on the scroller means the snap is over (a touch
+or a wheel also cancels the browser's own smooth scroll), so `pointerdown` and
+`wheel` now drop the guard immediately. Same reproduction after the fix reads
+20:00 straight away. The guard timer is also tracked in a ref and cleared on
+unmount now, like `snapTimer` already was.
+
+**2. The divider committed render state, not the release point.**
+`endDrag` read `dragRatio` — a `useState` value — from its closure. When a
+`pointermove` and the `pointerup` land in the same React batch the closure still
+holds the *previous* move's ratio, so the divider settles a step behind the
+finger. Now the ratio is derived from the release event itself, falling back to
+`dragRatio` only for `pointercancel` (which carries no meaningful position).
+Verified by dispatching the final move and the release in one task: commits
+0.700, the exact release point, where the old code would have committed 0.600.
+
+**Not fixed, deliberately:** `TimeAxis` wraps each tick pair in a `<div>` that
+exists only to carry a React key (52 surplus nodes a Fragment would remove).
+Cosmetic, and not worth churning the render path over.

@@ -58,15 +58,24 @@ export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", on
     if (!draggingRef.current) return;
     // A mouse move with no button held can't be a drag — belt-and-braces for a
     // pointerup we never saw.
-    if (e.pointerType === "mouse" && e.buttons === 0) { endDrag(e); return; }
+    if (e.pointerType === "mouse" && e.buttons === 0) { endDrag(e, true); return; }
     const next = ratioFromEvent(e);
     if (next != null) setDragRatio(next);
   }
-  function endDrag(e) {
+  // `fromEvent` false for pointercancel: that event carries no meaningful
+  // release position, so the last position we actually tracked is the honest
+  // answer there.
+  function endDrag(e, fromEvent) {
     if (!draggingRef.current) return;
     draggingRef.current = false;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-    if (dragRatio != null && onRatio) onRatio(dragRatio);
+    // v17.5.0 review fix: commit the ratio from the RELEASE event rather than
+    // from `dragRatio`, which is render state. If a pointermove and the
+    // pointerup ever land in one React batch, the closure here still holds the
+    // previous move's value and the divider settles a step behind the finger.
+    const fromRelease = fromEvent ? ratioFromEvent(e) : null;
+    const commit = fromRelease != null ? fromRelease : dragRatio;
+    if (commit != null && onRatio) onRatio(commit);
     setDragRatio(null);
   }
 
@@ -124,8 +133,8 @@ export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", on
       <div
         onPointerDown={onDividerDown}
         onPointerMove={onDividerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
+        onPointerUp={(e) => endDrag(e, true)}
+        onPointerCancel={(e) => endDrag(e, false)}
         onDoubleClick={() => { if (onRatio) onRatio(0.5); }}
         title="Drag to resize · double-click to reset"
         style={{

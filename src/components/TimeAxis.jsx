@@ -57,6 +57,7 @@ export function TimeAxis({
 }) {
   const scrollRef = useRef(null);
   const snapTimer = useRef(null);
+  const guardTimer = useRef(null);     // lifts snappingRef when a snap settles
   const snappingRef = useRef(false);   // ignore scroll events we caused ourselves
   const selRef = useRef(selected);
   selRef.current = selected;
@@ -77,7 +78,19 @@ export function TimeAxis({
     el.scrollTo({ left: xOf(m), behavior: smooth ? "smooth" : "auto" });
     // Smooth scrolling keeps firing scroll events; let them settle before we
     // start listening again, or the snap re-arms itself in a loop.
-    window.setTimeout(() => { snappingRef.current = false; }, smooth ? 320 : 60);
+    window.clearTimeout(guardTimer.current);
+    guardTimer.current = window.setTimeout(() => { snappingRef.current = false; }, smooth ? 320 : 60);
+  }
+
+  // v17.5.0 review fix: the guard above used to lift ONLY on its timer, so a
+  // second scrub started within ~320ms of the previous snap was ignored —
+  // measured: scrub to 16:00, release, scrub to 20:00, and the badge and the
+  // floor plan sat on 16:00 until the window expired. Any fresh user input on
+  // the scroller means the snap is over (a touch or a wheel also cancels the
+  // browser's smooth scroll), so drop the guard immediately on those.
+  function releaseSnapGuard() {
+    window.clearTimeout(guardTimer.current);
+    snappingRef.current = false;
   }
 
   // Programmatic re-centre only (date change, clock follow, the Now button).
@@ -88,7 +101,10 @@ export function TimeAxis({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoScrollKey]);
 
-  useEffect(() => () => window.clearTimeout(snapTimer.current), []);
+  useEffect(() => () => {
+    window.clearTimeout(snapTimer.current);
+    window.clearTimeout(guardTimer.current);
+  }, []);
 
   function onScroll() {
     if (snappingRef.current) return;
@@ -123,6 +139,8 @@ export function TimeAxis({
         ref={scrollRef}
         onScroll={onScroll}
         onClick={onTrackClick}
+        onPointerDown={releaseSnapGuard}
+        onWheel={releaseSnapGuard}
         style={{
           overflowX: "auto", overflowY: "hidden",
           paddingInline: "50%",               // lets the ends reach the centre
