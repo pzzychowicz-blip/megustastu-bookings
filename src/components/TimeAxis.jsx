@@ -39,14 +39,15 @@
 
 import { useRef, useLayoutEffect, useEffect } from "react";
 import { OPEN, GRID_CLOSE, QUARTER_HOURS, S } from "../lib/constants";
-import { toTime } from "../lib/booking-logic";
+// v17.5.0 correction: no toTime here any more — the selected-time badge moved
+// up into PlanView's Now/legend row, so the tape renders no text of its own
+// beyond the hour labels.
 
 // Ruler density: one 15-minute step every 24px → an hour is 96px. Wide enough
 // that hour labels never collide, tight enough that a whole service fits in a
 // couple of flicks.
 const PX_PER_QUARTER = 24;
 const H = 62;             // tape height
-const PILL_H = 24;        // the selected-time badge gets its own lane above the tape
 const SNAP_MS = 130;      // idle time after scrolling before we snap
 
 export function TimeAxis({
@@ -113,9 +114,11 @@ export function TimeAxis({
   const nowInRange = isToday && nowMins >= openM && nowMins <= openM + totalMins;
 
   return (
-    // paddingTop gives the centre badge its own lane ABOVE the tape, so it
-    // never sits on top of a tick or an hour label.
-    <div style={{ position: "relative", marginBottom: 8, paddingTop: PILL_H }}>
+    // v17.5.0 correction: no lane above the tape. The selected-time badge used
+    // to live here on its own row; it now sits in PlanView's Now/legend row,
+    // which was mostly empty anyway — same information, ~30px less height, and
+    // the tape starts directly under the status chips.
+    <div style={{ position: "relative", marginBottom: 8 }}>
       <div
         ref={scrollRef}
         onScroll={onScroll}
@@ -185,23 +188,15 @@ export function TimeAxis({
         </div>
       </div>
 
-      {/* The fixed centre marker, outside the scroller so it stays put while
-          the tape moves under it: a badge in its own lane above, and a line
-          straight down through the tape. `key={selected}` remounts the line so
-          the detent squash replays each time a mark passes. */}
-      <div style={{
-        position: "absolute", left: "50%", top: 0, transform: "translateX(-50%)",
-        pointerEvents: "none",
-        background: S.accent, color: "var(--text-on-accent)",
-        fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums",
-        padding: "2px 10px", borderRadius: 8,
-        boxShadow: "0 2px 6px rgba(0,0,0,0.18)", whiteSpace: "nowrap",
-      }}>{toTime(selected)}</div>
+      {/* The fixed centre marker: a line straight down through the tape,
+          outside the scroller so it stays put while the tape moves under it.
+          `key={selected}` remounts it so the detent squash replays each time a
+          mark passes. */}
       <div
         key={selected}
         className="mgt-detent"
         style={{
-          position: "absolute", left: "50%", top: PILL_H + 4, height: H - 8,
+          position: "absolute", left: "50%", top: 4, height: H - 8,
           transform: "translateX(-50%)", transformOrigin: "center",
           width: 2, borderRadius: 1,
           background: S.accent, pointerEvents: "none",

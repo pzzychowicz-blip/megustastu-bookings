@@ -33,9 +33,7 @@
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { S, STATUS_COLORS, BLOCK_BG, hoursFor } from "../lib/constants";
-// v17.5.0: toTime moved out with the readout — the ruler renders it on its
-// own centre marker now.
-import { toMins, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
+import { toMins, toTime, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
@@ -358,17 +356,26 @@ export const PlanView = memo(function PlanView({
       borderRadius: 20, border: "1px solid var(--tl-card-border)",
       padding: "10px 12px", boxShadow: "var(--shadow-soft)"
     }}>
-      {/* v17.5.0: Now + legend on one row, the ruler on its own row below. The
-          ruler is a SIBLING above the <svg>, so it sits outside the svg's
-          touchAction:"none" and never fights the plan's pan/pinch gestures.
-          The time readout lives INSIDE the ruler now (on its centre marker,
-          like the reference picker) — repeating it here was just noise. */}
+      {/* v17.5.0: Now + selected time + legend on one row, the ruler directly
+          below it. The ruler is a SIBLING above the <svg>, so it sits outside
+          the svg's touchAction:"none" and never fights the plan's pan/pinch
+          gestures.
+          v17.5.0 correction: the accent badge reads the scrubbed time and lives
+          HERE rather than on its own lane above the tape — this row was mostly
+          empty, so folding it in cost nothing and let the tape start directly
+          under the status chips (~30px saved off the whole header). */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
         {isToday ? (
           <button className="mgt-hover-scale"
             onClick={() => { setSliderTouched(false); setSlider(clampSlider(nowMins)); reCentre(); }}
             style={mkBtn({ fontSize: 11, minHeight: 28, padding: "3px 10px", background: atNow ? S.accent : "var(--app-btn-grey)" })}>Now</button>
         ) : null}
+        <span style={{
+          background: S.accent, color: "var(--text-on-accent)",
+          fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums",
+          padding: "3px 10px", borderRadius: 8, whiteSpace: "nowrap",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
+        }}>{toTime(slider)}</span>
         <span style={{ display: "inline-flex", gap: 4, marginLeft: "auto" }}>{legend}</span>
       </div>
       {h.closed ? null : (

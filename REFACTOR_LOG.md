@@ -5993,3 +5993,43 @@ at split ratios 0.2/0.5/0.8; the ruler snaps exactly, tap-to-jump lands
 (x=600 → 20:45 centred), the Now button re-centres, the detent animation is
 wired, the floor repaints as you scrub, and it all still works inside a narrow
 split pane.
+
+### Commit 6 — corrections: top/bottom gutter axis, split on by default, compact Plan header
+
+**Files:** `src/components/SplitLayout.jsx`, `src/components/TimeAxis.jsx`,
+`src/components/PlanView.jsx`, `src/App.jsx`, `CLAUDE.md`.
+**Bundle:** 672.58 kB / **191.67 kB gz** (−0.02 kB gz — the Plan header lost more
+markup than the fixes added).
+
+**1. The hover-lift gutter was fixed on the wrong axis.** Commit 5 scaled the
+pane gutter by `4 * share`, reasoning that a percentage padding resolves against
+the whole split row rather than the pane. True for **side by side** — but in
+**top and bottom** the panes divide the HEIGHT and each one is FULL width, so
+`share` there is a vertical fraction being applied to a horizontal gutter. An
+806px-wide pane got 16px of room for a 31px lift and the List cards clipped
+exactly as before. Now `row ? 4 * share : 4` percent. Re-measured both
+directions: top/bottom 608px pane → 24.3px gutter for a 22.4px need; side by
+side at the 0.2 minimum → 120px pane, 4.9px gutter, 4.4px need. Both fit.
+
+The general rule, now in CLAUDE.md: scale the gutter only in the direction that
+actually divides the width.
+
+**2. Split View's master toggle now defaults ON.** It shipped off in commit 4 on
+Patryk's original call; having used it he asked for it enabled out of the box.
+This also puts the key back on the **house convention** — absent = default, only
+the non-default `"0"` stored — the same shape as `planGestures`. (`navLocked`
+keeps the inverted form; its default genuinely is off.) `readSplit`'s master-
+switch check flipped with it, so a stored split still restores only when the
+feature is on.
+
+**3. The Plan header is ~30px shorter.** The selected-time badge had its own
+24px lane above the tape, with a 6px gap under the Now/legend row — and that row
+was mostly empty space. The badge now sits in that row, right after Now, and the
+tape starts directly under the status chips. Measured: the whole header block
+109px, down from ~139px. `TimeAxis` renders no text of its own beyond the hour
+labels now; its centre marker is purely the accent line (detent unchanged).
+
+**Verified on DEV:** top/bottom and side-by-side both keep the lift intact, at
+ratios 0.2 and 0.5; the split restores with no `mgt-split-enabled` key present
+(proving the new default); the badge sits on the Now row and tracks scrubbing,
+snapping exactly (scrub to 19:00 → `scrollLeft` 576 = computed 576).

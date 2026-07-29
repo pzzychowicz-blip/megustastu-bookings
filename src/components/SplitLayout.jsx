@@ -73,12 +73,19 @@ export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", on
   function pane(node, key) {
     const isFocused = focused === key;
     const share = key === "a" ? r : 1 - r;
-    // Hover-lift gutter, sized to THIS pane. A percentage padding resolves
-    // against the containing block (the whole split row), not the pane — so a
-    // flat "4%" would over-pad a narrow pane badly (32px of gutter inside a
-    // 161px pane at the 0.2 minimum). Scaling it by the pane's own share makes
-    // `4 * share` percent of the row exactly 4% of the pane, at any ratio.
-    const gutter = (4 * share) + "%";
+    // Hover-lift gutter, sized to THIS pane's WIDTH. A percentage padding
+    // resolves against the containing block (the whole split row), not the
+    // pane, so it has to be scaled by hand — but ONLY in the direction that
+    // actually divides the width:
+    //   • side by side: the panes split the width, so a pane is `share` of the
+    //     row and the gutter is `4 * share` percent. A flat 4% would put 32px
+    //     of gutter inside a 161px pane at the 0.2 minimum.
+    //   • top and bottom: the panes split the HEIGHT and each is FULL width,
+    //     so the gutter is a flat 4%.
+    // Scaling by `share` in BOTH directions was the v17.5.0 bug — it applied a
+    // vertical fraction to a horizontal gutter, leaving an 806px-wide pane with
+    // 16px of room for a 31px lift, so the List cards clipped in top/bottom.
+    const gutter = (row ? 4 * share : 4) + "%";
     return (
       <div
         // Capture phase: a child that stops propagation must not be able to

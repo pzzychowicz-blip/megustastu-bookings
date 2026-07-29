@@ -327,7 +327,7 @@ const VIEW_ORD=["timeline","list","plan"];
 // (timelineZoom / selectedListId / showFinished).
 function readSplit(){
   try{
-    if(localStorage.getItem("mgt-split-enabled")!=="1") return null;
+    if(localStorage.getItem("mgt-split-enabled")==="0") return null;   // master switch off
     if(typeof window!=="undefined"&&window.innerWidth<600) return null; // tablet/desktop only
     const s=JSON.parse(localStorage.getItem(SPLIT_KEY)||"null");
     if(!s||typeof s!=="object") return null;
@@ -838,17 +838,20 @@ function BookingApp(){
     }catch{/* ignore */}
     setNavLocked(next);
   }
-  // v17.5.0: per-device Split View master switch (Settings → General). Default
-  // OFF like navLocked, so only the "1" is stored. While off, the RMB /
-  // press-and-hold gesture on a view button does nothing at all.
+  // v17.5.0: per-device Split View master switch (Settings → General).
+  // v17.5.0 correction: default ON (was off), so the RMB / press-and-hold
+  // gesture works out of the box. That puts it back on the house convention —
+  // key absent = default, only the non-default "0" is stored — same shape as
+  // planGestures. (navLocked stays inverted; its default really is off.)
+  // While off, the gesture on a view button does nothing at all.
   const [splitEnabled,setSplitEnabled]=useState(function(){
-    try{return localStorage.getItem("mgt-split-enabled")==="1";}catch{return false;}
+    try{return localStorage.getItem("mgt-split-enabled")!=="0";}catch{return true;}
   });
   function onToggleSplitEnabled(){
     const next=!splitEnabled;
     try{
-      if(next) localStorage.setItem("mgt-split-enabled","1");
-      else{localStorage.removeItem("mgt-split-enabled");localStorage.removeItem(SPLIT_KEY);}
+      if(next) localStorage.removeItem("mgt-split-enabled");
+      else{localStorage.setItem("mgt-split-enabled","0");localStorage.removeItem(SPLIT_KEY);}
     }catch{/* ignore */}
     setSplitEnabled(next);
     if(!next) setSplit(null); // turning the feature off must also leave any active split
