@@ -21,6 +21,14 @@
 //
 // Props (all scalars/strings/small objects — no derivations in here):
 //  bookingsReady   — usePersistence: false until the first bookings snapshot
+//  loadStalled     — v17.5.1: the first read has exceeded the 15s watchdog, so
+//                    the "⟳ Loading bookings…" toast becomes a NAMED failure
+//                    with a Reload button. The two are mutually exclusive.
+//  readError       — v17.5.1 {path,code,message,at} | null — the last listener
+//                    cancellation reported by lib/dbError.js, so the toast can
+//                    print the real Firebase code instead of spinning
+//  hasConnected    — v17.5.1: has a handshake EVER completed? Separates
+//                    "connected but no data" from "never reached the database"
 //  resyncing       — the v15.2.0 freshness-gate banner flag
 //  reconnectShown  — "✓ Reconnected" flag
 //  syncFix         — v15.6.1 "Resolved a table conflict after syncing."
@@ -47,13 +55,35 @@ import { BTN } from "../lib/constants";
 
 const toastShadow="0 6px 20px rgba(0,0,0,0.18)";
 
-export function StatusToasts({bookingsReady,resyncing,reconnectShown,syncFix,waitAddedShown,undoInfo,onUndo,undoNote,dragMsg,reshuffled,reshuffledMsg,loadShown,loadMsg}){
+export function StatusToasts({bookingsReady,loadStalled,readError,hasConnected,resyncing,reconnectShown,syncFix,waitAddedShown,undoInfo,onUndo,undoNote,dragMsg,reshuffled,reshuffledMsg,loadShown,loadMsg}){
+  // v17.5.1: the first read has not completed within the watchdog window. Say
+  // what is actually wrong rather than spinning forever — this toast is the
+  // whole reason the Android-tablet outage took two releases to diagnose. It
+  // names the Firebase error code when a listener was cancelled, and otherwise
+  // distinguishes "never connected" from "connected but no data".
+  const stallNode=(
+    <div style={{background:"linear-gradient(var(--danger-bg),var(--danger-bg)),var(--bg-ac-menu)",border:"2px solid var(--danger-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--danger-text)",boxShadow:toastShadow,maxWidth:340,pointerEvents:"auto"}}>
+      <div style={{fontWeight:700,marginBottom:4}}>Couldn’t load bookings</div>
+      <div style={{fontWeight:500,lineHeight:1.4}}>
+        {readError
+          ? "The database refused the read ("+readError.code+" on /"+readError.path+")."
+          : hasConnected
+            ? "Connected, but no data has arrived."
+            : "Can’t reach the database — no connection has been established."}
+      </div>
+      <button
+        onClick={function(){window.location.reload();}}
+        className="mgt-hover-scale mgt-press"
+        style={mkBtn({background:BTN.today,marginTop:8,fontSize:12,padding:"5px 12px",minHeight:32})}>Reload</button>
+    </div>
+  );
   // v15.8.0: the status toasts share ONE slot — only the highest-priority
   // active one is shown (order below), so they never stack vertically. When the
   // top one changes, the old floats out as the new floats in; they overlap in
   // the same grid cell (gridArea 1/1) so the swap is a crossfade in place.
   const statusToasts=[
-    {key:"loading",on:!bookingsReady,node:<div
+    {key:"loadfail",on:!bookingsReady&&loadStalled,node:stallNode},
+    {key:"loading",on:!bookingsReady&&!loadStalled,node:<div
       style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Loading bookings…</div>},
     {key:"resync",on:resyncing,node:<div
       style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.</div>},

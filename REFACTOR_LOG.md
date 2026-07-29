@@ -6109,3 +6109,80 @@ equalise and the badge centres. Row height at desktop is unchanged at 28px.
 
 **Files:** `SplitLayout.jsx`, `PlanView.jsx`, `index.html`, `CLAUDE.md`.
 **Gates:** 88 tests, 0 lint errors, build 191.73 → **191.90 kB gz** (+0.17).
+
+---
+
+## v17.5.1 — the Android-tablet "Loading bookings…" freeze, root-caused (2026-07-29)
+
+**Behavioural change:** the RTDB long-polling transport is never used; listener
+failures are reported instead of swallowed; the connection dot gained a third
+state.
+
+### What was actually wrong
+
+The restaurant's Android tablet (HONOR NDL-L09, Android 16, Chrome 150) sat on
+"⟳ Loading bookings…" forever while the MacBook and iPhone ran the same build on
+the same network. Diagnosed on the device over USB + the Chrome DevTools
+Protocol. The chain, end to end:
+
+1. A single WebSocket connection to the RTDB failed at some point — a wifi blip
+   is enough.
+2. The Firebase SDK persists that as `firebase:previous_websocket_failure` in
+   **localStorage**, and from then on prefers **long-polling** on every load of
+   that device, permanently.
+3. RTDB long-polling is **JSONP**: it injects `<script>` tags into a hidden
+   iframe (`@firebase/database` → `createIFrame_` / `doc.createElement('script')`).
+4. Script tags are governed by the CSP's **`script-src`**, not `connect-src`.
+   `vercel.json` sets `script-src 'self' 'sha256-…'`, so every long-poll attempt
+   was blocked — forever, with exponential backoff. Meanwhile
+   `connect-src wss://*.firebasedatabase.app` made the config look correct.
+5. None of the app's 16 `onValue()` listeners passed the optional **third error
+   callback**, so the cancelled read produced no console line, no banner, no
+   state change. `setBookingsReady(true)` lives inside the success path.
+6. `isOnline` starts `true` and only goes false once `hasConnectedRef` is set —
+   so a device that had **never** connected showed a confident **green** dot.
+
+The CSP went from report-only to blocking on **2026-07-24**; v17.4.0 shipped
+**2026-07-25**. The PWA service worker took the blame for a CSP change that
+landed the day before. On the tablet the worker was long gone (`swRegs: []`,
+`swControlled: false`) and the freeze persisted regardless.
+
+### Why not just widen the CSP
+
+Tested on the affected device, with the document's CSP rewritten at the wire via
+CDP interception: adding the RTDB hosts to `script-src` **does** unblock the
+JSONP (violations dropped to `apis.google.com` only, `.lp` requests returned
+200s) — **and the app still never loaded**. Long-polling does not recover even
+when permitted, so widening the CSP would have traded security surface for
+nothing. Rejected on evidence, not preference.
+
+### The fix
+
+- **`src/firebase.js` — `forceWebSockets()`** before `getDatabase()`. Calls
+  `BrowserPollConnection.forceDisallow()`, so the JSONP transport is never
+  selected and the cached failure flag becomes inert. Verified: with the flag
+  deliberately set, the app loads with **0** `.lp` requests, and the SDK's
+  `markConnectionHealthy()` **deletes the flag** — affected devices self-heal on
+  first load. Accepted trade-off: no fallback where WebSocket is blocked
+  outright, which costs nothing because that fallback is already 100%
+  non-functional under our CSP.
+- **`src/lib/dbError.js` (new)** — `dbError(path)` builds the error callback and
+  `onDbError(fn)` lets `usePersistence` subscribe. **All 16 `onValue()` calls**
+  across 12 files now pass it. Rule: a listener without one is a silent failure
+  waiting to happen.
+- **Load watchdog** (`usePersistence`, `LOAD_TIMEOUT_MS` 15s) → `loadStalled`,
+  plus `readError` and `hasConnected`. `StatusToasts` turns the endless spinner
+  into a named failure ("The database refused the read (permission_denied on
+  /bookings)" / "Can't reach the database" / "Connected, but no data has
+  arrived") with a Reload button.
+- **`ConnectionStatus`** gained a third state: amber **"Connecting…"** until the
+  first handshake, so the dot can no longer assert a connection that has never
+  existed. New `--status-connecting(-glow)` tokens in both theme blocks.
+
+**Files:** `firebase.js`, `lib/dbError.js` (new), `lib/revGuard.js`,
+`hooks/usePersistence.js` + 10 other hooks, `components/StatusToasts.jsx`,
+`components/ConnectionStatus.jsx`, `App.jsx`, `index.html`, `CLAUDE.md`,
+`ROADMAP.md`.
+**Gates:** 88 tests, 0 lint errors, build 191.90 → **192.69 kB gz** (+0.79).
+**Verified:** on the tablet over CDP (root cause + the rejected CSP fix), and in
+DEV with the poison flag re-armed (0 long-poll requests, flag self-cleared).

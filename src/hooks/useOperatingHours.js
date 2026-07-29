@@ -27,6 +27,7 @@ import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { DEFAULT_WEEK_HOURS, setWeekHours, setActiveDayHours } from "../lib/constants";
+import { dbError } from "../lib/dbError";
 
 const TODAY = () => new Date().toISOString().slice(0, 10);
 
@@ -78,7 +79,7 @@ export function useOperatingHours(viewDate){
       }
       // Node absent (first run): keep the default week already applied at import.
       loaded.current = true;
-    });
+    },dbError("settings/operatingHours"));
     return unsub;
   }, []);
 
