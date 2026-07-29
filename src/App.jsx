@@ -42,6 +42,7 @@ import {
 } from "./lib/booking-logic";
 
 import { normalizePhone } from "./lib/customers";
+import { sameDraft } from "./lib/drafts";
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
@@ -116,6 +117,12 @@ import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
 import { ViewTools }    from "./components/ViewTools";
+// v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
+// split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
+// three-step setup popup (SplitMenu).
+import { ViewSwitcher }  from "./components/ViewSwitcher";
+import { SplitLayout }   from "./components/SplitLayout";
+import { SplitMenu }     from "./components/SplitMenu";
 const WeekView = lazyChunk(function(){return import("./components/WeekView").then(function(m){return {default:m.WeekView};});},"WeekView"); // v17.1.0: lazy (opened on demand)
 import { LateBanner }   from "./components/LateBanner";
 import { OverlapBanner } from "./components/OverlapBanner";
@@ -246,7 +253,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.4.2",
+  version:"17.5.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -304,6 +311,31 @@ function readAppWidth(){
   }catch{/* ignore */}
   const w=Math.round((window.innerWidth-300)/50)*50;
   return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,w));
+}
+
+// v17.5.0: the persisted Split View, per device. Restored on load so a split
+// survives a reload/redeploy — losing your layout on every refresh would make
+// the feature not worth setting up.
+const SPLIT_KEY="mgt-split";
+// The canonical view order — drives the slide direction on a view switch AND
+// validates a restored split. useKeyboardShortcuts keeps its own VIEW_ORD for
+// the same purpose; keep the two identical if a view is ever added.
+const VIEW_ORD=["timeline","list","plan"];
+// Validate HARD, and return null on anything unexpected: a hand-edited or
+// half-written key must never be able to wedge the app in a broken layout, and
+// the same view appearing twice would collide on the singleton per-view state
+// (timelineZoom / selectedListId / showFinished).
+function readSplit(){
+  try{
+    if(localStorage.getItem("mgt-split-enabled")==="0") return null;   // master switch off
+    if(typeof window!=="undefined"&&window.innerWidth<600) return null; // tablet/desktop only
+    const s=JSON.parse(localStorage.getItem(SPLIT_KEY)||"null");
+    if(!s||typeof s!=="object") return null;
+    if(VIEW_ORD.indexOf(s.a)===-1||VIEW_ORD.indexOf(s.b)===-1||s.a===s.b) return null;
+    if(s.dir!=="v"&&s.dir!=="h") return null;
+    const r=Number(s.ratio);
+    return {a:s.a,b:s.b,dir:s.dir,ratio:Number.isFinite(r)&&r>=0.2&&r<=0.8?r:0.5};
+  }catch{return null;}
 }
 
 // v17.2.0: per-device Timeline zoom/follow settings (theme pattern — key absent
@@ -584,6 +616,23 @@ function BookingApp(){
   const [manualTarget, setManualTarget] = useState(null);
   const [dismissedIneff, setDismissedIneff] = useState(null);
   const formRef=useRef(EMPTY_FORM);
+  // ── v17.5.0: unsaved-changes guard ──────────────────────────────────────────
+  // `formBaseline` holds the draft the form was OPENED with; `openForm` is the
+  // ONE way to seed a fresh draft, so the baseline can never drift out of step
+  // with the four open paths (openNew / openEdit / bookAgain /
+  // bookFromWaitlist). Every OTHER setForm call is a user edit and must NOT
+  // touch the baseline — that is the whole signal.
+  // STATE, not a ref (cf. formRef above, which exists precisely so handlers can
+  // read a FRESH draft): this one is read during render to derive formDirty, so
+  // a ref would be the wrong tool — a ref write wouldn't repaint.
+  const [formBaseline, setFormBaseline] = useState(EMPTY_FORM);
+  function openForm(next){setFormBaseline(next);setForm(next);}
+  // Which surface the discard confirm is asking about: "form" | "walkin" |
+  // "manual" | null. One shared modal, three callers.
+  const [confirmDiscard, setConfirmDiscard] = useState(null);
+  // ManualModal owns its table-pick state internally, so it reports dirtiness
+  // up rather than App reaching in (see its onDirty prop).
+  const [manualDirty, setManualDirty] = useState(false);
   // v17.0.0: status override for the pending flow — set by save("pending"/
   // "confirmed") ("Save pending" / "Save&confirm" buttons) and read by doSave.
   // A ref (not an arg) because the kitchen-confirm modal + its Enter shortcut
@@ -774,6 +823,86 @@ function BookingApp(){
     }catch{/* ignore */}
     setPlanGestures(next);
   }
+  // v17.5.0: per-device "Lock navigation" (Settings → General). Theme pattern,
+  // but INVERTED vs planGestures because the default is OFF — only the non-
+  // default value is ever stored, so localStorage["mgt-nav-lock"]="1" means on
+  // and an absent key means off. Drives the `shellFixed` layout below.
+  const [navLocked,setNavLocked]=useState(function(){
+    try{return localStorage.getItem("mgt-nav-lock")==="1";}catch{return false;}
+  });
+  function onToggleNavLock(){
+    const next=!navLocked;
+    try{
+      if(next) localStorage.setItem("mgt-nav-lock","1");
+      else localStorage.removeItem("mgt-nav-lock");
+    }catch{/* ignore */}
+    setNavLocked(next);
+  }
+  // v17.5.0: per-device Split View master switch (Settings → General).
+  // v17.5.0 correction: default ON (was off), so the RMB / press-and-hold
+  // gesture works out of the box. That puts it back on the house convention —
+  // key absent = default, only the non-default "0" is stored — same shape as
+  // planGestures. (navLocked stays inverted; its default really is off.)
+  // While off, the gesture on a view button does nothing at all.
+  const [splitEnabled,setSplitEnabled]=useState(function(){
+    try{return localStorage.getItem("mgt-split-enabled")!=="0";}catch{return true;}
+  });
+  function onToggleSplitEnabled(){
+    const next=!splitEnabled;
+    try{
+      if(next) localStorage.removeItem("mgt-split-enabled");
+      else{localStorage.setItem("mgt-split-enabled","0");localStorage.removeItem(SPLIT_KEY);}
+    }catch{/* ignore */}
+    setSplitEnabled(next);
+    if(!next) setSplit(null); // turning the feature off must also leave any active split
+  }
+  // The active split, or null for a single view. Restored per-device.
+  const [split,setSplit]=useState(readSplit);
+  const [focusedPane,setFocusedPane]=useState("a");
+  const [splitMenuFor,setSplitMenuFor]=useState(null); // which view's SplitMenu is open
+  // Which view the keyboard acts on: the focused pane's in a split, else `view`.
+  // Declared HERE, not next to the split handlers further down, because
+  // useKeyboardShortcuts' ctx object is built mid-render and a `const` used
+  // before its declaration is a TDZ ReferenceError, not a hoist (the split
+  // handlers below are function declarations, so those genuinely do hoist).
+  const activeView=split?split[focusedPane]:view;
+  // One writer for both the state and the key, so they can't drift.
+  function applySplit(next){
+    setSplit(next);
+    try{
+      if(next) localStorage.setItem(SPLIT_KEY,JSON.stringify(next));
+      else localStorage.removeItem(SPLIT_KEY);
+    }catch{/* ignore */}
+  }
+  // Phones collapse out of a split: the header already wraps to three rows at
+  // <600px, and a Timeline in a ~180px pane is unusable. Also covers a desktop
+  // window dragged narrow.
+  useEffect(function(){
+    if(isMobile&&split) applySplit(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[isMobile]);
+  // ── v17.5.0: the fixed shell ────────────────────────────────────────────────
+  // Normally <body> is the scrollport (see the mount effect near the top of
+  // BookingApp) and the app is a plain `minHeight:100dvh` block that grows.
+  // `shellFixed` flips that: the shell becomes a 100dvh flex COLUMN, the header
+  // and date rows become flexShrink:0, and an inner region takes the scroll.
+  // That is the ONE mechanism behind "lock navigation" — and Split View widens
+  // this flag rather than inventing a second layout.
+  // Both contributing settings default off, so the default render path is
+  // byte-for-byte what shipped in v17.4.2.
+  // Split View joins the SAME flag rather than getting its own layout: two
+  // independently-scrolling panes need a definite height, which is exactly what
+  // the fixed shell provides. Consequence, stated in CLAUDE.md: entering a
+  // split pins the nav whether or not "Lock navigation" is on.
+  const shellFixed = navLocked || !!split;
+  // Body must stop scrolling in that mode or the page gets a second scrollbar
+  // outside the fixed shell. Separate from the mount-once effect above (which
+  // establishes the baseline) because that effect is declared long before
+  // `navLocked` exists — putting navLocked in ITS dep array would be a TDZ error.
+  useEffect(function(){
+    document.body.style.overflow=shellFixed?"hidden":"auto";
+    return function(){document.body.style.overflow="auto";};
+  },[shellFixed]);
   // v17.2.0: per-device Timeline zoom/follow settings (see readTlSettings above).
   // Stored one value per key; a value equal to its default removes the key.
   // Lowering maxZoom clamps followZoom/defaultZoom (and the live zoom) with it.
@@ -1134,7 +1263,7 @@ function BookingApp(){
   // removes it once the booking is dispatched.
   function bookFromWaitlist(w){
     const avail=waitAvail[w.id];
-    setForm(Object.assign({},EMPTY_FORM,{
+    openForm(Object.assign({},EMPTY_FORM,{
       name:w.name||"",
       phone:w.phone||generalSettings.phonePrefix,
       date:w.date,
@@ -1240,8 +1369,8 @@ function BookingApp(){
     saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
   }
 
-  function openNew(){pendingWaitlistRef.current=null;setForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){pendingWaitlistRef.current=null;setForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openNew(){pendingWaitlistRef.current=null;openForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  function openEdit(b){pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -1254,7 +1383,7 @@ function BookingApp(){
     if(!sourceBooking) return;
     pendingWaitlistRef.current=null;
     const schedTime=sourceBooking.scheduledTime||sourceBooking.time||"13:00";
-    setForm(Object.assign({},EMPTY_FORM,{
+    openForm(Object.assign({},EMPTY_FORM,{
       name:sourceBooking.name||"",
       phone:sourceBooking.phone||generalSettings.phonePrefix,
       date:"",
@@ -1287,7 +1416,7 @@ function BookingApp(){
   const {
     showWalkin, setShowWalkin,
     walkinForm, setWalkinForm,
-    walkinError,
+    walkinError, walkinDirty,
     getNextWalkinNum,
     openWalkin, saveWalkin, doSaveWalkin,
   } = useWalkin({
@@ -1296,6 +1425,41 @@ function BookingApp(){
     confirmKitchen, setConfirmKitchen,
     defaultWalkinSize: generalSettings.defaultWalkinSize,
   });
+
+  // ── v17.5.0: unsaved-changes guard — dirtiness + the guarded close paths ────
+  // Origin: nothing in the app warned before losing a draft. On the tablets a
+  // mis-tap on the modal scrim discarded a half-typed booking silently, and a
+  // stray ⌘R did the same. Three surfaces hold real drafts; each diffs its live
+  // state against the snapshot taken when it opened (see lib/drafts.js).
+  //
+  // Each `requestClose*` is the GUARDED door: clean → close immediately (an
+  // untouched form must never nag, or staff learn to tap through the confirm);
+  // dirty → raise the shared discard modal instead. The RAW setters stay in
+  // place for the deliberate closes (a successful save, add-to-waitlist, the
+  // cancel-booking confirm) — those already represent a decision.
+  const formDirty=showForm&&!sameDraft(form,formBaseline);
+  function requestCloseForm(){if(formDirty) setConfirmDiscard("form");else setShowForm(false);}
+  function requestCloseWalkin(){if(walkinDirty) setConfirmDiscard("walkin");else setShowWalkin(false);}
+  function requestCloseManual(){if(manualDirty) setConfirmDiscard("manual");else setManualTarget(null);}
+  // Commit the discard: shut the surface the modal was asked about.
+  function doDiscard(){
+    const which=confirmDiscard;
+    setConfirmDiscard(null);
+    if(which==="form") setShowForm(false);
+    else if(which==="walkin") setShowWalkin(false);
+    else if(which==="manual") setManualTarget(null);
+  }
+
+  // Tab/window close + reload. Registered ONLY while something is dirty, so the
+  // browser never nags on a clean page. Custom text is not possible — every
+  // modern browser shows its own generic wording and ignores the string.
+  const anyDirty=formDirty||walkinDirty||manualDirty;
+  useEffect(function(){
+    if(!anyDirty) return undefined;
+    function onBeforeUnload(e){e.preventDefault();e.returnValue="";}
+    window.addEventListener("beforeunload",onBeforeUnload);
+    return function(){window.removeEventListener("beforeunload",onBeforeUnload);};
+  },[anyDirty]);
 
   // ── v17.3.5: doSave split (de-monolith #3) ────────────────────────────────────────
   // The 199-line doSave was split for maintainability (the tech-debt plan's
@@ -1773,7 +1937,12 @@ function BookingApp(){
   // the hook mounts its window listeners once and reads this through a ref).
   // Adding a shortcut = add the state/handler HERE and use it in the hook.
   useKeyboardShortcuts({
-    view:view,setView:setView,viewDate:viewDate,setViewDate:setViewDate,
+    // v17.5.0: in a split, every view-sensitive shortcut (S/C status, ↑/↓ list
+    // nav, the neutral-space and Esc list-deselect, the zoom keys) must act on
+    // the FOCUSED pane, not on the stale single-view `view`. Passing activeView
+    // here means the whole hook is split-aware without touching each branch.
+    view:activeView,setView:setView,goView:pickView,
+    viewDate:viewDate,setViewDate:setViewDate,
     timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoom,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
     followNow:followNow,setFollowNow:setFollowNow,
     autoOptimizer:autoOptimizer,setAutoOptimizer:setAutoOptimizer,
@@ -1815,7 +1984,15 @@ function BookingApp(){
     // v16.2.0: Shift+D theme toggle.
     onToggleDark:onToggleDark,
     // v17.1.0: Shift +/− app-width nudge (global, like Shift+D).
-    onSetAppWidth:onSetAppWidth,appWidth:appWidth
+    onSetAppWidth:onSetAppWidth,appWidth:appWidth,
+    // v17.5.0: the unsaved-changes guard. Esc must route the three drafting
+    // surfaces through requestClose* (it calls the setters directly, so it
+    // would otherwise be a silent back door past the guard), and the discard
+    // confirm needs its own Esc (dismiss) / Enter (discard) branches.
+    // v17.5.0 correction: Esc closes the split-setup popup (it has no Cancel).
+    splitMenuFor:splitMenuFor,setSplitMenuFor:setSplitMenuFor,
+    confirmDiscard:confirmDiscard,setConfirmDiscard:setConfirmDiscard,doDiscard:doDiscard,
+    requestCloseForm:requestCloseForm,requestCloseWalkin:requestCloseWalkin,requestCloseManual:requestCloseManual
   });
 
   function updateStatus(id,status){
@@ -2120,8 +2297,11 @@ function BookingApp(){
   // module bindings, which React.memo cannot see. Passing the weekHours/layout
   // state objects makes an hours or layout edit bust the memo so the views
   // repaint with the new bindings.
-  const mainView=view==="plan"?planView:view==="timeline"
-    ?<TimelineView
+  // v17.5.0: all three views are now built unconditionally and indexed, because
+  // Split View renders TWO of them. Constructing an element is just
+  // createElement — nothing renders until it's mounted — and `planView` above
+  // has always been built this way, so this costs nothing.
+  const timelineEl=<TimelineView
     bookings={bookings}
     date={viewDate}
     onEdit={VA.onEdit}
@@ -2148,8 +2328,8 @@ function BookingApp(){
     onReshuffle={VA.onReshuffle}
     hoursSig={weekHours}
     layoutSig={layout}
-    currency={generalSettings.currency} />
-    :<ListView
+    currency={generalSettings.currency} />;
+  const listEl=<ListView
     bookings={bookings}
     date={viewDate}
     onEdit={VA.onEdit}
@@ -2166,6 +2346,42 @@ function BookingApp(){
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
     currency={generalSettings.currency} />;
+  const viewEl={timeline:timelineEl,list:listEl,plan:planView};
+  const mainView=viewEl[view];
+
+  // ── v17.5.0: Split View handlers ────────────────────────────────────────────
+  // A plain tap on a view button REPLACES the focused pane; if that view is
+  // already in the other pane the two swap instead, so the same view can never
+  // occupy both (which would collide on the singleton timelineZoom /
+  // selectedListId / showFinished state). Outside a split it's the original
+  // behaviour, slide direction included.
+  function pickView(v){
+    if(split){
+      const other=focusedPane==="a"?"b":"a";
+      if(split[other]===v){applySplit(Object.assign({},split,{a:split.b,b:split.a}));setFocusedPane(other);return;}
+      if(split[focusedPane]===v) return;
+      applySplit(Object.assign({},split,{[focusedPane]:v}));
+      return;
+    }
+    if(v!==view) bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");
+    setView(v);
+  }
+  function confirmSplit(next){
+    setSplitMenuFor(null);
+    applySplit(next);
+    setFocusedPane("a");
+    // Keep the single-view state coherent for anything still reading `view`
+    // (the search-jump, the keyboard fallback) — pane A is the one it invoked on.
+    setView(next.a);
+  }
+  function swapSides(){
+    if(!split) return;
+    applySplit(Object.assign({},split,{a:split.b,b:split.a,ratio:1-split.ratio}));
+    setFocusedPane(focusedPane==="a"?"b":"a");
+  }
+  function toggleSplitDir(){ if(split) applySplit(Object.assign({},split,{dir:split.dir==="v"?"h":"v"})); }
+  function exitSplit(){ if(split){ setView(split[focusedPane]); applySplit(null); } }
+  function setSplitRatio(r){ if(split) applySplit(Object.assign({},split,{ratio:r})); }
 
 
 
@@ -2194,12 +2410,40 @@ function BookingApp(){
         className="mgt-hover-scale"
         style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
 
+  // v17.5.0: the ONE discard confirm, shared by the booking form, the walk-in
+  // form and ManualModal (requestClose* raise it; doDiscard commits).
+  // Wrapped in a relative z-260 div rather than relying on DOM order: it must
+  // paint above the three z-200 Overlays it guards, and `position:fixed` still
+  // anchors to the viewport inside a plain relative/z-index ancestor (only
+  // transform/filter/perspective would break that). Order-proof by construction.
+  //
+  // "Keep editing" uses --app-btn-slate, NOT BTN.cancel: in this app's
+  // vocabulary "cancel" means cancel the BOOKING, so --btn-cancel is RED. The
+  // delModal footer this is otherwise modelled on can afford that (its safe
+  // option is literally called Cancel); here the safe option sitting next to a
+  // red Discard would read as two danger buttons — the exact mis-tap this
+  // guard exists to prevent. Slate is the house token for a neutral dialog
+  // secondary (see confirmKitchen's "Back").
+  const DISCARD_BODY={
+    form:"The booking you're editing hasn't been saved yet.",
+    walkin:"This walk-in hasn't been saved yet.",
+    manual:"Your table selection hasn't been applied yet."
+  };
+  const discardModal=<div style={{position:"relative",zIndex:260}}><ModalPresence show={!!confirmDiscard}>{confirmDiscard?<Overlay onClose={function(){setConfirmDiscard(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
+        className="mgt-hover-scale"
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+        onClick={function(){setConfirmDiscard(null);}}>Keep editing</button><button
+        onClick={doDiscard}
+        className="mgt-hover-scale"
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Discard</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Discard unsaved changes?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
+
   const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
     booking={manualBooking}
     bookings={manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings}
     blocks={tableBlocks}
     onSave={function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{manualAssign(manualBooking.id,tables,locked,affected);}}}
-    onClose={function(){setManualTarget(null);}} />:null}</ModalPresence>;
+    onDirty={setManualDirty}
+    onClose={requestCloseManual} />:null}</ModalPresence>;
 
   const walkinModal=<ModalPresence show={showWalkin}>{showWalkin?<WalkinForm
     draft={walkinForm}
@@ -2213,7 +2457,7 @@ function BookingApp(){
     isMobile={isMobile}
     nowMins={nowMins}
     onSave={saveWalkin}
-    onClose={function(){setShowWalkin(false);}}
+    onClose={requestCloseWalkin}
     onAddToWaitlist={addWalkinToWaitlist} />:null}</ModalPresence>;
 
   // v17.1.0: Suspense INSIDE the ModalPresence (fallback null) so the open/close
@@ -2227,14 +2471,27 @@ function BookingApp(){
 
   return (
     <div
-      style={{background:"var(--bg-app)",minHeight:"100dvh",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"}}><div style={{maxWidth:appWidth,margin:"0 auto"}}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["timeline","list","plan"].map(function(v){return (
-              <button
-                key={v}
-                className="mgt-hover-scale"
-                onClick={function(){if(v!==view){const ORD=["timeline","list","plan"];bumpSlide(ORD.indexOf(v)>ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");}setView(v);}}
-                style={mkBtn({background:view===v?S.accent:"var(--app-btn-grey)",textTransform:"capitalize",minHeight:40})}>{v}</button>
-            );})}<button
+      style={Object.assign({background:"var(--bg-app)",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
+        /* v17.5.0: shellFixed → a 100dvh flex column whose inner region scrolls,
+           so the header + date rows stay put. Off = the original growing block.
+           v17.5.0 correction: NO overflow:hidden here. It clipped the List
+           cards' .mgt-hover-scale lift (scale 1.08 = 4% of card width per side,
+           ~32px on a full-width card) at the shell edge — visible mid-screen,
+           whereas normally that lift just bleeds to the window edge. It was
+           only ever belt-and-braces: html+body are already overflow:hidden in
+           this mode (see the body effect above), so nothing can scroll here. */
+        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}><ViewSwitcher
+              view={view}
+              split={split}
+              focusedPane={focusedPane}
+              splitEnabled={splitEnabled}
+              isMobile={isMobile}
+              onPickView={pickView}
+              onOpenSplitMenu={setSplitMenuFor}
+              onSwapSides={swapSides}
+              onToggleDir={toggleSplitDir}
+              onExitSplit={exitSplit} /><button
               onClick={openWalkin}
               className="mgt-hover-scale"
               style={{background:"var(--app-walkin)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Walk-in</button><button
@@ -2244,7 +2501,7 @@ function BookingApp(){
               onClick={function(){signOut(auth);}}
               className="mgt-hover-scale"
               style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button><ConnectionStatus connected={isOnline} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} /></div></div><div
-          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap"}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
+          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
@@ -2279,13 +2536,35 @@ function BookingApp(){
               mobile full-width Summary wraps them onto their own line. */}
             <div style={{display:"flex",alignItems:"center",minHeight:40,marginLeft:"auto",flexShrink:0}}><ViewTools
               onOpenSearch={function(){setShowSearch(true);}}
-              onOpenSettings={function(){setShowSettings(true);}} /></div></div><AppBanners
+              onOpenSettings={function(){setShowSettings(true);}} /></div></div>{/* v17.5.0: in the fixed shell everything from here down lives in ONE
+            scroll region, so the two rows above stay pinned. The banners scroll
+            away with the content — they're the pinning scope Patryk chose, and
+            several open at once (a 3+ row late banner) would eat the viewport.
+            When shellFixed is off this div is a plain, style-less wrapper and
+            the page scrolls exactly as it always did. */}
+            <div style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
+              /* With a split the panes own the scrolling, so this region must
+                 NOT scroll — a flex:1 child of an overflowY:auto parent resolves
+                 to CONTENT height, which would collapse a top/bottom split. The
+                 banners therefore pin here (they scroll away in nav-lock-only
+                 mode); they're collapsible and dismissible, so that's affordable. */
+              /* v17.5.0 correction — the hover-lift gutter. A scroll container
+                 clips at its PADDING box, and CSS can't pair overflow-y:auto
+                 with overflow-x:visible (the spec forces the other axis to
+                 clip), so the only way to keep the List cards' 1.08 lift intact
+                 is to make the scrollport wider than its content. Negative
+                 margin + equal padding does exactly that, and in PERCENT it is
+                 self-scaling: the lift needs 4% of the card width per side, the
+                 card is the content box, so 4% padding is precisely enough at
+                 any width. The negative margin puts the content back where it
+                 was, so card width and position are unchanged from before. */
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><AppBanners
                 isOnline={isOnline}
                 writeWarning={writeWarning}
                 onDismissWarning={function(){setWriteWarning(null);}}
                 ineffShow={ineffShow}
                 onDismissIneff={function(){setDismissedIneff(viewDate);}}
-                onReshuffle={function(){setConfirmReshuffle(true);}} /><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} collapseMax={generalSettings.lateCollapseMax} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={{position:"relative"}}><StatusToasts
+                onReshuffle={function(){setConfirmReshuffle(true);}} /><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} collapseMax={generalSettings.lateCollapseMax} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 resyncing={resyncing}
                 reconnectShown={reconnectShown}
@@ -2298,7 +2577,17 @@ function BookingApp(){
                 reshuffled={reshuffled}
                 reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
                 loadShown={loadBannerShown}
-                loadMsg={"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir}>{mainView}</SlideView></div><ModalPresence show={showForm}>{showForm?<BookingFormModal
+                loadMsg={"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir} fill={shellFixed}>{split?<SplitLayout
+                dir={split.dir}
+                ratio={split.ratio}
+                onRatio={setSplitRatio}
+                focused={focusedPane}
+                onFocus={setFocusedPane}
+                paneA={viewEl[split.a]}
+                paneB={viewEl[split.b]} />:mainView}</SlideView></div></div>{splitMenuFor?<SplitMenu
+              view={splitMenuFor}
+              onConfirm={confirmSplit}
+              onClose={function(){setSplitMenuFor(null);}} />:null}<ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
@@ -2313,7 +2602,7 @@ function BookingApp(){
               onSave={function(){save();}}
               onSavePending={function(){save("pending");}}
               onSaveConfirm={function(){save("confirmed");}}
-              onClose={function(){setShowForm(false);}}
+              onClose={requestCloseForm}
               onClearSwap={function(){setSwapAffected(null);}}
               onBookAgain={bookAgain}
               onOpenPrefPicker={function(){setShowPrefPicker(true);}}
@@ -2321,7 +2610,7 @@ function BookingApp(){
               onOpenHistory={function(){setShowHistory(true);}}
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}
@@ -2364,6 +2653,10 @@ function BookingApp(){
             onSetAppWidth={onSetAppWidth}
             reduceMotion={reduceMotion}
             onToggleReduceMotion={onToggleReduceMotion}
+            navLocked={navLocked}
+            onToggleNavLock={onToggleNavLock}
+            splitEnabled={splitEnabled}
+            onToggleSplitEnabled={onToggleSplitEnabled}
             planGestures={planGestures}
             onTogglePlanGestures={onTogglePlanGestures}
             tlSettings={tlSettings}

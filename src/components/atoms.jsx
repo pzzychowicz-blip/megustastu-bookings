@@ -334,13 +334,19 @@ export function AutoHeight({ children, style, linear }) {
 // -right). `overflow:hidden` ONLY while the slide runs (so the 28px translateX
 // doesn't cause a transient scrollbar), then `visible` so card hover-lifts aren't
 // clipped at rest (the v15.8.0-cont.3 regression fix).
-export function SlideView({ dir, children }) {
+// `fill` (v17.5.0): in the fixed-shell layout (Settings → "Lock navigation",
+// and Split View) this wrapper sits inside a flex COLUMN and must pass a
+// definite height through to its child instead of collapsing to content
+// height. Off by default, so the normal document-flow layout is unchanged.
+export function SlideView({ dir, fill = false, children }) {
   const [animating, setAnimating] = useState(true);
   return (
     <div
       className={animating ? dir : undefined}
       onAnimationEnd={function () { setAnimating(false); }}
-      style={{ overflow: animating ? "hidden" : "visible" }}
+      style={fill
+        ? { overflow: animating ? "hidden" : "visible", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }
+        : { overflow: animating ? "hidden" : "visible" }}
     >
       {children}
     </div>
