@@ -23,6 +23,7 @@ import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { DEFAULT_LAYOUT, setLayout, comboKey } from "../lib/constants";
+import { dbError } from "../lib/dbError";
 
 // Validate + clamp a layout config. Drops malformed/duplicate tables; coerces
 // capacity (1–20) and zone ("indoor"|"outdoor"); falls back to DEFAULT_LAYOUT
@@ -257,7 +258,7 @@ export function useLayout(){
       }
       // Node absent (first run): keep DEFAULT_LAYOUT already in force.
       loaded.current = true;
-    });
+    },dbError("settings/layout"));
     return unsub;
   }, []);
 

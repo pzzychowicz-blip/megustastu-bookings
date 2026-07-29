@@ -33,6 +33,7 @@
 
 import { ref, onValue, update } from "firebase/database";
 import { db } from "./../firebase";
+import { dbError } from "./dbError";
 
 // Subscribe `revRef.current` to <path>Rev. Plain assignment (not max): a
 // server rejection's rollback echo must be able to LOWER an optimistically
@@ -41,7 +42,7 @@ export function attachRev(path, revRef){
   return onValue(ref(db, path + "Rev"), function(snap){
     const v = snap.val();
     revRef.current = typeof v === "number" ? v : 0;
-  });
+  },dbError(path+"Rev"));
 }
 
 // Atomic { node, nodeRev: base+1 } write. `value` may be an empty array/object —

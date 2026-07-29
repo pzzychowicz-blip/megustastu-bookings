@@ -35,6 +35,7 @@ import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { setDurTiers } from "../lib/constants";
+import { dbError } from "../lib/dbError";
 
 export const MAX_TIERS = 6;
 
@@ -139,7 +140,7 @@ export function useBookingDefaults(){
       }
       // Node absent (first run): keep the defaults (= the historical literals).
       loaded.current = true;
-    });
+    },dbError("settings/bookingDefaults"));
     return unsub;
   }, []);
 

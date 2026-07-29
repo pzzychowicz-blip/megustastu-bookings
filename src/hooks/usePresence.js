@@ -17,6 +17,7 @@
 import { useState, useEffect, useRef } from "react";
 import { ref, onValue, onDisconnect, push, set, remove, serverTimestamp } from "firebase/database";
 import { db, auth } from "../firebase";
+import { dbError } from "../lib/dbError";
 
 // Best-effort human label from the userAgent — "iPad · Safari", "Mac · Chrome",
 // "Windows · Edge", "Android · Chrome". Purely cosmetic; falls back to "Device".
@@ -67,7 +68,7 @@ export function usePresence(){
       // onDisconnect FIRST so a write that races a drop is still cleaned up.
       onDisconnect(myRef).remove();
       set(myRef,{email:email,ua:deviceLabel(),since:serverTimestamp()}).catch(function(){});
-    });
+    },dbError(".info/connected"));
     return function(){
       active=false;
       unsub();
@@ -86,7 +87,7 @@ export function usePresence(){
         return {key:k,email:v.email||"unknown",ua:v.ua||"Device",since:typeof v.since==="number"?v.since:null};
       });
       setDevices(list);
-    });
+    },dbError("presence"));
     return unsub;
   },[]);
 

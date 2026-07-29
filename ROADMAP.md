@@ -14,11 +14,21 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **PWA / offline shell — withdrawn in v17.4.1, do not reintroduce casually.**
+- **PWA / offline shell — withdrawn in v17.4.1. The worker may have been
+  innocent (v17.5.1 finding).** v17.5.1 root-caused the *Android* tablet's
+  identical "⟳ Loading bookings…" freeze to something else entirely: the CSP's
+  `script-src` blocking Firebase's JSONP long-poll fallback, on any device
+  carrying a cached `firebase:previous_websocket_failure` flag. The CSP went
+  blocking on 2026-07-24, one day before v17.4.0 shipped. The iOS devices were
+  "fixed" by clearing site data — which also clears **localStorage**, i.e. that
+  same flag — so the evidence that convicted the worker fits this cause just as
+  well, as `public/sw.js`'s own comment hedged at the time. **Before any PWA
+  work: re-test on iOS now that v17.5.1's `forceWebSockets()` is deployed.** The
+  original outage may simply not recur. Keep the conditions below regardless.
   v17.4.0 shipped an offline-shell service worker; in production it froze the
-  app at "⟳ Loading bookings…" on iPhone and iPad (desktop unaffected). Root
-  cause was never established — it didn't reproduce locally under a PROD-mode
-  build against DEV data. v17.4.1 replaced it with a kill switch (see
+  app at "⟳ Loading bookings…" on iPhone and iPad (desktop unaffected). It
+  didn't reproduce locally under a PROD-mode build against DEV data. v17.4.1
+  replaced it with a kill switch (see
   `CLAUDE.md`'s Gotchas table: "A shipped service worker CANNOT be withdrawn
   by deleting it" / "A SW must be testable on the target device before it
   ships" — read both before touching this). The manifest and icon family were
