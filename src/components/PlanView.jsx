@@ -91,8 +91,12 @@ export const PlanView = memo(function PlanView({
   // v17.5.0: bumped ONLY at the programmatic scrub sites (date change, clock
   // follow, the Now button) so TimeAxis re-centres then — and never yanks the
   // strip while the user is scrolling it or tapping a block.
-  const [autoScrollKey, setAutoScrollKey] = useState(0);
-  const reCentre = () => setAutoScrollKey((k) => k + 1);
+  // v17.6.0: the bump carries HOW to move as well as when. `k` is the trigger
+  // (TimeAxis keys its layout effect on it); `smooth` says whether that re-centre
+  // glides. Kept in ONE state object so the two can never arrive out of step —
+  // two separate states would let a stale `smooth` ride along with a fresh `k`.
+  const [autoScroll, setAutoScroll] = useState({ k: 0, smooth: false });
+  const reCentre = (smooth) => setAutoScroll((s) => ({ k: s.k + 1, smooth: !!smooth }));
   // Re-anchor when the date changes; follow the clock on today until touched.
   // Both effects key on ONE trigger on purpose — re-running them on every
   // dependency would yank the selection out from under a hand scrub.
@@ -416,7 +420,7 @@ export const PlanView = memo(function PlanView({
         <span>
           {isToday ? (
             <button className="mgt-hover-scale"
-              onClick={() => { setSliderTouched(false); setSlider(clampExact(nowMins)); reCentre(); }}
+              onClick={() => { setSliderTouched(false); setSlider(clampExact(nowMins)); reCentre(true); }}
               style={mkBtn({ fontSize: 11, minHeight: 28, padding: "3px 10px", background: atNow ? S.accent : "var(--app-btn-grey)" })}>Now</button>
           ) : null}
         </span>
@@ -435,7 +439,8 @@ export const PlanView = memo(function PlanView({
           nowMins={nowMins}
           isToday={isToday}
           occupancy={occupancyByQuarter}
-          autoScrollKey={autoScrollKey} />
+          autoScrollKey={autoScroll.k}
+          autoScrollSmooth={autoScroll.smooth} />
       )}
       {h.closed ? (
         <div style={{ textAlign: "center", padding: "10px 0", fontSize: 13, fontWeight: 700, color: "var(--warn-text)" }}>Closed on this day.</div>
