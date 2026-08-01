@@ -25,7 +25,7 @@
 import { verifyStaffToken, getConversation, readMessages, readOperatingHours } from "./_lib/rtdb.js";
 import { parseThread } from "./_lib/gemini.js";
 import { applyParse } from "./_lib/inbound-core.js";
-import { WA_RECHECK_HISTORY } from "../src/lib/whatsapp.js";
+import { WA_RECHECK_HISTORY, normalizePhone } from "../src/lib/whatsapp.js";
 
 function readJsonBody(req) {
   if (req.body !== undefined && req.body !== null) {
@@ -56,8 +56,16 @@ export default async function handler(req, res) {
   }
 
   const body = await readJsonBody(req);
-  const phoneKey = body && typeof body.phoneKey === "string" ? body.phoneKey.trim() : "";
-  if (!phoneKey) { res.status(400).json({ error: "phoneKey required" }); return; }
+  const raw = body && typeof body.phoneKey === "string" ? body.phoneKey.trim() : "";
+  // Normalise, don't trust. This is the first endpoint to take a conversation
+  // key straight from a request body, and that key is concatenated into RTDB
+  // paths by getConversation / readMessages / applyParse. `/` is legal in an
+  // RTDB path, so an unvalidated key would let a signed-in client read and
+  // WRITE arbitrary sub-paths under conversations/. Every other caller of those
+  // helpers passes a normalizePhone() result — so require the client sent one,
+  // and reject anything that does not round-trip through it unchanged.
+  const phoneKey = normalizePhone(raw);
+  if (!phoneKey || phoneKey === "+" || phoneKey !== raw) { res.status(400).json({ error: "valid phoneKey required" }); return; }
 
   try {
     const conv = await getConversation(phoneKey);
