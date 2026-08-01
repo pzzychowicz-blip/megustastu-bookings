@@ -1,6 +1,6 @@
 ---
 name: mgt-workflow
-description: The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings) — covers session-start context bootstrapping, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit), AND keeping ROADMAP.md (the pending-work/deferred-features/ideas file) in sync. Load this at the START of every session in this repo (even before any coding task is clear) to run a cheap staleness check and decide whether last session's thread summary is worth reading. ALSO load it before making any edit under src/, before any commit, push, branch, PR, or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and whether ROADMAP.md needs an update all depend on decisions made before the first edit and at task close, not just at commit time. Also triggers on "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or anytime the user references prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, or ROADMAP.md. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
+description: The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings) — covers session-start context bootstrapping, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit), AND keeping ROADMAP.md (the pending-work/deferred-features/ideas file) in sync. Load this at the START of every session in this repo (even before any coding task is clear) to run a cheap staleness check and decide whether last session's thread summary is worth reading. ALSO load it before making any edit under src/, before any commit, push, branch, PR, or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and whether ROADMAP.md needs an update all depend on decisions made before the first edit and at task close, not just at commit time. A mandatory `/code-review` gate runs before EVERY push ("review and push" runs that gate end-to-end), and "sum up this thread" means the branch is already merged and gets its merge-confirmations asked in one batch. Also triggers on "review and push", "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or anytime the user references prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, or ROADMAP.md. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
 ---
 
 # MGT Bookings — workflow contract
@@ -155,16 +155,19 @@ apply, don't assume.
 
 **Once, when the version is ready to go out:**
 
-8. [ ] `git push -u origin <branch>` — **only when explicitly asked.** A push is a
+8. [ ] **Run `/code-review` over the branch diff — no push without it.** Fix critical
+   findings unprompted; put everything else to the user in one question. See the gate
+   below.
+9. [ ] `git push -u origin <branch>` — **only when explicitly asked.** A push is a
    shared-state action; a prior approval doesn't carry over to the next one.
-9. [ ] `gh pr create --base main --head <branch> …` — body ends with the "Generated
-   with Claude Code" line.
-10. [ ] Patryk reviews and merges. **You never merge your own PR** — not even if asked
+10. [ ] `gh pr create --base main --head <branch> …` — body ends with the "Generated
+    with Claude Code" line.
+11. [ ] Patryk reviews and merges. **You never merge your own PR** — not even if asked
     to "just finish it up," since merge authority is explicitly his.
-11. [ ] After merge, confirm the prod console boot banner / `window.__MGT_BUILD__`
+12. [ ] After merge, confirm the prod console boot banner / `window.__MGT_BUILD__`
     shows the new version — that's the real proof the deploy landed, not just that the
     PR merged.
-12. [ ] Sync the local checkout: `git checkout main && git pull --ff-only`.
+13. [ ] Sync the local checkout: `git checkout main && git pull --ff-only`.
 
 Review fixes arriving *after* the PR is open are just more passes through steps 2–7 on
 the same branch — new commits, same version, same REFACTOR_LOG entry.
@@ -184,6 +187,34 @@ Lead with the version, then which slice of it this is (`phase N`, `correction ro
 `follow-up`, `/code-review fixes`), then what it does. That prefix is what makes
 `git log --oneline` read as one version's story. Body ends with the Claude co-author
 trailer.
+
+### The pre-push review gate — mandatory
+
+**Nothing gets pushed until `/code-review` has run over the branch's diff** — every
+push, every version, not only the risky-looking ones. **"review and push" is the
+shorthand for running this whole gate end-to-end**: run the review, act on it per the
+rules below, then come back with a single question. Don't stop to narrate progress
+partway through — doing it in one pass is the entire point of the phrase.
+
+Sort the findings into two buckets and treat them differently:
+
+- **Critical — fix them, don't ask.** Anything that risks losing or corrupting booking
+  data, crashes or breaks a flow in PROD, opens a security hole, or breaks the build or
+  the test suite. Asking permission here is the wrong instinct: this repo has lost
+  production data twice, and a "should I fix this?" round-trip is exactly the delay
+  that hurt. Fix each one as its own commit (§7), re-run build + tests, then say what
+  you changed.
+- **Everything else — ask, don't act.** Style, perf nits, simplifications, missing
+  coverage, architectural suggestions. Gather them and put them to the user in **one**
+  `AskUserQuestion`: apply them now, or push as-is and leave them. One question
+  covering the whole set — never one per finding.
+
+If the review comes back clean, say so in a line and carry on to the push. No question
+needed when there's nothing to decide.
+
+`/code-review ultra` is a different thing — a billed, multi-agent cloud review that
+**only Patryk can launch**. Never attempt it yourself (via Bash or otherwise). If a
+version genuinely looks like it warrants that depth, say so and let him decide.
 
 ## 5. REFACTOR_LOG.md discipline
 
@@ -243,6 +274,9 @@ shipping.
 - **Commit and push only when the user explicitly asks**, each time — this isn't a
   standing permission once granted. Making the edits and running the build does not
   imply "and now commit it."
+- **No push without `/code-review` first** (§4). Critical findings — data loss, PROD
+  breakage, security, broken build/tests — get fixed unprompted; everything else is one
+  question, then push.
 - **Never use `-i`/interactive git flags** (`rebase -i`, `add -i`, etc.) — unsupported
   in this environment and would silently hang or fail.
 - **`gh` is at `/opt/homebrew/bin/gh`**, not on `$PATH` — always call it by full path
@@ -264,11 +298,30 @@ per CLAUDE.md, don't improvise a new interpretation:
   Firebase integration, auth, cleanup logic, logout.
 - **"give me changelog"** — generate a PDF changelog per
   `MGT_Changelog_Instructions.md`.
-- **"sum up this thread"** — produce a markdown thread-summary and update *both* the
-  context folder and this repo's `CLAUDE.md`/`REFACTOR_LOG.md` mirrors. The full
-  dual-folder mechanics are already spelled out in CLAUDE.md's "Trigger phrases"
-  section (and in memory as `sum-up-thread-implies-merged.md`) — read those rather
-  than reconstructing the behavior from scratch.
+- **"review and push"** — run the mandatory pre-push gate in §4 end-to-end in a single
+  pass: `/code-review` over the branch diff → fix critical findings unprompted → one
+  `AskUserQuestion` covering everything else (apply now, or push as-is) → push.
+
+- **"sum up this thread"** — this phrase carries three things at once: **the branch is
+  already merged** (assume that unless told otherwise), the summary needs writing, and
+  any loose ends get closed out in the *same* pass. Do all of it in one go — sparing a
+  second prompt that re-reads this whole context is the entire point.
+
+  Before writing, work out which of these actually apply, and ask **only** those, in a
+  single `AskUserQuestion`:
+  - **PROD Firebase rules** — only if this version added a new persisted node or a
+    `<name>Rev` pair needing the manual console step (see `database.rules.README.md`).
+    A version that touched no rules never gets asked about rules.
+  - **Unresolved threads to carry forward** — anything discussed but not shipped, so it
+    lands in the summary and `ROADMAP.md` (§6) instead of evaporating.
+
+  **If neither applies, ask nothing and just write the summary.** These confirmations
+  exist to catch real gaps, not to perform a ritual.
+
+  Then update *both* folders: the summary as `MGT_Bookings_<topic>_Thread_Summary.md`
+  in the context folder, plus refreshed `CLAUDE.md` / `REFACTOR_LOG.md` mirrors there.
+  Full mechanics are in CLAUDE.md's "Trigger phrases" section and in memory
+  (`sum-up-thread-implies-merged.md`).
 
 ## When this skill doesn't apply
 
