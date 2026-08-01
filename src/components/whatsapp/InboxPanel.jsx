@@ -295,7 +295,7 @@ export function InboxPanel({
   const listEl = (
     <div style={{ width: twoPane ? 320 : "100%", flexShrink: 0, borderRight: twoPane ? "1px solid var(--wa-divider)" : "none", background: "var(--wa-list-bg)", height: "100%", overflow: "hidden", display: twoPane || !activeKey ? "flex" : "none", flexDirection: "column" }}>
       {/* keyed by tab → Inbox⇄Archived switch crossfades the list */}
-      <div key={tab} className="mgt-fade-in" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div key={tab} className="mgt-fade-in-slow" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <ConversationList conversations={filteredConvs} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
       </div>
     </div>

@@ -506,6 +506,12 @@
       /* Settings tab-content crossfade on switch. */
       @keyframes mgt-fade-in { from { opacity: 0; } to { opacity: 1; } }
       .mgt-fade-in { animation: mgt-fade-in 180ms ease-out both; }
+      /* WhatsApp inbox: the Inbox⇄Archived tab crossfade runs 50% longer than
+         the house 180ms (Patryk, 2026-08-01) — the whole list pane swaps there,
+         which needs longer to read than a Settings tab body. Its OWN class on
+         purpose: .mgt-fade-in is shared with the Settings tabs and the composer
+         language chips, and those were not asked to change. */
+      .mgt-fade-in-slow { animation: mgt-fade-in 270ms ease-out both; }
 
       /* WhatsApp module (animation parity, post-port): a new chat bubble eases
          in (fade + small rise). Applied to the NEWEST bubble only — see
