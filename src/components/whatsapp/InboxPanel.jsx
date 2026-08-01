@@ -70,7 +70,7 @@ export function InboxPanel({
   conversations, messages, templates, bookings, initialActiveKey,
   onClose, onSend, onAccept, onDismiss, onSaveTemplates, onMarkRead,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
-  onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify,
+  onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, onRecheck,
   onBulkArchive, onBulkUnarchive, onBulkDelete,
   query, setQuery, needsAction, setNeedsAction,
   // Sandbox-only: opens the 🧪 simulator ON TOP of this panel (the WaSimulator
@@ -311,6 +311,7 @@ export function InboxPanel({
         onDismissAcceptedBadge={onDismissAcceptedBadge} onMarkIntentHandled={onMarkIntentHandled}
         onResend={onResend ? (msgId) => onResend(activeConv.phoneKey, msgId) : undefined}
         onApplyModify={onApplyModify}
+        onRecheck={onRecheck}
       />
     </div>
   ) : (twoPane ? (

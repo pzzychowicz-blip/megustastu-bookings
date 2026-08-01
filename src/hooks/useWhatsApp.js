@@ -30,7 +30,7 @@ import { ref, onValue, set, update } from "firebase/database";
 import { db } from "../firebase";
 import { EMPTY_FORM } from "../lib/constants";
 import { matchCustomerByPhone, normalizePhone, DEFAULT_TEMPLATES, intentBannerVisible } from "../lib/whatsapp";
-import { backendEnabled, sendViaBackend } from "../lib/wa-backend";
+import { backendEnabled, sendViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { WA_SANDBOX } from "../lib/waSandbox";
 import { clearCollapseSection } from "./useCollapseState";
 
@@ -498,6 +498,28 @@ export function useWhatsApp({
     if (ok) handleMarkIntentHandled(r.phoneKey);
   }
 
+  // ── Manual LLM re-check (the ⟳✓ button in the conversation header) ──────────
+  // The staff-initiated counterpart of the automatic per-message parse, for when
+  // that missed something. The server re-reads the recent thread (both
+  // directions) and applies the result through the SAME applyParse the webhook
+  // uses, so a re-check produces exactly the draft/banner an inbound would have.
+  //
+  // `parsing` is flipped on here so the existing "Reading the message…"
+  // indicator covers the round-trip; the server's applyParse clears it on
+  // success, and the catch clears it on failure — it can never get stuck.
+  // Resolves to the server's { intent, updated } so the caller can say whether
+  // anything actually changed.
+  async function recheckConversation(phoneKey) {
+    if (!phoneKey) return null;
+    patchConversation(phoneKey, { parsing: true });
+    try {
+      return await recheckViaBackend(phoneKey);
+    } catch (e) {
+      patchConversation(phoneKey, { parsing: null });
+      throw e;
+    }
+  }
+
   // Dev-only hard reset for the simulator: wipe BOTH WA nodes directly (bypasses
   // the empty-array guard on purpose — this is an explicit "clear the sandbox"
   // action, not an accidental effect write). Never wired outside the DEV-gated
@@ -523,6 +545,7 @@ export function useWhatsApp({
     handleSendReply, handleResend, simFailNextSend,
     handleAcceptDraft, handleDismissDraft, handleMarkRead,
     handleDismissAcceptedBadge, handleMarkIntentHandled, autoHandleCancelIntent,
+    recheckConversation,
     handleArchive, doArchive, handleUnarchive,
     handleDeleteConversation, doDeleteConversation,
     bulkArchive, bulkUnarchive, bulkDeleteConversations,

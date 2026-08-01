@@ -523,6 +523,12 @@
         animation: mgt-shimmer 1100ms ease-in-out infinite;
       }
 
+      /* Manual re-check (WA inbox): the ⟳✓ button's icon spins while the LLM
+         round-trip is in flight. Same reduced-motion guard as the shimmer —
+         the button is also disabled + dimmed, so the state stays legible with
+         the spin stopped. */
+      @keyframes mgt-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
       /* Accessibility + weak-hardware opt-out: collapse every animation/transition
          to ~instant when the OS requests reduced motion.
          v17.1.0: ALSO applied when the per-device "Reduce animations" toggle

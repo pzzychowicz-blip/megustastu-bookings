@@ -24,6 +24,25 @@ export function TemplatesIcon({ size = 16, color = "currentColor" }) {
   );
 }
 
+// RecheckIcon — a near-closed circular arrow with a tick inside: "run the check
+// again". Used for the manual LLM re-check button, left of Archive in the
+// conversation header. The gap + arrowhead sit at ~2 o'clock so the tick stays
+// centred and legible at 17px.
+export function RecheckIcon({ size = 16, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      style={{ pointerEvents: "none", display: "block" }} aria-hidden="true">
+      {/* Ring, open at the upper right */}
+      <path d="M20.2 9.8A8.5 8.5 0 1 1 14.9 4" />
+      {/* Arrowhead closing the gap, pointing up */}
+      <path d="M17.6 11l2.6-2.9 2.4 2.9" />
+      {/* Tick */}
+      <path d="M8.2 12.2l2.8 2.8 5-5.4" />
+    </svg>
+  );
+}
+
 export function SelectIcon({ size = 16, color = "currentColor" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"

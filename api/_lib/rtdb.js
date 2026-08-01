@@ -83,6 +83,21 @@ export async function appendMessage(phoneKey, msg) {
   await getDb().ref("messages/" + phoneKey + "/" + sanitizeKey(msg.id)).set(msg);
 }
 
+// readMessages(phoneKey, limit) — the conversation's most recent messages,
+// oldest-first, for the manual re-check (api/wa-recheck). Reads the whole keyed
+// node then slices: RTDB's orderByChild("ts") would need an index rule, and a
+// conversation is a handful of messages, so sorting in memory is the cheaper
+// trade. Reads BOTH storage shapes for the same reason the client listener does
+// (pre-migration array data).
+export async function readMessages(phoneKey, limit) {
+  const snap = await getDb().ref("messages/" + phoneKey).get();
+  if (!snap.exists()) return [];
+  const val = snap.val() || {};
+  const list = Array.isArray(val) ? val.filter(Boolean) : Object.values(val);
+  list.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  return limit > 0 ? list.slice(-limit) : list;
+}
+
 export async function messageExists(phoneKey, msgId) {
   const snap = await getDb().ref("messages/" + phoneKey + "/" + sanitizeKey(msgId)).get();
   return snap.exists();

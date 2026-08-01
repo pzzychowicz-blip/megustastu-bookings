@@ -36,6 +36,14 @@ export const WA_PARSE_TEXT_LEN = 1000;
 // this only stops it sitting there forever once staff has seen it.
 export const WA_ACCEPTED_BANNER_MS = 10000;
 
+// Manual re-check (the ⟳✓ button): how many of the conversation's most recent
+// messages — BOTH directions — are sent to the LLM. Both-directions matters:
+// the whole point of the manual check is catching a request that the
+// per-message automatic parse missed because it was spread over several
+// messages or made after a staff reply, and a staff reply is often what the
+// customer's "yes, that one" refers to.
+export const WA_RECHECK_HISTORY = 12;
+
 // Default quick-reply templates (EN/ES). Staff-editable via the TemplatesEditor;
 // persisted to Firebase `templates/` in this sandbox (was localStorage in the
 // preview). Seeded once on first load when the node is empty.

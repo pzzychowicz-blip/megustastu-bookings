@@ -64,6 +64,7 @@ const { default: waSend } = await import("../api/wa-send.js");
 const { default: waSimInbound } = await import("../api/wa-sim-inbound.js");
 const { default: waSimSuggest } = await import("../api/wa-sim-suggest.js");
 const { default: waSimGenerate } = await import("../api/wa-sim-generate.js");
+const { default: waRecheck } = await import("../api/wa-recheck.js");
 const { llmMode, sendMode, env } = await import("../api/_lib/env.js");
 // ✨ Suggest generator is shared with api/wa-sim-suggest.js (one source of truth).
 const { generateCustomerReply } = await import("../api/_lib/gemini.js");
@@ -144,7 +145,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname === "/api/wa-sim-inbound") { await waSimInbound(req, res); return; }
     if (pathname === "/api/wa-sim-suggest") { await waSimSuggest(req, res); return; }
     if (pathname === "/api/wa-sim-generate") { await waSimGenerate(req, res); return; }
-    res.status(404).json({ error: "not found", routes: ["/health", "/dev/models", "/dev/customer-reply", "/api/wa-inbound", "/api/wa-send", "/api/wa-sim-inbound", "/api/wa-sim-suggest", "/api/wa-sim-generate"] });
+    if (pathname === "/api/wa-recheck") { await waRecheck(req, res); return; }
+    res.status(404).json({ error: "not found", routes: ["/health", "/dev/models", "/dev/customer-reply", "/api/wa-inbound", "/api/wa-send", "/api/wa-sim-inbound", "/api/wa-sim-suggest", "/api/wa-sim-generate", "/api/wa-recheck"] });
   } catch (e) {
     console.error("[wa-backend] handler error:", e);
     if (!res.headersSent) res.status(500).json({ error: e.code === "NO_SERVICE_ACCOUNT" ? e.message : "internal error: " + e.message });

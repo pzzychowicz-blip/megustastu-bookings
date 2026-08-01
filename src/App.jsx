@@ -2939,6 +2939,7 @@ function BookingApp({uid}){
           onMarkIntentHandled={wa.handleMarkIntentHandled}
           onResend={wa.handleResend}
           onApplyModify={wa.handleApplyModify}
+          onRecheck={wa.recheckConversation}
           onOpenSim={WA_SANDBOX?function(){setShowSim(true);}:null} />:null}</ModalPresence>{confirmArchive?(function(){
           const conv=wa.conversations.find(function(c){return c.phoneKey===confirmArchive;});
           const bk=conv&&conv.acceptedBookingId?bookings.find(function(b){return b.id===conv.acceptedBookingId;}):null;

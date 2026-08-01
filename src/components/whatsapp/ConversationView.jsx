@@ -7,6 +7,7 @@
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, formatPhone, formatWindow, intentBannerVisible, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal } from "../atoms";
+import { RecheckIcon } from "./WaIcons";
 import { MessageBubble } from "./MessageBubble";
 import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
@@ -17,6 +18,7 @@ export function ConversationView({
   conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
+  onRecheck,
 }) {
   // Pass acceptedBookingId so the linked booking is excluded from the regular count.
   const match = matchCustomerByPhone(conv.phoneKey, bookings, conv.acceptedBookingId);
@@ -72,6 +74,32 @@ export function ConversationView({
     return () => clearTimeout(t);
   }, [acceptedBannerShowing, conv.phoneKey]);
 
+  // ── Manual re-check state ───────────────────────────────────────────────────
+  // null | "running" | { ok, msg }. The result line is transient (it clears
+  // itself) because the real answer is the draft / intent banner appearing —
+  // this only has to cover the "nothing found" case, which is otherwise
+  // indistinguishable from the button doing nothing at all.
+  const [recheck, setRecheck] = useState(null);
+  useEffect(() => { setRecheck(null); }, [conv.phoneKey]); // never carry a result across threads
+  useEffect(() => {
+    if (!recheck || recheck === "running") return;
+    const t = setTimeout(() => setRecheck(null), 6000);
+    return () => clearTimeout(t);
+  }, [recheck]);
+  function runRecheck() {
+    if (recheck === "running" || !onRecheck) return;
+    setRecheck("running");
+    Promise.resolve(onRecheck(conv.phoneKey)).then(
+      (r) => {
+        const intentFound = r && r.intent;
+        setRecheck(r && r.updated
+          ? { ok: true, msg: intentFound === "cancel" ? "Cancellation request found." : intentFound === "modify" ? "Change request found." : "Booking request found." }
+          : { ok: true, msg: "Nothing outstanding — no changes requested." });
+      },
+      (e) => setRecheck({ ok: false, msg: "Re-check failed: " + (e && e.message ? e.message : "unknown error") })
+    );
+  }
+
   const linkedBooking = conv.acceptedBookingId ? bookings.find((b) => b.id === conv.acceptedBookingId) : null;
   const intent = (conv.draftData && conv.draftData.intent) || null;
 
@@ -100,17 +128,38 @@ export function ConversationView({
     ? <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 8, background: win.expired ? "var(--danger-bg)" : "var(--suggest-bg)", color: win.expired ? "var(--danger-text)" : "var(--success-text)", border: "1px solid " + (win.expired ? "var(--danger-border)" : "var(--suggest-border)") }}>{win.label}</span>
     : null;
 
+  // Manual LLM re-check — leftmost of the header actions in BOTH states (an
+  // archived thread can be re-checked too; that's often exactly why you opened
+  // it). Icon-only to match the panel header's Templates/🧪 buttons, and it
+  // spins while the round-trip is in flight.
+  const running = recheck === "running";
+  const recheckBtn = onRecheck ? (
+    <button
+      onClick={runRecheck}
+      disabled={running}
+      title={running ? "Checking…" : "Re-check this conversation for requested changes"}
+      className={running ? undefined : "mgt-hover-scale mgt-press"}
+      style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "6px 9px", cursor: running ? "default" : "pointer", color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "center", opacity: running ? 0.6 : 1 }}
+    >
+      <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" } : { display: "block" }}><RecheckIcon size={15} /></span>
+    </button>
+  ) : null;
+
   let headerActionBtns;
   if (conv.archived) {
     headerActionBtns = (
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        {recheckBtn}
         <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>↺ Restore</button>
         <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>🗑 Delete</button>
       </div>
     );
   } else {
     headerActionBtns = (
-      <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>📦 Archive</button>
+      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        {recheckBtn}
+        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>📦 Archive</button>
+      </div>
     );
   }
   const disabled = !!(win && win.expired);
@@ -145,6 +194,16 @@ export function ConversationView({
         <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
       </div>
       <Reveal show={histOpen && hasRegulars} style={{ padding: "0 14px" }}><div style={{ paddingTop: 8 }}>{pastListBody}</div></Reveal>
+      {/* Manual re-check result. Only needed for the "found nothing" / error
+          cases — a positive finding announces itself as a draft card or intent
+          banner. Eased in and self-clearing, so it never becomes chrome. */}
+      <Reveal show={!!(recheck && recheck !== "running")} style={{ padding: "0 14px" }}>
+        <div style={{ paddingTop: 8 }}>
+          <div style={{ padding: "8px 12px", borderRadius: 10, fontSize: 12, fontWeight: 600, background: recheck && recheck.ok ? "var(--suggest-bg)" : "var(--danger-bg)", border: "1px solid " + (recheck && recheck.ok ? "var(--suggest-border)" : "var(--danger-border)"), color: recheck && recheck.ok ? "var(--success-text)" : "var(--danger-text)" }}>
+            {recheck && recheck !== "running" ? recheck.msg : ""}
+          </div>
+        </div>
+      </Reveal>
       {linkedBooking ? (
         <div style={{ padding: "8px 14px 0" }}>
           <LinkedBookingCard booking={linkedBooking} phoneKey={conv.phoneKey} defaultCollapsed={!(intent === "cancel" || intent === "modify")} onOpen={() => { if (onOpenLinkedBooking) onOpenLinkedBooking(conv); }} onCancel={() => { if (onCancelLinkedBooking) onCancelLinkedBooking(conv); }} />

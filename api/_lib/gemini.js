@@ -52,7 +52,7 @@ const RESPONSE_SCHEMA = {
   required: ["intent", "language", "confidence"],
 };
 
-function buildPrompt(text, { todayIso, weekday, hoursLine, existingDraft }) {
+function buildPrompt(text, { todayIso, weekday, hoursLine, existingDraft, threadMode }) {
   // Draft-aware mode: when the conversation already has a PENDING draft from
   // earlier messages, the model receives it and returns the MERGED update —
   // follow-up details fill gaps, corrections overwrite, confidence re-assessed.
@@ -70,6 +70,28 @@ function buildPrompt(text, { todayIso, weekday, hoursLine, existingDraft }) {
     "- if the request changed entirely (e.g. the customer now cancels), change the intent accordingly,",
     "- if the new message adds NO booking-relevant content at all (a pure acknowledgement: thanks, ok, emojis, smalltalk), return intent 'other' with null fields — do NOT echo the draft back; the existing draft is kept automatically.",
   ] : [];
+  // Thread mode (the manual re-check, api/wa-recheck): the input is a
+  // TRANSCRIPT, not a single message, and the question is about the
+  // conversation's CURRENT state rather than one message's meaning. Everything
+  // below — context, rules, schema — is shared; only the framing and the
+  // closing input block differ, so the two modes can never drift apart on how a
+  // date or a party size is read.
+  const closing = threadMode ? [
+    "",
+    "You are RE-CHECKING an ongoing conversation because a staff member asked you to — the automatic per-message check may have missed something.",
+    "Below is the recent transcript, oldest first. CUSTOMER lines are the customer; STAFF lines are the restaurant.",
+    "Judge the CURRENT state of the whole conversation: what, if anything, is the customer asking for RIGHT NOW?",
+    "- A request may be spread over several messages, or only make sense as a reply to what STAFF wrote — read them together.",
+    "- Ignore anything STAFF has already answered or fulfilled, and anything the customer has since withdrawn or changed their mind about.",
+    "- If the customer is not currently asking for anything actionable (the exchange is finished, or it is just thanks/smalltalk), return intent 'other' with null fields.",
+    "",
+    "Transcript:",
+    text,
+  ] : [
+    "",
+    "Customer message:",
+    JSON.stringify(text),
+  ];
   return [
     "You classify a WhatsApp message sent by a customer to a small restaurant in the Canary Islands and extract booking details.",
     "Customers write mostly in Spanish or English, informally, with typos.",
@@ -90,9 +112,7 @@ function buildPrompt(text, { todayIso, weekday, hoursLine, existingDraft }) {
     "- notes: special requests verbatim-ish (allergy, birthday, wheelchair...), else null.",
     "- preference: 'outdoor' if the customer asks to sit outside (terrace/terraza/fuera/afuera/patio/exterior), 'indoor' if they ask to sit inside (dentro/interior/adentro/inside). If they don't clearly state a seating area, use 'auto'. NEVER guess.",
     "- language: of the message itself.",
-    "",
-    "Customer message:",
-    JSON.stringify(text),
+    ...closing,
   ].join("\n");
 }
 
@@ -206,9 +226,13 @@ async function liveParse(text, ctx) {
     // message; never downgrade a stated area Gemini DID return, and fall back to
     // the existing draft's preference (so a follow-up that doesn't mention seating
     // keeps the earlier choice).
+    // In thread mode `text` is the whole transcript, so infer from ctx.prefText
+    // (the CUSTOMER's messages only) — otherwise a staff "terraza o dentro?"
+    // would be read as the customer stating a preference.
     if (parsed && (!parsed.preference || parsed.preference === "auto")) {
       const prev = ctx && ctx.existingDraft && ctx.existingDraft.preference;
-      parsed.preference = inferPreference(text) || (prev && prev !== "auto" ? prev : "auto");
+      const src = (ctx && ctx.prefText) || text;
+      parsed.preference = inferPreference(src) || (prev && prev !== "auto" ? prev : "auto");
     }
     return parsed;
   } catch (e) {
@@ -240,6 +264,45 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
   // Drift-review log: every parse, message + result, one line each.
   console.log("[wa-parse:" + mode + "] " + JSON.stringify({ text: String(text).slice(0, 200), merged: !!existingDraft, parsed }));
+  return parsed;
+}
+
+// parseThread(history, {hours, existingDraft}) → parse object or null. The
+// MANUAL re-check's parser (api/wa-recheck): same schema, same rules and the
+// same return contract as parseMessage — the caller feeds the result to the
+// very same applyParse — but the model sees the recent TRANSCRIPT (both
+// directions) instead of one message, and is asked what the customer wants
+// right now. That is the whole reason the button exists: an intent spread over
+// several messages, or one that only reads as a request next to the staff reply
+// it answers, is exactly what the per-message automatic parse cannot see.
+//
+// history: [{ direction: "in"|"out", text }, …] oldest-first.
+//
+// Mock mode has no notion of a thread, so it degrades to parsing the last
+// inbound message — which is what the automatic path already did.
+export async function parseThread(history, { hours, existingDraft } = {}) {
+  const list = Array.isArray(history) ? history.filter((m) => m && m.text) : [];
+  if (!list.length) return null;
+  const inbound = list.filter((m) => m.direction === "in");
+  const lastInbound = inbound.length ? String(inbound[inbound.length - 1].text) : "";
+  // Same total prompt-size guard as parseMessage, applied to the transcript.
+  const transcript = list
+    .map((m) => (m.direction === "in" ? "CUSTOMER: " : "STAFF: ") + String(m.text).replace(/\s+/g, " ").trim())
+    .join("\n")
+    .slice(-WA_PARSE_TEXT_LEN);
+  const now = new Date();
+  const ctx = {
+    todayIso: now.toISOString().slice(0, 10),
+    weekday: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][now.getUTCDay()],
+    hoursLine: hours ? "Operating hours config (per weekday, 24h): " + JSON.stringify(hours) : null,
+    existingDraft: existingDraft || null,
+    threadMode: true,
+    prefText: inbound.map((m) => m.text).join(" "),
+  };
+  const mode = llmMode();
+  let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound);
+  if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
+  console.log("[wa-recheck:" + mode + "] " + JSON.stringify({ msgs: list.length, merged: !!existingDraft, parsed }));
   return parsed;
 }
 

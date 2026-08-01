@@ -163,6 +163,32 @@ export async function suggestCustomerReply({ language, history }) {
   return data;
 }
 
+// Manual re-check — ask the server to re-read the conversation's recent thread
+// and re-run the LLM classification (api/wa-recheck). Unlike every other seam
+// here this is NOT a simulator affordance: it is a real staff feature, so it
+// always targets the server rather than gating on backendEnabled() — in
+// production the backend is simply always there. Locally that means the :3999
+// harness has to be running, hence the explicit hint on a connection failure
+// (the bare "Failed to fetch" reads as a bug rather than a missing process).
+// Returns { intent, updated } — the server has already applied the parse.
+export async function recheckViaBackend(phoneKey) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("not signed in");
+  const idToken = await user.getIdToken();
+  let res;
+  try {
+    res = await fetch(WA_BACKEND_URL + "/api/wa-recheck", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
+      body: JSON.stringify({ phoneKey }),
+    });
+  } catch {
+    throw new Error(import.meta.env.DEV ? "backend not running (npm run wa:backend)" : "could not reach the server");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
 // 🎲 Generate scenario — Gemini invents `count` varied inbound messages and the
 // server injects each as a fresh conversation (live parse). Staff-auth, same
 // endpoint DEV (via harness) and online. Returns { generated, samples }.
