@@ -45,7 +45,7 @@ function sinceText(ts) {
   return Math.floor(hrs / 24) + "d ago";
 }
 
-export function ConnectionStatus({ connected, userEmail, devices, myKey }) {
+export function ConnectionStatus({ connected, hasConnected, userEmail, devices, myKey }) {
   const [open, setOpen] = useState(false);
   const [alignRight, setAlignRight] = useState(true);
   const wrapRef = useRef(null);
@@ -79,9 +79,16 @@ export function ConnectionStatus({ connected, userEmail, devices, myKey }) {
     };
   }, [open]);
 
-  const dotColor = connected ? "var(--status-online)" : "var(--status-offline)";
-  const dotGlow = connected ? "var(--status-online-glow)" : "var(--status-offline-glow)";
-  const statusText = connected ? "Connected" : "Connection lost";
+  // v17.5.1: three states, not two. `connected` (isOnline) starts optimistically
+  // TRUE and only goes false after a handshake has succeeded at least once, so a
+  // device that has NEVER connected used to show a confident green dot — the
+  // single most misleading signal in the Android-tablet outage. `hasConnected`
+  // separates "still connecting" from "connected", so the dot can no longer
+  // claim a connection the app has never had.
+  const connecting = !hasConnected && connected;
+  const dotColor = connecting ? "var(--status-connecting)" : connected ? "var(--status-online)" : "var(--status-offline)";
+  const dotGlow = connecting ? "var(--status-connecting-glow)" : connected ? "var(--status-online-glow)" : "var(--status-offline-glow)";
+  const statusText = connecting ? "Connecting…" : connected ? "Connected" : "Connection lost";
   // v17.3.0: this device first, then most-recently-connected — so "This device"
   // sits at the top of the list.
   const deviceList = (devices || []).slice().sort(function (a, b) {
@@ -95,8 +102,8 @@ export function ConnectionStatus({ connected, userEmail, devices, myKey }) {
         type="button"
         className="mgt-hover-scale"
         onClick={toggleOpen}
-        title={connected ? "Connected to Firebase" : "Firebase connection lost"}
-        aria-label={connected ? "Connected to Firebase" : "Firebase connection lost"}
+        title={connecting ? "Connecting to Firebase…" : connected ? "Connected to Firebase" : "Firebase connection lost"}
+        aria-label={connecting ? "Connecting to Firebase" : connected ? "Connected to Firebase" : "Firebase connection lost"}
         style={{
           appearance: "none",
           border: "none",
@@ -155,9 +162,11 @@ export function ConnectionStatus({ connected, userEmail, devices, myKey }) {
             </span>
           </div>
           <div style={{ fontSize: 11, marginBottom: 8, color: S.muted }}>
-            {connected
-              ? "Realtime Database is connected."
-              : "Lost connection to the Realtime Database. Changes will sync when it reconnects."}
+            {connecting
+              ? "Establishing the first connection to the Realtime Database…"
+              : connected
+                ? "Realtime Database is connected."
+                : "Lost connection to the Realtime Database. Changes will sync when it reconnects."}
           </div>
           <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
             <div style={{ fontSize: 11, marginBottom: 2, color: S.muted }}>Signed in as</div>

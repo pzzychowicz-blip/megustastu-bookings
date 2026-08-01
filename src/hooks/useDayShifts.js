@@ -20,6 +20,7 @@ import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { weekRange } from "../lib/constants";
+import { dbError } from "../lib/dbError";
 
 // Clamp split strictly inside the service window so BOTH shifts stay non-empty;
 // coerce `enabled` to a boolean (default true). v15.0.0: the split is ONE global
@@ -54,7 +55,7 @@ export function useDayShifts(){
       }
       // Node absent (first run): keep the defaults — nothing to push.
       loaded.current = true;
-    });
+    },dbError("settings/dayShifts"));
     return unsub;
   }, []);
 

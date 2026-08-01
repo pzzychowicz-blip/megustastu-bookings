@@ -23,6 +23,7 @@ import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
+import { dbError } from "../lib/dbError";
 
 // Clamp the cutoff to the full day and coerce `autoSwitch` to a boolean (default
 // true). v15.0.0 (cutoff range): the cutoff is a single GLOBAL switch-off hour and
@@ -56,7 +57,7 @@ export function useOptimizerSettings(){
       }
       // Node absent (first run): keep the defaults — nothing to push.
       loaded.current = true;
-    });
+    },dbError("settings/optimizer"));
     return unsub;
   }, []);
 

@@ -31,7 +31,7 @@
 import { useState, useEffect, useRef } from "react";
 import { S, BTN } from "../lib/constants";
 import {
-  toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest
+  toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
 } from "../lib/booking-logic";
 import { Overlay, Toggle, mkBtn, AutoHeight, Reveal } from "./atoms";
 import { TableGrid } from "./TableGrid";
@@ -66,7 +66,11 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   // ── Derived context (recomputed every render — same as original) ──────────
   const needed = bk.size || 2;
   const s = toMins(bk.time || "13:00");
-  const e = s + (bk.duration || 90);
+  // v17.6.0: the query window's end carries the turnaround buffer, and each
+  // other booking's slot end does too (bookEnd) — so the picker greys out a
+  // table whose previous party leaves within the separation time. Off by
+  // default (TURN_BUFFER 0), in which case both are the plain end as before.
+  const e = padEnd(s + (bk.duration || 90));
   // v16.0.0 follow-up: completed bookings are excluded — a completed visit is
   // over (its guests left; its duration is frozen at the completion moment), so
   // it must neither read as busy NOR be swappable. This is what lets a seated
@@ -79,7 +83,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   const otherSlots = otherBookings.map((b) => ({
     tables: b.tables || [],
     s: toMins(b.time),
-    e: toMins(b.time) + (b.duration || 90),
+    e: bookEnd(b),
     status: b.status,
     id: b.id,
     name: b.name

@@ -34,6 +34,7 @@ import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
+import { dbError } from "../lib/dbError";
 
 export const DEFAULT_GENERAL_SETTINGS = {
   v: 1,
@@ -99,7 +100,7 @@ export function useGeneralSettings(){
       }
       // Node absent (first run): keep the defaults (= the historical literals).
       loaded.current = true;
-    });
+    },dbError("settings/general"));
     return unsub;
   }, []);
 

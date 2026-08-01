@@ -24,6 +24,7 @@ import { db } from "../firebase";
 import { sanitizeAll, toMins, bookingsAfterAction, histEntry } from "../lib/booking-logic";
 import { hoursFor } from "../lib/constants";
 import { attachRev, writeWithRev } from "../lib/revGuard";
+import { dbError, onDbError } from "../lib/dbError";
 
 // v15.2.0: heartbeat-gap threshold for the freshness/resync gate. A foreground
 // tab ticks the heartbeat every 10s; a backgrounded tab's timers throttle to
@@ -36,6 +37,12 @@ const STALE_GAP_MS = 90000;
 // freshly-resynced data before giving up and surfacing a red error. ~3 covers
 // the realistic stale-wake / concurrent-reject cases without looping forever.
 const MAX_RETRIES = 3;
+
+// v17.5.1: how long the first bookings snapshot may take before the app stops
+// showing "loading" and reports that the read is not completing. Generous —
+// a slow restaurant connection on a cold cache should never trip it; a
+// transport that can never work always will.
+const LOAD_TIMEOUT_MS = 15000;
 
 // v15.1.0: has `dateStr`'s closing moment already passed? Used by the
 // auto-extend effect (to skip) and the auto-complete effect (to trigger).
@@ -69,6 +76,15 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // poor connection). Distinct from `bookingsLoaded` (a ref, no re-render) and
   // from `loadBannerShown` (the 6s post-load green banner).
   const [bookingsReady, setBookingsReady] = useState(false);
+  // v17.5.1: the first bookings read has taken longer than LOAD_TIMEOUT_MS —
+  // the loading toast turns into an actionable failure message.
+  const [loadStalled, setLoadStalled] = useState(false);
+  // v17.5.1: the last listener cancellation reported by lib/dbError.js, so the
+  // UI can name the real Firebase error code (permission_denied etc).
+  const [readError, setReadError] = useState(null);
+  // v17.5.1: has a Firebase handshake EVER completed this session? Distinct from
+  // isOnline, which starts optimistically true (see the .info/connected effect).
+  const [hasConnected, setHasConnected] = useState(false);
   // ── Firebase write-guard system ─────────────────────────────────────────────
   // These refs track whether we've received AT LEAST ONE onValue callback from
   // Firebase for each path. Until that's happened, React state is [] / {}
@@ -412,7 +428,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // into one commit, so the change never visibly flickers. No-op when nothing is
       // queued (the normal case).
       drainPending();
-    });
+    },dbError("bookings"));
     return unsub;
   },[]);
   useEffect(function(){
@@ -422,7 +438,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       else setTableBlocks([]);
       blocksLoaded.current=true;
       clearStale(); // v15.2.0: a live server snapshot proves the local data is current
-    });
+    },dbError("tableBlocks"));
     return unsub;
   },[]);
   // v16.0.0: keep the tableBlocks revision-CAS ref anchored to the server value
@@ -440,6 +456,15 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // v14.1: Subscribe to Firebase's special .info/connected ref. Drives the
   // offline banner and the reconnected flash. The hasConnectedRef gate makes
   // sure the offline banner never shows before the first successful handshake.
+  //
+  // v17.5.1 — "never connected" is no longer reported as ONLINE. `isOnline`
+  // starts true and the offline branch below only fires once hasConnectedRef is
+  // set, so a client that has NEVER completed a handshake kept a green dot and
+  // no offline banner: the connection indicator actively asserted a healthy
+  // connection on a device that had never once connected. That is precisely the
+  // false signal that sent the Android-tablet investigation after an auth bug
+  // for a release cycle. `hasConnected` now mirrors hasConnectedRef into state
+  // so the UI can show a distinct "Connecting…" until the first handshake.
   useEffect(function(){
     const unsub=onValue(ref(db,".info/connected"),function(snap){
       const connected=snap.val()===true;
@@ -451,6 +476,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
         if(!hasConnectedRef.current){
           // First successful connection on boot — silent.
           hasConnectedRef.current=true;
+          setHasConnected(true);
           setIsOnline(true);
           return;
         }
@@ -461,8 +487,38 @@ export function usePersistence({ autoOptimizer, nowMins }){
       } else {
         if(hasConnectedRef.current) setIsOnline(false);
       }
-    });
+    },dbError(".info/connected"));
     return unsub;
+  },[]);
+  // ── v17.5.1: first-load watchdog ────────────────────────────────────────────
+  // If the first bookings snapshot has not arrived after LOAD_TIMEOUT_MS, stop
+  // pretending we are still loading and say so. Before this, a read that could
+  // never succeed (CSP-blocked transport, denied rule, dead socket) showed the
+  // "⟳ Loading bookings…" toast forever with no path to a diagnosis — the app
+  // was structurally incapable of reporting its own failure.
+  useEffect(function(){
+    if(bookingsReady) return;
+    const t=setTimeout(function(){ setLoadStalled(true); },LOAD_TIMEOUT_MS);
+    return function(){ clearTimeout(t); };
+  },[bookingsReady]);
+  // Any listener failure anywhere (see lib/dbError.js) is recorded so the UI can
+  // name the actual Firebase error code instead of showing a spinner.
+  //
+  // Two guards, both deliberate. (1) DEDUPE on path+code: a persistently failing
+  // listener re-fires its cancel callback on every reconnect attempt, and each
+  // raw setReadError would be a NEW object — i.e. a fresh BookingApp render per
+  // failure, on the device that is already struggling. (2) Never let a failure
+  // on some OTHER node overwrite a `bookings` failure: the stall toast prints
+  // this path, and pointing the next investigation at the wrong node is exactly
+  // how the v17.4.0→v17.5.0 misdiagnosis happened.
+  useEffect(function(){
+    return onDbError(function(info){
+      setReadError(function(prev){
+        if(prev&&prev.path===info.path&&prev.code===info.code) return prev;
+        if(prev&&prev.path==="bookings"&&info.path!=="bookings") return prev;
+        return info;
+      });
+    });
   },[]);
   // v15.2.0: heartbeat + resume detection driving the freshness gate.
   // The heartbeat bumps lastBeatRef every 10s; a gap >STALE_GAP_MS means the
@@ -554,6 +610,8 @@ export function usePersistence({ autoOptimizer, nowMins }){
     saveBookings, saveBlocks,
     isOnline, writeWarning, setWriteWarning,
     loadBannerShown, reconnectShown, resyncing, bookingsReady,
+    // v17.5.1 diagnosis surface — see the load-watchdog effect above.
+    loadStalled, readError, hasConnected,
     // firstLoadCount is exposed as a ref because the load-banner JSX in
     // BookingApp reads .current to show the booking count from the first
     // successful Firebase load. It must remain a ref (not state) so

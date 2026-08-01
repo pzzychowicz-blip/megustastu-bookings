@@ -25,6 +25,7 @@ import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { genId } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
+import { dbError } from "../lib/dbError";
 
 // v16.3.0 correction: standing bookings default OFF — the feature (and the
 // booking-form "Repeat weekly" toggle) stays hidden until staff enable it in
@@ -95,7 +96,7 @@ export function useRecurring({ setWriteWarning }) {
       recurringRef.current = next;
       setRecurring(next);
       loaded.current = true;
-    });
+    },dbError("recurring"));
     return unsub;
   }, []);
   useEffect(function () { return attachRev("recurring", revRef); }, []);

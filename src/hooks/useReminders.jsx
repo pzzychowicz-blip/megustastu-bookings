@@ -31,6 +31,7 @@ import { attachRev, writeWithRev } from "../lib/revGuard";
 import { BTN } from "../lib/constants";
 import { mkBtn } from "../components/atoms";
 import { genId } from "../lib/booking-logic";
+import { dbError } from "../lib/dbError";
 import {
   getActiveReminderBanners,
   pruneOldReminderFires,
@@ -106,7 +107,7 @@ export function useReminders({ nowMins, setWriteWarning }){
       remindersRef.current=arr;
       setReminders(arr);
       remindersLoaded.current=true;
-    });
+    },dbError("reminders"));
     return unsub;
   },[]);
   useEffect(function(){
@@ -116,7 +117,7 @@ export function useReminders({ nowMins, setWriteWarning }){
       reminderFiresRef.current=m;
       setReminderFires(m);
       reminderFiresLoaded.current=true;
-    });
+    },dbError("reminderFires"));
     return unsub;
   },[]);
   useEffect(function(){ return attachRev("reminders",remindersRevRef); },[]);

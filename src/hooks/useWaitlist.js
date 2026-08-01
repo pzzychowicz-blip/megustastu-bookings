@@ -29,6 +29,7 @@ import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { genId } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
+import { dbError } from "../lib/dbError";
 
 export function useWaitlist({ setWriteWarning }){
   const waitlistLoaded=useRef(false);
@@ -59,7 +60,7 @@ export function useWaitlist({ setWriteWarning }){
       waitlistRef.current=arr;
       setWaitlist(arr);
       waitlistLoaded.current=true;
-    });
+    },dbError("waitlist"));
     return unsub;
   },[]);
   useEffect(function(){ return attachRev("waitlist",waitlistRevRef); },[]);

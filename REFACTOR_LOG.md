@@ -6109,3 +6109,293 @@ equalise and the badge centres. Row height at desktop is unchanged at 28px.
 
 **Files:** `SplitLayout.jsx`, `PlanView.jsx`, `index.html`, `CLAUDE.md`.
 **Gates:** 88 tests, 0 lint errors, build 191.73 → **191.90 kB gz** (+0.17).
+
+---
+
+## v17.5.1 — the Android-tablet "Loading bookings…" freeze, root-caused (2026-07-29)
+
+**Behavioural change:** the RTDB long-polling transport is never used; listener
+failures are reported instead of swallowed; the connection dot gained a third
+state.
+
+### What was actually wrong
+
+The restaurant's Android tablet (HONOR NDL-L09, Android 16, Chrome 150) sat on
+"⟳ Loading bookings…" forever while the MacBook and iPhone ran the same build on
+the same network. Diagnosed on the device over USB + the Chrome DevTools
+Protocol. The chain, end to end:
+
+1. A single WebSocket connection to the RTDB failed at some point — a wifi blip
+   is enough.
+2. The Firebase SDK persists that as `firebase:previous_websocket_failure` in
+   **localStorage**, and from then on prefers **long-polling** on every load of
+   that device, permanently.
+3. RTDB long-polling is **JSONP**: it injects `<script>` tags into a hidden
+   iframe (`@firebase/database` → `createIFrame_` / `doc.createElement('script')`).
+4. Script tags are governed by the CSP's **`script-src`**, not `connect-src`.
+   `vercel.json` sets `script-src 'self' 'sha256-…'`, so every long-poll attempt
+   was blocked — forever, with exponential backoff. Meanwhile
+   `connect-src wss://*.firebasedatabase.app` made the config look correct.
+5. None of the app's 16 `onValue()` listeners passed the optional **third error
+   callback**, so the cancelled read produced no console line, no banner, no
+   state change. `setBookingsReady(true)` lives inside the success path.
+6. `isOnline` starts `true` and only goes false once `hasConnectedRef` is set —
+   so a device that had **never** connected showed a confident **green** dot.
+
+The CSP went from report-only to blocking on **2026-07-24**; v17.4.0 shipped
+**2026-07-25**. The PWA service worker took the blame for a CSP change that
+landed the day before. On the tablet the worker was long gone (`swRegs: []`,
+`swControlled: false`) and the freeze persisted regardless.
+
+### Why not just widen the CSP
+
+Tested on the affected device, with the document's CSP rewritten at the wire via
+CDP interception: adding the RTDB hosts to `script-src` **does** unblock the
+JSONP (violations dropped to `apis.google.com` only, `.lp` requests returned
+200s) — **and the app still never loaded**. Long-polling does not recover even
+when permitted, so widening the CSP would have traded security surface for
+nothing. Rejected on evidence, not preference.
+
+### The fix
+
+- **`src/firebase.js` — `forceWebSockets()`** before `getDatabase()`. Calls
+  `BrowserPollConnection.forceDisallow()`, so the JSONP transport is never
+  selected and the cached failure flag becomes inert. Verified: with the flag
+  deliberately set, the app loads with **0** `.lp` requests, and the SDK's
+  `markConnectionHealthy()` **deletes the flag** — affected devices self-heal on
+  first load. Accepted trade-off: no fallback where WebSocket is blocked
+  outright, which costs nothing because that fallback is already 100%
+  non-functional under our CSP.
+- **`src/lib/dbError.js` (new)** — `dbError(path)` builds the error callback and
+  `onDbError(fn)` lets `usePersistence` subscribe. **All 16 `onValue()` calls**
+  across 12 files now pass it. Rule: a listener without one is a silent failure
+  waiting to happen.
+- **Load watchdog** (`usePersistence`, `LOAD_TIMEOUT_MS` 15s) → `loadStalled`,
+  plus `readError` and `hasConnected`. `StatusToasts` turns the endless spinner
+  into a named failure ("The database refused the read (permission_denied on
+  /bookings)" / "Can't reach the database" / "Connected, but no data has
+  arrived") with a Reload button.
+- **`ConnectionStatus`** gained a third state: amber **"Connecting…"** until the
+  first handshake, so the dot can no longer assert a connection that has never
+  existed. New `--status-connecting(-glow)` tokens in both theme blocks.
+
+**Files:** `firebase.js`, `lib/dbError.js` (new), `lib/revGuard.js`,
+`hooks/usePersistence.js` + 10 other hooks, `components/StatusToasts.jsx`,
+`components/ConnectionStatus.jsx`, `App.jsx`, `index.html`, `CLAUDE.md`,
+`ROADMAP.md`.
+**Gates:** 88 tests, 0 lint errors, build 191.90 → **192.69 kB gz** (+0.79).
+**Verified:** on the tablet over CDP (root cause + the rejected CSP fix), and in
+DEV with the poison flag re-armed (0 long-poll requests, flag self-cleared).
+
+---
+
+## v17.6.0 — stay time, separation between bookings, exact Plan-Now, per-user settings
+
+**Date:** 2026-08-01
+**Branch:** `feat/v17.6.0-turnaround-and-user-prefs` (4 commits, one per item)
+**Behavioural change:** Yes — four independent staff-facing changes.
+**Gates:** 103 tests (88 → 103, +15), 0 lint errors, build 192.69 → **193.74 kB
+gz (+1.05)**.
+
+Four gaps, shipped as one version at Patryk's request, with each item as its own
+commit so any one can be read (or reverted) on its own.
+
+### 1/4 — List: actual stay time on completed bookings
+
+A Seated card showed a live "N min" tag that vanished the moment the booking
+flipped to Completed. Completed cards now carry a muted **"stayed N min"** tag.
+
+Only when the stay is knowable: a real seated→completed transition truncates
+`duration` to the actual span (v16.2.0), but a booking taken straight
+confirmed→completed keeps its SCHEDULED duration, so printing that number would
+assert a stay that never happened.
+
+The marker is a stored field, not a history-string scan — the two completion
+paths word their history entries differently ("status → seated" from
+`updateStatus`, "edited: …status confirmed→seated" from the form), which is
+exactly why parsing them would be fragile. `stayedMin` joins the `sanitize`
+whitelist; `stayedMins(b)` reads it, falling back to `duration` when a
+pre-v17.6.0 booking's history records a seated entry.
+
+The form path computes it for EVERY seated→completed save, including the
+`f.customDur` case the duration truncation skips — how long the party sat is a
+fact about the visit, independent of the duration chosen for storage.
+
+### 2/4 — Separation between bookings (the turnaround buffer)
+
+Nothing reserved turnaround time, so the optimizer would seat a new party the
+same minute the previous one was due to leave. Settings → General gains a
+toggle (**OFF by default**) and a 5–60 min stepper in 5-min steps, default 15.
+
+**The mechanic:** pad every END — both a stored slot's `e` and the candidate
+query window's `e` — and NEVER a start. Padding only the stored slots would stop
+a booking starting right after an existing one but still let it END exactly when
+the next one starts; padding both closes that direction too, and because only
+ends move the gap is exactly the buffer, never twice it. Carried by two helpers
+(`bookEnd`/`padEnd`) reading a new `TURN_BUFFER` live binding, so the change is
+greppable rather than sprinkled across ~20 sites.
+
+**Scope is placement only** (Patryk's call): `findFreeSlot`, `trialFits`,
+`optimise`/`applyOpt`, `findTimes`, `findKitchenFriendlyTimes`, `occupancyEnd`,
+and the UI busy-sets. Deliberately NOT buffered: `verifyClean`/`findConflicts`/
+`checkInefficent`, so turning the setting on can never flag or reshuffle a day
+that is already booked back-to-back; `getBlockSlots`, because a block's end was
+chosen by hand; `applySeatedShift`, because seating is a status action.
+
+**No Firebase console step** — two rolling-safe fields on the existing
+`settings/bookingDefaults` node, which already has its revGuard rev pair.
+`turnaroundEnabled` sanitizes as `=== true` (absent ⇒ off), the inverse of the
+`!== false` idiom the default-on switches use.
+
+Visible in Timeline (a 0.28-opacity tail sibling rendered like the seated ghost —
+NOT a longer block, since `liveBarDur` also gates the start-time chips and is
+read by List) and Plan (dashed muted outline; the walk-in gate subtracts it too).
+Both take it as a **scalar prop**: `React.memo` cannot see a live binding.
+
+### 3/4 — Plan: Now follows the exact clock
+
+At 14:07 the badge read 14:00, so Plan and Timeline disagreed about where "now"
+is by up to 7 minutes. `clampSlider` (round-to-nearest-15) is **gone**, replaced
+by `clampExact` at the three programmatic scrub sites. Hand-scrubbing still
+steps by 15 because TimeAxis snaps its OWN scroll — that is where the quarter
+grid always actually came from, so TimeAxis needed no change.
+
+The seated-occupancy clamps got **simpler**: the v17.1.0 overstay fix and the
+v17.1.1 "status change shows late in Plan" fix rounded to the slider grid purely
+to compensate for the follow position being rounded away from the clock. With an
+exact follow there is nothing to compensate for, so both key on raw `nowMins`.
+
+Also fixed a stale inline `eslint-disable` in PlanView that had drifted onto a
+comment line and was suppressing nothing.
+
+### 4/4 — Per-user settings sync
+
+Ten settings lived in `localStorage`, so every device had to be configured by
+hand. Five now follow the signed-in **account**: theme, reduce animations, Plan
+zoom & pan, lock navigation, split view on/off. Three stay per-device by
+explicit decision — **app width**, the **four Timeline zoom values** and the
+**saved split layout** (its master switch does sync) — because those are
+properties of the screen, not of the user.
+
+New `settings/users/{uid}/prefs` + `prefsRev` (8th settings node, and the first
+that is not restaurant-wide) via `useUserPrefs.js`, on the standard
+loaded-guard + revGuard CAS shape.
+
+**Device fallback is the migration.** Every setting keeps its `localStorage`
+initializer, so first paint and the signed-out shell are unchanged. One effect,
+gated on `prefsLoaded` and fired once per uid: a saved field overrides local
+state; an unsaved one is seeded from this device and written up, so logging in
+on a configured device adopts its setup rather than resetting it. Hence the
+**tri-state** model — `null` means "never chosen", and coercing an absent field
+to `false` would wipe every configured device on first login.
+`themePref === undefined` (follow the OS) is deliberately not seeded: it is the
+absence of a choice.
+
+**The `localStorage` mirror stays and is load-bearing** — `index.html`'s
+no-flash script reads `mgt-theme`/`mgt-reduce-motion` before React mounts and
+long before Firebase or auth resolve. localStorage is the pre-mount cache; the
+node is the source of truth. CLAUDE.md's old "per-device preferences never go in
+Firebase" rule is rewritten accordingly.
+
+`App` now renders `<BookingApp uid={user.uid} key={user.uid} />`; the key makes
+an account switch remount the subtree so no previous user's state survives.
+
+**One Firebase console step in this release** (rolling-safe, app first / rules
+second): the `prefs`/`prefsRev` pair nested inside `settings/users/$uid` — see
+`database.rules.README.md`. `$uid` is a wildcard, not an access rule; the
+top-level `auth != null` still governs, matching this app's trust model.
+
+### 5/6 — Plan: the Now button glides back
+
+Clicking Now snapped the tape in a single frame, which read as the view
+breaking rather than moving. It now uses the same browser glide the tape
+already uses for tap-to-jump and the scrub snap. TimeAxis gained an
+`autoScrollSmooth` prop; PlanView carries it and the trigger counter in ONE
+state object (`{k, smooth}`) so a stale `smooth` can never ride along with a
+fresh `k` — which also means no ref is needed, since both land in the same
+render.
+
+Only the button glides: the date change stays instant, and so does the
+per-minute clock follow (a ~1.6px step, where a glide is indistinguishable from
+a jump but would hold the snap guard for 320ms every minute). `centre()` now
+also honours **"Reduce animations"** like every other scripted scroll in the app
+(ListView's focus-into-view already did), with the snap-guard window following
+the EFFECTIVE behaviour rather than the request.
+
+### 6/6 — Edit form: a "> Pending" status button
+
+The form could move a booking forward or cancel it, but never back to
+"awaiting confirmation". `> Pending` is now offered on a **confirmed or
+cancelled** booking and deliberately **not** on a seated or completed one —
+those record something that physically happened, so "awaiting confirmation"
+would contradict them. This extends the v17.0.0 gating philosophy rather than
+carving an exception into it; a pending booking still offers only
+`> Confirmed`.
+
+The list moved out of the JSX into a named `statusTargets` block (three cases
+is past the point where an inline nested ternary stays readable). The List
+card's quick buttons deliberately do NOT gain it — the form is the considered
+surface. No footer change was needed: "Save & confirm" keys on the PERSISTED
+status, so a pending draft on a confirmed booking shows no extra button.
+
+### Verified (DEV, live)
+
+1. A pre-v17.6.0 completed booking renders "stayed 15 min" via the history
+   fallback.
+2. Buffer at 15 min: an 18:00–19:30 booking draws a tail of exactly 15/90 of the
+   block width flush at its end; the manual picker marks 1A **busy at 19:30** and
+   free at 19:45; auto-assign picks 1A at 19:45; Plan shows 1A dashed at 19:30
+   while every other table stays solid. Buffer off ⇒ all 88 pre-existing tests
+   unchanged.
+3. With Saturday's opening hour temporarily lowered so the clock fell inside
+   service (restored afterwards): the Plan badge read **09:52** against a 09:52
+   wall clock, hand-scrubbing snapped to 11:15, and Now returned to 09:52.
+4. Per-device keys wiped from `localStorage` and reloaded → theme, Plan-gestures
+   and a freshly-toggled nav-lock all came back **from the account node**, with
+   `body.overflow: hidden` confirming the restored value reached the render;
+   app width, Timeline zoom and the split layout stayed absent. No `[SAFE]`
+   refusals, no console errors.
+5. Now-button scroll sampled per frame: **37 distinct positions** easing
+   864 → 165 with animations on, and exactly **1** (an instant jump) with
+   "Reduce animations" on.
+6. `> Pending` checked against all four source statuses: offered on confirmed
+   (row then collapses to just `> Confirmed`, saves as Pending, List card gates
+   to match); absent on seated and on completed; pending unchanged.
+
+### /code-review pass
+
+One defect found and fixed: the Timeline turnaround tail was not clamped to the
+grid. A booking ending at (or past) `GRID_CLOSE` placed its tail entirely
+outside the grid, and an absolutely-positioned child still counts toward the
+scroller's `scrollWidth` — so it added a strip of empty scroll past the end of
+the day that grew with zoom. The tail now ends at `min(end + buffer,
+GRID_CLOSE)` and renders nothing when that leaves no width. Verified by
+arithmetic at every boundary (20:00 → normal, 01:50 → clipped to exactly 100%,
+at/past GRID_CLOSE → no tail) and live with the buffer on (3 tails, each
+exactly 15/1020 of the grid, all in bounds).
+
+Reviewed and deliberately NOT changed, recorded so the reasoning isn't
+re-derived:
+
+- **`checkInefficent` stays unbuffered** while `optimise` is buffered, so the
+  reshuffle-suggestion banner could in principle propose an arrangement the
+  buffered optimizer will not deliver. A probe on a packed fixture did not
+  reproduce it (the banner cleared after the reshuffle), so this was left alone
+  rather than changed speculatively — buffering it would only ever *reduce*
+  flags, which is the safe direction if it ever does show up.
+- **Per-user prefs apply once per session, not per snapshot.** Every other
+  `settings/*` node live-applies each `onValue`; this one is gated on
+  `prefsLoaded` firing once per uid. Changing a setting on device A therefore
+  reaches an already-open device B only on B's next reload. That satisfies the
+  requirement as stated ("the same experience on any device you log in to") and
+  avoids re-applying values on top of a user's own toggles, but it IS an
+  inconsistency with the other settings hooks.
+- **`optimise` pads the slots it builds from COMPLETED bookings.** Reserving
+  completed windows there is pre-existing behaviour (and contradicts the
+  app-wide "completed = table free" rule, also pre-existing); padding them is
+  the more defensible half, since a party that has left is exactly when a
+  turnaround applies.
+- **Seeding race:** two devices logging in for the first time simultaneously
+  both compute a seed; revGuard lets one win and the loser's rollback echo
+  updates its `userPrefs`, but its seeding effect has already run, so it keeps
+  its local values until the next reload. Self-correcting, single-shot.

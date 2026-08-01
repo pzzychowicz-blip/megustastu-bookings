@@ -38,7 +38,7 @@
 import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor } from "../lib/constants";
 import {
   toMins, toTime, getDur,
-  getBlockSlots, getBusy, occupancyEnd,
+  getBlockSlots, getBusy, occupancyEnd, padEnd,
   findBest, findBestAny,
   optimizerActiveFor, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes,
@@ -67,7 +67,10 @@ export function WalkinForm({
   // read today's per-weekday hours (not the viewed day's).
   const th = hoursFor(wDate);
   const wS = toMins(wTime);
-  const wE = wS + wDur;
+  // v17.6.0: the query window's end carries the turnaround buffer, so a walk-in
+  // is not offered a table whose next party starts within the separation time.
+  // The slot ends opposite already carry it via occupancyEnd. Buffer off ⇒ 0.
+  const wE = padEnd(wS + wDur);
 
   // Build the "other slots" array for availability checks. Excludes
   // cancelled AND (v16.0.0 follow-up) completed bookings — a completed visit
