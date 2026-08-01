@@ -5,7 +5,7 @@
 // is disabled when the 24h service window has expired.
 
 import { useState, useRef, useEffect } from "react";
-import { matchCustomerByPhone, formatPhone, formatWindow, intentBannerVisible } from "../../lib/whatsapp";
+import { matchCustomerByPhone, formatPhone, formatWindow, intentBannerVisible, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal } from "../atoms";
 import { MessageBubble } from "./MessageBubble";
 import { DraftCard } from "./DraftCard";
@@ -49,6 +49,28 @@ export function ConversationView({
       setAnimateId(lastId);                     // a new message landed in the open thread
     }
   }, [conv.phoneKey, msgsForConv.length]);
+
+  // ── "Booking confirmed" banner auto-dismiss ─────────────────────────────────
+  // The big accepted banner used to sit in the thread until someone hit its ✕.
+  // It stamps the SAME acceptedBadgeDismissedAt the ✕ does, so the existing
+  // re-show rule is untouched: a new inbound message clears the stamp and the
+  // banner comes back. The header's small "✓ Booking confirmed" chip is
+  // deliberately NOT on this timer — that one is the persistent status, and the
+  // LinkedBookingCard below it keeps showing the booking itself.
+  //
+  // Gated on the banner actually being on screen, and keyed by phoneKey, so
+  // switching threads restarts the clock rather than dismissing the next
+  // conversation's banner early. onDismissAcceptedBadge is deliberately NOT a
+  // dep — useWhatsApp hands back a fresh closure every render, which would
+  // restart the timer on every render and never fire.
+  const acceptedBannerShowing = conv.draftStatus === "accepted" && !conv.acceptedBadgeDismissedAt;
+  useEffect(() => {
+    if (!acceptedBannerShowing) return;
+    const t = setTimeout(() => {
+      if (onDismissAcceptedBadge) onDismissAcceptedBadge(conv.phoneKey);
+    }, WA_ACCEPTED_BANNER_MS);
+    return () => clearTimeout(t);
+  }, [acceptedBannerShowing, conv.phoneKey]);
 
   const linkedBooking = conv.acceptedBookingId ? bookings.find((b) => b.id === conv.acceptedBookingId) : null;
   const intent = (conv.draftData && conv.draftData.intent) || null;

@@ -30,6 +30,12 @@ export const WA_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const WA_MAX_TEXT_LEN = 4000;
 export const WA_PARSE_TEXT_LEN = 1000;
 
+// How long the big "✓ Booking confirmed" banner stays before it dismisses
+// itself (ConversationView's timer). The ✕ still dismisses it immediately, and
+// a new inbound message clears acceptedBadgeDismissedAt so it re-surfaces —
+// this only stops it sitting there forever once staff has seen it.
+export const WA_ACCEPTED_BANNER_MS = 10000;
+
 // Default quick-reply templates (EN/ES). Staff-editable via the TemplatesEditor;
 // persisted to Firebase `templates/` in this sandbox (was localStorage in the
 // preview). Seeded once on first load when the node is empty.

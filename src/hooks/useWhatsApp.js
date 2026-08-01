@@ -309,7 +309,13 @@ export function useWhatsApp({
   function completeDraftAccept(bookingId) {
     const phoneKey = draftSourceRef.current;
     if (!phoneKey) return;
-    patchConversation(phoneKey, { draftStatus: "accepted", acceptedBookingId: bookingId });
+    // Clearing acceptedBadgeDismissedAt is what makes the "Booking confirmed"
+    // banner reliably show for THIS acceptance. The stamp used to be set only by
+    // a deliberate ✕, so a stale one was rare; now the 10s auto-dismiss sets it
+    // every single time, and without this a conversation that was accepted once
+    // before (then re-drafted by a later message or a manual re-check) would
+    // silently skip its confirmation the second time round.
+    patchConversation(phoneKey, { draftStatus: "accepted", acceptedBookingId: bookingId, acceptedBadgeDismissedAt: null });
     draftSourceRef.current = null;
   }
 
@@ -328,7 +334,9 @@ export function useWhatsApp({
     const conv = conversationsRef.current.find(function (c) { return c.phoneKey === key; });
     if (!conv || conv.acceptedBookingId) return;
     const patch = { acceptedBookingId: bookingId };
-    if (conv.draftStatus === "parsed") patch.draftStatus = "accepted";
+    // Same reset as completeDraftAccept — this path also flips the conversation
+    // to "accepted", so it owes the banner the same clean slate.
+    if (conv.draftStatus === "parsed") { patch.draftStatus = "accepted"; patch.acceptedBadgeDismissedAt = null; }
     patchConversation(key, patch);
   }
 
