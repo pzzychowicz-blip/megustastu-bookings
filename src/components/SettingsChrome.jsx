@@ -8,17 +8,24 @@
 // open instead of in the startup bundle. Settings.jsx re-exports both, so the
 // old import path still works.
 
+import { WA_SANDBOX } from "../lib/waSandbox";
+
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
 // Single source of truth for the Settings tabs. SettingsContent renders it AND
 // App.jsx's ←/→ keyboard nav derives its cycle order from it (imported there).
 // Add or reorder tabs HERE ONLY — a hand-copied id list elsewhere is exactly
 // how the "arrow keys skip the new Customers tab" bug happened when the 5th
 // tab shipped. Never duplicate this list.
+// WA-sandbox note (prod-sync): this file is now WA-touched. The WhatsApp tab is
+// spliced in behind WA_SANDBOX so a non-sandbox build shows exactly the five
+// historical tabs — and because this stays ONE list, App's ←/→ nav follows the
+// gate automatically instead of arrowing onto a tab that renders nothing.
 export const SETTINGS_TABS = [
   { id: "general",   label: "General" },
   { id: "layout",    label: "Layout" },
   { id: "customers", label: "Customers" },
   { id: "reminders", label: "Reminders" },
+  ...(WA_SANDBOX ? [{ id: "whatsapp", label: "WhatsApp" }] : []),
   { id: "shortcuts", label: "Shortcuts" },
 ];
 

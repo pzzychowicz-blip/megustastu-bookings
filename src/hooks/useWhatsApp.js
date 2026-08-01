@@ -37,6 +37,8 @@ import { clearCollapseSection } from "./useCollapseState";
 export function useWhatsApp({
   bookings,
   setWriteWarning,
+  // settings/whatsapp (useWaSettings) — currently just autoArchiveOnComplete.
+  waSettings,
   // form / view handoff setters (BookingApp-owned):
   // openForm (NOT setForm) — it seeds prod's v17.5.0 formBaseline alongside the
   // draft, so an untouched WA-prefilled form still closes without the
@@ -380,6 +382,34 @@ export function useWhatsApp({
     patchConversation(phoneKey, { archived: false, archivedAt: null });
   }
   function handleDeleteConversation(phoneKey) { setConfirmDeleteConv(phoneKey); }
+  // Auto-archive on completion (settings/whatsapp.autoArchiveOnComplete, default
+  // ON). Once a conversation's LINKED booking reaches "completed" the visit is
+  // over, so the thread drops out of the inbox on its own.
+  //
+  // `autoArchivedBookingId` is what makes a manual Restore STICK: without a
+  // stamp this effect re-runs on the next bookings/conversations snapshot and
+  // instantly re-archives whatever staff just restored. Keying the stamp on the
+  // booking id (not a bare boolean) means a LATER booking linked to the same
+  // conversation still auto-archives when it completes in turn.
+  //
+  // Not gated on WA_SANDBOX: every conversation in `conversations` already came
+  // from the WA_SANDBOX-gated listener, so the array is empty otherwise and the
+  // loop is a no-op.
+  useEffect(function () {
+    if (!waSettings || waSettings.autoArchiveOnComplete === false) return;
+    if (!conversationsLoaded.current) return;
+    conversations.forEach(function (c) {
+      if (!c || !c.acceptedBookingId || c.archived) return;
+      if (c.autoArchivedBookingId === c.acceptedBookingId) return; // already did this one — a manual restore wins
+      const b = bookings.find(function (x) { return x.id === c.acceptedBookingId; });
+      if (!b || b.status !== "completed") return;
+      patchConversation(c.phoneKey, {
+        archived: true,
+        archivedAt: Date.now(),
+        autoArchivedBookingId: c.acceptedBookingId,
+      });
+    });
+  }, [bookings, conversations, waSettings]);
   // ── Bulk actions (multi-select) ──────────────────────────────────────────────
   // Loop the existing single-key primitives (patchConversation is per-key
   // update()-semantics, so a loop is safe). Bulk archive deliberately uses

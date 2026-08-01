@@ -257,6 +257,7 @@ import { DaySheet } from "./components/DaySheet";
 // gated behind WA_SANDBOX (dev server, or a deployed sandbox build with
 // VITE_FB_TARGET=dev) so it can never appear in a real production build.
 import { useWhatsApp } from "./hooks/useWhatsApp";
+import { useWaSettings } from "./hooks/useWaSettings";
 import { InboxPanel } from "./components/whatsapp/InboxPanel";
 import { WaSimulator } from "./components/whatsapp/WaSimulator";
 import { simulateInbound } from "./lib/wa-sim";
@@ -725,6 +726,9 @@ function BookingApp({uid}){
   const turnBuffer=bookingDefaults.turnaroundEnabled===true?(Number(bookingDefaults.turnaroundMin)||0):0;
   // v17.0.0: settings/general (6th settings node) — see the import note.
   const { generalSettings, saveGeneralSettings } = useGeneralSettings();
+  // WA sandbox: settings/whatsapp — the module's own restaurant-wide settings
+  // (currently just auto-archive-on-complete). WA_SANDBOX-gated inside the hook.
+  const { waSettings, saveWaSettings } = useWaSettings();
   // v17.6.0: per-user preferences (8th settings node, keyed by uid). The five
   // synced settings each keep their localStorage initializer below — this only
   // OVERRIDES them once the account's node has loaded, and seeds the node from
@@ -780,7 +784,7 @@ function BookingApp({uid}){
   // setForm would leave the baseline stale and make an untouched WA-prefilled
   // form read as dirty, popping "Discard unsaved changes?" on every Cancel/Esc.
   const wa = useWhatsApp({
-    bookings, setWriteWarning,
+    bookings, setWriteWarning, waSettings,
     openForm, setEditId, setError, setSwapAffected, setViewDate, setShowForm, setConfirmCancel,
     setShowInbox, setConfirmArchive, setConfirmDeleteConv, setReturnToInboxKey,
   });
@@ -2893,7 +2897,9 @@ function BookingApp({uid}){
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
             onDeleteReminder={deleteReminder}
-            onToggleReminder={toggleReminderActive} /></Suspense></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
+            onToggleReminder={toggleReminderActive}
+            waSettings={waSettings}
+            onSaveWaSettings={saveWaSettings} /></Suspense></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
         // window.confirm which is blocked in sandboxed preview environments).
         // Renders on top of Settings in DOM order so it visually covers the list.
         confirmReminderDel?<Overlay onClose={function(){setConfirmReminderDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button

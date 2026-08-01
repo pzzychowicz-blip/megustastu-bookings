@@ -826,6 +826,29 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
 // Tab state lives in BookingApp (so it persists across modal close/reopen if
 // desired — currently it's reset on close by the parent). Reminder list
 // state and handlers are also threaded from BookingApp.
+// ── WhatsApp tab body (WA sandbox) ──────────────────────────────────────────
+// The module's own settings. Shares the General tab's row shape (label + hint
+// on the left, Toggle on the right) so the two tabs read as one surface.
+// Backed by settings/whatsapp (useWaSettings) — restaurant-wide, not per-device.
+function WhatsAppTabContent({ waSettings, onSaveWaSettings }) {
+  const s = waSettings || {};
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <Section title="Inbox">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Archive when the booking is completed</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              A conversation whose linked booking reaches <strong>Completed</strong> moves itself to Archived — the visit is over, so it drops out of the inbox. Restoring one by hand sticks; it won&rsquo;t re-archive itself.
+            </div>
+          </div>
+          <Toggle on={s.autoArchiveOnComplete !== false} onClick={function () { onSaveWaSettings({ autoArchiveOnComplete: !(s.autoArchiveOnComplete !== false) }); }} />
+        </div>
+      </Section>
+    </div>
+  );
+}
+
 export function SettingsContent({
   tab, setTab,
   appVersion,
@@ -872,7 +895,10 @@ export function SettingsContent({
   onAddReminder,
   onEditReminder,
   onDeleteReminder,
-  onToggleReminder
+  onToggleReminder,
+  // WA sandbox (settings/whatsapp — useWaSettings)
+  waSettings,
+  onSaveWaSettings
 }) {
   let content;
   if (tab === "general") {
@@ -882,6 +908,10 @@ export function SettingsContent({
   } else if (tab === "customers") {
     // v16.0.0: customer management (phone-derived index; delete-all-data).
     content = <CustomersTabContent bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2} />;
+  } else if (tab === "whatsapp") {
+    // WA sandbox: only reachable when SETTINGS_TABS spliced this tab in
+    // (WA_SANDBOX gate), so a non-sandbox build can never land here.
+    content = <WhatsAppTabContent waSettings={waSettings} onSaveWaSettings={onSaveWaSettings} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent
