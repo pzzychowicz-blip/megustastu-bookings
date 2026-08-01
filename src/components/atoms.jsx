@@ -286,7 +286,16 @@ export function Reveal({ show, children, style, horizontal = false, ms = 280 }) 
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).
   const innerStyle = horizontal
     ? { overflow: revealed ? "visible" : "hidden", minWidth: 0, minHeight: 0, display: "flex", alignItems: "center" }
-    : { overflow: revealed ? "visible" : "hidden", minHeight: 0 };
+    // `minWidth: 0` is the horizontal counterpart of the `minHeight: 0` beside
+    // it, and it is load-bearing: the inner track is a GRID ITEM, whose default
+    // `min-width: auto` resolves to its content's MIN-CONTENT width. Wrap
+    // anything containing `white-space: nowrap` text (the WA conversation rows)
+    // and the item refuses to shrink below the full unwrapped text, blowing out
+    // of its track and killing the ellipsis. The horizontal branch above always
+    // had it; the vertical branch only ever wrapped self-limiting content, so
+    // the gap went unnoticed until v17.6.0-wa-sandbox put the conversation list
+    // in a Reveal.
+    : { overflow: revealed ? "visible" : "hidden", minHeight: 0, minWidth: 0 };
   return (
     <div style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
       <div style={innerStyle}>{children || last.current}</div>
