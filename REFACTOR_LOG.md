@@ -6186,3 +6186,139 @@ nothing. Rejected on evidence, not preference.
 **Gates:** 88 tests, 0 lint errors, build 191.90 → **192.69 kB gz** (+0.79).
 **Verified:** on the tablet over CDP (root cause + the rejected CSP fix), and in
 DEV with the poison flag re-armed (0 long-poll requests, flag self-cleared).
+
+---
+
+## v17.6.0 — stay time, separation between bookings, exact Plan-Now, per-user settings
+
+**Date:** 2026-08-01
+**Branch:** `feat/v17.6.0-turnaround-and-user-prefs` (4 commits, one per item)
+**Behavioural change:** Yes — four independent staff-facing changes.
+**Gates:** 103 tests (88 → 103, +15), 0 lint errors, build 192.69 → **193.74 kB
+gz (+1.05)**.
+
+Four gaps, shipped as one version at Patryk's request, with each item as its own
+commit so any one can be read (or reverted) on its own.
+
+### 1/4 — List: actual stay time on completed bookings
+
+A Seated card showed a live "N min" tag that vanished the moment the booking
+flipped to Completed. Completed cards now carry a muted **"stayed N min"** tag.
+
+Only when the stay is knowable: a real seated→completed transition truncates
+`duration` to the actual span (v16.2.0), but a booking taken straight
+confirmed→completed keeps its SCHEDULED duration, so printing that number would
+assert a stay that never happened.
+
+The marker is a stored field, not a history-string scan — the two completion
+paths word their history entries differently ("status → seated" from
+`updateStatus`, "edited: …status confirmed→seated" from the form), which is
+exactly why parsing them would be fragile. `stayedMin` joins the `sanitize`
+whitelist; `stayedMins(b)` reads it, falling back to `duration` when a
+pre-v17.6.0 booking's history records a seated entry.
+
+The form path computes it for EVERY seated→completed save, including the
+`f.customDur` case the duration truncation skips — how long the party sat is a
+fact about the visit, independent of the duration chosen for storage.
+
+### 2/4 — Separation between bookings (the turnaround buffer)
+
+Nothing reserved turnaround time, so the optimizer would seat a new party the
+same minute the previous one was due to leave. Settings → General gains a
+toggle (**OFF by default**) and a 5–60 min stepper in 5-min steps, default 15.
+
+**The mechanic:** pad every END — both a stored slot's `e` and the candidate
+query window's `e` — and NEVER a start. Padding only the stored slots would stop
+a booking starting right after an existing one but still let it END exactly when
+the next one starts; padding both closes that direction too, and because only
+ends move the gap is exactly the buffer, never twice it. Carried by two helpers
+(`bookEnd`/`padEnd`) reading a new `TURN_BUFFER` live binding, so the change is
+greppable rather than sprinkled across ~20 sites.
+
+**Scope is placement only** (Patryk's call): `findFreeSlot`, `trialFits`,
+`optimise`/`applyOpt`, `findTimes`, `findKitchenFriendlyTimes`, `occupancyEnd`,
+and the UI busy-sets. Deliberately NOT buffered: `verifyClean`/`findConflicts`/
+`checkInefficent`, so turning the setting on can never flag or reshuffle a day
+that is already booked back-to-back; `getBlockSlots`, because a block's end was
+chosen by hand; `applySeatedShift`, because seating is a status action.
+
+**No Firebase console step** — two rolling-safe fields on the existing
+`settings/bookingDefaults` node, which already has its revGuard rev pair.
+`turnaroundEnabled` sanitizes as `=== true` (absent ⇒ off), the inverse of the
+`!== false` idiom the default-on switches use.
+
+Visible in Timeline (a 0.28-opacity tail sibling rendered like the seated ghost —
+NOT a longer block, since `liveBarDur` also gates the start-time chips and is
+read by List) and Plan (dashed muted outline; the walk-in gate subtracts it too).
+Both take it as a **scalar prop**: `React.memo` cannot see a live binding.
+
+### 3/4 — Plan: Now follows the exact clock
+
+At 14:07 the badge read 14:00, so Plan and Timeline disagreed about where "now"
+is by up to 7 minutes. `clampSlider` (round-to-nearest-15) is **gone**, replaced
+by `clampExact` at the three programmatic scrub sites. Hand-scrubbing still
+steps by 15 because TimeAxis snaps its OWN scroll — that is where the quarter
+grid always actually came from, so TimeAxis needed no change.
+
+The seated-occupancy clamps got **simpler**: the v17.1.0 overstay fix and the
+v17.1.1 "status change shows late in Plan" fix rounded to the slider grid purely
+to compensate for the follow position being rounded away from the clock. With an
+exact follow there is nothing to compensate for, so both key on raw `nowMins`.
+
+Also fixed a stale inline `eslint-disable` in PlanView that had drifted onto a
+comment line and was suppressing nothing.
+
+### 4/4 — Per-user settings sync
+
+Ten settings lived in `localStorage`, so every device had to be configured by
+hand. Five now follow the signed-in **account**: theme, reduce animations, Plan
+zoom & pan, lock navigation, split view on/off. Three stay per-device by
+explicit decision — **app width**, the **four Timeline zoom values** and the
+**saved split layout** (its master switch does sync) — because those are
+properties of the screen, not of the user.
+
+New `settings/users/{uid}/prefs` + `prefsRev` (8th settings node, and the first
+that is not restaurant-wide) via `useUserPrefs.js`, on the standard
+loaded-guard + revGuard CAS shape.
+
+**Device fallback is the migration.** Every setting keeps its `localStorage`
+initializer, so first paint and the signed-out shell are unchanged. One effect,
+gated on `prefsLoaded` and fired once per uid: a saved field overrides local
+state; an unsaved one is seeded from this device and written up, so logging in
+on a configured device adopts its setup rather than resetting it. Hence the
+**tri-state** model — `null` means "never chosen", and coercing an absent field
+to `false` would wipe every configured device on first login.
+`themePref === undefined` (follow the OS) is deliberately not seeded: it is the
+absence of a choice.
+
+**The `localStorage` mirror stays and is load-bearing** — `index.html`'s
+no-flash script reads `mgt-theme`/`mgt-reduce-motion` before React mounts and
+long before Firebase or auth resolve. localStorage is the pre-mount cache; the
+node is the source of truth. CLAUDE.md's old "per-device preferences never go in
+Firebase" rule is rewritten accordingly.
+
+`App` now renders `<BookingApp uid={user.uid} key={user.uid} />`; the key makes
+an account switch remount the subtree so no previous user's state survives.
+
+**One Firebase console step in this release** (rolling-safe, app first / rules
+second): the `prefs`/`prefsRev` pair nested inside `settings/users/$uid` — see
+`database.rules.README.md`. `$uid` is a wildcard, not an access rule; the
+top-level `auth != null` still governs, matching this app's trust model.
+
+### Verified (DEV, live)
+
+1. A pre-v17.6.0 completed booking renders "stayed 15 min" via the history
+   fallback.
+2. Buffer at 15 min: an 18:00–19:30 booking draws a tail of exactly 15/90 of the
+   block width flush at its end; the manual picker marks 1A **busy at 19:30** and
+   free at 19:45; auto-assign picks 1A at 19:45; Plan shows 1A dashed at 19:30
+   while every other table stays solid. Buffer off ⇒ all 88 pre-existing tests
+   unchanged.
+3. With Saturday's opening hour temporarily lowered so the clock fell inside
+   service (restored afterwards): the Plan badge read **09:52** against a 09:52
+   wall clock, hand-scrubbing snapped to 11:15, and Now returned to 09:52.
+4. Per-device keys wiped from `localStorage` and reloaded → theme, Plan-gestures
+   and a freshly-toggled nav-lock all came back **from the account node**, with
+   `body.overflow: hidden` confirming the restored value reached the render;
+   app width, Timeline zoom and the split layout stayed absent. No `[SAFE]`
+   refusals, no console errors.

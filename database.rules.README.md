@@ -5,6 +5,37 @@ RTDB Security Rules. The rules are still applied **manually** via the Firebase c
 (Realtime Database → Rules → paste → Publish) — this file is the canonical copy to paste
 from and to diff against.
 
+## v17.6.0 addition — `settings/users/$uid/prefs` rev pair (per-user preferences)
+
+v17.6.0 adds an **eighth** settings node, and the first that is **not
+restaurant-wide**: `settings/users/{uid}/prefs` (`useUserPrefs.js`), holding the
+five preferences that now follow the signed-in account across devices — theme,
+reduce animations, Plan zoom & pan, lock navigation, split view on/off. (App
+width, the four Timeline zoom values and the saved split layout stay per-device
+in `localStorage` by design.)
+
+It is guarded by the same revision-CAS pattern as every other whole-node
+collection, with the pair nested one level deeper: a `prefsRev` sibling
+**inside each `$uid`**, so two accounts can never contend on one revision.
+`writeWithRev` builds a root multi-path `update()` keyed by the full path, so a
+nested path needs no code change.
+
+**`$uid` is a wildcard, not a per-user access rule.** The top-level
+`auth != null` read/write still applies, so any signed-in staff member can in
+principle write another's node — same trust model as every other node in this
+single-restaurant app (everyone can already edit the layout and every booking).
+If that ever needs tightening, add `".write": "$uid === auth.uid"` here.
+
+Deploy is **rolling-safe, app first, rules second**: until the pair is pasted
+the node simply has no per-node rule (the root auth rule still applies), so a
+v17.6.0 app writes it fine and an older app never touches it. Paste the updated
+`database.rules.json` to DEV, toggle any of the five settings and verify
+`settings/users/{your-uid}/prefsRev` counts up from 1, then PROD.
+
+Note that v17.6.0's OTHER new setting — the separation between bookings — needs
+**no rules change at all**: it is two extra fields on the existing
+`settings/bookingDefaults` node, which already has its rev pair.
+
 ## v16.3.0 addition — `recurring` rev pair (7th collection)
 
 v16.3.0 adds a **seventh** persisted collection, the top-level `recurring` node (standing /

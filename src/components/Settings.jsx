@@ -328,7 +328,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Dark mode</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Saved on this device. Defaults to your system setting.
+              Follows your account on every device. Defaults to your system setting.
             </div>
           </div>
           <Toggle on={isDark} onClick={onToggleDark} />
@@ -354,7 +354,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Reduce animations</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Turns off transitions and wipes on this device. Helps on slower tablets.
+              Turns off transitions and wipes. Follows your account on every device. Helps on slower tablets.
             </div>
           </div>
           <Toggle on={reduceMotion} onClick={onToggleReduceMotion} />
@@ -365,7 +365,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Plan zoom &amp; pan</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Scroll/pinch to zoom, drag to pan and double-tap to reset in the Plan view, on this device.
+              Scroll/pinch to zoom, drag to pan and double-tap to reset in the Plan view. Follows your account on every device.
             </div>
           </div>
           <Toggle on={planGestures} onClick={onTogglePlanGestures} />
@@ -377,7 +377,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Lock navigation</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Keeps the title bar and the date row in place while the timeline, list or plan scrolls underneath, on this device. Best on a tablet or desktop — on a phone those rows wrap and can take most of the screen.
+              Keeps the title bar and the date row in place while the timeline, list or plan scrolls underneath. Follows your account on every device. Best on a tablet or desktop — on a phone those rows wrap and can take most of the screen.
             </div>
           </div>
           <Toggle on={navLocked} onClick={onToggleNavLock} />
@@ -389,7 +389,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Split view</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Right-click or press and hold a view button (Timeline, List, Plan) to show two views at once, on this device. Tablet and desktop only.
+              Right-click or press and hold a view button (Timeline, List, Plan) to show two views at once. Follows your account on every device; the two views you pick are remembered per device. Tablet and desktop only.
             </div>
           </div>
           <Toggle on={splitEnabled} onClick={onToggleSplitEnabled} />
