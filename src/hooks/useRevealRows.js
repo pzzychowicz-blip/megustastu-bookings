@@ -24,7 +24,11 @@ import { useState, useRef, useEffect } from "react";
 
 const PRUNE_MS = 350; // > Reveal's ~300ms collapse, so a departed row finishes easing out
 
-export function useRevealRows(ids) {
+// `pruneMs` must stay ABOVE the caller's Reveal duration, or a row is unmounted
+// mid-collapse and vanishes instead of easing out. A caller passing a custom
+// `ms` to Reveal has to pass the matching prune window here (the WA
+// conversation list does; see ROW_MS/ROW_PRUNE_MS there).
+export function useRevealRows(ids, pruneMs = PRUNE_MS) {
   const [renderIds, setRenderIds] = useState(function () { return ids.slice(); });
   const [openIds, setOpenIds] = useState(function () { return new Set(ids); });
   const prevKeys = useRef(ids.slice());
@@ -59,7 +63,7 @@ export function useRevealRows(ids) {
           timers.current[id] = setTimeout(function () {
             delete timers.current[id];
             setRenderIds(function (prev) { return prev.filter(function (x) { return x !== id; }); });
-          }, PRUNE_MS);
+          }, pruneMs);
         }
       });
     }

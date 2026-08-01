@@ -241,7 +241,17 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // the sibling booking-name span slides in lockstep with the chip instead of
 // snapping when the chip appears/disappears. Default `false` = the original
 // vertical behaviour, byte-for-byte for every existing caller.
-export function Reveal({ show, children, style, horizontal = false }) {
+// v17.6.0-wa-sandbox: optional `ms` overrides the collapse duration. All FOUR
+// of Reveal's timings scale by the same factor, so they keep the relationship
+// they were tuned in (opacity finishes before the height; the unmount lands
+// after the height; `revealed` after that) — and at the default 280 every
+// number is byte-for-byte what it was before the prop existed. Used by the WA
+// conversation list, whose per-row collapse runs 30% slower than the house speed.
+export function Reveal({ show, children, style, horizontal = false, ms = 280 }) {
+  const k = ms / 280;
+  const fadeMs = Math.round(220 * k);
+  const unmountMs = Math.round(300 * k);
+  const revealedMs = Math.round(320 * k);
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -259,18 +269,18 @@ export function Reveal({ show, children, style, horizontal = false }) {
       // the mount so the transition actually fires (a single frame can batch).
       let r2 = 0;
       const r1 = requestAnimationFrame(function () { r2 = requestAnimationFrame(function () { setOpen(true); }); });
-      const tv = setTimeout(function () { setRevealed(true); }, 320);
+      const tv = setTimeout(function () { setRevealed(true); }, revealedMs);
       return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); clearTimeout(tv); };
     }
     setOpen(false);
     setRevealed(false);   // clip immediately so the collapse hides cleanly
-    const t = setTimeout(function () { setMounted(false); }, 300);
+    const t = setTimeout(function () { setMounted(false); }, unmountMs);
     return function () { clearTimeout(t); };
-  }, [show]);
+  }, [show, ms]);
   if (!mounted) return null;
   const track = horizontal
-    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns 280ms cubic-bezier(.4,0,.2,1), opacity 220ms ease" }
-    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows 280ms cubic-bezier(.4,0,.2,1), opacity 220ms ease" };
+    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + ms + "ms cubic-bezier(.4,0,.2,1), opacity " + fadeMs + "ms ease" }
+    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + ms + "ms cubic-bezier(.4,0,.2,1), opacity " + fadeMs + "ms ease" };
   // v16.1.1: the horizontal inner track is a flex box (align-items:center) so the
   // revealed child is vertically centred without an inherited-font line-box strut
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).

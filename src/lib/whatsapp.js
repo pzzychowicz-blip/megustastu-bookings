@@ -190,6 +190,20 @@ export function intentBannerVisible(conv) {
   return (conv.draftUpdatedAt || 0) > handledAt;
 }
 
+// conversationOrder(archivedView) — JUST the comparator half of
+// sortConversations, so a caller that must NOT re-filter can still sort the
+// canonical way. ConversationList needs exactly that: while a row is easing out
+// it is no longer in the filtered set (and may no longer belong to this tab at
+// all, e.g. it was just archived), but it still has to hold its correct
+// position for the length of the collapse. Split out rather than duplicated —
+// the visible order and the ↑/↓ nav order must never drift apart.
+export function conversationOrder(archivedView) {
+  return (a, b) =>
+    archivedView
+      ? (b.archivedAt || b.lastMessageAt || 0) - (a.archivedAt || a.lastMessageAt || 0)
+      : (b.lastMessageAt || 0) - (a.lastMessageAt || 0);
+}
+
 // sortConversations — the canonical inbox ordering for one tab: filter by the
 // active tab (archived vs inbox), then sort newest-first. Inbox sorts by
 // lastMessageAt; archived sorts by archivedAt (falling back to lastMessageAt).
@@ -201,9 +215,5 @@ export function sortConversations(conversations, archivedView) {
   if (!Array.isArray(conversations)) return [];
   return conversations
     .filter((c) => (archivedView ? c.archived : !c.archived))
-    .sort((a, b) =>
-      archivedView
-        ? (b.archivedAt || b.lastMessageAt || 0) - (a.archivedAt || a.lastMessageAt || 0)
-        : (b.lastMessageAt || 0) - (a.lastMessageAt || 0)
-    );
+    .sort(conversationOrder(archivedView));
 }
