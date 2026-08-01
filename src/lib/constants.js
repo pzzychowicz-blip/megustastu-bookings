@@ -436,6 +436,23 @@ export function setDurTiers(t){
   if(t&&typeof t==="object") DUR_TIERS=t;
 }
 
+// ── Turnaround buffer between bookings — live binding (v17.6.0) ─────────────
+// Minutes a table stays unavailable AFTER a booking's end, so parties are not
+// seated back-to-back. 0 = the feature is off, which is the DEFAULT and makes
+// an unconfigured app byte-for-byte identical to v17.5.1. Reassigned only by
+// setTurnBuffer() (useBookingDefaults per snapshot), same live-ESM-binding
+// mechanism as DUR_TIERS above — read at call time, never captured.
+//
+// Applied to booking ENDS only (booking-logic's bookEnd/padEnd), never to a
+// start and never to a table BLOCK: a block's end time was chosen by hand and
+// padding it would silently extend a window the user set deliberately.
+export let TURN_BUFFER=0;
+export function setTurnBuffer(cfg){
+  const on=!!(cfg&&cfg.turnaroundEnabled);
+  const n=Number(cfg&&cfg.turnaroundMin);
+  TURN_BUFFER=on&&Number.isFinite(n)&&n>0?n:0;
+}
+
 export var ROW_H=44,LABEL_W=58;
 // v17.0.0: 5th status `pending` (awaiting confirmation) — yellow family;
 // confirmed recolored to accent blue in index.html (the yellow moved to pending).

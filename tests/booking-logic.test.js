@@ -10,7 +10,7 @@
 // Dates use a fixed FUTURE day so optimizerActiveFor(date, …) is always true and
 // syncLiveDurations (seated-today only) never perturbs the fixtures.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
   comboCap, comboCapBest, sanitize, sanitizeAll, diffBooking,
@@ -19,9 +19,9 @@ import {
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
-  stayedMins,
+  stayedMins, bookEnd, padEnd,
 } from "../src/lib/booking-logic.js";
-import { TOTAL_SEATS, ALL_TABLES } from "../src/lib/constants.js";
+import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer } from "../src/lib/constants.js";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
 const today = new Date().toISOString().slice(0, 10);
@@ -294,6 +294,91 @@ describe("optimise / applyOpt / bookingsAfterAction", () => {
     const b = mk({ date: today, status: "confirmed", tables: ["7"], size: 4 });
     const out = bookingsAfterAction([b], today, [], null, false, false);
     expect(out[0].tables).toEqual(["7"]);
+  });
+});
+
+// v17.6.0: separation between bookings. The whole feature hangs off the
+// TURN_BUFFER live binding, so these flip it directly and MUST restore it — a
+// leaked non-zero buffer would silently change every later test in the file.
+describe("turnaround buffer (separation between bookings)", () => {
+  const on = (min) => setTurnBuffer({ turnaroundEnabled: true, turnaroundMin: min });
+  const off = () => setTurnBuffer(null);
+  afterEach(off);
+
+  it("is off unless BOTH the switch and a positive value are set", () => {
+    setTurnBuffer({ turnaroundEnabled: false, turnaroundMin: 30 });
+    expect(padEnd(100)).toBe(100);
+    setTurnBuffer({ turnaroundEnabled: true, turnaroundMin: 0 });
+    expect(padEnd(100)).toBe(100);
+    setTurnBuffer({ turnaroundEnabled: true, turnaroundMin: "nonsense" });
+    expect(padEnd(100)).toBe(100);
+  });
+
+  it("bookEnd/padEnd add the buffer to ends only", () => {
+    on(15);
+    expect(padEnd(100)).toBe(115);
+    expect(bookEnd(mk({ time: "13:00", duration: 90 }))).toBe(13 * 60 + 90 + 15);
+    // A missing duration still falls back to 90, buffered.
+    expect(bookEnd({ time: "13:00" })).toBe(13 * 60 + 90 + 15);
+  });
+
+  // NB these assert on whether table "2" is OFFERED, not on a null result:
+  // findFreeSlot falls back to findBest and will happily return some other free
+  // table. "Is table 2 still on the table" is the question the buffer answers.
+  const on2 = (existing, time) =>
+    findFreeSlot(existing, D, time, 2, "auto", 90, [], null, ["2"]);
+
+  it("refuses a booking starting inside the previous party's buffer", () => {
+    const existing = [mk({ id: "a", time: "13:00", duration: 90, tables: ["2"] })]; // ends 14:30
+    expect(on2(existing, "14:30")).toEqual(["2"]);   // no buffer → bookable at the end
+    on(15);
+    expect(on2(existing, "14:30")).not.toContain("2");
+    expect(on2(existing, "14:45")).toEqual(["2"]);
+  });
+
+  it("also protects the booking BEFORE an existing one (both ends padded)", () => {
+    // `a` starts at 16:00; a 90-min booking ENDING exactly at 16:00 must be
+    // refused too, or the separation would only work in one direction.
+    const existing = [mk({ id: "a", time: "16:00", duration: 90, tables: ["2"] })];
+    expect(on2(existing, "14:30")).toEqual(["2"]);
+    on(15);
+    expect(on2(existing, "14:30")).not.toContain("2");
+    expect(on2(existing, "14:15")).toEqual(["2"]);
+  });
+
+  it("separates by exactly the buffer, never twice it", () => {
+    on(30);
+    const existing = [mk({ id: "a", time: "13:00", duration: 90, tables: ["2"] })]; // ends 14:30
+    expect(on2(existing, "14:45")).not.toContain("2");  // 15 min gap — still short
+    expect(on2(existing, "15:00")).toEqual(["2"]);      // exactly 30 — allowed
+  });
+
+  it("does NOT pad a table block — a block ends when it says it ends", () => {
+    on(30);
+    const blocks = [{ tableId: "2", date: D, from: "13:00", to: "14:00" }];
+    expect(findFreeSlot([], D, "14:00", 2, "auto", 90, blocks, null, ["2"])).toEqual(["2"]);
+  });
+
+  it("leaves clash detection alone — an existing back-to-back day stays clean", () => {
+    // The decision: switching the setting on must never flag or reshuffle a day
+    // that is already booked. verifyClean/findConflicts are unbuffered.
+    const day = [
+      mk({ id: "a", time: "13:00", duration: 90, tables: ["2"] }),
+      mk({ id: "b", time: "14:30", duration: 90, tables: ["2"] }),
+    ];
+    expect(verifyClean(day, D)).toBe(true);
+    on(30);
+    expect(verifyClean(day, D)).toBe(true);
+    expect(findConflicts(day, D)).toEqual([]);
+  });
+
+  it("keeps the optimizer's output conflict-free with a buffer on", () => {
+    on(15);
+    const day = [2, 4, 2, 6, 3].map((size, i) =>
+      mk({ id: "o" + i, time: i % 2 ? "13:00" : "19:00", size, tables: [] })
+    );
+    const out = applyOpt(day, D, []);
+    expect(verifyClean(out, D)).toBe(true);
   });
 });
 

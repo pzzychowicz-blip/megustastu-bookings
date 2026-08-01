@@ -40,7 +40,7 @@ src/
 │   ├── useOperatingHours.js         PER-WEEKDAY open/close + closed days → constants.js live bindings via hoursFor(date)/setActiveDayHours; Firebase settings/operatingHours (v14.4.0; 24h v14.5.0; per-weekday v15.0.0)
 │   ├── useDayShifts.js              editable Afternoon/Evening split hour → Firebase settings/dayShifts (v14.6.0; 2nd settings node; split clamped to weekRange() v15.0.0)
 │   ├── useOptimizerSettings.js      editable optimizer cutoff (0–24, full-day) + auto-switch → Firebase settings/optimizer (v15.0.0; 3rd settings node)
-│   ├── useBookingDefaults.js        editable default booking-duration tiers — a VARIABLE-LENGTH list `tiers:[{max,dur}…]` (sorted, ≤6) + catch-all restDur (size s → first tier with s≤max, else restDur; feeds getDur via the DUR_TIERS live binding; legacy flat t1Max… shape converts on read) + running-late thresholds (lateEnabled/lateWarnMin/lateNoShowMin) + table-turn prediction (freeSoonEnabled + v16.3.0-correction freeSoonWindow — minutes ahead the "freeing soon" line/pills look, 5–60 step 5, default 15) + v17.0.0-round-7 banner master switches (overlapWarnEnabled/reshuffleSuggestEnabled, default on) → Firebase settings/bookingDefaults (v16.1.0; 5th settings node; revGuard CAS)
+│   ├── useBookingDefaults.js        editable default booking-duration tiers — a VARIABLE-LENGTH list `tiers:[{max,dur}…]` (sorted, ≤6) + catch-all restDur (size s → first tier with s≤max, else restDur; feeds getDur via the DUR_TIERS live binding; legacy flat t1Max… shape converts on read) + running-late thresholds (lateEnabled/lateWarnMin/lateNoShowMin) + table-turn prediction (freeSoonEnabled + v16.3.0-correction freeSoonWindow — minutes ahead the "freeing soon" line/pills look, 5–60 step 5, default 15) + v17.0.0-round-7 banner master switches (overlapWarnEnabled/reshuffleSuggestEnabled, default on) + v17.6.0 separation between bookings (turnaroundEnabled default OFF — sanitized `=== true`, the INVERSE of the default-on `!== false` idiom — + turnaroundMin 5–60 step 5, default 15; drives setTurnBuffer) → Firebase settings/bookingDefaults (v16.1.0; 5th settings node; revGuard CAS)
 │   ├── useWaitlist.js               waitlist CRUD → Firebase `waitlist` (6th collection; reminders-pattern loaded-guard; ref-mirror save — set() OUTSIDE the updater, see the sync-echo gotcha; auto-prunes past dates) (v16.0.0)
 │   ├── useDeferredCompute.js        post-paint deferred computation (v16.3.0 perf phase 2) — {value,pending}; runs the compute AFTER a guaranteed paint (rAF→setTimeout, + a 120ms fallback because a HIDDEN tab fires no rAF — hit live in the Preview pane), run-token superseding, value=null while (re-)checking (never a stale answer). Used by the form/walk-in availability scans; the ⏳ row's Reveal ease is the visual grace
 │   ├── useRecurring.js              standing/weekly booking RULES → Firebase `recurring` (7th collection, whole-node object {v,enabled,horizonWeeks,rules[]}; revGuard CAS on recurringRev; ref-mirror save). Occurrences are normal /bookings children (see the generator in App.jsx). v16.3.0-correction: DEFAULT OFF — DEFAULT_RECURRING.enabled=false + sanitize `enabled: src.enabled===true` (absent/legacy node ⇒ off), so the whole feature (incl. the form "Repeat weekly" toggle) stays hidden until enabled in Settings (v16.3.0)
@@ -90,7 +90,7 @@ src/
 │   └── atoms.jsx                    Overlay (+ pinned-footer slot), Fld, Section, Collapsible (v15.0.0; optional controlled mode `open`/`onToggle` v15.1.0), Reveal (graceful height show/hide via grid-rows 0fr↔1fr + delayed unmount; overflow:visible when open+settled, clip only while animating so inner hover-lifts aren't clipped — v15.8.0; v16.1.1 optional `horizontal` = grid-COLUMNS 0fr↔1fr + inline-grid, eases occupied WIDTH — used by the timeline start-time chip so the sibling name eases in lockstep), Presence/Toast (generic enter/exit wrapper with in/out class + delayed unmount + cached children; Toast = the toast-class alias — v15.8.0), ModalPresence/usePresence (PresenceContext so Overlay/ReminderEditor self-animate close — v15.8.0), AutoHeight (ResizeObserver eases content-height changes; overflow:visible at rest, clip ONLY while the height transition runs so inner hover-lifts aren't clipped — supersedes the earlier "always hidden"; optional `linear` — used in Settings tabs / Manual·Walkin·Pref·Reminder·Week bodies — v15.8.0), SlideView (slide wrapper, clips only while animating — v15.8.0; v17.5.0 optional `fill` = `flex:1;minHeight:0;display:flex;flexDirection:column`, needed in the `shellFixed` layout where it must pass a definite height through instead of collapsing to content height), useFlip (WAAPI list-reorder hook — v15.8.0), TBadge, AvailBanner, Toggle (knob/track ease — v15.8.0), mkInp, mkBtn
 └── lib/
     ├── booking-logic.js             pure functions (optimizer, sanitisation, derivations, daySummary); v15.0.0: isIn via ZONE_OF, date-finders read hoursFor(date); v15.9.0: ALL optimizer heuristics data-driven via PRIORITIES (IS_MGT_LAYOUT no longer imported); v16.1.0: getDur reads the DUR_TIERS live binding + lateState(b,today,nowMins,cfg) → null|"warn"|"noshow"; v17.6.0: `stayedMins(b)` → the actual stay of a COMPLETED booking or null — reads the new sanitize-whitelisted `stayedMin` stamp (written by App's two completion paths on a real seated→completed transition ONLY), falling back to `duration` when a pre-v17.6.0 booking's history records a seated entry
-    ├── constants.js                 layout config — DEFAULT_LAYOUT (incl. v15.9.0 priorities seed = the ex-hard-coded MGT heuristics) + setLayout/buildLayout reassign LIVE bindings (ALL_TABLES/INDOOR/OUTDOOR/TIMELINE_TABLES/TOTAL_SEATS/ZONE_OF/TABLE_GROUPS/VALID_COMBOS/CLUSTERS/KITCHEN_TABLE_LIMIT/IS_MGT_LAYOUT/PRIORITIES) + per-weekday hours (WEEK_HOURS/hoursFor/weekRange) + DUR_TIERS/setDurTiers duration tiers (v16.1.0); colours, S/BTN style tokens (v15.0.0)
+    ├── constants.js                 layout config — DEFAULT_LAYOUT (incl. v15.9.0 priorities seed = the ex-hard-coded MGT heuristics) + setLayout/buildLayout reassign LIVE bindings (ALL_TABLES/INDOOR/OUTDOOR/TIMELINE_TABLES/TOTAL_SEATS/ZONE_OF/TABLE_GROUPS/VALID_COMBOS/CLUSTERS/KITCHEN_TABLE_LIMIT/IS_MGT_LAYOUT/PRIORITIES) + per-weekday hours (WEEK_HOURS/hoursFor/weekRange) + DUR_TIERS/setDurTiers duration tiers (v16.1.0) + v17.6.0 TURN_BUFFER/setTurnBuffer (the separation between bookings, in minutes; 0 = off = the default, so an unconfigured app is byte-for-byte v17.5.1); colours, S/BTN style tokens (v15.0.0)
     ├── reminders.js                 reminder helpers (validate, fire-window, prune)
     ├── drafts.js                    v17.5.0 — `sameDraft(a,b)` behind the unsaved-changes guard. NOT JSON equality: key order differs between openEdit's literal and openNew's Object.assign spread; `<input type=number>` returns a STRING; `customDur:null`/`deposit:""` are the same nothing; table arrays are sets in spirit. Values normalise to strings, arrays sort, null/undefined/""/false all collapse to "" (tests/drafts.test.js)
     ├── dbError.js                   v17.5.1 — `dbError(path)` builds the THIRD argument every `onValue()` must pass (the optional error/cancel callback), and `onDbError(fn)` lets usePersistence subscribe so any listener failure anywhere surfaces in the UI. All 16 listeners pass it. Origin: a cancelled read produced NOTHING — no log, no banner, no state change — because `setBookingsReady(true)` lives in the success path, so the app showed "⟳ Loading bookings…" forever and was structurally incapable of reporting its own failure
@@ -240,6 +240,36 @@ Customers are **DERIVED from the bookings list by normalized phone** (`src/lib/c
 
 ### Waitlist active matching (v16.0.0)
 `waitAvail` is **state computed by a BookingApp effect**, not a render-time derivation — the `trialFits` scans are heavy, so the effect keys on `[bookings, tableBlocks, waitlist, autoOptimizer, nowQuarter]` where `nowQuarter = Math.floor(nowMins/15)` (never the raw 15s tick). Per waiting entry: try `prefTime` first; else a 15-min first-fit scan **clamped to ±90 min around the wanted time** (a 13:45 slot is no use to a party waiting for ~20:30); no wanted time → the whole remaining day. Transition-to-available (prev-id-set diff in a ref, first pass exempt) fires the green toast. The "⏳ N" badge lives in the Today slot (Presence slide; orange when someone fits now); Book prefills the form + `pendingWaitlistRef`, consumed in `doSave`'s new-booking path.
+
+### Separation between bookings — the turnaround buffer (v17.6.0)
+Minutes a table stays unavailable AFTER a party's end, so bookings aren't taken
+back-to-back. Off by default (`TURN_BUFFER` seeds 0), which makes the whole
+feature a no-op until Settings → General turns it on.
+
+**The rule is: pad every END — both a stored slot's `e` and the candidate query
+window's `e` — and NEVER a start.** Padding only the stored slots would stop a
+new booking starting right after an existing one but still let it END exactly
+when the next one starts; padding both closes that direction too, and because
+only ends move the gap is exactly `TURN_BUFFER`, never twice it. The two
+helpers are `bookEnd(b)` and `padEnd(e)` in `booking-logic.js`.
+
+**Scope is PLACEMENT ONLY** (Patryk-confirmed): `findFreeSlot`, `trialFits`,
+`optimise`/`applyOpt`, `findTimes`, `findKitchenFriendlyTimes`, `occupancyEnd`,
+plus the UI busy-sets (`ManualModal`, `WalkinForm`, `doSave`'s manual guard).
+**`verifyClean` / `findConflicts` / `checkInefficent` deliberately do NOT use
+it** — switching the setting on must never flag or reshuffle a day that is
+already booked back-to-back, so the Overlap banner and the v15.6.1
+reconciliation effect stay quiet. `getBlockSlots` is untouched too: a block's
+end time was chosen by hand and padding it would silently extend it.
+`applySeatedShift` is also unbuffered — seating an existing party is a status
+action, not a placement.
+
+Visible in Timeline (a 0.28-opacity tail sibling rendered like the seated ghost
+— NOT a longer block, because `liveBarDur` also gates the start-time chips and
+is read by List) and in Plan (a `resetting` map → dashed muted outline; the
+walk-in gate subtracts it too). Both views take the buffer as a **scalar
+`turnBuffer` prop** from App, never the live binding — `React.memo` cannot see
+a live binding, the same reason `hoursSig`/`layoutSig` exist.
 
 ### Optimizer cutoffs
 - 15:00 auto-cutoff for today's bookings — `autoOptimizer` flips off.

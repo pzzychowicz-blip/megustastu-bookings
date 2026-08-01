@@ -437,6 +437,10 @@ export const TimelineView = memo(function TimelineView({
   currency = "€", // v17.0.0: settings/general deposit marker
   onDropOnTable = null, // v17.0.0 correction: drag&drop move/swap handler (App)
   onReshuffle = () => {},
+  // v17.6.0: separation between bookings, in minutes (0 = feature off). A SCALAR
+  // from App rather than the TURN_BUFFER live binding, because React.memo cannot
+  // see a live binding — the same reason hoursSig/layoutSig exist.
+  turnBuffer = 0,
 }) {
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
@@ -715,6 +719,33 @@ export const TimelineView = memo(function TimelineView({
             scaled by the `.mgt-tlghost:has(+ .mgt-hover-scale:hover)` rule (index.html)
             so it lifts in lockstep with the block. */}
         {rows.map((b) => {
+          // v17.6.0: the turnaround tail — the table is held for `turnBuffer`
+          // minutes after the party's end, so the separation is visible rather
+          // than just being an invisible refusal when you try to book. Rendered
+          // as its OWN low-opacity sibling instead of lengthening the block:
+          // the block's width comes from liveBarDur, which also gates the
+          // start-time chips and is read by List, so growing it would move
+          // unrelated behaviour. Completed bookings get no tail — a completed
+          // visit's table reads as free everywhere else in the app.
+          let tail = null;
+          if (turnBuffer > 0 && b.status !== "completed") {
+            const tS = toMins(b.time) - OPEN * 60 + liveBarDur(b, nowMins);
+            tail = (
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute", top: 3, height: (ROW_H - 8) + "px",
+                  left: pct(OPEN * 60 + tS),
+                  width: Math.max((turnBuffer / totalMins) * 100, 0.3) + "%",
+                  background: BLOCK_BG[b.status] || BLOCK_BG.confirmed,
+                  opacity: 0.28,
+                  borderRadius: "0 10px 10px 0",
+                  boxSizing: "border-box", pointerEvents: "none",
+                  transition: "left 320ms ease, width 320ms ease"
+                }}
+              />
+            );
+          }
           let ghost = null;
           if (b.status === "seated") {
             const origD = b.originalDuration || b.duration;
@@ -738,6 +769,7 @@ export const TimelineView = memo(function TimelineView({
           }
           return (
             <Fragment key={b.id}>
+              {tail}
               {ghost}
               <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
             </Fragment>

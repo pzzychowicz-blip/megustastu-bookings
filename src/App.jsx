@@ -34,7 +34,7 @@ import {
   getBlockSlots, canAssign, getBusy, overlaps, comboCapBest,
   getKitchenLoad,
   applyOpt,
-  optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
+  optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
   checkInefficent, verifyClean, findConflicts,
   nowTime,
   trialFits, toTime, lateState, freeingSoon, rankCombosContaining, comboExistsFor,
@@ -683,6 +683,11 @@ function BookingApp(){
   const { optimizerSettings, saveOptimizerSettings } = useOptimizerSettings();
   // v16.1.0: booking defaults — duration tiers + running-late thresholds.
   const { bookingDefaults, saveBookingDefaults } = useBookingDefaults();
+  // v17.6.0: the separation between bookings, as a SCALAR for the memoized
+  // views. They could read the TURN_BUFFER live binding directly, but
+  // React.memo cannot see a live binding — a settings change would not repaint
+  // them (the hoursSig/layoutSig problem). A number prop sidesteps it entirely.
+  const turnBuffer=bookingDefaults.turnaroundEnabled===true?(Number(bookingDefaults.turnaroundMin)||0):0;
   // v17.0.0: settings/general (6th settings node) — see the import note.
   const { generalSettings, saveGeneralSettings } = useGeneralSettings();
   // A phone value that is empty, a bare "+", or exactly the untouched prefix
@@ -1694,7 +1699,7 @@ function BookingApp(){
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
       // WalkinForm; the optimizer already ignores completed via isActive).
-      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
+      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
       if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
       else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
     }catch(err){setError("Error: "+err.message);}
@@ -2307,6 +2312,7 @@ function BookingApp(){
     onNoShow={VA.onNoShow}
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
+    turnBuffer={turnBuffer}
     hoursSig={weekHours} />;
   // v17.1.0 perf note: hoursSig / layoutSig are identity-only props — the views
   // read OPEN/GRID_CLOSE/QUARTER_HOURS/TIMELINE_TABLES/TOTAL_SEATS as LIVE
@@ -2342,6 +2348,7 @@ function BookingApp(){
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={VA.onReshuffle}
+    turnBuffer={turnBuffer}
     hoursSig={weekHours}
     layoutSig={layout}
     currency={generalSettings.currency} />;

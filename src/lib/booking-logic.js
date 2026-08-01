@@ -24,7 +24,8 @@ import {
   hoursFor,
   ZONE_OF,
   PRIORITIES,
-  DUR_TIERS
+  DUR_TIERS,
+  TURN_BUFFER
 } from "./constants";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
@@ -104,6 +105,26 @@ export function stayedMins(b){
 export function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
 export function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
+// ── Turnaround buffer (v17.6.0) ───────────────────────────────────────────────
+// The separation between bookings (Settings → General; off by default, so
+// TURN_BUFFER is 0 and everything below is a no-op). The rule is: pad every
+// END — both a stored slot's `e` and the candidate query window's `e` — and
+// NEVER a start.
+//
+// Why both ends and no starts: padding only the stored slots would stop a new
+// booking starting right after an existing one, but would still let it END
+// exactly when the next one starts. Padding both ends closes that direction
+// too, and because only ends move, the gap between any pair is exactly
+// TURN_BUFFER — never twice it.
+//
+// Scope is PLACEMENT ONLY: findFreeSlot/trialFits/optimise/findTimes and the
+// UI busy-sets route through these. verifyClean/findConflicts/checkInefficent
+// deliberately do NOT, so switching the setting on can never flag or reshuffle
+// a day that is already booked back-to-back. getBlockSlots is untouched.
+export function padEnd(e){return e+TURN_BUFFER;}
+// Buffered occupancy end of a booking — the drop-in for `toMins(b.time)+(b.duration||90)`
+// at every slot-building site.
+export function bookEnd(b){return toMins(b.time)+((b&&b.duration)||90)+TURN_BUFFER;}
 export function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
 // ── Booking sanitisation / diffing ────────────────────────────────────────────
@@ -188,9 +209,13 @@ export function getBusy(slots,s,e){var busy=new Set();slots.forEach(function(sl)
 // time set past now) must still see the table free — the guest is expected to
 // have left by then. Non-overstaying seated bookings (e>nowM) and any non-seated
 // booking are returned unchanged (a no-show `confirmed` past its time stays free).
+// v17.6.0: the scheduled end is buffered (bookEnd) — this feeds availability
+// checks, which is exactly the placement scope. The overstay branch returns
+// nowM+1+buffer for the same reason: the party is still at the table, so the
+// turnaround has not started yet.
 export function occupancyEnd(b,nowM){
-  var e=toMins(b.time)+(b.duration||90);
-  if(b.status==="seated"&&e<=nowM) return nowM+1;
+  var e=bookEnd(b);
+  if(b.status==="seated"&&e<=nowM) return padEnd(nowM+1);
   return e;
 }
 export function canAssign(ids,slots,s,e){
@@ -425,7 +450,7 @@ export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excl
   var results=[];
   // v16.0.0 follow-up: completed excluded — a completed visit's table is free
   // (its duration is frozen at the completion moment; app-wide rule).
-  var exSl=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:toMins(b.time)+b.duration};});
+  var exSl=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed";}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:bookEnd(b)};});
   if(blocks) exSl=exSl.concat(getBlockSlots(blocks,date));
   times.forEach(function(m){
     if(m===aroundM) return;
@@ -433,7 +458,7 @@ export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excl
     if(m+dur>h.close*60) return;
     var load=getKitchenLoad(bookings,date,toTime(m),dur,excludeId);
     if(load.starts+1>=KITCHEN_TABLE_LIMIT) return;
-    var hasTables=!!findBest(size,pref,m,m+dur,exSl)||(pref==="auto"?!!findBestAny(size,m,m+dur,exSl):false);
+    var hasTables=!!findBest(size,pref,m,padEnd(m+dur),exSl)||(pref==="auto"?!!findBestAny(size,m,padEnd(m+dur),exSl):false);
     results.push({time:m,timeStr:toTime(m),hasTables:hasTables});
   });
   var before=results.filter(function(r){return r.time<aroundM;}).slice(-5);
@@ -456,14 +481,14 @@ export function findAllOptions(size,pref,s,e,slots){
 // ── Optimizer (greedy + retry passes) ─────────────────────────────────────────
 function _runGreedy(day,baseSlots){
   var slots=baseSlots.slice();var assigned={};
-  day.forEach(function(b){if(!b||!b.time) return;var s=toMins(b.time),e=s+(b.duration||90);var tables;if(isLocked(b)){tables=b.tables;}else{
+  day.forEach(function(b){if(!b||!b.time) return;var s=toMins(b.time),e=bookEnd(b);var tables;if(isLocked(b)){tables=b.tables;}else{
     if(b.preferredTables&&b.preferredTables.length>0){var pt=b.preferredTables;var ptCap=comboCap(pt);if(ptCap>=(b.size||2)&&canAssign(pt,slots,s,e)) tables=pt;}
     if(!tables){tables=findBest(b.size||2,b.preference||"auto",s,e,slots);if(!tables) tables=findBestAny(b.size||2,s,e,slots);}}assigned[b.id]=tables||null;if(tables) slots.push({tables:tables,s:s,e:e});});
   return assigned;
 }
 export function optimise(bookings,date,blocks){
   var completed=bookings.filter(function(b){return b&&b.date===date&&b.status==="completed"&&(b.tables||[]).length>0;});
-  var baseSlots=completed.map(function(b){return {tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
+  var baseSlots=completed.map(function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};});
   if(blocks) baseSlots=baseSlots.concat(getBlockSlots(blocks,date));
   var day=bookings.filter(function(b){return b&&b.date===date&&isActive(b);}).sort(function(a,b){var la=isLocked(a)?0:1,lb=isLocked(b)?0:1;if(la!==lb) return la-lb;if(b.size!==a.size) return b.size-a.size;var pa=a.preference!=="auto"?0:1,pb=b.preference!=="auto"?0:1;if(pa!==pb) return pa-pb;return toMins(a.time)-toMins(b.time);});
   // First pass
@@ -476,19 +501,19 @@ export function optimise(bookings,date,blocks){
   // grow. Empty rules → pass skipped (the pre-v15.9.0 generic behaviour).
   PRIORITIES.swapRules.forEach(function(rule){
     var holders=day.filter(function(b){return !isLocked(b)&&assigned[b.id]&&assigned[b.id].length===1&&assigned[b.id][0]===rule.table&&b.size===rule.fromSize;});
-    holders.forEach(function(fb){var fs=toMins(fb.time),fe=fs+(fb.duration||90);var three=day.find(function(b){return !isLocked(b)&&b.size===rule.toSize&&b.id!==fb.id&&overlaps(fs,fe,toMins(b.time),toMins(b.time)+(b.duration||90))&&(!assigned[b.id]||assigned[b.id][0]!==rule.table);});if(!three) return;var lockedSlots=baseSlots.slice();day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)});});var ts=toMins(three.time),te=ts+(three.duration||90);if(!canAssign([rule.table],lockedSlots,ts,te)) return;var trialSlots=lockedSlots.slice();trialSlots.push({tables:[rule.table],s:ts,e:te});var trialAssigned={};trialAssigned[three.id]=[rule.table];var others=day.filter(function(b){return b.id!==three.id&&!isLocked(b);}).sort(function(a,b){return b.size-a.size||toMins(a.time)-toMins(b.time);});others.forEach(function(b){var bs=toMins(b.time),be=bs+(b.duration||90);var tables;if(b.preferredTables&&b.preferredTables.length>0){var pt=b.preferredTables;if(comboCap(pt)>=(b.size||2)&&canAssign(pt,trialSlots,bs,be)) tables=pt;}if(!tables){tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}trialAssigned[b.id]=tables||null;if(tables) trialSlots.push({tables:tables,s:bs,e:be});});day.forEach(function(b){if(isLocked(b)) trialAssigned[b.id]=b.tables;});var curUn=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];}).length;var tryUn=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;if(tryUn<=curUn) assigned=trialAssigned;});
+    holders.forEach(function(fb){var fs=toMins(fb.time),fe=bookEnd(fb);var three=day.find(function(b){return !isLocked(b)&&b.size===rule.toSize&&b.id!==fb.id&&overlaps(fs,fe,toMins(b.time),bookEnd(b))&&(!assigned[b.id]||assigned[b.id][0]!==rule.table);});if(!three) return;var lockedSlots=baseSlots.slice();day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:bookEnd(b)});});var ts=toMins(three.time),te=bookEnd(three);if(!canAssign([rule.table],lockedSlots,ts,te)) return;var trialSlots=lockedSlots.slice();trialSlots.push({tables:[rule.table],s:ts,e:te});var trialAssigned={};trialAssigned[three.id]=[rule.table];var others=day.filter(function(b){return b.id!==three.id&&!isLocked(b);}).sort(function(a,b){return b.size-a.size||toMins(a.time)-toMins(b.time);});others.forEach(function(b){var bs=toMins(b.time),be=bookEnd(b);var tables;if(b.preferredTables&&b.preferredTables.length>0){var pt=b.preferredTables;if(comboCap(pt)>=(b.size||2)&&canAssign(pt,trialSlots,bs,be)) tables=pt;}if(!tables){tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}trialAssigned[b.id]=tables||null;if(tables) trialSlots.push({tables:tables,s:bs,e:be});});day.forEach(function(b){if(isLocked(b)) trialAssigned[b.id]=b.tables;});var curUn=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];}).length;var tryUn=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;if(tryUn<=curUn) assigned=trialAssigned;});
   });
   // Preference retry: if any non-auto booking got wrong area, force-fix it
   var prefMismatch=day.filter(function(b){if(isLocked(b)||!assigned[b.id]||b.preference==="auto") return false;var tbl=assigned[b.id];if(b.preference==="indoor") return !isAllIn(tbl);if(b.preference==="outdoor") return !isAllOut(tbl);return false;});
   if(prefMismatch.length){
-    var lockedSlots=baseSlots.slice();day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)});});
+    var lockedSlots=baseSlots.slice();day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:bookEnd(b)});});
     prefMismatch.forEach(function(pb){
-      var s=toMins(pb.time),e=s+(pb.duration||90);
+      var s=toMins(pb.time),e=bookEnd(pb);
       var prefTables=findBest(pb.size||2,pb.preference,s,e,lockedSlots);
       if(!prefTables) return;
       var trialSlots=baseSlots.slice();trialSlots.push({tables:prefTables,s:s,e:e});
       var trialAssigned={};trialAssigned[pb.id]=prefTables;
-      day.forEach(function(b){if(!b||!b.time||b.id===pb.id) return;var bs=toMins(b.time),be=bs+(b.duration||90);var tables;if(isLocked(b)){tables=b.tables;}else{tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}trialAssigned[b.id]=tables||null;if(tables) trialSlots.push({tables:tables,s:bs,e:be});});
+      day.forEach(function(b){if(!b||!b.time||b.id===pb.id) return;var bs=toMins(b.time),be=bookEnd(b);var tables;if(isLocked(b)){tables=b.tables;}else{tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}trialAssigned[b.id]=tables||null;if(tables) trialSlots.push({tables:tables,s:bs,e:be});});
       var curUn=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];}).length;
       var tryUn=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;
       if(tryUn<=curUn){assigned=trialAssigned;}
@@ -498,15 +523,15 @@ export function optimise(bookings,date,blocks){
   var unassigned=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];});
   if(!unassigned.length) return assigned;
   // Retry: try reshuffling any assigned booking that overlaps with unassigned ones
-  var unTimes=unassigned.map(function(b){return {s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
-  var comboBookings=day.filter(function(b){if(isLocked(b)||!assigned[b.id]) return false;var bs=toMins(b.time),be=bs+(b.duration||90);return unTimes.some(function(u){return overlaps(bs,be,u.s,u.e);});}).sort(function(a,b){return b.size-a.size;}).slice(0,8);
+  var unTimes=unassigned.map(function(b){return {s:toMins(b.time),e:bookEnd(b)};});
+  var comboBookings=day.filter(function(b){if(isLocked(b)||!assigned[b.id]) return false;var bs=toMins(b.time),be=bookEnd(b);return unTimes.some(function(u){return overlaps(bs,be,u.s,u.e);});}).sort(function(a,b){return b.size-a.size;}).slice(0,8);
   if(!comboBookings.length) return assigned;
   var bestAssigned=assigned;
   var bestUnassignedCount=unassigned.length;
   comboBookings.forEach(function(cb){
-    var s=toMins(cb.time),e=s+(cb.duration||90);
+    var s=toMins(cb.time),e=bookEnd(cb);
     var lockedSlots=baseSlots.slice();
-    day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)});});
+    day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:bookEnd(b)});});
     var options=findAllOptions(cb.size||2,cb.preference||"auto",s,e,lockedSlots);
     var currentKey=assigned[cb.id].slice().sort().join("|");
     options.forEach(function(opt){
@@ -514,13 +539,13 @@ export function optimise(bookings,date,blocks){
       if(optKey===currentKey) return;
       // Reserve forced booking's tables first
       var trialSlots=baseSlots.slice();
-      var cbs=toMins(cb.time),cbe=cbs+(cb.duration||90);
+      var cbs=toMins(cb.time),cbe=bookEnd(cb);
       trialSlots.push({tables:opt,s:cbs,e:cbe});
       var trialAssigned={};
       trialAssigned[cb.id]=opt;
       day.forEach(function(b){
         if(!b||!b.time||b.id===cb.id) return;
-        var bs=toMins(b.time),be=bs+(b.duration||90);
+        var bs=toMins(b.time),be=bookEnd(b);
         var tables;
         if(isLocked(b)){tables=b.tables;}
         else{tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}
@@ -593,9 +618,9 @@ export function applySeatedShift(booking,nowM,allBookings){
 }
 export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
   // v16.0.0 follow-up: completed excluded — a completed visit's table is free.
-  var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:toMins(b.time)+(b.duration||90)};});
+  var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};});
   if(blocks) slots=slots.concat(getBlockSlots(blocks,date));
-  var s=toMins(time),e=s+dur;
+  var s=toMins(time),e=padEnd(s+dur);
   var pt=Array.isArray(prefTables)?prefTables:[];
   if(pt.length>0&&canAssign(pt,slots,s,e)&&comboOk(pt,pref||"auto")&&comboCap(pt)>=size) return pt;
   var tables=findBest(size,pref||"auto",s,e,slots);

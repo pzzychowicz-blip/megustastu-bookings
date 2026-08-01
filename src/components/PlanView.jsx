@@ -54,7 +54,11 @@ export const PlanView = memo(function PlanView({
   onEdit, onStatus, onNoShow, onWalkin = () => {},
   // v17.1.2: per-device master switch for zoom/pan/double-tap-reset (Settings →
   // General "Plan zoom & pan", localStorage-backed in App — scalar, memo-safe).
-  gesturesEnabled = true
+  gesturesEnabled = true,
+  // v17.6.0: separation between bookings, in minutes (0 = off). Scalar from App
+  // rather than the TURN_BUFFER live binding — React.memo can't see a live
+  // binding (same reason hoursSig exists).
+  turnBuffer = 0
 }) {
   const fp = (layout && layout.floorPlan) || { room: { w: 900, h: 600 }, tables: {}, walls: [], doors: [] };
   const tables = (layout && Array.isArray(layout.tables)) ? layout.tables : [];
@@ -144,6 +148,21 @@ export const PlanView = memo(function PlanView({
       });
     }
   });
+  // v17.6.0: tables inside a turnaround tail at the selected time — the party
+  // has left but the separation has not elapsed, so the table is not bookable
+  // yet. Only meaningful for tables that are NOT currently occupied; a table
+  // still holding a party shows that party's colour, not the reset shade.
+  const resetting = {};
+  if (turnBuffer > 0) {
+    day.forEach((b) => {
+      if (b.status === "completed") return;   // completed = table free, everywhere
+      let e = toMins(b.time) + (b.duration || 90);
+      if (b.status === "seated" && isToday) e = Math.max(e, nowMins + 1);
+      if (slider >= e && slider < e + turnBuffer) {
+        (b.tables || []).forEach((id) => { if (!occupying[id]) resetting[id] = true; });
+      }
+    });
+  }
   const blockSlots = getBlockSlots(blocks, date);
   const isBlocked = (id) => blockSlots.some((sl) => sl.tables.indexOf(id) >= 0 && slider >= sl.s && slider < sl.e);
 
@@ -278,6 +297,10 @@ export const PlanView = memo(function PlanView({
     // stripes, --tl-blocked-a/b), not grey-dashed — one "blocked" look app-wide.
     if (isBlocked(id)) return { fill: "url(#pv-blocked)", stroke: "var(--tl-blocked-badge-border)", dash: undefined };
     const b = occupying[id];
+    // v17.6.0: resetting — free of guests, still inside the separation window.
+    // A muted dashed outline over the free fill: clearly not occupied, but
+    // clearly not offerable either.
+    if (!b && resetting[id]) return { fill: FREE_FILL, stroke: "var(--text-muted)", dash: "4 3" };
     if (!b) return { fill: FREE_FILL, stroke: FREE_STROKE, dash: undefined };
     return { fill: BLOCK_BG[b.status] || BLOCK_BG.confirmed, stroke: "rgba(255,255,255,0.5)", dash: undefined };
   }
@@ -292,7 +315,9 @@ export const PlanView = memo(function PlanView({
     // v17.1.2 (Patryk): a table with ANY current occupant — including a seated
     // party — never offers "Walk-in here" (the v17.1.1 "seated-takeover" was
     // removed: an occupied table must not take another walk-in at that time).
-    const freeNow = !occ && !isBlocked(id);
+    // v17.6.0: a table inside its turnaround tail is not free for a walk-in —
+    // the optimizer would refuse the placement, so Plan must not offer it.
+    const freeNow = !occ && !isBlocked(id) && !resetting[id];
     // v17.0.0 correction round 6: only OFFER a walk-in when the table can
     // actually seat one now — free at the slider AND a real window before the
     // next booking/block/close (≥ a minimal walk-in duration). A table free now
@@ -307,7 +332,9 @@ export const PlanView = memo(function PlanView({
     // stale for up to ONE MINUTE (the next nowMins tick busts the memo).
     // Accepted (/code-review #5): self-healing, cosmetic, not worth a third
     // sig prop.
-    const canWalkin = freeNow && isToday && (nextBusy - slider) >= getDur(2);
+    // v17.6.0: …and must still fit the separation BEFORE the next booking, or
+    // the walk-in form would open on a slot the placement check then refuses.
+    const canWalkin = freeNow && isToday && (nextBusy - slider) >= getDur(2) + turnBuffer;
     // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
     // SlideView's transform makes an in-tree position:fixed scrim center on
     // the container, not the viewport.

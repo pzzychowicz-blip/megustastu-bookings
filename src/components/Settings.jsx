@@ -248,7 +248,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
   // Defensive fallback mirrors the hook's DEFAULT_BOOKING_DEFAULTS seed.
   const bd = bookingDefaults && typeof bookingDefaults === "object"
     ? bookingDefaults
-    : { tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }], restDur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20, freeSoonEnabled: true };
+    : { tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }], restDur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20, freeSoonEnabled: true, turnaroundEnabled: false, turnaroundMin: 15 };
   const tiers = Array.isArray(bd.tiers) ? bd.tiers : [];
   // v17.0.0: general settings (settings/general). Defensive fallback mirrors
   // the hook's DEFAULT_GENERAL_SETTINGS seed.
@@ -596,6 +596,38 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           </div>
         </div>
       </Collapsible>
+      {/* v17.6.0: Separation between bookings — turnaround time held after each
+          party so the next one isn't seated back-to-back. Firebase-shared
+          (settings/bookingDefaults, same node as the durations). Default OFF;
+          affects only where NEW bookings can be placed, never existing ones. */}
+      <Section style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Separation between bookings</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+              Keeps a table free for a while after each booking, so parties are not booked back to back. Shared across all devices.
+            </div>
+          </div>
+          <Toggle on={bd.turnaroundEnabled === true} onClick={() => onSaveBookingDefaults({ turnaroundEnabled: bd.turnaroundEnabled !== true })} />
+        </div>
+        <AutoHeight>{bd.turnaroundEnabled === true ? (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+              <HourStepper label="Separation" value={bd.turnaroundMin} fmt={minsLabel}
+                disableDec={bd.turnaroundMin <= 5} disableInc={bd.turnaroundMin >= 60}
+                onDec={() => onSaveBookingDefaults({ turnaroundMin: bd.turnaroundMin - 5 })}
+                onInc={() => onSaveBookingDefaults({ turnaroundMin: bd.turnaroundMin + 5 })} />
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 10, textAlign: "left" }}>
+              Applies to new and moved bookings only — bookings already in the diary are left exactly as they are.
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginTop: 12 }}>
+            Off — a table can be booked again the moment the previous booking ends.
+          </div>
+        )}</AutoHeight>
+      </Section>
       {/* v16.1.0: Running late — amber highlight for a confirmed booking past
           its time, then a one-tap "No show" offer. Firebase-shared
           (settings/bookingDefaults, same node as the durations). */}
