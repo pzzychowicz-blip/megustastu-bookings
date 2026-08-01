@@ -520,15 +520,28 @@ export function useWhatsApp({
   // success, and the catch clears it on failure — it can never get stuck.
   // Resolves to the server's { intent, updated } so the caller can say whether
   // anything actually changed.
-  async function recheckConversation(phoneKey) {
-    if (!phoneKey) return null;
-    patchConversation(phoneKey, { parsing: true });
-    try {
-      return await recheckViaBackend(phoneKey);
-    } catch (e) {
-      patchConversation(phoneKey, { parsing: null });
+  //
+  // The in-flight guard lives HERE, keyed by phoneKey, not in ConversationView:
+  // that component is recycled across threads, so its "running" state is wiped
+  // by a switch and a user who switched away and back could fire a second
+  // Gemini call while the first was still open — two parses racing to applyParse
+  // the same conversation, and two billed requests. A repeat call now joins the
+  // promise already in flight instead of starting another.
+  const recheckInFlightRef = useRef({});
+  function recheckConversation(phoneKey) {
+    if (!phoneKey) return Promise.resolve(null);
+    const existing = recheckInFlightRef.current[phoneKey];
+    if (existing) return existing;
+    patchConversation(phoneKey, { parsing: true, parsingAt: Date.now() });
+    const p = recheckViaBackend(phoneKey).catch(function (e) {
+      patchConversation(phoneKey, { parsing: null, parsingAt: null });
       throw e;
-    }
+    });
+    recheckInFlightRef.current[phoneKey] = p;
+    // Clear the slot whichever way it settles; the caller still sees p's result.
+    p.then(function () { delete recheckInFlightRef.current[phoneKey]; },
+      function () { delete recheckInFlightRef.current[phoneKey]; });
+    return p;
   }
 
   // Dev-only hard reset for the simulator: wipe BOTH WA nodes directly (bypasses
