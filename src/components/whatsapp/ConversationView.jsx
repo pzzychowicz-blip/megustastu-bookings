@@ -80,7 +80,14 @@ export function ConversationView({
   // this only has to cover the "nothing found" case, which is otherwise
   // indistinguishable from the button doing nothing at all.
   const [recheck, setRecheck] = useState(null);
-  useEffect(() => { setRecheck(null); }, [conv.phoneKey]); // never carry a result across threads
+  // Request token. InboxPanel renders ONE ConversationView and swaps its `conv`
+  // prop, so this component is NOT remounted when you switch threads — an
+  // in-flight re-check would otherwise resolve and paint its result onto
+  // whichever conversation happens to be open when it returns. Every start
+  // takes a token; a resolution whose token is stale is dropped. The switch
+  // effect bumps the token, so switching away also cancels.
+  const recheckReqRef = useRef(0);
+  useEffect(() => { recheckReqRef.current++; setRecheck(null); }, [conv.phoneKey]);
   useEffect(() => {
     if (!recheck || recheck === "running") return;
     const t = setTimeout(() => setRecheck(null), 6000);
@@ -88,15 +95,18 @@ export function ConversationView({
   }, [recheck]);
   function runRecheck() {
     if (recheck === "running" || !onRecheck) return;
+    const token = ++recheckReqRef.current;
+    const fresh = () => recheckReqRef.current === token;
     setRecheck("running");
     Promise.resolve(onRecheck(conv.phoneKey)).then(
       (r) => {
+        if (!fresh()) return;
         const intentFound = r && r.intent;
         setRecheck(r && r.updated
           ? { ok: true, msg: intentFound === "cancel" ? "Cancellation request found." : intentFound === "modify" ? "Change request found." : "Booking request found." }
           : { ok: true, msg: "Nothing outstanding — no changes requested." });
       },
-      (e) => setRecheck({ ok: false, msg: "Re-check failed: " + (e && e.message ? e.message : "unknown error") })
+      (e) => { if (fresh()) setRecheck({ ok: false, msg: "Re-check failed: " + (e && e.message ? e.message : "unknown error") }); }
     );
   }
 
