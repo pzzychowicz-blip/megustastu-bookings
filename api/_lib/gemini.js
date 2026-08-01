@@ -285,11 +285,21 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
   if (!list.length) return null;
   const inbound = list.filter((m) => m.direction === "in");
   const lastInbound = inbound.length ? String(inbound[inbound.length - 1].text) : "";
-  // Same total prompt-size guard as parseMessage, applied to the transcript.
-  const transcript = list
-    .map((m) => (m.direction === "in" ? "CUSTOMER: " : "STAFF: ") + String(m.text).replace(/\s+/g, " ").trim())
-    .join("\n")
-    .slice(-WA_PARSE_TEXT_LEN);
+  // Same total prompt-size guard as parseMessage, but applied by dropping WHOLE
+  // LINES from the front rather than slicing the joined string: a mid-line cut
+  // hands the model a fragment with no speaker prefix ("OMER: y para las 9
+  // mejor") as the oldest — and most context-setting — turn. Newest kept.
+  const lines = list.map((m) => (m.direction === "in" ? "CUSTOMER: " : "STAFF: ") + String(m.text).replace(/\s+/g, " ").trim());
+  const kept = [];
+  let budget = WA_PARSE_TEXT_LEN;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const cost = lines[i].length + 1; // +1 for the joining newline
+    if (kept.length && cost > budget) break;
+    budget -= cost;
+    kept.unshift(lines[i]);
+  }
+  // A single line longer than the entire budget still has to be capped.
+  const transcript = kept.join("\n").slice(-WA_PARSE_TEXT_LEN);
   const now = new Date();
   const ctx = {
     todayIso: now.toISOString().slice(0, 10),
