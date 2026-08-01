@@ -403,14 +403,25 @@ export function useWhatsApp({
   // Not gated on WA_SANDBOX: every conversation in `conversations` already came
   // from the WA_SANDBOX-gated listener, so the array is empty otherwise and the
   // loop is a no-op.
+  //
+  // `autoArchiveSince` (settings/whatsapp) is the cutoff that keeps this from
+  // sweeping the backlog: on the first load after the feature ships, EVERY
+  // conversation linked to an already-completed booking would otherwise archive
+  // itself in one unattended burst. A booking only qualifies once its own
+  // `updatedAt` — the per-booking CAS stamp, bumped by the write that completed
+  // it — is at or after the epoch. Until the epoch is established (0) nothing
+  // is archived at all, so a device that loads before the stamp lands does
+  // nothing rather than guessing.
   useEffect(function () {
     if (!waSettings || waSettings.autoArchiveOnComplete === false) return;
+    if (!waSettings.autoArchiveSince) return; // epoch not established yet
     if (!conversationsLoaded.current) return;
     conversations.forEach(function (c) {
       if (!c || !c.acceptedBookingId || c.archived) return;
       if (c.autoArchivedBookingId === c.acceptedBookingId) return; // already did this one — a manual restore wins
       const b = bookings.find(function (x) { return x.id === c.acceptedBookingId; });
       if (!b || b.status !== "completed") return;
+      if (!(Number(b.updatedAt) >= waSettings.autoArchiveSince)) return; // completed before the feature existed here
       patchConversation(c.phoneKey, {
         archived: true,
         archivedAt: Date.now(),
