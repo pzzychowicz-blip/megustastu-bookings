@@ -106,10 +106,14 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
     <div style={{ borderTop: "1px solid var(--wa-divider)", padding: "10px 12px", background: "var(--wa-list-bg)" }}>
       {/* v15.8.2-wa-sandbox: the Templates trigger became an icon button that
           lives in the input row (left of the textarea). The chip strip reveals
-          above the row when toggled. gridTemplateColumns:minmax(0,1fr) caps the
-          Reveal's grid column to the container width (its default auto column
-          grows to the chips' content width, defeating the inner overflow-x). */}
-      <Reveal show={tplOpen} style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+          above the row when toggled.
+          The local gridTemplateColumns:minmax(0,1fr) override that used to sit
+          here is gone: it was a call-site patch for the Reveal grid ITEM
+          refusing to shrink below its content width, which the atom now fixes
+          for every caller via minWidth:0 on its inner track. Keeping both would
+          leave two mechanisms guarding one failure, and invite someone to
+          remove the wrong half. */}
+      <Reveal show={tplOpen}>
         <div style={{ paddingBottom: 8, minWidth: 0 }}><TemplateChips templates={templates} convLang={convLang} onInsert={insertTemplate} scrollLang /></div>
       </Reveal>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
