@@ -4,7 +4,7 @@
 // relative time, and the last-message snippet. Archived rows render dimmed.
 
 import { useState, useRef, useEffect } from "react";
-import { matchCustomerByPhone, formatPhone, formatRelativeTime } from "../../lib/whatsapp";
+import { matchCustomerByPhone, formatPhone, formatRelativeTime, isParsing } from "../../lib/whatsapp";
 
 export function ConversationRow({ conv, active, onClick, bookings, flipId, selectMode, checked }) {
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
@@ -17,7 +17,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
   // Parsing/typing tag (sandbox inbound path) takes visual priority — the
   // message is mid-parse, so the intent/draft tag isn't known yet.
   let tagEl = null;
-  if (conv.parsing) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: 10, fontWeight: 700, marginLeft: 6, padding: "1px 7px", borderRadius: 6, color: "var(--accent)", border: "1px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
+  if (isParsing(conv)) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: 10, fontWeight: 700, marginLeft: 6, padding: "1px 7px", borderRadius: 6, color: "var(--accent)", border: "1px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
   else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: 12, marginLeft: 6, color: "var(--danger-text)", fontWeight: 700 }}>⚠</span>;
   else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: 12, marginLeft: 6, color: "var(--warn-text)", fontWeight: 700 }}>✎</span>;
   else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ fontSize: 12, marginLeft: 6 }}>📋</span>;

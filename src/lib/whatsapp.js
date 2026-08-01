@@ -44,6 +44,25 @@ export const WA_ACCEPTED_BANNER_MS = 10000;
 // customer's "yes, that one" refers to.
 export const WA_RECHECK_HISTORY = 12;
 
+// How long a `parsing` flag is believed before the UI treats it as abandoned.
+// The flag is set before an LLM round-trip and cleared when it lands — but if
+// the tab is closed or navigated mid-request, nothing ever clears it and the
+// conversation shows "Reading the message…" to every device, forever, with no
+// UI to fix it. Well above the 15s Gemini timeout, so a slow-but-live parse is
+// never mistaken for a dead one.
+export const WA_PARSING_STALE_MS = 90000;
+
+// isParsing(conv) — THE test for "an LLM round-trip is genuinely in progress".
+// Use this rather than reading `conv.parsing` directly, so the staleness bound
+// applies everywhere the indicator is shown. A conversation written before
+// `parsingAt` existed has no timestamp; those are trusted, since the pre-
+// existing inbound path always cleared the flag on both success and failure.
+export function isParsing(conv) {
+  if (!conv || !conv.parsing) return false;
+  if (!conv.parsingAt) return true;
+  return Date.now() - conv.parsingAt < WA_PARSING_STALE_MS;
+}
+
 // Default quick-reply templates (EN/ES). Staff-editable via the TemplatesEditor;
 // persisted to Firebase `templates/` in this sandbox (was localStorage in the
 // preview). Seeded once on first load when the node is empty.

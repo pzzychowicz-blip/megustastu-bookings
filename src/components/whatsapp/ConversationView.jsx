@@ -5,7 +5,7 @@
 // is disabled when the 24h service window has expired.
 
 import { useState, useRef, useEffect } from "react";
-import { matchCustomerByPhone, formatPhone, formatWindow, intentBannerVisible, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
+import { matchCustomerByPhone, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal } from "../atoms";
 import { RecheckIcon } from "./WaIcons";
 import { MessageBubble } from "./MessageBubble";
@@ -232,7 +232,7 @@ export function ConversationView({
       {/* Parsing/typing indicator — eased in while the inbound is being parsed
           (conv.parsing, set by the sandbox inbound path; cleared when the draft
           lands). The real DraftCard Reveals in as this Reveals out. */}
-      <Reveal show={!!conv.parsing} style={{ padding: "0 14px" }}>
+      <Reveal show={isParsing(conv)} style={{ padding: "0 14px" }}>
         <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: 14, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 16 }}>📋</span>
           <div style={{ flex: 1, minWidth: 0 }}>

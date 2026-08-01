@@ -132,11 +132,11 @@ export function simulateInbound(params, ctx) {
   // (the real backend is genuinely async). Without patchConversation, fall back
   // to the original single write.
   if (draftPatch && ctx.patchConversation) {
-    ctx.upsertConversation(phoneKey, Object.assign({}, base, patch, { parsing: true }));
+    ctx.upsertConversation(phoneKey, Object.assign({}, base, patch, { parsing: true, parsingAt: Date.now() }));
     ctx.appendMessage(phoneKey, inboundMsg);
     if (autoAckMsg) ctx.appendMessage(phoneKey, autoAckMsg);
     setTimeout(function () {
-      ctx.patchConversation(phoneKey, Object.assign({ parsing: null }, draftPatch));
+      ctx.patchConversation(phoneKey, Object.assign({ parsing: null, parsingAt: null }, draftPatch));
     }, WA_SIM_PARSE_MS);
     return phoneKey;
   }

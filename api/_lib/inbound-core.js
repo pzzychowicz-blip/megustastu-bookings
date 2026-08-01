@@ -69,7 +69,7 @@ export async function applyParse(phoneKey, parse, ts) {
   if (!phoneKey) return;
   // Always clear the "analyzing…" indicator — the LLM route has finished, even
   // on a null/failed parse, so the indicator can never get stuck.
-  const patch = { parsing: null };
+  const patch = { parsing: null, parsingAt: null };
   if (parse) {
     patch.language = parse.language === "en" ? "en" : "es";
     const intent = parse.intent || null;
@@ -138,7 +138,11 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   if (isDraftIntent) Object.assign(patch, draftPatchFromParse(parse, ts));
   // Async path (parse runs after the response): flag "analyzing…" so the inbox
   // shows the LLM route in progress; applyParse clears it when the draft lands.
-  if (parse == null && willParse) patch.parsing = true;
+  // `parsingAt` bounds the flag: if nothing ever clears it (the process dies
+  // mid-parse, a client tab closes mid-re-check), the client's isParsing()
+  // stops believing it after WA_PARSING_STALE_MS instead of showing "Reading
+  // the message…" on every device forever.
+  if (parse == null && willParse) { patch.parsing = true; patch.parsingAt = Date.now(); }
   await upsertConversation(phoneKey, patch);
 
   // ── The inbound message itself ────────────────────────────────────────────
