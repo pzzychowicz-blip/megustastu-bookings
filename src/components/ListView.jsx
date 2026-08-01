@@ -30,7 +30,7 @@
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
-import { toMins, toTime, isLocked, statusOrder, lateMins } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
 
@@ -177,8 +177,18 @@ export const ListView = memo(function ListView({
               : (useStatusColor || isPending) ? sc.border : "var(--border-card-plain)";
         const cardBrdW = (warn || lateSt) ? "3px" : (useStatusColor || isPending) ? "3px" : "1px";
 
+        // v17.6.0: the same "how long were they here" number survives the visit.
+        // Seated shows the LIVE elapsed minutes (green, still running); completed
+        // shows the settled stay from stayedMins() in a muted slate, so the two
+        // read as different states at a glance rather than one number that stops
+        // moving. stayedMins returns null when the stay isn't knowable (a direct
+        // confirmed→completed keeps its scheduled duration) — then no tag at all,
+        // which is the point: never assert a stay that didn't happen.
+        const stayed = b.status === "completed" ? stayedMins(b) : null;
         const durationTag = b.status === "seated" ? (
           <SmallTag label={elapsedMin + " min"} style={{ background: "#166534", color: "var(--text-on-accent)", border: "none" }} />
+        ) : stayed != null ? (
+          <SmallTag label={"stayed " + stayed + " min"} style={{ background: "var(--bg-soft)", color: "var(--text-secondary)", border: "1px solid var(--border-soft)" }} />
         ) : null;
 
         const warnEl = warn ? (

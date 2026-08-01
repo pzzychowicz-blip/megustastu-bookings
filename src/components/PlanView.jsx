@@ -54,7 +54,11 @@ export const PlanView = memo(function PlanView({
   onEdit, onStatus, onNoShow, onWalkin = () => {},
   // v17.1.2: per-device master switch for zoom/pan/double-tap-reset (Settings →
   // General "Plan zoom & pan", localStorage-backed in App — scalar, memo-safe).
-  gesturesEnabled = true
+  gesturesEnabled = true,
+  // v17.6.0: separation between bookings, in minutes (0 = off). Scalar from App
+  // rather than the TURN_BUFFER live binding — React.memo can't see a live
+  // binding (same reason hoursSig exists).
+  turnBuffer = 0
 }) {
   const fp = (layout && layout.floorPlan) || { room: { w: 900, h: 600 }, tables: {}, walls: [], doors: [] };
   const tables = (layout && Array.isArray(layout.tables)) ? layout.tables : [];
@@ -69,21 +73,42 @@ export const PlanView = memo(function PlanView({
   const closeM = (h.closed ? 23 : h.gridClose) * 60;
 
   // ── Time scrubber (defaults: now on today, opening time otherwise) ─────────
-  // Absolute minutes-since-midnight, snapped to the NEAREST 15 — the rounding
-  // direction is load-bearing for the seated-start clamp in the occupancy scan
-  // below, so don't switch it to floor/ceil.
-  const clampSlider = (m) => Math.max(openM, Math.min(closeM, Math.round(m / 15) * 15));
-  const [slider, setSlider] = useState(() => clampSlider(isToday ? nowMins : openM));
+  // Absolute minutes-since-midnight, clamped to the day's span and NOT rounded.
+  //
+  // v17.6.0: this used to round to the nearest 15, and that rounding is gone.
+  // While FOLLOWING the clock the selection is now the exact minute, so the
+  // badge reads the real time and the tape centre lands on the same minute as
+  // the Timeline's now-line — the two views no longer disagree about where
+  // "now" is by up to 7 minutes. Hand-scrubbing is unchanged: TimeAxis snaps
+  // its OWN scroll to the quarter grid, which is where the 15-min stepping
+  // always actually came from. (The old rounding was also described as
+  // load-bearing for the seated-start clamp in the occupancy scan below; it
+  // only ever compensated for the follow position being rounded away from the
+  // clock, so with an exact follow there is nothing left to compensate for.)
+  const clampExact = (m) => Math.max(openM, Math.min(closeM, m));
+  const [slider, setSlider] = useState(() => clampExact(isToday ? nowMins : openM));
   const [sliderTouched, setSliderTouched] = useState(false);
   // v17.5.0: bumped ONLY at the programmatic scrub sites (date change, clock
   // follow, the Now button) so TimeAxis re-centres then — and never yanks the
   // strip while the user is scrolling it or tapping a block.
-  const [autoScrollKey, setAutoScrollKey] = useState(0);
-  const reCentre = () => setAutoScrollKey((k) => k + 1);
+  // v17.6.0: the bump carries HOW to move as well as when. `k` is the trigger
+  // (TimeAxis keys its layout effect on it); `smooth` says whether that re-centre
+  // glides. Kept in ONE state object so the two can never arrive out of step —
+  // two separate states would let a stale `smooth` ride along with a fresh `k`.
+  const [autoScroll, setAutoScroll] = useState({ k: 0, smooth: false });
+  const reCentre = (smooth) => setAutoScroll((s) => ({ k: s.k + 1, smooth: !!smooth }));
   // Re-anchor when the date changes; follow the clock on today until touched.
-  useEffect(() => { setSlider(clampSlider(isToday ? nowMins : openM)); setSliderTouched(false); reCentre(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [date]);
-  useEffect(() => { if (isToday && !sliderTouched) { setSlider(clampSlider(nowMins)); reCentre(); } }, [nowMins]);
-  const atNow = isToday && Math.abs(slider - clampSlider(nowMins)) < 15;
+  // Both effects key on ONE trigger on purpose — re-running them on every
+  // dependency would yank the selection out from under a hand scrub.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setSlider(clampExact(isToday ? nowMins : openM)); setSliderTouched(false); reCentre(); }, [date]);
+  // Follows per MINUTE now rather than per quarter. `nowMins` only changes value
+  // once a minute (the 15s tick re-sets the same number and React bails), and
+  // the occupancy pass below is one linear loop over the day — nowhere near the
+  // heavy-scan class CLAUDE.md warns about.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (isToday && !sliderTouched) { setSlider(clampExact(nowMins)); reCentre(); } }, [nowMins]);
+  const atNow = isToday && Math.abs(slider - clampExact(nowMins)) < 1;
 
   // ── Occupancy at the slider time ────────────────────────────────────────────
   const day = bookings.filter((b) => b && b.date === date && b.status !== "cancelled");
@@ -114,28 +139,25 @@ export const PlanView = memo(function PlanView({
     let s = toMins(b.time);
     let e = s + (b.duration || 90);
     // A seated party occupies until AT LEAST now (overstayers included) — the
-    // occupancyEnd/v15.1.1 semantics, applied to the slider timeline.
-    // v17.1.0 fix: extend to the SLIDER's 15-min granularity, not raw now —
-    // the auto-following slider is clampSlider(nowMins) (rounded to NEAREST
-    // 15), so it can sit up to ~7 min AHEAD of now; with e = nowMins+1 an
-    // overstayer dropped out of `occupying` the moment it passed its scheduled
-    // end (slider < e failed) and the table flipped free/next-booking in Plan
-    // while Timeline/List still showed it seated. clampSlider(nowMins)+1
-    // always covers the rounded "now" position; sliding into the future still
-    // frees the table correctly.
-    // v17.1.1 fix: clamp the START to the slider grid too. Seating a booking
-    // runs the seated-shift (time → now, e.g. "14:03"), but the auto-following
-    // slider is clampSlider(nowMins) — rounded to the NEAREST 15, so it can sit
-    // BELOW the shifted time (14:00 < 14:03) for up to ~7 min. `slider >= s`
-    // failed and the table stayed free-coloured right after a quick-status
-    // Seated — the "Plan shows the status change with a delay" bug. A seated
-    // party is at the table NOW, so occupancy starts no later than the rounded
-    // "now" position. NB the clamp only ever pulls the start back to the
-    // rounded CURRENT time — dragging the slider into the viewed past (before
-    // the party sat down) still shows the table free.
+    // occupancyEnd/v15.1.1 semantics, applied to the slider timeline. Widening
+    // the window to `now` in BOTH directions fixes two bugs at once:
+    //   • an overstayer used to drop out of `occupying` the moment it passed
+    //     its scheduled end, so Plan showed the table free while Timeline and
+    //     List still showed it seated (v17.1.0);
+    //   • seating runs the seated-shift (time → now, e.g. "14:03"), and the
+    //     table stayed free-coloured until the selection caught up — the "Plan
+    //     shows the status change with a delay" bug (v17.1.1).
+    //
+    // v17.6.0: both clamps are now keyed on the RAW `nowMins`. They used to
+    // round to the slider's 15-min grid, purely because the auto-following
+    // selection was itself rounded and could sit up to ~7 min either side of
+    // the real clock; following is exact now, so the rounding has nothing left
+    // to compensate for. The clamps only ever widen the window TOWARD now, so
+    // hand-scrubbing into the viewed past (before the party sat down) still
+    // correctly shows the table free.
     if (b.status === "seated" && isToday) {
-      s = Math.min(s, clampSlider(nowMins));
-      e = Math.max(e, clampSlider(nowMins) + 1);
+      s = Math.min(s, nowMins);
+      e = Math.max(e, nowMins + 1);
     }
     if (slider >= s && slider < e) {
       (b.tables || []).forEach((id) => {
@@ -144,6 +166,21 @@ export const PlanView = memo(function PlanView({
       });
     }
   });
+  // v17.6.0: tables inside a turnaround tail at the selected time — the party
+  // has left but the separation has not elapsed, so the table is not bookable
+  // yet. Only meaningful for tables that are NOT currently occupied; a table
+  // still holding a party shows that party's colour, not the reset shade.
+  const resetting = {};
+  if (turnBuffer > 0) {
+    day.forEach((b) => {
+      if (b.status === "completed") return;   // completed = table free, everywhere
+      let e = toMins(b.time) + (b.duration || 90);
+      if (b.status === "seated" && isToday) e = Math.max(e, nowMins + 1);
+      if (slider >= e && slider < e + turnBuffer) {
+        (b.tables || []).forEach((id) => { if (!occupying[id]) resetting[id] = true; });
+      }
+    });
+  }
   const blockSlots = getBlockSlots(blocks, date);
   const isBlocked = (id) => blockSlots.some((sl) => sl.tables.indexOf(id) >= 0 && slider >= sl.s && slider < sl.e);
 
@@ -278,6 +315,10 @@ export const PlanView = memo(function PlanView({
     // stripes, --tl-blocked-a/b), not grey-dashed — one "blocked" look app-wide.
     if (isBlocked(id)) return { fill: "url(#pv-blocked)", stroke: "var(--tl-blocked-badge-border)", dash: undefined };
     const b = occupying[id];
+    // v17.6.0: resetting — free of guests, still inside the separation window.
+    // A muted dashed outline over the free fill: clearly not occupied, but
+    // clearly not offerable either.
+    if (!b && resetting[id]) return { fill: FREE_FILL, stroke: "var(--text-muted)", dash: "4 3" };
     if (!b) return { fill: FREE_FILL, stroke: FREE_STROKE, dash: undefined };
     return { fill: BLOCK_BG[b.status] || BLOCK_BG.confirmed, stroke: "rgba(255,255,255,0.5)", dash: undefined };
   }
@@ -292,7 +333,9 @@ export const PlanView = memo(function PlanView({
     // v17.1.2 (Patryk): a table with ANY current occupant — including a seated
     // party — never offers "Walk-in here" (the v17.1.1 "seated-takeover" was
     // removed: an occupied table must not take another walk-in at that time).
-    const freeNow = !occ && !isBlocked(id);
+    // v17.6.0: a table inside its turnaround tail is not free for a walk-in —
+    // the optimizer would refuse the placement, so Plan must not offer it.
+    const freeNow = !occ && !isBlocked(id) && !resetting[id];
     // v17.0.0 correction round 6: only OFFER a walk-in when the table can
     // actually seat one now — free at the slider AND a real window before the
     // next booking/block/close (≥ a minimal walk-in duration). A table free now
@@ -307,7 +350,9 @@ export const PlanView = memo(function PlanView({
     // stale for up to ONE MINUTE (the next nowMins tick busts the memo).
     // Accepted (/code-review #5): self-healing, cosmetic, not worth a third
     // sig prop.
-    const canWalkin = freeNow && isToday && (nextBusy - slider) >= getDur(2);
+    // v17.6.0: …and must still fit the separation BEFORE the next booking, or
+    // the walk-in form would open on a slot the placement check then refuses.
+    const canWalkin = freeNow && isToday && (nextBusy - slider) >= getDur(2) + turnBuffer;
     // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
     // SlideView's transform makes an in-tree position:fixed scrim center on
     // the container, not the viewport.
@@ -375,7 +420,7 @@ export const PlanView = memo(function PlanView({
         <span>
           {isToday ? (
             <button className="mgt-hover-scale"
-              onClick={() => { setSliderTouched(false); setSlider(clampSlider(nowMins)); reCentre(); }}
+              onClick={() => { setSliderTouched(false); setSlider(clampExact(nowMins)); reCentre(true); }}
               style={mkBtn({ fontSize: 11, minHeight: 28, padding: "3px 10px", background: atNow ? S.accent : "var(--app-btn-grey)" })}>Now</button>
           ) : null}
         </span>
@@ -394,7 +439,8 @@ export const PlanView = memo(function PlanView({
           nowMins={nowMins}
           isToday={isToday}
           occupancy={occupancyByQuarter}
-          autoScrollKey={autoScrollKey} />
+          autoScrollKey={autoScroll.k}
+          autoScrollSmooth={autoScroll.smooth} />
       )}
       {h.closed ? (
         <div style={{ textAlign: "center", padding: "10px 0", fontSize: 13, fontWeight: 700, color: "var(--warn-text)" }}>Closed on this day.</div>

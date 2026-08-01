@@ -34,7 +34,7 @@ import {
   getBlockSlots, canAssign, getBusy, overlaps, comboCapBest,
   getKitchenLoad,
   applyOpt,
-  optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd,
+  optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
   checkInefficent, verifyClean, findConflicts,
   nowTime,
   trialFits, toTime, lateState, freeingSoon, rankCombosContaining, comboExistsFor,
@@ -195,6 +195,10 @@ import { useBookingDefaults } from "./hooks/useBookingDefaults";
 // banner collapse threshold, waitlist match window, undo-toast duration —
 // the ex-hard-coded literals from the multi-tenancy configurability pass.
 import { useGeneralSettings } from "./hooks/useGeneralSettings";
+// v17.6.0: per-user preferences (settings/users/{uid}/prefs) — the first
+// settings node that is NOT restaurant-wide. See useUserPrefs.js for what
+// syncs, what stays per-device, and why the localStorage mirror stays.
+import { useUserPrefs } from "./hooks/useUserPrefs";
 import { useLayout } from "./hooks/useLayout";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
@@ -253,7 +257,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.5.1",
+  version:"17.6.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -517,7 +521,7 @@ console.log(
 
 
 // ── Booking App ───────────────────────────────────────────────────────────────
-function BookingApp(){
+function BookingApp({uid}){
   // ── Phase D1 (v14.1.8): persistence state lives in ./hooks/usePersistence ──
   // `bookings`, `tableBlocks`, write-guards (bookingsLoaded/blocksLoaded/
   // firstLoadCount/hasConnectedRef), connection-status state, saveBookings/
@@ -683,8 +687,18 @@ function BookingApp(){
   const { optimizerSettings, saveOptimizerSettings } = useOptimizerSettings();
   // v16.1.0: booking defaults — duration tiers + running-late thresholds.
   const { bookingDefaults, saveBookingDefaults } = useBookingDefaults();
+  // v17.6.0: the separation between bookings, as a SCALAR for the memoized
+  // views. They could read the TURN_BUFFER live binding directly, but
+  // React.memo cannot see a live binding — a settings change would not repaint
+  // them (the hoursSig/layoutSig problem). A number prop sidesteps it entirely.
+  const turnBuffer=bookingDefaults.turnaroundEnabled===true?(Number(bookingDefaults.turnaroundMin)||0):0;
   // v17.0.0: settings/general (6th settings node) — see the import note.
   const { generalSettings, saveGeneralSettings } = useGeneralSettings();
+  // v17.6.0: per-user preferences (8th settings node, keyed by uid). The five
+  // synced settings each keep their localStorage initializer below — this only
+  // OVERRIDES them once the account's node has loaded, and seeds the node from
+  // the device when the user has never saved one.
+  const { userPrefs, prefsLoaded, saveUserPrefs } = useUserPrefs(uid);
   // A phone value that is empty, a bare "+", or exactly the untouched prefix
   // seed counts as "no phone" (the prefix is a typing convenience, not data).
   function cleanPhoneOf(p){
@@ -782,8 +796,13 @@ function BookingApp(){
   const isDark=useThemeMode(themePref);
   function onToggleDark(){
     const next=!isDark;
+    // v17.6.0: localStorage stays as the PRE-MOUNT cache — index.html's
+    // no-flash script reads this key before React mounts and long before
+    // Firebase resolves, so dropping it would flash the wrong theme on every
+    // load. The per-user node is the source of truth.
     try{localStorage.setItem("mgt-theme",next?"dark":"light");}catch{/* ignore */}
     setThemePref(next);
+    saveUserPrefs({theme:next?"dark":"light"});
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
@@ -809,6 +828,7 @@ function BookingApp(){
     if(next) document.documentElement.dataset.motion="reduce";
     else delete document.documentElement.dataset.motion;
     setReduceMotion(next);
+    saveUserPrefs({reduceMotion:next});   // v17.6.0: follows the account
   }
   // v17.1.2: per-device "Plan zoom & pan" (Settings → General). Theme pattern:
   // localStorage["mgt-plan-gestures"]="0" only when OFF (absent = on, the
@@ -823,6 +843,7 @@ function BookingApp(){
       else localStorage.setItem("mgt-plan-gestures","0");
     }catch{/* ignore */}
     setPlanGestures(next);
+    saveUserPrefs({planGestures:next});   // v17.6.0: follows the account
   }
   // v17.5.0: per-device "Lock navigation" (Settings → General). Theme pattern,
   // but INVERTED vs planGestures because the default is OFF — only the non-
@@ -838,6 +859,7 @@ function BookingApp(){
       else localStorage.removeItem("mgt-nav-lock");
     }catch{/* ignore */}
     setNavLocked(next);
+    saveUserPrefs({navLocked:next});      // v17.6.0: follows the account
   }
   // v17.5.0: per-device Split View master switch (Settings → General).
   // v17.5.0 correction: default ON (was off), so the RMB / press-and-hold
@@ -855,10 +877,64 @@ function BookingApp(){
       else{localStorage.setItem("mgt-split-enabled","0");localStorage.removeItem(SPLIT_KEY);}
     }catch{/* ignore */}
     setSplitEnabled(next);
+    saveUserPrefs({splitEnabled:next});   // v17.6.0: the SWITCH syncs; the saved
+    // split LAYOUT (which two views + ratio) stays per-device, see useUserPrefs.
     if(!next) setSplit(null); // turning the feature off must also leave any active split
   }
   // The active split, or null for a single view. Restored per-device.
   const [split,setSplit]=useState(readSplit);
+  // ── v17.6.0: apply the signed-in user's preferences, or seed them ──────────
+  // Runs once the account's node has loaded. For each of the five synced
+  // settings: a value the user HAS saved overrides this device; a value they
+  // have never saved is seeded from whatever this device is currently using and
+  // written up, so logging in on a configured device adopts its setup instead
+  // of resetting it. localStorage is written alongside, because it is what
+  // index.html's no-flash script reads before React mounts.
+  //
+  // Keyed on `prefsLoaded` alone: it flips false→true exactly once per uid (the
+  // hook resets it when the path changes), and re-running on every later
+  // snapshot would fight the user's own toggles. Reading the current local
+  // values here without depending on them is the point, not an oversight.
+  const seededPrefsRef=useRef(false);
+  useEffect(function(){
+    if(!prefsLoaded||seededPrefsRef.current) return;
+    seededPrefsRef.current=true;
+    const seed={};
+    if(userPrefs.theme==="dark"||userPrefs.theme==="light"){
+      const dark=userPrefs.theme==="dark";
+      try{localStorage.setItem("mgt-theme",userPrefs.theme);}catch{/* ignore */}
+      setThemePref(dark);
+    }else if(themePref!==undefined){
+      // Only seed an EXPLICIT device preference. `undefined` means this device
+      // follows the OS, which is the absence of a choice — writing it up would
+      // freeze the user to whatever the OS happened to say at first login.
+      seed.theme=themePref?"dark":"light";
+    }
+    if(userPrefs.reduceMotion!==null){
+      const v=userPrefs.reduceMotion;
+      try{ if(v) localStorage.setItem("mgt-reduce-motion","1"); else localStorage.removeItem("mgt-reduce-motion"); }catch{/* ignore */}
+      if(v) document.documentElement.dataset.motion="reduce"; else delete document.documentElement.dataset.motion;
+      setReduceMotion(v);
+    }else seed.reduceMotion=reduceMotion;
+    if(userPrefs.planGestures!==null){
+      const v=userPrefs.planGestures;
+      try{ if(v) localStorage.removeItem("mgt-plan-gestures"); else localStorage.setItem("mgt-plan-gestures","0"); }catch{/* ignore */}
+      setPlanGestures(v);
+    }else seed.planGestures=planGestures;
+    if(userPrefs.navLocked!==null){
+      const v=userPrefs.navLocked;
+      try{ if(v) localStorage.setItem("mgt-nav-lock","1"); else localStorage.removeItem("mgt-nav-lock"); }catch{/* ignore */}
+      setNavLocked(v);
+    }else seed.navLocked=navLocked;
+    if(userPrefs.splitEnabled!==null){
+      const v=userPrefs.splitEnabled;
+      try{ if(v) localStorage.removeItem("mgt-split-enabled"); else{localStorage.setItem("mgt-split-enabled","0");localStorage.removeItem(SPLIT_KEY);} }catch{/* ignore */}
+      setSplitEnabled(v);
+      if(!v) setSplit(null);
+    }else seed.splitEnabled=splitEnabled;
+    if(Object.keys(seed).length) saveUserPrefs(seed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[prefsLoaded]);
   const [focusedPane,setFocusedPane]=useState("a");
   const [splitMenuFor,setSplitMenuFor]=useState(null); // which view's SplitMenu is open
   // Which view the keyboard acts on: the focused pane's in a split, else `view`.
@@ -1503,6 +1579,17 @@ function BookingApp(){
         // before this save. A direct Confirmed → Completed edit keeps the form's
         // scheduled duration (mirrors the updateStatus quick-action gate).
         if(f.status==="completed"&&orig&&orig.status==="seated"&&!f.customDur){const now=new Date();const nowMinsLocal=now.getHours()*60+now.getMinutes();const startMins=toMins(f.time);const actualDur=Math.max(15,nowMinsLocal-startMins);saveDur=actualDur;saveCustDur=actualDur;}
+        // v17.6.0: record how long they ACTUALLY stayed, so the List card can
+        // show it after the visit (booking-logic's stayedMins). Computed for
+        // EVERY seated→completed save, including the `f.customDur` case the
+        // truncation above skips — how long the party sat is a fact about the
+        // visit, independent of the duration the user chose to store. 0 leaves
+        // the existing value alone (never overwrite a real stay with a blank).
+        let saveStayed=orig?(Number(orig.stayedMin)||0):0;
+        if(f.status==="completed"&&orig&&orig.status==="seated"){
+          const nowD=new Date();
+          saveStayed=Math.max(15,(nowD.getHours()*60+nowD.getMinutes())-toMins(f.time));
+        }
         // Apply seated shift (if any) to the values we'll write. Overrides plan
         // numbers above — the shift always wins over default-duration logic.
         let saveTime=f.time;
@@ -1551,7 +1638,7 @@ function BookingApp(){
               let h=(b.history||[]).concat([editHist]);
               if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
               const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
-              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
             }
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
@@ -1683,7 +1770,7 @@ function BookingApp(){
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
       // WalkinForm; the optimizer already ignores completed via isActive).
-      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,sm+dur)){setError("Selected tables are not available at this time.");return;}}
+      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
       if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
       else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
     }catch(err){setError("Error: "+err.message);}
@@ -2020,6 +2107,10 @@ function BookingApp(){
           const actualDur=Math.max(15,nowM-startMins);
           extra.duration=actualDur;
           extra.customDur=actualDur;
+          // v17.6.0: stamp the real stay so the List card can show it after the
+          // visit (booking-logic's stayedMins). Only a genuine seated→completed
+          // transition reaches here, which is exactly the gate the tag needs.
+          extra.stayedMin=actualDur;
         }
         if(status==="seated"&&x.status!=="seated"){
           const shift=applySeatedShift(x,nowM,b);
@@ -2292,6 +2383,7 @@ function BookingApp(){
     onNoShow={VA.onNoShow}
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
+    turnBuffer={turnBuffer}
     hoursSig={weekHours} />;
   // v17.1.0 perf note: hoursSig / layoutSig are identity-only props — the views
   // read OPEN/GRID_CLOSE/QUARTER_HOURS/TIMELINE_TABLES/TOTAL_SEATS as LIVE
@@ -2327,6 +2419,7 @@ function BookingApp(){
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={VA.onReshuffle}
+    turnBuffer={turnBuffer}
     hoursSig={weekHours}
     layoutSig={layout}
     currency={generalSettings.currency} />;
@@ -2729,5 +2822,8 @@ export default function App(){
       style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-app)",color:S.text,fontSize:15}}>Loading...</div>
   );
   if(!user) return <LoginScreen />;
-  return <BookingApp />;
+  // v17.6.0: `key={user.uid}` remounts BookingApp on an account switch, so a
+  // previous user's per-device state can't survive into the next session; the
+  // uid also feeds useUserPrefs' per-account node.
+  return <BookingApp uid={user.uid} key={user.uid} />;
 }

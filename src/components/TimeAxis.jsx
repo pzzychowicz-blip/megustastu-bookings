@@ -53,6 +53,10 @@ const SNAP_MS = 130;      // idle time after scrolling before we snap
 export function TimeAxis({
   selected, onSelect, nowMins = 0, isToday = false,
   autoScrollKey = 0,
+  // v17.6.0: whether THIS programmatic re-centre glides or jumps. No ref needed —
+  // PlanView bumps the key and sets this from one state object, so both arrive in
+  // the same render and the effect below closes over the matching value.
+  autoScrollSmooth = false,
   occupancy = null,       // {quarterMins: 0..1} — share of tables busy
 }) {
   const scrollRef = useRef(null);
@@ -71,15 +75,21 @@ export function TimeAxis({
   const clampQ = (m) => Math.max(openM, Math.min(openM + totalMins, Math.round(m / 15) * 15));
 
   // Centre a time without notifying the parent (this IS the parent's value).
+  //
+  // v17.6.0: honours the app's "Reduce animations" setting, like every other
+  // scripted scroll in the app (ListView's focus-into-view does the same check).
+  // A smooth scroll is an animation; the setting exists because it costs real
+  // frames on the restaurant's weaker tablets.
   function centre(m, smooth) {
     const el = scrollRef.current;
     if (!el) return;
+    const glide = smooth && document.documentElement.dataset.motion !== "reduce";
     snappingRef.current = true;
-    el.scrollTo({ left: xOf(m), behavior: smooth ? "smooth" : "auto" });
+    el.scrollTo({ left: xOf(m), behavior: glide ? "smooth" : "auto" });
     // Smooth scrolling keeps firing scroll events; let them settle before we
     // start listening again, or the snap re-arms itself in a loop.
     window.clearTimeout(guardTimer.current);
-    guardTimer.current = window.setTimeout(() => { snappingRef.current = false; }, smooth ? 320 : 60);
+    guardTimer.current = window.setTimeout(() => { snappingRef.current = false; }, glide ? 320 : 60);
   }
 
   // v17.5.0 review fix: the guard above used to lift ONLY on its timer, so a
@@ -96,8 +106,14 @@ export function TimeAxis({
   // Programmatic re-centre only (date change, clock follow, the Now button).
   // Never on a user scroll — yanking the ruler under a finger is exactly what
   // makes a scrubber feel broken.
+  //
+  // v17.6.0: the Now button asks for a SMOOTH return (same glide as a tap-to-jump
+  // or a scrub snap) instead of teleporting; the date change and the per-minute
+  // clock follow stay instant. A per-minute follow step is ~1.6px, where a glide
+  // would be indistinguishable from a jump but would keep the snap guard armed
+  // for 320ms every minute.
   useLayoutEffect(() => {
-    centre(selected, false);
+    centre(selected, autoScrollSmooth);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoScrollKey]);
 

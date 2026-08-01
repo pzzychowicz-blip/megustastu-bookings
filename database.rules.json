@@ -41,7 +41,14 @@
       "bookingDefaultsRev": { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
       "general":            { ".validate": "newData.parent().child('generalRev').val() === (data.parent().child('generalRev').exists() ? data.parent().child('generalRev').val() + 1 : 1)" },
-      "generalRev":         { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" }
+      "generalRev":         { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+      "users": {
+        "$uid": {
+          "prefs":    { ".validate": "newData.parent().child('prefsRev').val() === (data.parent().child('prefsRev').exists() ? data.parent().child('prefsRev').val() + 1 : 1)" },
+          "prefsRev": { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" }
+        }
+      }
     }
   }
 }

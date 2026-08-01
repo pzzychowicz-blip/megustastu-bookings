@@ -34,7 +34,7 @@ import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
-import { setDurTiers } from "../lib/constants";
+import { setDurTiers, setTurnBuffer } from "../lib/constants";
 import { dbError } from "../lib/dbError";
 
 export const MAX_TIERS = 6;
@@ -55,7 +55,13 @@ export const DEFAULT_BOOKING_DEFAULTS = {
   // v17.0.0 round 7: master switches for the other alert banners (the Running-
   // late pattern applied app-wide). Default on; rolling-safe field adds.
   overlapWarnEnabled: true,
-  reshuffleSuggestEnabled: true
+  reshuffleSuggestEnabled: true,
+  // v17.6.0: separation between bookings — minutes a table stays unavailable
+  // after a party's end so the next one isn't seated back-to-back. DEFAULT OFF,
+  // so an absent node (and every existing restaurant) behaves exactly as
+  // before; `turnaroundMin` is only the value the stepper starts at.
+  turnaroundEnabled: false,
+  turnaroundMin: 15
 };
 
 // Clamp helpers. Durations snap to the 15-min grid (the app's quarter-hour
@@ -115,7 +121,12 @@ function sanitizeBookingDefaults(raw){
     freeSoonWindow: clampStep(src.freeSoonWindow, d.freeSoonWindow, 5, 60, 5),
     // v17.0.0 round 7: banner master switches (absent = on, rolling-safe).
     overlapWarnEnabled: src.overlapWarnEnabled !== false,
-    reshuffleSuggestEnabled: src.reshuffleSuggestEnabled !== false
+    reshuffleSuggestEnabled: src.reshuffleSuggestEnabled !== false,
+    // v17.6.0: default OFF, so this is `=== true` — the INVERSE of the
+    // `!== false` idiom the default-on switches above use. An absent field on a
+    // legacy node must read as off, never on.
+    turnaroundEnabled: src.turnaroundEnabled === true,
+    turnaroundMin: clampStep(src.turnaroundMin, d.turnaroundMin, 5, 60, 5)
   };
   // invariant: warn strictly before the no-show offer
   if(out.lateNoShowMin <= out.lateWarnMin) out.lateNoShowMin = out.lateWarnMin + 5;
@@ -135,8 +146,9 @@ export function useBookingDefaults(){
       const val = snap.val();
       if(val && typeof val === "object"){
         const next = sanitizeBookingDefaults(val);
-        setDurTiers(next);   // point the DUR_TIERS live binding at the config
-        setBD(next);         // repaint so consumers re-read it
+        setDurTiers(next);     // point the DUR_TIERS live binding at the config
+        setTurnBuffer(next);   // v17.6.0: and the TURN_BUFFER separation binding
+        setBD(next);           // repaint so consumers re-read it
       }
       // Node absent (first run): keep the defaults (= the historical literals).
       loaded.current = true;
@@ -154,6 +166,7 @@ export function useBookingDefaults(){
     }
     const next = sanitizeBookingDefaults({ ...bookingDefaults, ...(partial || {}) });
     setDurTiers(next);
+    setTurnBuffer(next);
     setBD(next);
     writeWithRev("settings/bookingDefaults", next, revRef);
   }

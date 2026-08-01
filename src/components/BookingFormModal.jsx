@@ -395,9 +395,29 @@ export function BookingFormModal({
       style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span><span style={{fontWeight:700}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<span
         style={{fontWeight:700,color:"var(--text-required)",fontSize:13,padding:"4px 12px",borderRadius:8,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}}>Kitchen busy</span>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>:null;
 
+  // v17.6.0: which statuses the edit form offers.
+  //
+  //   • pending   → only ">Confirmed" (the v17.0.0 gating rule: a pending
+  //                 booking's ONLY forward status is confirmed; Cancel/Delete
+  //                 stay reachable elsewhere for the decline flow).
+  //   • otherwise → confirmed / seated / completed / cancelled, as before, PLUS
+  //                 ">Pending" — but only while the party has NOT sat down.
+  //                 Walking a confirmed (or a revived cancelled) booking back to
+  //                 "awaiting confirmation" is a real thing; offering it on a
+  //                 seated or completed visit would contradict a physical fact
+  //                 that already happened.
+  //
+  // The trailing filter drops the booking's CURRENT status, so no row ever
+  // offers a no-op button.
+  const statusTargets=(function(){
+    if(form.status==="pending") return ["confirmed"];
+    const base=["confirmed","seated","completed","cancelled"];
+    const sat=form.status==="seated"||form.status==="completed";
+    return (sat?base:base.concat(["pending"])).filter(function(s){return s!==form.status;});
+  })();
   const quickStatusBtns=editId?<Section style={{position:"relative"}}>{statusFlash?(
         <div key={statusFlash.k} className="mgt-wipe-ltr" style={{position:"absolute",inset:0,borderRadius:16,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
-      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600,marginRight:4}}>Status:</span>{(form.status==="pending"?["confirmed"]:["confirmed","seated","completed","cancelled"]).filter(function(s){return s!==form.status;}).map(function(s){return (
+      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600,marginRight:4}}>Status:</span>{statusTargets.map(function(s){return (
         <button
           key={s}
           className="mgt-hover-scale"
