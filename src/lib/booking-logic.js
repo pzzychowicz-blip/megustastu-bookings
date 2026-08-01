@@ -76,6 +76,31 @@ export function freeingSoon(bookings,todayStr,nowMins,windowMin){
   out.sort(function(a,b){return a.inMin-b.inMin;});
   return out;
 }
+// v17.6.0: how long a COMPLETED party actually stayed, in minutes — or null when
+// that is not knowable. List renders the tag only when this is non-null.
+//
+// Why a stored field and not just `duration`: only a real seated→completed
+// transition truncates `duration` to the actual span (v16.2.0). A booking taken
+// straight confirmed→completed keeps its SCHEDULED duration, so printing that
+// number would assert a stay that never happened. `stayedMin` is written by both
+// completion paths in exactly that branch, so its presence IS the marker.
+//
+// The history fallback backfills bookings completed BEFORE v17.6.0, which have
+// no stamp: if the trail records a seated transition then `duration` was already
+// truncated and is the real span. Deliberately a loose /seated/i match — the two
+// completion paths word their entries differently ("status → seated" from
+// updateStatus, "edited: …status confirmed→seated" from the form), which is
+// precisely why the live path uses a field instead of parsing this.
+export function stayedMins(b){
+  if(!b||b.status!=="completed") return null;
+  var st=Number(b.stayedMin);
+  if(Number.isFinite(st)&&st>0) return st;
+  var hist=Array.isArray(b.history)?b.history:[];
+  var seated=hist.some(function(h){return h&&typeof h.action==="string"&&/seated/i.test(h.action);});
+  if(!seated) return null;
+  var d=Number(b.duration);
+  return Number.isFinite(d)&&d>0?d:null;
+}
 export function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
 export function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
@@ -102,6 +127,12 @@ export function sanitize(b){if(!b||typeof b!=="object") return null;var t=b.time
   // stays for statistics as name "Data removed" (phone/notes/history wiped,
   // noShow kept). The flag excludes it from the name-search/autocomplete paths.
   anonymized:!!b.anonymized,
+  // v17.6.0: how long the party ACTUALLY stayed, in minutes — written by the two
+  // completion paths ONLY on a real seated→completed transition (App.jsx's
+  // updateStatus + doSave). Whitelisted so it survives reads. 0/absent means
+  // "not known" (a direct confirmed→completed never sets it); read it through
+  // stayedMins() below rather than touching the field directly.
+  stayedMin:Number(b.stayedMin)||0,
   // v15.5.0: per-booking revision stamp for the per-node write model. Carried
   // through sanitise so it survives reads (this whitelist would otherwise drop
   // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.

@@ -19,6 +19,7 @@ import {
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
+  stayedMins,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES } from "../src/lib/constants.js";
 
@@ -145,6 +146,56 @@ describe("lateState / lateMins", () => {
     expect(lateState(mk({ status: "completed", time: "13:00" }), D, 800, cfg)).toBe(null);
     expect(lateState(mk({ date: "2099-06-16", time: "13:00" }), D, 800, cfg)).toBe(null);
     expect(lateState(mk({ time: "13:00" }), D, 800, { lateEnabled: false })).toBe(null);
+  });
+});
+
+// v17.6.0: the List card's "stayed N min" tag on a completed booking.
+describe("stayedMins", () => {
+  it("returns the stamped stay for a seated→completed booking", () => {
+    expect(stayedMins(mk({ status: "completed", stayedMin: 105, duration: 105 }))).toBe(105);
+  });
+
+  it("returns null for a booking completed without ever being seated", () => {
+    // No stamp and no seated trail — duration is the SCHEDULED 90, which would
+    // be a lie about how long they sat. This is the case the tag must skip.
+    expect(stayedMins(mk({ status: "completed", duration: 90 }))).toBe(null);
+  });
+
+  it("falls back to duration for a legacy booking with a seated history entry", () => {
+    const legacy = mk({
+      status: "completed", duration: 72,
+      history: [{ at: "x", by: "y", action: "status → seated" }],
+    });
+    expect(stayedMins(legacy)).toBe(72);
+  });
+
+  it("also matches the form path's history wording", () => {
+    const legacy = mk({
+      status: "completed", duration: 64,
+      history: [{ at: "x", by: "y", action: "edited: status confirmed→seated" }],
+    });
+    expect(stayedMins(legacy)).toBe(64);
+  });
+
+  it("returns null for any non-completed status, stamp or not", () => {
+    expect(stayedMins(mk({ status: "seated", stayedMin: 40 }))).toBe(null);
+    expect(stayedMins(mk({ status: "confirmed" }))).toBe(null);
+    expect(stayedMins(mk({ status: "cancelled", stayedMin: 40 }))).toBe(null);
+  });
+
+  it("survives missing / malformed input", () => {
+    expect(stayedMins(null)).toBe(null);
+    expect(stayedMins(undefined)).toBe(null);
+    expect(stayedMins({ status: "completed" })).toBe(null);
+    expect(stayedMins({ status: "completed", stayedMin: "abc", history: "nope" })).toBe(null);
+    // A zero/negative stamp is "not known", not a zero-minute visit.
+    expect(stayedMins(mk({ status: "completed", stayedMin: 0, duration: 90 }))).toBe(null);
+  });
+
+  it("survives a sanitize round-trip (stayedMin is whitelisted)", () => {
+    const out = sanitize(mk({ status: "completed", stayedMin: 118 }));
+    expect(out.stayedMin).toBe(118);
+    expect(stayedMins(out)).toBe(118);
   });
 });
 

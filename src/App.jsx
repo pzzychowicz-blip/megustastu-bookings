@@ -253,7 +253,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.5.1",
+  version:"17.6.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1503,6 +1503,17 @@ function BookingApp(){
         // before this save. A direct Confirmed → Completed edit keeps the form's
         // scheduled duration (mirrors the updateStatus quick-action gate).
         if(f.status==="completed"&&orig&&orig.status==="seated"&&!f.customDur){const now=new Date();const nowMinsLocal=now.getHours()*60+now.getMinutes();const startMins=toMins(f.time);const actualDur=Math.max(15,nowMinsLocal-startMins);saveDur=actualDur;saveCustDur=actualDur;}
+        // v17.6.0: record how long they ACTUALLY stayed, so the List card can
+        // show it after the visit (booking-logic's stayedMins). Computed for
+        // EVERY seated→completed save, including the `f.customDur` case the
+        // truncation above skips — how long the party sat is a fact about the
+        // visit, independent of the duration the user chose to store. 0 leaves
+        // the existing value alone (never overwrite a real stay with a blank).
+        let saveStayed=orig?(Number(orig.stayedMin)||0):0;
+        if(f.status==="completed"&&orig&&orig.status==="seated"){
+          const nowD=new Date();
+          saveStayed=Math.max(15,(nowD.getHours()*60+nowD.getMinutes())-toMins(f.time));
+        }
         // Apply seated shift (if any) to the values we'll write. Overrides plan
         // numbers above — the shift always wins over default-duration logic.
         let saveTime=f.time;
@@ -1551,7 +1562,7 @@ function BookingApp(){
               let h=(b.history||[]).concat([editHist]);
               if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
               const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
-              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
             }
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
@@ -2020,6 +2031,10 @@ function BookingApp(){
           const actualDur=Math.max(15,nowM-startMins);
           extra.duration=actualDur;
           extra.customDur=actualDur;
+          // v17.6.0: stamp the real stay so the List card can show it after the
+          // visit (booking-logic's stayedMins). Only a genuine seated→completed
+          // transition reaches here, which is exactly the gate the tag needs.
+          extra.stayedMin=actualDur;
         }
         if(status==="seated"&&x.status!=="seated"){
           const shift=applySeatedShift(x,nowM,b);
