@@ -2,7 +2,7 @@
 // Left pane: filters conversations by the active tab (inbox vs archived) and
 // sorts them — archived by archivedAt desc, inbox by lastMessageAt desc.
 
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { sortConversations, conversationOrder } from "../../lib/whatsapp";
 import { useFlip, Reveal } from "../atoms";
 import { useRevealRows } from "../../hooks/useRevealRows";
@@ -32,16 +32,26 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
   const { renderIds, openIds } = useRevealRows(sorted.map((c) => c.phoneKey), ROW_PRUNE_MS);
   // A departing row is no longer in `conversations`, so its object has to come
   // from somewhere: cache every conversation we have rendered, keyed by
-  // phoneKey. Bounded by the number of conversations that have been on screen,
-  // and refreshed each render so a still-visible row never shows stale data.
+  // phoneKey. Bounded by the number of conversations that have been on screen.
+  //
+  // Filled in a dep-less EFFECT, not during render — the house pattern, per
+  // CLAUDE.md on useKeyboardShortcuts: "the hook refreshes a ref from it in a
+  // dep-less effect (lint-clean vs the old in-render write)". It still holds
+  // what is needed when it is needed: a row only falls back to the cache on the
+  // render where it has just LEFT `sorted`, and the previous COMMITTED render's
+  // effect already stored it.
   const cache = useRef({});
-  sorted.forEach((c) => { cache.current[c.phoneKey] = c; });
+  useEffect(() => { sorted.forEach((c) => { cache.current[c.phoneKey] = c; }); });
+  // Live data wins over the cache for anything still visible, so a row on
+  // screen can never paint from a stale copy.
+  const live = {};
+  sorted.forEach((c) => { live[c.phoneKey] = c; });
   // Sort the UNION (visible + still-collapsing) with the shared comparator, NOT
   // sortConversations: its tab filter would drop a row that departed *because*
   // it was archived, and that row would vanish instead of easing out — the very
   // case this is here to animate.
   const rows = renderIds
-    .map((id) => cache.current[id])
+    .map((id) => live[id] || cache.current[id])
     .filter(Boolean)
     .sort(conversationOrder(archivedView));
 
