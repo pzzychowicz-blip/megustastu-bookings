@@ -1,6 +1,6 @@
 ---
 name: mgt-workflow
-description: The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings) — covers session-start context bootstrapping, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit), AND keeping ROADMAP.md (the pending-work/deferred-features/ideas file) in sync. Load this at the START of every session in this repo (even before any coding task is clear) to run a cheap staleness check and decide whether last session's thread summary is worth reading. ALSO load it before making any edit under src/, before any commit, push, branch, PR, or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and whether ROADMAP.md needs an update all depend on decisions made before the first edit and at task close, not just at commit time. A mandatory `/code-review` gate runs before EVERY push ("review and push" runs that gate end-to-end), and "sum up this thread" means the branch is already merged and gets its merge-confirmations asked in one batch. Also triggers on "review and push", "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or anytime the user references prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, or ROADMAP.md. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
+description: The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings) — covers session-start context bootstrapping, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit), AND keeping ROADMAP.md (the pending-work/deferred-features/ideas file) in sync. Load this at the START of every session in this repo (even before any coding task is clear) to run a cheap staleness check and decide whether last session's thread summary is worth reading. ALSO load it before making any edit under src/, before any commit, push, branch, PR, or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and whether ROADMAP.md needs an update all depend on decisions made before the first edit and at task close, not just at commit time. A mandatory `/code-review` gate runs before EVERY push — Claude cannot invoke it, so Patryk types "/code-review and push" and Claude carries the gate through to the push in that same turn — and "sum up this thread" means the branch is already merged and gets its merge-confirmations asked in one batch. Also triggers on "/code-review and push", "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or anytime the user references prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, or ROADMAP.md. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
 ---
 
 # MGT Bookings — workflow contract
@@ -155,9 +155,9 @@ apply, don't assume.
 
 **Once, when the version is ready to go out:**
 
-8. [ ] **Run `/code-review` over the branch diff — no push without it.** Fix critical
-   findings unprompted; put everything else to the user in one question. See the gate
-   below.
+8. [ ] **No push until `/code-review` has run over the branch diff.** You can't invoke
+   it — Patryk types `/code-review and push`. Then fix critical findings unprompted and
+   put everything else to him in one question. See the gate below.
 9. [ ] `git push -u origin <branch>` — **only when explicitly asked.** A push is a
    shared-state action; a prior approval doesn't carry over to the next one.
 10. [ ] `gh pr create --base main --head <branch> …` — body ends with the "Generated
@@ -191,10 +191,22 @@ trailer.
 ### The pre-push review gate — mandatory
 
 **Nothing gets pushed until `/code-review` has run over the branch's diff** — every
-push, every version, not only the risky-looking ones. **"review and push" is the
-shorthand for running this whole gate end-to-end**: run the review, act on it per the
-rules below, then come back with a single question. Don't stop to narrate progress
-partway through — doing it in one pass is the entire point of the phrase.
+push, every version, not only the risky-looking ones.
+
+**You cannot invoke `/code-review` yourself.** It's marked `disable-model-invocation`,
+so the Skill tool refuses it — only Patryk can type it. That shapes the whole gate:
+
+- **He types `/code-review and push`.** The slash command loads the review into the
+  turn; the trailing "and push" is your instruction to carry the gate through to the
+  end in that same turn — run the review, act on the findings per the rules below,
+  push. Don't stop to narrate progress partway through; doing it in one pass is the
+  entire point of the phrase.
+- **If a push is due and no review has run, don't push.** Say so plainly and ask him
+  to re-issue as `/code-review and push`. The same applies if he says "review and
+  push" without the slash command actually loading — you need the real review, not an
+  approximation of it.
+- **Never substitute a different review tool silently**, and never describe a review
+  as having happened when it hasn't.
 
 Sort the findings into two buckets and treat them differently:
 
@@ -298,9 +310,12 @@ per CLAUDE.md, don't improvise a new interpretation:
   Firebase integration, auth, cleanup logic, logout.
 - **"give me changelog"** — generate a PDF changelog per
   `MGT_Changelog_Instructions.md`.
-- **"review and push"** — run the mandatory pre-push gate in §4 end-to-end in a single
-  pass: `/code-review` over the branch diff → fix critical findings unprompted → one
-  `AskUserQuestion` covering everything else (apply now, or push as-is) → push.
+- **"/code-review and push"** — Patryk's shorthand for running the mandatory pre-push
+  gate (§4) end-to-end in one turn. The slash command loads the review; "and push" is
+  the instruction to finish the job without further prompting: review the branch diff →
+  fix critical findings unprompted → one `AskUserQuestion` covering everything else
+  (apply now, or push as-is) → push. You can't invoke `/code-review` yourself, so if a
+  push is due without one, ask him to re-issue it in this form.
 
 - **"sum up this thread"** — this phrase carries three things at once: **the branch is
   already merged** (assume that unless told otherwise), the summary needs writing, and
