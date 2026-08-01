@@ -822,33 +822,42 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
   );
 }
 
-// ── Settings modal body — tab bar + active tab content ──────────────────────
-// Tab state lives in BookingApp (so it persists across modal close/reopen if
-// desired — currently it's reset on close by the parent). Reminder list
-// state and handlers are also threaded from BookingApp.
 // ── WhatsApp tab body (WA sandbox) ──────────────────────────────────────────
-// The module's own settings. Shares the General tab's row shape (label + hint
-// on the left, Toggle on the right) so the two tabs read as one surface.
+// The module's own settings. Uses Collapsible for its titled section, matching
+// every other settings section — NOT Section, which takes only {style, children}
+// and silently swallows a `title` prop.
 // Backed by settings/whatsapp (useWaSettings) — restaurant-wide, not per-device.
 function WhatsAppTabContent({ waSettings, onSaveWaSettings }) {
   const s = waSettings || {};
+  // Default-ON tri-state read, resolved ONCE: the toggle's state and the value
+  // it writes are then obviously each other's inverse.
+  const autoArchive = s.autoArchiveOnComplete !== false;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <Section title="Inbox">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <Collapsible
+        title="Inbox"
+        subtitle="How conversations leave the inbox. Shared across all devices."
+        summary={autoArchive ? "Auto-archive on" : "Auto-archive off"}
+        defaultOpen
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 4 }}>
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Archive when the booking is completed</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              A conversation whose linked booking reaches <strong>Completed</strong> moves itself to Archived — the visit is over, so it drops out of the inbox. Restoring one by hand sticks; it won&rsquo;t re-archive itself.
+              A conversation whose linked booking reaches <strong>Completed</strong> moves itself to Archived — the visit is over, so it drops out of the inbox. Restoring one by hand sticks; it won&rsquo;t re-archive itself. Only bookings completed from now on are affected.
             </div>
           </div>
-          <Toggle on={s.autoArchiveOnComplete !== false} onClick={function () { onSaveWaSettings({ autoArchiveOnComplete: !(s.autoArchiveOnComplete !== false) }); }} />
+          <Toggle on={autoArchive} onClick={function () { onSaveWaSettings({ autoArchiveOnComplete: !autoArchive }); }} />
         </div>
-      </Section>
+      </Collapsible>
     </div>
   );
 }
 
+// ── Settings modal body — tab bar + active tab content ──────────────────────
+// Tab state lives in BookingApp (so it persists across modal close/reopen if
+// desired — currently it's reset on close by the parent). Reminder list
+// state and handlers are also threaded from BookingApp.
 export function SettingsContent({
   tab, setTab,
   appVersion,
