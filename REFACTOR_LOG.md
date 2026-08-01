@@ -6305,6 +6305,39 @@ second): the `prefs`/`prefsRev` pair nested inside `settings/users/$uid` — see
 `database.rules.README.md`. `$uid` is a wildcard, not an access rule; the
 top-level `auth != null` still governs, matching this app's trust model.
 
+### 5/6 — Plan: the Now button glides back
+
+Clicking Now snapped the tape in a single frame, which read as the view
+breaking rather than moving. It now uses the same browser glide the tape
+already uses for tap-to-jump and the scrub snap. TimeAxis gained an
+`autoScrollSmooth` prop; PlanView carries it and the trigger counter in ONE
+state object (`{k, smooth}`) so a stale `smooth` can never ride along with a
+fresh `k` — which also means no ref is needed, since both land in the same
+render.
+
+Only the button glides: the date change stays instant, and so does the
+per-minute clock follow (a ~1.6px step, where a glide is indistinguishable from
+a jump but would hold the snap guard for 320ms every minute). `centre()` now
+also honours **"Reduce animations"** like every other scripted scroll in the app
+(ListView's focus-into-view already did), with the snap-guard window following
+the EFFECTIVE behaviour rather than the request.
+
+### 6/6 — Edit form: a "> Pending" status button
+
+The form could move a booking forward or cancel it, but never back to
+"awaiting confirmation". `> Pending` is now offered on a **confirmed or
+cancelled** booking and deliberately **not** on a seated or completed one —
+those record something that physically happened, so "awaiting confirmation"
+would contradict them. This extends the v17.0.0 gating philosophy rather than
+carving an exception into it; a pending booking still offers only
+`> Confirmed`.
+
+The list moved out of the JSX into a named `statusTargets` block (three cases
+is past the point where an inline nested ternary stays readable). The List
+card's quick buttons deliberately do NOT gain it — the form is the considered
+surface. No footer change was needed: "Save & confirm" keys on the PERSISTED
+status, so a pending draft on a confirmed booking shows no extra button.
+
 ### Verified (DEV, live)
 
 1. A pre-v17.6.0 completed booking renders "stayed 15 min" via the history
@@ -6322,3 +6355,9 @@ top-level `auth != null` still governs, matching this app's trust model.
    `body.overflow: hidden` confirming the restored value reached the render;
    app width, Timeline zoom and the split layout stayed absent. No `[SAFE]`
    refusals, no console errors.
+5. Now-button scroll sampled per frame: **37 distinct positions** easing
+   864 → 165 with animations on, and exactly **1** (an instant jump) with
+   "Reduce animations" on.
+6. `> Pending` checked against all four source statuses: offered on confirmed
+   (row then collapses to just `> Confirmed`, saves as Pending, List card gates
+   to match); absent on seated and on completed; pending unchanged.
