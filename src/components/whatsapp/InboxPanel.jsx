@@ -35,6 +35,37 @@ function topKeyOfTab(convs, whichTab) {
   return sorted.length ? sorted[0].phoneKey : null;
 }
 
+// ── Last-opened conversation (per device) ───────────────────────────────────
+// Reopening the inbox lands you back on the thread you were reading. Kept in
+// localStorage rather than App state so it also survives a reload — it is a UI
+// position, i.e. a property of this screen, so it stays per-device (the
+// settings/users prefs node is for choices, not cursor positions).
+const LAST_CONV_KEY = "mgt-wa-last-conv";
+function readLastConv() {
+  try { return localStorage.getItem(LAST_CONV_KEY) || null; } catch { return null; }
+}
+function writeLastConv(key) {
+  try { key ? localStorage.setItem(LAST_CONV_KEY, key) : localStorage.removeItem(LAST_CONV_KEY); } catch { /* ignore */ }
+}
+
+// resolveInitialKey — which conversation the inbox opens on, in priority order:
+//   1. initialActiveKey — returning from the booking form / cancel confirm.
+//      Handled by the caller (it also switches to the Archived tab if needed).
+//   2. the remembered thread, if it still exists and is still in the Inbox.
+//   3. the top of the Inbox tab.
+// (2) deliberately falls through to (3) when the remembered thread is archived
+// rather than flipping to the Archived tab: with auto-archive-on-complete on,
+// the last thread you read is very often the one that just archived itself, and
+// opening the inbox into the Archived tab would be a daily surprise.
+function resolveInitialKey(convs) {
+  const last = readLastConv();
+  if (last) {
+    const c = convs.find((x) => x.phoneKey === last);
+    if (c && !c.archived) return last;
+  }
+  return topKeyOfTab(convs, "inbox");
+}
+
 export function InboxPanel({
   conversations, messages, templates, bookings, initialActiveKey,
   onClose, onSend, onAccept, onDismiss, onSaveTemplates, onMarkRead,
@@ -86,9 +117,12 @@ export function InboxPanel({
   const [tab, setTab] = useState(initialTab);
   const [activeKey, setActiveKey] = useState(() => {
     if (initialKey && initialConv) return initialKey;
-    // No incoming key → in two-pane, open on the top inbox conversation; in
-    // stacked mode start on the list (no forced selection).
-    return twoPane ? topKeyOfTab(conversations, "inbox") : null;
+    // No incoming key → in two-pane, restore the last thread you were reading
+    // (falling back to the top of the Inbox), so the panel never opens on an
+    // empty right pane. Stacked mode still starts on the LIST: on a phone the
+    // conversation is full-screen, and auto-opening one would hide the inbox
+    // behind it every single time.
+    return twoPane ? resolveInitialKey(conversations) : null;
   });
   const [showTpl, setShowTpl] = useState(false);
   const searchRef = useRef(null); // "/" focuses the search box
@@ -145,7 +179,7 @@ export function InboxPanel({
     const was = prevTwoPane.current;
     prevTwoPane.current = twoPane;
     if (twoPane && !was && !activeKey) {
-      const top = topKeyOfTab(conversations, tab);
+      const top = tab === "inbox" ? resolveInitialKey(conversations) : topKeyOfTab(conversations, tab);
       if (top) setActiveKey(top);
     }
   }, [twoPane]);
@@ -237,6 +271,12 @@ export function InboxPanel({
     if (!activeKey) return;
     const c = conversations.find((x) => x.phoneKey === activeKey);
     if (c && c.unread) onMarkRead(activeKey);
+  }, [activeKey]);
+  // Remember the open thread for the next time the inbox opens. Only a real
+  // selection is stored — clearing to the list (mobile back, archive) leaves the
+  // previous memory in place rather than wiping it.
+  useEffect(() => {
+    if (activeKey) writeLastConv(activeKey);
   }, [activeKey]);
   // Drop the selection if the active conversation leaves the current tab.
   useEffect(() => {
