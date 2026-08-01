@@ -307,7 +307,11 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
     hoursLine: hours ? "Operating hours config (per weekday, 24h): " + JSON.stringify(hours) : null,
     existingDraft: existingDraft || null,
     threadMode: true,
-    prefText: inbound.map((m) => m.text).join(" "),
+    // ONLY the newest inbound, matching what the single-message path sees.
+    // Joining every retained inbound would backfill a seating area the customer
+    // mentioned on a previous visit onto a fresh request — and inferPreference
+    // runs precisely when Gemini judged that no area was stated this time.
+    prefText: lastInbound,
   };
   const mode = llmMode();
   let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound);
