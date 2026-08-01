@@ -1,6 +1,6 @@
 ---
 name: mgt-workflow
-description: The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings) — covers session-start context bootstrapping, git/branching/versioning, AND keeping ROADMAP.md (the pending-work/deferred-features/ideas file) in sync. Load this at the START of every session in this repo (even before any coding task is clear) to run a cheap staleness check and decide whether last session's thread summary is worth reading. ALSO load it before making any edit under src/, before any commit, push, branch, PR, or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and whether ROADMAP.md needs an update all depend on decisions made before the first edit and at task close, not just at commit time. Also triggers on "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or anytime the user references prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, or ROADMAP.md. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
+description: The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings) — covers session-start context bootstrapping, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit), AND keeping ROADMAP.md (the pending-work/deferred-features/ideas file) in sync. Load this at the START of every session in this repo (even before any coding task is clear) to run a cheap staleness check and decide whether last session's thread summary is worth reading. ALSO load it before making any edit under src/, before any commit, push, branch, PR, or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and whether ROADMAP.md needs an update all depend on decisions made before the first edit and at task close, not just at commit time. Also triggers on "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or anytime the user references prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, or ROADMAP.md. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
 ---
 
 # MGT Bookings — workflow contract
@@ -72,10 +72,12 @@ git branch --show-current
 (`gh` is not on `$PATH` in this environment — always use the full path above.)
 
 - **On `main`?** Branch first. Never commit work-in-progress directly to `main`.
-- **An open PR listed?** Stop and tell the user. Per the locked deployment flow, a new
-  version branch does not start until the previous PR merges — bundling two versions'
-  worth of change across branches is exactly what this rule prevents. Wait, or ask
-  whether they want to continue on the existing branch instead of starting a new one.
+- **An open PR listed?** Don't start a *new version* branch — that rule still holds,
+  and it's what keeps two versions from being in flight at once. But adding another
+  feature to the version that's already open is entirely normal (§3), so put the
+  choice to the user: land this as another commit on the open branch under the same
+  version, or wait for the merge and start the next version fresh. Recommend one
+  rather than just listing both.
 - **Clean, no open PR, already on a `feat/v.../fix/v.../chore/...` branch?** Carry
   on — you're already mid-version, no need to re-branch.
 - **Clean, no open PR, but on some other branch** (main, or a harness-assigned
@@ -103,7 +105,7 @@ time, so the branch name and `__APP_SIGNATURE__` never disagree.
 `fix/` for bug fixes and hotfixes — e.g. `fix/v17.4.1-sw-killswitch`, the PWA
 kill-switch hotfix. Use it for that case rather than forcing a bug fix into `feat/`.)
 
-## 3. Versioning — decide the bump before you branch
+## 3. Versioning — one version per branch, one bump in the first commit
 
 Single source of truth: `src/App.jsx` → `__APP_SIGNATURE__.version`. Schema
 `MAJOR.MINOR.PATCH`.
@@ -113,50 +115,89 @@ Single source of truth: `src/App.jsx` → `__APP_SIGNATURE__.version`. Schema
 | **Major/minor** | A user-visible feature shift — something staff would notice using the app. |
 | **Patch** | A structural refactor, bug fix, or internal change with no new user-facing behavior. |
 
-**Every meaningful change bumps the version, in the same branch/PR.** There is no
-"ship without a bump" — if you're opening a PR against `main`, `__APP_SIGNATURE__` has
-moved. A same-version follow-up commit (fixing review feedback on a still-open PR)
-does *not* get its own bump or its own REFACTOR_LOG section — see §5.
+**A version can carry several features.** v16.3.0 shipped 11, v17.0.0 shipped 6,
+v17.6.0 shipped 6 — one branch, one version, many commits. Size the bump by the
+version's overall user-visible impact, not by counting features: a handful of internal
+refactors together is still a patch; one new staff-facing view is a minor.
+
+**The bump happens once, in the branch's first commit** — so the branch name and
+`__APP_SIGNATURE__` agree from the very start, and a branch abandoned mid-way is still
+self-consistent. Every later commit on that branch (another feature, a correction
+round, a review fix) leaves the version line alone. There is no "ship without a bump":
+if you're opening a PR against `main`, `__APP_SIGNATURE__` has moved exactly once.
 
 ## 4. The ship checklist
 
-Work through this in order. Don't skip a step because it "doesn't apply this time" —
-confirm it doesn't apply, don't assume.
+Three parts: set the branch up once, commit each change separately, ship the branch
+out once. Don't skip a step because it "doesn't apply this time" — confirm it doesn't
+apply, don't assume.
 
-1. [ ] On a fresh branch off `main`, named per §2.
-2. [ ] Edits made in `src/`.
-3. [ ] `__APP_SIGNATURE__.version` bumped in `src/App.jsx` (§3).
-4. [ ] `CLAUDE.md` updated — **only if** this change affects the file-structure block or
-   a locked-decision — i.e. a new hook/component, a changed data shape, a new
-   architectural rule. A pure bugfix with no structural change touches neither.
-5. [ ] `REFACTOR_LOG.md` gets an entry (§5) — append at the bottom, never renumber
-   history.
-6. [ ] `npm run build` succeeds. Note the main-bundle gz size delta in the commit
-   message or REFACTOR_LOG entry — this is how bundle bloat gets caught early.
-7. [ ] Commit — descriptive message, ends with the Claude co-author trailer. **Only
-   when the user has explicitly asked you to commit** — see the hard rules below.
+**Once, when the branch starts:**
+
+1. [ ] Cut a fresh branch off `main`, named per §2.
+
+**Then once per feature / fix / follow-up — each gets its OWN commit (§7):**
+
+2. [ ] Make just that one change's edits in `src/`. Don't let a second feature ride along.
+3. [ ] *First commit of the branch only:* bump `__APP_SIGNATURE__.version` (§3).
+4. [ ] `REFACTOR_LOG.md` — the first commit creates this version's entry, every later
+   commit **extends that same entry** (§5). Never a second entry for one version.
+5. [ ] `CLAUDE.md` — only if *this particular* change touches the file-structure block
+   or a locked decision (new hook/component, changed data shape, new architectural
+   rule). Most commits won't.
+6. [ ] `npm run build` **and** `npm test` pass. Together they run in ~1s here, so do it
+   for every commit — a `git bisect` should never land on a broken one. Note the
+   main-bundle gz delta.
+7. [ ] Commit this one change (subject format below). **Only when the user has
+   explicitly asked you to commit** — see §7.
+
+   → Then loop back to step 2 for the next change.
+
+**Once, when the version is ready to go out:**
+
 8. [ ] `git push -u origin <branch>` — **only when explicitly asked.** A push is a
-   shared-state action; a prior approval to push doesn't carry over to the next one.
+   shared-state action; a prior approval doesn't carry over to the next one.
 9. [ ] `gh pr create --base main --head <branch> …` — body ends with the "Generated
    with Claude Code" line.
 10. [ ] Patryk reviews and merges. **You never merge your own PR** — not even if asked
     to "just finish it up," since merge authority is explicitly his.
 11. [ ] After merge, confirm the prod console boot banner / `window.__MGT_BUILD__`
-    shows the new version — this is the actual verification that the deploy landed,
-    not just that the PR merged.
+    shows the new version — that's the real proof the deploy landed, not just that the
+    PR merged.
 12. [ ] Sync the local checkout: `git checkout main && git pull --ff-only`.
+
+Review fixes arriving *after* the PR is open are just more passes through steps 2–7 on
+the same branch — new commits, same version, same REFACTOR_LOG entry.
+
+**Commit subject format** (established by repo history — keep it):
+
+```
+v17.0.0 phase 1: PENDING booking status
+v16.3.0 (phase 11): recurring / standing bookings
+v17.0.0 correction round 7: OverlapBanner + banner master switches
+v17.6.0: extend the REFACTOR_LOG entry with commits 5/6 and 6/6
+v16.3.0 follow-up: move 🔍 search next to the Settings gear
+v16.3.0: /code-review fixes — deposit clamp · skipDate-gated delete
+```
+
+Lead with the version, then which slice of it this is (`phase N`, `correction round N`,
+`follow-up`, `/code-review fixes`), then what it does. That prefix is what makes
+`git log --oneline` read as one version's story. Body ends with the Claude co-author
+trailer.
 
 ## 5. REFACTOR_LOG.md discipline
 
-Every shipped version gets one entry: date, files changed, behavioral-change status
-(almost always "None" for pure refactors), line delta, scope, key design decisions,
-verification results. Keep entries **chronological, newest at the bottom** — never
-reorder history to group by topic.
+Every shipped version gets **exactly one** entry — one per version, never one per
+commit. Date, files changed, behavioural-change status (almost always "None" for pure
+refactors), line delta, scope, key design decisions, verification results. Keep entries
+**chronological, newest at the bottom** — never reorder history to group by topic.
 
-**Same-version follow-up ≠ new entry.** If the user asks for a change on a branch
-that's still open (addressing review feedback, a QA fix before merge), *extend* the
-existing version's entry rather than appending a new dated section. A new section
-implies a new version bump, which contradicts §3.
+**The first commit of a version creates the entry; every later commit extends it in
+place.** That covers everything landing under that version — additional features,
+correction rounds, review fixes, QA fixes after the PR is open. Appending a second
+dated section for the same version implies a second version bump, which contradicts §3.
+(`v17.6.0: extend the REFACTOR_LOG entry with commits 5/6 and 6/6` on main is exactly
+this working as intended.)
 
 ## 6. ROADMAP.md upkeep — this skill owns it
 
@@ -188,10 +229,17 @@ shipping.
 
 ## 7. Hard rules (non-negotiable, not situational)
 
-- **Never bundle multiple versions on one branch.** One version per branch, one
-  branch per PR, always.
-- **If a previous PR is open, wait for it to merge** before starting the next version
-  branch (§1). Don't work around this by stacking branches.
+- **One change per commit — never bundle features.** Every feature, correction round,
+  and follow-up gets its own commit, however small. A commit carrying two features
+  can't be reviewed, reverted, or bisected independently, and that separability is the
+  entire point.
+- **Never `--amend` or force-push to fold a follow-up into an earlier commit.** The
+  separate-commit record *is* the deliverable; rewriting it destroys exactly what the
+  rule above protects. A fix to an already-made commit is a new commit.
+- **One version per branch, one branch per PR.** A branch may carry many commits and
+  many features, but only ever one version.
+- **If a previous PR is open, don't start the next *version*** (§1). Another commit on
+  the open branch under the same version is fine; a second version in flight is not.
 - **Commit and push only when the user explicitly asks**, each time — this isn't a
   standing permission once granted. Making the edits and running the build does not
   imply "and now commit it."
