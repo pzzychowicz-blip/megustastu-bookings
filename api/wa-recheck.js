@@ -77,8 +77,13 @@ export default async function handler(req, res) {
     // model merges into, an accepted/dismissed one is not.
     const existingDraft = conv.draftStatus === "parsed" ? conv.draftData : null;
     const hours = await readOperatingHours();
+    // isAutoAck is dropped, not passed through: the one-time "Thanks for your
+    // message! We'll get back to you shortly." is a bot line, and handing it to
+    // the model as a STAFF turn — under a prompt that says to ignore whatever
+    // staff has already answered — biases it toward "nothing outstanding" on
+    // exactly the short threads this button exists to re-examine.
     const parse = await parseThread(
-      history.map((m) => ({ direction: m.direction, text: m.text })),
+      history.filter((m) => !m.isAutoAck).map((m) => ({ direction: m.direction, text: m.text })),
       { hours, existingDraft }
     );
 
