@@ -73,8 +73,17 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
   }
   return (
     <div ref={flipRef} style={{ padding: "10px 10px 20px", height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
+      {/* A collapsing row stays mounted for the whole prune window, so it is
+          made inert: without this you can click a row on its way out and select
+          a conversation no longer in this tab, which the leaves-the-tab effect
+          then immediately clears — the click reads as the app ignoring it. */}
       {rows.map((c) => (
-        <Reveal key={c.phoneKey} show={openIds.has(c.phoneKey)} ms={ROW_MS}>
+        <Reveal
+          key={c.phoneKey}
+          show={openIds.has(c.phoneKey)}
+          ms={ROW_MS}
+          style={openIds.has(c.phoneKey) ? undefined : { pointerEvents: "none" }}
+        >
           <ConversationRow
             flipId={c.phoneKey}
             conv={c}
