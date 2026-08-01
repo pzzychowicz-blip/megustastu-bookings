@@ -729,14 +729,21 @@ export const TimelineView = memo(function TimelineView({
           // visit's table reads as free everywhere else in the app.
           let tail = null;
           if (turnBuffer > 0 && b.status !== "completed") {
-            const tS = toMins(b.time) - OPEN * 60 + liveBarDur(b, nowMins);
-            tail = (
+            // /code-review: clamp the tail to the grid's right edge. A booking
+            // that ends at (or past) GRID_CLOSE would otherwise place its tail
+            // entirely OUTSIDE the grid — an absolutely-positioned child still
+            // counts toward the scroller's scrollWidth, so it added a strip of
+            // empty scroll past the end of the day that grew with zoom.
+            const tStart = toMins(b.time) + liveBarDur(b, nowMins);
+            const tEnd = Math.min(tStart + turnBuffer, GRID_CLOSE * 60);
+            const tMins = tEnd - tStart;
+            tail = tMins <= 0 ? null : (
               <div
                 aria-hidden="true"
                 style={{
                   position: "absolute", top: 3, height: (ROW_H - 8) + "px",
-                  left: pct(OPEN * 60 + tS),
-                  width: Math.max((turnBuffer / totalMins) * 100, 0.3) + "%",
+                  left: pct(tStart),
+                  width: Math.max((tMins / totalMins) * 100, 0.3) + "%",
                   background: BLOCK_BG[b.status] || BLOCK_BG.confirmed,
                   opacity: 0.28,
                   borderRadius: "0 10px 10px 0",

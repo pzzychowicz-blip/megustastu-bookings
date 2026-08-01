@@ -6361,3 +6361,41 @@ status, so a pending draft on a confirmed booking shows no extra button.
 6. `> Pending` checked against all four source statuses: offered on confirmed
    (row then collapses to just `> Confirmed`, saves as Pending, List card gates
    to match); absent on seated and on completed; pending unchanged.
+
+### /code-review pass
+
+One defect found and fixed: the Timeline turnaround tail was not clamped to the
+grid. A booking ending at (or past) `GRID_CLOSE` placed its tail entirely
+outside the grid, and an absolutely-positioned child still counts toward the
+scroller's `scrollWidth` — so it added a strip of empty scroll past the end of
+the day that grew with zoom. The tail now ends at `min(end + buffer,
+GRID_CLOSE)` and renders nothing when that leaves no width. Verified by
+arithmetic at every boundary (20:00 → normal, 01:50 → clipped to exactly 100%,
+at/past GRID_CLOSE → no tail) and live with the buffer on (3 tails, each
+exactly 15/1020 of the grid, all in bounds).
+
+Reviewed and deliberately NOT changed, recorded so the reasoning isn't
+re-derived:
+
+- **`checkInefficent` stays unbuffered** while `optimise` is buffered, so the
+  reshuffle-suggestion banner could in principle propose an arrangement the
+  buffered optimizer will not deliver. A probe on a packed fixture did not
+  reproduce it (the banner cleared after the reshuffle), so this was left alone
+  rather than changed speculatively — buffering it would only ever *reduce*
+  flags, which is the safe direction if it ever does show up.
+- **Per-user prefs apply once per session, not per snapshot.** Every other
+  `settings/*` node live-applies each `onValue`; this one is gated on
+  `prefsLoaded` firing once per uid. Changing a setting on device A therefore
+  reaches an already-open device B only on B's next reload. That satisfies the
+  requirement as stated ("the same experience on any device you log in to") and
+  avoids re-applying values on top of a user's own toggles, but it IS an
+  inconsistency with the other settings hooks.
+- **`optimise` pads the slots it builds from COMPLETED bookings.** Reserving
+  completed windows there is pre-existing behaviour (and contradicts the
+  app-wide "completed = table free" rule, also pre-existing); padding them is
+  the more defensible half, since a party that has left is exactly when a
+  turnaround applies.
+- **Seeding race:** two devices logging in for the first time simultaneously
+  both compute a seed; revGuard lets one win and the loser's rollback echo
+  updates its `userPrefs`, but its seeding effect has already run, so it keeps
+  its local values until the next reload. Self-correcting, single-shot.
