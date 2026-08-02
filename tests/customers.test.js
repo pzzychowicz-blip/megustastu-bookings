@@ -10,6 +10,7 @@ import {
   normalizePhone, formatPhone, hasRealPhone, isNoShow,
   matchCustomerByPhone, customerIndex, noShowMap,
   searchBookings, searchCustomers, searchGuestsByName, findPhoneOverlaps,
+  regularChipLabel,
 } from "../src/lib/customers.js";
 
 function bk(o) {
@@ -194,5 +195,39 @@ describe("findPhoneOverlaps", () => {
     expect(findPhoneOverlaps([existing, early], { phone: P, date: "2099-01-01", time: "18:30", dur: 15 }).map((b) => b.id)).toEqual(["e"]);
     // a long booking spans both — earliest first
     expect(findPhoneOverlaps([existing, early], { phone: P, date: "2099-01-01", time: "18:30", dur: 240 }).map((b) => b.id)).toEqual(["e", "x"]);
+  });
+});
+
+// regularChipLabel — the ONE implementation behind the "Regular · N past visits"
+// chip in BOTH the booking form and the WA conversation header. The two copies
+// had drifted (the WA one ignored regularMin and printed "Regular · 1 past
+// visits" at a single visit), so these cases pin the threshold and the
+// pluralization that fix depends on.
+describe("regularChipLabel", () => {
+  it("prefixes 'Regular · ' only at or above the threshold", () => {
+    expect(regularChipLabel(1, 2)).toBe("1 past visit");
+    expect(regularChipLabel(2, 2)).toBe("Regular · 2 past visits");
+    expect(regularChipLabel(3, 2)).toBe("Regular · 3 past visits");
+    // a raised threshold pushes the prefix out
+    expect(regularChipLabel(3, 5)).toBe("3 past visits");
+    expect(regularChipLabel(5, 5)).toBe("Regular · 5 past visits");
+  });
+
+  it("pluralizes on the count, not on whether it says 'Regular'", () => {
+    // regularMin 1 is settable in Settings; the old form copy said
+    // "Regular · 1 past visits" here
+    expect(regularChipLabel(1, 1)).toBe("Regular · 1 past visit");
+    expect(regularChipLabel(2, 1)).toBe("Regular · 2 past visits");
+  });
+
+  it("falls back to a threshold of 2 when regularMin is absent", () => {
+    expect(regularChipLabel(1)).toBe("1 past visit");
+    expect(regularChipLabel(2)).toBe("Regular · 2 past visits");
+    expect(regularChipLabel(2, undefined)).toBe("Regular · 2 past visits");
+  });
+
+  it("treats a missing count as 0 rather than printing undefined", () => {
+    expect(regularChipLabel(undefined, 2)).toBe("0 past visits");
+    expect(regularChipLabel(0, 2)).toBe("0 past visits");
   });
 });
