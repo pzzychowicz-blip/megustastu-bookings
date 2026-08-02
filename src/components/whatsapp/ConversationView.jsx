@@ -5,7 +5,7 @@
 // is disabled when the 24h service window has expired.
 
 import { useState, useRef, useEffect } from "react";
-import { matchCustomerByPhone, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
+import { matchCustomerByPhone, regularChipLabel, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal } from "../atoms";
 import { RecheckIcon } from "./WaIcons";
 import { MessageBubble } from "./MessageBubble";
@@ -18,10 +18,17 @@ export function ConversationView({
   conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
-  onRecheck,
+  onRecheck, regularMin,
 }) {
-  // Pass acceptedBookingId so the linked booking is excluded from the regular count.
-  const match = matchCustomerByPhone(conv.phoneKey, bookings, conv.acceptedBookingId);
+  // NO excludeBookingId. This used to pass conv.acceptedBookingId, which made the
+  // header chip disagree with the booking form's for the same customer (Patryk:
+  // the Inbox said 2 past visits where a new booking said 3). That argument exists
+  // for the booking being EDITED — its own row must not count as one of its own
+  // past visits — and a conversation is not a booking: the linked booking is a
+  // separate visit which, once completed, genuinely IS a past one. While it is
+  // pending/confirmed it isn't `completed`, so it never counted anyway — the
+  // argument could only ever subtract a real past visit.
+  const match = matchCustomerByPhone(conv.phoneKey, bookings);
   const displayName = match ? match.name : (conv.phone || conv.phoneKey);
   const phoneDisplay = formatPhone(conv.phone || conv.phoneKey);
   const [histOpen, setHistOpen] = useState(false);
@@ -118,10 +125,12 @@ export function ConversationView({
   const acceptedBadge = conv.draftStatus === "accepted"
     ? <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8, background: "var(--wa-accept-bg)", color: "var(--wa-accept-text)", border: "1px solid var(--wa-accept-border)" }}>✓ Booking confirmed</span>
     : null;
-  // Regular chip — only when the customer has ≥1 completed booking that isn't the
-  // currently linked one.
+  // Regular chip — only when the customer has ≥1 completed booking. Same count
+  // AND same label as the booking form's chip: regularChipLabel is the one
+  // implementation, so the settings/general `regularMin` threshold applies here
+  // too (this copy used to print "Regular · " at any count, including 1).
   const regularChip = match && match.regularCount >= 1
-    ? <button className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)} style={{ background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", borderRadius: 10, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "var(--wa-teal-text)", cursor: "pointer" }}>{"Regular · " + match.regularCount + " past visit" + (match.regularCount !== 1 ? "s" : "") + (histOpen ? " ▾" : " ▸")}</button>
+    ? <button className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)} style={{ background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", borderRadius: 10, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "var(--wa-teal-text)", cursor: "pointer" }}>{regularChipLabel(match.regularCount, regularMin) + (histOpen ? " ▾" : " ▸")}</button>
     : null;
   // Body rendered whenever the customer has past visits; Reveal (below) eases it
   // open/closed off histOpen so the disclosure doesn't snap.

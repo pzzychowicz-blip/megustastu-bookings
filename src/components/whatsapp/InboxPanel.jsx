@@ -73,6 +73,9 @@ export function InboxPanel({
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, onRecheck,
   onBulkArchive, onBulkUnarchive, onBulkDelete,
   query, setQuery, needsAction, setNeedsAction,
+  // settings/general — the "Regular" threshold, so the conversation header's chip
+  // reads identically to the booking form's (see regularChipLabel in customers.js).
+  regularMin,
   // Sandbox-only: opens the 🧪 simulator ON TOP of this panel (the WaSimulator
   // Overlay mounts after InboxPanel in App's tree, so it stacks above at the
   // same z-index). null in any non-sandbox build → no button renders.
@@ -312,6 +315,7 @@ export function InboxPanel({
         onResend={onResend ? (msgId) => onResend(activeConv.phoneKey, msgId) : undefined}
         onApplyModify={onApplyModify}
         onRecheck={onRecheck}
+        regularMin={regularMin}
       />
     </div>
   ) : (twoPane ? (

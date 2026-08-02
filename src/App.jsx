@@ -2920,6 +2920,7 @@ function BookingApp({uid}){
           templates={wa.templates}
           bookings={bookings}
           initialActiveKey={returnToInboxKey}
+          regularMin={generalSettings.regularMin}
           query={waQuery} setQuery={setWaQuery} needsAction={waNeedsAction} setNeedsAction={setWaNeedsAction}
           onClose={function(){setShowInbox(false);setReturnToInboxKey(null);setWaQuery("");setWaNeedsAction(false);}}
           onSend={wa.handleSendReply}

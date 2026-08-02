@@ -89,7 +89,7 @@ export const AUTO_ACK_TEXT = {
 // keeps working. Never re-add local copies.
 // NB: the explicit .js extension is load-bearing — this module is ALSO imported
 // by the Node server side (api/_lib), where extensionless ESM specifiers fail.
-export { normalizePhone, formatPhone, matchCustomerByPhone } from "./customers.js";
+export { normalizePhone, formatPhone, matchCustomerByPhone, regularChipLabel } from "./customers.js";
 
 // Human-readable relative time ("2 min ago", "yesterday", "3 days ago").
 export function formatRelativeTime(ts) {

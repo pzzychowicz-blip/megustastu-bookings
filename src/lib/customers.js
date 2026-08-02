@@ -99,6 +99,18 @@ export function matchCustomerByPhone(phoneKey, bookings, excludeBookingId) {
   };
 }
 
+// regularChipLabel — the text of the green/teal "Regular · N past visits" chip.
+// ONE implementation because the chip renders in two places: the booking form
+// (BookingFormModal) and the WA conversation header (ConversationView). They had
+// drifted — the WA copy printed "Regular · " at ANY count, ignoring the
+// settings/general `regularMin` threshold the form respects — so the same
+// customer could read differently in the two panes. Callers add their own ▸/▾.
+export function regularChipLabel(count, regularMin) {
+  const n = count || 0;
+  const plural = n === 1 ? " past visit" : " past visits";
+  return (n >= (regularMin || 2) ? "Regular · " : "") + n + plural;
+}
+
 // customerIndex — build the full phone→customer map from the bookings list.
 // One pass; feeds the phone autocomplete, the timeline/list no-show markers,
 // and the Settings → Customers tab. Bookings without a real phone are skipped
