@@ -14,6 +14,14 @@
 //     (so an outer <Reveal show={hasAny}> eases the whole banner, not each row).
 //     A DEPARTED id is removed from openIds (eases OUT) then pruned from renderIds.
 //
+// `instantIn` (v17.6.0-wa-sandbox) makes the lifecycle ASYMMETRIC: a newcomer is
+// added to renderIds and openIds in the SAME commit, so its Reveal mounts already
+// open (show=true at mount → Reveal's state initializers, no transition) and the
+// row simply appears at full height. Departures are unaffected — they still
+// collapse. Patryk on the WA conversation list: the expand-back on the way in read
+// as too much movement, since the rows below are already sliding to make room
+// (useFlip) and the growing row added a second motion on top of that.
+//
 // `sig` is a stable, sorted membership signature — the effects key on it, NOT the
 // fresh-every-render ids array, so a value-only change (e.g. warn→noshow, or a
 // countdown tick) re-renders without churning the lifecycle. The membership diff
@@ -28,7 +36,7 @@ const PRUNE_MS = 350; // > Reveal's ~300ms collapse, so a departed row finishes 
 // mid-collapse and vanishes instead of easing out. A caller passing a custom
 // `ms` to Reveal has to pass the matching prune window here (the WA
 // conversation list does; see ROW_MS/ROW_PRUNE_MS there).
-export function useRevealRows(ids, pruneMs = PRUNE_MS) {
+export function useRevealRows(ids, pruneMs = PRUNE_MS, instantIn = false) {
   const [renderIds, setRenderIds] = useState(function () { return ids.slice(); });
   const [openIds, setOpenIds] = useState(function () { return new Set(ids); });
   const prevKeys = useRef(ids.slice());
@@ -47,6 +55,19 @@ export function useRevealRows(ids, pruneMs = PRUNE_MS) {
         newcomers.forEach(function (id) { if (next.indexOf(id) === -1) next.push(id); });
         return next;
       });
+      // Asymmetric mode: open in the SAME commit as the mount. Both updaters
+      // batch, so the row's <Reveal> is first rendered with show=true and its
+      // useState initializers make it open+revealed with no transition to run.
+      // (A row that departs and returns BEFORE its prune is still mounted and
+      // mid-collapse, so it eases the rest of the way open — it cannot teleport,
+      // and that is the right behaviour for a genuinely interrupted collapse.)
+      if (instantIn) {
+        setOpenIds(function (prev) {
+          const next = new Set(prev);
+          newcomers.forEach(function (id) { next.add(id); });
+          return next;
+        });
+      }
     }
     cur.forEach(function (id) {
       if (timers.current[id]) { clearTimeout(timers.current[id]); delete timers.current[id]; }

@@ -29,7 +29,13 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
   // departing row collapses its own height and the rows below follow it up —
   // the "stack of cards" fold, identical in both tabs because it is one code
   // path with no per-tab branch.
-  const { renderIds, openIds } = useRevealRows(sorted.map((c) => c.phoneKey), ROW_PRUNE_MS);
+  //
+  // ASYMMETRIC on purpose (`instantIn`): only the way OUT folds. A returning row
+  // appears at full height straight away and the rows below slide down to it via
+  // the FLIP below. Easing it open as well meant two motions stacked on one row —
+  // the row growing AND the rows under it travelling — which read as too much
+  // movement for what is just a filter toggle.
+  const { renderIds, openIds } = useRevealRows(sorted.map((c) => c.phoneKey), ROW_PRUNE_MS, true);
   // A departing row is no longer in `conversations`, so its object has to come
   // from somewhere: cache every conversation we have rendered, keyed by
   // phoneKey. Bounded by the number of conversations that have been on screen.
