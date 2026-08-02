@@ -15,6 +15,7 @@ import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { TemplatesIcon, SelectIcon } from "./WaIcons";
 import { mkBtn, mkInp, usePresence, ModalPresence, Overlay, Reveal } from "../atoms";
+import { R } from "../../lib/constants";
 
 // A conversation is "actionable" when it needs a staff response. For a
 // cancel/modify request that's the intent banner being VISIBLE (i.e. not yet
@@ -329,20 +330,20 @@ export function InboxPanel({
   function tabBtn(key, label, badge) {
     const isActive = tab === key;
     return (
-      <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: 9, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.08)" : "none" }}>
+      <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: R.pill, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.08)" : "none" }}>
         {label}
-        {badge != null && badge > 0 ? <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 7, background: isActive ? "var(--wa-unread-dot)" : "var(--btn-default)", color: "var(--text-on-accent)", lineHeight: 1.4 }}>{badge}</span> : null}
+        {badge != null && badge > 0 ? <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: R.pill, background: isActive ? "var(--wa-unread-dot)" : "var(--btn-default)", color: "var(--text-on-accent)", lineHeight: 1.4 }}>{badge}</span> : null}
       </button>
     );
   }
 
   return (
     <div className={scrimCls} style={{ position: "fixed", inset: 0, zIndex: 200, background: "var(--wa-panel-scrim)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: winW < 600 ? 0 : 16, boxSizing: "border-box" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={cardCls} style={{ background: "var(--wa-panel-bg)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: winW < 600 ? 0 : 20, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 1200, height: winW < 600 ? "100dvh" : "min(900px, 90dvh)", display: "flex", flexDirection: "column", boxShadow: "var(--shadow-sheet)", overflow: "hidden", boxSizing: "border-box" }}>
+      <div className={cardCls} style={{ background: "var(--wa-panel-bg)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: winW < 600 ? 0 : R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 1200, height: winW < 600 ? "100dvh" : "min(900px, 90dvh)", display: "flex", flexDirection: "column", boxShadow: "var(--shadow-sheet)", overflow: "hidden", boxSizing: "border-box" }}>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8, background: "var(--wa-green)", color: "var(--text-on-accent)", letterSpacing: "0.02em" }}>WHATSAPP</span>
-            <div style={{ display: "flex", gap: 2, background: "var(--bg-tabbar)", borderRadius: 11, padding: 3, border: "1px solid var(--border-soft)" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: R.pill, background: "var(--wa-green)", color: "var(--text-on-accent)", letterSpacing: "0.02em" }}>WHATSAPP</span>
+            <div style={{ display: "flex", gap: 2, background: "var(--bg-tabbar)", borderRadius: R.pill, padding: 3, border: "1px solid var(--border-soft)" }}>
               {tabBtn("inbox", "Inbox", unreadCount)}
               {tabBtn("archived", "Archived", archivedCount)}
             </div>
@@ -366,13 +367,13 @@ export function InboxPanel({
             onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
             title={selectMode ? "Exit selection" : "Select conversations"}
             className="mgt-hover-scale mgt-press"
-            style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: 10, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color 160ms linear, color 160ms linear" }}
+            style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color 160ms linear, color 160ms linear" }}
           ><SelectIcon size={17} /></button>
           <button
             onClick={() => setNeedsAction((v) => !v)}
             title="Show only conversations that need a response"
             className="mgt-hover-scale mgt-press"
-            style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: 10, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+            style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
           >● Needs action</button>
           <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
             <input
@@ -395,19 +396,19 @@ export function InboxPanel({
               onClick={() => { if (allVisibleSelected) clearSelection(); else selectAllVisible(); }}
               className="mgt-hover-scale mgt-press"
               title={allVisibleSelected ? "Clear selection" : "Select all"}
-              style={{ flexShrink: 0, background: "transparent", color: "var(--text-primary)", border: "1px solid var(--border-soft)", borderRadius: 10, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+              style={{ flexShrink: 0, background: "transparent", color: "var(--text-primary)", border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
             >{allVisibleSelected ? "Clear" : "Select all"}</button>
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>{selected.size + " selected"}</span>
             <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexShrink: 0 }}>
               {tab === "archived" ? (
                 <>
-                  <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 700, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }}>↺ Restore</button>
-                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-btn-cancel)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 700, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }}>🗑 Delete</button>
+                  <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 700, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }}>↺ Restore</button>
+                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-btn-cancel)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 700, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }}>🗑 Delete</button>
                 </>
               ) : (
-                <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 700, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }}>📦 Archive</button>
+                <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 700, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }}>📦 Archive</button>
               )}
-              <button onClick={exitSelectMode} className="mgt-hover-scale mgt-press" style={{ background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border-soft)", borderRadius: 10, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>Cancel</button>
+              <button onClick={exitSelectMode} className="mgt-hover-scale mgt-press" style={{ background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>Cancel</button>
             </div>
           </div>
         </Reveal>

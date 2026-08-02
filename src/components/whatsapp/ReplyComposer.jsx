@@ -7,6 +7,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Reveal } from "../atoms";
 import { TemplatesIcon } from "./WaIcons";
+import { R } from "../../lib/constants";
 
 // TemplateChips — private to the composer. Tapping a chip inserts its text.
 // scrollLang (compact mode): the language switch joins the chips inside ONE
@@ -22,20 +23,20 @@ function TemplateChips({ templates, convLang, onInsert, scrollLang }) {
       key={t.id}
       className="mgt-hover-scale"
       onClick={() => onInsert(outLang === "es" ? t.textEs : t.textEn)}
-      style={{ flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: 16, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "var(--text-primary)", boxShadow: "0 1px 2px rgba(0,0,0,0.04)", whiteSpace: "nowrap" }}
+      style={{ flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "var(--text-primary)", boxShadow: "0 1px 2px rgba(0,0,0,0.04)", whiteSpace: "nowrap" }}
     >{outLang === "es" ? t.labelEs : t.labelEn}</button>
   ));
 
   // EN/ES switch — eases its active highlight like the app's Toggle atom
   // (`background-color`/`color` 160ms linear), per the shared toggle CSS.
   const langSwitch = (
-    <div style={{ display: "flex", gap: 2, flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: 12, padding: 2 }}>
+    <div style={{ display: "flex", gap: 2, flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: R.pill, padding: 2 }}>
       {["en", "es"].map((l) => (
         <button
           key={l}
           className="mgt-hover-scale"
           onClick={() => setOutLang(l)}
-          style={{ background: outLang === l ? "var(--accent)" : "transparent", color: outLang === l ? "var(--text-on-accent)" : "var(--text-primary)", border: "none", borderRadius: 10, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", textTransform: "uppercase", transition: "background-color 160ms linear, color 160ms linear" }}
+          style={{ background: outLang === l ? "var(--accent)" : "transparent", color: outLang === l ? "var(--text-on-accent)" : "var(--text-primary)", border: "none", borderRadius: R.pill, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", textTransform: "uppercase", transition: "background-color 160ms linear, color 160ms linear" }}
         >{l}</button>
       ))}
     </div>
@@ -121,7 +122,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
           onClick={() => setTplOpen((v) => !v)}
           title="Templates"
           className="mgt-hover-scale mgt-press"
-          style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: 12, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "0 1px 2px rgba(0,0,0,0.04)", transition: "background-color 160ms linear, color 160ms linear" }}
+          style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: R.pill, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "0 1px 2px rgba(0,0,0,0.04)", transition: "background-color 160ms linear, color 160ms linear" }}
         ><TemplatesIcon size={18} /></button>
         <textarea
           ref={areaRef}
@@ -131,13 +132,18 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
           placeholder={disabled ? "Conversation closed" : "Type a reply... (Enter to send, Shift+Enter for new line)"}
           disabled={disabled}
           rows={2}
-          style={{ flex: 1, boxSizing: "border-box", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 12, padding: "10px 12px", fontSize: 14, color: "var(--text-primary)", fontWeight: 500, resize: "none", fontFamily: "inherit", minHeight: 44, boxShadow: "var(--shadow-input)", opacity: disabled ? 0.6 : 1 }}
+          // Bespoke (not mkInp-derived — flex:1, resize:"none", its own 44px
+          // floor), so it needs mkArea's `alignContent:"center"` spelled out
+          // here: on --r-pill the box is NARROWEST at the top, where a textarea
+          // starts its text, and the corner curve eats the first characters.
+          // Centring puts the text at the box's widest point. See mkArea().
+          style={{ flex: 1, boxSizing: "border-box", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.pill, alignContent: "center", padding: "10px 12px", fontSize: 14, color: "var(--text-primary)", fontWeight: 500, resize: "none", fontFamily: "inherit", minHeight: 44, boxShadow: "var(--shadow-input)", opacity: disabled ? 0.6 : 1 }}
         />
         <button
           onClick={send}
           disabled={!canSend}
           className="mgt-hover-scale mgt-press"
-          style={{ background: canSend ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 12, padding: "10px 18px", cursor: canSend ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 700, color: "var(--text-on-accent)", minHeight: 44, boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)" }}
+          style={{ background: canSend ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "10px 18px", cursor: canSend ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 700, color: "var(--text-on-accent)", minHeight: 44, boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)" }}
         >Send</button>
       </div>
     </div>

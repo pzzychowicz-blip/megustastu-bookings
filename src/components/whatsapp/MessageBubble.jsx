@@ -5,6 +5,7 @@
 // saturated blue bubble are theme-invariant (same convention as the atoms).
 
 import { formatClockTime } from "../../lib/whatsapp";
+import { R } from "../../lib/constants";
 
 // `isLast` (set by ConversationView for the newest message only) opts the bubble
 // into the `mgt-bubble-in` ease — so a freshly-arrived/sent message rises in, but
@@ -17,7 +18,7 @@ export function MessageBubble({ msg, isLast, onRetry }) {
   const align = incoming ? "flex-start" : "flex-end";
 
   const ackTag = msg.isAutoAck ? (
-    <span style={{ fontSize: 10, fontWeight: 600, color: incoming ? "var(--text-muted)" : "rgba(255,255,255,0.75)", marginLeft: 6, padding: "1px 6px", borderRadius: 6, background: incoming ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.18)" }}>auto</span>
+    <span style={{ fontSize: 10, fontWeight: 600, color: incoming ? "var(--text-muted)" : "rgba(255,255,255,0.75)", marginLeft: 6, padding: "1px 6px", borderRadius: R.pill, background: incoming ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.18)" }}>auto</span>
   ) : null;
 
   let statusEl = null;
@@ -34,13 +35,19 @@ export function MessageBubble({ msg, isLast, onRetry }) {
       onClick={() => onRetry(msg.id)}
       className="mgt-hover-scale mgt-press"
       title="Resend this message"
-      style={{ marginLeft: 6, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", borderRadius: 7, padding: "1px 7px", cursor: "pointer", fontSize: 10, fontWeight: 700, color: "var(--danger-text)" }}
+      style={{ marginLeft: 6, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", borderRadius: R.pill, padding: "1px 7px", cursor: "pointer", fontSize: 10, fontWeight: 700, color: "var(--danger-text)" }}
     >↻ Retry</button>
   ) : null;
 
   return (
     <div className={isLast ? "mgt-bubble-in" : undefined} style={{ display: "flex", justifyContent: align, marginBottom: 8 }}>
       <div style={{ maxWidth: "78%", display: "flex", flexDirection: "column", alignItems: align }}>
+        {/* The one DELIBERATE radius literal left in the WA module (v17.7.0
+            token sweep). The chat bubble's corner is the module's visual
+            identity, not a card: it must not follow --r-card if that token is
+            ever retuned, and it cannot be a pill — the bubble wraps to any
+            height, and on --r-pill a multi-line bubble's corner curve eats the
+            first and last characters (the same trap that produced mkArea). */}
         <div style={{ background: bg, color, border, borderRadius: 14, padding: "8px 12px", fontSize: 14, lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", opacity: msg.status === "sending" ? 0.7 : 1 }}>{msg.text}</div>
         <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 3, padding: "0 4px", display: "flex", alignItems: "center" }}>
           {formatClockTime(msg.ts)}{ackTag}{statusEl}{retryEl}

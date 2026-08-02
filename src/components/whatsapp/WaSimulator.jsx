@@ -14,7 +14,7 @@
 
 import { useState, useEffect } from "react";
 import { Overlay, Fld, Section, Toggle, mkInp, mkArea, mkBtn } from "../atoms";
-import { S, BTN } from "../../lib/constants";
+import { S, BTN, R } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
 import { simulateInbound } from "../../lib/wa-sim";
@@ -146,7 +146,7 @@ export function WaSimulator({ ctx, onClose }) {
     <Overlay onClose={onClose} footer={footer}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <span style={{ fontSize: 17, fontWeight: 700, color: "var(--text-primary)" }}>🧪 WhatsApp Simulator</span>
-        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 7, background: "var(--wa-sim-accent)", color: "var(--text-on-accent)", letterSpacing: "0.04em" }}>DEV</span>
+        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: R.pill, background: "var(--wa-sim-accent)", color: "var(--text-on-accent)", letterSpacing: "0.04em" }}>DEV</span>
       </div>
       <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>Injects mock inbound messages into the DEV Firebase inbox. Never shown in production.</div>
 

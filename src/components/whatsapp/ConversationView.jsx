@@ -13,6 +13,7 @@ import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
 import { IntentBanner } from "./IntentBanner";
+import { R } from "../../lib/constants";
 
 export function ConversationView({
   conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack,
@@ -123,7 +124,7 @@ export function ConversationView({
   // "Booking confirmed" header chip — non-dismissable (the big DraftCard banner
   // is the dismissable element instead).
   const acceptedBadge = conv.draftStatus === "accepted"
-    ? <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8, background: "var(--wa-accept-bg)", color: "var(--wa-accept-text)", border: "1px solid var(--wa-accept-border)" }}>✓ Booking confirmed</span>
+    ? <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: R.pill, background: "var(--wa-accept-bg)", color: "var(--wa-accept-text)", border: "1px solid var(--wa-accept-border)" }}>✓ Booking confirmed</span>
     : null;
   // The disclosure lists the customer's OTHER visits. The linked booking is
   // already rendered in full by LinkedBookingCard a few lines below, and now the
@@ -140,7 +141,7 @@ export function ConversationView({
   // It is only a BUTTON when there is something to disclose: a customer whose
   // single completed visit is the linked one still earns the chip, but tapping
   // it would open an empty "Past bookings" box.
-  const chipStyle = { background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", borderRadius: 10, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "var(--wa-teal-text)" };
+  const chipStyle = { background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", borderRadius: R.pill, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "var(--wa-teal-text)" };
   const regularChip = match && match.regularCount >= 1
     ? (pastList.length
       ? <button className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)} style={Object.assign({}, chipStyle, { cursor: "pointer" })}>{regularChipLabel(match.regularCount, regularMin) + (histOpen ? " ▾" : " ▸")}</button>
@@ -150,7 +151,7 @@ export function ConversationView({
   // it open/closed off histOpen so the disclosure doesn't snap.
   const hasRegulars = pastList.length > 0;
   const pastListBody = hasRegulars ? (
-    <div style={{ padding: "8px 12px", background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", borderRadius: 10, marginBottom: 10, fontSize: 12, color: "var(--text-primary)" }}>
+    <div style={{ padding: "8px 12px", background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", borderRadius: R.card, marginBottom: 10, fontSize: 12, color: "var(--text-primary)" }}>
       <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--wa-teal-text)" }}>Past bookings</div>
       {pastList.slice(0, 5).map((b) => (
         <div key={b.id} style={{ padding: "3px 0", borderTop: "1px solid var(--wa-teal-border)" }}>{(b.date || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</div>
@@ -158,7 +159,7 @@ export function ConversationView({
     </div>
   ) : null;
   const windowEl = win
-    ? <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 8, background: win.expired ? "var(--danger-bg)" : "var(--suggest-bg)", color: win.expired ? "var(--danger-text)" : "var(--success-text)", border: "1px solid " + (win.expired ? "var(--danger-border)" : "var(--suggest-border)") }}>{win.label}</span>
+    ? <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: R.pill, background: win.expired ? "var(--danger-bg)" : "var(--suggest-bg)", color: win.expired ? "var(--danger-text)" : "var(--success-text)", border: "1px solid " + (win.expired ? "var(--danger-border)" : "var(--suggest-border)") }}>{win.label}</span>
     : null;
 
   // Manual LLM re-check — leftmost of the header actions in BOTH states (an
@@ -172,7 +173,7 @@ export function ConversationView({
       disabled={running}
       title={running ? "Checking…" : "Re-check this conversation for requested changes"}
       className={running ? undefined : "mgt-hover-scale mgt-press"}
-      style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "6px 9px", cursor: running ? "default" : "pointer", color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "center", opacity: running ? 0.6 : 1 }}
+      style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 9px", cursor: running ? "default" : "pointer", color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "center", opacity: running ? 0.6 : 1 }}
     >
       <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" } : { display: "block" }}><RecheckIcon size={15} /></span>
     </button>
@@ -183,15 +184,15 @@ export function ConversationView({
     headerActionBtns = (
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
-        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>↺ Restore</button>
-        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>🗑 Delete</button>
+        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>↺ Restore</button>
+        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>🗑 Delete</button>
       </div>
     );
   } else {
     headerActionBtns = (
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
-        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>📦 Archive</button>
+        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>📦 Archive</button>
       </div>
     );
   }
@@ -217,12 +218,12 @@ export function ConversationView({
           cluster wraps under the name on narrow widths; the action buttons stay
           pinned right via marginLeft:auto. The old "WA" badge was removed. */}
       <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)", minHeight: 36, minWidth: 36, flexShrink: 0 }} title="Back">‹</button> : null}
+        {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, padding: "6px 10px", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)", minHeight: 36, minWidth: 36, flexShrink: 0 }} title="Back">‹</button> : null}
         <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
         <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
         {regularChip}
         {acceptedBadge}
-        {conv.archived ? <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 8, background: "var(--bg-soft)", color: "var(--text-muted)", border: "1px solid var(--border-soft)" }}>📦 Archived</span> : null}
+        {conv.archived ? <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: R.pill, background: "var(--bg-soft)", color: "var(--text-muted)", border: "1px solid var(--border-soft)" }}>📦 Archived</span> : null}
         {windowEl}
         <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
       </div>
@@ -232,7 +233,7 @@ export function ConversationView({
           banner. Eased in and self-clearing, so it never becomes chrome. */}
       <Reveal show={!!(recheck && recheck !== "running")} style={{ padding: "0 14px" }}>
         <div style={{ paddingTop: 8 }}>
-          <div style={{ padding: "8px 12px", borderRadius: 10, fontSize: 12, fontWeight: 600, background: recheck && recheck.ok ? "var(--suggest-bg)" : "var(--danger-bg)", border: "1px solid " + (recheck && recheck.ok ? "var(--suggest-border)" : "var(--danger-border)"), color: recheck && recheck.ok ? "var(--success-text)" : "var(--danger-text)" }}>
+          <div style={{ padding: "8px 12px", borderRadius: R.card, fontSize: 12, fontWeight: 600, background: recheck && recheck.ok ? "var(--suggest-bg)" : "var(--danger-bg)", border: "1px solid " + (recheck && recheck.ok ? "var(--suggest-border)" : "var(--danger-border)"), color: recheck && recheck.ok ? "var(--success-text)" : "var(--danger-text)" }}>
             {recheck && recheck !== "running" ? recheck.msg : ""}
           </div>
         </div>
@@ -256,11 +257,11 @@ export function ConversationView({
           (conv.parsing, set by the sandbox inbound path; cleared when the draft
           lands). The real DraftCard Reveals in as this Reveals out. */}
       <Reveal show={isParsing(conv)} style={{ padding: "0 14px" }}>
-        <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: 14, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 16 }}>📋</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--wa-draft-text)", marginBottom: 6 }}>Reading the message…</div>
-            <div className="mgt-shimmer" style={{ height: 8, borderRadius: 4, background: "var(--wa-draft-border)" }} />
+            <div className="mgt-shimmer" style={{ height: 8, borderRadius: R.pill, background: "var(--wa-draft-border)" }} />
           </div>
         </div>
       </Reveal>

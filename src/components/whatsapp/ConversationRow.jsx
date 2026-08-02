@@ -5,6 +5,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, formatPhone, formatRelativeTime, isParsing } from "../../lib/whatsapp";
+import { R } from "../../lib/constants";
 
 export function ConversationRow({ conv, active, onClick, bookings, flipId, selectMode, checked }) {
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
@@ -17,7 +18,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
   // Parsing/typing tag (sandbox inbound path) takes visual priority — the
   // message is mid-parse, so the intent/draft tag isn't known yet.
   let tagEl = null;
-  if (isParsing(conv)) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: 10, fontWeight: 700, marginLeft: 6, padding: "1px 7px", borderRadius: 6, color: "var(--accent)", border: "1px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
+  if (isParsing(conv)) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: 10, fontWeight: 700, marginLeft: 6, padding: "1px 7px", borderRadius: R.pill, color: "var(--accent)", border: "1px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
   else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: 12, marginLeft: 6, color: "var(--danger-text)", fontWeight: 700 }}>⚠</span>;
   else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: 12, marginLeft: 6, color: "var(--warn-text)", fontWeight: 700 }}>✎</span>;
   else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ fontSize: 12, marginLeft: 6 }}>📋</span>;
@@ -46,7 +47,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{ cursor: "pointer", padding: "12px 14px", borderRadius: 12, background: hover ? bgHover : bg, border, marginBottom: 6, transition: "background 0.12s", boxShadow: (selHi || (active && !selectMode)) ? "0 2px 8px rgba(0,122,255,0.12)" : "0 1px 3px rgba(0,0,0,0.04)", opacity: archivedDimming, display: "flex", alignItems: "center", gap: 10 }}
+      style={{ cursor: "pointer", padding: "12px 14px", borderRadius: R.card, background: hover ? bgHover : bg, border, marginBottom: 6, transition: "background 0.12s", boxShadow: (selHi || (active && !selectMode)) ? "0 2px 8px rgba(0,122,255,0.12)" : "0 1px 3px rgba(0,0,0,0.04)", opacity: archivedDimming, display: "flex", alignItems: "center", gap: 10 }}
     >
       {selectMode ? (
         <input
@@ -61,8 +62,8 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1 }}>
           {conv.unread
-            ? <span style={{ width: 8, height: 8, borderRadius: 4, background: "var(--wa-unread-dot)", flexShrink: 0, boxShadow: "0 0 0 1px rgba(220,38,38,0.25)" }} />
-            : <span style={{ width: 8, height: 8, borderRadius: 4, background: "transparent", border: "1px solid var(--wa-bubble-in-border)", flexShrink: 0, boxSizing: "border-box" }} />}
+            ? <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--wa-unread-dot)", flexShrink: 0, boxShadow: "0 0 0 1px rgba(220,38,38,0.25)" }} />
+            : <span style={{ width: 8, height: 8, borderRadius: "50%", background: "transparent", border: "1px solid var(--wa-bubble-in-border)", flexShrink: 0, boxSizing: "border-box" }} />}
           <span style={{ fontSize: 14, fontWeight: conv.unread ? 700 : 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
           {tagEl}
           {conv.archived ? <span title="Archived" style={{ fontSize: 11, marginLeft: 4 }}>📦</span> : null}

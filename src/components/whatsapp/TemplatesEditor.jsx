@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { Overlay, Fld, mkInp, mkArea, mkBtn, AutoHeight } from "../atoms";
-import { S, BTN } from "../../lib/constants";
+import { S, BTN, R } from "../../lib/constants";
 
 export function TemplatesEditor({ templates, onSave, onClose }) {
   const [list, setList] = useState(() => templates.slice().map((t) => Object.assign({}, t)));
@@ -30,7 +30,7 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
   function removeT(id) { setList(list.filter((t) => t.id !== id)); }
 
   const rows = list.map((t) => (
-    <div key={t.id} style={{ padding: "10px 12px", borderRadius: 12, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", marginBottom: 8 }}>
+    <div key={t.id} style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", marginBottom: 8 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 2 }}>{t.labelEn + " / " + t.labelEs}</div>
@@ -64,7 +64,7 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
       <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>Used as one-tap chips in the reply composer.</div>
       <AutoHeight>
       {editing ? (
-        <div style={{ padding: "14px", borderRadius: 12, background: "var(--wa-row-active-bg)", border: "1px solid var(--wa-row-active-border)" }}>
+        <div style={{ padding: "14px", borderRadius: R.card, background: "var(--wa-row-active-bg)", border: "1px solid var(--wa-row-active-border)" }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 10 }}>{editing === "__new__" ? "New template" : "Edit template"}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Fld label="Label (EN)"><input className="mgt-hover-scale" value={form.labelEn} onChange={(e) => setForm(Object.assign({}, form, { labelEn: e.target.value }))} style={mkInp()} placeholder="Confirm" /></Fld>
