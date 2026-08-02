@@ -125,20 +125,34 @@ export function ConversationView({
   const acceptedBadge = conv.draftStatus === "accepted"
     ? <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8, background: "var(--wa-accept-bg)", color: "var(--wa-accept-text)", border: "1px solid var(--wa-accept-border)" }}>✓ Booking confirmed</span>
     : null;
+  // The disclosure lists the customer's OTHER visits. The linked booking is
+  // already rendered in full by LinkedBookingCard a few lines below, and now the
+  // COUNT no longer excludes it (see `match` above) it would otherwise appear
+  // twice on the same screen. Filtered here and not in the count on purpose: the
+  // count is the number that has to agree with the booking form's chip, so it
+  // stays the true total — a list shorter than the count is already normal, the
+  // slice(0, 5) cap does the same thing.
+  const pastList = match ? match.regularBookings.filter((b) => b.id !== conv.acceptedBookingId) : [];
   // Regular chip — only when the customer has ≥1 completed booking. Same count
   // AND same label as the booking form's chip: regularChipLabel is the one
   // implementation, so the settings/general `regularMin` threshold applies here
   // too (this copy used to print "Regular · " at any count, including 1).
+  // It is only a BUTTON when there is something to disclose: a customer whose
+  // single completed visit is the linked one still earns the chip, but tapping
+  // it would open an empty "Past bookings" box.
+  const chipStyle = { background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", borderRadius: 10, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "var(--wa-teal-text)" };
   const regularChip = match && match.regularCount >= 1
-    ? <button className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)} style={{ background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", borderRadius: 10, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "var(--wa-teal-text)", cursor: "pointer" }}>{regularChipLabel(match.regularCount, regularMin) + (histOpen ? " ▾" : " ▸")}</button>
+    ? (pastList.length
+      ? <button className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)} style={Object.assign({}, chipStyle, { cursor: "pointer" })}>{regularChipLabel(match.regularCount, regularMin) + (histOpen ? " ▾" : " ▸")}</button>
+      : <span style={chipStyle}>{regularChipLabel(match.regularCount, regularMin)}</span>)
     : null;
-  // Body rendered whenever the customer has past visits; Reveal (below) eases it
-  // open/closed off histOpen so the disclosure doesn't snap.
-  const hasRegulars = !!(match && match.regularCount >= 1);
+  // Body rendered whenever there are other visits to show; Reveal (below) eases
+  // it open/closed off histOpen so the disclosure doesn't snap.
+  const hasRegulars = pastList.length > 0;
   const pastListBody = hasRegulars ? (
     <div style={{ padding: "8px 12px", background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", borderRadius: 10, marginBottom: 10, fontSize: 12, color: "var(--text-primary)" }}>
       <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--wa-teal-text)" }}>Past bookings</div>
-      {match.regularBookings.slice(0, 5).map((b) => (
+      {pastList.slice(0, 5).map((b) => (
         <div key={b.id} style={{ padding: "3px 0", borderTop: "1px solid var(--wa-teal-border)" }}>{(b.date || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</div>
       ))}
     </div>
