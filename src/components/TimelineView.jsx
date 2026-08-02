@@ -41,8 +41,7 @@ import { useState, useRef, useEffect, useMemo, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG,
-  S, TBL, BTN, TIMELINE_TABLES, hoursFor
-} from "../lib/constants";
+  S, TBL, BTN, TIMELINE_TABLES, hoursFor, R } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
@@ -97,7 +96,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   const timeChip = (
     <Reveal show={showChip} horizontal style={{ pointerEvents: "none" }}>
       <span style={{
-        flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: 5,
+        flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: R.pill,
         fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
         whiteSpace: "nowrap",
         background: "rgba(255,255,255,0.25)", color: "var(--text-on-accent)",
@@ -340,7 +339,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
           seated block is near full width this late, so there's room. */}
       {freeMin != null ? (
         <span style={{
-          flexShrink: 0, marginRight: 2, padding: "1px 5px", borderRadius: 5,
+          flexShrink: 0, marginRight: 2, padding: "1px 5px", borderRadius: R.pill,
           fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
           whiteSpace: "nowrap", position: "relative",
           background: "rgba(255,255,255,0.28)", color: "var(--text-on-accent)",
@@ -610,7 +609,7 @@ export const TimelineView = memo(function TimelineView({
             fontSize: 10, fontWeight: 600, color: "var(--text-on-accent)",
             whiteSpace: "nowrap", pointerEvents: "none",
             background: "var(--tl-hour-pill)",
-            padding: "2px 5px", borderRadius: 6, zIndex: 1,
+            padding: "2px 5px", borderRadius: R.pill, zIndex: 1,
             boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
           }}
         >
@@ -647,7 +646,7 @@ export const TimelineView = memo(function TimelineView({
             }}
           >
             <span className="mgt-hover-scale" style={{
-              fontSize: 11, fontWeight: 600, padding: "3px 0", borderRadius: 8,
+              fontSize: 11, fontWeight: 600, padding: "3px 0", borderRadius: R.pill,
               background: hasBlock ? "var(--tl-blocked-badge)" : indoor ? TBL.ind.bg : TBL.out.bg,
               color: hasBlock ? "var(--text-on-accent)" : indoor ? TBL.ind.text : TBL.out.text,
               border: "1px solid " + (hasBlock ? "var(--tl-blocked-badge-border)" : indoor ? TBL.ind.border : TBL.out.border),
@@ -812,7 +811,7 @@ export const TimelineView = memo(function TimelineView({
         position: "absolute", top: 3, left: "50%", transform: "translateX(-50%)",
         fontSize: 10, fontWeight: 600, color: "var(--text-on-accent)",
         background: "var(--tl-now-pill)",
-        padding: "2px 5px", borderRadius: 6, whiteSpace: "nowrap", zIndex: 11,
+        padding: "2px 5px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
         boxShadow: "0 1px 4px rgba(0,0,0,0.15)"
       }}>
         {toTime(nowMins)}
@@ -958,7 +957,7 @@ export const TimelineView = memo(function TimelineView({
       <span
         key={s}
         style={{
-          fontSize: 11, padding: "3px 8px", borderRadius: 8,
+          fontSize: 11, padding: "3px 8px", borderRadius: R.pill,
           background: BLOCK_BG[s] || "#999",
           color: "var(--text-on-accent)",
           border: "1px solid rgba(255,255,255,0.2)",
@@ -971,17 +970,17 @@ export const TimelineView = memo(function TimelineView({
     );
   });
   legendEls.push(
-    <span key="in" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="in" style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
       indoor
     </span>
   );
   legendEls.push(
-    <span key="out" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="out" style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
       outdoor
     </span>
   );
   legendEls.push(
-    <span key="blocked" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="blocked" style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
       blocked
     </span>
   );
@@ -1003,7 +1002,7 @@ export const TimelineView = memo(function TimelineView({
     <div style={{
       background: "var(--tl-card-bg)",
       backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-      borderRadius: 20,
+      borderRadius: R.sheet,
       border: "1px solid var(--tl-card-border)",
       padding: "10px 12px",
       boxShadow: "var(--shadow-soft)"
@@ -1020,7 +1019,7 @@ export const TimelineView = memo(function TimelineView({
       {hoursFor(date).closed ? (
         <div style={{
           background: "var(--warn-bg)", border: "1px solid var(--warn-border)",
-          borderRadius: 12, padding: "8px 14px", marginBottom: 8,
+          borderRadius: R.card, padding: "8px 14px", marginBottom: 8,
           fontSize: 13, fontWeight: 700, color: "var(--warn-text)", textAlign: "center"
         }}>
           Closed this day — no bookings or walk-ins. Adjust in Settings → Opening hours.

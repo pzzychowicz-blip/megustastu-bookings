@@ -26,7 +26,7 @@
 import { useState, useEffect } from "react";
 import { Overlay, mkBtn, AutoHeight } from "./atoms";
 import { daySummary, rangeStats } from "../lib/booking-logic";
-import { BTN } from "../lib/constants";
+import { BTN, R } from "../lib/constants";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
 const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
@@ -158,7 +158,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
         onClick={function(){ switchMode(m); }}
         className="mgt-hover-scale"
         style={{
-          border: "none", borderRadius: 9, padding: "6px 18px", cursor: "pointer",
+          border: "none", borderRadius: R.pill, padding: "6px 18px", cursor: "pointer",
           fontSize: 13, fontWeight: 700, minHeight: 32,
           background: active ? "rgba(0,122,255,0.85)" : "transparent",
           color: active ? "var(--text-on-accent)" : "var(--text-secondary)",
@@ -185,7 +185,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   return (
     <Overlay onClose={onClose} footer={footer}>
       <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <div style={{ display: "inline-flex", gap: 2, padding: 3, borderRadius: 12, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+        <div style={{ display: "inline-flex", gap: 2, padding: 3, borderRadius: R.pill, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
           {modeBtn("week", "Week")}
           {modeBtn("month", "Month")}
           {modeBtn("stats", "Stats")}
@@ -230,7 +230,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
               className="mgt-hover-scale"
               style={{
                 display: "flex", alignItems: "center", gap: 10,
-                padding: "10px 12px", borderRadius: 12, cursor: "pointer",
+                padding: "10px 12px", borderRadius: R.inset, cursor: "pointer",
                 width: "100%", boxSizing: "border-box", textAlign: "left",
                 background: "var(--bg-input)",
                 border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
@@ -266,7 +266,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
     const maxT = st.tables.reduce(function(mx, t){ return Math.max(mx, t.bookings); }, 0) || 1;
     const stat = function(val, label, color){
       return (
-        <div style={{ flex: "1 1 84px", padding: "8px 10px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 10 }}>
+        <div style={{ flex: "1 1 84px", padding: "8px 10px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: color || "var(--text-primary)" }}>{val}</div>
           <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>{label}</div>
         </div>
@@ -343,7 +343,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                     className="mgt-hover-scale"
                     style={{
                       position: "relative", overflow: "hidden",
-                      minHeight: 54, padding: "6px 4px 5px", borderRadius: 10, cursor: "pointer",
+                      minHeight: 54, padding: "6px 4px 5px", borderRadius: R.inset, cursor: "pointer",
                       boxSizing: "border-box", textAlign: "center",
                       background: "var(--bg-input)",
                       opacity: c.inMonth ? 1 : 0.4,

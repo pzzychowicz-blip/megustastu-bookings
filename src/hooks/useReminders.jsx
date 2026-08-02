@@ -28,7 +28,7 @@ import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
-import { BTN } from "../lib/constants";
+import { BTN, R } from "../lib/constants";
 import { mkBtn } from "../components/atoms";
 import { genId } from "../lib/booking-logic";
 import { dbError } from "../lib/dbError";
@@ -206,14 +206,14 @@ export function useReminders({ nowMins, setWriteWarning }){
       return (
         <div
           key={ab.fireKey}
-          style={{background:"rgba(254,243,199,0.8)",border:"2px solid rgba(251,191,36,0.55)",borderRadius:14,padding:"10px 14px",marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div
+          style={{background:"rgba(254,243,199,0.8)",border:"2px solid rgba(251,191,36,0.55)",borderRadius:R.card,padding:"10px 14px",marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div
             style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0,flexWrap:"wrap"}}><span style={{fontSize:14,fontWeight:700,color:"#78350f"}}>⏰ Reminder</span><span
-              style={{fontSize:11,padding:"2px 8px",borderRadius:6,background:"rgba(146,64,14,0.15)",color:"#78350f",fontWeight:700,letterSpacing:"0.02em",whiteSpace:"nowrap"}}>{ab.time}</span><span
+              style={{fontSize:11,padding:"2px 8px",borderRadius:R.pill,background:"rgba(146,64,14,0.15)",color:"#78350f",fontWeight:700,letterSpacing:"0.02em",whiteSpace:"nowrap"}}>{ab.time}</span><span
               style={{fontSize:14,color:"#78350f",fontWeight:700,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               onClick={function(){snoozeReminderFire(ab.fireKey);}}
               style={mkBtn({fontSize:12,minHeight:34,padding:"4px 12px",background:BTN.nav})}>Snooze 15m</button><button
               onClick={function(){markReminderDone(ab.fireKey);}}
-              style={{background:"rgba(22,101,52,0.8)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#fff",minHeight:34,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Done</button></div></div>
+              style={{background:"rgba(22,101,52,0.8)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#fff",minHeight:34,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Done</button></div></div>
       );
     })}</div>:null;
 

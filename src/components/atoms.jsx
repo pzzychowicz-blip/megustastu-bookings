@@ -12,7 +12,7 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, TBL, S } from "../lib/constants";
+import { BLOCK_BG, TBL, S, R } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ export function mkInp() {
     boxSizing: "border-box",
     background: "var(--bg-input)",
     border: "1px solid var(--border-input)",
-    borderRadius: 12,
+    borderRadius: R.pill,
     padding: "10px 12px",
     fontSize: 16,
     color: S.text,
@@ -34,11 +34,28 @@ export function mkInp() {
   };
 }
 
+// Multi-line variant of mkInp (v17.7.0). All three textareas in the app — the
+// booking form's Notes, the walk-in Notes, the reminder Text — were
+// `{...mkInp(), resize:"vertical"}` copy-pasted; this is that shape, once.
+//
+// `alignContent:"center"` is what earns it its own atom. A textarea starts its
+// text at the TOP, and on a pill the box is at its NARROWEST there, so with
+// --r-pill the first characters of a 2-row field were being clipped by the
+// corner curve ("Allergies…" rendered as ".gies…"). Centring puts the text at
+// the box's widest point, which fixes the clipping and the balance together.
+// It only applies while the content is shorter than the box, so a textarea the
+// user has typed two full lines into is unaffected. A browser without
+// align-content support falls back to top-aligned — i.e. exactly the pre-
+// v17.7.0 rendering, so this degrades rather than breaks.
+export function mkArea() {
+  return { ...mkInp(), resize: "vertical", alignContent: "center" };
+}
+
 export function mkBtn(extra) {
   return {
     border: "1px solid var(--border-glass)",
     background: "var(--btn-default)",
-    borderRadius: 12,
+    borderRadius: R.pill,
     padding: "8px 14px",
     cursor: "pointer",
     fontSize: 13,
@@ -117,7 +134,7 @@ export function Overlay({ onClose, children, footer }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {footer ? (
-        <div className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -126,7 +143,7 @@ export function Overlay({ onClose, children, footer }) {
           </div>
         </div>
       ) : (
-        <div className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           {children}
         </div>
       )}
@@ -153,7 +170,7 @@ export function Section({ style, children }) {
     <div style={{
       background: "var(--bg-soft)",
       border: "1px solid var(--border-soft)",
-      borderRadius: 16,
+      borderRadius: R.card,
       padding: "14px",
       marginBottom: 14,
       boxShadow: "var(--shadow-soft)",
@@ -490,7 +507,7 @@ export function ModalPresence({ show, children, outMs = 200 }) {
 export function SBadge({ status }) {
   return (
     <span style={{
-      fontSize: 12, padding: "4px 10px", borderRadius: 10,
+      fontSize: 12, padding: "4px 10px", borderRadius: R.pill,
       background: BLOCK_BG[status] || BLOCK_BG.confirmed,
       color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)",
       fontWeight: 600, textTransform: "capitalize",
@@ -508,7 +525,7 @@ export function TBadge({ id }) {
   const t = indoor ? TBL.ind : TBL.out;
   return (
     <span style={{
-      fontSize: 12, padding: "4px 10px", borderRadius: 10,
+      fontSize: 12, padding: "4px 10px", borderRadius: R.pill,
       background: t.bg, color: t.text,
       border: "1px solid " + t.border,
       fontWeight: 600, display: "inline-block",
@@ -523,7 +540,7 @@ export function TBadge({ id }) {
 export function SmallTag({ label, style }) {
   return (
     <span style={{
-      fontSize: 11, padding: "3px 8px", borderRadius: 8,
+      fontSize: 11, padding: "3px 8px", borderRadius: R.pill,
       fontWeight: 600, display: "inline-block",
       ...(style || {})
     }}>
@@ -539,7 +556,7 @@ export function Toggle({ on, onClick }) {
       onClick={onClick}
       className="mgt-hover-scale"
       style={{
-        width: 48, height: 26, borderRadius: 13,
+        width: 48, height: 26, borderRadius: R.pill,
         border: "1px solid var(--border-glass)",
         cursor: "pointer",
         background: on ? "var(--toggle-on)" : "var(--toggle-off)",
@@ -552,7 +569,7 @@ export function Toggle({ on, onClick }) {
         position: "absolute",
         top: 3,
         left: on ? 24 : 3,
-        width: 20, height: 20, borderRadius: 10,
+        width: 20, height: 20, borderRadius: R.pill,
         background: "var(--text-on-accent)",
         boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
         transition: "left 160ms linear"               // v15.8.0: knob slides
@@ -607,7 +624,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
             className="mgt-hover-scale"
             onClick={() => onTapTime(t)}
             style={{
-              cursor: "pointer", padding: "3px 8px", borderRadius: 8,
+              cursor: "pointer", padding: "3px 8px", borderRadius: R.pill,
               fontWeight: 600, fontSize: 12,
               background: "var(--suggest-bg)",
               color: "var(--success-text)",
@@ -625,7 +642,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
   return (
     <div style={{
       padding: "10px 14px",
-      borderRadius: 14,
+      borderRadius: R.card,
       border: "2px solid " + brdClr,
       background: bgClr,
       marginBottom: 14,

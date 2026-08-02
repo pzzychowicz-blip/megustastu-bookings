@@ -217,6 +217,20 @@
         --wa-btn-handled: rgba(13, 148, 136, 0.85);
         --wa-unread-dot: #dc2626;
         --wa-sim-accent: rgba(168, 85, 247, 0.85);   /* dev-only simulator chrome */
+        /* ── v17.7.0: corner-radius scale. Radii are theme-agnostic, so these
+           live ONLY here and are deliberately NOT duplicated into the
+           [data-theme="dark"] block below.
+           --r-pill is 999px rather than a real pill radius because CSS clamps
+           an oversized radius to half the box: one token therefore gives a
+           true pill at every control height in the app (30px steppers, 40px
+           buttons, 44px sheet actions) with no per-element arithmetic.
+           JS reads these through the `R` object in lib/constants.js — see the
+           style-token rule in CLAUDE.md. */
+        --r-pill: 999px;   /* buttons, inputs, chips, badges, segmented controls */
+        --r-auth: 40px;    /* login card */
+        --r-sheet: 20px;   /* modals, popovers */
+        --r-card: 14px;    /* cards, banners, panels */
+        --r-inset: 10px;   /* nested rows inside a card */
       }
       [data-theme="dark"] {
         --bg-app: linear-gradient(135deg, #15171c 0%, #191c22 20%, #1c1a23 40%, #161c26 60%, #1b1f28 80%, #17191f 100%);
@@ -347,13 +361,24 @@
       /* v14.3.0: .mgt-hover-scale hover-lift — ported from MGT Scheduling so
          both apps share one hover identity. Opt-in per element via
          className="mgt-hover-scale". Primary interactive surfaces lift 8% on
-         hover and gain an opaque card bg + soft shadow + 12px corners. It is
+         hover and gain an opaque card bg + soft shadow. It is
          paint-only (transform) so hovering never reflows neighbours, and uses
          box-shadow (NOT blur) so it doesn't count against the ≤4 backdrop-
-         filter:blur() limit. Contract (scale 1.08 / 120ms / 12px / the
-         :hover:not(:disabled) guard / token --bg-hover-card / the
-         hover-capability media guard) MUST match Scheduling exactly —
-         improve it in one app, port the change to both.
+         filter:blur() limit.
+         v17.7.0: the rule's `border-radius: 12px` is GONE. With the pill-radius
+         system every control carries its own radius (--r-pill etc.), and a
+         hover state that hard-set 12px squared off every pill the instant the
+         pointer touched it. Dropping the declaration — rather than setting
+         `inherit`, which resolves against the PARENT's radius and would square
+         a bare element inside a square parent — leaves each element on its own
+         resting radius, which is the actual intent.
+         CONSEQUENCE — any element carrying this class MUST set its own
+         border-radius. The rule still supplies an OPAQUE --bg-hover-card, so a
+         bare element with no radius now shows that background as a hard-edged
+         rectangle on hover. ConnectionStatus's dot button was exactly that case
+         (it is transparent + radius-less) and had to be given borderRadius:50%
+         in the same version (R.pill = 12px on its 24x40 box, i.e. exactly the shape
+         this rule used to draw); it was the only one, but check any new one.
          v15.1.0: the :hover rule is wrapped in @media (hover:hover) and
          (pointer:fine). iOS Safari makes :hover STICKY after a tap, so on
          touch devices the last-tapped element stayed scaled 1.08 — full-width
@@ -414,7 +439,6 @@
           transform: scale(1.08);
           background-color: var(--bg-hover-card);
           box-shadow: var(--shadow-soft);
-          border-radius: 12px;
           position: relative;
           z-index: 2;
         }

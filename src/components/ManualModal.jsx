@@ -29,7 +29,7 @@
 // source. The duplicate in WalkinForm has been replaced with the same import.
 
 import { useState, useEffect, useRef } from "react";
-import { S, BTN } from "../lib/constants";
+import { S, BTN, R } from "../lib/constants";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
 } from "../lib/booking-logic";
@@ -220,7 +220,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         style={{
           background: ok ? (isSwapping ? BTN.orange : S.accent) : "rgba(180,180,190,0.4)",
           border: "1px solid rgba(255,255,255,0.2)",
-          borderRadius: 14, padding: "10px 20px",
+          borderRadius: R.pill, padding: "10px 20px",
           cursor: ok ? "pointer" : "not-allowed",
           fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
           boxShadow: ok ? "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"
@@ -239,7 +239,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
           fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
-          display: "inline-block", padding: "8px 16px", borderRadius: 12,
+          display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
           background: "rgba(0,122,255,0.75)",
           border: "1px solid rgba(255,255,255,0.2)",
           boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
@@ -252,7 +252,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
       </div>
       <div style={{
         marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "10px 14px", borderRadius: 14,
+        padding: "10px 14px", borderRadius: R.card,
         background: swapBg, border: swapBrd,
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
         transition: "background-color 160ms linear, border-color 160ms linear"
@@ -276,7 +276,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         Tap tables to select / deselect.
       </div>
       <div style={{
-        marginBottom: 14, padding: "12px 14px", borderRadius: 14,
+        marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
         border: "2px solid " + (conflict ? "var(--danger-border)" : ok ? "var(--suggest-border)" : "var(--border-sheet)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -303,7 +303,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
       </div>
       <Reveal show={isSwapping}>{isSwapping ? (
         <div style={{
-          marginTop: 8, padding: "10px 14px", borderRadius: 14,
+          marginTop: 8, padding: "10px 14px", borderRadius: R.card,
           background: "var(--warn-bg)",
           border: "2px solid var(--warn-border)"
         }}>

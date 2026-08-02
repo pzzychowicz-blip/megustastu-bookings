@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
-import { S } from "../lib/constants";
+import { S, R } from "../lib/constants";
 import { mkInp, mkBtn } from "./atoms";
 
 export function LoginScreen() {
@@ -65,7 +65,7 @@ export function LoginScreen() {
       <div style={{
         background: "var(--bg-sheet)",
         backdropFilter: "blur(40px)", WebkitBackdropFilter: "blur(40px)",
-        borderRadius: 20,
+        borderRadius: R.auth,
         border: "1px solid var(--border-sheet)",
         padding: "32px 28px",
         width: "100%", maxWidth: 360,
@@ -101,7 +101,7 @@ export function LoginScreen() {
               color: "var(--danger-text)", fontSize: 13,
               padding: "8px 12px",
               background: "var(--danger-bg)",
-              borderRadius: 12,
+              borderRadius: R.pill,
               border: "2px solid var(--danger-border)"
             }}>
               {error}

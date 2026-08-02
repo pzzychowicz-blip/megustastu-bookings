@@ -17,6 +17,7 @@
 
 import { useState } from "react";
 import { Reveal } from "./atoms";
+import { R } from "../lib/constants";
 import { useRevealRows } from "../hooks/useRevealRows";
 
 export function BannerRows({ title, ids, collapseMax = 2, renderRow, bg = "var(--app-overlap-bg)", border = "var(--app-overlap-border)", textColor = "var(--warn-text)" }) {
@@ -30,7 +31,7 @@ export function BannerRows({ title, ids, collapseMax = 2, renderRow, bg = "var(-
   const liveCount = ids.length;
 
   return (
-    <div style={{ background: bg, border: "2px solid " + border, borderRadius: 14, padding: "10px 14px", marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+    <div style={{ background: bg, border: "2px solid " + border, borderRadius: R.card, padding: "10px 14px", marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
       <button
         onClick={function () { setOpen(!open); }}
         aria-expanded={open}

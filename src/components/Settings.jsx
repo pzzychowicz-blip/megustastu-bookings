@@ -30,7 +30,7 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp } from "./atoms";
-import { BTN } from "../lib/constants";
+import { BTN, R } from "../lib/constants";
 
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
 const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -51,7 +51,7 @@ export function TabBar({ tabs, current, onSelect }) {
   return (
     <div style={{
       display: "flex", gap: 4, padding: 4,
-      borderRadius: 12,
+      borderRadius: R.pill,
       background: "var(--bg-tabbar)",
       marginBottom: 16,
       border: "1px solid var(--border-soft)",
@@ -76,7 +76,7 @@ export function TabBar({ tabs, current, onSelect }) {
               flex: "1 0 0%",
               whiteSpace: "nowrap",
               padding: "8px 12px",
-              borderRadius: 8,
+              borderRadius: R.pill,
               border: "none",
               background: active ? "var(--bg-tab-active)" : "transparent",
               color: active ? "var(--accent)" : "var(--text-muted)",
@@ -107,7 +107,7 @@ export function TabBar({ tabs, current, onSelect }) {
 // re-renders it); disabled at the bounds so an invalid value can't be set.
 const HOUR_STEP_BTN = {
   background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
-  borderRadius: 10, width: 38, height: 38, fontSize: 20, fontWeight: 600,
+  borderRadius: R.pill, width: 38, height: 38, fontSize: 20, fontWeight: 600,
   color: "var(--text-primary)",
   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   boxShadow: "var(--shadow-input)"
@@ -168,7 +168,7 @@ function GsTextField({ label, value, onCommit, width }) {
 // rows stay scannable). Same disabled / hover-scale contract as HourStepper.
 const MINI_STEP_BTN = {
   background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
-  borderRadius: 8, width: 30, height: 30, fontSize: 17, fontWeight: 600,
+  borderRadius: R.pill, width: 30, height: 30, fontSize: 17, fontWeight: 600,
   color: "var(--text-primary)",
   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   boxShadow: "var(--shadow-input)"
@@ -198,7 +198,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   const o = day && Number.isFinite(day.open) ? day.open : 13;
   const c = day && Number.isFinite(day.close) ? day.close : 22;
   const pill = {
-    border: "1px solid var(--border-soft)", borderRadius: 8, padding: "4px 10px",
+    border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 10px",
     fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
     boxShadow: "var(--shadow-input)"
   };
@@ -588,7 +588,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
               disabled={!canAddTier}
               className={canAddTier ? "mgt-hover-scale" : undefined}
               style={{
-                background: "var(--bg-stepper)", border: "1px solid var(--border-soft)", borderRadius: 10,
+                background: "var(--bg-stepper)", border: "1px solid var(--border-soft)", borderRadius: R.pill,
                 padding: "8px 14px", fontSize: 13, fontWeight: 600, color: "var(--accent)",
                 cursor: canAddTier ? "pointer" : "not-allowed", opacity: canAddTier ? 1 : 0.4,
                 boxShadow: "var(--shadow-input)"
@@ -729,7 +729,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
               ) : (recurring.rules || []).map(function (r) {
                 const armed = armedRule === r.id;
                 return (
-                  <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+                  <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", opacity: r.active !== false ? 1 : 0.5 }}>{(r.name || "(no name)") + " · " + r.size + " pax"}</div>
                       <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>{"Every " + (RULE_WD[r.weekday] || "?") + " at " + r.time + (r.active === false ? " · paused" : "")}</div>

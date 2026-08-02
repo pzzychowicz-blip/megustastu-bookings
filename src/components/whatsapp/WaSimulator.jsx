@@ -13,7 +13,7 @@
 // the conversations/messages nodes.
 
 import { useState, useEffect } from "react";
-import { Overlay, Fld, Section, Toggle, mkInp, mkBtn } from "../atoms";
+import { Overlay, Fld, Section, Toggle, mkInp, mkArea, mkBtn } from "../atoms";
 import { S, BTN } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
@@ -199,7 +199,7 @@ export function WaSimulator({ ctx, onClose }) {
               </select>
             </Fld>
             <Fld label="The customer's message">
-              <textarea className="mgt-hover-scale" value={custText} onChange={(e) => setCustText(e.target.value)} rows={2} style={Object.assign({}, mkInp(), { resize: "vertical" })} placeholder={custConv && custConv.language === "en" ? "Type as the customer…" : "Escribe como el cliente…"} />
+              <textarea className="mgt-hover-scale" value={custText} onChange={(e) => setCustText(e.target.value)} rows={2} style={mkArea()} placeholder={custConv && custConv.language === "en" ? "Type as the customer…" : "Escribe como el cliente…"} />
             </Fld>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {/* ✨ Suggest = Gemini plays the customer. DEV → harness
@@ -275,7 +275,7 @@ export function WaSimulator({ ctx, onClose }) {
           <Fld label="Size"><input className="mgt-hover-scale" type="number" value={form.size} onChange={upd("size")} style={mkInp()} /></Fld>
           <Fld label="Date"><input className="mgt-hover-scale" type="date" value={form.date} onChange={upd("date")} style={mkInp()} /></Fld>
           <Fld label="Time"><input className="mgt-hover-scale" type="time" value={form.time} onChange={upd("time")} style={mkInp()} /></Fld>
-          <Fld label="Message" style={{ gridColumn: "1 / -1" }}><textarea className="mgt-hover-scale" value={form.text} onChange={upd("text")} rows={2} style={Object.assign({}, mkInp(), { resize: "vertical" })} placeholder="What the customer typed…" /></Fld>
+          <Fld label="Message" style={{ gridColumn: "1 / -1" }}><textarea className="mgt-hover-scale" value={form.text} onChange={upd("text")} rows={2} style={mkArea()} placeholder="What the customer typed…" /></Fld>
         </div>
         <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "9px 16px", background: S.accent, marginTop: 10 })} onClick={sendCustom}>Send custom message</button>
         <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>Intent question/other → message only (no draft). Size/date/time apply to new_booking.</div>
