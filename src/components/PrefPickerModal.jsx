@@ -34,7 +34,7 @@
 // different export (`comboCapBest`) which adds a greedy best-subset branch;
 // for soft-hint preferences here, the simpler version is correct.
 
-import { S, BTN, TBL, TABLE_GROUPS } from "../lib/constants";
+import { S, BTN, TBL, TABLE_GROUPS, R } from "../lib/constants";
 import { isIn, comboCap } from "../lib/booking-logic";
 import { Overlay, mkBtn, AutoHeight } from "./atoms";
 
@@ -94,7 +94,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
           fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
-          display: "inline-block", padding: "8px 16px", borderRadius: 12,
+          display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
           background: "#0d9488",
           border: "1px solid rgba(255,255,255,0.2)",
           boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
@@ -106,7 +106,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
         Soft hint — optimizer tries this first, falls back if unavailable.
       </div>
       <div style={{
-        marginBottom: 14, padding: "10px 14px", borderRadius: 14,
+        marginBottom: 14, padding: "10px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
         border: "2px solid " + (capOk ? "var(--suggest-border)" : "var(--border-sheet)"),
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
@@ -134,7 +134,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                   className="mgt-hover-scale"
                   onClick={() => togglePref(t.id)}
                   style={{
-                    width: 64, height: 52, padding: 0, borderRadius: 12,
+                    width: 64, height: 52, padding: 0, borderRadius: R.pill,
                     border: "2px solid " + (isPref ? "#0d9488" : tc.bg),
                     background: isPref ? "rgba(13,148,136,0.8)" : "rgba(255,255,255,0.4)",
                     color: isPref ? "#fff" : S.text,

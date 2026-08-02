@@ -12,12 +12,12 @@
 //   onOpenSettings() — App's setShowSettings(true)
 
 import { CogIcon } from "./SettingsChrome"; // v17.1.0: light import — Settings.jsx is lazy-loaded now
-import { S } from "../lib/constants";
+import { S, R } from "../lib/constants";
 
 const BTN_STYLE = {
   background: "var(--cog-bg)",
   border: "1px solid var(--cog-border)",
-  borderRadius: 10, width: 34, height: 34,
+  borderRadius: R.pill, width: 34, height: 34,
   cursor: "pointer",
   display: "flex", alignItems: "center", justifyContent: "center",
   flexShrink: 0, padding: 0,

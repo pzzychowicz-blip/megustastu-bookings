@@ -6399,3 +6399,169 @@ re-derived:
   both compute a seed; revGuard lets one win and the loser's rollback echo
   updates its `userPrefs`, but its seeding effect has already run, so it keeps
   its local values until the next reload. Self-correcting, single-shot.
+
+---
+
+## v17.7.0 — the pill radius system (2026-08-02)
+
+**Scope:** every corner radius in the app moves from a hardcoded inline literal
+to a five-token scale, and the tokens re-shape controls into pills.
+**Behavioural change:** none. Radius (and, in commit 2, three status-label
+fills) only — no padding, `minHeight`, font size, colour, border or shadow moved.
+
+### Commit 1/2 — tokens + rollout
+
+**The problem.** 208 `borderRadius: <number>` literals across 37 files, no token
+anywhere. The same *role* had already drifted to three different values
+depending on which file it was in (chips were 6, 8 **and** 10), and there was no
+single place to change any of it.
+
+**The tokens** (`index.html` `:root`, mirrored as `R` in `lib/constants.js`):
+
+| token | value | role |
+|---|---|---|
+| `--r-pill` | `999px` | buttons, inputs, selects, segmented tracks AND segments, status chips, table badges, choice chips, steppers |
+| `--r-auth` | `40px` | the login card, only |
+| `--r-sheet` | `20px` | modal shells, popovers |
+| `--r-card` | `14px` | cards, banners, panels, toasts |
+| `--r-inset` | `10px` | rows nested inside a card |
+
+Radii are theme-agnostic, so they live only in `:root` and are deliberately
+**not** duplicated into `[data-theme="dark"]`.
+
+`999px` rather than a real pill radius: CSS clamps an oversized radius to half
+the box, so ONE token produces a true pill at every control height in the app
+(30px steppers, 38/42px steppers, 40px buttons, 44px sheet actions) with no
+per-element arithmetic and nothing to re-tune when a control's height changes.
+
+`R` lives in `constants.js` because CLAUDE.md's style-token rule already routes
+colours, button and badge styles through it, and `S`/`BTN`/`TBL` already hold
+`var(--…)` strings — so this is the existing pattern, not a new one. It also
+makes the invariant greppable: `grep -rn "borderRadius: [0-9]" src/` must return
+only the exception list below.
+
+**174 sites converted across 35 files, assigned BY ROLE, not by the old number**
+— the same `borderRadius: 12` meant "control" in one file and "card" in another,
+so every site was read rather than pattern-replaced. `atoms.jsx` was done first
+and separately: `mkInp`/`mkBtn`/`SBadge`/`TBadge`/`SmallTag`/`Toggle`/
+`AvailBanner`/`Section`/`Overlay` are the shared factories behind most controls
+in the app, so ~10 edits there converted the bulk of it — and `ViewSwitcher.jsx`
+(the T/L/P segmented control) needed no edit at all, because it derives from
+`mkBtn`.
+
+**`.mgt-hover-scale` had to be fixed first.** The hover rule hard-set
+`border-radius: 12px`, which would have squared off every pill the instant the
+pointer touched it. The declaration was **deleted** rather than set to `inherit`:
+`inherit` resolves against the PARENT's radius, so a bare element inside a
+square parent would go square — the opposite of the intent. Deleting it leaves
+each element on its own resting radius. Everything else in the utility is
+byte-identical (`scale(1.08)`, `120ms`, `--bg-hover-card`, `--shadow-soft`, the
+`:hover:not(:disabled)` guard, the `(hover:hover) and (pointer:fine)` wrapper).
+This was always a fallback for bare background-less elements, of which there are
+none.
+
+**Exceptions — these stay numeric literals, on purpose.** They are geometry, not
+style; recorded here so the reasoning isn't re-derived:
+
+- **Timeline canvas** — `TimelineView` 200/281 (block body + its wipe overlay,
+  `10`), 406 (tick, `4`), 768 (seated ghost, `10`), plus the string radii
+  `"0 10px 10px 0"` (the manual-assign handle, clipped by the block's
+  `overflow:hidden` — a pill would eat it) and `"6px 0 0 0"` (the folded
+  corner). Blocks are pixel-identical to v17.6.0.
+- **TimeAxis ruler** — 197/198/219/235, the 1–2px ticks and the now marker.
+- **Floor plan** — `FloorGlyphs`/`FloorPlanEditor` table and door shapes.
+- **Progress-bar track+fill pairs** — `WeekView` 244/245 + 279/280, `Summary`
+  158/159. Track and fill must stay EQUAL or the full-bleed fill pokes out of
+  its `overflow:hidden` track's corners.
+- **`SplitLayout` `MARK_R`** — not an exception but a coupling: the focus
+  brackets' radius must track the pane scroller's or the arc stops lining up, so
+  both now read `var(--r-card)`.
+- **`atoms.jsx` `Kbd`** (`6`) — a keycap is not a control; the rule table has no
+  row for it.
+- **`borderRadius: "50%"`** — the three `ConnectionStatus` dots.
+- **`src/firebase.js:47`** — `border-radius:3px` inside the DEV/PROD console
+  **badge CSS string**. Not UI; a naive sweep breaks the boot banner.
+
+**Corrections to the brief.** The design brief listed 21 files; an audit found
+the rollout also needed `atoms.jsx` (unlisted, and the highest-leverage file in
+the change) and 15 further files — including `hooks/useReminders.jsx`, whose
+banner lives in a **hook** so no `src/components` sweep would find it, and
+`WeekView.jsx:161/188`, which is the Week/Month segmented control the brief's
+own rule table names. The brief also asked for `border-radius: inherit` (see
+above) and claimed no numeric radius would remain, which the exception list
+above shows is not achievable.
+
+**Verification.** `npm run build` clean; `npm run lint` **0 errors** (it caught
+two files where the `R` import hadn't landed — the bundler did **not**, because
+an undefined identifier is a runtime `ReferenceError`, not a build error, which
+is exactly why lint is a hard CI gate); `npm test` 103/103. Live in DEV: tokens
+resolve (`999/40/20/14/10`), a `mkBtn` button, a date input and a `TBadge` all
+compute `999px`, a timeline block still computes `10px`, and the hover rule's
+`cssText` no longer contains `border-radius`. Timeline, List, Plan, the booking
+form and Settings checked in light and dark at desktop and 375px; no console
+errors.
+
+### Commit 2/2 — status labels render solid
+
+**The rule:** a status *label* renders solid everywhere — the status colour as
+background, `var(--text-on-accent)` text, `1px solid var(--border-glass)`,
+`padding: "5px 11px"`, `fontSize: 11.5`, `fontWeight: 600` — so one label doesn't
+read at two different weights depending on which screen it's on. A status label
+now carries the same visual weight as the action button beside it.
+
+Most surfaces were already solid via `BLOCK_BG` (`atoms.jsx`'s `SBadge`, which
+`ListView` uses; `PlanView`'s legend; `TimelineView`'s legend). **Three tinted
+`STATUS_COLORS` labels remained**, and they are the whole change:
+
+1. `SearchPanel.jsx` — the search-result status chip
+2. `PlanView.jsx` — the table day-queue popover rows
+3. `CustomersSettings.jsx` — the customer booking-history rows
+
+All three dropped their now-dead `const sc = STATUS_COLORS[…]` and their
+`STATUS_COLORS` import in favour of `BLOCK_BG`.
+
+**`ListView.jsx:165`'s `sc` is deliberately untouched.** It reads `STATUS_COLORS`
+but drives the booking CARD's background and border, not a label — solid-filling
+it would fill whole cards with the status colour.
+
+**The brief's "status picker" rule was dropped: this app has no status picker.**
+All three "Change status" surfaces (`BookingFormModal`, `QuickStatusPopup`,
+`ListView`) `.filter(s => s !== current)`, so the current status is *never*
+rendered as an option — they are rows of action buttons (`> seated`,
+`> confirmed`), already solid. Applying "chosen solid, rest tinted" literally
+would have tinted every button in every row, since none of them is ever the
+chosen one. They keep their solid fills and take only the pill radius.
+Likewise the brief's "day-summary filter pills (`N seated` / `N upcoming`)" do
+not exist — `Summary.jsx:98–102` is plain coloured text in the today status bar,
+with no pill and no filtering behaviour, and was left alone.
+
+Also in this pass: a phase-1 correction. `CustomersSettings.jsx:79` carries two
+radii on one line (the history ROW and the chip inside it); the role-mapping pass
+had assigned the whole line `pill`, right for the chip and wrong for the row,
+which is an `inset`. Committed separately.
+
+**Verification.** Build clean, lint 0 errors, 103/103 tests. Confirmed live in
+DEV: a search result's `Completed` label now renders as a solid grey pill with
+white text instead of the tinted treatment, matching `SBadge` on the List card.
+
+### Commit 3/3 — `mkArea()`: textarea text is vertically centred
+
+Fallout from the pill radius, found in DEV QA. A `<textarea>` starts its text at
+the TOP of the box — and on a pill the box is at its NARROWEST there, because
+the corner curve is eating into the line. The booking form's 2-row Notes field
+rendered its placeholder as ".gies, special requests…": the corner had swallowed
+"Aller". It also read as unbalanced next to the single-line Deposit input below
+it, whose text a browser centres for free.
+
+`alignContent: "center"` fixes both at once — the text moves to the box's
+vertical middle, which is exactly where a pill is at its WIDEST, so there is no
+curve left to clip it. It applies only while the content is shorter than the
+box, so a textarea the user has typed two full lines into is unaffected
+(verified live). A browser without `align-content` support falls back to
+top-aligned, i.e. the pre-v17.7.0 rendering — this degrades, it does not break.
+
+Shipped as a new atom rather than three edits: all three textareas in the app
+(booking-form Notes, walk-in Notes, reminder Text) were the same
+`{...mkInp(), resize:"vertical"}` copy-paste, so `mkArea()` in `atoms.jsx` is
+now that shape once, per the "new UI composes from atoms" rule. Returns a style
+object like its `mkInp`/`mkBtn` siblings.

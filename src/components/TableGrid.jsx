@@ -17,7 +17,7 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { S, TBL, TABLE_GROUPS } from "../lib/constants";
+import { S, TBL, TABLE_GROUPS, R } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 
 // TABLE_GROUPS lives in ../lib/constants because it's also consumed by the
@@ -72,7 +72,7 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
                   onClick={() => toggle(t.id)}
                   className={blocked && !isSel ? undefined : "mgt-hover-scale"}
                   style={{
-                    width: 64, height: 52, padding: 0, borderRadius: 12,
+                    width: 64, height: 52, padding: 0, borderRadius: R.pill,
                     border: brd, background: bg, color: clr,
                     fontWeight: 600, fontSize: 14,
                     cursor: blocked && !isSel ? "not-allowed" : "pointer",

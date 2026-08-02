@@ -22,7 +22,7 @@
 // only positions what exists (a new table gets an auto slot via sanitize).
 
 import { useState, useRef, useEffect } from "react";
-import { S } from "../lib/constants";
+import { S, R } from "../lib/constants";
 import { mkBtn } from "./atoms";
 // v17.1.0 (Tier 3 code-splitting): the shared geometry moved to FloorGlyphs.jsx
 // so PlanView (main chunk) no longer pulls this whole editor in. Re-exported
@@ -36,7 +36,7 @@ function snap(n){ return Math.round(n / SNAP) * SNAP; }
 // Tiny labelled stepper (local — Settings' HourStepper isn't exported).
 function Step({ label, value, fmt, onDec, onInc, disableDec, disableInc }){
   const btn = {
-    background: "var(--bg-stepper)", border: "1px solid var(--border-soft)", borderRadius: 8,
+    background: "var(--bg-stepper)", border: "1px solid var(--border-soft)", borderRadius: R.pill,
     width: 28, height: 28, fontSize: 15, fontWeight: 600, color: "var(--text-primary)",
     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "var(--shadow-input)"
   };
@@ -345,7 +345,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
       </div>
       {/* touchAction on the WRAPPER, not just the svg — WebKit honours it here
           (round 10; the svg's own copy stays for Chrome/Android). */}
-      <div ref={wrapRef} style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)", touchAction: "none" }}>
+      <div ref={wrapRef} style={{ borderRadius: R.card, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)", touchAction: "none" }}>
         <svg ref={svgRef} viewBox={zoom.x + " " + zoom.y + " " + vbW + " " + vbH} style={{ display: "block", width: "100%", touchAction: "none", cursor: zoom.k > 1 && mode === "select" ? "grab" : "default" }}
           onPointerDown={onCanvasDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
           onPointerLeave={function(e){
@@ -444,7 +444,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
           onInc={function(){ commitFp({ ...fp, room: { ...fp.room, h: fp.room.h + 50 } }); }} />
       </div>
       {inspector ? (
-        <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 14, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+        <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: R.card, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
           {inspector}
         </div>
       ) : null}

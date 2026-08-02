@@ -29,7 +29,7 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, STATUS_COLORS, BTN } from "../lib/constants";
+import { S, BLOCK_BG, STATUS_COLORS, BTN, R } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
@@ -194,7 +194,7 @@ export const ListView = memo(function ListView({
         const warnEl = warn ? (
           <div style={{
             fontSize: 13, fontWeight: 700, marginBottom: 8,
-            padding: "6px 10px", borderRadius: 12,
+            padding: "6px 10px", borderRadius: R.pill,
             background: warn.overdue ? "var(--danger-bg)" : "var(--warn-bg)",
             color: warn.overdue ? "var(--danger-text)" : "var(--warn-text)",
             border: "2px solid " + (warn.overdue ? "var(--danger-border)" : "var(--warn-border)")
@@ -210,7 +210,7 @@ export const ListView = memo(function ListView({
             fontSize: 13, color: "var(--danger-text)", fontWeight: 700, marginBottom: 8,
             background: "var(--danger-bg)",
             border: "2px solid var(--danger-border)",
-            borderRadius: 12, padding: "6px 10px"
+            borderRadius: R.pill, padding: "6px 10px"
           }}>
             No table assigned — use manual assignment.
           </div>
@@ -290,7 +290,7 @@ export const ListView = memo(function ListView({
             style={{
               background: cardBg,
               border: cardBrdW + " solid " + cardBrd,
-              borderRadius: 16, padding: "14px 16px",
+              borderRadius: R.card, padding: "14px 16px",
               position: "relative",
               opacity: (b.status === "completed" || b.status === "cancelled") ? 0.75 : 1,
               // v14.4.0: accent ring marks the keyboard-focused card (List shortcuts).
@@ -306,7 +306,7 @@ export const ListView = memo(function ListView({
                 `animFrom` is only the trigger flag; the colour is the new status. */}
             {animFrom ? (
               <div className="mgt-wipe-ltr" style={{
-                position: "absolute", inset: 0, borderRadius: 16, pointerEvents: "none", zIndex: 0,
+                position: "absolute", inset: 0, borderRadius: R.card, pointerEvents: "none", zIndex: 0,
                 background: BLOCK_BG[b.status] || "transparent", opacity: 0.5
               }} />
             ) : null}

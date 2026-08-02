@@ -22,7 +22,7 @@
 
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
-import { BTN } from "../lib/constants";
+import { BTN, R } from "../lib/constants";
 
 export function WaitAvailBanner({ entries, availability, onBook, onDismiss, collapseMax = 2 }) {
   const byId = new Map(entries.map(function (e) { return [e.id, e]; }));
@@ -32,7 +32,7 @@ export function WaitAvailBanner({ entries, availability, onBook, onDismiss, coll
     if (!w) return null;
     const avail = availability[id] || null;
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 12px", borderRadius: 12, background: "var(--bg-soft)", border: "1px solid var(--suggest-border)", marginTop: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 12px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--suggest-border)", marginTop: 6 }}>
         <span style={{ fontSize: 13, color: "var(--success-text)", fontWeight: 600, flex: "1 1 auto", minWidth: 0 }}>{(w.name || "(no name)") + " · " + w.size + " pax — table free" + (avail && avail.time ? " · " + avail.time : "")}</span>
         <button
           onClick={function () { onBook(w); }}

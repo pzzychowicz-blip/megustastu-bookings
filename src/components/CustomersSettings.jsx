@@ -19,7 +19,7 @@
 //                           waitlist entries and reports the outcome
 
 import { useState, useEffect, useMemo } from "react";
-import { S, BTN, STATUS_COLORS } from "../lib/constants";
+import { S, BTN, BLOCK_BG, R } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, hasRealPhone, isNoShow } from "../lib/customers";
 import { Section, Reveal, mkInp, mkBtn } from "./atoms";
 
@@ -66,7 +66,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   }
 
   const chip = function (label, colors) {
-    return <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 8, padding: "2px 6px", background: colors.bg, border: "1px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
+    return <span style={{ fontSize: 10, fontWeight: 700, borderRadius: R.pill, padding: "2px 6px", background: colors.bg, border: "1px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
   };
 
   const rows = shown.map(function (c) {
@@ -74,9 +74,8 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     const armed = armedKey === c.phone;
     const wlCount = waitCountOf(c.phone);
     const historyRows = open ? c.bookings.map(function (b) {
-      const sc = STATUS_COLORS[b.status] || STATUS_COLORS.confirmed;
       return (
-        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 10, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: 12, fontWeight: 600, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: 12, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: 12, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span><span style={{ fontSize: 10, fontWeight: 700, borderRadius: 8, padding: "2px 8px", background: sc.bg, border: "1px solid " + sc.border, color: sc.text, textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { bg: "var(--warn-bg)", border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
+        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: 12, fontWeight: 600, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: 12, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: 12, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: 11.5, fontWeight: 600, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: "var(--text-on-accent)", textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { bg: "var(--warn-bg)", border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
       );
     }) : null;
     return (
@@ -85,7 +84,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
       // applies to ANY container of a hover-lift, not just height animators).
       // No child paints edge-to-edge, so the rounded corners don't need
       // clipping; Reveal does its own clipping while the history animates.
-      <div key={c.phone} style={{ borderRadius: 14, border: "1px solid var(--border-soft)", background: "var(--bg-soft)", marginBottom: 8 }}>
+      <div key={c.phone} style={{ borderRadius: R.card, border: "1px solid var(--border-soft)", background: "var(--bg-soft)", marginBottom: 8 }}>
         <div
           className="mgt-hover-scale"
           onClick={function () { setOpenKey(open ? null : c.phone); setArmedKey(null); }}
@@ -129,20 +128,20 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
       <Section>
         {/* v16.3.0: insight totals */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 10 }}>
+          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{totalCustomers}</div>
             <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>customers</div>
           </div>
-          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 10 }}>
+          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: "var(--success-text)" }}>{totalVisits}</div>
             <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>completed visits</div>
           </div>
-          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 10 }}>
+          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: "var(--warn-text)" }}>{noShowCustomers}</div>
             <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>with a no-show</div>
           </div>
           {phonelessNoShowCount > 0 ? (
-            <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 10 }}>
+            <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: "var(--warn-text)" }}>{phonelessNoShowCount}</div>
               <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>no-show, no phone</div>
             </div>
