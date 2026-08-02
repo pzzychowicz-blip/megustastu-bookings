@@ -132,12 +132,17 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
           placeholder={disabled ? "Conversation closed" : "Type a reply... (Enter to send, Shift+Enter for new line)"}
           disabled={disabled}
           rows={2}
-          // Bespoke (not mkInp-derived — flex:1, resize:"none", its own 44px
-          // floor), so it needs mkArea's `alignContent:"center"` spelled out
-          // here: on --r-pill the box is NARROWEST at the top, where a textarea
-          // starts its text, and the corner curve eats the first characters.
-          // Centring puts the text at the box's widest point. See mkArea().
-          style={{ flex: 1, boxSizing: "border-box", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.pill, alignContent: "center", padding: "10px 12px", fontSize: 14, color: "var(--text-primary)", fontWeight: 500, resize: "none", fontFamily: "inherit", minHeight: 44, boxShadow: "var(--shadow-input)", opacity: disabled ? 0.6 : 1 }}
+          // NOT a pill, deliberately — R.inset instead (v17.7.0 sweep).
+          // This box is `rows={2}` + resize:"none", so it does not grow: a reply
+          // longer than two lines SCROLLS, and that is the normal case here (the
+          // placeholder itself advertises Shift+Enter for a new line). Once the
+          // content overflows, `alignContent:"center"` stops applying — text
+          // starts hard at the top, where a --r-pill corner (999px clamps to
+          // half of ~55px ≈ 27px) reaches ~26px inward and slices the topmost
+          // visible line. mkArea's centring only rescues the SHORT-content case.
+          // At R.inset the corner reaches at most 10px, inside the 12px padding,
+          // so no line can be clipped at any scroll position.
+          style={{ flex: 1, boxSizing: "border-box", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset, padding: "10px 12px", fontSize: 14, color: "var(--text-primary)", fontWeight: 500, resize: "none", fontFamily: "inherit", minHeight: 44, boxShadow: "var(--shadow-input)", opacity: disabled ? 0.6 : 1 }}
         />
         <button
           onClick={send}
