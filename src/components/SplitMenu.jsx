@@ -28,7 +28,7 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { S } from "../lib/constants";
+import { S, R } from "../lib/constants";
 import { mkBtn } from "./atoms";
 
 const LABEL = { timeline: "Timeline", list: "List", plan: "Plan" };
@@ -60,7 +60,7 @@ export function SplitMenu({ view, onConfirm, onClose }) {
         onClick={(e) => e.stopPropagation()}
         className="mgt-card-in"
         style={{
-          background: "var(--tl-popup-bg)", borderRadius: 20,
+          background: "var(--tl-popup-bg)", borderRadius: R.sheet,
           border: "1px solid " + S.border,
           boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
           padding: "20px 24px",

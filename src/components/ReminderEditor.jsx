@@ -18,9 +18,9 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { S, BTN } from "../lib/constants";
+import { S, BTN, R } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
-import { Fld, Toggle, mkBtn, mkInp, usePresence, AutoHeight } from "./atoms";
+import { Fld, Toggle, mkBtn, mkInp, mkArea, usePresence, AutoHeight } from "./atoms";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
 // recurrence.days. Sun is at the end (index 0).
@@ -98,7 +98,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
       <div className={leaving ? "mgt-card-out" : "mgt-card-in"} style={{
         background: "var(--bg-sheet)",
         backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-        borderRadius: 20,
+        borderRadius: R.sheet,
         border: "1px solid var(--border-sheet)",
         width: "100%", maxWidth: 520, maxHeight: "90dvh",
         display: "flex", flexDirection: "column", overflow: "hidden",
@@ -115,7 +115,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <div style={{
             fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
-            display: "inline-block", padding: "8px 16px", borderRadius: 12,
+            display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
             background: "rgba(0,122,255,0.75)",
             border: "1px solid rgba(255,255,255,0.2)",
             boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
@@ -131,7 +131,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             rows={2}
             placeholder="e.g. Place order to Coca Cola today"
             className="mgt-hover-scale"
-            style={{ ...mkInp(), resize: "vertical" }}
+            style={mkArea()}
           />
         </Fld>
 
@@ -223,7 +223,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           display: "flex", alignItems: "center", gap: 10, marginBottom: 14,
           padding: "10px 12px",
           background: "var(--bg-soft)",
-          borderRadius: 12,
+          borderRadius: R.card,
           border: "1px solid var(--border-soft)"
         }}>
           <Toggle on={draft.active} onClick={toggleActive} />
@@ -239,7 +239,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             color: "var(--danger-text)", fontSize: 13,
             padding: "8px 12px",
             background: "var(--danger-bg)",
-            borderRadius: 12,
+            borderRadius: R.card,
             border: "1px solid var(--danger-border)",
             marginBottom: 12
           }}>
@@ -262,7 +262,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             style={{
               background: err ? "rgba(180,180,190,0.4)" : "rgba(22,101,52,0.8)",
               border: "1px solid rgba(255,255,255,0.2)",
-              borderRadius: 14,
+              borderRadius: R.pill,
               padding: "10px 22px",
               cursor: err ? "not-allowed" : "pointer",
               fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 40,

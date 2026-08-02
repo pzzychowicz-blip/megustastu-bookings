@@ -51,7 +51,7 @@
 //  loadMsg         — "Firebase connected — N bookings loaded."
 
 import { mkBtn, Toast } from "./atoms";
-import { BTN } from "../lib/constants";
+import { BTN, R } from "../lib/constants";
 
 const toastShadow="0 6px 20px rgba(0,0,0,0.18)";
 
@@ -62,7 +62,7 @@ export function StatusToasts({bookingsReady,loadStalled,readError,hasConnected,r
   // names the Firebase error code when a listener was cancelled, and otherwise
   // distinguishes "never connected" from "connected but no data".
   const stallNode=(
-    <div style={{background:"linear-gradient(var(--danger-bg),var(--danger-bg)),var(--bg-ac-menu)",border:"2px solid var(--danger-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--danger-text)",boxShadow:toastShadow,maxWidth:340,pointerEvents:"auto"}}>
+    <div style={{background:"linear-gradient(var(--danger-bg),var(--danger-bg)),var(--bg-ac-menu)",border:"2px solid var(--danger-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--danger-text)",boxShadow:toastShadow,maxWidth:340,pointerEvents:"auto"}}>
       <div style={{fontWeight:700,marginBottom:4}}>Couldn’t load bookings</div>
       <div style={{fontWeight:500,lineHeight:1.4}}>
         {readError
@@ -84,28 +84,28 @@ export function StatusToasts({bookingsReady,loadStalled,readError,hasConnected,r
   const statusToasts=[
     {key:"loadfail",on:!bookingsReady&&loadStalled,node:stallNode},
     {key:"loading",on:!bookingsReady&&!loadStalled,node:<div
-      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Loading bookings…</div>},
+      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Loading bookings…</div>},
     {key:"resync",on:resyncing,node:<div
-      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.</div>},
+      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.</div>},
     {key:"reconnect",on:reconnectShown,node:<div
-      style={{background:"linear-gradient(var(--app-reconnect-bg),var(--app-reconnect-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-reconnect-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:toastShadow}}>✓ Reconnected — changes synced.</div>},
+      style={{background:"linear-gradient(var(--app-reconnect-bg),var(--app-reconnect-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-reconnect-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:toastShadow}}>✓ Reconnected — changes synced.</div>},
     {key:"syncfix",on:syncFix,node:<div
-      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
+      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
     {key:"waitadded",on:waitAddedShown,node:<div
-      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
+      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
     {key:"undo",on:!!undoInfo,node:<div
-      style={{background:"linear-gradient(var(--bg-sheet),var(--bg-sheet)),var(--bg-ac-menu)",border:"2px solid var(--border-sheet)",borderRadius:14,padding:"8px 10px 8px 14px",fontSize:13,fontWeight:600,color:"var(--text-primary)",boxShadow:toastShadow,display:"flex",alignItems:"center",gap:10,pointerEvents:"auto"}}><span>{(!undoInfo?"":undoInfo.noShow?"Marked no-show":undoInfo.kind==="delete"?"Booking deleted":undoInfo.kind==="edit"?"Booking updated":"Booking cancelled")+(undoInfo&&undoNote?" · "+undoNote:"")}</span><button
+      style={{background:"linear-gradient(var(--bg-sheet),var(--bg-sheet)),var(--bg-ac-menu)",border:"2px solid var(--border-sheet)",borderRadius:R.card,padding:"8px 10px 8px 14px",fontSize:13,fontWeight:600,color:"var(--text-primary)",boxShadow:toastShadow,display:"flex",alignItems:"center",gap:10,pointerEvents:"auto"}}><span>{(!undoInfo?"":undoInfo.noShow?"Marked no-show":undoInfo.kind==="delete"?"Booking deleted":undoInfo.kind==="edit"?"Booking updated":"Booking cancelled")+(undoInfo&&undoNote?" · "+undoNote:"")}</span><button
         onClick={function(e){e.stopPropagation();onUndo();}}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({fontSize:12,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button></div>},
     {key:"dragmsg",on:!!dragMsg,node:<div
       style={dragMsg&&dragMsg.good
-        ?{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}
-        :{background:"linear-gradient(var(--warn-bg),var(--warn-bg)),var(--bg-ac-menu)",border:"2px solid var(--warn-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--warn-text)",boxShadow:toastShadow}}>{dragMsg?dragMsg.text:""}</div>},
+        ?{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}
+        :{background:"linear-gradient(var(--warn-bg),var(--warn-bg)),var(--bg-ac-menu)",border:"2px solid var(--warn-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--warn-text)",boxShadow:toastShadow}}>{dragMsg?dragMsg.text:""}</div>},
     {key:"reshuffled",on:reshuffled,node:<div
-      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{reshuffledMsg}</div>},
+      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{reshuffledMsg}</div>},
     {key:"load",on:loadShown,node:<div
-      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>{loadMsg}</div>},
+      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>{loadMsg}</div>},
   ];
   const topToastKey=(statusToasts.find(function(t){return t.on;})||{}).key;
   // Floating layer — absolutely positioned over the TOP-CENTRE of mainView so the

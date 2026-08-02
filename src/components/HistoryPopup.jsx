@@ -18,7 +18,7 @@
 // IIFE) and converted RC() → JSX. Behaviour, output markup, and all inline
 // styles are byte-identical to the original.
 
-import { S } from "../lib/constants";
+import { S, R } from "../lib/constants";
 import { Overlay, mkBtn } from "./atoms";
 
 export function HistoryPopup({ booking, onClose }) {
@@ -42,7 +42,7 @@ export function HistoryPopup({ booking, onClose }) {
       </div>
       <div style={{
         maxHeight: 300, overflowY: "auto",
-        borderRadius: 14,
+        borderRadius: R.card,
         border: "2px solid rgba(160,170,190,0.4)",
         background: "rgba(255,255,255,0.35)",
         padding: "10px 12px",

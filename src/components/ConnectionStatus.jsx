@@ -28,7 +28,7 @@
 // fix on its next touch (shared-pattern rule).
 
 import { useEffect, useRef, useState } from "react";
-import { S } from "../lib/constants";
+import { S, R } from "../lib/constants";
 
 // Rendered popover width: minWidth 260 + 2×12 padding + 2×1 border.
 const POPOVER_W = 286;
@@ -108,6 +108,17 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
           appearance: "none",
           border: "none",
           background: "transparent",
+          // v17.7.0: this button MUST carry its own radius. It is the app's only
+          // .mgt-hover-scale element with no background of its own, so it was the
+          // sole consumer of the `border-radius: 12px` the hover rule used to
+          // supply — and that declaration is gone now (it squared off every
+          // pill). Without a resting radius the hover state paints its opaque
+          // --bg-hover-card as a hard-edged RECTANGLE behind the round dot.
+          // R.pill rather than "50%": the button is 24x40, so 50% would give a
+          // pointed ELLIPSE, while the pill clamps to half the narrow axis =
+          // 12px — which is exactly the shape the deleted hover rule used to
+          // draw, now expressed through the token.
+          borderRadius: R.pill,
           padding: 6,
           cursor: "pointer",
           display: "inline-flex",
@@ -142,7 +153,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
             padding: 12,
             background: "var(--bg-ac-menu)",
             border: "1px solid var(--border-card)",
-            borderRadius: 12,
+            borderRadius: R.card,
             boxShadow: "var(--shadow-sheet)",
           }}
         >
@@ -201,7 +212,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                           style={{
                             fontSize: 10, fontWeight: 700, color: "var(--success-text)",
                             background: "var(--suggest-bg)", border: "1px solid var(--suggest-border)",
-                            borderRadius: 8, padding: "2px 6px", flexShrink: 0, whiteSpace: "nowrap",
+                            borderRadius: R.pill, padding: "2px 6px", flexShrink: 0, whiteSpace: "nowrap",
                           }}
                         >
                           This device

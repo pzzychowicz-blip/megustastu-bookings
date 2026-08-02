@@ -17,7 +17,7 @@
 // original. `var DAY_SHORT_LABELS` (previously a top-level App.jsx constant)
 // is co-located here as a module-level `const`.
 
-import { BTN } from "../lib/constants";
+import { BTN, R } from "../lib/constants";
 import { Toggle, mkBtn } from "./atoms";
 
 // ── Day-of-week labels for recurrence summary ────────────────────────────────
@@ -42,7 +42,7 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
     <div style={{
       background: "var(--bg-soft)",
       border: "1px solid var(--border-soft)",
-      borderRadius: 12,
+      borderRadius: R.card,
       padding: "12px 14px",
       marginBottom: 8,
       opacity: r.active ? 1 : 0.55,
@@ -91,7 +91,7 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
       color: "var(--text-muted)",
       fontSize: 13,
       background: "var(--bg-soft)",
-      borderRadius: 12,
+      borderRadius: R.card,
       border: "1px dashed var(--border-soft)"
     }}>
       No reminders yet. Click &ldquo;+ New reminder&rdquo; to add one.

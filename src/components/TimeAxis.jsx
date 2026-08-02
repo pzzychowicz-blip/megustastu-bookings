@@ -38,7 +38,7 @@
 // on each 15s clock tick (the v17.1.0 GridLines lesson).
 
 import { useRef, useLayoutEffect, useEffect } from "react";
-import { OPEN, GRID_CLOSE, QUARTER_HOURS, S } from "../lib/constants";
+import { OPEN, GRID_CLOSE, QUARTER_HOURS, S, R } from "../lib/constants";
 // v17.5.0 correction: no toTime here any more — the selected-time badge moved
 // up into PlanView's Now/legend row, so the tape renders no text of its own
 // beyond the hour labels.
@@ -164,7 +164,7 @@ export function TimeAxis({
           scrollbarWidth: "none",             // the centre marker IS the affordance
           cursor: "pointer",
           background: "var(--bg-soft)",
-          borderRadius: 14,
+          borderRadius: R.card,
           border: "1px solid var(--border-soft)",
         }}
       >

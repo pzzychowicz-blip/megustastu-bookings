@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor } from "../lib/constants";
+import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor, R } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
@@ -44,7 +44,7 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   comboCapBest, nowTime
 } from "../lib/booking-logic";
-import { Overlay, Section, Fld, AvailBanner, mkInp, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, Section, Fld, AvailBanner, mkInp, mkArea, mkBtn, AutoHeight, Reveal } from "./atoms";
 import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
@@ -188,7 +188,7 @@ export function WalkinForm({
         className="mgt-hover-scale"
         onClick={() => setDraft({ ...wf, tables: [], time: r.timeStr, _pre: false })}
         style={{
-          cursor: "pointer", padding: "3px 8px", borderRadius: 6,
+          cursor: "pointer", padding: "3px 8px", borderRadius: R.pill,
           fontWeight: 600, fontSize: 12,
           background: r.hasTables ? "rgba(220,252,231,0.8)" : "rgba(254,249,195,0.8)",
           color: r.hasTables ? "#166534" : "#854d0e",
@@ -206,14 +206,14 @@ export function WalkinForm({
       <div style={{ fontSize: 11, color: S.muted, marginBottom: 6 }}>
         <span style={{
           background: "rgba(220,252,231,0.8)", color: "#166534",
-          padding: "2px 6px", borderRadius: 6, fontSize: 10, fontWeight: 600
+          padding: "2px 6px", borderRadius: R.pill, fontSize: 10, fontWeight: 600
         }}>
           green
         </span>
         {" = tables available  "}
         <span style={{
           background: "rgba(254,249,195,0.8)", color: "#854d0e",
-          padding: "2px 6px", borderRadius: 6, fontSize: 10, fontWeight: 600
+          padding: "2px 6px", borderRadius: R.pill, fontSize: 10, fontWeight: 600
         }}>
           yellow
         </span>
@@ -245,7 +245,7 @@ export function WalkinForm({
   const wKitchenSection = (
     <div style={{
       padding: "10px 14px",
-      borderRadius: 14,
+      borderRadius: R.card,
       border: "2px solid " + (wKitchenBusy ? "var(--warn-border)" : "var(--border-soft)"),
       background: wKitchenBusy ? "var(--warn-bg)" : "var(--bg-soft)",
       marginBottom: 14, fontSize: 13,
@@ -260,7 +260,7 @@ export function WalkinForm({
         {wKitchenBusy ? (
           <span style={{
             fontWeight: 700, color: "var(--text-required)", fontSize: 13,
-            padding: "4px 12px", borderRadius: 8,
+            padding: "4px 12px", borderRadius: R.pill,
             border: "1.5px solid rgba(220,38,38,0.4)",
             flexShrink: 0
           }}>
@@ -279,7 +279,7 @@ export function WalkinForm({
   const stepperBtnStyle = {
     background: "var(--bg-stepper)",
     border: "1px solid var(--border-soft)",
-    borderRadius: 12, width: 42, height: 42, fontSize: 22,
+    borderRadius: R.pill, width: 42, height: 42, fontSize: 22,
     cursor: "pointer", color: S.text, fontWeight: 600,
     display: "flex", alignItems: "center", justifyContent: "center",
     flexShrink: 0,
@@ -301,7 +301,7 @@ export function WalkinForm({
           color: "var(--danger-text)", fontSize: 13,
           padding: "10px 14px",
           background: "var(--danger-bg)",
-          borderRadius: 14,
+          borderRadius: R.card,
           border: "2px solid var(--danger-border)",
           marginBottom: 14
         }}>
@@ -323,7 +323,7 @@ export function WalkinForm({
           style={{
             background: wOk ? "rgba(22,101,52,0.8)" : "rgba(180,180,190,0.4)",
             border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: 14, padding: "10px 22px",
+            borderRadius: R.pill, padding: "10px 22px",
             cursor: wOk ? "pointer" : "not-allowed",
             fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
             boxShadow: wOk
@@ -343,7 +343,7 @@ export function WalkinForm({
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
           fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
-          display: "inline-block", padding: "8px 16px", borderRadius: 12,
+          display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
           background: "rgba(22,101,52,0.75)",
           border: "1px solid rgba(255,255,255,0.2)",
           boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
@@ -460,7 +460,7 @@ export function WalkinForm({
               rows={2}
               placeholder="Special requests..."
               className="mgt-hover-scale"
-              style={{ ...mkInp(), resize: "vertical" }}
+              style={mkArea()}
             />
           </Fld>
         </div>
@@ -473,7 +473,7 @@ export function WalkinForm({
       </div>
 
       <div style={{
-        marginBottom: 14, padding: "12px 14px", borderRadius: 14,
+        marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
         border: "2px solid " + (wOk ? "var(--suggest-border)" : "var(--border-sheet)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -503,7 +503,7 @@ export function WalkinForm({
           Reveal-wrapped — its ~300ms ease is the grace, so a fast scan shows
           only an imperceptible sliver instead of a flash. */}
       <Reveal show={wChecking && wSel.length === 0}>
-        <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: 12, padding: "10px 14px", marginBottom: 12, fontSize: 13, fontWeight: 600, color: "var(--text-muted)", textAlign: "center" }}>⏳ Checking table availability…</div>
+        <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: 13, fontWeight: 600, color: "var(--text-muted)", textAlign: "center" }}>⏳ Checking table availability…</div>
       </Reveal>
       {wAutoCheck && wSel.length === 0 ? (
         <>

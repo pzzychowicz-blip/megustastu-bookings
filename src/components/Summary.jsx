@@ -21,7 +21,7 @@
 
 import { useMemo, memo } from "react";
 import { daySummary } from "../lib/booking-logic";
-import { BTN, TOTAL_SEATS, hoursFor } from "../lib/constants";
+import { BTN, TOTAL_SEATS, hoursFor, R } from "../lib/constants";
 import { mkBtn, Reveal } from "./atoms";
 
 function hh(n){ return String(((n % 24) + 24) % 24).padStart(2, "0") + ":00"; }
@@ -67,7 +67,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
       style={{
         background: "var(--bg-soft)",
         border: "1px solid var(--border-soft)",
-        borderRadius: 14,
+        borderRadius: R.card,
         boxShadow: "var(--shadow-soft)",
         overflow: "hidden"
       }}
@@ -189,7 +189,7 @@ function ShiftChip({ label, covers, count }) {
     <div style={{
       flex: "1 1 160px", minWidth: 150,
       padding: "8px 12px",
-      background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 10
+      background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset
     }}>
       <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", marginBottom: 3 }}>{label}</div>
       <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>{covers + " cover" + (covers !== 1 ? "s" : "")}</div>

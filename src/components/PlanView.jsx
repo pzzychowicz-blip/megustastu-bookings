@@ -32,7 +32,7 @@
 
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
-import { S, STATUS_COLORS, BLOCK_BG, hoursFor } from "../lib/constants";
+import { S, BLOCK_BG, hoursFor, R } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
@@ -360,19 +360,19 @@ export const PlanView = memo(function PlanView({
       <div onClick={() => setTablePop(null)} className="mgt-scrim-in"
         style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--tl-popup-scrim)" }}>
         <div onClick={(e) => e.stopPropagation()} className="mgt-card-in"
-          style={{ background: "var(--tl-popup-bg)", borderRadius: 20, border: "1px solid " + S.border, boxShadow: "0 8px 32px rgba(0,0,0,0.14)", padding: "18px 20px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}>
+          style={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "0 8px 32px rgba(0,0,0,0.14)", padding: "18px 20px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: S.text, marginBottom: 12 }}>{"Table " + id}</div>
           {queue.length === 0 ? (
             <div style={{ fontSize: 13, color: S.muted, marginBottom: 4 }}>No bookings on this table today.</div>
           ) : queue.map((b) => {
-            const sc = STATUS_COLORS[b.status] || STATUS_COLORS.confirmed;
             return (
               <div key={b.id} className="mgt-hover-scale"
                 onClick={() => { setTablePop(null); onEdit(b); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 12, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
                 <span style={{ fontSize: 13, fontWeight: 600, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name + " (" + b.size + ")"}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 8, textTransform: "capitalize", background: sc.bg, color: sc.text, border: "1px solid " + sc.border }}>{b.status}</span>
+                {/* v17.7.0: solid, like every other status label (see SBadge). */}
+                <span style={{ fontSize: 11.5, fontWeight: 600, padding: "5px 11px", borderRadius: R.pill, textTransform: "capitalize", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }}>{b.status}</span>
               </div>
             );
           })}
@@ -391,14 +391,14 @@ export const PlanView = memo(function PlanView({
 
   // ── Legend + slider row ─────────────────────────────────────────────────────
   const legend = ["seated", "confirmed", "pending"].map((s) => (
-    <span key={s} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: BLOCK_BG[s], color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600, textTransform: "capitalize" }}>{s}</span>
+    <span key={s} style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600, textTransform: "capitalize" }}>{s}</span>
   ));
 
   return (
     <div style={{
       background: "var(--tl-card-bg)",
       backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-      borderRadius: 20, border: "1px solid var(--tl-card-border)",
+      borderRadius: R.sheet, border: "1px solid var(--tl-card-border)",
       padding: "10px 12px", boxShadow: "var(--shadow-soft)"
     }}>
       {/* v17.5.0: Now + selected time + legend on one row, the ruler directly
@@ -427,7 +427,7 @@ export const PlanView = memo(function PlanView({
         <span style={{
           background: S.accent, color: "var(--text-on-accent)",
           fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums",
-          padding: "3px 10px", borderRadius: 8, whiteSpace: "nowrap",
+          padding: "3px 10px", borderRadius: R.pill, whiteSpace: "nowrap",
           boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
         }}>{toTime(slider)}</span>
         <span style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>{legend}</span>
@@ -445,7 +445,7 @@ export const PlanView = memo(function PlanView({
       {h.closed ? (
         <div style={{ textAlign: "center", padding: "10px 0", fontSize: 13, fontWeight: 700, color: "var(--warn-text)" }}>Closed on this day.</div>
       ) : null}
-      <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)" }}>
+      <div style={{ borderRadius: R.card, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)" }}>
         <svg ref={svgRef} viewBox={"0 0 " + fp.room.w + " " + fp.room.h}
           style={{ display: "block", width: "100%", touchAction: gesturesEnabled ? "none" : "auto" }}
           onWheel={onWheel}

@@ -468,6 +468,30 @@ export var BLOCK_BG={confirmed:"var(--block-confirmed)",pending:"var(--block-pen
 // *text* flips light in dark. `S.bg` stays the literal "transparent".
 export var S={bg:"transparent",card:"var(--bg-card)",border:"var(--border-card)",muted:"var(--text-muted)",text:"var(--text-primary)",accent:"var(--accent)"};
 export var TBL={out:{bg:"rgba(var(--tbl-out-rgb),0.8)",text:"var(--text-on-accent)",border:"rgba(var(--tbl-out-rgb),0.5)"},ind:{bg:"rgba(var(--tbl-ind-rgb),0.8)",text:"var(--text-on-accent)",border:"rgba(var(--tbl-ind-rgb),0.5)"}};
+// ── Corner-radius tokens (v17.7.0) ───────────────────────────────────────────
+// The pill-radius system. Before v17.7.0 every corner was a hardcoded inline
+// radius literal (4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 20) across 208 call sites
+// and 37 files, with no token — so the same role had drifted to three different
+// values depending on the file, and any change meant another 200-site sweep.
+//
+// Assign BY ROLE, never by the old number: the same literal 12 meant "control"
+// in one file and "card" in another.
+//   pill  — every button/input/select, segmented-control tracks AND segments,
+//           status chips, table badges, choice chips, steppers, quick-status
+//           options. 999px because CSS clamps an oversized radius to half the
+//           box, so ONE token is a true pill at every control height.
+//   auth  — the login card, and nothing else.
+//   sheet — modal shells and popovers.
+//   card  — booking cards, list rows, settings sections, banners, panels.
+//   inset — rows nested inside a card.
+//
+// Deliberate exceptions stay numeric literals — they are geometry, not style:
+// the timeline blocks (a pill eats the manual-assign handle their
+// overflow:hidden clips, and breaks the folded corner), TimeAxis's 1–2px ruler
+// ticks, the floor-plan glyphs, progress-bar track+fill pairs (track and fill
+// must stay equal or the fill pokes out), and `borderRadius:"50%"` circles.
+export var R={pill:"var(--r-pill)",auth:"var(--r-auth)",sheet:"var(--r-sheet)",card:"var(--r-card)",inset:"var(--r-inset)"};
+
 export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,10),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null};
 
 // ── Button colour tokens ──────────────────────────────────────────────────────

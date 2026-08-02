@@ -20,6 +20,7 @@
 //   paneA / paneB  — the view elements
 
 import { useRef, useState } from "react";
+import { R } from "../lib/constants";
 
 const MIN_RATIO = 0.2;
 const MAX_RATIO = 0.8;
@@ -31,7 +32,9 @@ const MAX_RATIO = 0.8;
 // with. Module scope so the array isn't rebuilt on every drag frame.
 const MARK = 18;        // arm length
 const RING = 2;         // stroke
-const MARK_R = 14;      // matches the scroller's borderRadius so the arc lines up
+// Must track the scroller's borderRadius (R.card, below) or the bracket arc
+// stops lining up with the corner it traces. v17.7.0: both read the same token.
+const MARK_R = "var(--r-card)";
 const EDGE = RING + "px solid var(--accent)";
 const CORNERS = [
   { k: "tl", style: { top: 0, left: 0, borderTop: EDGE, borderLeft: EDGE, borderTopLeftRadius: MARK_R } },
@@ -129,7 +132,7 @@ export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", on
           // the List cards inside scale 1.08 on hover (= 4% of card width per
           // side), so without this the lift is cut off at the pane edge.
           paddingInline: "4%", paddingBlock: 12,
-          borderRadius: 14,
+          borderRadius: R.card,
         }}>{node}</div>
         {CORNERS.map((c) => (
           <div key={c.k} style={Object.assign({

@@ -13,12 +13,12 @@
 import { useState } from "react";
 import { Section, Collapsible, Toggle } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
-import { contiguousRuns, comboKey } from "../lib/constants";
+import { contiguousRuns, comboKey, R } from "../lib/constants";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 const STEP_BTN = {
   background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
-  borderRadius: 8, width: 30, height: 30, fontSize: 17, fontWeight: 600,
+  borderRadius: R.pill, width: 30, height: 30, fontSize: 17, fontWeight: 600,
   color: "var(--text-primary)",
   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   boxShadow: "var(--shadow-input)"
@@ -26,7 +26,7 @@ const STEP_BTN = {
 // Small circular remove (×) button — used by the editable combo rows.
 const X_BTN = {
   background: "var(--danger-bg)", border: "1px solid var(--danger-border)",
-  borderRadius: 8, width: 28, height: 28, fontSize: 16, fontWeight: 700,
+  borderRadius: R.pill, width: 28, height: 28, fontSize: 16, fontWeight: 700,
   color: "var(--danger-text)", lineHeight: 1,
   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   cursor: "pointer", boxShadow: "var(--shadow-input)"
@@ -35,7 +35,7 @@ const X_BTN = {
 const GCHIP = {
   display: "inline-flex", alignItems: "center", gap: 1,
   background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
-  borderRadius: 8, padding: "2px 4px", boxShadow: "var(--shadow-input)"
+  borderRadius: R.pill, padding: "2px 4px", boxShadow: "var(--shadow-input)"
 };
 const GCHIP_BTN = {
   background: "transparent", border: "none", padding: 0, width: 18, height: 22,
@@ -44,31 +44,31 @@ const GCHIP_BTN = {
 };
 // An "available table" chip in the add-to-group / new-group pickers.
 const PICK_CHIP = {
-  fontSize: 12, fontWeight: 700, borderRadius: 8, padding: "4px 9px", cursor: "pointer",
+  fontSize: 12, fontWeight: 700, borderRadius: R.pill, padding: "4px 9px", cursor: "pointer",
   border: "1px solid var(--accent)", background: "var(--accent)", color: "var(--text-on-accent)",
   boxShadow: "var(--shadow-input)"
 };
 // Small text input — table id (rename / add).
 const TXT_INP = {
-  background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 8,
+  background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.pill,
   padding: "6px 9px", fontSize: 13, fontWeight: 700, color: "var(--text-primary)",
   width: 70, boxSizing: "border-box", boxShadow: "var(--shadow-input)"
 };
 // Small select — combo / table pickers in the priorities editor (v15.9.0).
 const SEL_INP = {
-  background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: 8,
+  background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.pill,
   padding: "6px 9px", fontSize: 13, fontWeight: 700, color: "var(--text-primary)",
   boxShadow: "var(--shadow-input)", cursor: "pointer"
 };
 // Segmented mini-button (zone-order / prefer-avoid toggles in the priorities editor).
 const SEG_BTN = {
-  border: "1px solid var(--border-soft)", borderRadius: 8, padding: "4px 10px",
+  border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 10px",
   fontSize: 12, fontWeight: 700, cursor: "pointer", background: "var(--bg-stepper)",
   color: "var(--text-primary)", boxShadow: "var(--shadow-input)"
 };
 // Accent action button (Add / Rename / confirm).
 const ACT_BTN = {
-  border: "1px solid var(--accent)", borderRadius: 8, padding: "6px 12px",
+  border: "1px solid var(--accent)", borderRadius: R.pill, padding: "6px 12px",
   fontSize: 13, fontWeight: 700, background: "var(--accent)", color: "var(--text-on-accent)",
   boxShadow: "var(--shadow-input)", cursor: "pointer"
 };
@@ -358,7 +358,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           }) : <span style={{ fontSize: 11, color: "var(--text-faint)" }}>—</span>}
           <button onClick={function () { setPriPick(open ? null : { kind: kind, band: bandIdx }); }} className="mgt-hover-scale"
             title={"Add a table"} disabled={!avail.length}
-            style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: 18, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: 8, background: "var(--bg-stepper)", boxShadow: "var(--shadow-input)", opacity: avail.length ? 1 : 0.3, cursor: avail.length ? "pointer" : "not-allowed" }}>+</button>
+            style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: 18, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-input)", opacity: avail.length ? 1 : 0.3, cursor: avail.length ? "pointer" : "not-allowed" }}>+</button>
         </div>
         {open ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "6px 0 2px 58px" }}>
@@ -407,7 +407,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   onDec={function () { updateTable(t.id, { capacity: cap - 1 }); }} onInc={function () { updateTable(t.id, { capacity: cap + 1 }); }} />
                 <button onClick={function () { updateTable(t.id, { zone: indoor ? "outdoor" : "indoor" }); }} className="mgt-hover-scale"
                   style={{
-                    marginLeft: "auto", border: "1px solid var(--border-soft)", borderRadius: 8,
+                    marginLeft: "auto", border: "1px solid var(--border-soft)", borderRadius: R.pill,
                     padding: "4px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
                     background: indoor ? "rgba(var(--tbl-ind-rgb),0.18)" : "rgba(var(--tbl-out-rgb),0.18)",
                     color: "var(--text-primary)", boxShadow: "var(--shadow-input)"
@@ -423,7 +423,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 ) : (
                   <>
                     <button onClick={function () { startEdit(t.id); }} className="mgt-hover-scale" title="Rename table"
-                      style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: 14, border: "1px solid var(--border-soft)", borderRadius: 8, background: "var(--bg-stepper)", boxShadow: "var(--shadow-input)" }}>✎</button>
+                      style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: 14, border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-input)" }}>✎</button>
                     <button onClick={function () { setEditId(null); setPendingRemove(t.id); }} disabled={tables.length <= 1}
                       className={tables.length <= 1 ? undefined : "mgt-hover-scale"}
                       title={tables.length <= 1 ? "A layout needs at least one table" : "Remove table"}
@@ -443,7 +443,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warn-text)", marginTop: 4 }}>A table “{editTrim}” already exists.</div>
               ) : null}
               {confirming ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6, padding: "6px 8px", borderRadius: 8, background: "var(--warn-bg)", border: "1px solid var(--warn-border)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6, padding: "6px 8px", borderRadius: R.inset, background: "var(--warn-bg)", border: "1px solid var(--warn-border)" }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: "var(--warn-text)" }}>
                     {orph > 0
                       ? orph + " upcoming booking" + (orph === 1 ? " uses “" : "s use “") + t.id + "”. Remove anyway?"
@@ -451,9 +451,9 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   </span>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                     <button onClick={function () { setPendingRemove(null); }} className="mgt-hover-scale"
-                      style={{ border: "1px solid var(--border-soft)", borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 700, background: "var(--bg-stepper)", color: "var(--text-primary)", cursor: "pointer", boxShadow: "var(--shadow-input)" }}>Cancel</button>
+                      style={{ border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "5px 12px", fontSize: 12, fontWeight: 700, background: "var(--bg-stepper)", color: "var(--text-primary)", cursor: "pointer", boxShadow: "var(--shadow-input)" }}>Cancel</button>
                     <button onClick={function () { removeTable(t.id); }} className="mgt-hover-scale"
-                      style={{ border: "1px solid var(--danger-border)", borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 700, background: "var(--danger-bg)", color: "var(--danger-text)", cursor: "pointer", boxShadow: "var(--shadow-input)" }}>{orph > 0 ? "Remove anyway" : "Remove"}</button>
+                      style={{ border: "1px solid var(--danger-border)", borderRadius: R.pill, padding: "5px 12px", fontSize: 12, fontWeight: 700, background: "var(--danger-bg)", color: "var(--danger-text)", cursor: "pointer", boxShadow: "var(--shadow-input)" }}>{orph > 0 ? "Remove anyway" : "Remove"}</button>
                   </div>
                 </div>
               ) : null}
@@ -471,7 +471,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               onDec={function () { setNewCap(Math.max(1, newCap - 1)); }} onInc={function () { setNewCap(Math.min(20, newCap + 1)); }} />
             <button onClick={function () { setNewZone(newZone === "indoor" ? "outdoor" : "indoor"); }} className="mgt-hover-scale"
               style={{
-                border: "1px solid var(--border-soft)", borderRadius: 8, padding: "4px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer",
                 background: newZone === "indoor" ? "rgba(var(--tbl-ind-rgb),0.18)" : "rgba(var(--tbl-out-rgb),0.18)",
                 color: "var(--text-primary)", boxShadow: "var(--shadow-input)"
               }}>
@@ -522,7 +522,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 })}
                 <button onClick={function () { setPickFor(pickFor === gi ? null : gi); }} className="mgt-hover-scale"
                   title="Add a table to this group" disabled={!ungrouped.length}
-                  style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: 18, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: 8, background: "var(--bg-stepper)", boxShadow: "var(--shadow-input)", opacity: ungrouped.length ? 1 : 0.3, cursor: ungrouped.length ? "pointer" : "not-allowed" }}>+</button>
+                  style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: 18, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-input)", opacity: ungrouped.length ? 1 : 0.3, cursor: ungrouped.length ? "pointer" : "not-allowed" }}>+</button>
                 <button onClick={function () { removeGroup(gi); }} className="mgt-hover-scale" title="Remove whole group"
                   style={{ ...X_BTN, marginLeft: "auto" }}>×</button>
               </div>
@@ -601,7 +601,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 return (
                   <button key={t.id} onClick={function () { toggleAdd(t.id); }} className="mgt-hover-scale"
                     style={{
-                      fontSize: 12, fontWeight: 700, borderRadius: 8, padding: "5px 10px", cursor: "pointer",
+                      fontSize: 12, fontWeight: 700, borderRadius: R.pill, padding: "5px 10px", cursor: "pointer",
                       border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)",
                       background: on ? "var(--accent)" : "var(--bg-stepper)",
                       color: on ? "var(--text-on-accent)" : "var(--text-primary)",
@@ -618,7 +618,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 onDec={function () { setAddCap(Math.max(1, addCap - 1)); }} onInc={function () { setAddCap(Math.min(60, addCap + 1)); }} />
               <button onClick={addMega} disabled={!canAdd} className={canAdd ? "mgt-hover-scale" : undefined}
                 style={{
-                  border: "1px solid var(--accent)", borderRadius: 8, padding: "6px 14px",
+                  border: "1px solid var(--accent)", borderRadius: R.pill, padding: "6px 14px",
                   fontSize: 13, fontWeight: 700, background: "var(--accent)", color: "var(--text-on-accent)",
                   boxShadow: "var(--shadow-input)", opacity: canAdd ? 1 : 0.4, cursor: canAdd ? "pointer" : "not-allowed"
                 }}>

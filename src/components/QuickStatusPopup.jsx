@@ -19,7 +19,7 @@
 //   onClose()      — clear the parent's popup state
 
 import { createPortal } from "react-dom";
-import { S, BLOCK_BG, BTN } from "../lib/constants";
+import { S, BLOCK_BG, BTN, R } from "../lib/constants";
 
 export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClose }) {
   if (!booking) return null;
@@ -41,7 +41,7 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
         onClick={(e) => e.stopPropagation()}
         className="mgt-card-in"
         style={{
-          background: "var(--tl-popup-bg)", borderRadius: 20,
+          background: "var(--tl-popup-bg)", borderRadius: R.sheet,
           border: "1px solid " + S.border,
           boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
           padding: "20px 24px",
@@ -62,7 +62,7 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
                 className="mgt-hover-scale"
                 style={{
                   background: BLOCK_BG[st], border: "none",
-                  borderRadius: 12, padding: "10px 18px",
+                  borderRadius: R.pill, padding: "10px 18px",
                   fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
                   cursor: "pointer", textTransform: "capitalize",
                   minHeight: 44, flex: "1 1 auto"
@@ -80,7 +80,7 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
               className="mgt-hover-scale"
               style={{
                 background: BTN.orange, border: "none",
-                borderRadius: 12, padding: "10px 18px",
+                borderRadius: R.pill, padding: "10px 18px",
                 fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
                 cursor: "pointer",
                 minHeight: 44, flex: "1 1 auto"
