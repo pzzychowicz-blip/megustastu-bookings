@@ -64,12 +64,31 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
   // FLIP: when a new message bumps a conversation to the top, the rows ease to
   // their new spots instead of jumping. Keyed on the rendered order signature so
   // it fires only on a reorder/add/remove — not on every unrelated re-render.
-  // It composes with the collapse rather than fighting it: on a filter change
-  // the union order is unchanged (so FLIP no-ops and the heights do the work),
-  // and a newcomer mounts at zero height (so FLIP measures no movement and the
-  // expansion does it instead).
+  // It composes with the collapse rather than fighting it, and the two directions
+  // divide the work cleanly: on the way OUT the shrinking heights carry the rows
+  // below and FLIP stays silent; on the way IN the row is there at full height
+  // immediately, so FLIP is the ONLY thing that animates — the rows below slide
+  // down into their new spots.
+  //
+  // The quiet predicate is what keeps the OUT direction silent, and it is not
+  // optional. FLIP's stored tops last refreshed before the collapse began; the
+  // rows then eased upward under a CSS height transition, which React never
+  // re-rendered through. So at the prune — the next commit that changes the order
+  // signature — FLIP would measure the entire collapse as one unseen jump and
+  // replay it: a second slide starting ~90ms after the fold visibly finished,
+  // repeating its last stage. Going quiet whenever a row is, or has just been,
+  // collapsing resyncs the tops instead.
+  //
+  // `wasCollapsing` is written in a plain effect, so during the PRUNE commit's
+  // layout effect it still holds the previous render's answer (true) — which is
+  // exactly the question being asked. A genuine reorder landing inside that window
+  // loses its FLIP for one pass; a new message arriving during a 365ms fold is
+  // rare enough to accept.
+  const collapsing = renderIds.some((id) => !live[id]);
+  const wasCollapsing = useRef(false);
+  useEffect(() => { wasCollapsing.current = collapsing; });
   const orderSig = rows.map((c) => c.phoneKey).join("|");
-  const flipRef = useFlip([orderSig]);
+  const flipRef = useFlip([orderSig], () => collapsing || wasCollapsing.current);
   if (!rows.length) {
     return (
       <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>

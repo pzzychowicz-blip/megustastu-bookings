@@ -377,7 +377,20 @@ export function SlideView({ dir, fill = false, children }) {
 // `[data-flip-id]` child's top, and for any that moved, plays a Web-Animations
 // translateY(from→0) — so a re-sorted card eases to its new spot instead of
 // jumping. WAAPI leaves no inline styles, so it never fights `.mgt-hover-scale`.
-export function useFlip(deps) {
+//
+// `isQuiet` (v17.6.0-wa-sandbox) — an optional PREDICATE that re-measures WITHOUT
+// animating when it returns true. It exists because FLIP's stored tops only
+// refresh when `deps` change, so a layout shift that happened between two passes —
+// a CSS height transition easing rows upward, say — leaves the stored tops
+// describing a position the rows left long ago. The next pass then measures that
+// whole stale delta and replays a move the user already watched. A caller that
+// knows a given change was carried by something other than FLIP returns true for
+// that pass, which resyncs the tops and animates nothing.
+//
+// A predicate rather than a boolean so it is evaluated HERE, inside the layout
+// effect — the moment the question is actually asked. That also lets a caller
+// answer it from refs without reading them during render.
+export function useFlip(deps, isQuiet) {
   const ref = useRef(null);
   const prevTops = useRef(new Map());
   useLayoutEffect(function () {
@@ -389,13 +402,14 @@ export function useFlip(deps) {
     // per flip pass (/code-review fix #4 — it was inside the per-element loop).
     const reduceMotion = document.documentElement.dataset.motion === "reduce"
       || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    const quiet = typeof isQuiet === "function" && isQuiet() === true;
     const next = new Map();
     container.querySelectorAll("[data-flip-id]").forEach(function (el) {
       const id = el.getAttribute("data-flip-id");
       const top = el.getBoundingClientRect().top;
       next.set(id, top);
       const prev = prevTops.current.get(id);
-      if (!reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
+      if (!quiet && !reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
         el.animate(
           [{ transform: "translateY(" + (prev - top) + "px)" }, { transform: "translateY(0)" }],
           { duration: 320, easing: "ease" }
