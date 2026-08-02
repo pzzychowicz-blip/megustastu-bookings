@@ -41,7 +41,7 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   optimizerActiveFor
 } from "../lib/booking-logic";
-import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone, findPhoneOverlaps, regularChipLabel } from "../lib/customers";
+import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
 import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
@@ -55,7 +55,7 @@ export function BookingFormModal({
   onSave, onSavePending, onSaveConfirm, onClose, onClearSwap, onBookAgain,
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel,
   onAddToWaitlist, standingEnabled,
-  currency = "€", regularMin = 2, // v17.0.0: settings/general
+  currency = "€", regularMin = DEFAULT_REGULAR_MIN, // v17.0.0: settings/general
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
   // Pre-E1, these all lived inline in BookingApp's body. Moved here because

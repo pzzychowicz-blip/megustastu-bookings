@@ -35,13 +35,16 @@ import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError } from "../lib/dbError";
+// The "Regular" threshold is owned by the customer-identity layer — the chip
+// helper there falls back to it too, so both agree by construction.
+import { DEFAULT_REGULAR_MIN } from "../lib/customers";
 
 export const DEFAULT_GENERAL_SETTINGS = {
   v: 1,
   restaurantName: "Me Gustas Tú",
   currency: "€",
   phonePrefix: "+",
-  regularMin: 2,
+  regularMin: DEFAULT_REGULAR_MIN,
   lateCollapseMax: 2,
   waitMatchWin: 90,
   undoSecs: 10,

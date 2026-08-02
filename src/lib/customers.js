@@ -99,6 +99,14 @@ export function matchCustomerByPhone(phoneKey, bookings, excludeBookingId) {
   };
 }
 
+// DEFAULT_REGULAR_MIN — completed visits a customer needs before the chip calls
+// them a Regular. Lives HERE, in the customer-identity layer, because that is
+// what it describes; settings/general's seed imports it rather than restating 2
+// (useGeneralSettings.js), as does the booking form's prop default. Keep it in
+// this file and not in the hook: customers.js is also imported by the Node API
+// side via whatsapp.js, which must never pull in firebase.
+export const DEFAULT_REGULAR_MIN = 2;
+
 // regularChipLabel — the text of the green/teal "Regular · N past visits" chip.
 // ONE implementation because the chip renders in two places: the booking form
 // (BookingFormModal) and the WA conversation header (ConversationView). They had
@@ -108,7 +116,7 @@ export function matchCustomerByPhone(phoneKey, bookings, excludeBookingId) {
 export function regularChipLabel(count, regularMin) {
   const n = count || 0;
   const plural = n === 1 ? " past visit" : " past visits";
-  return (n >= (regularMin || 2) ? "Regular · " : "") + n + plural;
+  return (n >= (regularMin || DEFAULT_REGULAR_MIN) ? "Regular · " : "") + n + plural;
 }
 
 // customerIndex — build the full phone→customer map from the bookings list.

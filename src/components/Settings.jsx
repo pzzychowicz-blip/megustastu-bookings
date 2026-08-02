@@ -40,6 +40,7 @@ const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // can import them WITHOUT pulling this whole (now lazy-loaded) module into the
 // startup chunk. Re-exported here for back-compat; still exactly ONE list.
 import { SETTINGS_TABS } from "./SettingsChrome";
+import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
@@ -250,11 +251,13 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
     ? bookingDefaults
     : { tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }], restDur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20, freeSoonEnabled: true, turnaroundEnabled: false, turnaroundMin: 15 };
   const tiers = Array.isArray(bd.tiers) ? bd.tiers : [];
-  // v17.0.0: general settings (settings/general). Defensive fallback mirrors
-  // the hook's DEFAULT_GENERAL_SETTINGS seed.
+  // v17.0.0: general settings (settings/general). The defensive fallback IS the
+  // hook's seed now — it used to be a hand-copied literal of the same nine
+  // fields, which is how a stale copy of one of them (regularMin) could sit here
+  // disagreeing with the real default.
   const gs = generalSettings && typeof generalSettings === "object"
     ? generalSettings
-    : { restaurantName: "Me Gustas Tú", currency: "€", phonePrefix: "+", regularMin: 2, lateCollapseMax: 2, waitMatchWin: 90, undoSecs: 10, defaultBookingSize: 2, defaultWalkinSize: 2 };
+    : DEFAULT_GENERAL_SETTINGS;
   // v17.2.0: per-device Timeline zoom/follow settings (App's tlSettings).
   const tl = tlSettings && typeof tlSettings === "object"
     ? tlSettings
