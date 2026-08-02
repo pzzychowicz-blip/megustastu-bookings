@@ -6565,3 +6565,65 @@ Shipped as a new atom rather than three edits: all three textareas in the app
 `{...mkInp(), resize:"vertical"}` copy-paste, so `mkArea()` in `atoms.jsx` is
 now that shape once, per the "new UI composes from atoms" rule. Returns a style
 object like its `mkInp`/`mkBtn` siblings.
+
+---
+
+## v17.7.1 — textarea radius: the centring fix was only half a fix
+
+**Date:** 2026-08-02
+**Files:** `src/components/atoms.jsx` (`mkArea`), `src/App.jsx` (version), `CLAUDE.md`
+**Behavioural change:** yes — the three textareas lose the pill and take a 10px
+radius. **Line delta:** +18 / −11 (almost all comment). **Bundle:** main chunk
+193.74 kB gz, `atoms` 16.53 kB gz — both unchanged from v17.7.0 (one extra
+property; the rest is comment). **Verification:** lint 0 errors / 40 warnings ·
+103/103 tests · build clean.
+
+### The bug
+
+v17.7.0 gave `mkArea()` `alignContent: "center"` to stop `--r-pill` clipping the
+first characters of a textarea, and the entry above closes with: *"It applies
+only while the content is shorter than the box, so a textarea the user has typed
+two full lines into is unaffected (verified live)."*
+
+Both halves of that sentence are true. The conclusion drawn from them is not.
+
+`align-content` has nothing to distribute once the content is TALLER than its
+box. Every caller is `rows={2}` — and these are the fields people write
+paragraphs into (allergies, special requests, a reminder note). Type a third
+line and the field scrolls: the text returns to the top edge, where `--r-pill`
+(999px, clamped by CSS to half of the ~60px box = **30px**) reaches ~30px inward
+against **12px** of padding. The topmost VISIBLE line is sliced — at every
+scroll position, for as long as the content overflows.
+
+"Two full lines is unaffected" is exactly right and exactly the point: two lines
+is the last size that still fits. The verification stopped one line short of the
+bug.
+
+### The fix
+
+`mkArea()` sets `borderRadius: R.inset` (10px). That is inside `mkInp`'s 12px
+horizontal padding, so the curve cannot reach any line at any height, scroll
+position, or size the user drags the `resize:vertical` handle to. `alignContent`
+stays — it is genuinely nicer for short content — but it is now a nicety, not
+the thing holding the correctness.
+
+Verified on a clean v17.7.0 build with a harness reading the REAL `--r-*` tokens:
+two identical 60px `rows={2}` textareas, same four-line content, both scrolled to
+the bottom — at `999px` the top visible line renders with its glyph tops cut, at
+`10px` it renders whole. Effective radius 30px vs 10px against 12px padding.
+
+### The rule this earns
+
+**Any box holding wrapping or scrolling text must keep its radius ≤ its
+horizontal padding.** Vertical centring is not a substitute, because it silently
+stops applying at precisely the moment the content starts to overflow — which is
+why this passed QA: testing a rounded multi-line box with short content proves
+nothing about it. Pills are for SINGLE-LINE controls, where line-height centres
+the text and it never reaches the curve. Added to CLAUDE.md under the `R` scale.
+
+### Found by
+
+The WhatsApp sandbox's v17.7.0 sync. Its reply composer is `rows={2}` +
+`resize:"none"` and advertises "Shift+Enter for new line", so overflow is the
+ordinary state there rather than an edge case; the clipping was obvious within
+one test message, and the same geometry then reproduced on `mkArea` itself.

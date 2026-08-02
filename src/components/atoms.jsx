@@ -38,17 +38,31 @@ export function mkInp() {
 // booking form's Notes, the walk-in Notes, the reminder Text — were
 // `{...mkInp(), resize:"vertical"}` copy-pasted; this is that shape, once.
 //
-// `alignContent:"center"` is what earns it its own atom. A textarea starts its
-// text at the TOP, and on a pill the box is at its NARROWEST there, so with
-// --r-pill the first characters of a 2-row field were being clipped by the
-// corner curve ("Allergies…" rendered as ".gies…"). Centring puts the text at
-// the box's widest point, which fixes the clipping and the balance together.
-// It only applies while the content is shorter than the box, so a textarea the
-// user has typed two full lines into is unaffected. A browser without
-// align-content support falls back to top-aligned — i.e. exactly the pre-
-// v17.7.0 rendering, so this degrades rather than breaks.
+// ── Why this does NOT inherit mkInp's pill (v17.7.1 fix) ─────────────────────
+// A rounded box is NARROWEST at its top edge, which is exactly where a textarea
+// starts its text — so a radius wider than the horizontal padding eats the
+// first characters ("Allergies…" rendering as ".gies…").
+//
+// v17.7.0 shipped `alignContent:"center"` as the answer: centring pushes short
+// content down to the box's widest point. That is a real improvement, but it is
+// only half the fix, and the half it misses is the common one. alignContent has
+// nothing to distribute once the content is TALLER than the box — and every
+// caller is rows={2} with the text areas people actually write paragraphs in
+// (allergies, special requests, a reminder note). The moment a third line is
+// typed the field scrolls, the text returns to the top edge, and on --r-pill
+// (999px, clamped by CSS to half the ~60px box = 30px) the corner reaches ~30px
+// inward against 12px of padding — so the topmost VISIBLE line is sliced at
+// every scroll position. The v17.7.0 note reasoned that a full field is
+// "unaffected" by the centring; correct, but that is precisely when the
+// clipping comes back.
+//
+// So the radius, not the alignment, has to be the guarantee: R.inset (10px)
+// sits inside mkInp's 12px horizontal padding, so no line can be clipped at any
+// height, scroll position, or resize the user drags it to. `alignContent` stays
+// for the balance it gives short content — it is now a nicety, not a load-
+// bearing fix, and a browser without it simply renders top-aligned.
 export function mkArea() {
-  return { ...mkInp(), resize: "vertical", alignContent: "center" };
+  return { ...mkInp(), borderRadius: R.inset, resize: "vertical", alignContent: "center" };
 }
 
 export function mkBtn(extra) {
