@@ -14,6 +14,52 @@ session and keeping it in sync.
 
 ## Deferred
 
+- **`.mgt-press` silently kills `.mgt-hover-scale`'s transform transition.**
+  `transition` is a shorthand, so two rules of EQUAL specificity do not merge —
+  the later one replaces the earlier outright. `.mgt-hover-scale` (index.html
+  ~349) sets `transition: transform …`, and `.mgt-press` (~472, i.e. later)
+  sets `transition: filter …, background-color …`. Every element carrying both
+  classes therefore has no `transform` transition at all, and its 1.08 hover
+  SNAPS instead of easing. **28 call sites in `src/` carry both.**
+
+  Fix is one edit: declare the transition ONCE for both selectors, listing
+  every property (`transform`, `background-color`, `box-shadow`,
+  `border-radius`, `filter`). An element with only one class then carries a
+  couple of transitions for properties it never changes, which costs nothing.
+
+  Found and fixed in MGT Scheduling v16.0.0 phase 27, where the same two
+  classes had drifted the same way. It went unnoticed there for as long as
+  only a handful of buttons had both; when a later pass put `.mgt-press` on
+  every button it became app-wide, which is the trajectory this repo is on.
+  Verify by reading the computed style of an element with both classes — it
+  should list `transform`, and today it will not.
+
+- **No `:focus-visible` affordance anywhere.** `index.html` has zero
+  `focus-visible` rules, so a keyboard user tabbing through the app gets no
+  indication of where they are. This is the clearest accessibility gap in the
+  app. Scheduling v16.0.0 added a global rule and it is worth porting verbatim:
+
+  ```css
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ```
+
+  `:focus-visible` rather than `:focus` so a mouse click does not paint a ring
+  while Tab does; `outline` rather than `box-shadow` because it follows the
+  element's border-radius automatically and, sitting outside the box model,
+  cannot reflow layout or fight an input's inset shadow.
+
+  Two notes specific to THIS repo, both checked rather than assumed:
+  - Scheduling had to remove an `outline: "none"` from its input style first,
+    because an inline style beats a global rule. **Bookings has no such
+    declaration**, so the rule should reach inputs immediately.
+  - `ViewSwitcher.jsx:124` already draws a deliberate `outline: 2px solid
+    var(--text-on-accent)` to mark the focused pane in a split. Check the two
+    do not read as the same thing on that control.
+
+  Scheduling also folded `outline-color` / `outline-offset` into its shared
+  transition list so the ring fades in rather than snapping — worth doing in
+  the same edit as the item above, since it touches the same declaration.
+
 - **The reminder banner in `useReminders.jsx` is unthemed.** Lines ~209–216 use
   raw hex/rgba literals (`#78350f`, `rgba(254,243,199,0.8)`, `rgba(22,101,52,0.8)`)
   instead of CSS custom properties, so the banner — its amber shell, its time
