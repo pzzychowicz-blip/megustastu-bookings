@@ -42,7 +42,7 @@ import {
   optimizerActiveFor
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone, findPhoneOverlaps } from "../lib/customers";
-import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
@@ -561,7 +561,7 @@ export function BookingFormModal({
             value={form.preference}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{preference:e.target.value});});}}
             className="mgt-hover-scale"
-            style={inp()}><option value="auto">Auto (recommended)</option>{INDOOR.length>0?<option value="indoor">Indoor</option>:null}{OUTDOOR.length>0?<option value="outdoor">Outdoor</option>:null}</select></Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
+            style={mkSel()}><option value="auto">Auto (recommended)</option>{INDOOR.length>0?<option value="indoor">Indoor</option>:null}{OUTDOOR.length>0?<option value="outdoor">Outdoor</option>:null}</select></Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}}>-</button><span

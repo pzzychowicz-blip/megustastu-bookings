@@ -57,7 +57,9 @@ const TXT_INP = {
 // Small select — combo / table pickers in the priorities editor (v15.9.0).
 const SEL_INP = {
   background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.pill,
-  padding: "6px 9px", fontSize: 13, fontWeight: 700, color: "var(--text-primary)",
+  // v17.8.0: paddingRight ~= this control's own pill radius (~15px on its 30px
+  // box), for the same reason mkSel exists — the arrow sat inside the curve.
+  padding: "6px 9px", paddingRight: 14, fontSize: 13, fontWeight: 700, color: "var(--text-primary)",
   boxShadow: "var(--shadow-input)", cursor: "pointer"
 };
 // Segmented mini-button (zone-order / prefer-avoid toggles in the priorities editor).

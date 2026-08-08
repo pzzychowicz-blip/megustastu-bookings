@@ -65,6 +65,19 @@ export function mkArea() {
   return { ...mkInp(), borderRadius: R.inset, resize: "vertical", alignContent: "center" };
 }
 
+// v17.8.0 — the dropdown mkInp. A <select> renders its disclosure arrow inside
+// its own padding box, hard against padding-right; mkInp's 12px puts that arrow
+// deep inside a pill's right CAP, which on a 43px-tall control is 21.5px wide
+// (`--r-pill` is 999px and CSS clamps a radius to half the box). The arrow then
+// reads as shoved into the curve rather than sitting in the control.
+// A single small glyph at the end of a pill wants padding ~= the radius, so it
+// lands where the cap is flattest. Text doesn't need this — it spans enough
+// height that the curve has already receded behind it, which is why the LEFT
+// 12px looks right and the right 12px doesn't.
+export function mkSel() {
+  return { ...mkInp(), paddingRight: 18, cursor: "pointer" };
+}
+
 export function mkBtn(extra) {
   return {
     border: "1px solid var(--border-glass)",
