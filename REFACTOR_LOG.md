@@ -6966,3 +6966,90 @@ when a touch listener exists somewhere on the document, and this app had none.
 Without the empty passive listener now in the boot script the whole feature
 would have been desktop-only — silently absent on the iPads it was mostly for,
 and impossible to notice from a Mac.
+
+### Polish round 2 (commits 9–13) — the second look
+
+Patryk re-reviewed the polish round with the app open and found five things.
+Four were real defects; one of them had been shipped and invisible since
+v15.8.0.
+
+#### The hover lift was snapping on ~30 buttons, and had been for two versions
+
+"These buttons' hover reacts in a jumpy way, less smooth than Reshuffle." He was
+describing a genuine, measurable difference:
+
+```
+Reshuffle    (.mgt-hover-scale)             transform .12s, background-color .12s, box-shadow .12s
+Snooze 15m   (.mgt-hover-scale .mgt-press)  filter .16s, background-color .16s
+```
+
+No transform transition at all on the second one. Two `transition:` declarations
+in `index.html`, both at specificity (0,1,0) — and `transition` is a **shorthand**,
+so the later rule (`.mgt-press`) didn't add to the earlier list, it *replaced*
+it. Every element carrying both classes jumped straight to `scale(1.08)`.
+
+That is the reminder banner's Snooze/Done, the whole timeline zoom cluster,
+every banner ✕, the booking form's customer chips — about thirty controls,
+broken since `.mgt-press` was introduced in v15.8.0 and never noticed because
+the *filter* dim it added still worked. v17.8.0's universal press-scale then
+doubled the damage by giving the same elements a press dip that also snapped.
+
+Two shorthand declarations of one property cannot merge, so the fix is to stop
+having two: `.mgt-hover-scale, .mgt-press` now share one declaration listing
+every property either class animates. Source order can no longer matter because
+there is nothing left to override. `border-radius` left the list — v17.7.0
+removed the radius change from the hover rule, so it had been easing nothing.
+
+**Carry forward:** when two classes are designed to compose, they must not both
+set the same shorthand. Give them one shared declaration, or use longhands that
+don't collide.
+
+#### A label is solid, or it is text
+
+The chips Patryk flagged ("Table free · 20:30", the reminder's "19:17", "This
+device", ListView's `SmallTag`s) all had the same shape: a pale semantic fill, a
+border in the matching hue, bold text in a third shade of it. That is the stock
+badge, and it encodes one signal three times.
+
+The app already had two better treatments and both were in use: **solid** (fill
+carries the colour, `--text-on-accent` text, neutral `--border-glass` rim — the
+v17.7.0 status-label decision) and **plain text** (the colour carries itself).
+The pastel-bordered pill was a third system nobody had decided on.
+
+Choosing between the two is not taste — **match what is next to you**:
+
+- ListView's `no-show ×N` / `N min late` / `€N deposit` sat in the same row as
+  four solid tags (`manual`, `locked`, `★`, the seated `N min`). Solid.
+- `Table free · 20:30`, `This device` and the reminder time sit in text
+  contexts, and each already has a plain-text twin elsewhere — `WaitAvailBanner`
+  prints that exact waitlist string as plain green text one surface away. Text.
+
+The `⚠` went with the fill, for the reason the banners lost theirs. And removing
+the waitlist chip left the panel's footnote ("a green chip means…") describing
+something that no longer existed — a reminder that a visual change can silently
+falsify copy.
+
+#### Three smaller ones
+
+**The `<select>` arrow.** A select paints its disclosure arrow inside its own
+padding box, hard against `padding-right`. `mkInp`'s 12px put it deep inside the
+pill's right cap — `--r-pill` is 999px and CSS clamps a radius to half the box,
+so on the 43px control the cap is 21.5px wide. Text never hits this because it
+spans enough height that the curve has receded behind it, which is exactly why
+the left 12px looked right and the right 12px didn't. New `mkSel()` atom
+(`mkInp` + `paddingRight: 18`), following `mkArea`'s precedent.
+
+**The ghost still wasn't a block.** Two ways: a multi-table ghost lifted only the
+hovered cell, so it broke the group-lift behaviour it is supposed to be a quiet
+copy of; and the `⏳` trailed the name, which made it the first thing the
+ellipsis ate — the marker meaning "proposal, not booking" disappeared on exactly
+the narrow blocks where the dimming is hardest to read. It now uses
+TimelineBlock's group mechanism verbatim under its own `data-wg` attribute
+(waitlist and booking ids come from the same `genId()`, and one namespace is one
+collision away from a ghost lifting an unrelated booking), and the marker sits
+between the time chip and the name where a real block puts its ★ / ⚠ / [L].
+
+**The split tools were eggs.** Single-glyph buttons at `minHeight: 40` plus
+horizontal padding ≈ 30×40; CSS clamps `--r-pill` to half the *shorter* side, so
+an unequal box can only ever be an egg. Square 40×40 makes them circles by the
+same rule that already makes the 34×34 🔍 one.
