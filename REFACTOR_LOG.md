@@ -6736,3 +6736,66 @@ is supplied, so the component stays usable without it. Same `BTN.nav` +
 The sibling MGT Scheduling app has its own copy of `ConnectionStatus` (this one
 was ported from it in v16.2.0). Per the shared-pattern rule this is a port
 candidate on its next touch — not done here.
+
+### 3/5 — Presence: a connection now has to keep proving itself
+
+**Bundle:** main chunk 194.53 kB gz.
+
+The popover's "Connected devices" list was showing tablets that had last been on
+**days** earlier. The cause is a real hole in the `onDisconnect`-only model, not
+a bug in how it was called:
+
+> `onDisconnect()` arms **one** server-side operation that fires **once**. If the
+> socket drops between arming it and the `set()` landing, the server fires the
+> (empty) removal — and the SDK then **replays the queued `set()` on reconnect**,
+> writing a child with no `onDisconnect` attached to it. That child is immortal.
+
+The v17.3.0 comment above the two calls asserted that ordering `onDisconnect`
+first covers "a write that races a drop". It doesn't. Reordering them doesn't
+either; it only moves the window. Any scheme built on a single fire-once hook is
+one lost race away from a permanent phantom.
+
+So the model changed rather than the ordering. `onDisconnect` stays as the fast
+path — a clean tab close still vanishes instantly — but it is no longer the
+*proof*. A live connection now re-proves itself every 45s with a `lastSeen`
+heartbeat, and a child counts as connected only while its `lastSeen` is inside
+150s (three missed beats).
+
+**The filter is enforced on READ.** That matters more than it looks: it means a
+child that leaked before this version shipped is hidden the moment the new code
+runs, with no migration, no cleanup pass, and no write needing to succeed first.
+Pruning is a separate, slower concern — children older than 10 minutes are
+deleted, so leaked keys don't accumulate forever, but deletion is deliberately
+4× more conservative than hiding. Hiding is free and reversible (the next beat
+brings a device straight back); deleting is neither.
+
+`.info/serverTimeOffset` was added because the whole model now rests on
+comparing a `serverTimestamp` against local time, and on a device with clock
+skew that comparison is nonsense — "connected 3h ago" for a tab opened a minute
+ago, or a negative span that renders as "just now" forever. The offset is
+returned from the hook so `ConnectionStatus`'s "since" text uses it too.
+
+**Two things QA caught that the design got wrong:**
+
+*The prune never fired.* The first version pruned at registration, inside the
+`.info/connected` handler — but that resolves **before** the first `presence`
+snapshot arrives, so it always read an empty node and deleted nothing, silently.
+It is now armed on connect and consumed by the next real snapshot, which is the
+first moment the data it needs actually exists. Still once per registration, so
+N devices cause N deletes at connect rather than a rolling write storm.
+
+*A pre-v17.8.0 child has no `lastSeen`*, so the filter falls back to `since`.
+That keeps such a device listed for its first 150s and then drops it until it
+reloads. A transitional cost on a handful of devices, and the alternative —
+trusting a field that is never refreshed — is precisely the bug being fixed.
+
+Verified against DEV by seeding three children: a 3-day-old one, a 3-day-old
+one in the pre-v17.8.0 shape, and one beating 10s ago. The first two were hidden
+immediately and deleted on the next connect; the third stayed listed, then
+disappeared **on its own** once it crossed 150s without beating — no reload, no
+`onDisconnect`, which is exactly the case the old code could never recover from.
+
+Still exempt from the CAS/revGuard rule. The prune writes to keys other than our
+own, but only to delete ones already proven dead, and deleting a dead key is
+idempotent — two devices racing on the same one is harmless. No rules change,
+no Firebase console step.

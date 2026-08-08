@@ -36,9 +36,14 @@ const POPOVER_W = 286;
 
 // v17.3.0: compact "connected since" — a relative string computed at render time
 // (the popover only opens on click, so no ticking clock is needed).
-function sinceText(ts) {
+// v17.8.0: `offset` is the `.info/serverTimeOffset` correction from usePresence.
+// These timestamps are serverTimestamps, so on a device with clock skew a raw
+// Date.now() comparison produces nonsense like "connected 3h ago" for a tab
+// opened a minute ago — or a negative span rendered as "just now" forever.
+function sinceText(ts, offset) {
   if (!ts) return "";
-  const mins = Math.floor((Date.now() - ts) / 60000);
+  const mins = Math.floor((Date.now() + (offset || 0) - ts) / 60000);
+  if (mins < 0) return "just now";
   if (mins < 1) return "just now";
   if (mins < 60) return mins + "m ago";
   const hrs = Math.floor(mins / 60);
@@ -46,7 +51,7 @@ function sinceText(ts) {
   return Math.floor(hrs / 24) + "d ago";
 }
 
-export function ConnectionStatus({ connected, hasConnected, userEmail, devices, myKey, onLogout }) {
+export function ConnectionStatus({ connected, hasConnected, userEmail, devices, myKey, onLogout, offset = 0 }) {
   const [open, setOpen] = useState(false);
   const [alignRight, setAlignRight] = useState(true);
   const wrapRef = useRef(null);
@@ -222,7 +227,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, color: S.text, wordBreak: "break-all" }}>{d.email}</div>
                         <div style={{ fontSize: 11, color: S.muted }}>
-                          {d.ua + (sinceText(d.since) ? "  ·  " + sinceText(d.since) : "")}
+                          {d.ua + (sinceText(d.since, offset) ? "  ·  " + sinceText(d.since, offset) : "")}
                         </div>
                       </div>
                       {mine ? (
