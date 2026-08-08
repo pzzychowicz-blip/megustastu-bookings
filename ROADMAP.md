@@ -14,16 +14,6 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **The reminder banner in `useReminders.jsx` is unthemed.** Lines ~209–216 use
-  raw hex/rgba literals (`#78350f`, `rgba(254,243,199,0.8)`, `rgba(22,101,52,0.8)`)
-  instead of CSS custom properties, so the banner — its amber shell, its time
-  chip and its green "Done" button — renders identically in light and dark and
-  reads wrong in dark mode. It is the last surface the v14.2.x token migration
-  missed, most likely because it lives in a **hook**, not a component, so a
-  `src/components` sweep never sees it. Spotted during the v17.7.0 radius
-  rollout (same reason: it wasn't in the design brief's file list). Fix = swap
-  each literal for the matching `--warn-*` / `--app-*` token; no logic change.
-
 - **PWA / offline shell — withdrawn in v17.4.1. The worker may have been
   innocent (v17.5.1 finding).** v17.5.1 root-caused the *Android* tablet's
   identical "⟳ Loading bookings…" freeze to something else entirely: the CSP's

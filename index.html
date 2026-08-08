@@ -118,6 +118,10 @@
         --status-connecting: #eab308; --status-connecting-glow: rgba(234, 179, 8, 0.25);
         /* Banners (warn / danger / suggestion) — bg + border + text flip together */
         --warn-bg: rgba(255, 237, 213, 0.7);    --warn-border: rgba(253, 186, 116, 0.55);
+        /* v17.8.0: a tint sitting ON --warn-bg — the reminder banner's time chip.
+           Distinct from --warn-border, which is a stroke tone and reads too pale
+           as a fill. */
+        --warn-chip-bg: rgba(146, 64, 14, 0.15);
         --danger-bg: rgba(254, 226, 226, 0.7);  --danger-border: rgba(252, 165, 165, 0.55);
         --suggest-bg: rgba(220, 252, 231, 0.8); --suggest-border: rgba(134, 239, 172, 0.5);
         /* Shadows carrying white inset highlights (dimmed on dark) */
@@ -185,6 +189,7 @@
         --app-btn-slate-dim: #78828c;             /* write-warning dismiss */
         /* Saturated action fills (white text — read on both themes) */
         --app-walkin: rgba(22, 101, 52, 0.75);    /* Walk-in button */
+        --app-success-solid: rgba(22, 101, 52, 0.8); /* v17.8.0: reminder "Done" */
         --app-new: rgba(0, 122, 255, 0.75);       /* + New button */
         --app-danger-solid: #dc2626;              /* Delete (solid) */
         --app-warn-solid: #9a3412;                /* No-show / Confirm (solid warn) */
@@ -284,6 +289,9 @@
         --status-offline: #ff3b30; --status-offline-glow: rgba(255, 59, 48, 0.25);
         --status-connecting: #eab308; --status-connecting-glow: rgba(234, 179, 8, 0.25);
         --warn-bg: rgba(120, 70, 20, 0.3);    --warn-border: rgba(253, 186, 116, 0.4);
+        /* Inverted for dark: a LIGHT tint on the dark amber shell (the light
+           theme's dark-brown tint would disappear into it). */
+        --warn-chip-bg: rgba(253, 186, 116, 0.18);
         --danger-bg: rgba(120, 30, 30, 0.32); --danger-border: rgba(252, 165, 165, 0.4);
         --suggest-bg: rgba(34, 90, 50, 0.45); --suggest-border: rgba(134, 239, 172, 0.35);
         --shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.07);

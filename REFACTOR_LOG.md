@@ -6799,3 +6799,41 @@ Still exempt from the CAS/revGuard rule. The prune writes to keys other than our
 own, but only to delete ones already proven dead, and deleting a dead key is
 idempotent — two devices racing on the same one is harmless. No rules change,
 no Firebase console step.
+
+### 4/5 — Theme the reminder banner (was `ROADMAP.md` → Deferred)
+
+**Bundle:** unchanged (styles only).
+
+The last surface the v14.2.x token migration missed. Its amber shell, its time
+chip and its green "Done" button were raw literals (`rgba(254,243,199,0.8)`,
+`#78350f`, `rgba(146,64,14,0.15)`, `rgba(22,101,52,0.8)`, `#fff`), so the banner
+rendered identically in both themes — pale cream with dark brown text, sitting
+directly above a correctly-dark "Running late" banner it is supposed to match.
+
+It survived every sweep because it lives in a **hook**, not a component: a
+`src/components` pass never sees it. Worth remembering — `useReminders.jsx` is
+the only hook in the codebase that returns JSX.
+
+Straight literal → token swap, no logic change. Two tokens were added:
+
+- **`--warn-chip-bg`** (both blocks). The time chip is a tint sitting *on*
+  `--warn-bg`, and no existing token filled that role — `--warn-border` is a
+  stroke tone and reads too pale as a fill. The value inverts between themes:
+  a dark-brown tint on the light shell, a light-amber tint on the dark one. The
+  light theme's value would vanish into the dark shell.
+- **`--app-success-solid`** (light block only), carrying the exact
+  `rgba(22,101,52,0.8)` the Done button already used. It joins the "saturated
+  action fills (white text — read on both themes)" family next to
+  `--app-walkin` / `--app-danger-solid`, which is deliberately not duplicated
+  into the dark block. Reaching for `--app-walkin` instead would have been the
+  wrong token by role — it means "the Walk-in button", not "a success action".
+
+One value moved: the light theme's text is now `--warn-text` (#9a3412) rather
+than the old #78350f. That is a hair lighter, and it is the point — every other
+warn surface in the app already uses it, and the banner was drifting.
+
+Verified by rendering the exact post-swap markup in both themes and reading the
+resolved values back. Note for the next person: a real reminder could not be
+created in DEV — the project's deployed rules reject rev-guarded writes
+(`reminders` and `waitlist` both return PERMISSION_DENIED through the app's own
+`writeWithRev`), so DEV's rules are out of step with `database.rules.json`.
