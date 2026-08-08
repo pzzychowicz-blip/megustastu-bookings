@@ -414,6 +414,74 @@ function BlockBar({ bl, totalMins }) {
   );
 }
 
+// ── v17.8.0: waitlist ghost block ────────────────────────────────────────────
+// A preview of where a waiting party WOULD go, drawn on the table row that
+// waitAvail picked for them. Same dimmed treatment as the v17.6.0 turnaround
+// tail so the two read as one visual family ("not a real booking"), in the
+// PENDING colour because that is what the party is — awaiting a decision.
+//
+// Why the dimming is a separate FILL LAYER rather than `opacity` on the whole
+// box (which is how the turnaround tail does it): the tail carries no text, and
+// at 0.3 the guest's name would be illegible. So the wrapper stays fully opaque,
+// an absolutely-positioned sibling supplies the dimmed fill, and the label sits
+// above it at full contrast.
+//
+// `resh` = the match only exists AFTER re-optimising (the reshuffling trialFits
+// branch in App's waitAvail effect). Those tables can be visibly occupied right
+// now, so a solid fill would look like a double-booking; they get a dashed
+// outline and no fill instead — "there is room here, once the day is re-shuffled".
+//
+// Hoisted to module scope per CLAUDE.md's inline-sub-component rule (a component
+// defined inside another's body is a new TYPE every render → full remount).
+function WaitGhost({ g, totalMins, onBook }) {
+  const gS = toMins(g.time);
+  // Clamp to the grid's right edge, exactly as the turnaround tail does — an
+  // absolutely-positioned child past GRID_CLOSE still counts toward the
+  // scroller's scrollWidth and would add empty scroll that grows with zoom.
+  const gE = Math.min(gS + g.dur, GRID_CLOSE * 60);
+  const mins = gE - gS;
+  if (mins <= 0) return null;
+  return (
+    <div
+      className="mgt-hover-scale"
+      onClick={() => onBook(g.id)}
+      title={"Waiting: " + g.name + " · " + g.size + " at " + g.time
+        + (g.resh ? " (after re-optimising)" : "") + " — tap to book"}
+      style={{
+        position: "absolute", top: 3, height: (ROW_H - 8) + "px",
+        left: pct(gS), width: Math.max((mins / totalMins) * 100, 0.3) + "%",
+        // The hover rule no longer supplies a radius (v17.7.0) and paints an
+        // OPAQUE --bg-hover-card, so a radius-less hover-scale element renders a
+        // hard-edged rectangle on hover. 10 matches the tail/ghost family — a
+        // numeric literal here for the same reason the timeline blocks are
+        // exempt from the R scale (canvas geometry, not a control).
+        borderRadius: 10,
+        border: g.resh ? "2px dashed " + BLOCK_BG.pending : "none",
+        boxSizing: "border-box", cursor: "pointer", overflow: "hidden",
+        display: "flex", alignItems: "center",
+        transition: "left 320ms ease, width 320ms ease, transform 120ms ease"
+      }}
+    >
+      {g.resh ? null : (
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute", inset: 0,
+            background: BLOCK_BG.pending, opacity: 0.3, pointerEvents: "none"
+          }}
+        />
+      )}
+      <span style={{
+        position: "relative", padding: "0 6px", fontSize: 10, fontWeight: 600,
+        color: "var(--text-secondary)", whiteSpace: "nowrap",
+        overflow: "hidden", textOverflow: "ellipsis"
+      }}>
+        {"⏳ " + g.name + " · " + g.size}
+      </span>
+    </div>
+  );
+}
+
 // v17.1.0 perf: React.memo — BookingApp re-renders on every form keystroke /
 // banner tick, and the timeline is its heaviest subtree. All function props are
 // the stable VA wrappers (App.jsx viewActionsRef pattern); `hoursSig` and
@@ -440,6 +508,12 @@ export const TimelineView = memo(function TimelineView({
   // from App rather than the TURN_BUFFER live binding, because React.memo cannot
   // see a live binding — the same reason hoursSig/layoutSig exist.
   turnBuffer = 0,
+  // v17.8.0: waitlist ghost blocks — one entry per waiting party the viewed day
+  // currently has room for, [{id,name,size,time,dur,tables,resh}]. Computed and
+  // MEMOISED in App (an inline array literal would defeat this component's
+  // React.memo on every BookingApp render), scoped there to the viewed date.
+  waitGhosts = [],
+  onBookWait = () => {},
 }) {
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
@@ -709,6 +783,13 @@ export const TimelineView = memo(function TimelineView({
       >
         <GridLines />
         {tblBlocks.map((bl, i) => <BlockBar key={"blk" + i} bl={bl} totalMins={totalMins} />)}
+        {/* v17.8.0: waitlist ghosts — rendered BEFORE the real blocks so a live
+            booking always paints on top of a preview. */}
+        {waitGhosts.map((g) =>
+          (g.tables || []).includes(id)
+            ? <WaitGhost key={"wg" + g.id + id} g={g} totalMins={totalMins} onBook={onBookWait} />
+            : null
+        )}
         {/* v15.8.1: render each seated booking's dashed "ghost" (original-duration
             outline) IMMEDIATELY BEFORE its block, so the ghost mirrors EVERY cell
             effect: (1) reposition — same left/width + transform transition; (2) vertical

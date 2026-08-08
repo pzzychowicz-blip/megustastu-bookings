@@ -6627,3 +6627,86 @@ The WhatsApp sandbox's v17.7.0 sync. Its reply composer is `rows={2}` +
 `resize:"none"` and advertises "Shift+Enter for new line", so overflow is the
 ordinary state there rather than an edge case; the clipping was obvious within
 one test message, and the same geometry then reproduced on `mkArea` itself.
+
+---
+
+## v17.8.0 — waitlist ghosts · connection popover · guard extensions
+
+**Date:** 2026-08-08
+**Files:** `src/App.jsx`, `src/components/TimelineView.jsx`,
+`src/components/ConnectionStatus.jsx`, `src/hooks/usePresence.js`,
+`src/hooks/useReminders.jsx`, `src/hooks/useKeyboardShortcuts.js`,
+`src/components/BlockModal.jsx`, `src/components/Settings.jsx`,
+`src/components/LayoutSettings.jsx`, `CLAUDE.md`, `ROADMAP.md`
+**Behavioural change:** yes (four features — see each commit below).
+**Verification:** lint 0 errors / 40 warnings · 103/103 tests · build clean.
+
+Four changes on one branch, one commit each. Two came from Patryk directly, two
+off `ROADMAP.md`. No Firebase rules change: `presence` is the only node touched
+at the persistence layer and it inherits the top-level `.write: auth != null`
+with no `.validate`.
+
+### 1/5 — Waitlist ghost blocks on the Timeline
+
+**Bundle:** main chunk 194.20 kB gz (was 193.74).
+
+`waitAvail` has known, since v16.0.0, exactly which tables and which time would
+fit each waiting party — that is what turns the ⏳ badge orange and what the
+green WaitAvailBanner asserts. But it was only ever *asserted*. Staff could read
+"a table is free for Ghost Alpha" and still have no idea **where**, so the one
+judgement the information exists to support — is taking this party actually a
+good idea? — still needed a manual scan of the grid.
+
+So the match is now drawn where it would go: a dimmed, pending-coloured block on
+the matched table row, at the matched time, for the party's default duration.
+Pending because that is precisely what the party is — awaiting a decision — and
+dimmed in the same family as the v17.6.0 turnaround tail, so the whole class of
+"not a real booking yet" reads alike.
+
+Three things are worth recording about the implementation.
+
+**The dimming is a separate fill LAYER, not `opacity` on the box.** The
+turnaround tail sets `opacity: 0.28` on the whole element, which is fine because
+the tail carries no text. A ghost has to say whose it is, and a label at 0.3
+alpha is unreadable. So the wrapper stays fully opaque, an absolutely-positioned
+`inset: 0` sibling supplies the dimmed fill, and the label sits above it at full
+contrast (`--text-secondary`: #4a5568 light / #c7c7cc dark — checked against the
+0.3-alpha pending tint in both themes, not assumed).
+
+**A match that needs a reshuffle is drawn differently, and that distinction is
+new data.** `tryFit` in App's waitAvail effect already had two branches — the
+cheap `findFreeSlot` (tables free exactly as drawn) and the reshuffling
+`trialFits` (reachable only by moving other parties) — but it discarded which
+one produced the hit. It now records it as a `resh` flag on the entry. This is
+not cosmetic: a solid ghost drawn across a table that is visibly occupied right
+now would read as a rendering bug, and it is the *only* case where a ghost can
+overlap a real block. Those render as a dashed outline with no fill instead.
+`resh` is additive, so `bookFromWaitlist` and `WaitAvailBanner` never see it.
+
+**The ghost is tappable, and that is why it is its own element.** Tapping opens
+the prefilled booking form through the existing `bookFromWaitlist` — no new
+booking path, just a new door to the old one. Because the ghost is a sibling of
+`TimelineBlock` rather than anything layered inside it, it carries no drag or
+RMB handling and cannot swallow a block's gesture. It is rendered *before* the
+row's blocks so a live booking always paints on top of a preview.
+
+Plumbing follows the existing rules rather than inventing anything: `waitGhosts`
+is `useMemo`'d in App (an inline array literal would defeat TimelineView's
+`React.memo` on every BookingApp keystroke), scoped to the viewed date because
+`waitAvail` spans every date ≥ today while the timeline draws one day, and
+`onBookWait` is a stable `VA` wrapper resolving the id against the live waitlist
+at event time. `WaitGhost` is hoisted to module scope per the
+inline-sub-component rule. Its `borderRadius: 10` is a deliberate numeric
+literal — same canvas-geometry exemption the timeline blocks carry — and it is
+required, not optional: `.mgt-hover-scale` paints an opaque `--bg-hover-card`
+and since v17.7.0 supplies no radius of its own, so a radius-less hover-scale
+element renders a hard-edged rectangle on hover.
+
+**Verification note.** The DEV Firebase project rejects `waitlist` writes
+outright (PERMISSION_DENIED, reproduced through the app's own `writeWithRev` —
+its deployed rules for that node disagree with `database.rules.json`), so
+seeding an entry took a direct SDK write that only landed on a retry. Worth
+knowing before the next person tries to QA a waitlist change in DEV. Both
+branches were then exercised against real data: the filled variant from a
+genuine clean match, the dashed variant by temporarily forcing `resh` on one
+entry.

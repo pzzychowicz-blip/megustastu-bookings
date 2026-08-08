@@ -257,7 +257,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.7.1",
+  version:"17.8.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1240,16 +1240,29 @@ function BookingApp({uid}){
       // pass (next data change / 15-min bucket) re-verifies for real, and the
       // Book path re-validates via the form's own scan + doSave guards anyway.
       let budgetHit=false;
+      // v17.8.0: `lastResh` records WHICH branch produced the hit, so the entry
+      // can carry a `resh` flag. The cheap findFreeSlot path (and any hit while
+      // noResh is true) places the party on tables that are free exactly as the
+      // Timeline currently draws them; the reshuffling trialFits path may only
+      // be reachable by MOVING other parties first. The waitlist ghost blocks
+      // need that distinction — a solid ghost drawn over a table that is visibly
+      // occupied would read as a bug, so those render as a dashed outline
+      // instead. Additive: bookFromWaitlist and WaitAvailBanner ignore it.
+      let lastResh=false;
       const tryFit=function(timeStr){
-        if(!noResh){const cheap=findFreeSlot(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null);if(cheap) return cheap;}
+        if(!noResh){const cheap=findFreeSlot(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null);if(cheap){lastResh=false;return cheap;}}
         if(Date.now()-scanT0>WAIT_SCAN_BUDGET_MS){budgetHit=true;return null;}
-        return trialFits(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null,noResh);
+        const t=trialFits(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null,noResh);
+        // noResh === true means trialFits was forbidden from moving anyone, so
+        // its answer is a clean placement too.
+        if(t) lastResh=!noResh;
+        return t;
       };
       if(w.prefTime){
         const sm=toMins(w.prefTime);
         if(sm>=fromM&&sm+dur<=h.close*60){
           const t=tryFit(w.prefTime);
-          if(t){next[w.id]={tables:t,time:w.prefTime};return;}
+          if(t){next[w.id]={tables:t,time:w.prefTime,resh:lastResh};return;}
         }
         // v17.0.0: the ± window is editable (settings/general waitMatchWin).
         const win=generalSettings.waitMatchWin||90;
@@ -1258,7 +1271,7 @@ function BookingApp({uid}){
       }
       for(let m=scanLo;m<=scanHi&&m<24*60;m+=15){
         const t=tryFit(toTime(m));
-        if(t){next[w.id]={tables:t,time:toTime(m)};break;}
+        if(t){next[w.id]={tables:t,time:toTime(m),resh:lastResh};break;}
       }
       // Anti-flap carry-forward: no match found AND the budget cut this entry's
       // scan short → keep the previous pass's availability (if any) rather than
@@ -2330,6 +2343,27 @@ function BookingApp({uid}){
   },[dayWaiting,waitlist,viewDate,waitAvail,waitNotifyDismissed]);
   function dismissWaitRow(id){setWaitNotifyDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});}
   const hasWaitBanner=waitBannerEntries.length>0;
+  // ── v17.8.0: waitlist ghost blocks for the Timeline ─────────────────────────
+  // waitAvail already knows, per waiting party, the exact tables + time that
+  // would fit them — but that only ever surfaced as a banner row and the ⏳
+  // badge, so staff could not see WHERE the party would go and had to guess
+  // whether taking them was a good idea. This projects each match onto the
+  // viewed day's timeline as a dimmed, pending-coloured block.
+  //
+  // Scoped to the VIEWED date (waitAvail spans every date ≥ today, the timeline
+  // draws one day) and memoised — TimelineView is React.memo'd, so an inline
+  // array literal here would defeat the memo on every BookingApp render.
+  const waitGhosts=useMemo(function(){
+    const out=[];
+    waitlist.forEach(function(w){
+      if(!w||w.status!=="waiting"||w.date!==viewDate) return;
+      const a=waitAvail[w.id];
+      if(!a||!a.tables||!a.tables.length||!a.time) return;
+      const size=Number(w.size)||2;
+      out.push({id:w.id,name:w.name||"Waiting",size:size,time:a.time,dur:getDur(size),tables:a.tables,resh:!!a.resh});
+    });
+    return out;
+  },[waitlist,viewDate,waitAvail]);
   const waitlistModal=<ModalPresence show={showWaitlist}>{showWaitlist?<WaitlistPanel
     entries={dayWaiting}
     availability={waitAvail}
@@ -2347,7 +2381,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId};
+  viewActionsRef.current={openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -2364,6 +2398,11 @@ function BookingApp({uid}){
       onSelect:function(id){R.current.setSelectedListId(id);},
       onSummaryToggle:function(){R.current.setSummaryOpen(function(o){return !o;});},
       onOpenWeek:function(){R.current.setShowWeek(true);},
+      // v17.8.0: tapping a waitlist ghost on the Timeline. The ghost only
+      // carries the entry id, so resolve it here against the live waitlist and
+      // hand the whole entry to the existing bookFromWaitlist (which prefills
+      // the booking form from it + its waitAvail time).
+      onBookWait:function(id){const A=R.current;const w=(A.waitlist||[]).find(function(x){return x&&x.id===id;});if(w) A.bookFromWaitlist(w);},
       onPrint:function(){window.print();}
     };
   });
@@ -2420,6 +2459,8 @@ function BookingApp({uid}){
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={VA.onReshuffle}
     turnBuffer={turnBuffer}
+    waitGhosts={waitGhosts}
+    onBookWait={VA.onBookWait}
     hoursSig={weekHours}
     layoutSig={layout}
     currency={generalSettings.currency} />;
