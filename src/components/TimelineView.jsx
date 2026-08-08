@@ -414,22 +414,32 @@ function BlockBar({ bl, totalMins }) {
   );
 }
 
-// ── v17.8.0: waitlist ghost block ────────────────────────────────────────────
+// ── v17.8.0: waitlist ghost block (restyled v17.8.0) ─────────────────────────
 // A preview of where a waiting party WOULD go, drawn on the table row that
-// waitAvail picked for them. Same dimmed treatment as the v17.6.0 turnaround
-// tail so the two read as one visual family ("not a real booking"), in the
-// PENDING colour because that is what the party is — awaiting a decision.
+// waitAvail picked for them.
 //
-// Why the dimming is a separate FILL LAYER rather than `opacity` on the whole
-// box (which is how the turnaround tail does it): the tail carries no text, and
-// at 0.3 the guest's name would be illegible. So the wrapper stays fully opaque,
-// an absolutely-positioned sibling supplies the dimmed fill, and the label sits
-// above it at full contrast.
+// v17.8.0: it IS a pending block now — same geometry, radius, border, shadow,
+// label typography and label GRAMMAR ("Name (size)") as TimelineBlock, in
+// BLOCK_BG.pending because a waiting party is precisely awaiting a decision —
+// and the whole element is simply turned down with `opacity`.
+//
+// The v17.8.0 version instead layered a 0.3-alpha fill under a full-strength
+// label, and got two things wrong. The label had to pick its own colour, so it
+// used `--text-secondary` — a token that INVERTS between themes, which is why
+// the ghost's text visibly changed colour on a theme flip while every real
+// block's `--text-on-accent` stayed put. And with its own font size, weight and
+// separator it read as a different kind of object rather than a quieter version
+// of the same one. Dimming the whole block fixes both at once: nothing has to
+// choose a second set of values, so nothing can drift from the block it mirrors.
+//
+// The trailing ⏳ follows the block's own marker convention (★ preferred, ⚠
+// repeat no-show, [L] locked, !! overdue all append to the label) rather than
+// inventing a leading badge.
 //
 // `resh` = the match only exists AFTER re-optimising (the reshuffling trialFits
 // branch in App's waitAvail effect). Those tables can be visibly occupied right
-// now, so a solid fill would look like a double-booking; they get a dashed
-// outline and no fill instead — "there is room here, once the day is re-shuffled".
+// now, so it is dimmer still and takes a dashed edge in the block's own
+// rgba-white border family: "there is room here, once the day is re-shuffled".
 //
 // Hoisted to module scope per CLAUDE.md's inline-sub-component rule (a component
 // defined inside another's body is a new TYPE every render → full remount).
@@ -445,38 +455,40 @@ function WaitGhost({ g, totalMins, onBook }) {
     <div
       className="mgt-hover-scale"
       onClick={() => onBook(g.id)}
-      title={"Waiting: " + g.name + " · " + g.size + " at " + g.time
-        + (g.resh ? " (after re-optimising)" : "") + " — tap to book"}
+      title={"Waiting: " + g.name + " (" + g.size + ") at " + g.time
+        + (g.resh ? " — fits after re-optimising" : "") + ". Tap to book."}
       style={{
+        // Geometry, radius, border, shadow: TimelineBlock's, verbatim.
         position: "absolute", top: 3, height: (ROW_H - 8) + "px",
         left: pct(gS), width: Math.max((mins / totalMins) * 100, 0.3) + "%",
-        // The hover rule no longer supplies a radius (v17.7.0) and paints an
-        // OPAQUE --bg-hover-card, so a radius-less hover-scale element renders a
-        // hard-edged rectangle on hover. 10 matches the tail/ghost family — a
-        // numeric literal here for the same reason the timeline blocks are
-        // exempt from the R scale (canvas geometry, not a control).
-        borderRadius: 10,
-        border: g.resh ? "2px dashed " + BLOCK_BG.pending : "none",
-        boxSizing: "border-box", cursor: "pointer", overflow: "hidden",
-        display: "flex", alignItems: "center",
+        background: BLOCK_BG.pending, borderRadius: 10, overflow: "hidden",
+        display: "flex", alignItems: "center", boxSizing: "border-box",
+        border: g.resh ? "1px dashed rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.2)",
+        boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
+        cursor: "pointer",
+        // The one deliberate difference from a real block. A reshuffle-only match
+        // is turned down further because it can sit over a table that is visibly
+        // occupied right now.
+        opacity: g.resh ? 0.4 : 0.55,
         transition: "left 320ms ease, width 320ms ease, transform 120ms ease"
       }}
     >
-      {g.resh ? null : (
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute", inset: 0,
-            background: BLOCK_BG.pending, opacity: 0.3, pointerEvents: "none"
-          }}
-        />
-      )}
+      {/* The start-time chip, in TimelineBlock's exact chip style. A real block
+          shows it only when the whole day's blocks are wide enough (the
+          all-or-nothing `chipsOn` rule); a ghost always does, because the time
+          is the entire proposal — a ghost without one says nothing useful. */}
       <span style={{
-        position: "relative", padding: "0 6px", fontSize: 10, fontWeight: 600,
-        color: "var(--text-secondary)", whiteSpace: "nowrap",
-        overflow: "hidden", textOverflow: "ellipsis"
+        flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: R.pill,
+        fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+        whiteSpace: "nowrap",
+        background: "rgba(255,255,255,0.25)", color: "var(--text-on-accent)"
+      }}>{g.time}</span>
+      <span style={{
+        flex: 1, padding: "0 8px 0 6px", position: "relative",
+        fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
       }}>
-        {"⏳ " + g.name + " · " + g.size}
+        {g.name + " (" + g.size + ") ⏳"}
       </span>
     </div>
   );
