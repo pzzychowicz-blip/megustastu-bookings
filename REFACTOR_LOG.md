@@ -6710,3 +6710,29 @@ knowing before the next person tries to QA a waitlist change in DEV. Both
 branches were then exercised against real data: the filled variant from a
 genuine clean match, the dashed variant by temporarily forcing `resh` on one
 entry.
+
+### 2/5 — Log out moves into the connection popover
+
+**Bundle:** main chunk 194.25 kB gz.
+
+Log out sat in the header row, left of the connection dot. Two reasons it is
+better inside the popover, right-aligned on the status line:
+
+It belongs with the identity. The popover already answers "who am I signed in
+as" two rows below — the sign-out control was the one part of that answer
+living somewhere else.
+
+And the header is crowded. It carries the restaurant name block, ViewSwitcher
+(T/L/P), Walk-in, + New, the dot, and it `flexWrap`s: on a phone that is already
+three rows. Removing an item is the cheapest fix available, and this is the item
+with the weakest claim to being one tap away — it is used once a shift, not once
+a table.
+
+`ConnectionStatus` takes an `onLogout` prop and renders the button only when it
+is supplied, so the component stays usable without it. Same `BTN.nav` +
+`mkBtn` + `.mgt-hover-scale` treatment as the header button had, at
+`minHeight: 32` rather than 40 — popover scale, not header scale.
+
+The sibling MGT Scheduling app has its own copy of `ConnectionStatus` (this one
+was ported from it in v16.2.0). Per the shared-pattern rule this is a port
+candidate on its next touch — not done here.

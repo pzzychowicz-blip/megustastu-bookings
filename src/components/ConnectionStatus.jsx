@@ -28,7 +28,8 @@
 // fix on its next touch (shared-pattern rule).
 
 import { useEffect, useRef, useState } from "react";
-import { S, R } from "../lib/constants";
+import { S, R, BTN } from "../lib/constants";
+import { mkBtn } from "./atoms";
 
 // Rendered popover width: minWidth 260 + 2×12 padding + 2×1 border.
 const POPOVER_W = 286;
@@ -45,7 +46,7 @@ function sinceText(ts) {
   return Math.floor(hrs / 24) + "d ago";
 }
 
-export function ConnectionStatus({ connected, hasConnected, userEmail, devices, myKey }) {
+export function ConnectionStatus({ connected, hasConnected, userEmail, devices, myKey, onLogout }) {
   const [open, setOpen] = useState(false);
   const [alignRight, setAlignRight] = useState(true);
   const wrapRef = useRef(null);
@@ -157,20 +158,37 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
             boxShadow: "var(--shadow-sheet)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <span
-              style={{
-                display: "inline-block",
-                width: 10,
-                height: 10,
-                borderRadius: "50%",
-                background: dotColor,
-                flexShrink: 0,
-              }}
-            />
-            <span style={{ fontSize: 13, fontWeight: 600, color: S.text }}>
-              {statusText}
-            </span>
+          {/* v17.8.0: Log out moved OFF the header row and in here, right-aligned
+              on the status line. It belongs with the identity this popover
+              already shows ("Signed in as" sits two rows below), and the header
+              — ViewSwitcher · Walk-in · + New · the dot — was wrapping to a
+              third row on a phone with it there. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  background: dotColor,
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ fontSize: 13, fontWeight: 600, color: S.text }}>
+                {statusText}
+              </span>
+            </div>
+            {onLogout ? (
+              <button
+                type="button"
+                className="mgt-hover-scale"
+                onClick={onLogout}
+                style={mkBtn({ fontSize: 12, minHeight: 32, padding: "6px 12px", background: BTN.nav })}
+              >
+                Log out
+              </button>
+            ) : null}
           </div>
           <div style={{ fontSize: 11, marginBottom: 8, color: S.muted }}>
             {connecting
