@@ -451,9 +451,25 @@ function WaitGhost({ g, totalMins, onBook }) {
   const gE = Math.min(gS + g.dur, GRID_CLOSE * 60);
   const mins = gE - gS;
   if (mins <= 0) return null;
+  // v17.8.0 correction: group hover-lift, TimelineBlock's mechanism verbatim.
+  // A ghost for a party that needs two tables renders one cell per row exactly
+  // as a real multi-table booking does, so hovering one cell has to lift both —
+  // otherwise the ghost breaks the very block behaviour it is a quiet copy of.
+  // Own attribute rather than data-bk: a waitlist id and a booking id come from
+  // the same genId(), and one shared namespace is one collision away from a
+  // ghost lifting an unrelated booking.
+  function setGroupHover(on) {
+    document.querySelectorAll('[data-wg="' + g.id + '"]').forEach(function (el) {
+      el.classList.toggle("mgt-group-hover", on);
+    });
+  }
+
   return (
     <div
       className="mgt-hover-scale"
+      data-wg={g.id}
+      onMouseEnter={() => setGroupHover(true)}
+      onMouseLeave={() => setGroupHover(false)}
       onClick={() => onBook(g.id)}
       title={"Waiting: " + g.name + " (" + g.size + ") at " + g.time
         + (g.resh ? " — fits after re-optimising" : "") + ". Tap to book."}
@@ -483,12 +499,21 @@ function WaitGhost({ g, totalMins, onBook }) {
         whiteSpace: "nowrap",
         background: "rgba(255,255,255,0.25)", color: "var(--text-on-accent)"
       }}>{g.time}</span>
+      {/* v17.8.0 correction: the ⏳ sits BETWEEN the time and the name, not
+          trailing it. Trailing, it was the first thing the ellipsis ate — the
+          marker that says "this is a proposal, not a booking" vanished on
+          exactly the narrow blocks where the dimming is hardest to read. Here
+          it is fixed-width and unclippable, and it lines up with the marker
+          column a real block uses for its ★ / ⚠ / [L] flags. */}
+      <span aria-hidden="true" style={{
+        flexShrink: 0, marginLeft: 6, fontSize: 10, lineHeight: "12px"
+      }}>⏳</span>
       <span style={{
-        flex: 1, padding: "0 8px 0 6px", position: "relative",
+        flex: 1, padding: "0 8px 0 5px", position: "relative",
         fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
       }}>
-        {g.name + " (" + g.size + ") ⏳"}
+        {g.name + " (" + g.size + ")"}
       </span>
     </div>
   );
