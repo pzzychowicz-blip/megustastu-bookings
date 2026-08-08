@@ -237,7 +237,7 @@ export function useReminders({ nowMins, setWriteWarning }){
               aria-hidden="true"
               style={{width:8,height:8,borderRadius:"50%",background:"var(--warn-text)",flexShrink:0}} /><span
               style={{fontSize:13,fontWeight:700,color:"var(--warn-text)"}}>Reminder</span><span
-              style={{fontSize:11,padding:"2px 8px",borderRadius:R.pill,background:"var(--warn-chip-bg)",color:"var(--warn-text)",fontWeight:700,letterSpacing:"0.02em",whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums"}}>{ab.time}</span><span
+              style={{fontSize:11,color:"var(--warn-text)",fontWeight:700,letterSpacing:"0.02em",whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",opacity:0.85}}>{ab.time}</span><span
               style={{fontSize:13,color:"var(--text-primary)",fontWeight:600,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               onClick={function(){snoozeReminderFire(ab.fireKey);}}
               className="mgt-hover-scale mgt-press"

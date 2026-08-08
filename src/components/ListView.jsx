@@ -227,16 +227,24 @@ export const ListView = memo(function ListView({
         ) : null;
         // v16.0.0: repeat no-show offender chip (same threshold as the timeline ⚠).
         const noShowCt = nsMap[normalizePhone(b.phone)] || 0;
+        // v17.8.0: solid, like every other tag in this row. The pale-fill +
+        // colour-matched-border + bold-coloured-text combination these three
+        // carried is the generic badge shape, and it sat inches from `manual`
+        // / `locked` / `★` / the seated `N min`, which are all solid-with-white.
+        // One row, two label systems. Solid wins because it is the app's own
+        // v17.7.0 status-label decision, already applied everywhere else.
+        // The ⚠ goes with it: an amber fill plus an amber warning glyph is the
+        // same signal twice (the banner restyle dropped its glyphs for this).
         const noShowTag = noShowCt >= 2 ? (
-          <SmallTag label={"⚠ no-show ×" + noShowCt} style={{ background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)" }} />
+          <SmallTag label={"no-show ×" + noShowCt} style={{ background: "var(--app-warn-solid)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         // v16.1.0: running-late tag (minutes past the booked time).
         const lateTag = lateSt ? (
-          <SmallTag label={lateMins(b, nowMins) + " min late"} style={{ background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)" }} />
+          <SmallTag label={lateMins(b, nowMins) + " min late"} style={{ background: "var(--app-warn-solid)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         // v16.3.0: deposit chip (suggest/green tokens — a prepaid booking).
         const depositTag = (Number(b.deposit) || 0) > 0 ? (
-          <SmallTag label={(currency || "€") + b.deposit + " deposit"} style={{ background: "var(--suggest-bg)", color: "var(--success-text)", border: "1px solid var(--suggest-border)" }} />
+          <SmallTag label={(currency || "€") + b.deposit + " deposit"} style={{ background: "var(--app-success-solid)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
 
         const notesEl = b.notes ? (

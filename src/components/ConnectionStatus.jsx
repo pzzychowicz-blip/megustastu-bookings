@@ -231,11 +231,14 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                         </div>
                       </div>
                       {mine ? (
+                        // v17.8.0: text, not a pill. Every other thing in this
+                        // popover is plain text on a quiet pane, and "this one
+                        // is you" is a marker, not a state — the row's own dot
+                        // is the only status the line has to carry.
                         <span
                           style={{
-                            fontSize: 10, fontWeight: 700, color: "var(--success-text)",
-                            background: "var(--suggest-bg)", border: "1px solid var(--suggest-border)",
-                            borderRadius: R.pill, padding: "2px 6px", flexShrink: 0, whiteSpace: "nowrap",
+                            fontSize: 10, fontWeight: 700, color: "var(--text-secondary)",
+                            letterSpacing: "0.03em", flexShrink: 0, whiteSpace: "nowrap",
                           }}
                         >
                           This device
