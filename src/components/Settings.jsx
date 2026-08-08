@@ -24,7 +24,7 @@
 // __APP_SIGNATURE__ edit in App.jsx; this file no longer needs touching
 // for version changes.
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
@@ -147,9 +147,15 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }
 // revGuard CAS write. The draft re-syncs when the committed value changes (a
 // remote save from another device). mkInp returns a STYLE OBJECT (Bookings
 // convention — no prop passthrough).
-function GsTextField({ label, value, onCommit, width }) {
+function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => { setDraft(value); }, [value]);
+  // v17.8.0 unsaved-changes guard: this field commits on BLUR, so closing
+  // Settings while the caret is still in it dropped the edit silently. Report
+  // up (see SettingsContent's aggregator) whenever the draft has diverged.
+  const dirty = draft !== value;
+  useEffect(() => { if (onDirty && dirtyId) onDirty(dirtyId, dirty); }, [dirty, onDirty, dirtyId]);
+  useEffect(() => () => { if (onDirty && dirtyId) onDirty(dirtyId, false); }, [onDirty, dirtyId]);
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
@@ -227,7 +233,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   );
 }
 
-export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, planGestures = true, onTogglePlanGestures = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {}, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {} }) {
+export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, planGestures = true, onTogglePlanGestures = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {}, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {}, onDirty = null }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
@@ -448,12 +454,12 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
         summary={gs.restaurantName}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-          <GsTextField label="Restaurant name" value={gs.restaurantName} width={260}
+          <GsTextField label="Restaurant name" value={gs.restaurantName} width={260} onDirty={onDirty} dirtyId="gs-name"
             onCommit={(v) => onSaveGeneralSettings({ restaurantName: v })} />
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-            <GsTextField label="Currency symbol" value={gs.currency} width={80}
+            <GsTextField label="Currency symbol" value={gs.currency} width={80} onDirty={onDirty} dirtyId="gs-currency"
               onCommit={(v) => onSaveGeneralSettings({ currency: v })} />
-            <GsTextField label="Phone prefix" value={gs.phonePrefix} width={100}
+            <GsTextField label="Phone prefix" value={gs.phonePrefix} width={100} onDirty={onDirty} dirtyId="gs-prefix"
               onCommit={(v) => onSaveGeneralSettings({ phonePrefix: v })} />
           </div>
           <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>
@@ -872,13 +878,42 @@ export function SettingsContent({
   onAddReminder,
   onEditReminder,
   onDeleteReminder,
-  onToggleReminder
+  onToggleReminder,
+  onDirty
 }) {
+  // v17.8.0 unsaved-changes guard. Settings holds drafts that commit on BLUR
+  // (GsTextField) or on an explicit Add/Rename (LayoutTabContent), so closing
+  // the modal mid-edit silently dropped them. Each holder reports its own
+  // dirtiness by id; this aggregates them into the ONE boolean App needs.
+  //
+  // A Set of ids rather than a counter: an unmounting field always clears its
+  // own entry, so a tab switch (which unmounts the whole body) cannot leave a
+  // phantom count behind and strand `beforeunload` armed.
+  // Initialised inline rather than lazily: reading `.current` during render to
+  // lazy-init trips react-hooks/refs, and Settings renders rarely enough that
+  // the discarded Set per render is free.
+  const dirtyIdsRef = useRef(new Set());
+  const reportDirty = useCallback(function (id, on) {
+    const set = dirtyIdsRef.current;
+    const had = set.size > 0;
+    if (on) set.add(id); else set.delete(id);
+    const has = set.size > 0;
+    if (has !== had && onDirty) onDirty(has);
+  }, [onDirty]);
+  // Closing Settings entirely must never leave the flag set. The Set is copied
+  // into a local first — the standard react-hooks/exhaustive-deps fix for
+  // touching a ref from a cleanup, and safe here because useRef hands back the
+  // same object for the component's whole life.
+  useEffect(function () {
+    const set = dirtyIdsRef.current;
+    return function () { set.clear(); if (onDirty) onDirty(false); };
+  }, [onDirty]);
+
   let content;
   if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} />;
+    content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
   } else if (tab === "layout") {
-    content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} />;
+    content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} onDirty={reportDirty} />;
   } else if (tab === "customers") {
     // v16.0.0: customer management (phone-derived index; delete-all-data).
     content = <CustomersTabContent bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2} />;

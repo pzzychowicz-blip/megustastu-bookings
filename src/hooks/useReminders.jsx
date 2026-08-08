@@ -32,6 +32,7 @@ import { BTN, R } from "../lib/constants";
 import { mkBtn } from "../components/atoms";
 import { genId } from "../lib/booking-logic";
 import { dbError } from "../lib/dbError";
+import { sameDraft } from "../lib/drafts";
 import {
   getActiveReminderBanners,
   pruneOldReminderFires,
@@ -54,6 +55,11 @@ export function useReminders({ nowMins, setWriteWarning }){
   const [reminders, setReminders] = useState([]);
   const [reminderFires, setReminderFires] = useState({});
   const [reminderEditor, setReminderEditor] = useState(null);
+  // v17.8.0 unsaved-changes guard: the draft the editor was OPENED with. Set
+  // ONLY by openNewReminder / openEditReminder — the two doors — so every other
+  // setReminderEditor is a user edit and correctly reads as dirty. State rather
+  // than a ref: it feeds a value derived during render.
+  const [reminderBaseline, setReminderBaseline] = useState(null);
   // v14 p7 fix: in-app confirmation for reminder deletion — window.confirm is
   // blocked in sandboxed / embedded preview environments, so it never showed
   // the dialog. Matches the confirmDel / confirmCancel pattern used elsewhere.
@@ -151,9 +157,24 @@ export function useReminders({ nowMins, setWriteWarning }){
   function snoozeReminderFire(fireKey){
     saveReminderFires(function(prev){const n=Object.assign({},prev);n[fireKey]={status:"snoozed",until:Date.now()+15*60*1000};return n;});
   }
+  // v17.8.0: flatten a reminder draft before diffing it. `sameDraft`'s norm()
+  // falls back to JSON.stringify for a nested object, which is key-ORDER
+  // sensitive — and `recurrence` is rebuilt by spreads all over ReminderEditor,
+  // so two equivalent drafts could serialise differently and read as dirty. The
+  // arrays survive as arrays because norm() sorts those, which is right here:
+  // reordering `times` or `days` is not an edit.
+  function flatReminder(d){
+    if(!d) return null;
+    const rec=d.recurrence||{};
+    return {text:d.text,active:d.active,times:d.times,rec_type:rec.type,rec_date:rec.date,rec_days:rec.days};
+  }
+  const reminderDirty=!!reminderEditor&&!sameDraft(flatReminder(reminderEditor.draft),flatReminder(reminderBaseline));
+
   function openNewReminder(){
     const today=new Date().toISOString().slice(0,10);
-    setReminderEditor({id:"new",draft:{text:"",times:["21:00"],recurrence:{type:"once",date:today,days:[]},active:true}});
+    const draft={text:"",times:["21:00"],recurrence:{type:"once",date:today,days:[]},active:true};
+    setReminderBaseline(draft);
+    setReminderEditor({id:"new",draft:draft});
   }
   function openEditReminder(r){
     // Deep-clone to prevent live-editing the stored reminder.
@@ -163,6 +184,7 @@ export function useReminders({ nowMins, setWriteWarning }){
       recurrence:Object.assign({},r.recurrence||{},{days:(r.recurrence&&r.recurrence.days||[]).slice()}),
       active:!!r.active
     };
+    setReminderBaseline(draft);
     setReminderEditor({id:r.id,draft:draft});
   }
   function saveReminderFromEditor(){
@@ -220,6 +242,7 @@ export function useReminders({ nowMins, setWriteWarning }){
   return {
     reminders,
     reminderEditor, setReminderEditor,
+    reminderDirty,
     confirmReminderDel, setConfirmReminderDel,
     saveReminderFromEditor,
     doDeleteReminder,

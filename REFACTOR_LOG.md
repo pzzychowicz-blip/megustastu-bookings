@@ -6837,3 +6837,53 @@ resolved values back. Note for the next person: a real reminder could not be
 created in DEV — the project's deployed rules reject rev-guarded writes
 (`reminders` and `waitlist` both return PERMISSION_DENIED through the app's own
 `writeWithRev`), so DEV's rules are out of step with `database.rules.json`.
+
+### 5/5 — Extend the unsaved-changes guard (was `ROADMAP.md` → Ideas)
+
+**Bundle:** main chunk 194.83 kB gz.
+
+v17.5.0 guarded the booking form, the walk-in form and `ManualModal`, and left
+three surfaces out by explicit scope decision. They are in now, so every place
+that holds a draft is covered. The shared discard modal goes from three callers
+to six; `DISCARD_BODY` gains a line each.
+
+Each surface needed the same three wirings CLAUDE.md spells out, and the third
+is the one that would have been easy to skip:
+
+**a) `ReminderEditor`.** Baseline set in `openNewReminder`/`openEditReminder` —
+the only two doors — and `reminderDirty` returned from the hook. The draft is
+diffed through a small `flatReminder()` first, because `sameDraft`'s `norm()`
+falls back to `JSON.stringify` for a nested object and `recurrence` is rebuilt
+by spreads all over the editor: two equivalent drafts could serialise in
+different key orders and read as permanently dirty. Flattening to
+`rec_type`/`rec_date`/`rec_days` sidesteps that, and leaves `times`/`days` as
+arrays so `norm()` still sorts them — reordering times is not an edit.
+
+**b) `BlockModal`.** Component-local `mode`/`from`/`to`, so it reports up via
+`onDirty` exactly like `ManualModal`, with the unmount-only `onDirty(false)`
+cleanup. Dirty means add-mode *with a time actually changed* from the default
+full-service window — browsing the existing-blocks list, or merely opening the
+add form, closes silently.
+
+**c) Settings.** The awkward one: the drafts are two levels down and in two
+different tab bodies. `GsTextField` (×3, commits on blur) and
+`LayoutTabContent`'s new-table + rename boxes each report `onDirty(id, bool)`,
+and `SettingsContent` aggregates them into the single boolean App wants. A
+**Set of ids, not a counter** — an unmounting field always clears its own entry,
+so a tab switch (which unmounts the whole body) cannot leave a phantom count
+behind and strand `beforeunload` armed. The tab reset that Settings has always
+done on close moved into `closeSettings()` so it runs on *both* paths, the clean
+close and the discard.
+
+The Esc chain in `useKeyboardShortcuts` was edited for all three. That chain
+calls the state setters directly and never touches a modal's `onClose`, so a
+surface guarded only at its mount site still has Esc as a silent back door —
+which is exactly what "three wirings" is warning about.
+
+**Not guarded, deliberately:** Settings' steppers and toggles. They commit on
+each tap and hold no draft, so there is nothing to lose.
+
+Verified per surface in DEV — clean close silent; dirty close via button, scrim
+and **Esc** all raising the confirm with the right copy; Discard dropping the
+edit; and, after a discard, reopening and closing cleanly staying silent (the
+`ManualModal` unmount trap, which is what the cleanup effects exist for).

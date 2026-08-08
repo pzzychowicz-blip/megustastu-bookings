@@ -15,18 +15,29 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { S, BTN, TBL, OPEN, GRID_CLOSE, R } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
 import { Overlay, Section, Fld, mkBtn, mkInp } from "./atoms";
 
-export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose }) {
+export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose, onDirty }) {
   const existing = blocks.filter((bl) => bl.tableId === tableId && bl.date === date);
   const indoor = isIn(tableId);
   const tc = indoor ? TBL.ind : TBL.out;
   const [mode, setMode] = useState(existing.length > 0 ? "view" : "add");
   const [from, setFrom] = useState(OPEN + ":00");
   const [to, setTo] = useState(GRID_CLOSE + ":00");
+
+  // v17.8.0 unsaved-changes guard. The From/To times are component-local, so
+  // this modal REPORTS its dirtiness up rather than App reaching in — the same
+  // contract ManualModal uses. Dirty only in "add" mode with a time actually
+  // changed from the default full-service window: merely opening the add form,
+  // or browsing the existing-blocks list, must close silently.
+  const dirty = mode === "add" && (from !== OPEN + ":00" || to !== GRID_CLOSE + ":00");
+  useEffect(() => { if (onDirty) onDirty(dirty); }, [dirty, onDirty]);
+  // Unmount-only reset. Without it a closed modal leaves the flag — and so
+  // `beforeunload` — armed for the rest of the session (the ManualModal trap).
+  useEffect(() => () => { if (onDirty) onDirty(false); }, [onDirty]);
   // Lint cleanup (2026-07-24): the null guard moved BELOW the hooks — an early
   // return above useState changes the hook count if tableId ever turns null on
   // a mounted instance (the v16.4.0 ListView crash class). All derivations

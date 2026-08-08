@@ -632,11 +632,15 @@ function BookingApp({uid}){
   const [formBaseline, setFormBaseline] = useState(EMPTY_FORM);
   function openForm(next){setFormBaseline(next);setForm(next);}
   // Which surface the discard confirm is asking about: "form" | "walkin" |
-  // "manual" | null. One shared modal, three callers.
+  // "manual" | "reminder" | "block" | "settings" | null. One shared modal, six
+  // callers as of v17.8.0.
   const [confirmDiscard, setConfirmDiscard] = useState(null);
   // ManualModal owns its table-pick state internally, so it reports dirtiness
-  // up rather than App reaching in (see its onDirty prop).
+  // up rather than App reaching in (see its onDirty prop). v17.8.0: BlockModal
+  // and Settings do the same — their drafts are component-local too.
   const [manualDirty, setManualDirty] = useState(false);
+  const [blockDirty, setBlockDirty] = useState(false);
+  const [settingsDirty, setSettingsDirty] = useState(false);
   // v17.0.0: status override for the pending flow — set by save("pending"/
   // "confirmed") ("Save pending" / "Save&confirm" buttons) and read by doSave.
   // A ref (not an arg) because the kitchen-confirm modal + its Enter shortcut
@@ -747,6 +751,7 @@ function BookingApp({uid}){
   const {
     reminders,
     reminderEditor, setReminderEditor,
+    reminderDirty,
     confirmReminderDel, setConfirmReminderDel,
     saveReminderFromEditor,
     doDeleteReminder,
@@ -1531,6 +1536,14 @@ function BookingApp({uid}){
   function requestCloseForm(){if(formDirty) setConfirmDiscard("form");else setShowForm(false);}
   function requestCloseWalkin(){if(walkinDirty) setConfirmDiscard("walkin");else setShowWalkin(false);}
   function requestCloseManual(){if(manualDirty) setConfirmDiscard("manual");else setManualTarget(null);}
+  // v17.8.0: the remaining three drafting surfaces (ROADMAP "Ideas"). Settings
+  // keeps its tab reset on BOTH paths — the clean close here and the discard
+  // below — because that was part of the close behaviour before the guard, not
+  // part of the guard.
+  function closeSettings(){setShowSettings(false);setSettingsTab("general");}
+  function requestCloseReminderEditor(){if(reminderDirty) setConfirmDiscard("reminder");else setReminderEditor(null);}
+  function requestCloseBlock(){if(blockDirty) setConfirmDiscard("block");else setBlockTarget(null);}
+  function requestCloseSettings(){if(settingsDirty) setConfirmDiscard("settings");else closeSettings();}
   // Commit the discard: shut the surface the modal was asked about.
   function doDiscard(){
     const which=confirmDiscard;
@@ -1538,12 +1551,15 @@ function BookingApp({uid}){
     if(which==="form") setShowForm(false);
     else if(which==="walkin") setShowWalkin(false);
     else if(which==="manual") setManualTarget(null);
+    else if(which==="reminder") setReminderEditor(null);
+    else if(which==="block") setBlockTarget(null);
+    else if(which==="settings") closeSettings();
   }
 
   // Tab/window close + reload. Registered ONLY while something is dirty, so the
   // browser never nags on a clean page. Custom text is not possible — every
   // modern browser shows its own generic wording and ignores the string.
-  const anyDirty=formDirty||walkinDirty||manualDirty;
+  const anyDirty=formDirty||walkinDirty||manualDirty||reminderDirty||blockDirty||settingsDirty;
   useEffect(function(){
     if(!anyDirty) return undefined;
     function onBeforeUnload(e){e.preventDefault();e.returnValue="";}
@@ -2093,7 +2109,9 @@ function BookingApp({uid}){
     // v17.5.0 correction: Esc closes the split-setup popup (it has no Cancel).
     splitMenuFor:splitMenuFor,setSplitMenuFor:setSplitMenuFor,
     confirmDiscard:confirmDiscard,setConfirmDiscard:setConfirmDiscard,doDiscard:doDiscard,
-    requestCloseForm:requestCloseForm,requestCloseWalkin:requestCloseWalkin,requestCloseManual:requestCloseManual
+    requestCloseForm:requestCloseForm,requestCloseWalkin:requestCloseWalkin,requestCloseManual:requestCloseManual,
+    // v17.8.0: the three surfaces added to the guard — same reason as above.
+    requestCloseReminderEditor:requestCloseReminderEditor,requestCloseBlock:requestCloseBlock,requestCloseSettings:requestCloseSettings
   });
 
   function updateStatus(id,status){
@@ -2562,7 +2580,10 @@ function BookingApp({uid}){
   const DISCARD_BODY={
     form:"The booking you're editing hasn't been saved yet.",
     walkin:"This walk-in hasn't been saved yet.",
-    manual:"Your table selection hasn't been applied yet."
+    manual:"Your table selection hasn't been applied yet.",
+    reminder:"This reminder hasn't been saved yet.",
+    block:"This table block hasn't been applied yet.",
+    settings:"A setting you were editing hasn't been saved yet."
   };
   const discardModal=<div style={{position:"relative",zIndex:260}}><ModalPresence show={!!confirmDiscard}>{confirmDiscard?<Overlay onClose={function(){setConfirmDiscard(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
@@ -2754,7 +2775,8 @@ function BookingApp({uid}){
           blocks={tableBlocks}
           onSave={addBlock}
           onRemove={removeBlock}
-          onClose={function(){setBlockTarget(null);}} />:null}</ModalPresence><ModalPresence show={!!confirmCancel}>{confirmCancel?<Overlay onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+          onDirty={setBlockDirty}
+          onClose={requestCloseBlock} />:null}</ModalPresence><ModalPresence show={!!confirmCancel}>{confirmCancel?<Overlay onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmCancel(null);}}>Back</button><button
@@ -2779,12 +2801,13 @@ function BookingApp({uid}){
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
-        showSettings?<Overlay onClose={function(){setShowSettings(false);setSettingsTab("general");}} footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
+        showSettings?<Overlay onClose={requestCloseSettings} footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"8px 18px",background:"var(--app-btn-slate)"})}
-              onClick={function(){setShowSettings(false);setSettingsTab("general");}}>Close</button></div>}><div style={{textAlign:"center",marginBottom:14}}><div
+              onClick={requestCloseSettings}>Close</button></div>}><div style={{textAlign:"center",marginBottom:14}}><div
               style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:"var(--app-btn-grey-strong)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Settings</div></div><Suspense fallback={null}><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
+            onDirty={setSettingsDirty}
             isDark={isDark}
             onToggleDark={onToggleDark}
             appWidth={appWidth}
@@ -2844,7 +2867,7 @@ function BookingApp({uid}){
           draft={reminderEditor.draft}
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
           onSave={saveReminderFromEditor}
-          onCancel={function(){setReminderEditor(null);}}
+          onCancel={requestCloseReminderEditor}
           isNew={reminderEditor.id==="new"} />:null}</ModalPresence>{historyPopup}</div></div>
   );
 }

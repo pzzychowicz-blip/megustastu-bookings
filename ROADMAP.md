@@ -67,12 +67,11 @@ session and keeping it in sync.
   extraction is straightforward whenever it's worth doing; the risk is all in
   TimelineView, not in the shared piece.
 
-- **Extend the unsaved-changes guard to the remaining draft surfaces.**
-  v17.5.0 guards the booking form, the walk-in form and `ManualModal`. Still
-  unguarded, by explicit scope decision: the **reminder editor** (`ReminderEditor`
-  has its own z-250 modal, not `Overlay`, and re-implements the scrim click
-  itself), the **Block modal**, and **Settings** drafts (`GsTextField` commits on
-  blur, so closing Settings mid-edit can drop it; `LayoutSettings`' half-typed
-  new table likewise). See CLAUDE.md's "Unsaved-changes guard" section for the
-  three wirings each new surface needs — the Esc branch is the one that's easy
-  to miss.
+- **Unsaved-changes guard — the last unguarded drafts.** v17.8.0 brought the
+  reminder editor, the Block modal and Settings (`GsTextField` × 3 +
+  `LayoutSettings`' new-table / rename boxes) into the guard, so every surface
+  that holds a draft is now covered. What remains is deliberately out: the
+  Settings **steppers and toggles**, which commit on each tap rather than
+  holding a draft at all. If a future setting ever gains a typed field, wire it
+  into `SettingsContent`'s `reportDirty` aggregator with its own id — that is
+  the whole cost.

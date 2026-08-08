@@ -10,7 +10,7 @@
 //     "mega" combos (add/edit-cap/remove). All derived into VALID_COMBOS by buildLayout.
 //   • Kitchen limit.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Section, Collapsible, Toggle } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
 import { contiguousRuns, comboKey, R } from "../lib/constants";
@@ -88,7 +88,7 @@ function Stepper({ value, onDec, onInc, disableDec, disableInc, width = 30 }) {
   );
 }
 
-export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [] }) {
+export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [], onDirty = null }) {
   const tables = (layout && Array.isArray(layout.tables)) ? layout.tables : [];
   const kitchenLimit = layout && Number.isFinite(layout.kitchenLimit) ? layout.kitchenLimit : 3;
   const totalSeats = tables.reduce((a, t) => a + (Number(t.capacity) || 0), 0);
@@ -120,6 +120,15 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   const [newId, setNewId] = useState("");
   const [newCap, setNewCap] = useState(2);
   const [newZone, setNewZone] = useState("outdoor");
+
+  // v17.8.0 unsaved-changes guard: two drafts here commit only on an explicit
+  // Add / Rename, so closing Settings mid-typing dropped them silently. A
+  // rename counts as dirty only once the name actually differs from the id it
+  // started as — opening the rename box changes nothing yet.
+  const layoutDirty = (adding && newId.trim() !== "")
+    || (editId !== null && editVal.trim() !== editId);
+  useEffect(() => { if (onDirty) onDirty("layout-tables", layoutDirty); }, [layoutDirty, onDirty]);
+  useEffect(() => () => { if (onDirty) onDirty("layout-tables", false); }, [onDirty]);
 
   function startEdit(id) { setPendingRemove(null); setEditId(id); setEditVal(id); }
   function cancelEdit() { setEditId(null); setEditVal(""); }
