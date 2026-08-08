@@ -99,7 +99,20 @@ export function ViewSwitcher({
   function isActive(v) { return split ? (split.a === v || split.b === v) : view === v; }
   function isFocusedPaneView(v) { return !!split && split[focusedPane] === v; }
 
-  const toolBtn = (extra) => mkBtn(Object.assign({ minHeight: 40, padding: "8px 10px", fontSize: 13, background: BTN.nav }, extra));
+  // v17.8.0: the three split tools are single glyphs, so they get a SQUARE box
+  // and become true circles under --r-pill (CSS clamps an oversized radius to
+  // half the box — equal sides are the whole condition). They were
+  // `minHeight: 40` + horizontal padding, which on a one-character label gives
+  // ~30x40: a vertical egg, and the odd one out beside the perfectly round 34x34
+  // 🔍/⚙ pair one row down. 40 (not 34) keeps them level with the T/L/P buttons
+  // they sit beside. `width`/`height` rather than min-*, or the flex row
+  // stretches them back into an egg.
+  const toolBtn = (extra) => mkBtn(Object.assign({
+    width: 40, height: 40, minHeight: 40, padding: 0, fontSize: 15,
+    background: BTN.nav,
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    flexShrink: 0, lineHeight: 1
+  }, extra));
 
   return (
     <>
