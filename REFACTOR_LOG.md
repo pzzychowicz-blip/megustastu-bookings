@@ -6887,3 +6887,82 @@ Verified per surface in DEV — clean close silent; dirty close via button, scri
 and **Esc** all raising the confirm with the right copy; Discard dropping the
 edit; and, after a discard, reopening and closing cleanly staying silent (the
 `ManualModal` unmount trap, which is what the cleanup effects exist for).
+
+### Polish round (commits 6–8) — the design-consistency pass
+
+**Bundle:** main chunk 194.97 kB gz. Prompted by Patryk reviewing 1/5 and 2/5
+in DEV: the ghost "stands out too much comparing to the other booking blocks",
+the banners are "too generic-AI like", and every button should have a press
+effect.
+
+#### The ghost was two objects pretending to be one
+
+The v17.8.0 ghost layered a 0.3-alpha fill under a full-strength label. That one
+decision forced every other difference. A label sitting above its own fill has
+to choose its own colour, and it chose `--text-secondary` — a token that
+**inverts between themes**, which is exactly the "font color changes whilst
+changing the light-dark mode" Patryk saw, while every real block's
+`--text-on-accent` is theme-invariant. Having chosen a colour it had also chosen
+a size (10 vs 11), a weight (600 vs 700), a padding and a separator ("·" vs the
+block's parenthesised size).
+
+The entry above defends the fill-layer as necessary for legibility. That was
+true of the constraint and wrong about the solution: the real fix is to dim the
+*whole block*, text included, which keeps white-on-amber intact — quieter, not
+recoloured. It is now TimelineBlock's geometry, radius, border, shadow, chip and
+label grammar verbatim, at `opacity: 0.55` (`0.4` + a dashed edge for `resh`).
+**Nothing in it picks a second set of values, so nothing can drift**, and the
+theme bug cannot recur because no theme-dependent token remains.
+
+#### The banners were a nested card
+
+The generic-alert-box impression had a specific cause: every in-flow banner was
+a saturated tinted container with a **2px ring**, holding rows that each had
+their own fill, their own 1px border and their own radius. Cards inside a card —
+the loudest treatment in the app, spent on ambient messages, and directly
+against the house style where every other surface (Summary, list cards, the
+connection popover) is a single quiet pane.
+
+The nine status toasts were the same shape nine times over, hand-written, and
+had already drifted: font weight alternated 600/700 with no rule behind it.
+
+All of it is now ONE pane — a whisper of tint, a 1px border, `R.card` — with the
+semantic colour carried by a leading **dot**, the device the connection popover
+already uses. Rows are transparent and hairline-separated. Connection-shaped
+toasts borrow the header dot's own `--status-*` tokens, so "Reconnected" is
+literally the same green as the dot in the header.
+
+Done in one pass across all seven surfaces on purpose. A notification looking
+like two different things in two places is the fault being fixed; converting
+half of them would have preserved it.
+
+Two smaller findings: `--suggest-bg` (0.8 alpha, a *chip* fill) made the
+waitlist pane read louder than the "Running late" pane above it, inverting the
+hierarchy — a suggestion must not outshout a warning, hence the new
+`--suggest-bg-soft`. And the ⚠/⏰/⟳ glyphs went: a glyph plus a coloured dot
+plus coloured text is three signals for one message, and a ⟳ that says
+"spinning" without spinning is worse than none (the loading dot pulses instead).
+
+#### The press effect needed the specificity checked, and it did conflict
+
+`.mgt-hover-scale:hover` is (0,2,0). The obvious `button:active` is (0,1,1) and
+**loses to it** — the press would have been invisible on precisely the elements
+where it matters most on a desktop, since a mouse user is always hovering the
+button they press. The shipped selector is
+`button:active:not(:disabled):not(.mgt-nopress)` = (0,3,1), verified in the live
+cascade rather than only computed. A hover-lifted button presses to 1.02 rather
+than 0.96 so the dip stays proportional instead of jumping down through the
+resting scale, and inline transforms still win (TimelineView's drag must not be
+overridden).
+
+The model flipped from opt-in to opt-out. `.mgt-press` existed but was on 28 of
+several hundred controls, so most of the app gave no tap feedback — the thing
+staff notice most on a tablet, which has no hover state to confirm a tap landed.
+`.mgt-nopress` handles the inverse: TableGrid's blocked cells are inert but not
+`disabled`, and animating a tap that does nothing is a lie about what happened.
+
+**The one that would have shipped broken:** iOS Safari only delivers `:active`
+when a touch listener exists somewhere on the document, and this app had none.
+Without the empty passive listener now in the boot script the whole feature
+would have been desktop-only — silently absent on the iPads it was mostly for,
+and impossible to notice from a Mac.
