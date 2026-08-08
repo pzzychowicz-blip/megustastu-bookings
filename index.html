@@ -487,6 +487,52 @@
       .mgt-press { transition: filter 160ms ease-out, background-color 160ms ease-out; }
       .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
 
+      /* ── v17.8.0: universal press-scale ──────────────────────────────────────
+         EVERY button dips on press. Opt-IN was the old model (.mgt-press, 28 of
+         several hundred controls), which meant most of the app gave no touch
+         feedback at all — the thing staff notice most on a tablet, where there is
+         no hover state to confirm a tap landed.
+
+         Why this can safely be a bare `button` rule rather than another class:
+
+         • SPECIFICITY. `button:active:not(:disabled)` is (0,2,1) — one element,
+           two pseudo-classes. `.mgt-hover-scale:hover` is (0,2,0). The press
+           therefore WINS on a hovered button, which is the whole point: a
+           mouse user is always hovering the button they press, so a lower-
+           specificity press rule would be invisible on desktop. Verified rather
+           than assumed — this is the exact conflict the two rules could have had.
+
+         • INLINE TRANSFORMS STILL WIN, which is correct: TimelineView's drag sets
+           an inline translateY, and a drag must not be overridden by a press.
+
+         • :not(:disabled) covers real disabled controls. For controls that are
+           BLOCKED but not `disabled` (TableGrid's busy cells, which withhold
+           .mgt-hover-scale for the same reason) there is `.mgt-nopress` — a press
+           animation on an inert control is a lie about what the tap did.
+
+         96% not a smaller dip: on a 30px stepper 0.96 is ~1px of travel, which is
+         about the floor of what reads as a press; anything subtler is lost on a
+         glossy tablet screen. Paint-only, so it never reflows neighbours.
+         The reduce-motion block below zeroes the transition (the scale still
+         applies instantly, which is feedback without motion). */
+      button, [role="button"] {
+        /* Same duration AND same curve as .mgt-hover-scale's transform, so a
+           button that has both reads as one material rather than two easings
+           fighting. (The class wins this declaration on hover-scale elements
+           anyway — matching it here keeps the other few hundred buttons
+           identical to them.) */
+        transition: transform 120ms ease;
+      }
+      button:active:not(:disabled):not(.mgt-nopress),
+      [role="button"]:active:not(.mgt-nopress) {
+        transform: scale(0.96);
+      }
+      /* A hover-lifted button presses from its lifted size, so the dip stays
+         proportional instead of jumping down through the resting scale. */
+      @media (hover: hover) and (pointer: fine) {
+        .mgt-hover-scale:active:not(:disabled):not(.mgt-nopress) { transform: scale(1.02); }
+      }
+
       /* v17.8.0: the status-toast "busy" dot. A slow opacity pulse replaces the
          static ⟳ glyph the loading/syncing toasts used to carry — a glyph that
          says "spinning" without spinning is worse than no glyph, and the dot is
@@ -574,6 +620,17 @@
             document.documentElement.dataset.motion = "reduce";
           }
         } catch (e) { /* keep default data-theme="light" */ }
+        // v17.8.0: iOS Safari only delivers :active to an element when a touch
+        // listener exists somewhere on the document — without this, the whole
+        // press-scale is a desktop-only feature, and the iPad on the pass (the
+        // device with no hover state to fall back on, i.e. the one that needs
+        // press feedback MOST) would get nothing at all. An empty passive
+        // listener is the standard unlock; passive so it can never delay a
+        // scroll. Lives here rather than in React so it also covers the login
+        // screen and is in place before the first paint.
+        try {
+          document.addEventListener("touchstart", function () {}, { passive: true });
+        } catch (e) { /* pre-2015 Safari: no options object — press stays hover-only */ }
       })();
     </script>
     <div id="root"></div>

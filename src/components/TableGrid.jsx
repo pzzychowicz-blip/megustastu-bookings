@@ -70,7 +70,11 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
                 <button
                   key={t.id}
                   onClick={() => toggle(t.id)}
-                  className={blocked && !isSel ? undefined : "mgt-hover-scale"}
+                  // v17.8.0: a blocked cell is inert but NOT `disabled`, so the
+                  // universal button press-scale would animate a tap that does
+                  // nothing. .mgt-nopress opts it out, for the same reason the
+                  // hover lift is withheld here.
+                  className={blocked && !isSel ? "mgt-nopress" : "mgt-hover-scale"}
                   style={{
                     width: 64, height: 52, padding: 0, borderRadius: R.pill,
                     border: brd, background: bg, color: clr,
