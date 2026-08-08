@@ -55,57 +55,112 @@ import { BTN, R } from "../lib/constants";
 
 const toastShadow="0 6px 20px rgba(0,0,0,0.18)";
 
+// ── v17.8.0: ONE toast surface ───────────────────────────────────────────────
+// These nine toasts used to be nine hand-written style objects, each a
+// saturated tint behind a 2px ring in its own semantic colour. Two problems.
+// They shouted — a 2px ring plus a full-surface wash is the loudest treatment
+// in the app, spent on messages that are mostly ambient ("Firebase connected").
+// And they were nine independent definitions of the same object, so the
+// vocabulary drifted: font weight alternated 600/700 with no rule behind it.
+//
+// Now every toast is the SAME pane — the one the connection popover already
+// uses (`--bg-ac-menu`, a 1px border, `--shadow-sheet`'s weight) — and the
+// semantic colour is carried by a leading dot. That is not just quieter, it is
+// the same signal in the same shape as the header's connection dot, which is
+// where a user has already learned to read this app's status colours.
+//
+// `tone` is deliberately drawn from the STATUS dot tokens for anything
+// connection-shaped, so "Reconnected" and the header dot are literally the
+// same green.
+function toast(tone, body, opts) {
+  // `busy` is a behaviour flag, not a style — destructured OUT so it can never
+  // reach the style object (React would warn about an unknown CSS property and
+  // the DOM would carry a junk attribute). Everything else in `opts` IS style.
+  const { busy, ...styleOverrides } = opts || {};
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 9, textAlign: "left",
+      background: "var(--bg-ac-menu)",
+      border: "1px solid var(--border-card)",
+      borderRadius: R.card,
+      padding: "9px 14px",
+      fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
+      boxShadow: toastShadow,
+      ...styleOverrides
+    }}>
+      <span
+        aria-hidden="true"
+        className={busy ? "mgt-dot-pulse" : undefined}
+        style={{ width: 8, height: 8, borderRadius: "50%", background: tone, flexShrink: 0 }} />
+      <span style={{ minWidth: 0 }}>{body}</span>
+    </div>
+  );
+}
+
 export function StatusToasts({bookingsReady,loadStalled,readError,hasConnected,resyncing,reconnectShown,syncFix,waitAddedShown,undoInfo,onUndo,undoNote,dragMsg,reshuffled,reshuffledMsg,loadShown,loadMsg}){
   // v17.5.1: the first read has not completed within the watchdog window. Say
   // what is actually wrong rather than spinning forever — this toast is the
   // whole reason the Android-tablet outage took two releases to diagnose. It
   // names the Firebase error code when a listener was cancelled, and otherwise
   // distinguishes "never connected" from "connected but no data".
+  // v17.8.0: same pane as every other toast; the red STATUS dot carries the
+  // alarm instead of a 2px danger ring, and only the title keeps danger-red.
   const stallNode=(
-    <div style={{background:"linear-gradient(var(--danger-bg),var(--danger-bg)),var(--bg-ac-menu)",border:"2px solid var(--danger-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--danger-text)",boxShadow:toastShadow,maxWidth:340,pointerEvents:"auto"}}>
-      <div style={{fontWeight:700,marginBottom:4}}>Couldn’t load bookings</div>
-      <div style={{fontWeight:500,lineHeight:1.4}}>
-        {readError
-          ? "The database refused the read ("+readError.code+" on /"+readError.path+")."
-          : hasConnected
-            ? "Connected, but no data has arrived."
-            : "Can’t reach the database — no connection has been established."}
+    <div style={{display:"flex",alignItems:"flex-start",gap:9,textAlign:"left",background:"var(--bg-ac-menu)",border:"1px solid var(--border-card)",borderRadius:R.card,padding:"10px 14px",boxShadow:toastShadow,maxWidth:340,pointerEvents:"auto"}}>
+      <span aria-hidden="true" style={{width:8,height:8,borderRadius:"50%",background:"var(--status-offline)",flexShrink:0,marginTop:5}} />
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:13,fontWeight:700,color:"var(--danger-text)",marginBottom:3}}>Couldn’t load bookings</div>
+        <div style={{fontSize:13,fontWeight:500,lineHeight:1.4,color:"var(--text-primary)"}}>
+          {readError
+            ? "The database refused the read ("+readError.code+" on /"+readError.path+")."
+            : hasConnected
+              ? "Connected, but no data has arrived."
+              : "Can’t reach the database — no connection has been established."}
+        </div>
+        <button
+          onClick={function(){window.location.reload();}}
+          className="mgt-hover-scale mgt-press"
+          style={mkBtn({background:BTN.today,marginTop:8,fontSize:12,padding:"5px 12px",minHeight:32})}>Reload</button>
       </div>
-      <button
-        onClick={function(){window.location.reload();}}
-        className="mgt-hover-scale mgt-press"
-        style={mkBtn({background:BTN.today,marginTop:8,fontSize:12,padding:"5px 12px",minHeight:32})}>Reload</button>
     </div>
   );
+
   // v15.8.0: the status toasts share ONE slot — only the highest-priority
   // active one is shown (order below), so they never stack vertically. When the
   // top one changes, the old floats out as the new floats in; they overlap in
   // the same grid cell (gridArea 1/1) so the swap is a crossfade in place.
   const statusToasts=[
     {key:"loadfail",on:!bookingsReady&&loadStalled,node:stallNode},
-    {key:"loading",on:!bookingsReady&&!loadStalled,node:<div
-      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Loading bookings…</div>},
-    {key:"resync",on:resyncing,node:<div
-      style={{background:"linear-gradient(var(--app-offline-bg),var(--app-offline-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-offline-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:700,color:"var(--app-offline-text)",boxShadow:toastShadow}}>⟳ Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.</div>},
-    {key:"reconnect",on:reconnectShown,node:<div
-      style={{background:"linear-gradient(var(--app-reconnect-bg),var(--app-reconnect-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-reconnect-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-reconnect-text)",boxShadow:toastShadow}}>✓ Reconnected — changes synced.</div>},
-    {key:"syncfix",on:syncFix,node:<div
-      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>Resolved a table conflict after syncing.</div>},
-    {key:"waitadded",on:waitAddedShown,node:<div
-      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>Added to the waitlist.</div>},
-    {key:"undo",on:!!undoInfo,node:<div
-      style={{background:"linear-gradient(var(--bg-sheet),var(--bg-sheet)),var(--bg-ac-menu)",border:"2px solid var(--border-sheet)",borderRadius:R.card,padding:"8px 10px 8px 14px",fontSize:13,fontWeight:600,color:"var(--text-primary)",boxShadow:toastShadow,display:"flex",alignItems:"center",gap:10,pointerEvents:"auto"}}><span>{(!undoInfo?"":undoInfo.noShow?"Marked no-show":undoInfo.kind==="delete"?"Booking deleted":undoInfo.kind==="edit"?"Booking updated":"Booking cancelled")+(undoInfo&&undoNote?" · "+undoNote:"")}</span><button
-        onClick={function(e){e.stopPropagation();onUndo();}}
-        className="mgt-hover-scale mgt-press"
-        style={mkBtn({fontSize:12,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button></div>},
-    {key:"dragmsg",on:!!dragMsg,node:<div
-      style={dragMsg&&dragMsg.good
-        ?{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}
-        :{background:"linear-gradient(var(--warn-bg),var(--warn-bg)),var(--bg-ac-menu)",border:"2px solid var(--warn-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--warn-text)",boxShadow:toastShadow}}>{dragMsg?dragMsg.text:""}</div>},
-    {key:"reshuffled",on:reshuffled,node:<div
-      style={{background:"linear-gradient(var(--app-saved-bg),var(--app-saved-bg)),var(--bg-ac-menu)",border:"2px solid var(--app-saved-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--app-saved-text)",boxShadow:toastShadow}}>{reshuffledMsg}</div>},
-    {key:"load",on:loadShown,node:<div
-      style={{background:"linear-gradient(var(--suggest-bg),var(--suggest-bg)),var(--bg-ac-menu)",border:"2px solid var(--suggest-border)",borderRadius:R.card,padding:"10px 14px",fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:toastShadow}}>{loadMsg}</div>},
+    // Connection-shaped toasts borrow the header dot's OWN tokens, so
+    // "connecting" and "connected" are literally the same amber and green the
+    // user already reads in the connection dot.
+    {key:"loading",on:!bookingsReady&&!loadStalled,
+      node:toast("var(--status-connecting)","Loading bookings…",{busy:true})},
+    {key:"resync",on:resyncing,
+      node:toast("var(--status-connecting)","Syncing the latest data — this device may have been asleep. Your changes are saved and will finish syncing in a moment.",{busy:true,maxWidth:340})},
+    {key:"reconnect",on:reconnectShown,
+      node:toast("var(--status-online)","Reconnected — changes synced.")},
+    {key:"syncfix",on:syncFix,
+      node:toast("var(--app-saved-text)","Resolved a table conflict after syncing.")},
+    {key:"waitadded",on:waitAddedShown,
+      node:toast("var(--success-text)","Added to the waitlist.")},
+    // The undo pill is the one toast the user ACTS on, so it keeps its trailing
+    // button — and a neutral dot, because "booking cancelled" states a fact
+    // rather than raising an alarm. pointerEvents:auto because the layer is inert.
+    {key:"undo",on:!!undoInfo,node:toast("var(--text-muted)",
+      <span style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span>{(!undoInfo?"":undoInfo.noShow?"Marked no-show":undoInfo.kind==="delete"?"Booking deleted":undoInfo.kind==="edit"?"Booking updated":"Booking cancelled")+(undoInfo&&undoNote?" · "+undoNote:"")}</span>
+        <button
+          onClick={function(e){e.stopPropagation();onUndo();}}
+          className="mgt-hover-scale mgt-press"
+          style={mkBtn({fontSize:12,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button>
+      </span>,{pointerEvents:"auto",padding:"7px 10px 7px 14px"})},
+    {key:"dragmsg",on:!!dragMsg,
+      node:toast(dragMsg&&dragMsg.good?"var(--success-text)":"var(--warn-text)",dragMsg?dragMsg.text:"")},
+    {key:"reshuffled",on:reshuffled,
+      node:toast("var(--app-saved-text)",reshuffledMsg)},
+    {key:"load",on:loadShown,
+      node:toast("var(--status-online)",loadMsg)},
   ];
   const topToastKey=(statusToasts.find(function(t){return t.on;})||{}).key;
   // Floating layer — absolutely positioned over the TOP-CENTRE of mainView so the

@@ -19,7 +19,7 @@
 
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
-import { BTN, R } from "../lib/constants";
+import { BTN } from "../lib/constants";
 
 export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, collapseMax = 2 }) {
   const byId = new Map(bookings.map(function (b) { return [b.id, b]; }));
@@ -28,12 +28,10 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, colla
     const w = warnings[id];
     const sb = byId.get(id);
     if (!sb || !w) return null;
-    const rowBg = w.overdue ? "var(--danger-bg)" : "var(--warn-bg)";
-    const rowBrd = w.overdue ? "var(--danger-border)" : "var(--warn-border)";
     const rowTxt = w.overdue ? "var(--danger-text)" : "var(--warn-text)";
     const msg = sb.name + " (overstaying) → " + w.next + " at " + w.nextTime + (w.overdue ? " — overdue" : " — in " + w.gap + " min");
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 12px", borderRadius: R.inset, background: rowBg, border: "1px solid " + rowBrd, marginTop: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "9px 0" }}>
         <span style={{ fontSize: 13, color: rowTxt, fontWeight: 600, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
         <button
           onClick={function () { onReassign(w.nextId); }}

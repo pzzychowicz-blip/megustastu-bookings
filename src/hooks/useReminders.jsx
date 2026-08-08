@@ -224,18 +224,27 @@ export function useReminders({ nowMins, setWriteWarning }){
   const activeReminderBanners=getActiveReminderBanners(reminders,reminderFires,reminderTodayStr,nowMins);
   // One row per active fire slot, stacked vertically. Amber (distinct from the
   // green success toasts and red error banners), with Done + Snooze actions.
+  // v17.8.0: on the shared banner pane (see BannerRows.jsx / AppBanners.jsx) —
+  // 1px border, soft tint, a semantic dot instead of the ⏰ glyph plus a 2px
+  // amber ring. v17.8.0 had only just moved this off raw hex literals; the
+  // literals were the correctness bug, this is the consistency one.
   const reminderBanners=activeReminderBanners.length?<div style={{marginBottom:10}}>{activeReminderBanners.map(function(ab){
       return (
         <div
           key={ab.fireKey}
-          style={{background:"var(--warn-bg)",border:"2px solid var(--warn-border)",borderRadius:R.card,padding:"10px 14px",marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div
-            style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0,flexWrap:"wrap"}}><span style={{fontSize:14,fontWeight:700,color:"var(--warn-text)"}}>⏰ Reminder</span><span
-              style={{fontSize:11,padding:"2px 8px",borderRadius:R.pill,background:"var(--warn-chip-bg)",color:"var(--warn-text)",fontWeight:700,letterSpacing:"0.02em",whiteSpace:"nowrap"}}>{ab.time}</span><span
-              style={{fontSize:14,color:"var(--warn-text)",fontWeight:700,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
+          style={{background:"var(--app-overlap-bg)",border:"1px solid var(--border-card)",borderRadius:R.card,padding:"10px 14px",marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",boxShadow:"var(--shadow-soft)"}}><div
+            style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0,flexWrap:"wrap"}}><span
+              aria-hidden="true"
+              style={{width:8,height:8,borderRadius:"50%",background:"var(--warn-text)",flexShrink:0}} /><span
+              style={{fontSize:13,fontWeight:700,color:"var(--warn-text)"}}>Reminder</span><span
+              style={{fontSize:11,padding:"2px 8px",borderRadius:R.pill,background:"var(--warn-chip-bg)",color:"var(--warn-text)",fontWeight:700,letterSpacing:"0.02em",whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums"}}>{ab.time}</span><span
+              style={{fontSize:13,color:"var(--text-primary)",fontWeight:600,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               onClick={function(){snoozeReminderFire(ab.fireKey);}}
+              className="mgt-hover-scale mgt-press"
               style={mkBtn({fontSize:12,minHeight:34,padding:"4px 12px",background:BTN.nav})}>Snooze 15m</button><button
               onClick={function(){markReminderDone(ab.fireKey);}}
-              style={{background:"var(--app-success-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:600,color:"var(--text-on-accent)",minHeight:34,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Done</button></div></div>
+              className="mgt-hover-scale mgt-press"
+              style={mkBtn({fontSize:12,minHeight:34,padding:"6px 14px",background:"var(--app-success-solid)"})}>Done</button></div></div>
       );
     })}</div>:null;
 

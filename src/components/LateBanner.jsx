@@ -22,7 +22,7 @@
 import { BannerRows } from "./BannerRows";
 import { Presence, mkBtn } from "./atoms";
 import { lateMins } from "../lib/booking-logic";
-import { BTN, R } from "../lib/constants";
+import { BTN } from "../lib/constants";
 
 export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, collapseMax = 2 }) {
   // v17.0.0 review fix #6: the collapsible/Reveal scaffolding moved to the
@@ -36,7 +36,7 @@ export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, co
     if (!b) return null;
     const offerNoShow = lateMap[id] === "noshow";
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 12px", borderRadius: R.inset, background: "var(--warn-bg)", border: "1px solid var(--warn-border)", marginTop: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "9px 0" }}>
         <span style={{ fontSize: 13, color: "var(--warn-text)", fontWeight: 600, flex: "1 1 auto", minWidth: 0 }}>{b.name + " (" + b.time + ") — " + lateMins(b, nowMins) + " min late"}</span>
         <Presence show={offerNoShow} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span">
           <button

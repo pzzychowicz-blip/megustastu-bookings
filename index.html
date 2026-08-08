@@ -181,6 +181,12 @@
         --app-reconnect-bg: rgba(219, 234, 254, 0.85); --app-reconnect-border: rgba(147, 197, 253, 0.7); --app-reconnect-text: #1e40af;
         /* Overlap-warning panel container (soft amber) */
         --app-overlap-bg: rgba(255, 250, 235, 0.55); --app-overlap-border: rgba(253, 186, 116, 0.45);
+        /* v17.8.0: the SOFT counterpart of --suggest-bg, for the in-flow
+           waitlist banner's pane. --suggest-bg (0.8 alpha) is a chip/inline
+           fill; at banner size it read louder than the amber "Running late"
+           pane directly above it, which inverts the hierarchy — a suggestion
+           must never shout over a warning. Tuned to --app-overlap-bg's weight. */
+        --suggest-bg-soft: rgba(240, 253, 244, 0.6);
         /* Date input (header) */
         --app-date-bg: rgba(255, 255, 255, 0.45); --app-date-border: rgba(255, 255, 255, 0.4);
         /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
@@ -303,6 +309,7 @@
         --app-offline-bg: rgba(90, 70, 15, 0.4);   --app-offline-border: rgba(252, 211, 77, 0.45); --app-offline-text: #fcd34d;
         --app-reconnect-bg: rgba(20, 45, 95, 0.45); --app-reconnect-border: rgba(147, 197, 253, 0.4); --app-reconnect-text: #93c5fd;
         --app-overlap-bg: rgba(80, 55, 15, 0.3);   --app-overlap-border: rgba(253, 186, 116, 0.35);
+        --suggest-bg-soft: rgba(28, 66, 42, 0.3);
         --app-date-bg: rgba(118, 118, 128, 0.24);  --app-date-border: rgba(255, 255, 255, 0.12);
         --app-btn-grey: rgba(110, 118, 135, 0.5);  --app-btn-grey-strong: rgba(110, 118, 135, 0.6);
         --app-btn-slate: rgba(100, 116, 139, 0.7);
@@ -474,11 +481,21 @@
       .mgt-slide-in-r  { animation: mgt-slide-in-r  180ms linear both; display: inline-flex; }
       .mgt-slide-out-r { animation: mgt-slide-out-r 180ms linear both; display: inline-flex; }
 
-      /* Press feedback (ease-out, v15.8.0 cont.4) — Follow / − / 1× / + AND utility
-         buttons (Clear / Reset / Done). Uses brightness (not transform) so it never
-         fights `.mgt-hover-scale`'s hover transform. */
+      /* Press feedback (ease-out, v15.8.0 cont.4) — the brightness dim, opt-in via
+         .mgt-press on ~28 elements. v17.8.0 keeps it: brightness and scale read as
+         one press, and the two are orthogonal (filter vs transform). */
       .mgt-press { transition: filter 160ms ease-out, background-color 160ms ease-out; }
       .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
+
+      /* v17.8.0: the status-toast "busy" dot. A slow opacity pulse replaces the
+         static ⟳ glyph the loading/syncing toasts used to carry — a glyph that
+         says "spinning" without spinning is worse than no glyph, and the dot is
+         already there doing the semantic work. Opacity-only, so it costs one
+         composited layer and nothing reflows. Neutralised by the reduce-motion
+         block below, where it settles at full opacity (a solid dot, still
+         legible as "in progress" alongside the text). */
+      @keyframes mgt-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+      .mgt-dot-pulse { animation: mgt-dot-pulse 1.4s ease-in-out infinite; }
 
       /* v15.8.0 animation pass #2. */
       /* Status-change colour wipe (v15.9.0: unified left→right everywhere — List
