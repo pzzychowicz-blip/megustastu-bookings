@@ -361,8 +361,26 @@
          form inputs (Date/Time in the booking form) visibly overflowed their
          Section. Touch devices get no hover lift at all now; mouse/trackpad
          behaviour is unchanged. */
-      .mgt-hover-scale {
-        transition: transform 120ms ease, background-color 120ms ease, box-shadow 120ms ease, border-radius 120ms ease;
+      /* ── ONE interaction transition, shared by both classes ─────────────────
+         v17.8.0 correction. These used to be two separate `transition:`
+         declarations — .mgt-hover-scale here, .mgt-press further down. Same
+         specificity (0,1,0), and `transition` is a shorthand, so on the ~30
+         elements carrying BOTH classes the later rule (.mgt-press) REPLACED
+         this list wholesale. Those buttons — the reminder banner's Snooze/Done,
+         the timeline zoom cluster, every banner ✕, the form's chips — had
+         `transition: filter, background-color` and NO transform transition at
+         all, so their hover lift (and, since the universal press-scale, their
+         press dip) SNAPPED while Reshuffle and every hover-scale-only button
+         eased. That is the "jumpy" difference, and it dated back to v15.8.0.
+         Two shorthand declarations of one property cannot merge, so the fix is
+         to stop having two: one selector list, one declaration, covering every
+         property either class animates. Order can no longer matter because
+         there is nothing left to override.
+         `border-radius` is deliberately NOT in the list — v17.7.0 removed the
+         radius change from the hover rule, so it had nothing left to ease. */
+      .mgt-hover-scale, .mgt-press {
+        transition: transform 120ms ease, background-color 120ms ease,
+                    box-shadow 120ms ease, filter 160ms ease-out;
       }
       /* v16.4.0: autocomplete dropdown rows (phone + name pickers in the booking
          form) — a hover tint so the cursor's target row is visible. Not a
@@ -484,7 +502,8 @@
       /* Press feedback (ease-out, v15.8.0 cont.4) — the brightness dim, opt-in via
          .mgt-press on ~28 elements. v17.8.0 keeps it: brightness and scale read as
          one press, and the two are orthogonal (filter vs transform). */
-      .mgt-press { transition: filter 160ms ease-out, background-color 160ms ease-out; }
+         (Its `transition` moved up next to .mgt-hover-scale's — see the note
+         there for why the two had to become one declaration.) */
       .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
 
       /* ── v17.8.0: universal press-scale ──────────────────────────────────────
