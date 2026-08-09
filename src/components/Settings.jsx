@@ -29,7 +29,7 @@ import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep } from "./atoms";
 import { BTN, R, M } from "../lib/constants";
 
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
@@ -108,13 +108,8 @@ export function TabBar({ tabs, current, onSelect }) {
 // Whole-hour stepper — still used for the Afternoon/Evening split + the optimizer
 // cutoff (both single global hours). Fully controlled by props (the Firebase echo
 // re-renders it); disabled at the bounds so an invalid value can't be set.
-const HOUR_STEP_BTN = {
-  background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
-  borderRadius: R.pill, width: 38, height: 38, fontSize: 20, fontWeight: 600,
-  color: "var(--text-primary)",
-  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-  boxShadow: "var(--shadow-input)"
-};
+// v17.8.0: one stepper definition for the app — see mkStep in atoms.jsx.
+const HOUR_STEP_BTN = mkStep(38);
 // `fmt` (v15.0.0): optional value→label formatter. Defaults to the modulo-24
 // clock label; the optimizer cutoff passes its own so it can show "24:00" (the
 // full-day endpoint) distinctly from "00:00".
@@ -175,13 +170,7 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
 
 // v15.0.0: compact stepper for the per-weekday hours editor (no label row, so 7
 // rows stay scannable). Same disabled / hover-scale contract as HourStepper.
-const MINI_STEP_BTN = {
-  background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
-  borderRadius: R.pill, width: 30, height: 30, fontSize: 17, fontWeight: 600,
-  color: "var(--text-primary)",
-  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-  boxShadow: "var(--shadow-input)"
-};
+const MINI_STEP_BTN = mkStep(30);
 function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt }) {
   // v16.3.0: fmt is now optional (defaults to the HH:00 time format used by the
   // Opening-hours editor); the Standing-bookings horizon passes a plain number.
@@ -209,7 +198,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   const pill = {
     border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 10px",
     fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
-    boxShadow: "var(--shadow-input)"
+    boxShadow: "var(--shadow-btn)"
   };
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
@@ -607,7 +596,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
                 background: "var(--bg-stepper)", border: "1px solid var(--border-soft)", borderRadius: R.pill,
                 padding: "8px 14px", fontSize: 13, fontWeight: 600, color: "var(--accent)",
                 cursor: canAddTier ? "pointer" : "not-allowed", opacity: canAddTier ? 1 : 0.4,
-                boxShadow: "var(--shadow-input)"
+                boxShadow: "var(--shadow-btn)"
               }}>+ Add tier</button>
           </div>
           <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>

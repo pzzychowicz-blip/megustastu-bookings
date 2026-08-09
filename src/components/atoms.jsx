@@ -78,6 +78,29 @@ export function mkSel() {
   return { ...mkInp(), paddingRight: 18, cursor: "pointer" };
 }
 
+// v17.8.0 — the +/- stepper button. Settings.jsx (MINI_STEP_BTN) and
+// LayoutSettings.jsx (STEP_BTN) held byte-identical private copies of this, and
+// Settings held a THIRD at a larger size (HOUR_STEP_BTN). One definition, one
+// size argument.
+//
+// `--shadow-btn`, not `--shadow-input`: this is a RAISED control. The two
+// tokens exist precisely to separate a recessed field from a raised button
+// (--shadow-input leads with an INSET highlight), and every stepper, segmented
+// button and action button in Settings was wearing the field one — which is why
+// Settings never quite looked like the rest of the app despite using the same
+// palette. Inputs there keep --shadow-input, correctly.
+export function mkStep(size) {
+  const d = size || 30;
+  return {
+    background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
+    borderRadius: R.pill, width: d, height: d,
+    fontSize: d >= 36 ? 20 : 17, fontWeight: 600,
+    color: "var(--text-primary)",
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+    boxShadow: "var(--shadow-btn)"
+  };
+}
+
 export function mkBtn(extra) {
   return {
     border: "1px solid var(--border-glass)",
