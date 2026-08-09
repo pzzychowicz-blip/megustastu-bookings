@@ -6627,3 +6627,1100 @@ The WhatsApp sandbox's v17.7.0 sync. Its reply composer is `rows={2}` +
 `resize:"none"` and advertises "Shift+Enter for new line", so overflow is the
 ordinary state there rather than an edge case; the clipping was obvious within
 one test message, and the same geometry then reproduced on `mkArea` itself.
+
+---
+
+## v17.8.0 — waitlist ghosts · connection popover · guard extensions
+
+**Date:** 2026-08-08
+**Files:** `src/App.jsx`, `src/components/TimelineView.jsx`,
+`src/components/ConnectionStatus.jsx`, `src/hooks/usePresence.js`,
+`src/hooks/useReminders.jsx`, `src/hooks/useKeyboardShortcuts.js`,
+`src/components/BlockModal.jsx`, `src/components/Settings.jsx`,
+`src/components/LayoutSettings.jsx`, `CLAUDE.md`, `ROADMAP.md`
+**Behavioural change:** yes (four features — see each commit below).
+**Verification:** lint 0 errors / 40 warnings · 103/103 tests · build clean.
+
+Four changes on one branch, one commit each. Two came from Patryk directly, two
+off `ROADMAP.md`. No Firebase rules change: `presence` is the only node touched
+at the persistence layer and it inherits the top-level `.write: auth != null`
+with no `.validate`.
+
+### 1/5 — Waitlist ghost blocks on the Timeline
+
+**Bundle:** main chunk 194.20 kB gz (was 193.74).
+
+`waitAvail` has known, since v16.0.0, exactly which tables and which time would
+fit each waiting party — that is what turns the ⏳ badge orange and what the
+green WaitAvailBanner asserts. But it was only ever *asserted*. Staff could read
+"a table is free for Ghost Alpha" and still have no idea **where**, so the one
+judgement the information exists to support — is taking this party actually a
+good idea? — still needed a manual scan of the grid.
+
+So the match is now drawn where it would go: a dimmed, pending-coloured block on
+the matched table row, at the matched time, for the party's default duration.
+Pending because that is precisely what the party is — awaiting a decision — and
+dimmed in the same family as the v17.6.0 turnaround tail, so the whole class of
+"not a real booking yet" reads alike.
+
+Three things are worth recording about the implementation.
+
+**The dimming is a separate fill LAYER, not `opacity` on the box.** The
+turnaround tail sets `opacity: 0.28` on the whole element, which is fine because
+the tail carries no text. A ghost has to say whose it is, and a label at 0.3
+alpha is unreadable. So the wrapper stays fully opaque, an absolutely-positioned
+`inset: 0` sibling supplies the dimmed fill, and the label sits above it at full
+contrast (`--text-secondary`: #4a5568 light / #c7c7cc dark — checked against the
+0.3-alpha pending tint in both themes, not assumed).
+
+**A match that needs a reshuffle is drawn differently, and that distinction is
+new data.** `tryFit` in App's waitAvail effect already had two branches — the
+cheap `findFreeSlot` (tables free exactly as drawn) and the reshuffling
+`trialFits` (reachable only by moving other parties) — but it discarded which
+one produced the hit. It now records it as a `resh` flag on the entry. This is
+not cosmetic: a solid ghost drawn across a table that is visibly occupied right
+now would read as a rendering bug, and it is the *only* case where a ghost can
+overlap a real block. Those render as a dashed outline with no fill instead.
+`resh` is additive, so `bookFromWaitlist` and `WaitAvailBanner` never see it.
+
+**The ghost is tappable, and that is why it is its own element.** Tapping opens
+the prefilled booking form through the existing `bookFromWaitlist` — no new
+booking path, just a new door to the old one. Because the ghost is a sibling of
+`TimelineBlock` rather than anything layered inside it, it carries no drag or
+RMB handling and cannot swallow a block's gesture. It is rendered *before* the
+row's blocks so a live booking always paints on top of a preview.
+
+Plumbing follows the existing rules rather than inventing anything: `waitGhosts`
+is `useMemo`'d in App (an inline array literal would defeat TimelineView's
+`React.memo` on every BookingApp keystroke), scoped to the viewed date because
+`waitAvail` spans every date ≥ today while the timeline draws one day, and
+`onBookWait` is a stable `VA` wrapper resolving the id against the live waitlist
+at event time. `WaitGhost` is hoisted to module scope per the
+inline-sub-component rule. Its `borderRadius: 10` is a deliberate numeric
+literal — same canvas-geometry exemption the timeline blocks carry — and it is
+required, not optional: `.mgt-hover-scale` paints an opaque `--bg-hover-card`
+and since v17.7.0 supplies no radius of its own, so a radius-less hover-scale
+element renders a hard-edged rectangle on hover.
+
+**Verification note.** The DEV Firebase project rejects `waitlist` writes
+outright (PERMISSION_DENIED, reproduced through the app's own `writeWithRev` —
+its deployed rules for that node disagree with `database.rules.json`), so
+seeding an entry took a direct SDK write that only landed on a retry. Worth
+knowing before the next person tries to QA a waitlist change in DEV. Both
+branches were then exercised against real data: the filled variant from a
+genuine clean match, the dashed variant by temporarily forcing `resh` on one
+entry.
+
+### 2/5 — Log out moves into the connection popover
+
+**Bundle:** main chunk 194.25 kB gz.
+
+Log out sat in the header row, left of the connection dot. Two reasons it is
+better inside the popover, right-aligned on the status line:
+
+It belongs with the identity. The popover already answers "who am I signed in
+as" two rows below — the sign-out control was the one part of that answer
+living somewhere else.
+
+And the header is crowded. It carries the restaurant name block, ViewSwitcher
+(T/L/P), Walk-in, + New, the dot, and it `flexWrap`s: on a phone that is already
+three rows. Removing an item is the cheapest fix available, and this is the item
+with the weakest claim to being one tap away — it is used once a shift, not once
+a table.
+
+`ConnectionStatus` takes an `onLogout` prop and renders the button only when it
+is supplied, so the component stays usable without it. Same `BTN.nav` +
+`mkBtn` + `.mgt-hover-scale` treatment as the header button had, at
+`minHeight: 32` rather than 40 — popover scale, not header scale.
+
+The sibling MGT Scheduling app has its own copy of `ConnectionStatus` (this one
+was ported from it in v16.2.0). Per the shared-pattern rule this is a port
+candidate on its next touch — not done here.
+
+### 3/5 — Presence: a connection now has to keep proving itself
+
+**Bundle:** main chunk 194.53 kB gz.
+
+The popover's "Connected devices" list was showing tablets that had last been on
+**days** earlier. The cause is a real hole in the `onDisconnect`-only model, not
+a bug in how it was called:
+
+> `onDisconnect()` arms **one** server-side operation that fires **once**. If the
+> socket drops between arming it and the `set()` landing, the server fires the
+> (empty) removal — and the SDK then **replays the queued `set()` on reconnect**,
+> writing a child with no `onDisconnect` attached to it. That child is immortal.
+
+The v17.3.0 comment above the two calls asserted that ordering `onDisconnect`
+first covers "a write that races a drop". It doesn't. Reordering them doesn't
+either; it only moves the window. Any scheme built on a single fire-once hook is
+one lost race away from a permanent phantom.
+
+So the model changed rather than the ordering. `onDisconnect` stays as the fast
+path — a clean tab close still vanishes instantly — but it is no longer the
+*proof*. A live connection now re-proves itself every 45s with a `lastSeen`
+heartbeat, and a child counts as connected only while its `lastSeen` is inside
+150s (three missed beats).
+
+**The filter is enforced on READ.** That matters more than it looks: it means a
+child that leaked before this version shipped is hidden the moment the new code
+runs, with no migration, no cleanup pass, and no write needing to succeed first.
+Pruning is a separate, slower concern — children older than 10 minutes are
+deleted, so leaked keys don't accumulate forever, but deletion is deliberately
+4× more conservative than hiding. Hiding is free and reversible (the next beat
+brings a device straight back); deleting is neither.
+
+`.info/serverTimeOffset` was added because the whole model now rests on
+comparing a `serverTimestamp` against local time, and on a device with clock
+skew that comparison is nonsense — "connected 3h ago" for a tab opened a minute
+ago, or a negative span that renders as "just now" forever. The offset is
+returned from the hook so `ConnectionStatus`'s "since" text uses it too.
+
+**Two things QA caught that the design got wrong:**
+
+*The prune never fired.* The first version pruned at registration, inside the
+`.info/connected` handler — but that resolves **before** the first `presence`
+snapshot arrives, so it always read an empty node and deleted nothing, silently.
+It is now armed on connect and consumed by the next real snapshot, which is the
+first moment the data it needs actually exists. Still once per registration, so
+N devices cause N deletes at connect rather than a rolling write storm.
+
+*A pre-v17.8.0 child has no `lastSeen`*, so the filter falls back to `since`.
+That keeps such a device listed for its first 150s and then drops it until it
+reloads. A transitional cost on a handful of devices, and the alternative —
+trusting a field that is never refreshed — is precisely the bug being fixed.
+
+Verified against DEV by seeding three children: a 3-day-old one, a 3-day-old
+one in the pre-v17.8.0 shape, and one beating 10s ago. The first two were hidden
+immediately and deleted on the next connect; the third stayed listed, then
+disappeared **on its own** once it crossed 150s without beating — no reload, no
+`onDisconnect`, which is exactly the case the old code could never recover from.
+
+Still exempt from the CAS/revGuard rule. The prune writes to keys other than our
+own, but only to delete ones already proven dead, and deleting a dead key is
+idempotent — two devices racing on the same one is harmless. No rules change,
+no Firebase console step.
+
+### 4/5 — Theme the reminder banner (was `ROADMAP.md` → Deferred)
+
+**Bundle:** unchanged (styles only).
+
+The last surface the v14.2.x token migration missed. Its amber shell, its time
+chip and its green "Done" button were raw literals (`rgba(254,243,199,0.8)`,
+`#78350f`, `rgba(146,64,14,0.15)`, `rgba(22,101,52,0.8)`, `#fff`), so the banner
+rendered identically in both themes — pale cream with dark brown text, sitting
+directly above a correctly-dark "Running late" banner it is supposed to match.
+
+It survived every sweep because it lives in a **hook**, not a component: a
+`src/components` pass never sees it. Worth remembering — `useReminders.jsx` is
+the only hook in the codebase that returns JSX.
+
+Straight literal → token swap, no logic change. Two tokens were added:
+
+- **`--warn-chip-bg`** (both blocks). The time chip is a tint sitting *on*
+  `--warn-bg`, and no existing token filled that role — `--warn-border` is a
+  stroke tone and reads too pale as a fill. The value inverts between themes:
+  a dark-brown tint on the light shell, a light-amber tint on the dark one. The
+  light theme's value would vanish into the dark shell.
+- **`--app-success-solid`** (light block only), carrying the exact
+  `rgba(22,101,52,0.8)` the Done button already used. It joins the "saturated
+  action fills (white text — read on both themes)" family next to
+  `--app-walkin` / `--app-danger-solid`, which is deliberately not duplicated
+  into the dark block. Reaching for `--app-walkin` instead would have been the
+  wrong token by role — it means "the Walk-in button", not "a success action".
+
+One value moved: the light theme's text is now `--warn-text` (#9a3412) rather
+than the old #78350f. That is a hair lighter, and it is the point — every other
+warn surface in the app already uses it, and the banner was drifting.
+
+Verified by rendering the exact post-swap markup in both themes and reading the
+resolved values back. Note for the next person: a real reminder could not be
+created in DEV — the project's deployed rules reject rev-guarded writes
+(`reminders` and `waitlist` both return PERMISSION_DENIED through the app's own
+`writeWithRev`), so DEV's rules are out of step with `database.rules.json`.
+
+### 5/5 — Extend the unsaved-changes guard (was `ROADMAP.md` → Ideas)
+
+**Bundle:** main chunk 194.83 kB gz.
+
+v17.5.0 guarded the booking form, the walk-in form and `ManualModal`, and left
+three surfaces out by explicit scope decision. They are in now, so every place
+that holds a draft is covered. The shared discard modal goes from three callers
+to six; `DISCARD_BODY` gains a line each.
+
+Each surface needed the same three wirings CLAUDE.md spells out, and the third
+is the one that would have been easy to skip:
+
+**a) `ReminderEditor`.** Baseline set in `openNewReminder`/`openEditReminder` —
+the only two doors — and `reminderDirty` returned from the hook. The draft is
+diffed through a small `flatReminder()` first, because `sameDraft`'s `norm()`
+falls back to `JSON.stringify` for a nested object and `recurrence` is rebuilt
+by spreads all over the editor: two equivalent drafts could serialise in
+different key orders and read as permanently dirty. Flattening to
+`rec_type`/`rec_date`/`rec_days` sidesteps that, and leaves `times`/`days` as
+arrays so `norm()` still sorts them — reordering times is not an edit.
+
+**b) `BlockModal`.** Component-local `mode`/`from`/`to`, so it reports up via
+`onDirty` exactly like `ManualModal`, with the unmount-only `onDirty(false)`
+cleanup. Dirty means add-mode *with a time actually changed* from the default
+full-service window — browsing the existing-blocks list, or merely opening the
+add form, closes silently.
+
+**c) Settings.** The awkward one: the drafts are two levels down and in two
+different tab bodies. `GsTextField` (×3, commits on blur) and
+`LayoutTabContent`'s new-table + rename boxes each report `onDirty(id, bool)`,
+and `SettingsContent` aggregates them into the single boolean App wants. A
+**Set of ids, not a counter** — an unmounting field always clears its own entry,
+so a tab switch (which unmounts the whole body) cannot leave a phantom count
+behind and strand `beforeunload` armed. The tab reset that Settings has always
+done on close moved into `closeSettings()` so it runs on *both* paths, the clean
+close and the discard.
+
+The Esc chain in `useKeyboardShortcuts` was edited for all three. That chain
+calls the state setters directly and never touches a modal's `onClose`, so a
+surface guarded only at its mount site still has Esc as a silent back door —
+which is exactly what "three wirings" is warning about.
+
+**Not guarded, deliberately:** Settings' steppers and toggles. They commit on
+each tap and hold no draft, so there is nothing to lose.
+
+Verified per surface in DEV — clean close silent; dirty close via button, scrim
+and **Esc** all raising the confirm with the right copy; Discard dropping the
+edit; and, after a discard, reopening and closing cleanly staying silent (the
+`ManualModal` unmount trap, which is what the cleanup effects exist for).
+
+### Polish round (commits 6–8) — the design-consistency pass
+
+**Bundle:** main chunk 194.97 kB gz. Prompted by Patryk reviewing 1/5 and 2/5
+in DEV: the ghost "stands out too much comparing to the other booking blocks",
+the banners are "too generic-AI like", and every button should have a press
+effect.
+
+#### The ghost was two objects pretending to be one
+
+The v17.8.0 ghost layered a 0.3-alpha fill under a full-strength label. That one
+decision forced every other difference. A label sitting above its own fill has
+to choose its own colour, and it chose `--text-secondary` — a token that
+**inverts between themes**, which is exactly the "font color changes whilst
+changing the light-dark mode" Patryk saw, while every real block's
+`--text-on-accent` is theme-invariant. Having chosen a colour it had also chosen
+a size (10 vs 11), a weight (600 vs 700), a padding and a separator ("·" vs the
+block's parenthesised size).
+
+The entry above defends the fill-layer as necessary for legibility. That was
+true of the constraint and wrong about the solution: the real fix is to dim the
+*whole block*, text included, which keeps white-on-amber intact — quieter, not
+recoloured. It is now TimelineBlock's geometry, radius, border, shadow, chip and
+label grammar verbatim, at `opacity: 0.55` (`0.4` + a dashed edge for `resh`).
+**Nothing in it picks a second set of values, so nothing can drift**, and the
+theme bug cannot recur because no theme-dependent token remains.
+
+#### The banners were a nested card
+
+The generic-alert-box impression had a specific cause: every in-flow banner was
+a saturated tinted container with a **2px ring**, holding rows that each had
+their own fill, their own 1px border and their own radius. Cards inside a card —
+the loudest treatment in the app, spent on ambient messages, and directly
+against the house style where every other surface (Summary, list cards, the
+connection popover) is a single quiet pane.
+
+The nine status toasts were the same shape nine times over, hand-written, and
+had already drifted: font weight alternated 600/700 with no rule behind it.
+
+All of it is now ONE pane — a whisper of tint, a 1px border, `R.card` — with the
+semantic colour carried by a leading **dot**, the device the connection popover
+already uses. Rows are transparent and hairline-separated. Connection-shaped
+toasts borrow the header dot's own `--status-*` tokens, so "Reconnected" is
+literally the same green as the dot in the header.
+
+Done in one pass across all seven surfaces on purpose. A notification looking
+like two different things in two places is the fault being fixed; converting
+half of them would have preserved it.
+
+Two smaller findings: `--suggest-bg` (0.8 alpha, a *chip* fill) made the
+waitlist pane read louder than the "Running late" pane above it, inverting the
+hierarchy — a suggestion must not outshout a warning, hence the new
+`--suggest-bg-soft`. And the ⚠/⏰/⟳ glyphs went: a glyph plus a coloured dot
+plus coloured text is three signals for one message, and a ⟳ that says
+"spinning" without spinning is worse than none (the loading dot pulses instead).
+
+#### The press effect needed the specificity checked, and it did conflict
+
+`.mgt-hover-scale:hover` is (0,2,0). The obvious `button:active` is (0,1,1) and
+**loses to it** — the press would have been invisible on precisely the elements
+where it matters most on a desktop, since a mouse user is always hovering the
+button they press. The shipped selector is
+`button:active:not(:disabled):not(.mgt-nopress)` = (0,3,1), verified in the live
+cascade rather than only computed. A hover-lifted button presses to 1.02 rather
+than 0.96 so the dip stays proportional instead of jumping down through the
+resting scale, and inline transforms still win (TimelineView's drag must not be
+overridden).
+
+The model flipped from opt-in to opt-out. `.mgt-press` existed but was on 28 of
+several hundred controls, so most of the app gave no tap feedback — the thing
+staff notice most on a tablet, which has no hover state to confirm a tap landed.
+`.mgt-nopress` handles the inverse: TableGrid's blocked cells are inert but not
+`disabled`, and animating a tap that does nothing is a lie about what happened.
+
+**The one that would have shipped broken:** iOS Safari only delivers `:active`
+when a touch listener exists somewhere on the document, and this app had none.
+Without the empty passive listener now in the boot script the whole feature
+would have been desktop-only — silently absent on the iPads it was mostly for,
+and impossible to notice from a Mac.
+
+### Polish round 2 (commits 9–13) — the second look
+
+Patryk re-reviewed the polish round with the app open and found five things.
+Four were real defects; one of them had been shipped and invisible since
+v15.8.0.
+
+#### The hover lift was snapping on ~30 buttons, and had been for two versions
+
+"These buttons' hover reacts in a jumpy way, less smooth than Reshuffle." He was
+describing a genuine, measurable difference:
+
+```
+Reshuffle    (.mgt-hover-scale)             transform .12s, background-color .12s, box-shadow .12s
+Snooze 15m   (.mgt-hover-scale .mgt-press)  filter .16s, background-color .16s
+```
+
+No transform transition at all on the second one. Two `transition:` declarations
+in `index.html`, both at specificity (0,1,0) — and `transition` is a **shorthand**,
+so the later rule (`.mgt-press`) didn't add to the earlier list, it *replaced*
+it. Every element carrying both classes jumped straight to `scale(1.08)`.
+
+That is the reminder banner's Snooze/Done, the whole timeline zoom cluster,
+every banner ✕, the booking form's customer chips — about thirty controls,
+broken since `.mgt-press` was introduced in v15.8.0 and never noticed because
+the *filter* dim it added still worked. v17.8.0's universal press-scale then
+doubled the damage by giving the same elements a press dip that also snapped.
+
+Two shorthand declarations of one property cannot merge, so the fix is to stop
+having two: `.mgt-hover-scale, .mgt-press` now share one declaration listing
+every property either class animates. Source order can no longer matter because
+there is nothing left to override. `border-radius` left the list — v17.7.0
+removed the radius change from the hover rule, so it had been easing nothing.
+
+**Carry forward:** when two classes are designed to compose, they must not both
+set the same shorthand. Give them one shared declaration, or use longhands that
+don't collide.
+
+#### A label is solid, or it is text
+
+The chips Patryk flagged ("Table free · 20:30", the reminder's "19:17", "This
+device", ListView's `SmallTag`s) all had the same shape: a pale semantic fill, a
+border in the matching hue, bold text in a third shade of it. That is the stock
+badge, and it encodes one signal three times.
+
+The app already had two better treatments and both were in use: **solid** (fill
+carries the colour, `--text-on-accent` text, neutral `--border-glass` rim — the
+v17.7.0 status-label decision) and **plain text** (the colour carries itself).
+The pastel-bordered pill was a third system nobody had decided on.
+
+Choosing between the two is not taste — **match what is next to you**:
+
+- ListView's `no-show ×N` / `N min late` / `€N deposit` sat in the same row as
+  four solid tags (`manual`, `locked`, `★`, the seated `N min`). Solid.
+- `Table free · 20:30`, `This device` and the reminder time sit in text
+  contexts, and each already has a plain-text twin elsewhere — `WaitAvailBanner`
+  prints that exact waitlist string as plain green text one surface away. Text.
+
+The `⚠` went with the fill, for the reason the banners lost theirs. And removing
+the waitlist chip left the panel's footnote ("a green chip means…") describing
+something that no longer existed — a reminder that a visual change can silently
+falsify copy.
+
+#### Three smaller ones
+
+**The `<select>` arrow.** A select paints its disclosure arrow inside its own
+padding box, hard against `padding-right`. `mkInp`'s 12px put it deep inside the
+pill's right cap — `--r-pill` is 999px and CSS clamps a radius to half the box,
+so on the 43px control the cap is 21.5px wide. Text never hits this because it
+spans enough height that the curve has receded behind it, which is exactly why
+the left 12px looked right and the right 12px didn't. New `mkSel()` atom
+(`mkInp` + `paddingRight: 18`), following `mkArea`'s precedent.
+
+**The ghost still wasn't a block.** Two ways: a multi-table ghost lifted only the
+hovered cell, so it broke the group-lift behaviour it is supposed to be a quiet
+copy of; and the `⏳` trailed the name, which made it the first thing the
+ellipsis ate — the marker meaning "proposal, not booking" disappeared on exactly
+the narrow blocks where the dimming is hardest to read. It now uses
+TimelineBlock's group mechanism verbatim under its own `data-wg` attribute
+(waitlist and booking ids come from the same `genId()`, and one namespace is one
+collision away from a ghost lifting an unrelated booking), and the marker sits
+between the time chip and the name where a real block puts its ★ / ⚠ / [L].
+
+**The split tools were eggs.** Single-glyph buttons at `minHeight: 40` plus
+horizontal padding ≈ 30×40; CSS clamps `--r-pill` to half the *shorter* side, so
+an unequal box can only ever be an egg. Square 40×40 makes them circles by the
+same rule that already makes the 34×34 🔍 one.
+
+### Polish round 3 (commits 9–15) — the design-consistency audit
+
+Ran `impeccable critique` + `high-end-visual-design` over the whole app. The two
+skills disagree by construction — the second is a BRAND-register generator
+(macro-whitespace, double-bezel nested containers, glass everywhere, banned
+system fonts) and this is a product-register operational tool, where impeccable's
+own product reference says system fonts are legitimate, density is a permission,
+and nested cards are always wrong. It was used as a craft lens (icon precision,
+motion discipline) and its layout mandates rejected. Two of its rules did land:
+the icon one, and "no default easings".
+
+Scored 34/40 on Nielsen. The deficit was concentrated in exactly two heuristics
+— Consistency (2/4) and Aesthetic/Minimalist (3/4) — which is what made the fix
+list short.
+
+#### The accent had five jobs, and one of them was invisible
+
+`--tbl-out-rgb: 0, 122, 255` and `--accent: #007aff` are the same colour. Nine
+outdoor table pills therefore painted the accent on every screen at all times,
+so nothing in the app could outrank a table label — the strongest colour was
+permanently spent on identity, which is neither an action nor a selection.
+Outdoor moved to teal, the only hue left free (green is seated/success, amber
+confirmed/pending, burnt orange warn, red danger, purple indoor).
+
+That forced a second question: the three booking-attribute FLAGS (`manual`,
+`locked`, `★preferred`) carried three unrelated hand-picked hues for three tags
+of the same kind in the same row. The hue never meant anything. One graphite
+`--tag-flag`, deeper than the slate-400 `completed` so a flag can't read as a
+status. Where "preferred" is a SELECTION (the PrefPicker's chosen cells) it
+takes the now-free accent, which is what accent is for.
+
+#### No focus ring at all, in the app with a shortcuts tab
+
+Zero `:focus`/`:focus-visible` rules existed; a focused button computed
+`outline: none`. The one interface here that is explicitly keyboard-driven was
+the one with no keyboard feedback.
+
+The fix is one rule, and `outline-offset: 2px` is what makes a single colour
+enough: the ring lands on the page background rather than the control's fill, so
+it never has to survive being drawn over a saturated accent pill. A first draft
+added a white inner hairline for that case; it was removed after checking, since
+mkBtn/mkInp's inline `boxShadow` beats a stylesheet `box-shadow` on most
+controls and the declaration would have applied inconsistently or not at all.
+
+It also exposed a collision: `ViewSwitcher`'s split-pane marker was
+`outline: 2px solid white` — indistinguishable from a focus ring, and once a
+real one existed two meanings wore the same clothes. Now an inset underline,
+echoing SplitLayout's corner brackets.
+
+#### The hard-coded shadows were a dark-mode bug, not untidiness
+
+24 hand-written shadow strings sat beside four `--shadow-*` tokens, and the
+tokens are not cosmetic: light carries `inset 0 1px 1px rgba(255,255,255,0.6)`,
+dark drops the same inset to `0.05`. Every hard-coded white inset was therefore
+shipping a LIGHT-mode top highlight into dark, 3–8× too bright, worst on the
+TableGrid/PrefPicker cells at 0.3. Several others were byte-equivalents of a
+token already and just needed pointing at it.
+
+**Triaged, not swept.** TimelineView's block shadows keep their literals: those
+sit on `BLOCK_BG` fills, which are deliberately theme-INVARIANT, so a fixed
+white inset is correct there in both themes — the same reason their
+`borderRadius` is a documented exception. Three identical `0 8px 32px` popover
+shadows became `--shadow-popover`.
+
+#### Emoji were the strongest remaining "AI made this" tell
+
+`ViewTools` put a full-colour OS emoji (🔍) beside a hand-drawn monochrome SVG
+(CogIcon) in the same 34px pair — different renderers, different weights, and
+only one of them follows `currentColor`.
+
+The device-specific half matters more. An emoji is painted from the OS font, so
+U+26A0 ⚠ (which Unicode defaults to TEXT presentation, macOS honours, and
+Android's Chrome overrides with the colour emoji) made the repeat-no-show marker
+a thin outline on one device in the restaurant and a yellow sign on another.
+
+New `Icons.jsx` in CogIcon's house style. Two cases resolved without an icon:
+the timeline label's ⚠ became `[!]`, joining that label's own bracket vocabulary
+(`[L]` = locked), because an inline SVG cannot truncate with the name the way
+that label must; and the two "Checking table availability…" rows took the
+toast layer's pulsing busy DOT, since "in progress" already had a device here
+and an hourglass that doesn't run was never it.
+
+Kept as text on purpose: ✕ ‹ › ▲ ▼ ▸ ▾ ✓ ★. **The line is "does this render as
+colour emoji, or is its font coverage patchy" — not "is this a picture."**
+
+#### One notification strip
+
+Six banners could be live at once, each its own pane with its own margin. On a
+busy evening — exactly when several fire together — they pushed the timeline off
+the bottom of the tablet: the alerts displaced the thing the alerts are about.
+
+The earlier v17.8.0 pass made them all *look* like one system. `NotificationStrip`
+makes them *be* one: a single pane whose collapsed height is one row however many
+fire, so the cost of a bad evening stops scaling with how bad it is.
+
+Severity ordering lives in App, not the strip, because it is a judgement about
+this restaurant's operations rather than a property of the widget — and the strip
+shows `sections[0]` as its collapsed summary, which makes "worst first"
+load-bearing. The waitlist sits last and keeps its green: it is an opportunity,
+not a problem.
+
+`AppBanners` now exports a section FACTORY rather than a component. The strip
+needs each section's tone/title/count as DATA to build its summary and sort; a
+component could only return opaque JSX and App would have had to repeat the same
+facts beside it.
+
+#### Two smaller ones
+
+`mkSel` — a `<select>` paints its arrow against `padding-right`, and mkInp's 12px
+put it inside the pill's 21.5px right cap. Text is immune because it spans enough
+height that the curve has receded, which is exactly why the left 12px looked
+right and the right 12px didn't.
+
+Settings said "Follows your account on every device." verbatim on five
+consecutive rows. Five copies of the rule buried the only useful fact — which
+settings are the exception. The rule is stated once; App width and Timeline zoom
+open with "This device only".
+
+### Polish round 4 (commits 16–18) — motion
+
+The audit's last open finding, plus the animations that were simply absent.
+
+#### One motion signature
+
+Five easing curves were in use — `ease`, `ease-out`, `ease-in-out`, `linear`,
+and Material's `cubic-bezier(.4,0,.2,1)` — chosen per site across eight
+versions with no rule behind which went where. A modal's scrim faded `linear`
+while the toast inside it used Material's curve while the button on it used
+`ease`: three materials in one glance. Twelve durations did the same job
+(120·140·160·170·180·200·220·260·280·320·340·360), several a few ms apart.
+
+Two curves now, and **the split is by direction, not by element**: `--ease-out`
+for everything that arrives, opens, moves or answers a finger, `--ease-in` (its
+exact mirror) only for things leaving. Three durations by what is moving —
+`--t-tap`, `--t-move`, `--t-shift` — plus `--t-status` and `--t-wipe`, which sit
+outside the scale because they are not interface response. `--t-status` earns
+its own name for a specific reason: TimelineView and PlanView must agree on it,
+and a shared number needs a shared name.
+
+Two exceptions survive and both are genuine. The busy dot's pulse keeps
+`ease-in-out` — a loop has no arrival and no departure, so neither direction
+curve applies. And `useFlip` keeps literal values because WAAPI cannot read a
+CSS var; it would resolve to nothing and run linear. Those two literals are the
+only thing in the system that can drift, and `M`'s comment says so.
+
+Picked up in passing, both in files already open: Settings' TabBar was
+`transition: all 0.15s` (which was trying to tween a 600→700 font-weight jump,
+and is the transition equivalent of a wildcard import), and it carried a
+hard-coded light-calibrated shadow that commit 11's sweep had missed.
+
+#### Motion where there was none
+
+Mostly the notification strip. A section that resolved while others were still
+up vanished mid-frame and everything below it jumped — worst in exactly the
+case the strip exists for. Sections now ride `useRevealRows`, the hook their
+own rows have used since v16.3.0.
+
+Three details only measurement caught:
+
+- A departing section held its old index, but the sections below had already
+  shifted up into it, so it **tied** with its replacement and the tie fell
+  through to `renderIds`, which is arrival-ordered. Measured live: "Running
+  late" jumped from first to second and *then* collapsed. Departed ranks now
+  sort half a step above their replacement.
+- Nothing caches the departing section's content, because `Reveal` already
+  holds its last truthy children for precisely this case. The strip remembers
+  only WHERE a section was — one integer.
+- Emptying the strip entirely still blanked before collapsing, because App
+  passed a live-but-empty strip as `Reveal`'s children and Reveal caches only
+  **truthy** children. It passes `null` now.
+
+Also: the strip's tint and tone cross-fade (it is recoloured by whatever is
+worst right now, and a cut between two saturated tints reads as a flicker), and
+the ▲/▼ pair became one ▾ that turns — a glyph swap is a cut with nothing to
+say the two are the same control.
+
+Outside the strip, a waitlist ghost fades in rather than blinking into
+existence beside blocks that never move on their own, and the connection dot
+cross-fades instead of cutting. That needed a new keyframe: `mgt-appear`, with
+no `to` and no fill-mode. The omitted endpoint resolves to the element's own
+computed value, so it lands on the ghost's 0.55 (or 0.4 when reshuffling)
+without the rule knowing that number; and `both` would have pinned the animated
+properties forever, which on a `.mgt-hover-scale` element kills the lift
+permanently. Verified live: opacity settles at 0.55, the group lift still
+reaches 1.08.
+
+**Deliberately not animated:** the empty-day state. It appears mostly when you
+navigate to an empty day, where `SlideView` is already animating the whole
+view — a second fade inside it would only make the day change feel slow.
+
+**Verification.** Build + 103 tests + lint (0 errors) on every commit. Live in
+DEV: every token resolves, zero legacy curves remain anywhere in the computed
+DOM, and the section collapse was sampled at 50ms (126→74→28→9→3→1→gone, no
+position jump). Main chunk 686.33 kB / 195.92 kB gz.
+
+#### /code-review fixes (commit 19)
+
+Seven findings over the branch diff; all fixed.
+
+**The one that mattered.** The token sweep (commit 11) put `--success-text` and
+`--status-pending-text` on the kitchen-suggestion chips in `BookingFormModal`
+and `WalkinForm` — but those chips' FILLS are hard-coded pale green and pale
+yellow, deliberately theme-invariant like `BLOCK_BG`. The text tokens invert
+(`#166534`→`#86efac`, `#854d0e`→`#fde047`), so in dark mode the suggested
+alternative times — which staff tap to pick a slot — rendered at roughly 1.3:1.
+Six sites are back on hex literals as `KTXT_OK` / `KTXT_TIGHT`, and that is the
+correct answer rather than debt: **triage a colour exactly like a shadow, by
+asking whether the surface under it flips.** The same commit that wrote that
+rule for shadows had inverted it for colour. Verified in dark mode live.
+
+**Presence prune vs. the clock.** The prune deletes other devices' children off
+a serverTimestamp comparison, but nothing ordered `.info/serverTimeOffset`
+before the first `presence` snapshot. With the offset still 0 on a device whose
+clock ran more than `PRUNE_MS` fast, every live child looked ancient and the
+whole node would be deleted. The prune now waits for a real offset (and stays
+armed, so the next snapshot retries); staleness *hiding* is left ungated on
+purpose, because hiding is reversible — the same asymmetry that already makes
+`PRUNE_MS` 4× `STALE_MS`. Separately, the heartbeat now rewrites the identity
+fields, not just `lastSeen`: `update()` on a removed path CREATES it, so a
+lastSeen-only beat resurrected a nameless stub reading "unknown · Device".
+
+**`Object.assign` replaces a shadow, it does not add one.** `ViewSwitcher`'s
+split-pane marker overwrote `mkBtn`'s `--shadow-btn`, so the focused pane's
+button sat flatter than the unfocused one. One comma-separated list now.
+
+Four smaller ones: `--warn-chip-bg` was defined in both theme blocks and used
+nowhere (the reminder restyle removed the chip fill it was added for, and
+CLAUDE.md still claimed it was needed — both corrected); `sinceText` had an
+unreachable `mins < 0` branch; `BannerRows`' hairline indexed `renderIds`,
+which retains a collapsing row, so the survivor briefly wore a border flush
+under the section header — it keys on visible position now; and `TL_MOVE` was
+declared between two `import` statements, working only because imports hoist.
+
+Checked and **not** a bug: `GsTextField`'s dirty flag looked like it would
+false-trigger the discard confirm on the normal close path (blur commits, but
+the Firebase echo is async). It doesn't — `saveGeneralSettings` calls `setGS`
+optimistically, so `value` updates before the click lands. The guard fires only
+on Esc, which is exactly the path it exists for.
+
+### Polish round 5 (commits 19–24) — the notification strip, and motion again
+
+#### Motion: the curve was the fault, not the clock
+
+"Too fast" and "toggles just jump" were one problem, and the toggle proved it.
+Its transition WAS applied and correct at 120ms; the 21px knob slide still read
+as a teleport, because `--ease-out` was a quint — ~90% of the distance in the
+first third of the time. Right for a press dip, where the eye only registers
+arrival; wrong for anything crossing a distance.
+
+So both ends moved: a cubic-out (`0.33,1,0.68,1`), and +20% on the durations
+(145/240/385). The knob also moved from `M.tap` to `M.move`, which is the scale
+working as designed — the steps key on WHAT moves, and what moves here is a
+position. Sampled after: 3-11-18-21-23-24px. Its inline transition gained
+`transform` too, since an inline transition beats `.mgt-hover-scale`'s
+stylesheet one and its absence left that button's hover lift unanimated.
+
+The connection popover also gained an entrance. It never had one — a bare
+`open ?` since v17.3.0 — which stopped being survivable once everything else
+eased. `mgt-card-in/-out` reused, not invented.
+
+#### The strip: icons, a tally, and two exiles
+
+Every section now carries an icon instead of the 8px dot — a bell for the lid,
+a ringing bell for reminders, a stopwatch for late, the hourglass for the
+waitlist, plus four the brief didn't name (overlap, offline, failed save,
+reshuffle) so the vocabulary stays whole. All `currentColor`, so they take the
+same `tone` the dot did.
+
+That unlocked the collapsed row: "+2 more" and a total told you how much was
+wrong without telling you what. It now lists an icon and a count per section in
+severity order, so "1 reminder, 2 waiting" is legible without expanding.
+
+The membership audit moved two things. **"Couldn't load bookings"** was a
+floating toast — the only message in that layer that neither passes on its own
+nor can be acted on without a reload, and a one-slot transient layer is the
+wrong home for a permanent failure. **"Closed this day"** was drawn inside
+TimelineView AND, differently worded, inside PlanView, and not at all in List:
+three views, two implementations, one gap, for a fact about the DAY.
+
+#### Labels: a third treatment, stated
+
+The reminder's time became a SOLID chip (ListView's `locked` pattern, graphite
+`--tag-flag` — a time is metadata, not a state). The Customers counts and the
+booking form's Regular/no-show disclosures went the other way: no fill, a 2px
+border, colour in the border and the text. Both are right, and the rule is
+context: solid where a tag competes inside a busy row, outline where a chip
+stands alone. ListView's row tags are deliberately untouched.
+
+A real bug fell out: the Customers row squared off on hover. `.mgt-hover-scale`
+stopped setting `border-radius` in v17.7.0 but still paints an opaque
+`--bg-hover-card`, so a radius-less element renders it as a hard-edged
+rectangle. ConnectionStatus's dot button was called the only instance; this is
+the second.
+
+#### Settings buttons were wearing the input shadow
+
+Nearly every BUTTON in Settings carried `--shadow-input` — the token that leads
+with an inset white highlight because it describes a RECESSED field. That one
+mismatch, on ~20 sites, is most of why that modal never quite looked like the
+rest of the app despite sharing its palette and radii. Three stepper
+definitions (two of them byte-identical) collapsed into `mkStep(size)` in
+atoms. Two controls were also the wrong shape: the remove "×" was a pale danger
+wash behind danger text inside a danger border — the banned three-encodings
+badge, and on a destructive control it read as disabled — and the Add/Rename
+actions defined their own accent button. Both are `mkBtn` now.
+
+**Verification.** Build + 103 tests + lint (0 errors) on every commit. Live in
+DEV: motion tokens resolve and knob travel sampled frame by frame; the popover
+caught mid-fade entering and with `mgt-card-out` leaving; the strip verified
+collapsed ("Notifications | 1 | 2 | ▾", three glyphs) and expanded; zero
+buttons under Settings still compute an inset-highlight shadow.
+
+### Polish round 6 (commits 25–28) — four things Patryk caught in round 5
+
+Round 5's own follow-up list. Two are corrections to it, two are older bugs it
+made visible.
+
+#### The strip's tally stays put when it opens
+
+The per-category icon+count row was gated on the strip being COLLAPSED, on the
+reasoning that an open strip heads every section itself. Wrong twice: it makes
+the lid's contents change under the finger that just tapped it, and the tally
+is the one part of that row still useful while open — the sections scroll, the
+lid doesn't, so with several live it is a fixed summary of a body you may be
+halfway down.
+
+#### The customer chips swap with a transition
+
+Regular and No-shows shared one `Reveal`, so switching between them never
+changed `show`: the swap happened inside an already-open box, the rows were
+replaced in a single frame, and the height snapped. One Reveal each makes the
+switch what it actually is — one disclosure closing while another opens — and
+since both ride the same curve for the same duration, the container height
+interpolates straight from one panel's to the other's with no bulge between.
+
+Generalised into CLAUDE.md, because a shared Reveal looks like the tidier code
+right up until the swap case.
+
+#### AutoHeight is always linear now
+
+Patryk: Settings' transitions and window resizing feel too fast or jumpy, and
+Summary → More is the reference. Those two are the *same component at the same
+duration* — 385ms `AutoHeight` both — differing only in the curve, because
+`AutoHeight` carried an opt-in `linear` prop that exactly two call sites had
+ever set, one of them being the reference.
+
+So the prop was the bug, not the setting of it. `AutoHeight` is never an object
+arriving; it is a box conforming to content that already changed. There is no
+arrival to decelerate into, so ease-out has nothing to describe and only
+front-loads: cubic-out puts 70% of a height change in the first third of the
+time and crawls the rest, which is precisely the lurch being reported. The
+easing is now linear unconditionally, the prop is gone, and every modal body —
+Settings, booking form, walk-in, manual, preferred-tables, search, waitlist —
+resizes like the one that felt right.
+
+Linear is a third curve in a system that documents two, so it is named:
+`M.resize`, carrying the reasoning, alongside `.mgt-dot-pulse`'s `ease-in-out`.
+Those two exceptions share a test — ask whether anything is actually going
+anywhere; if nothing is, a direction curve is describing a motion that isn't
+happening.
+
+The Settings tab crossfade moved `--t-move` → `--t-shift` with it. It rides
+inside a card resizing over `--t-shift` and the two are one event; at 240ms the
+new tab hit full strength while the card was still visibly moving. That class
+has a single call site, so the duration is a Settings decision, not a global.
+
+#### Waitlist matches are placed in a queue, not in parallel
+
+Two ghosts on one table. Every waiting entry was matched independently against
+the same `liveBookings`, so identical inputs produced identical answers — four
+parties of two on a quiet evening all offered the same best table at the same
+minute.
+
+Never only a drawing bug. The answers were individually true and jointly
+impossible: booking the first party silently falsified the second's "Table
+free" chip, and the banner had been doing that since v16.0.0. Drawing them is
+what made it visible — which is the argument for the ghosts, in miniature.
+
+Matching is sequential now. Each party that lands is appended to `holds` as a
+synthetic `_locked` booking the next party's scan sees as occupied — locked
+because `applyOpt`, on the reshuffling path inside `trialFits`, copies a locked
+booking's tables through verbatim, so a hold reserves its slot instead of being
+optimised out from under the ghost already drawn for it. The queue is
+`createdAt`-ascending: sequential placement is only fair if the sequence is,
+and FCFS is the order the panel and banner already present. A budget-skipped
+entry keeping its previous answer is held too, or the queue behind it can't see
+it and the double-booking returns.
+
+Still true and still deliberate: a `resh` match — one reachable only by
+re-optimising — can overlap a visibly occupied table. That is what its dashed
+edge says.
+
+**Verification.** Build + 103 tests + lint (0 errors) on every commit. Live in
+DEV: the tally confirmed present with the strip open and collapsed; all six
+Settings `AutoHeight`s compute `height var(--t-shift) linear`; 12 waiting
+parties all wanting 21:00 rendered 12 ghosts on 12 different tables (was 12 on
+one), with the one occupied row correctly skipped. Seeded waitlist restored.
+
+#### /code-review over all 33 commits (commit 29)
+
+Three findings, all introduced by this version, all reproduced in the running
+app before the fix and re-checked after.
+
+**A dead CSS rule.** An extra `*/` after an already-closed comment left two
+lines of prose loose in the stylesheet. CSS error recovery folds that text into
+the next rule's *selector*, so `.mgt-press:active { filter: brightness(0.86) }`
+was dropped outright — the press dim was gone on all ~28 opted-in controls,
+while the commit responsible stated in as many words that the dim was being
+kept. Found by walking the live CSSOM for rules matching the class rather than
+by reading the file, which is the only way this one shows up: the source looks
+fine at a glance and the build says nothing, because a stylesheet has no syntax
+errors, only rules that silently don't exist.
+
+**A snapped tab.** Settings' TabBar button carries `.mgt-hover-scale` and set
+an inline `transition` naming background-color, color and box-shadow. An inline
+shorthand replaces the class's declaration wholesale, so the tabs had no
+transform transition at all and both the hover lift and the new press dip
+snapped. That is the same collision this release diagnosed and fixed one layer
+up in `index.html` — committed one layer down, in the same commit that
+documented it. The rule generalises past two CSS classes: **an inline
+`transition` on a `.mgt-hover-scale` element must list `transform`.**
+
+**A lost `since`.** `usePresence`'s heartbeat rewrites the identity fields
+precisely so a child deleted underneath us (another device's prune) comes back
+complete — and omitted `since`, the one field only that write can restore. Now
+included, from a new `sinceRef` holding this connection's own resolved value:
+a beat restores the original start time instead of stamping a fresh one every
+45s, which would have pinned every device to "just now" forever. Verified live
+by watching one child across a beat — `since=93s` while `seen=3s`.
+
+One finding was investigated and **withdrawn**: `GsTextField` looked like it
+would raise a false "unsaved changes" confirm when Settings is closed straight
+after a text edit, because its dirty test compares the draft to a `value` that
+only updates on the Firebase echo. It does not — `saveGeneralSettings` calls
+`setGS` synchronously, so `value` lands in the same discrete-event flush as the
+blur, and React flushes the resulting passive effect before dispatching the
+click. Confirmed by doing it: real typing, real click, no dialog, name saved.
+The first attempt "reproduced" it only because a synthetic blur never fired the
+commit at all — the field was genuinely dirty and the guard was right.
+
+#### Tech-debt pass over the version (commits 30–33)
+
+A `/engineering:tech-debt` scan scoped to v17.8.0's own diff. The finding that
+framed the rest: **this version's debt was not in the code it wrote, it was in
+the code it could not check.** Three of the four items existed because an
+invariant had been written into prose instead of into a test, and the release
+proved that gap twice — the review pass found a CSS rule silently deleted by a
+comment typo, and the scan found a 7px misalignment underneath it that no
+reader would ever catch.
+
+Token discipline, measured, was the opposite: 17 `borderRadius` literals all on
+the documented exemption list, zero stray easing or duration literals outside
+`M`'s own WAAPI values. The `R`/`M` scales held.
+
+**The gutter was three copies of a calculation.** `AppBanners`, `BannerRows`
+and `useReminders` each hard-coded `paddingLeft: 31` with its own comment
+deriving it as 14 + 8 + 9 — right while the section mark was an 8px dot, and
+silently wrong the moment this same release made it a 15px icon. Measured:
+titles at x=55, bodies at x=48, three comments all claiming they matched.
+`NOTIF_GUTTER` is exported from the strip and imported by all three, and the
+strip uses the same constants in its own styles so definition and consumers
+cannot drift.
+
+**A stylesheet has no syntax errors — only rules that silently don't exist.**
+`tests/stylesheet.test.js` (20 cases) checks comment hygiene, brace balance, no
+prose in a selector, and a list of 15 rules whose absence is invisible.
+Validated by reintroducing the exact v17.8.0 defect and watching it fail.
+
+**Two cores were extracted so they could be tested at all.** `placeWaitlist`
+decides which table the app offers each waiting party — the most consequential
+logic this version changed — and lived in a `useEffect` in a 2,900-line
+component, so the double-booking fix shipped on "it looked right in DEV".
+`presenceState` has the same shape: v17.8.0 turned "who is connected" from a
+fact into an inference from timestamps, and inferences have edge cases. Both
+are now pure modules with the algorithms transcribed verbatim, 40 tests between
+them, App.jsx down to 2,888. The regression test that matters: four identical
+parties wanting 19:00 get four different tables, and twelve get twelve.
+
+**Two style rules are enforced instead of described.**
+`scripts/check-style-invariants.mjs` runs in CI after lint. Notable: all 22
+surviving white-inset shadow literals turned out to be correct — every one sits
+on a saturated solid that is theme-invariant by intent — so that rule guards
+the next one rather than a backlog. Its fill resolver needed real care, because
+these are one-line JSX style objects and a naive "rest of the line" grab
+swallows the `border:"1px solid rgba(255,255,255,0.2)"` beside almost every one
+of these shadows, reporting 12 correct sites as violations.
+
+Left alone deliberately: the three production `npm audit` advisories, which are
+Firebase transitives in its Node-only path and absent from the browser bundle
+(settled 2026-07-24 — do not `npm audit fix`, it can force-bump firebase), and
+CLAUDE.md's size, which is a real per-session cost but is also why each of
+these bugs could be named as an instance of a known trap.
+
+**Verification.** Build + lint (0 errors) + `check:style` + 163 tests across 6
+files, green on every commit. Live in DEV: strip titles and row text both at
+x=55, ghosts unchanged after the extraction.
+
+### Design pass over the whole app (commits 47–52)
+
+An `/impeccable` critique of the repo, then the four items Patryk picked from
+it. The deterministic detector found four things and all four were false
+positives (a CSS-triangle "side stripe", three documented layout transitions),
+so everything below came from measuring the running app.
+
+**Light mode had never had its contrast checked.** Every saturated fill was
+`rgba(hue, 0.7–0.92)` declared in `:root` only, under a comment asserting the
+block/table/button tokens were "theme-invariant (saturated fills read on both
+themes)". An alpha fill composites toward what is behind it, so one token lands
+somewhere different per theme — over dark-mode's near-black sheet it darkens
+and white text pops, over light-mode's near-white sheet it washes out. Measured
+in light: Save pending 1.83:1, Follow 1.82:1, the inactive View buttons 1.94:1,
+mkBtn's default 1.99:1, the outdoor table pill 2.15:1. In dark the same tokens
+were 2.20, 7.65, 8.35, 7.12 and 3.54. Dark passed, light failed, and light is
+what runs on a terrace tablet in Canary Islands daylight.
+
+The four fills that did pass were the four authored as opaque and picked
+deliberately (`--app-*-solid`, `--tag-flag`), which is the rule now: a fill
+carrying text is chosen for its contrast against its ink, per theme. Small bold
+labels take 4.5:1, buttons 3:1 (large, solid, meaning also carried by position —
+Patryk's call, so the palette stays recognisable). The amber pair keeps its
+exact fills and takes dark ink instead, because v17.0.0 engineered
+confirmed/pending as a matched-intensity pair and darkening them far enough for
+white text turns one brown and the other olive. `BLOCK_INK` pairs every fill
+with its ink; `--blk-wash`/`--blk-rule` flip the translucent furniture inside a
+block with it. Light mode went from 46 sub-AA text elements to 2.
+
+Two findings inside that one. **A literal duplicate of a token is a token that
+cannot be fixed** — TimelineView's Follow button held a hard-coded copy of
+`--app-btn-grey`'s old value and was the one secondary button the token fix
+could not reach; the form footer held two more, one of them a copy of
+`--app-success-solid` from *before* the retune. And **two names for one concept
+is how a fill hides from its own audit**: the inactive View button is
+`--app-btn-grey`, not `--btn-nav`, so the first draft of the coverage check
+walked straight past the control staff look at on every screen.
+
+**I reproduced the v17.8.0 stray-`*/` bug while writing the fix, one scope
+deeper, and the guard written earlier this version did not catch it.**
+`tests/stylesheet.test.js` only inspected selectors, because that is where the
+original defect landed. Loose prose inside a *declaration block* eats the
+declaration after it instead: `--tbl-out-rgb` resolved to empty and nine table
+badges would have rendered transparent, with every test passing. Two checks
+added, both validated by reintroducing the defect. Worth carrying forward: a
+regex reading of CSS is not what the browser sees, so parse validity needs its
+own guard and cannot be inferred from a token-extracting test passing.
+
+**A type scale, and the regular weight that makes it work.** 497 inline
+`fontSize` literals in thirteen values, sixteen distinct size/weight
+combinations on the app's *emptiest* screen, nine sizes between 9 and 18px
+where 11→12 is a ratio of 1.09 — below the threshold at which a reader
+perceives a step. The app had many type styles and almost no hierarchy. The
+cause was the other half: 93 of 95 elements were 500 or heavier, so weight
+could not carry emphasis, so size carried all of it and the sizes crowded
+together. `T` (six role-named steps) and `FW` ship together for that reason.
+Merges collapse downward, because a size that shrinks cannot overflow its box
+and a size that grows can, in ways a sweep of 497 sites cannot be verified
+against. The weight pass had a judgement half expressed as a rule a script
+could apply — `fontWeight: 500` beside a muted colour is describing, not
+labelling — and 56 sites became regular. After: 12 type styles, six sizes, 13
+elements at weight 400.
+
+**Tap targets were inversely proportional to use.** The timeline zoom cluster,
+touched constantly during service, was 32px; "+ New", touched a few times an
+hour, 40. The control opening the day's numbers was a 13×21px chevron. Those
+went to 44 along with the Find/Settings pair and the connection dot; the 40px
+`mkBtn` standard was deliberately left, being 91% of the HIG figure rather than
+a third of it. Two were also shape bugs — `--r-pill` clamps to half the shorter
+side, so the 24×40 connection dot rendered as a vertical egg beside a round pair.
+
+**The booking form's footer had no primary action** — three saturated pills,
+one of them `--btn-cancel` red used as a dialog dismiss, which is a trap
+CLAUDE.md names explicitly. Cancel is neutral slate, "Save pending" takes the
+outline treatment as the alternative save it is, and the primary is the opaque
+accent.
+
+**Verification.** Build + lint (0 errors) + `check:style` + 223 tests across 8
+files, green on every commit. Live in DEV at each step: contrast re-measured
+in the running page rather than trusted from the solver, no horizontal
+overflow, no console errors. Dark mode is verified by computation against the
+token values, not by eye — the account-level theme pref in DEV would not
+switch, and saying so is more useful than implying a visual check happened.
+
+### Corrections to the design pass (commits 53–58)
+
+Patryk reviewed the pass in the running app and four things came back.
+
+**Two of them were my bugs, and both are worth recording as classes.** Eight
+`/* @canvas */` exemption markers were appended to the end of their line, which
+for a line ending in `>` or `/>` is JSX *children* position — so React printed
+the comment syntax across the Plan view's time ruler and every bar in the Stats
+popover. It shipped because `check:style` only asked whether the marker was
+present, never where: the eight sites it was written to bless were the eight it
+broke, and it reported OK on all of them. A checker that cannot see its own
+annotation is worse than none, because it also carries the authority of having
+passed. Rule 0 rejects the placement now. Separately, the tap-target pass
+treated 44 as a target rather than a floor and made the date-nav row stop
+reading as chrome; toolbar controls settle at 36, `mkBtn`'s 40 stays the
+standard, and real 44s are kept for decision surfaces where a mis-tap costs
+something.
+
+**Dark ink on the amber blocks was wrong for a reason I should have predicted.**
+It was better contrast and a worse screen: on a timeline where seated and
+cancelled carry white text, a near-black label reads as *disabled*, so a status
+change looked like a state change. White ink is back and both fills are
+unchanged, at 2.9:1 and 1.8:1. `tests/contrast.test.js` records that as
+`role: "exempt"` — measured and printed every run, still failing if either
+drops below a recorded floor, because an accepted contrast is not a licence to
+keep going. What made it defensible was moving the one piece of *information* on
+a block — the start time — onto its own opaque `--tl-hour-pill` chip, the same
+pill the hour ruler uses. It had been a translucent white wash, so its
+appearance was a function of whatever block it sat on: pale on amber, bright on
+green, legible on neither. A time is a time wherever it appears.
+
+**Consolidating the colour families found fifteen hard-coded copies of token
+values across ten files** — eight of the green, five of the accent, two of the
+delete red, several of them copies of a value from *before* this version retuned
+it. Four were fills carrying white text that the contrast pass could not see at
+all, because it audits tokens and these were literals: TableGrid's selected cell
+at 2.31:1, its blocked cell at 3.13, its swap cell at ~1.4 (white on bright
+yellow) and ManualModal's swap panel at 2.62. **An audit that enumerates tokens
+has a blind spot exactly the size of the literals.** They now reuse tokens the
+app already had rather than four more near-duplicate hues, and `selected` takes
+the accent — accent means primary action or current selection, which is
+literally that state, and it is free now that table badges are teal and purple.
+
+**The Book Again banner** was a pale green fill plus a matching border plus bold
+green text: one signal three times, and the stock alert box. It is the outline
+pill the Regular / N-past-visits chips beside it already use. The title reads
+"Book again". The copy drops the clause that restated the title and keeps "set a
+date", which is the only thing on screen explaining why Save is disabled.
+
+### Review fixes (commits 60–61)
+
+**The contrast pass had four fills it could not see, and the reason is the one
+this version already wrote down twice.** All four were byte copies of a token's
+*pre-retune* value, so the pass moved the token and the copy kept rendering:
+TimelineView's Optimizer OFF at 1.94:1, ReminderEditor's inactive
+Once/Weekly/weekday buttons at **1.70:1** — the worst text contrast in the app
+after a pass whose whole subject was contrast — its title pill at 2.85:1, and
+WeekView's Week/Month segment. The Optimizer one is eight lines below the Follow
+button, which was cured of the *same literal* in the *same commit*, under a
+comment reading "a literal duplicate of a token is a token that cannot be
+fixed". Writing the lesson beside one copy is not running the grep.
+
+**`--tl-now-pill` was at 3.91:1 in dark and unwatched**, because the contrast
+registry's coverage check enumerates `--block-` / `--btn-` / `--app-btn-` /
+`--tbl-` and the timeline pills are a *third* naming family — the same
+prefix-blindness that hid `--app-btn-grey` from the first draft of that file.
+The sharp one there is `--tl-hour-pill`: the amber blocks are a **recorded
+exemption** on the explicit grounds that the start time moved onto that pill, so
+the exemption's entire justification was resting on a fill nothing measured. It
+passes at 4.73/6.87 — by luck, not by check. Coverage now includes
+`--tl-*(pill|badge)`, the shape that actually carries text on that view.
+`--tl-now-pill` goes two steps deeper in the same blue (5.02:1).
+
+**BLOCK_INK's pairing was three sites short**, and its comment described a
+design that had been reverted. SBadge and ListView's status buttons paint text
+on `BLOCK_BG` and hard-code white — invisible today because all five inks *are*
+white, which is the kind of correct-by-coincidence that stops being correct the
+first time someone changes one. Worse, `constants.js` still told the next reader
+the amber pair "takes DARK ink" and that `completed` "flips its ink per THEME":
+the design that shipped for one commit and was rejected three commits later.
+TimelineView repeated it, and both pointed at `.mgt-blk[data-st]` rules that no
+longer exist (`data-st` is dropped; nothing read it). **These files are the
+architecture record, so a stale comment is not cosmetic** — this one would have
+argued a future reader straight back into the rejected design.
+
+Verified live in DEV, both themes: Optimizer OFF 1.94 → 3.00, reminder
+Once/Weekly 1.70 → 3.00, reminder title 2.85 → 3.02, Week/Month 3.28 → 4.02, no
+console errors. `npm run build` · **229 tests** (contrast now 64) · lint 0
+errors · `check:style` OK.

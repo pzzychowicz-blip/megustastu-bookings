@@ -1,0 +1,281 @@
+// src/components/NotificationStrip.jsx
+// v17.8.0 — ONE pane for every in-flow notification.
+//
+// ── The problem it solves ────────────────────────────────────────────────────
+// Six independent banners could be live at once — offline, write-error,
+// inefficiency, overlap warnings, running-late, waitlist-table-free, plus the
+// reminder rows — each its own pane with its own margin, stacked. On a busy
+// evening (which is exactly when several of them fire together) they pushed the
+// timeline off the bottom of the tablet: the alerts displaced the thing the
+// alerts are about. Each one was dismissible, but dismissing costs the taps a
+// host does not have between parties.
+//
+// v17.8.0's earlier pass made them all LOOK like one system. This makes them
+// BE one: a single pane whose collapsed height is one row, no matter how many
+// notifications are live. That is the property that matters — the cost of a bad
+// evening stops scaling with how bad it is.
+//
+// ── Contract ─────────────────────────────────────────────────────────────────
+// App builds `sections`, ordered by severity (see ORDER at the call site):
+//   { id, tone, title, count, node }
+// `node` is the section's already-rendered body — the banner components still
+// own their own rows, actions and per-row Reveal lifecycle, unchanged. This
+// component owns only the pane, the collapse, and the separators.
+//
+// Collapsed, it shows the FIRST section (highest severity) plus "+N more". The
+// section list is pre-sorted by App rather than here so severity stays one
+// decision in one place, next to the flags that produce it.
+//
+// `startOpen` comes from settings/general.lateCollapseMax, which used to mean
+// "collapse a banner with more than N rows". It now means the same thing about
+// the strip as a whole, so the setting keeps working and gains reach.
+
+import { useState, useEffect } from "react";
+import { Reveal } from "./atoms";
+import { useRevealRows } from "../hooks/useRevealRows";
+import { R, M, T, FW } from "../lib/constants";
+
+// ── The strip's own geometry, exported because three other files depend on it ─
+// A section BODY (the banner rows, the reminder rows, AppBanners' one-liners)
+// has to start its text on the same left edge as the section TITLE above it,
+// which means every one of them needs this arithmetic: the pane's padding, plus
+// the width of the mark, plus the gap after it.
+//
+// v17.8.0 fix: it was a literal `31` hard-coded in AppBanners, BannerRows and
+// useReminders, each with its own comment deriving it as 14 + 8 + 9 — correct
+// while the mark was an 8px dot, and silently wrong the moment the same release
+// made it a 15px icon. Measured after that change: section titles at x=55, row
+// text at x=48. Nobody would catch a 7px drift by reading, and no test could,
+// because the number was three copies of a calculation rather than one export.
+//
+// So the numbers live here, next to the styles that actually use them, and the
+// callers import the total. Change PAD_X / MARK / GAP and every body follows.
+export const NOTIF_PAD_X = 14;   // the pane's horizontal padding
+const NOTIF_MARK = 15;           // SectionMark's icon box
+const NOTIF_GAP = 9;             // the flex gap between mark and title
+export const NOTIF_GUTTER = NOTIF_PAD_X + NOTIF_MARK + NOTIF_GAP;
+
+// One section's mark. `fallbackDot` keeps the old 8px dot for a section that
+// has no icon yet, so adding a section without one degrades to the previous
+// design instead of rendering a hole. The dot is deliberately NOT what
+// NOTIF_GUTTER measures — a section without an icon is the exception, and the
+// bodies must stay aligned with the majority that have one.
+function SectionMark({ icon: Icon, tone, size, fallbackDot }) {
+  if (!Icon) {
+    if (!fallbackDot) return null;
+    return <span aria-hidden="true" style={{
+      width: 8, height: 8, borderRadius: "50%", backgroundColor: tone, flexShrink: 0,
+      transition: "background-color " + M.move
+    }} />;
+  }
+  return (
+    <span aria-hidden="true" style={{
+      display: "inline-flex", alignItems: "center", color: tone, flexShrink: 0,
+      transition: "color " + M.move
+    }}><Icon size={size} /></span>
+  );
+}
+
+export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null }) {
+  const liveTotal = sections.reduce(function (n, s) { return n + (s.count || 1); }, 0);
+  // Initial-only, like BannerRows' own collapse was: a strip the user opened
+  // must not slam shut because a seventh late booking arrived.
+  const [open, setOpen] = useState(function () { return liveTotal <= collapseMax; });
+
+  // ── Sections ease in and out, on the same lifecycle their ROWS already use ──
+  // Without this a resolved notification vanished mid-frame and everything below
+  // it jumped up — which is worst in exactly the case the strip exists for, a
+  // busy evening where sections come and go while someone is reading one.
+  // useRevealRows is the hook LateBanner/Overlap/WaitAvail already share for
+  // their rows; applying it one level up means the strip's own contents behave
+  // like its contents' contents, and there is one implementation of the pattern.
+  const ids = sections.map(function (s) { return s.id; });
+  const sig = ids.join(",");
+  const { renderIds, openIds } = useRevealRows(ids);
+
+  // A departed section is gone from `sections` but must keep rendering for the
+  // ~350ms its Reveal takes to collapse. Its CONTENT needs no cache here — the
+  // Reveal atom already holds its last truthy children for exactly this reason,
+  // so passing `null` makes it fade out what it was showing. What Reveal cannot
+  // know is WHERE the section belongs: renderIds is arrival-ordered (newcomers
+  // are appended), and this list is severity-ordered, so a "Working offline"
+  // that arrives while "Running late" is up would otherwise render below it —
+  // the one thing about this component that is not allowed to drift.
+  //
+  // Hence a remembered rank, and nothing else. The effect is keyed on the id
+  // SET, so it runs on a membership change and not on every App render, and it
+  // lands AFTER the render in which a section departs — which is exactly right:
+  // that render still sees the rank the section is fading out from.
+  const [rank, setRank] = useState({});
+  useEffect(function () {
+    setRank(function (prev) {
+      const next = Object.assign({}, prev);
+      ids.forEach(function (id, i) { next[id] = i; });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the id set, see above
+  }, [sig]);
+
+  const live = {};
+  sections.forEach(function (s, i) { live[s.id] = i; });
+  function rankOf(id) {
+    if (live[id] !== undefined) return live[id];
+    // A departing section holds its OLD index — but the sections below it have
+    // already shifted up into it, so the raw index ties with whichever one took
+    // its place, and a tie is broken by renderIds, which is arrival-ordered.
+    // Measured live: "Running late" jumped from first to second and THEN
+    // collapsed. Half a step earlier puts it immediately above its replacement,
+    // which is where it visibly was, at every position in the list.
+    return rank[id] !== undefined ? rank[id] - 0.5 : Number.MAX_SAFE_INTEGER;
+  }
+  const orderedIds = renderIds.slice().sort(function (a, b) { return rankOf(a) - rankOf(b); });
+  const byId = {};
+  sections.forEach(function (s) { byId[s.id] = s; });
+
+  // `sections` is never empty here: the mount site in App passes null instead,
+  // so the Reveal wrapping this component fades out its own cached copy rather
+  // than collapsing an already-blanked box. Same mechanism, one owner.
+  if (!sections.length) return null;
+  const top = sections[0];
+  const total = liveTotal;
+  const multi = orderedIds.length > 1;
+  // The live sections in render order — the collapsed tally reads this, so it
+  // stays in the same severity order the body uses.
+  const ordered = orderedIds.map(function (id) { return byId[id]; }).filter(Boolean);
+
+  return (
+    <div style={{
+      backgroundColor: top.tint || "var(--app-overlap-bg)",
+      // The strip is recoloured by whatever is WORST right now, so its tint and
+      // tone change under the reader when a notification arrives or resolves —
+      // amber to red as a write fails, back to amber when it recovers. A cut
+      // between two saturated tints reads as a flicker; a cross-fade reads as
+      // the same object changing state, which is what it is.
+      transition: "background-color " + M.move,
+      border: "1px solid var(--border-card)",
+      borderRadius: R.card,
+      marginBottom: 10,
+      boxShadow: "var(--shadow-soft)",
+      overflow: "hidden"
+    }}>
+      <button
+        onClick={function () { setOpen(!open); }}
+        aria-expanded={open}
+        aria-label={open ? "Collapse notifications" : "Expand notifications"}
+        // No press-scale: this is a full-width strip header, and a 0.96 dip on
+        // something that spans the viewport reads as the page flinching.
+        className="mgt-nopress"
+        style={{
+          display: "flex", alignItems: "center", gap: NOTIF_GAP, width: "100%",
+          background: "transparent", border: "none", cursor: "pointer",
+          padding: "10px " + NOTIF_PAD_X + "px", textAlign: "left"
+        }}>
+        {/* v17.8.0: an ICON, not the 8px dot. The dot said "something is
+            happening", in a colour; the icon says WHICH something and keeps the
+            colour, because every glyph is currentColor and takes `tone`. With
+            several sections live the lid is the generic bell (it labels the
+            container); with one, the strip IS that section, so it wears that
+            section's own mark. */}
+        <SectionMark
+          icon={multi ? lidIcon : top.icon}
+          tone={top.tone} size={15} fallbackDot />
+        {/* With ONE section live the strip IS that banner, so the lid takes its
+            title and mark — a generic lid plus a redundant sub-header would be
+            two rows saying one thing. With several it says "Notifications",
+            collapsed as well as open: collapsed, the per-category tally on the
+            right already names them, and repeating the top one in the title
+            drew its icon twice in the same row. */}
+        <span style={{ fontSize: T.body, fontWeight: FW.bold, color: top.tone, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", transition: "color " + M.move }}>
+          {multi ? "Notifications" : top.title}
+        </span>
+        {/* With several sections live, the right side is a per-category tally —
+            an icon and a count each, in the same severity order as the body.
+            "+2 more" and a bare total told you how much was wrong without
+            telling you what; two glyphs and two numbers tell you it is one late
+            table and one waiting party, which is the difference between needing
+            to expand and not.
+            It stays put when the strip OPENS. The first version swapped it for
+            the plain total on the grounds that each section then heads itself —
+            but that made the lid's contents change under the finger that tapped
+            it, and the tally is the one part of the row that is still useful
+            while open: the sections scroll, the lid does not, so it stays a
+            fixed summary of a body you may be halfway down. */}
+        {multi ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            {ordered.map(function (s) {
+              return (
+                <span key={s.id} title={s.title}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4, color: s.tone }}>
+                  <SectionMark icon={s.icon} tone={s.tone} size={13} fallbackDot />
+                  <span style={{ fontSize: T.small, fontWeight: FW.bold, fontVariantNumeric: "tabular-nums" }}>{s.count || 1}</span>
+                </span>
+              );
+            })}
+          </span>
+        ) : (
+          <span style={{
+            fontSize: T.small, fontWeight: FW.bold, color: top.tone, opacity: 0.75,
+            fontVariantNumeric: "tabular-nums", flexShrink: 0,
+            transition: "color " + M.move
+          }}>{total}</span>
+        )}
+        {/* ONE glyph that turns, not two that swap. A ▲/▼ swap is a cut: the
+            chevron is gone and a different one is there, with nothing to say
+            the two are the same control. Rotating it makes the arrow the thing
+            that moves, which is also what the panel below is doing. Matches the
+            Collapsible atom's ›, which has turned since v15.8.0. */}
+        <span aria-hidden="true" style={{
+          fontSize: T.micro, color: top.tone, opacity: 0.6, fontWeight: FW.bold, flexShrink: 0,
+          display: "inline-block", lineHeight: 1,
+          transform: open ? "rotate(180deg)" : "rotate(0deg)",
+          transition: "transform " + M.move + ", color " + M.move
+        }}>▾</span>
+      </button>
+      <Reveal show={open}>
+        {/* .mgt-notif draws the hairlines between sections (index.html). A CSS
+            adjacent-sibling rule rather than a per-section borderTop prop, so a
+            section never has to know its own position in the list. */}
+        <div className="mgt-notif">
+          {orderedIds.map(function (id) {
+            const s = byId[id];
+            return (
+              // A departed id has no live section, so children go null and the
+              // Reveal fades out the copy it already holds. That is the atom's
+              // documented behaviour, and using it is why nothing here has to
+              // cache a node.
+              <Reveal key={id} show={openIds.has(id)}>
+                {s ? (
+                  <>
+                    {/* The sub-header is itself Revealed, not conditionally
+                        rendered. Going from two sections to one changes three
+                        things at once — a section folds away, the survivor
+                        loses its own header, and the lid stops saying
+                        "Notifications" and takes that section's title. All
+                        three key on the RENDERED count, so they happen on one
+                        frame, when the departing section is finally pruned.
+                        Keying the lid on the live count instead moved the text
+                        350ms before the geometry, which is the version that
+                        looked broken. */}
+                    <Reveal show={orderedIds.length > 1}>
+                      <div style={{ display: "flex", alignItems: "center", gap: NOTIF_GAP, padding: "9px " + NOTIF_PAD_X + "px 1px" }}>
+                        <SectionMark icon={s.icon} tone={s.tone} size={15} fallbackDot />
+                        <span style={{ fontSize: T.body, fontWeight: FW.bold, color: s.tone, flex: 1, minWidth: 0 }}>{s.title}</span>
+                        {s.count > 1 ? (
+                          <span style={{
+                            fontSize: T.small, fontWeight: FW.bold, color: s.tone, opacity: 0.75,
+                            fontVariantNumeric: "tabular-nums", flexShrink: 0
+                          }}>{s.count}</span>
+                        ) : null}
+                      </div>
+                    </Reveal>
+                    {s.node}
+                  </>
+                ) : null}
+              </Reveal>
+            );
+          })}
+        </div>
+      </Reveal>
+    </div>
+  );
+}

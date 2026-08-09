@@ -7,49 +7,78 @@
 // by useRevealRows. Each banner supplies only its `title` and a `renderRow(id)`
 // render-prop for the row's own content (name + action buttons + ✕).
 //
+// ── v17.8.0 restyle: one surface, not two ────────────────────────────────────
+// These banners used to be a NESTED CARD: a saturated tinted container with a
+// 2px ring, holding rows that each had their own fill, their own 1px border and
+// their own radius. Two stacked card treatments is what made them read as
+// bolted-on alert boxes rather than part of the app — every other surface here
+// (Summary, list cards, the connection popover) is a single quiet pane.
+//
+// Now: ONE pane, in the app's own card language — a whisper of semantic tint,
+// a 1px border, `R.card`. Rows are transparent and separated by hairlines, so
+// the eye reads a list inside a panel instead of cards inside a card. The
+// semantic colour is carried by a `tone` DOT next to the title (the exact
+// device the connection popover uses for status) plus the title colour, rather
+// than by washing two full surfaces in it.
+//
+// Callers pass `tone` (dot + title colour) and `tint` (the barely-there pane
+// wash). The old bg/border/textColor props are gone; there were three call
+// sites and all three moved together.
+//
 // Props:
 //   title       — header label (the count " · N" is appended here)
 //   ids         — the CURRENT live row ids (array; drives the count + lifecycle)
 //   collapseMax — start collapsed when ids.length exceeds this (default 2)
 //   renderRow(id) — returns the row JSX for a still-mounted id, or null
-//   bg / border / textColor — container token overrides (default = the amber
-//     warn family; WaitAvailBanner passes the green suggest family)
+//   tone        — semantic colour for the dot + title (default: the warn amber)
+//   tint        — the pane's background wash (default: the soft overlap amber)
 
-import { useState } from "react";
 import { Reveal } from "./atoms";
-import { R } from "../lib/constants";
 import { useRevealRows } from "../hooks/useRevealRows";
+import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 
-export function BannerRows({ title, ids, collapseMax = 2, renderRow, bg = "var(--app-overlap-bg)", border = "var(--app-overlap-border)", textColor = "var(--warn-text)" }) {
-  // Initial-only (session): won't auto-re-collapse if the count later crosses.
-  const [open, setOpen] = useState(function () { return ids.length <= collapseMax; });
+export function BannerRows({ ids, renderRow }) {
   // Per-row ease-in/out lifecycle: renderIds may hold departing rows a moment
   // longer than `ids` so their collapse animates.
   const { renderIds, openIds } = useRevealRows(ids);
 
   if (renderIds.length === 0) return null;
-  const liveCount = ids.length;
 
   return (
-    <div style={{ background: bg, border: "2px solid " + border, borderRadius: R.card, padding: "10px 14px", marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-      <button
-        onClick={function () { setOpen(!open); }}
-        aria-expanded={open}
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, width: "100%", background: "transparent", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: textColor, marginBottom: 2 }}>{title + " · " + liveCount}</span>
-        <span style={{ fontSize: 11, color: textColor, fontWeight: 700, flexShrink: 0 }}>{open ? "▲" : "▼"}</span>
-      </button>
-      <Reveal show={open}>
-        <div>
-          {renderIds.map(function (id) {
-            return (
-              <Reveal key={id} show={openIds.has(id)}>
+    <div>
+      {/* v17.8.0: the pane AND the header are gone — NotificationStrip owns
+          both (one pane for every notification, one collapsed height however
+          many fire, and every section headed on the same terms whether its body
+          is a row list like this or a single sentence like "Working offline").
+          What is left here is the rows. The collapse moved up too, because
+          collapsing per-banner cannot bound the total height, which was the
+          whole point. */}
+      <div>
+        {renderIds.map(function (id) {
+          // v17.8.0 review fix: the hairline keys on this row's position among
+          // the rows that are actually OPEN, not its index in renderIds — which
+          // retains a departing row for ~350ms while its Reveal collapses. With
+          // the raw index, marking the first of two late bookings as a no-show
+          // left the survivor wearing a borderTop that ended up flush under the
+          // section header: a line appearing exactly where the design says none.
+          const visible = renderIds.filter(function (x) { return openIds.has(x); });
+          const i = visible.indexOf(id);
+          return (
+            <Reveal key={id} show={openIds.has(id)}>
+              {/* The hairline lives HERE, not on the row, so a banner's row
+                  components stay pure content and every banner separates its
+                  rows identically. `i > 0` keeps it off the first row, whose
+                  separation from the header is already the header's padding.
+                  NOTIF_GUTTER puts row text on the same left edge as the
+                  section title rather than under the mark — imported from the
+                  strip that defines that geometry, never re-derived here. */}
+              <div style={{ padding: "0 " + NOTIF_PAD_X + "px 0 " + NOTIF_GUTTER + "px", ...(i > 0 ? { borderTop: "1px solid var(--border-soft)" } : null) }}>
                 {renderRow(id)}
-              </Reveal>
-            );
-          })}
-        </div>
-      </Reveal>
+              </div>
+            </Reveal>
+          );
+        })}
+      </div>
     </div>
   );
 }

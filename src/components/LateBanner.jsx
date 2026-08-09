@@ -22,9 +22,9 @@
 import { BannerRows } from "./BannerRows";
 import { Presence, mkBtn } from "./atoms";
 import { lateMins } from "../lib/booking-logic";
-import { BTN, R } from "../lib/constants";
+import { BTN, T, FW } from "../lib/constants";
 
-export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, collapseMax = 2 }) {
+export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, }) {
   // v17.0.0 review fix #6: the collapsible/Reveal scaffolding moved to the
   // shared BannerRows shell (also used by OverlapBanner); this file supplies
   // only the row content. The No-show button (offerNoShow = lateMap[id]===
@@ -36,24 +36,24 @@ export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, co
     if (!b) return null;
     const offerNoShow = lateMap[id] === "noshow";
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 12px", borderRadius: R.inset, background: "var(--warn-bg)", border: "1px solid var(--warn-border)", marginTop: 6 }}>
-        <span style={{ fontSize: 13, color: "var(--warn-text)", fontWeight: 600, flex: "1 1 auto", minWidth: 0 }}>{b.name + " (" + b.time + ") — " + lateMins(b, nowMins) + " min late"}</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "9px 0" }}>
+        <span style={{ fontSize: T.body, color: "var(--warn-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{b.name + " (" + b.time + ") — " + lateMins(b, nowMins) + " min late"}</span>
         <Presence show={offerNoShow} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span">
           <button
             onClick={function () { onNoShow(id); }}
             className="mgt-hover-scale"
-            style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: BTN.orange })}>No show</button>
+            style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.orange })}>No show</button>
         </Presence>
         <button
           onClick={function () { onDismiss(id); }}
           aria-label="Dismiss this alert"
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}>✕</button>
+          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}>✕</button>
       </div>
     );
   }
 
   return (
-    <BannerRows title="Running late" ids={Object.keys(lateMap)} collapseMax={collapseMax} renderRow={renderRow} />
+    <BannerRows ids={Object.keys(lateMap)} renderRow={renderRow} />
   );
 }

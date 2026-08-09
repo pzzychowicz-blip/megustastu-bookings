@@ -28,8 +28,9 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { S, R } from "../lib/constants";
+import { S, R, T, FW } from "../lib/constants";
 import { mkBtn } from "./atoms";
+import { SplitSideIcon, SplitStackIcon } from "./Icons";
 
 const LABEL = { timeline: "Timeline", list: "List", plan: "Plan" };
 const ORDER = ["timeline", "list", "plan"];
@@ -45,6 +46,8 @@ export function SplitMenu({ view, onConfirm, onClose }) {
 
   const row = { display: "flex", gap: 8, flexWrap: "wrap" };
   const btn = (extra) => mkBtn(Object.assign({ minHeight: 44, padding: "10px 16px", flex: "1 1 auto" }, extra));
+  // v17.8.0: the direction buttons carry a glyph now, so they lay out as a row.
+  const dirBtn = (extra) => btn(Object.assign({ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }, extra));
 
   return createPortal(
     <div
@@ -62,20 +65,20 @@ export function SplitMenu({ view, onConfirm, onClose }) {
         style={{
           background: "var(--tl-popup-bg)", borderRadius: R.sheet,
           border: "1px solid " + S.border,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
+          boxShadow: "var(--shadow-popover)",
           padding: "20px 24px",
           minWidth: 240, maxWidth: 320, zIndex: 301,
         }}
       >
-        <div style={{ fontSize: 17, fontWeight: 700, color: S.text, marginBottom: 4 }}>{title}</div>
-        <div style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 14 }}>{sub}</div>
+        <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: T.body, color: "var(--text-faint)", marginBottom: 14 }}>{sub}</div>
 
         {step === 1 ? (
           <div style={row}>
-            <button className="mgt-hover-scale" style={btn({ background: "var(--app-btn-grey)" })}
-              onClick={() => { setDir("v"); setStep(2); }}>◧ Side by side</button>
-            <button className="mgt-hover-scale" style={btn({ background: "var(--app-btn-grey)" })}
-              onClick={() => { setDir("h"); setStep(2); }}>⬓ Top and bottom</button>
+            <button className="mgt-hover-scale" style={dirBtn({ background: "var(--app-btn-grey)" })}
+              onClick={() => { setDir("v"); setStep(2); }}><SplitSideIcon size={18} />Side by side</button>
+            <button className="mgt-hover-scale" style={dirBtn({ background: "var(--app-btn-grey)" })}
+              onClick={() => { setDir("h"); setStep(2); }}><SplitStackIcon size={18} />Top and bottom</button>
           </div>
         ) : (
           <div style={row}>
@@ -86,7 +89,7 @@ export function SplitMenu({ view, onConfirm, onClose }) {
           </div>
         )}
 
-        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 12, textAlign: "center" }}>
+        <div style={{ fontSize: T.small, color: "var(--text-faint)", marginTop: 12, textAlign: "center" }}>
           tap outside or press Esc to close
         </div>
       </div>

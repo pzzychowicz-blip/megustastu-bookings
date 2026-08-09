@@ -26,7 +26,7 @@
 import { useState, useEffect } from "react";
 import { Overlay, mkBtn, AutoHeight } from "./atoms";
 import { daySummary, rangeStats } from "../lib/booking-logic";
-import { BTN, R } from "../lib/constants";
+import { S, BTN, R, T, FW } from "../lib/constants";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
 const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
@@ -159,8 +159,8 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
         className="mgt-hover-scale"
         style={{
           border: "none", borderRadius: R.pill, padding: "6px 18px", cursor: "pointer",
-          fontSize: 13, fontWeight: 700, minHeight: 32,
-          background: active ? "rgba(0,122,255,0.85)" : "transparent",
+          fontSize: T.body, fontWeight: FW.bold, minHeight: 32,
+          background: active ? S.accent : "transparent",
           color: active ? "var(--text-on-accent)" : "var(--text-secondary)",
           boxShadow: active ? "0 1px 3px rgba(0,0,0,0.15), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"
         }}
@@ -174,9 +174,9 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   const footer = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Previous week" : "Previous month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: 18, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8249;" }} />
+        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Previous week" : "Previous month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8249;" }} />
         <button onClick={goToday} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "6px 14px", background: BTN.today })}>{isWeek ? "This week" : "This month"}</button>
-        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Next week" : "Next month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: 18, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8250;" }} />
+        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Next week" : "Next month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8250;" }} />
       </div>
       <button onClick={onClose} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })}>Close</button>
     </div>
@@ -190,15 +190,18 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
           {modeBtn("month", "Month")}
           {modeBtn("stats", "Stats")}
         </div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginTop: 8 }}>
+        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", marginTop: 8 }}>
           {isWeek ? weekRangeLabel(weekDates(ref)) : monthLabel(ref)}
         </div>
       </div>
 
-      {/* v15.8.0: AutoHeight (linear) eases the height when switching Week↔Month. */}
-      <AutoHeight linear>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
+      {/* v15.8.0: AutoHeight eases the height when switching Week↔Month. (v17.8.0:
+          its `linear` prop is gone — AutoHeight always eases linear now, so this
+          call site is byte-identical in behaviour and is the reference the rest
+          of the app's modal bodies were brought in line with.) */}
+      <AutoHeight>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
 
-      <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-faint)", textAlign: "center" }}>
+      <div style={{ marginTop: 12, fontSize: T.small, color: "var(--text-faint)", textAlign: "center" }}>
         {isStats
           ? "W/M/S view · ‹ › month · T this month"
           : isWeek
@@ -238,15 +241,15 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
               }}
             >
               <div style={{ minWidth: 56, flexShrink: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: isToday ? "var(--accent)" : "var(--text-primary)" }}>{WD[i]}</div>
-                <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>{dnum + (isToday ? " · today" : "")}</div>
+                <div style={{ fontSize: T.body, fontWeight: FW.bold, color: isToday ? "var(--accent)" : "var(--text-primary)" }}>{WD[i]}</div>
+                <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{dnum + (isToday ? " · today" : "")}</div>
               </div>
-              <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4, overflow: "hidden", minWidth: 30 }}>
-                <div style={{ width: ((r.covers / maxCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: r.covers ? 0.8 : 0, borderRadius: 4 }} />
+              <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4,   /* @canvas */  overflow: "hidden", minWidth: 30 }}>
+                <div style={{ width: ((r.covers / maxCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: r.covers ? 0.8 : 0, borderRadius: 4,   /* @canvas */ }} />
               </div>
               <div style={{ minWidth: 86, textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>{r.covers + " cover" + (r.covers !== 1 ? "s" : "")}</div>
-                <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)" }}>{r.bookings + " booking" + (r.bookings !== 1 ? "s" : "")}</div>
+                <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)" }}>{r.covers + " cover" + (r.covers !== 1 ? "s" : "")}</div>
+                <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{r.bookings + " booking" + (r.bookings !== 1 ? "s" : "")}</div>
               </div>
             </button>
           );
@@ -267,24 +270,24 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
     const stat = function(val, label, color){
       return (
         <div style={{ flex: "1 1 84px", padding: "8px 10px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: color || "var(--text-primary)" }}>{val}</div>
-          <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>{label}</div>
+          <div style={{ fontSize: T.title, fontWeight: FW.bold, color: color || "var(--text-primary)" }}>{val}</div>
+          <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{label}</div>
         </div>
       );
     };
     const bar = function(label, val, max, color){
       return (
-        <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 4 }}>
-          <span style={{ color: "var(--text-secondary)", fontWeight: 600, minWidth: 64, flexShrink: 0 }}>{label}</span>
-          <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4, overflow: "hidden", minWidth: 30 }}>
-            <div style={{ width: ((val / max) * 100) + "%", height: "100%", background: color || "var(--accent)", opacity: 0.8, borderRadius: 4 }} />
+        <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body, marginBottom: 4 }}>
+          <span style={{ color: "var(--text-secondary)", fontWeight: FW.semi, minWidth: 64, flexShrink: 0 }}>{label}</span>
+          <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4,   /* @canvas */  overflow: "hidden", minWidth: 30 }}>
+            <div style={{ width: ((val / max) * 100) + "%", height: "100%", background: color || "var(--accent)", opacity: 0.8, borderRadius: 4,   /* @canvas */ }} />
           </div>
-          <span style={{ color: "var(--text-primary)", fontWeight: 700, minWidth: 64, textAlign: "right", flexShrink: 0 }}>{val}</span>
+          <span style={{ color: "var(--text-primary)", fontWeight: FW.bold, minWidth: 64, textAlign: "right", flexShrink: 0 }}>{val}</span>
         </div>
       );
     };
     if(st.totalBookings === 0 && st.noShows === 0){
-      return <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>No bookings this month.</div>;
+      return <div style={{ fontSize: T.body, color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>No bookings this month.</div>;
     }
     return (
       <div>
@@ -295,15 +298,15 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
           {stat(st.avgCoversPerDay, "covers / day")}
           {stat(st.noShows, "no-shows", st.noShows ? "var(--warn-text)" : undefined)}
         </div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", margin: "0 0 6px" }}>Busiest hours</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-muted)", margin: "0 0 6px" }}>Busiest hours</div>
         <div style={{ marginBottom: 14 }}>
           {st.hours.slice(0, 6).map(function(h){ return bar(String(h.hour).padStart(2, "0") + ":00", h.covers, maxH); })}
-          {st.hours.length === 0 ? <div style={{ fontSize: 12, color: "var(--text-faint)" }}>—</div> : null}
+          {st.hours.length === 0 ? <div style={{ fontSize: T.body, color: "var(--text-faint)" }}>—</div> : null}
         </div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", margin: "0 0 6px" }}>Table usage</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-muted)", margin: "0 0 6px" }}>Table usage</div>
         <div>
           {st.tables.slice(0, 10).map(function(t){ return bar("Table " + t.id, t.bookings, maxT); })}
-          {st.tables.length === 0 ? <div style={{ fontSize: 12, color: "var(--text-faint)" }}>—</div> : null}
+          {st.tables.length === 0 ? <div style={{ fontSize: T.body, color: "var(--text-faint)" }}>—</div> : null}
         </div>
       </div>
     );
@@ -323,7 +326,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
       <div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
           {WDS.map(function(w){ return (
-            <div key={w} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--text-muted)" }}>{w}</div>
+            <div key={w} style={{ textAlign: "center", fontSize: T.small, fontWeight: FW.bold, color: "var(--text-muted)" }}>{w}</div>
           ); })}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -353,8 +356,8 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                   >
                     <div style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: intensity * 0.3, pointerEvents: "none" }} />
                     <div style={{ position: "relative" }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: isToday ? "var(--accent)" : "var(--text-primary)" }}>{dnum}</div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: cov ? "var(--text-secondary)" : "var(--text-faint)", marginTop: 1 }}>
+                      <div style={{ fontSize: T.body, fontWeight: FW.bold, color: isToday ? "var(--accent)" : "var(--text-primary)" }}>{dnum}</div>
+                      <div style={{ fontSize: T.micro, fontWeight: FW.semi, color: cov ? "var(--text-secondary)" : "var(--text-faint)", marginTop: 1 }}>
                         {c.inMonth ? cov : ""}
                       </div>
                     </div>

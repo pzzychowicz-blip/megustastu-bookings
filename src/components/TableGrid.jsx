@@ -17,7 +17,7 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { S, TBL, TABLE_GROUPS, R } from "../lib/constants";
+import { S, TBL, TABLE_GROUPS, R, T, FW } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 
 // TABLE_GROUPS lives in ../lib/constants because it's also consumed by the
@@ -41,11 +41,11 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
     <div>
       {TABLE_GROUPS.map((grp) => (
         <div key={grp.name} style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: grp.color, marginBottom: 2, textAlign: "center" }}>
+          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: grp.color, marginBottom: 2, textAlign: "center" }}>
             {grp.name}
           </div>
           {grp.note ? (
-            <div style={{ fontSize: 12, color: S.text, marginBottom: 6, fontStyle: "italic", textAlign: "center" }}>
+            <div style={{ fontSize: T.body, color: S.text, marginBottom: 6, fontStyle: "italic", textAlign: "center" }}>
               {grp.note}
             </div>
           ) : null}
@@ -57,10 +57,22 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
               const indoor = isIn(t.id);
               const tc = indoor ? TBL.ind : TBL.out;
               let bg, clr, brd;
-              if (isSel)        { bg = "rgba(249,115,22,0.8)"; clr = "#fff";  brd = "2px solid rgba(249,115,22,0.9)"; }
-              else if (blocked) { bg = "rgba(220,60,60,0.75)"; clr = "#fff";  brd = "2px solid rgba(220,60,60,0.8)"; }
-              else if (isBusyT) { bg = "rgba(250,204,21,0.7)"; clr = "#fff";  brd = "2px solid rgba(250,204,21,0.8)"; }
-              else              { bg = "rgba(255,255,255,0.4)"; clr = S.text; brd = "2px solid " + tc.bg; }
+              // v17.8.0: these three were hard-coded fills with white text and
+              // NO token, so the contrast pass could not see them at all —
+              // measured 2.31 (selected), 3.13 (blocked) and ~1.4 (swap, white
+              // on a bright yellow). The blocked red was also a stale copy of
+              // --btn-del's value from BEFORE that pass retuned it.
+              // Consolidated onto tokens the app already has rather than three
+              // new near-duplicate hues, and the rim is now neutral
+              // --border-glass per the solid-label convention (the fill carries
+              // the colour; a matching border is a second copy of one signal).
+              // `selected` takes the ACCENT because accent means primary action
+              // or CURRENT SELECTION — which is literally this state, and it is
+              // free now that table badges are teal and purple.
+              if (isSel)        { bg = S.accent;                 clr = "var(--text-on-accent)"; brd = "2px solid var(--border-glass)"; }
+              else if (blocked) { bg = "var(--btn-del)";         clr = "var(--text-on-accent)"; brd = "2px solid var(--border-glass)"; }
+              else if (isBusyT) { bg = "var(--app-warn-solid)";  clr = "var(--text-on-accent)"; brd = "2px solid var(--border-glass)"; }
+              else              { bg = "var(--bg-input)";       clr = S.text; brd = "2px solid " + tc.bg; }
               // v17.1.1: isSel first — a Plan-view pre-selected table can be
               // selected AND busy; it paints orange (isSel wins above), so the
               // label must agree.
@@ -70,21 +82,25 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
                 <button
                   key={t.id}
                   onClick={() => toggle(t.id)}
-                  className={blocked && !isSel ? undefined : "mgt-hover-scale"}
+                  // v17.8.0: a blocked cell is inert but NOT `disabled`, so the
+                  // universal button press-scale would animate a tap that does
+                  // nothing. .mgt-nopress opts it out, for the same reason the
+                  // hover lift is withheld here.
+                  className={blocked && !isSel ? "mgt-nopress" : "mgt-hover-scale"}
                   style={{
                     width: 64, height: 52, padding: 0, borderRadius: R.pill,
                     border: brd, background: bg, color: clr,
-                    fontWeight: 600, fontSize: 14,
+                    fontWeight: FW.semi, fontSize: T.lead,
                     cursor: blocked && !isSel ? "not-allowed" : "pointer",
                     opacity: blocked && !isSel ? 0.5 : 1,
                     display: "flex", flexDirection: "column",
                     alignItems: "center", justifyContent: "center",
                     gap: 2, boxSizing: "border-box",
-                    boxShadow: "0 1px 4px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.3)"
+                    boxShadow: "var(--shadow-btn)"
                   }}
                 >
                   <span>{t.id}</span>
-                  <span style={{ fontSize: 10, fontWeight: 500, color: subClr }}>{label}</span>
+                  <span style={{ fontSize: T.micro, fontWeight: FW.medium, color: subClr }}>{label}</span>
                 </button>
               );
             })}

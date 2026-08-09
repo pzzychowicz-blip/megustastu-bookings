@@ -17,7 +17,7 @@
 //   onClose()      — close the panel
 
 import { useState } from "react";
-import { S, BTN, R } from "../lib/constants";
+import { S, BTN, R, T, FW } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
 import { Overlay, mkBtn, AutoHeight } from "./atoms";
 
@@ -32,20 +32,25 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
 
   const rows=entries.map(function(w,i){
     const avail=availability[w.id]||null;
+    // v17.8.0: text, not a pill. WaitAvailBanner already prints this exact fact
+    // ("… — table free · 19:30") as plain green text one surface away, and the
+    // row here ALSO turns its border green when `avail` — so the pill was the
+    // third encoding of one signal, in the pale-fill + matching-border + bold-
+    // coloured-text shape that reads as a stock badge.
     const fitChip=avail?<span
-      style={{fontSize:11,fontWeight:700,color:"var(--success-text)",background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:R.pill,padding:"3px 8px",flexShrink:0}}>{"Table free"+(avail.time?" · "+avail.time:"")}</span>:<span
-      style={{fontSize:11,fontWeight:600,color:S.muted,background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"3px 8px",flexShrink:0}}>waiting</span>;
+      style={{fontSize: T.small,fontWeight: FW.bold,color:"var(--success-text)",whiteSpace:"nowrap",flexShrink:0}}>{"Table free"+(avail.time?" · "+avail.time:"")}</span>:<span
+      style={{fontSize: T.small,fontWeight: FW.semi,color:S.muted,whiteSpace:"nowrap",flexShrink:0}}>waiting</span>;
     const arming=confirmId===w.id;
     return (
       <div
         key={w.id}
         style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:R.card,background:"var(--bg-soft)",border:"1px solid "+(avail?"var(--suggest-border)":"var(--border-soft)"),marginBottom:8,boxShadow:"var(--shadow-input)"}}><span
-          style={{fontSize:13,fontWeight:700,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:14,fontWeight:700,color:S.text}}>{w.name||"(no name)"}</span><span style={{fontSize:13,fontWeight:700,color:S.text}}>{w.size+" pax"}</span>{fitChip}</div><div style={{fontSize:12,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize:12,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
+          style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{w.name||"(no name)"}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{w.size+" pax"}</span>{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
             className="mgt-hover-scale"
-            style={mkBtn({fontSize:12,background:"rgba(22,101,52,0.8)",minHeight:36})}
+            style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",minHeight:36})}
             onClick={function(){onBook(w);}}>Book</button><button
             className="mgt-hover-scale mgt-press"
-            style={mkBtn({fontSize:12,background:arming?BTN.del:BTN.cancel,minHeight:36})}
+            style={mkBtn({fontSize: T.body,background:arming?BTN.del:BTN.cancel,minHeight:36})}
             onClick={function(){if(arming){onRemove(w.id);setConfirmId(null);}else setConfirmId(w.id);}}>{arming?"Confirm?":"Remove"}</button></div></div>
     );
   });
@@ -53,13 +58,13 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
   const footerEl=(
     <div style={{display:"flex",justifyContent:"flex-end"}}><button
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"})}
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
         onClick={onClose}>Done</button></div>
   );
 
   return (
     <Overlay onClose={onClose} footer={footerEl}><AutoHeight><div style={{textAlign:"center",marginBottom:16}}><div
-          style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{"Waitlist — "+date}</div></div>{rows.length?rows:<div
-        style={{textAlign:"center",padding:"24px 0",color:S.muted,fontSize:14}}>No one on the waitlist for this day.</div>}<div style={{fontSize:11,color:S.muted,textAlign:"center",marginTop:10}}>First come, first served — a green chip means a table currently fits this party.</div></AutoHeight></Overlay>
+          style={{fontSize: T.title,fontWeight: FW.bold,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:"var(--accent)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{"Waitlist — "+date}</div></div>{rows.length?rows:<div
+        style={{textAlign:"center",padding:"24px 0",color:S.muted,fontSize: T.lead}}>No one on the waitlist for this day.</div>}<div style={{fontSize: T.small,color:S.muted,textAlign:"center",marginTop:10}}>First come, first served — "Table free" means a table currently fits this party.</div></AutoHeight></Overlay>
   );
 }

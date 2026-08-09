@@ -28,10 +28,12 @@ import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
-import { BTN, R } from "../lib/constants";
-import { mkBtn } from "../components/atoms";
+import { BTN, R, T, FW } from "../lib/constants";
+import { mkBtn, SmallTag } from "../components/atoms";
+import { NOTIF_GUTTER, NOTIF_PAD_X } from "../components/NotificationStrip";
 import { genId } from "../lib/booking-logic";
 import { dbError } from "../lib/dbError";
+import { sameDraft } from "../lib/drafts";
 import {
   getActiveReminderBanners,
   pruneOldReminderFires,
@@ -54,6 +56,11 @@ export function useReminders({ nowMins, setWriteWarning }){
   const [reminders, setReminders] = useState([]);
   const [reminderFires, setReminderFires] = useState({});
   const [reminderEditor, setReminderEditor] = useState(null);
+  // v17.8.0 unsaved-changes guard: the draft the editor was OPENED with. Set
+  // ONLY by openNewReminder / openEditReminder — the two doors — so every other
+  // setReminderEditor is a user edit and correctly reads as dirty. State rather
+  // than a ref: it feeds a value derived during render.
+  const [reminderBaseline, setReminderBaseline] = useState(null);
   // v14 p7 fix: in-app confirmation for reminder deletion — window.confirm is
   // blocked in sandboxed / embedded preview environments, so it never showed
   // the dialog. Matches the confirmDel / confirmCancel pattern used elsewhere.
@@ -151,9 +158,24 @@ export function useReminders({ nowMins, setWriteWarning }){
   function snoozeReminderFire(fireKey){
     saveReminderFires(function(prev){const n=Object.assign({},prev);n[fireKey]={status:"snoozed",until:Date.now()+15*60*1000};return n;});
   }
+  // v17.8.0: flatten a reminder draft before diffing it. `sameDraft`'s norm()
+  // falls back to JSON.stringify for a nested object, which is key-ORDER
+  // sensitive — and `recurrence` is rebuilt by spreads all over ReminderEditor,
+  // so two equivalent drafts could serialise differently and read as dirty. The
+  // arrays survive as arrays because norm() sorts those, which is right here:
+  // reordering `times` or `days` is not an edit.
+  function flatReminder(d){
+    if(!d) return null;
+    const rec=d.recurrence||{};
+    return {text:d.text,active:d.active,times:d.times,rec_type:rec.type,rec_date:rec.date,rec_days:rec.days};
+  }
+  const reminderDirty=!!reminderEditor&&!sameDraft(flatReminder(reminderEditor.draft),flatReminder(reminderBaseline));
+
   function openNewReminder(){
     const today=new Date().toISOString().slice(0,10);
-    setReminderEditor({id:"new",draft:{text:"",times:["21:00"],recurrence:{type:"once",date:today,days:[]},active:true}});
+    const draft={text:"",times:["21:00"],recurrence:{type:"once",date:today,days:[]},active:true};
+    setReminderBaseline(draft);
+    setReminderEditor({id:"new",draft:draft});
   }
   function openEditReminder(r){
     // Deep-clone to prevent live-editing the stored reminder.
@@ -163,6 +185,7 @@ export function useReminders({ nowMins, setWriteWarning }){
       recurrence:Object.assign({},r.recurrence||{},{days:(r.recurrence&&r.recurrence.days||[]).slice()}),
       active:!!r.active
     };
+    setReminderBaseline(draft);
     setReminderEditor({id:r.id,draft:draft});
   }
   function saveReminderFromEditor(){
@@ -202,29 +225,52 @@ export function useReminders({ nowMins, setWriteWarning }){
   const activeReminderBanners=getActiveReminderBanners(reminders,reminderFires,reminderTodayStr,nowMins);
   // One row per active fire slot, stacked vertically. Amber (distinct from the
   // green success toasts and red error banners), with Done + Snooze actions.
-  const reminderBanners=activeReminderBanners.length?<div style={{marginBottom:10}}>{activeReminderBanners.map(function(ab){
+  // v17.8.0: on the shared banner pane (see BannerRows.jsx / AppBanners.jsx) —
+  // 1px border, soft tint, a semantic dot instead of the ⏰ glyph plus a 2px
+  // amber ring. v17.8.0 had only just moved this off raw hex literals; the
+  // literals were the correctness bug, this is the consistency one.
+  // v17.8.0: this is a SECTION BODY now, not a pane. NotificationStrip owns the
+  // one pane every notification shares (see NotificationStrip.jsx) and draws
+  // the dot + "Reminder" title + count header, so each row here supplies only
+  // its time, text and actions. NOTIF_GUTTER (imported from the strip, not
+  // re-derived) lines the rows up with the section titles above them, and rows
+  // are hairline-separated like every other
+  // section's. `reminderCount` is exported alongside because the strip needs the
+  // count as data for its collapsed summary.
+  const reminderCount=activeReminderBanners.length;
+  const reminderBanners=reminderCount?<div>{activeReminderBanners.map(function(ab,i){
       return (
         <div
           key={ab.fireKey}
-          style={{background:"rgba(254,243,199,0.8)",border:"2px solid rgba(251,191,36,0.55)",borderRadius:R.card,padding:"10px 14px",marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div
-            style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0,flexWrap:"wrap"}}><span style={{fontSize:14,fontWeight:700,color:"#78350f"}}>⏰ Reminder</span><span
-              style={{fontSize:11,padding:"2px 8px",borderRadius:R.pill,background:"rgba(146,64,14,0.15)",color:"#78350f",fontWeight:700,letterSpacing:"0.02em",whiteSpace:"nowrap"}}>{ab.time}</span><span
-              style={{fontSize:14,color:"#78350f",fontWeight:700,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
+          style={{padding:"9px "+NOTIF_PAD_X+"px 9px "+NOTIF_GUTTER+"px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",...(i>0?{borderTop:"1px solid var(--border-soft)"}:null)}}><div
+            style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0,flexWrap:"wrap"}}>{/* v17.8.0: a SOLID chip on ListView's `locked` pattern — SmallTag, the
+              fill carrying the colour, --text-on-accent text, a neutral
+              --border-glass rim. As dimmed amber text it was the same colour and
+              nearly the same weight as the sentence beside it, so the one thing
+              you scan a reminder row FOR did not separate from the thing you
+              read. Graphite (--tag-flag) rather than a semantic hue: the time is
+              metadata about the reminder, not a state of it, which is exactly
+              what that token is for. */}
+              <SmallTag label={ab.time} style={{background:"var(--tag-flag)",color:"var(--text-on-accent)",border:"1px solid var(--border-glass)",fontWeight: FW.bold,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap",flexShrink:0}} /><span
+              style={{fontSize: T.body,color:"var(--text-primary)",fontWeight: FW.semi,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               onClick={function(){snoozeReminderFire(ab.fireKey);}}
-              style={mkBtn({fontSize:12,minHeight:34,padding:"4px 12px",background:BTN.nav})}>Snooze 15m</button><button
+              className="mgt-hover-scale mgt-press"
+              style={mkBtn({fontSize: T.body,minHeight:34,padding:"4px 12px",background:BTN.nav})}>Snooze 15m</button><button
               onClick={function(){markReminderDone(ab.fireKey);}}
-              style={{background:"rgba(22,101,52,0.8)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#fff",minHeight:34,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Done</button></div></div>
+              className="mgt-hover-scale mgt-press"
+              style={mkBtn({fontSize: T.body,minHeight:34,padding:"6px 14px",background:"var(--app-success-solid)"})}>Done</button></div></div>
       );
     })}</div>:null;
 
   return {
     reminders,
     reminderEditor, setReminderEditor,
+    reminderDirty,
     confirmReminderDel, setConfirmReminderDel,
     saveReminderFromEditor,
     doDeleteReminder,
     openNewReminder, openEditReminder,
     deleteReminder, toggleReminderActive,
-    reminderBanners,
+    reminderBanners, reminderCount,
   };
 }

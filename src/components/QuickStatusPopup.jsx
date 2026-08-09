@@ -19,7 +19,7 @@
 //   onClose()      — clear the parent's popup state
 
 import { createPortal } from "react-dom";
-import { S, BLOCK_BG, BTN, R } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, BTN, R, T, FW } from "../lib/constants";
 
 export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClose }) {
   if (!booking) return null;
@@ -43,12 +43,12 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
         style={{
           background: "var(--tl-popup-bg)", borderRadius: R.sheet,
           border: "1px solid " + S.border,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
+          boxShadow: "var(--shadow-popover)",
           padding: "20px 24px",
           minWidth: 240, maxWidth: 320, zIndex: 301
         }}
       >
-        <div style={{ fontSize: 20, fontWeight: 700, color: S.text, marginBottom: 16 }}>
+        <div style={{ fontSize: T.display, fontWeight: FW.bold, color: S.text, marginBottom: 16 }}>
           {booking.name}
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -63,7 +63,7 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
                 style={{
                   background: BLOCK_BG[st], border: "none",
                   borderRadius: R.pill, padding: "10px 18px",
-                  fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
+                  fontSize: T.lead, fontWeight: FW.bold, color: BLOCK_INK[st] || "var(--text-on-accent)",
                   cursor: "pointer", textTransform: "capitalize",
                   minHeight: 44, flex: "1 1 auto"
                 }}
@@ -81,7 +81,7 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
               style={{
                 background: BTN.orange, border: "none",
                 borderRadius: R.pill, padding: "10px 18px",
-                fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
+                fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-on-accent)",
                 cursor: "pointer",
                 minHeight: 44, flex: "1 1 auto"
               }}

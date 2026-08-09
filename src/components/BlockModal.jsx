@@ -15,18 +15,29 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { useState } from "react";
-import { S, BTN, TBL, OPEN, GRID_CLOSE, R } from "../lib/constants";
+import { useState, useEffect } from "react";
+import { S, BTN, TBL, OPEN, GRID_CLOSE, R, T, FW } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
 import { Overlay, Section, Fld, mkBtn, mkInp } from "./atoms";
 
-export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose }) {
+export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose, onDirty }) {
   const existing = blocks.filter((bl) => bl.tableId === tableId && bl.date === date);
   const indoor = isIn(tableId);
   const tc = indoor ? TBL.ind : TBL.out;
   const [mode, setMode] = useState(existing.length > 0 ? "view" : "add");
   const [from, setFrom] = useState(OPEN + ":00");
   const [to, setTo] = useState(GRID_CLOSE + ":00");
+
+  // v17.8.0 unsaved-changes guard. The From/To times are component-local, so
+  // this modal REPORTS its dirtiness up rather than App reaching in — the same
+  // contract ManualModal uses. Dirty only in "add" mode with a time actually
+  // changed from the default full-service window: merely opening the add form,
+  // or browsing the existing-blocks list, must close silently.
+  const dirty = mode === "add" && (from !== OPEN + ":00" || to !== GRID_CLOSE + ":00");
+  useEffect(() => { if (onDirty) onDirty(dirty); }, [dirty, onDirty]);
+  // Unmount-only reset. Without it a closed modal leaves the flag — and so
+  // `beforeunload` — armed for the rest of the session (the ManualModal trap).
+  useEffect(() => () => { if (onDirty) onDirty(false); }, [onDirty]);
   // Lint cleanup (2026-07-24): the null guard moved BELOW the hooks — an early
   // return above useState changes the hook count if tableId ever turns null on
   // a mounted instance (the v16.4.0 ListView crash class). All derivations
@@ -45,7 +56,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: "#64748b" })}
+          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: "var(--app-btn-slate)" })}
           onClick={() => setMode("add")}
         >
           + Add block
@@ -63,12 +74,12 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
       <Overlay onClose={onClose} footer={footerViewEl}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
           <span style={{
-            fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: R.pill,
+            fontSize: T.body, fontWeight: FW.bold, padding: "4px 10px", borderRadius: R.pill,
             background: tc.bg, color: tc.text, border: "1px solid " + tc.border
           }}>
             {tableId}
           </span>
-          <span style={{ fontSize: 17, fontWeight: 700, color: S.text }}>
+          <span style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text }}>
             {"Table " + tableId + " — " + date}
           </span>
         </div>
@@ -79,17 +90,17 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "10px 14px", borderRadius: R.card,
               background: "var(--danger-bg)",
-              border: "2px solid var(--danger-border)",
+              border: "1px solid var(--danger-border)",
               marginBottom: 8
             }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--danger-text)" }}>Blocked</div>
-                <div style={{ fontSize: 13, color: "var(--danger-text)" }}>{label}</div>
+                <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--danger-text)" }}>Blocked</div>
+                <div style={{ fontSize: T.body, color: "var(--danger-text)" }}>{label}</div>
               </div>
               <button
                 onClick={() => onRemove(bl)}
                 className="mgt-hover-scale"
-                style={mkBtn({ background: BTN.del, fontSize: 12 })}
+                style={mkBtn({ background: BTN.del, fontSize: T.body })}
               >
                 Unblock
               </button>
@@ -115,10 +126,13 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
         onClick={handleSave}
         className="mgt-hover-scale"
         style={{
-          background: "rgba(153,27,27,0.85)",
+          // v17.8.0: deep red, deliberately — this Save BLOCKS a table out of
+          // service rather than saving a booking. Tokenized onto the app's
+          // solid danger fill instead of a one-off literal.
+          background: "var(--app-danger-solid)",
           border: "1px solid rgba(255,255,255,0.2)",
           borderRadius: R.pill, padding: "10px 22px", cursor: "pointer",
-          fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
+          fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
           boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"
         }}
       >
@@ -130,16 +144,16 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
     <Overlay onClose={onClose} footer={footerAddEl}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <span style={{
-          fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: R.pill,
+          fontSize: T.body, fontWeight: FW.bold, padding: "4px 10px", borderRadius: R.pill,
           background: tc.bg, color: tc.text, border: "1px solid " + tc.border
         }}>
           {tableId}
         </span>
-        <span style={{ fontSize: 17, fontWeight: 700, color: S.text }}>
+        <span style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text }}>
           {"Block table " + tableId}
         </span>
       </div>
-      <div style={{ fontSize: 13, color: S.muted, marginBottom: 16 }}>{date}</div>
+      <div style={{ fontSize: T.body, color: S.muted, marginBottom: 16 }}>{date}</div>
       <Section>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Fld label="From">

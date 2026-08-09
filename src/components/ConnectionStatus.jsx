@@ -28,16 +28,23 @@
 // fix on its next touch (shared-pattern rule).
 
 import { useEffect, useRef, useState } from "react";
-import { S, R } from "../lib/constants";
+import { S, R, BTN, M, T, FW } from "../lib/constants";
+import { mkBtn, Presence } from "./atoms";
 
 // Rendered popover width: minWidth 260 + 2×12 padding + 2×1 border.
 const POPOVER_W = 286;
 
 // v17.3.0: compact "connected since" — a relative string computed at render time
 // (the popover only opens on click, so no ticking clock is needed).
-function sinceText(ts) {
+// v17.8.0: `offset` is the `.info/serverTimeOffset` correction from usePresence.
+// These timestamps are serverTimestamps, so on a device with clock skew a raw
+// Date.now() comparison produces nonsense like "connected 3h ago" for a tab
+// opened a minute ago — or a negative span rendered as "just now" forever.
+function sinceText(ts, offset) {
   if (!ts) return "";
-  const mins = Math.floor((Date.now() - ts) / 60000);
+  // Negative spans (a stamp fractionally ahead of the corrected clock) fall
+  // into this same branch — deliberately one test, not two.
+  const mins = Math.floor((Date.now() + (offset || 0) - ts) / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return mins + "m ago";
   const hrs = Math.floor(mins / 60);
@@ -45,7 +52,7 @@ function sinceText(ts) {
   return Math.floor(hrs / 24) + "d ago";
 }
 
-export function ConnectionStatus({ connected, hasConnected, userEmail, devices, myKey }) {
+export function ConnectionStatus({ connected, hasConnected, userEmail, devices, myKey, onLogout, offset = 0 }) {
   const [open, setOpen] = useState(false);
   const [alignRight, setAlignRight] = useState(true);
   const wrapRef = useRef(null);
@@ -114,18 +121,21 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
           // supply — and that declaration is gone now (it squared off every
           // pill). Without a resting radius the hover state paints its opaque
           // --bg-hover-card as a hard-edged RECTANGLE behind the round dot.
-          // R.pill rather than "50%": the button is 24x40, so 50% would give a
-          // pointed ELLIPSE, while the pill clamps to half the narrow axis =
-          // 12px — which is exactly the shape the deleted hover rule used to
-          // draw, now expressed through the token.
+          // R.pill rather than "50%". v17.8.0 made the box SQUARE (it was 24x40
+          // — a 24px-wide target for the control that opens the device list and
+          // Log out), so the pill clamps to half of a square and this is finally
+          // a true circle rather than the vertical egg the old width/height
+          // mismatch produced. 36 rather than the HIG's 44: at 44 it dominated
+          // the header row it is only an indicator in.
           borderRadius: R.pill,
-          padding: 6,
+          padding: 0,
           cursor: "pointer",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
           lineHeight: 0,
-          minHeight: 40,
+          width: 36,
+          height: 36,
         }}
       >
         <span
@@ -134,45 +144,84 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
             width: 12,
             height: 12,
             borderRadius: "50%",
-            background: dotColor,
+            backgroundColor: dotColor,
             // Soft glow in the matching colour so it reads as "illuminated".
             boxShadow: "0 0 0 3px " + dotGlow,
+            // Green -> amber -> red used to be a hard cut, which is the one way
+            // to change a always-visible indicator that nobody notices: a static
+            // thing that is a different colour than it was reads as having always
+            // been that colour. Motion is what makes a glance catch it, and 200ms
+            // is not a delay — the state has already changed, this is only how it
+            // is drawn.
+            transition: "background-color " + M.move + ", box-shadow " + M.move,
           }}
         />
       </button>
 
-      {open ? (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 8px)",
-            right: alignRight ? 0 : "auto",
-            left: alignRight ? "auto" : 0,
-            zIndex: 30,
-            minWidth: 260,
-            padding: 12,
-            background: "var(--bg-ac-menu)",
-            border: "1px solid var(--border-card)",
-            borderRadius: R.card,
-            boxShadow: "var(--shadow-sheet)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <span
-              style={{
-                display: "inline-block",
-                width: 10,
-                height: 10,
-                borderRadius: "50%",
-                background: dotColor,
-                flexShrink: 0,
-              }}
-            />
-            <span style={{ fontSize: 13, fontWeight: 600, color: S.text }}>
-              {statusText}
-            </span>
+      {/* v17.8.0: the popover appears and disappears through Presence rather
+          than a bare `open ?` — it never had an entrance, which stopped being
+          survivable once every other surface in the app eased. mgt-card-in /
+          -out are reused rather than invented: they fade and translateY(8px),
+          which on a top-anchored popover reads as it dropping out of the dot,
+          exactly the motion this needs. outMs must match --t-move (240ms) or
+          the node unmounts mid-animation.
+          Presence renders the positioned element ITSELF (its `style` prop) —
+          no extra wrapper, so `wrapRef.current.contains()` and the absolute
+          anchoring are untouched. */}
+      <Presence
+        show={open}
+        inClass="mgt-card-in"
+        outClass="mgt-card-out"
+        outMs={240}
+        style={{
+          position: "absolute",
+          top: "calc(100% + 8px)",
+          right: alignRight ? 0 : "auto",
+          left: alignRight ? "auto" : 0,
+          zIndex: 30,
+          minWidth: 260,
+          padding: 12,
+          background: "var(--bg-ac-menu)",
+          border: "1px solid var(--border-card)",
+          borderRadius: R.card,
+          boxShadow: "var(--shadow-sheet)",
+        }}
+      >
+        {open ? (
+          <>
+          {/* v17.8.0: Log out moved OFF the header row and in here, right-aligned
+              on the status line. It belongs with the identity this popover
+              already shows ("Signed in as" sits two rows below), and the header
+              — ViewSwitcher · Walk-in · + New · the dot — was wrapping to a
+              third row on a phone with it there. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  background: dotColor,
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text }}>
+                {statusText}
+              </span>
+            </div>
+            {onLogout ? (
+              <button
+                type="button"
+                className="mgt-hover-scale"
+                onClick={onLogout}
+                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "6px 12px", background: BTN.nav })}
+              >
+                Log out
+              </button>
+            ) : null}
           </div>
-          <div style={{ fontSize: 11, marginBottom: 8, color: S.muted }}>
+          <div style={{ fontSize: T.small, marginBottom: 8, color: S.muted }}>
             {connecting
               ? "Establishing the first connection to the Realtime Database…"
               : connected
@@ -180,14 +229,14 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                 : "Lost connection to the Realtime Database. Changes will sync when it reconnects."}
           </div>
           <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
-            <div style={{ fontSize: 11, marginBottom: 2, color: S.muted }}>Signed in as</div>
-            <div style={{ fontSize: 13, color: S.text, wordBreak: "break-all" }}>
+            <div style={{ fontSize: T.small, marginBottom: 2, color: S.muted }}>Signed in as</div>
+            <div style={{ fontSize: T.body, color: S.text, wordBreak: "break-all" }}>
               {userEmail || "—"}
             </div>
           </div>
           {deviceList.length ? (
             <div style={{ borderTop: "1px solid var(--border-soft)", marginTop: 8, paddingTop: 8 }}>
-              <div style={{ fontSize: 11, marginBottom: 6, color: S.muted }}>
+              <div style={{ fontSize: T.small, marginBottom: 6, color: S.muted }}>
                 {"Connected device" + (deviceList.length === 1 ? "" : "s") + " (" + deviceList.length + ")"}
               </div>
               <div style={{ maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -202,17 +251,20 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                         }}
                       />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, color: S.text, wordBreak: "break-all" }}>{d.email}</div>
-                        <div style={{ fontSize: 11, color: S.muted }}>
-                          {d.ua + (sinceText(d.since) ? "  ·  " + sinceText(d.since) : "")}
+                        <div style={{ fontSize: T.body, color: S.text, wordBreak: "break-all" }}>{d.email}</div>
+                        <div style={{ fontSize: T.small, color: S.muted }}>
+                          {d.ua + (sinceText(d.since, offset) ? "  ·  " + sinceText(d.since, offset) : "")}
                         </div>
                       </div>
                       {mine ? (
+                        // v17.8.0: text, not a pill. Every other thing in this
+                        // popover is plain text on a quiet pane, and "this one
+                        // is you" is a marker, not a state — the row's own dot
+                        // is the only status the line has to carry.
                         <span
                           style={{
-                            fontSize: 10, fontWeight: 700, color: "var(--success-text)",
-                            background: "var(--suggest-bg)", border: "1px solid var(--suggest-border)",
-                            borderRadius: R.pill, padding: "2px 6px", flexShrink: 0, whiteSpace: "nowrap",
+                            fontSize: T.micro, fontWeight: FW.bold, color: "var(--text-secondary)",
+                            letterSpacing: "0.03em", flexShrink: 0, whiteSpace: "nowrap",
                           }}
                         >
                           This device
@@ -224,8 +276,9 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
               </div>
             </div>
           ) : null}
-        </div>
-      ) : null}
+          </>
+        ) : null}
+      </Presence>
     </div>
   );
 }

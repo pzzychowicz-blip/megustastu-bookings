@@ -46,6 +46,12 @@
         --text-muted: #5a6474;
         /* Accent */
         --accent: #007aff;
+        /* v17.8.0: the keyboard focus ring. Its own token rather than --accent
+           because it must stay legible on accent-filled buttons too, where an
+           accent ring would vanish. Deliberately NOT the same value as the
+           split-pane corner marks (--accent), so "the keyboard is here" and
+           "this pane owns the view shortcuts" never look alike. */
+        --focus-ring: #0a2540;
         /* Status chips — bg + border share a hue (RGB triplet, composed in
            constants.js as rgba(var(--…-rgb), a)); text is a solid token. */
         /* v17.0.0: confirmed left the amber family so the new PENDING status
@@ -58,28 +64,92 @@
         --status-seated-rgb: 34, 197, 94;      --status-seated-text: #166534;
         --status-completed-rgb: 148, 163, 184; --status-completed-text: #64748b;
         --status-cancelled-rgb: 239, 68, 68;   --status-cancelled-text: #991b1b;
-        /* Timeline block fills / status buttons — saturated, white text;
-           theme-invariant (read on light + dark), defined once here. */
-        --block-confirmed: rgba(217, 119, 6, 0.92);
-        --block-pending: rgba(234, 179, 8, 0.92);
-        --block-seated: rgba(34, 160, 80, 0.85);
-        --block-completed: rgba(140, 140, 150, 0.7);
-        --block-cancelled: rgba(200, 80, 80, 0.8);
-        /* Table badges — bg .8 / border .5 share a hue (triplet); white text. */
-        --tbl-out-rgb: 0, 122, 255;
-        --tbl-ind-rgb: 175, 82, 222;
+        /* Timeline block fills / status buttons.
+           v17.8.0 — these used to be one set, declared here only, with a
+           comment claiming they were "theme-invariant (read on light + dark)".
+           They were not. An alpha fill composites toward what is BEHIND it, so
+           the same token lands somewhere different per theme: over dark-mode's
+           near-black sheet it darkens and white text pops (pending 2.2:1 — bad
+           but survivable), over light-mode's near-white sheet it washes out
+           (pending 1.83:1 — the "Save pending" button was effectively unlabelled
+           in daylight). Nobody had measured the light side in eight versions.
+           Each fill now names its own INK, and the fills that need different
+           values per theme are overridden in the dark block rather than
+           inherited. tests/contrast.test.js measures every pair, both themes.
+
+           The amber pair keeps its exact fills AND white ink (Patryk's call,
+           v17.8.0 correction). Two options were on the table for the amber
+           pair: darken the fills until white text clears AA, or keep the fills
+           and switch to dark ink. The first destroys the matched-intensity
+           pair v17.0.0 engineered — one goes brown, the other olive. The second
+           was tried and shipped for one commit and looked wrong: dark ink on a
+           timeline block reads as disabled next to the white-inked seated and
+           cancelled blocks beside it, so a status change looked like a state
+           change. Confirmed sits at 2.9:1 and pending at 1.8:1 and that is
+           accepted — the block's colour, position and width already carry its
+           meaning, the name on it is a label rather than the information, and
+           these two have looked like this for eight versions. The START-TIME
+           CHIP is the part that had to be legible, and it now carries its own
+           solid --tl-hour-pill fill (the same pill the hour ruler uses) rather
+           than a wash tinted by whatever is underneath it. tests/contrast.test.js
+           records this as a deliberate exemption rather than passing silently. */
+        --block-confirmed: rgba(217, 119, 6, 0.92);  --ink-confirmed: #ffffff;
+        --block-pending: rgba(234, 179, 8, 0.92);    --ink-pending: #ffffff;
+        --block-seated: rgba(24, 111, 56, 0.85);     --ink-seated: #ffffff;
+        --block-completed: rgba(140, 140, 150, 0.7); --ink-completed: #ffffff;
+        --block-cancelled: rgba(149, 59, 59, 0.8);   --ink-cancelled: #ffffff;
+        /* The translucent furniture INSIDE a timeline block — the "~Nm"
+           countdown pill and the manual-assign divider. Named rather than
+           hard-coded so it stays tied to the block's ink: every fill takes
+           white ink today, so there is one set, but the pairing is explicit. */
+        --wash-on-dark: rgba(255, 255, 255, 0.25);   --rule-on-dark: rgba(255, 255, 255, 0.3);
+        /* Table badges — bg .8 / border .5 share a hue (triplet); white text.
+           v17.8.0: outdoor was `0, 122, 255` — byte-identical to --accent. Nine
+           outdoor tables therefore painted the accent at all times, on every
+           screen, so nothing in the app could ever outrank a table label. A
+           table number is an IDENTITY, not an action or a state, and the
+           product rule is that accent means primary action or current
+           selection. Teal is the only free slot: green is seated/success,
+           amber is confirmed/pending, burnt orange is warn, red is danger,
+           purple is indoor. It also reads as "outside" next to indoor purple,
+           which the old blue never did.
+           v17.8.0 contrast pass: the teal above was picked for its hue and
+           never measured. At 0.8 alpha over a light sheet it composited to
+           2.15:1 against the white label — the LOWEST contrast in the app, on
+           the label staff read most, and a regression from the 3.08:1 the old
+           accent blue gave. Both triplets are now solved per theme (deep in
+           light, bright in dark) so white text clears AA in both. */
+        --tbl-out-rgb: 26, 94, 107;
+        --tbl-ind-rgb: 124, 58, 157;
         --text-on-accent: #ffffff;
-        /* Buttons — saturated accent fills, white text; theme-invariant. */
-        --btn-tables: rgba(0, 122, 255, 0.75);
-        --btn-edit: rgba(0, 122, 255, 0.7);
-        --btn-del: rgba(220, 60, 60, 0.75);
-        --btn-cancel: rgba(220, 60, 60, 0.75);
-        --btn-clear: rgba(220, 60, 60, 0.7);
-        --btn-reset: rgba(220, 60, 60, 0.7);
-        --btn-today: rgba(0, 122, 255, 0.7);
-        --btn-nav: rgba(120, 130, 150, 0.5);
-        --btn-dismiss: rgba(220, 60, 60, 0.7);
-        --btn-orange: rgba(230, 100, 30, 0.8);
+        /* Buttons — saturated fills, white text.
+           v17.8.0: solved to 3:1 rather than the 4.5:1 the small labels get.
+           A button is large, solid, and its meaning is carried by position and
+           shape as well as by the word on it, so the palette stays recognisable
+           instead of every control going muddy. The saturated ones barely moved
+           (2.7–2.95 -> 3.0); the two NEUTRALS moved a long way, because white
+           text on a 0.5-alpha grey over a white sheet was 1.87:1 — the inactive
+           View buttons were legible only as shapes. Darkening the grey also
+           fixes the hierarchy it broke: an inactive segment now reads as
+           secondary rather than as disabled. */
+        --btn-tables: rgba(0, 116, 244, 0.75);
+        --btn-edit: rgba(0, 108, 225, 0.7);
+        --btn-del: rgba(211, 58, 58, 0.75);
+        --btn-cancel: rgba(211, 58, 58, 0.75);
+        --btn-clear: rgba(211, 58, 58, 0.7);
+        --btn-reset: rgba(211, 58, 58, 0.7);
+        --btn-today: rgba(0, 108, 225, 0.7);
+        --btn-nav: rgba(39, 43, 49, 0.5);
+        --btn-dismiss: rgba(211, 58, 58, 0.7);
+        --btn-orange: rgba(210, 91, 28, 0.8);
+        /* v17.8.0: booking-attribute FLAGS (manual / locked / preferred-tables).
+           They were three unrelated hand-picked hues — #0369a1 blue (a shade off
+           the accent), #854d0e (the pending-text amber) and #0d9488 teal (which
+           now collides with the outdoor tables) — for three tags of the SAME
+           kind sitting in the same row. The hue never carried meaning; the label
+           does. One graphite, deliberately deeper than the slate-400 `completed`
+           status so a flag can't be mistaken for a status. */
+        --tag-flag: #475569;
         /* ── v14.2.2: atoms / modal surfaces, borders, semantic text, banners ── */
         /* Surfaces */
         --bg-sheet: rgba(255, 255, 255, 0.72);         /* Overlay desktop dialog card */
@@ -89,7 +159,7 @@
         --bg-soft: rgba(248, 250, 253, 0.95);          /* Section panel */
         --bg-input: rgba(255, 255, 255, 0.5);          /* text inputs / selects */
         --bg-kbd: rgba(255, 255, 255, 0.75);           /* keycap */
-        --btn-default: rgba(120, 130, 150, 0.55);      /* mkBtn default grey fill */
+        --btn-default: rgba(58, 62, 72, 0.55);         /* mkBtn default grey fill — v17.8.0, was rgba(120,130,150,.55) = 1.99:1 white-on-grey */
         --bg-stepper: rgba(235, 239, 246, 0.95);       /* +/- stepper buttons (form) */
         --bg-tabbar: rgba(240, 243, 248, 0.8);         /* Settings tab-strip track */
         --bg-tab-active: rgba(255, 255, 255, 0.95);    /* lifted active tab */
@@ -118,6 +188,9 @@
         --status-connecting: #eab308; --status-connecting-glow: rgba(234, 179, 8, 0.25);
         /* Banners (warn / danger / suggestion) — bg + border + text flip together */
         --warn-bg: rgba(255, 237, 213, 0.7);    --warn-border: rgba(253, 186, 116, 0.55);
+        /* v17.8.0: a tint sitting ON --warn-bg — the reminder banner's time chip.
+           Distinct from --warn-border, which is a stroke tone and reads too pale
+           as a fill. */
         --danger-bg: rgba(254, 226, 226, 0.7);  --danger-border: rgba(252, 165, 165, 0.55);
         --suggest-bg: rgba(220, 252, 231, 0.8); --suggest-border: rgba(134, 239, 172, 0.5);
         /* Shadows carrying white inset highlights (dimmed on dark) */
@@ -177,15 +250,32 @@
         --app-reconnect-bg: rgba(219, 234, 254, 0.85); --app-reconnect-border: rgba(147, 197, 253, 0.7); --app-reconnect-text: #1e40af;
         /* Overlap-warning panel container (soft amber) */
         --app-overlap-bg: rgba(255, 250, 235, 0.55); --app-overlap-border: rgba(253, 186, 116, 0.45);
+        /* v17.8.0: the SOFT counterpart of --suggest-bg, for the in-flow
+           waitlist banner's pane. --suggest-bg (0.8 alpha) is a chip/inline
+           fill; at banner size it read louder than the amber "Running late"
+           pane directly above it, which inverts the hierarchy — a suggestion
+           must never shout over a warning. Tuned to --app-overlap-bg's weight. */
+        --suggest-bg-soft: rgba(240, 253, 244, 0.6);
         /* Date input (header) */
         --app-date-bg: rgba(255, 255, 255, 0.45); --app-date-border: rgba(255, 255, 255, 0.4);
         /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
-        --app-btn-grey: rgba(120, 130, 150, 0.55); --app-btn-grey-strong: rgba(120, 130, 150, 0.75);
+        --app-btn-grey: rgba(58, 62, 72, 0.55);  --app-btn-grey-strong: rgba(105, 114, 131, 0.75);
         --app-btn-slate: #64748b;                 /* dialog secondary buttons */
+        /* v17.8.0: the three popovers (QuickStatus, SplitMenu, Plan's day queue)
+           all carried the same hand-written `0 8px 32px rgba(0,0,0,0.14)`, which
+           never deepened for dark mode the way every --shadow-* token does. */
+        --shadow-popover: 0 8px 32px rgba(0, 0, 0, 0.14);
+        /* v17.8.0: TABLE_GROUP_STRUCT heading colours, ex-hex in constants.js.
+           #7c3aed was a third purple, unrelated to --tbl-ind-rgb; both are now
+           tied to their zone and both flip for dark, where the originals were
+           near-unreadable on the dark sheet. */
+        --tbl-out-text: #3f7f8c;
+        --tbl-ind-text: #7c3aed;
         --app-btn-slate-dim: #78828c;             /* write-warning dismiss */
         /* Saturated action fills (white text — read on both themes) */
         --app-walkin: rgba(22, 101, 52, 0.75);    /* Walk-in button */
-        --app-new: rgba(0, 122, 255, 0.75);       /* + New button */
+        --app-success-solid: rgba(22, 99, 51, 0.8); /* v17.8.0: reminder "Done" */
+        --app-new: rgba(0, 116, 243, 0.75);       /* + New button */
         --app-danger-solid: #dc2626;              /* Delete (solid) */
         --app-warn-solid: #9a3412;                /* No-show / Confirm (solid warn) */
         /* ── v14.3.0: hover-lift (.mgt-hover-scale) — opaque, theme-aware card
@@ -207,6 +297,67 @@
         --r-sheet: 20px;   /* modals, popovers */
         --r-card: 14px;    /* cards, banners, panels */
         --r-inset: 10px;   /* nested rows inside a card */
+        /* ── v17.8.0: the motion scale. Like the radii above, motion is
+           theme-agnostic, so these live ONLY here.
+
+           The app had FIVE easing curves — `ease`, `ease-out`, `ease-in-out`,
+           `linear` and Material's cubic-bezier(.4,0,.2,1) — chosen per site
+           over eight versions with no rule behind which went where. A modal's
+           scrim faded `linear` while the toast inside it used Material's curve
+           while the button on it used `ease`: three materials in one glance.
+           Twelve durations did the same job (120·140·160·170·180·200·220·260·
+           280·320·340·360), several of them a few ms apart and none of them
+           meaningfully different to look at.
+
+           Two curves now, and the split is by DIRECTION, not by element:
+
+           --ease-out  everything that arrives, opens, moves, or answers a
+                       finger. Fast to respond, unhurried to land.
+           --ease-in   its exact mirror, and ONLY for things leaving. An exit
+                       accelerates away: the eye is already moving on, so the
+                       slow part belongs at the start, not the end.
+
+           v17.8.0 correction: this WAS a quint (0.22,1,0.36,1) and it was too
+           front-loaded to describe travel. A quint covers ~90% of the distance
+           in the first third of the time — which is right for a press dip,
+           where the eye only registers arrival, and wrong for anything that
+           moves ACROSS a distance. The toggle knob proved it: its 145ms
+           transition was applied and correct, and the 21px slide still read as
+           a jump, because almost all of it happened in the first 45ms. A
+           cubic-out settles just as clearly and spends the time on the journey.
+           Durations went up 20% in the same pass; the two changes fix the same
+           complaint from opposite ends.
+
+           There are two documented exceptions in the stylesheet below, both
+           genuine: --mgt-dot-pulse is an infinite symmetric loop (ease-in-out
+           is correct for a breath — it has no arrival and no departure), and
+           the status wipe is narrative rather than responsive.
+
+           Three durations, by what is moving:
+
+           --t-tap    a control answering your finger: hover lift, press dip,
+                      a tint, a toggle knob, the TimeAxis detent.
+           --t-move   something arriving or leaving: toasts, modals, sheets,
+                      the view switch, a slide-in button.
+           --t-shift  geometry: heights, widths, positions — a Reveal opening,
+                      a timeline block repositioning, the split divider.
+
+           Plus two that are deliberately outside the scale because they are
+           not interface response:
+           --t-status the status colour change, shared by TimelineView and
+                      PlanView. Its own token precisely BECAUSE two files must
+                      agree; a shared number needs a shared name.
+           --t-wipe   the left-to-right status wipe. TimelineView's overlay
+                      window (`__statusAnims.until`) must stay >= this.
+
+           JS reads all of these through the `M` object in lib/constants.js. */
+        --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+        --ease-in:  cubic-bezier(0.32, 0, 0.67, 0);
+        --t-tap: 145ms;
+        --t-move: 240ms;
+        --t-shift: 385ms;
+        --t-status: 360ms;
+        --t-wipe: 760ms;
       }
       [data-theme="dark"] {
         --bg-app: linear-gradient(135deg, #15171c 0%, #191c22 20%, #1c1a23 40%, #161c26 60%, #1b1f28 80%, #17191f 100%);
@@ -215,14 +366,28 @@
         --text-primary: #f2f2f7;
         --text-muted: #9a9aa0;
         --accent: #0a84ff;
-        /* Status chip text -> light variants for dark surfaces. Tint RGB and
-           the block/table/button tokens are theme-invariant (inherited from
-           :root); only the chip text needs to flip. */
+        --focus-ring: #ffffff;
+        /* Status chip text -> light variants for dark surfaces. */
         --status-confirmed-text: #fcd9a0;
         --status-pending-text: #fde047;
         --status-seated-text: #86efac;
         --status-completed-text: #cbd5e1;
         --status-cancelled-text: #fca5a5;
+        /* v17.8.0 — the fills that genuinely need a different value here.
+           The old comment above claimed the block/table/button tokens were
+           theme-invariant and inherited them all; that assumption is what let
+           light mode ship at 1.8–2.2:1. A fill is only theme-invariant if it is
+           OPAQUE. These are alpha, so each one composites against a different
+           backdrop per theme and has to be solved twice.
+           Light needs them DARK (they sit on near-white and must hold white
+           text); dark needs them BRIGHT (they sit on near-black and must stay
+           visible as a shape). Everything not listed here composites to the
+           same side of the line in both themes and is correctly inherited.
+           Numbers are solved, not eyeballed — see tests/contrast.test.js. */
+        --tbl-out-rgb: 41, 151, 171;
+        --tbl-ind-rgb: 175, 82, 222;
+        --block-seated: rgba(32, 152, 76, 0.85);
+        --block-cancelled: rgba(200, 80, 80, 0.8);
         /* ── v14.2.2: atoms / modal dark overrides ── */
         --bg-sheet: rgba(44, 44, 46, 0.85);
         --bg-sheet-mobile: rgba(28, 28, 30, 0.98);
@@ -244,7 +409,12 @@
         --tl-header-border: rgba(255, 255, 255, 0.1);
         --tl-header-strip: rgba(255, 255, 255, 0.06);
         --tl-hour-pill: rgba(90, 100, 120, 0.85);
-        --tl-now-pill: rgba(10, 132, 255, 0.95);
+        /* v17.8.0 review fix: was rgba(10,132,255,.95) — the dark --accent,
+           copied. White 10px on it measured 3.91:1, the one --tl-* pill that
+           missed the label bar, and nothing was watching because the contrast
+           registry's coverage regex only knew the --block-/--btn-/--tbl- names.
+           Two steps deeper in the same blue; still unmistakably the now marker. */
+        --tl-now-pill: rgba(6, 112, 228, 0.95);
         --tl-now-line: rgba(10, 132, 255, 0.85);
         --tl-unassigned-border: rgba(255, 120, 120, 0.45);
         /* block warn borders, blocked-stripe + badge, popup are theme-invariant
@@ -283,7 +453,12 @@
         --status-online: #34c759;  --status-online-glow: rgba(52, 199, 89, 0.25);
         --status-offline: #ff3b30; --status-offline-glow: rgba(255, 59, 48, 0.25);
         --status-connecting: #eab308; --status-connecting-glow: rgba(234, 179, 8, 0.25);
+        --shadow-popover: 0 8px 32px rgba(0, 0, 0, 0.55);
+        --tbl-out-text: #7fd3e0;
+        --tbl-ind-text: #cba6f7;
         --warn-bg: rgba(120, 70, 20, 0.3);    --warn-border: rgba(253, 186, 116, 0.4);
+        /* Inverted for dark: a LIGHT tint on the dark amber shell (the light
+           theme's dark-brown tint would disappear into it). */
         --danger-bg: rgba(120, 30, 30, 0.32); --danger-border: rgba(252, 165, 165, 0.4);
         --suggest-bg: rgba(34, 90, 50, 0.45); --suggest-border: rgba(134, 239, 172, 0.35);
         --shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.07);
@@ -295,6 +470,7 @@
         --app-offline-bg: rgba(90, 70, 15, 0.4);   --app-offline-border: rgba(252, 211, 77, 0.45); --app-offline-text: #fcd34d;
         --app-reconnect-bg: rgba(20, 45, 95, 0.45); --app-reconnect-border: rgba(147, 197, 253, 0.4); --app-reconnect-text: #93c5fd;
         --app-overlap-bg: rgba(80, 55, 15, 0.3);   --app-overlap-border: rgba(253, 186, 116, 0.35);
+        --suggest-bg-soft: rgba(28, 66, 42, 0.3);
         --app-date-bg: rgba(118, 118, 128, 0.24);  --app-date-border: rgba(255, 255, 255, 0.12);
         --app-btn-grey: rgba(110, 118, 135, 0.5);  --app-btn-grey-strong: rgba(110, 118, 135, 0.6);
         --app-btn-slate: rgba(100, 116, 139, 0.7);
@@ -346,14 +522,34 @@
          form inputs (Date/Time in the booking form) visibly overflowed their
          Section. Touch devices get no hover lift at all now; mouse/trackpad
          behaviour is unchanged. */
-      .mgt-hover-scale {
-        transition: transform 120ms ease, background-color 120ms ease, box-shadow 120ms ease, border-radius 120ms ease;
+      /* ── ONE interaction transition, shared by both classes ─────────────────
+         v17.8.0 correction. These used to be two separate `transition:`
+         declarations — .mgt-hover-scale here, .mgt-press further down. Same
+         specificity (0,1,0), and `transition` is a shorthand, so on the ~30
+         elements carrying BOTH classes the later rule (.mgt-press) REPLACED
+         this list wholesale. Those buttons — the reminder banner's Snooze/Done,
+         the timeline zoom cluster, every banner ✕, the form's chips — had
+         `transition: filter, background-color` and NO transform transition at
+         all, so their hover lift (and, since the universal press-scale, their
+         press dip) SNAPPED while Reshuffle and every hover-scale-only button
+         eased. That is the "jumpy" difference, and it dated back to v15.8.0.
+         Two shorthand declarations of one property cannot merge, so the fix is
+         to stop having two: one selector list, one declaration, covering every
+         property either class animates. Order can no longer matter because
+         there is nothing left to override.
+         `border-radius` is deliberately NOT in the list — v17.7.0 removed the
+         radius change from the hover rule, so it had nothing left to ease. */
+      .mgt-hover-scale, .mgt-press {
+        transition: transform var(--t-tap) var(--ease-out),
+                    background-color var(--t-tap) var(--ease-out),
+                    box-shadow var(--t-tap) var(--ease-out),
+                    filter var(--t-tap) var(--ease-out);
       }
       /* v16.4.0: autocomplete dropdown rows (phone + name pickers in the booking
          form) — a hover tint so the cursor's target row is visible. Not a
          .mgt-hover-scale (rows shouldn't scale); plain background swap, and no
          touch sticky-hover concern (the rows are tapped, not lifted). */
-      .mgt-ac-row { transition: background-color 120ms ease; }
+      .mgt-ac-row { transition: background-color var(--t-tap) var(--ease-out); }
       @media (hover: hover) and (pointer: fine) {
         .mgt-ac-row:hover { background-color: var(--bg-ac-hover); }
       }
@@ -368,7 +564,7 @@
         40%  { transform: translateX(-50%) scaleY(1.22); }
         100% { transform: translateX(-50%) scaleY(1); }
       }
-      .mgt-detent { animation: mgt-detent 170ms ease-out; }
+      .mgt-detent { animation: mgt-detent var(--t-tap) var(--ease-out); }
       /* v17.5.0 correction 2: the Plan header row (Now · selected time · status
          legend). The badge sits in the middle column, directly above TimeAxis's
          fixed centre marker — the two are siblings of equal width, so 50% of one
@@ -435,42 +631,157 @@
         from { opacity: 1; transform: translateY(0); }
         to   { opacity: 0; transform: translateY(-6px); }
       }
-      .mgt-toast-in  { animation: mgt-toast-in 220ms cubic-bezier(.4, 0, .2, 1) both; }
-      .mgt-toast-out { animation: mgt-toast-out 200ms cubic-bezier(.4, 0, .2, 1) both; }
+      .mgt-toast-in  { animation: mgt-toast-in var(--t-move) var(--ease-out) both; }
+      .mgt-toast-out { animation: mgt-toast-out var(--t-move) var(--ease-in) both; }
 
-      /* v15.8.0 animation pass. Modal open/close (symmetric, linear) — desktop:
-         scrim fade + card fade/scale; mobile: slide-up/down sheet. Driven by the
-         <ModalPresence> wrapper (atoms.jsx) toggling the *-in / *-out class. */
+      /* v15.8.0 animation pass. Modal open/close — desktop: scrim fade + card
+         fade/scale; mobile: slide-up/down sheet. Driven by the <ModalPresence>
+         wrapper (atoms.jsx) toggling the *-in / *-out class.
+         v17.8.0: these were `linear`, the one curve that reads as nothing
+         physical — a sheet sliding up at a constant speed has no mass. In and
+         out now take the two direction curves like everything else. */
       @keyframes mgt-scrim-in  { from { opacity: 0; } to { opacity: 1; } }
       @keyframes mgt-scrim-out { from { opacity: 1; } to { opacity: 0; } }
       @keyframes mgt-card-in   { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
       @keyframes mgt-card-out  { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px) scale(.97); } }
       @keyframes mgt-sheet-in  { from { transform: translateY(100%); } to { transform: translateY(0); } }
       @keyframes mgt-sheet-out { from { transform: translateY(0); } to { transform: translateY(100%); } }
-      .mgt-scrim-in  { animation: mgt-scrim-in  180ms linear both; }
-      .mgt-scrim-out { animation: mgt-scrim-out 180ms linear both; }
-      .mgt-card-in   { animation: mgt-card-in   180ms linear both; }
-      .mgt-card-out  { animation: mgt-card-out  180ms linear both; }
-      .mgt-sheet-in  { animation: mgt-sheet-in  200ms linear both; }
-      .mgt-sheet-out { animation: mgt-sheet-out 200ms linear both; }
+      .mgt-scrim-in  { animation: mgt-scrim-in var(--t-move) var(--ease-out) both; }
+      .mgt-scrim-out { animation: mgt-scrim-out var(--t-move) var(--ease-in) both; }
+      .mgt-card-in   { animation: mgt-card-in var(--t-move) var(--ease-out) both; }
+      .mgt-card-out  { animation: mgt-card-out var(--t-move) var(--ease-in) both; }
+      .mgt-sheet-in  { animation: mgt-sheet-in var(--t-move) var(--ease-out) both; }
+      .mgt-sheet-out { animation: mgt-sheet-out var(--t-move) var(--ease-in) both; }
 
       /* Slide in (L→R) / slide out (→L) — Reshuffle + Today buttons (via Presence). */
       @keyframes mgt-slide-in  { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
       @keyframes mgt-slide-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-12px); } }
-      .mgt-slide-in  { animation: mgt-slide-in  180ms linear both; display: inline-flex; }
-      .mgt-slide-out { animation: mgt-slide-out 180ms linear both; display: inline-flex; }
+      .mgt-slide-in  { animation: mgt-slide-in var(--t-move) var(--ease-out) both; display: inline-flex; }
+      .mgt-slide-out { animation: mgt-slide-out var(--t-move) var(--ease-in) both; display: inline-flex; }
       /* v17.0.0: rightward mirror — the form's Save&confirm button slides out to
          the RIGHT (Patryk-specified direction; same timing as the Today button). */
       @keyframes mgt-slide-in-r  { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
       @keyframes mgt-slide-out-r { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(12px); } }
-      .mgt-slide-in-r  { animation: mgt-slide-in-r  180ms linear both; display: inline-flex; }
-      .mgt-slide-out-r { animation: mgt-slide-out-r 180ms linear both; display: inline-flex; }
+      .mgt-slide-in-r  { animation: mgt-slide-in-r var(--t-move) var(--ease-out) both; display: inline-flex; }
+      .mgt-slide-out-r { animation: mgt-slide-out-r var(--t-move) var(--ease-in) both; display: inline-flex; }
 
-      /* Press feedback (ease-out, v15.8.0 cont.4) — Follow / − / 1× / + AND utility
-         buttons (Clear / Reset / Done). Uses brightness (not transform) so it never
-         fights `.mgt-hover-scale`'s hover transform. */
-      .mgt-press { transition: filter 160ms ease-out, background-color 160ms ease-out; }
+      /* Press feedback (ease-out, v15.8.0 cont.4) — the brightness dim, opt-in via
+         .mgt-press on ~28 elements. v17.8.0 keeps it: brightness and scale read as
+         one press, and the two are orthogonal (filter vs transform).
+         Its `transition` moved up next to .mgt-hover-scale's — see the note
+         there for why the two had to become one declaration. */
       .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
+
+      /* ── v17.8.0: a timeline block's ink scheme ──────────────────────────────
+         A block sets `color` inline from BLOCK_INK[status] and its text
+         children inherit it. Every fill currently takes white (see index.html's
+         --ink-* block for why the amber pair keeps white rather than going
+         dark), so there is ONE wash set — but the indirection stays, because
+         the fill/ink pairing is the thing that has to be changed together and
+         a future fill may not want white. The wash is what the translucent
+         furniture inside a block uses: the "~Nm" countdown and the
+         manual-assign divider. The start-time chip does NOT use it — it takes
+         a solid --tl-hour-pill, matching the hour ruler above the grid, so it
+         is legible on every fill instead of being tinted by it. */
+      .mgt-blk { --blk-wash: var(--wash-on-dark); --blk-rule: var(--rule-on-dark); }
+
+      /* ── v17.8.0: universal press-scale ──────────────────────────────────────
+         EVERY button dips on press. Opt-IN was the old model (.mgt-press, 28 of
+         several hundred controls), which meant most of the app gave no touch
+         feedback at all — the thing staff notice most on a tablet, where there is
+         no hover state to confirm a tap landed.
+
+         Why this can safely be a bare `button` rule rather than another class:
+
+         • SPECIFICITY. `button:active:not(:disabled)` is (0,2,1) — one element,
+           two pseudo-classes. `.mgt-hover-scale:hover` is (0,2,0). The press
+           therefore WINS on a hovered button, which is the whole point: a
+           mouse user is always hovering the button they press, so a lower-
+           specificity press rule would be invisible on desktop. Verified rather
+           than assumed — this is the exact conflict the two rules could have had.
+
+         • INLINE TRANSFORMS STILL WIN, which is correct: TimelineView's drag sets
+           an inline translateY, and a drag must not be overridden by a press.
+
+         • :not(:disabled) covers real disabled controls. For controls that are
+           BLOCKED but not `disabled` (TableGrid's busy cells, which withhold
+           .mgt-hover-scale for the same reason) there is `.mgt-nopress` — a press
+           animation on an inert control is a lie about what the tap did.
+
+         96% not a smaller dip: on a 30px stepper 0.96 is ~1px of travel, which is
+         about the floor of what reads as a press; anything subtler is lost on a
+         glossy tablet screen. Paint-only, so it never reflows neighbours.
+         The reduce-motion block below zeroes the transition (the scale still
+         applies instantly, which is feedback without motion). */
+      button, [role="button"] {
+        /* Same duration AND same curve as .mgt-hover-scale's transform, so a
+           button that has both reads as one material rather than two easings
+           fighting. (The class wins this declaration on hover-scale elements
+           anyway — matching it here keeps the other few hundred buttons
+           identical to them.) */
+        transition: transform var(--t-tap) var(--ease-out);
+      }
+      button:active:not(:disabled):not(.mgt-nopress),
+      [role="button"]:active:not(.mgt-nopress) {
+        transform: scale(0.96);
+      }
+      /* A hover-lifted button presses from its lifted size, so the dip stays
+         proportional instead of jumping down through the resting scale. */
+      @media (hover: hover) and (pointer: fine) {
+        .mgt-hover-scale:active:not(:disabled):not(.mgt-nopress) { transform: scale(1.02); }
+      }
+
+      /* ── v17.8.0: the keyboard focus ring ───────────────────────────────────
+         The app had NO :focus or :focus-visible rule anywhere, so a focused
+         button computed `outline: none` and a keyboard user could not see where
+         they were. That is a real gap in an app whose shortcut system has its
+         own Settings tab — the one interface here that is explicitly driven
+         from the keyboard was the one with no keyboard feedback.
+
+         :focus-visible, not :focus — a mouse click must not leave a ring behind
+         (the whole reason browsers moved to it).
+
+         `outline-offset: 2px` is what makes ONE colour enough. The ring sits
+         outside the control, on the page background, instead of on the button's
+         own fill — so it never has to survive being drawn on top of a saturated
+         accent pill, and --focus-ring only needs to contrast with the app
+         background (near-navy on light, white on dark). An inset ring would
+         have needed a second, opposite-coloured hairline to stay visible on
+         every fill, and inline `boxShadow` from mkBtn/mkInp would have beaten
+         it on most controls anyway.
+
+         The offset does need those 2px to exist: a control flush inside an
+         `overflow:hidden` scroller has its ring clipped — the same trap as the
+         hover-lift (see the scroll-container gotcha), fixed by the same
+         `padding-inline` gutters already in place there.
+
+         Outline follows border-radius in every browser we target, so pills get
+         a pill-shaped ring for free. */
+      :focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      /* The ring is the only focus signal; never let a UA default double it. */
+      :focus:not(:focus-visible) { outline: none; }
+
+      /* v17.8.0: hairlines BETWEEN the notification strip's sections. An
+         adjacent-sibling rule rather than a borderTop prop on each section, so
+         a section never has to know its own position in the list — App builds
+         that list by severity and the order changes as alerts come and go. */
+      .mgt-notif > div + div { border-top: 1px solid var(--border-soft); }
+
+      /* v17.8.0: the status-toast "busy" dot. A slow opacity pulse replaces the
+         static ⟳ glyph the loading/syncing toasts used to carry — a glyph that
+         says "spinning" without spinning is worse than no glyph, and the dot is
+         already there doing the semantic work. Opacity-only, so it costs one
+         composited layer and nothing reflows. Neutralised by the reduce-motion
+         block below, where it settles at full opacity (a solid dot, still
+         legible as "in progress" alongside the text). */
+      @keyframes mgt-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+      /* The ONE legitimate ease-in-out left in the app: a loop has no arrival and
+         no departure, so neither direction curve applies. It is a breath, not a
+         move. */
+      .mgt-dot-pulse { animation: mgt-dot-pulse 1.4s ease-in-out infinite; }
 
       /* v15.8.0 animation pass #2. */
       /* Status-change colour wipe (v15.9.0: unified left→right everywhere — List
@@ -479,18 +790,37 @@
          the reveal sweeps left→right. NB the timeline's overlay window
          (__statusAnims `until` in TimelineView) must stay ≥ this duration. */
       @keyframes mgt-wipe-ltr { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }
-      .mgt-wipe-ltr { animation: mgt-wipe-ltr 760ms ease-out both; }
+      .mgt-wipe-ltr { animation: mgt-wipe-ltr var(--t-wipe) var(--ease-out) both; }
       /* Seated→Completed: the old (seated) colour overlay fades out, revealing completed. */
       @keyframes mgt-fade-overlay { from { opacity: 1; } to { opacity: 0; } }
-      .mgt-fade-overlay { animation: mgt-fade-overlay 360ms ease-out both; }
+      .mgt-fade-overlay { animation: mgt-fade-overlay var(--t-status) var(--ease-out) both; }
       /* Timeline↔List view switch — incoming view slides in (direction by switch). */
       @keyframes mgt-view-in-right { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
       @keyframes mgt-view-in-left  { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
-      .mgt-view-in-right { animation: mgt-view-in-right 220ms ease-out both; }
-      .mgt-view-in-left  { animation: mgt-view-in-left  220ms ease-out both; }
-      /* Settings tab-content crossfade on switch. */
+      .mgt-view-in-right { animation: mgt-view-in-right var(--t-move) var(--ease-out) both; }
+      .mgt-view-in-left  { animation: mgt-view-in-left var(--t-move) var(--ease-out) both; }
+      /* Settings tab-content crossfade on switch. --t-shift, not --t-move: it
+         rides inside an AutoHeight that is resizing the modal card over
+         --t-shift at the same moment, and the two are one event. At --t-move
+         the new tab reached full strength while the card was still visibly
+         moving under it, which is half of why that modal read as jumpy — the
+         other half was the card's easing (see M.resize). This class has exactly
+         one call site, so the duration is a Settings decision, not a global. */
       @keyframes mgt-fade-in { from { opacity: 0; } to { opacity: 1; } }
-      .mgt-fade-in { animation: mgt-fade-in 180ms ease-out both; }
+      /* v17.8.0: fade in to WHATEVER OPACITY THE ELEMENT ALREADY HAS. Note
+         there is no `to` and no `both`: an omitted keyframe endpoint resolves
+         to the element's own computed value, so a timeline waitlist ghost
+         (inline opacity 0.55, or 0.4 when it needs a reshuffle) lands on its
+         own number without this rule knowing it. mgt-fade-in cannot do that —
+         its explicit `to { opacity: 1 }` would fade the ghost to full strength
+         and then snap it back down.
+         And no fill-mode ON PURPOSE: `both` would pin the animated properties
+         forever, which on a .mgt-hover-scale element means the hover lift never
+         applies again. Opacity-only for the same reason — nothing here may own
+         `transform`, because the hover and press rules do. */
+      @keyframes mgt-appear { from { opacity: 0; } }
+      .mgt-fade-in { animation: mgt-fade-in var(--t-shift) var(--ease-out) both; }
+      .mgt-appear  { animation: mgt-appear  var(--t-move) var(--ease-out); }
 
       /* Accessibility + weak-hardware opt-out: collapse every animation/transition
          to ~instant when the OS requests reduced motion.
@@ -549,6 +879,17 @@
             document.documentElement.dataset.motion = "reduce";
           }
         } catch (e) { /* keep default data-theme="light" */ }
+        // v17.8.0: iOS Safari only delivers :active to an element when a touch
+        // listener exists somewhere on the document — without this, the whole
+        // press-scale is a desktop-only feature, and the iPad on the pass (the
+        // device with no hover state to fall back on, i.e. the one that needs
+        // press feedback MOST) would get nothing at all. An empty passive
+        // listener is the standard unlock; passive so it can never delay a
+        // scroll. Lives here rather than in React so it also covers the login
+        // screen and is in place before the first paint.
+        try {
+          document.addEventListener("touchstart", function () {}, { passive: true });
+        } catch (e) { /* pre-2015 Safari: no options object — press stays hover-only */ }
       })();
     </script>
     <div id="root"></div>

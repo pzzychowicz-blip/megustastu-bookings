@@ -23,8 +23,9 @@
 // left-click behaviour below is then exactly what App.jsx did before.
 
 import { useRef, useEffect } from "react";
-import { S, BTN } from "../lib/constants";
+import { S, BTN, T } from "../lib/constants";
 import { mkBtn, Presence } from "./atoms";
+import { SwapIcon, SplitSideIcon, SplitStackIcon } from "./Icons";
 
 const ORD = ["timeline", "list", "plan"];
 const HOLD_MS = 450;
@@ -99,7 +100,20 @@ export function ViewSwitcher({
   function isActive(v) { return split ? (split.a === v || split.b === v) : view === v; }
   function isFocusedPaneView(v) { return !!split && split[focusedPane] === v; }
 
-  const toolBtn = (extra) => mkBtn(Object.assign({ minHeight: 40, padding: "8px 10px", fontSize: 13, background: BTN.nav }, extra));
+  // v17.8.0: the three split tools are single glyphs, so they get a SQUARE box
+  // and become true circles under --r-pill (CSS clamps an oversized radius to
+  // half the box — equal sides are the whole condition). They were
+  // `minHeight: 40` + horizontal padding, which on a one-character label gives
+  // ~30x40: a vertical egg, and the odd one out beside the perfectly round 34x34
+  // 🔍/⚙ pair one row down. 40 (not 34) keeps them level with the T/L/P buttons
+  // they sit beside. `width`/`height` rather than min-*, or the flex row
+  // stretches them back into an egg.
+  const toolBtn = (extra) => mkBtn(Object.assign({
+    width: 40, height: 40, minHeight: 40, padding: 0, fontSize: T.lead,
+    background: BTN.nav,
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    flexShrink: 0, lineHeight: 1
+  }, extra));
 
   return (
     <>
@@ -119,9 +133,24 @@ export function ViewSwitcher({
               WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
               touchAction: "manipulation",
             },
-            // In a split, an outline marks WHICH of the two active buttons the
+            // In a split, a mark shows WHICH of the two active buttons the
             // keyboard is pointed at — the fill alone can't say that.
-            isFocusedPaneView(v) ? { outline: "2px solid var(--text-on-accent)", outlineOffset: -4 } : null
+            // v17.8.0: it used to be `outline: 2px solid white, offset -4`,
+            // which is indistinguishable from a keyboard focus ring — and once
+            // v17.8.0 added a REAL one, two different meanings wore the same
+            // clothes. It is now an inset underline in the pane-focus colour,
+            // echoing SplitLayout's corner brackets (the established "this pane
+            // is focused" device) rather than impersonating focus.
+            // boxShadow, not border/outline: it must not change the button's
+            // box or fight the focus ring for the outline property.
+            // v17.8.0 review fix: mkBtn ALREADY sets boxShadow, and Object.assign
+            // replaces a property rather than merging it — so this used to strip
+            // the button's drop shadow, leaving the focused pane's button sitting
+            // flatter than the unfocused one for no reason a user could read. Two
+            // shadows, one comma-separated list.
+            isFocusedPaneView(v)
+              ? { boxShadow: "inset 0 -3px 0 var(--text-on-accent), var(--shadow-btn)" }
+              : null
           )}
         >{v}</button>
       ))}
@@ -129,11 +158,11 @@ export function ViewSwitcher({
         <span style={{ display: "inline-flex", gap: 6 }}>
           <button className="mgt-hover-scale" onClick={onSwapSides}
             title="Swap the two views" aria-label="Swap the two views"
-            style={toolBtn()}>⇄</button>
+            style={toolBtn()}><SwapIcon size={17} /></button>
           <button className="mgt-hover-scale" onClick={onToggleDir}
             title={split && split.dir === "v" ? "Switch to top and bottom" : "Switch to side by side"}
             aria-label="Change split direction"
-            style={toolBtn()}>{split && split.dir === "v" ? "⬓" : "◧"}</button>
+            style={toolBtn()}>{split && split.dir === "v" ? <SplitStackIcon size={17} /> : <SplitSideIcon size={17} />}</button>
           <button className="mgt-hover-scale" onClick={onExitSplit}
             title="Leave split view" aria-label="Leave split view"
             style={toolBtn({ background: BTN.dismiss })}>✕</button>

@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
-import { S, R } from "../lib/constants";
+import { S, R, T, FW } from "../lib/constants";
 import { mkInp, mkBtn } from "./atoms";
 
 export function LoginScreen() {
@@ -71,10 +71,10 @@ export function LoginScreen() {
         width: "100%", maxWidth: 360,
         boxShadow: "var(--shadow-sheet)"
       }}>
-        <div style={{ fontSize: 22, fontWeight: 700, color: S.text, marginBottom: 4 }}>
+        <div style={{ fontSize: T.display, fontWeight: FW.bold, color: S.text, marginBottom: 4 }}>
           Me Gustas T&uacute;
         </div>
-        <div style={{ fontSize: 14, color: S.muted, marginBottom: 24 }}>
+        <div style={{ fontSize: T.lead, color: S.muted, marginBottom: 24 }}>
           Staff login
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -98,11 +98,11 @@ export function LoginScreen() {
           />
           {error ? (
             <div style={{
-              color: "var(--danger-text)", fontSize: 13,
+              color: "var(--danger-text)", fontSize: T.body,
               padding: "8px 12px",
               background: "var(--danger-bg)",
               borderRadius: R.pill,
-              border: "2px solid var(--danger-border)"
+              border: "1px solid var(--danger-border)"
             }}>
               {error}
             </div>
@@ -112,8 +112,8 @@ export function LoginScreen() {
             disabled={loading}
             className="mgt-hover-scale"
             style={{
-              ...mkBtn({ fontSize: 15, minHeight: 44, padding: "12px" }),
-              background: "rgba(0,122,255,0.75)",
+              ...mkBtn({ fontSize: T.lead, minHeight: 44, padding: "12px" }),
+              background: "var(--accent)",
               opacity: loading ? 0.7 : 1,
               cursor: loading ? "wait" : "pointer"
             }}

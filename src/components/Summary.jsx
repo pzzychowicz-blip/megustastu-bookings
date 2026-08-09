@@ -21,7 +21,7 @@
 
 import { useMemo, memo } from "react";
 import { daySummary } from "../lib/booking-logic";
-import { BTN, TOTAL_SEATS, hoursFor, R } from "../lib/constants";
+import { BTN, TOTAL_SEATS, hoursFor, R, T, FW } from "../lib/constants";
 import { mkBtn, Reveal } from "./atoms";
 
 function hh(n){ return String(((n % 24) + 24) % 24).padStart(2, "0") + ":00"; }
@@ -81,31 +81,37 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           aria-expanded={open}
           style={{
             flex: "1 1 200px", minWidth: 0, boxSizing: "border-box", padding: 0,
-            display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap",
+            // v17.8.0: the box was only as tall as its text line — 17px — even
+            // though it is the whole "tap to see the day" target. Wide enough
+            // to hit horizontally, but 17px is thin for a thumb. 36 to match the
+            // controls beside it (44 made the summary card visibly taller than
+            // the date row for no gain — it is already 400px+ wide).
+            minHeight: 36,
+            display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
             background: "transparent", border: "none", cursor: "pointer", textAlign: "left"
           }}
         >
-          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--accent)" }}>{coversLabel(s.totalCovers)}</span>
-          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)" }}>{bookingsLabel(s.totalBookings)}</span>
+          <span style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--accent)" }}>{coversLabel(s.totalCovers)}</span>
+          <span style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>{bookingsLabel(s.totalBookings)}</span>
         </button>
         {/* Right cluster — the live status bar (today only) + Week + chevron, right-aligned
             via marginLeft:auto; wraps below the headline as a unit on narrow widths. */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexShrink: 1, minWidth: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {isToday ? (
-            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", minWidth: 0, textAlign: "right" }}>
+            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)", minWidth: 0, textAlign: "right" }}>
               {/* Occupancy metrics stay together as one no-wrap unit (short line). */}
               <span style={{ whiteSpace: "nowrap" }}>
-                <span style={{ fontWeight: 700, color: "var(--status-seated-text)" }}>{s.seated.count}</span> seated
+                <span style={{ fontWeight: FW.bold, color: "var(--status-seated-text)" }}>{s.seated.count}</span> seated
                 <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
-                <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{s.upcoming.count}</span> upcoming
+                <span style={{ fontWeight: FW.bold, color: "var(--text-primary)" }}>{s.upcoming.count}</span> upcoming
                 <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
-                <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{s.seated.covers}/{TOTAL_SEATS}</span> seats filled
+                <span style={{ fontWeight: FW.bold, color: "var(--text-primary)" }}>{s.seated.covers}/{TOTAL_SEATS}</span> seats filled
               </span>
               {/* freeing soon — each entry is its own no-wrap span so the list
                   wraps BETWEEN tables (never mid-token) when it gets long. */}
               {freeing && freeing.length ? (
-                <span style={{ color: "var(--success-text)", fontWeight: 600 }}>
-                  <span style={{ margin: "0 5px", color: "var(--text-faint)", fontWeight: 500 }}>·</span>
+                <span style={{ color: "var(--success-text)", fontWeight: FW.semi }}>
+                  <span style={{ margin: "0 5px", color: "var(--text-faint)", fontWeight: FW.regular }}>·</span>
                   <span style={{ whiteSpace: "nowrap" }}>freeing soon:</span>{" "}
                   {freeingParts(freeing).map(function(p, i){
                     return (
@@ -120,7 +126,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
             <button
               onClick={onOpenWeek}
               className="mgt-hover-scale"
-              style={mkBtn({ minHeight: 30, padding: "4px 12px", fontSize: 11, background: BTN.nav })}
+              style={mkBtn({ minHeight: 36, padding: "4px 12px", fontSize: T.small, background: BTN.nav })}
             >
               More
             </button>
@@ -128,7 +134,11 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           <button
             onClick={onToggle}
             aria-label={open ? "Collapse summary" : "Expand summary"}
-            style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 11, color: "var(--text-muted)", fontWeight: 700, flexShrink: 0, padding: "4px 2px" }}
+            style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: T.small, color: "var(--text-muted)", fontWeight: FW.bold, flexShrink: 0,
+              /* v17.8.0: was padding "4px 2px", giving a 13x21px hit area — the
+                 smallest target in the app, on the control that opens the day's
+                 numbers. The glyph is unchanged; only the box around it grew. */
+              padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}
           >
             {open ? "▲" : "▼"}
           </button>
@@ -151,14 +161,14 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {s.hours.map(function(h){
                   return (
-                    <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                      <span style={{ color: "var(--text-secondary)", fontWeight: 600, minWidth: 104, flexShrink: 0 }}>
+                    <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body }}>
+                      <span style={{ color: "var(--text-secondary)", fontWeight: FW.semi, minWidth: 104, flexShrink: 0 }}>
                         {hh(h.hour) + "–" + hh(h.hour + 1)}
                       </span>
-                      <div style={{ flex: 1, height: 7, background: "var(--bg-input)", borderRadius: 4, overflow: "hidden", minWidth: 40 }}>
-                        <div style={{ width: ((h.covers / maxHourCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: 0.8, borderRadius: 4 }} />
+                      <div style={{ flex: 1, height: 7, background: "var(--bg-input)", borderRadius: 4,   /* @canvas */  overflow: "hidden", minWidth: 40 }}>
+                        <div style={{ width: ((h.covers / maxHourCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: 0.8, borderRadius: 4,   /* @canvas */ }} />
                       </div>
-                      <span style={{ color: "var(--text-primary)", fontWeight: 700, minWidth: 70, textAlign: "right", flexShrink: 0 }}>
+                      <span style={{ color: "var(--text-primary)", fontWeight: FW.bold, minWidth: 70, textAlign: "right", flexShrink: 0 }}>
                         {coversLabel(h.covers)}
                       </span>
                     </div>
@@ -167,14 +177,14 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               </div>
             </div>
           ) : (
-            <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "4px 0 2px" }}>No bookings for this day.</div>
+            <div style={{ fontSize: T.body, color: "var(--text-muted)", padding: "4px 0 2px" }}>No bookings for this day.</div>
           )}
           {onPrint ? (
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
               <button
                 onClick={onPrint}
                 className="mgt-hover-scale mgt-press"
-                style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>🖨 Print day sheet</button>
+                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>🖨 Print day sheet</button>
             </div>
           ) : null}
         </div>
@@ -191,9 +201,9 @@ function ShiftChip({ label, covers, count }) {
       padding: "8px 12px",
       background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset
     }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>{covers + " cover" + (covers !== 1 ? "s" : "")}</div>
-      <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)" }}>{count + " booking" + (count !== 1 ? "s" : "")}</div>
+      <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-muted)", marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{covers + " cover" + (covers !== 1 ? "s" : "")}</div>
+      <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{count + " booking" + (count !== 1 ? "s" : "")}</div>
     </div>
   );
 }

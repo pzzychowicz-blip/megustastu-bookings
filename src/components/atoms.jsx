@@ -12,7 +12,7 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, TBL, S, R } from "../lib/constants";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -27,9 +27,9 @@ export function mkInp() {
     border: "1px solid var(--border-input)",
     borderRadius: R.pill,
     padding: "10px 12px",
-    fontSize: 16,
+    fontSize: T.title,
     color: S.text,
-    fontWeight: 500,
+    fontWeight: FW.medium,
     boxShadow: "var(--shadow-input)"
   };
 }
@@ -65,6 +65,42 @@ export function mkArea() {
   return { ...mkInp(), borderRadius: R.inset, resize: "vertical", alignContent: "center" };
 }
 
+// v17.8.0 — the dropdown mkInp. A <select> renders its disclosure arrow inside
+// its own padding box, hard against padding-right; mkInp's 12px puts that arrow
+// deep inside a pill's right CAP, which on a 43px-tall control is 21.5px wide
+// (`--r-pill` is 999px and CSS clamps a radius to half the box). The arrow then
+// reads as shoved into the curve rather than sitting in the control.
+// A single small glyph at the end of a pill wants padding ~= the radius, so it
+// lands where the cap is flattest. Text doesn't need this — it spans enough
+// height that the curve has already receded behind it, which is why the LEFT
+// 12px looks right and the right 12px doesn't.
+export function mkSel() {
+  return { ...mkInp(), paddingRight: 18, cursor: "pointer" };
+}
+
+// v17.8.0 — the +/- stepper button. Settings.jsx (MINI_STEP_BTN) and
+// LayoutSettings.jsx (STEP_BTN) held byte-identical private copies of this, and
+// Settings held a THIRD at a larger size (HOUR_STEP_BTN). One definition, one
+// size argument.
+//
+// `--shadow-btn`, not `--shadow-input`: this is a RAISED control. The two
+// tokens exist precisely to separate a recessed field from a raised button
+// (--shadow-input leads with an INSET highlight), and every stepper, segmented
+// button and action button in Settings was wearing the field one — which is why
+// Settings never quite looked like the rest of the app despite using the same
+// palette. Inputs there keep --shadow-input, correctly.
+export function mkStep(size) {
+  const d = size || 30;
+  return {
+    background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
+    borderRadius: R.pill, width: d, height: d,
+    fontSize: d >= 36 ? T.display : T.title, fontWeight: FW.semi,
+    color: "var(--text-primary)",
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+    boxShadow: "var(--shadow-btn)"
+  };
+}
+
 export function mkBtn(extra) {
   return {
     border: "1px solid var(--border-glass)",
@@ -72,9 +108,9 @@ export function mkBtn(extra) {
     borderRadius: R.pill,
     padding: "8px 14px",
     cursor: "pointer",
-    fontSize: 13,
+    fontSize: T.body,
     color: "var(--text-on-accent)",
-    fontWeight: 600,
+    fontWeight: FW.semi,
     minHeight: 40,
     boxShadow: "var(--shadow-btn)",
     letterSpacing: "0.01em",
@@ -169,7 +205,7 @@ export function Overlay({ onClose, children, footer }) {
 export function Fld({ label, req, style, children }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, ...(style || {}) }}>
-      <label style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.01em" }}>
+      <label style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.semi, letterSpacing: "0.01em" }}>
         {label}
         {req ? <span style={{ color: "var(--text-required)" }}>*</span> : null}
       </label>
@@ -230,19 +266,19 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{title}</div>
+          <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>{title}</div>
           {open && subtitle ? (
-            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>{subtitle}</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>{subtitle}</div>
           ) : null}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {!open && summary ? (
-            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
           ) : null}
           <span style={{
-            fontSize: 18, fontWeight: 700, color: "var(--text-muted)", lineHeight: 1,
+            fontSize: T.title, fontWeight: FW.bold, color: "var(--text-muted)", lineHeight: 1,
             display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)",
-            transition: "transform 0.18s ease"
+            transition: "transform " + M.tap
           }}>›</span>
         </div>
       </button>
@@ -300,8 +336,10 @@ export function Reveal({ show, children, style, horizontal = false }) {
   }, [show]);
   if (!mounted) return null;
   const track = horizontal
-    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns 280ms cubic-bezier(.4,0,.2,1), opacity 220ms ease" }
-    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows 280ms cubic-bezier(.4,0,.2,1), opacity 220ms ease" };
+    // A Reveal changes GEOMETRY (the 0fr↔1fr track), so it takes M.shift; the
+    // opacity riding along takes the same timing so the two land together.
+    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + M.shift + ", opacity " + M.shift }
+    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + M.shift + ", opacity " + M.shift };
   // v16.1.1: the horizontal inner track is a flex box (align-items:center) so the
   // revealed child is vertically centred without an inherited-font line-box strut
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).
@@ -326,8 +364,16 @@ export function Reveal({ show, children, style, horizontal = false }) {
 // `.mgt-hover-scale` lift inside (ReminderEditor edit sections, Settings bodies, the
 // form/Manual/Walkin/Pref/Week bodies). Mirrors the SlideView pattern — the growth is
 // still clipped + revealed by the eased height (no first-frame pop), but a settled
-// AutoHeight no longer clips its children. `linear` opts the easing to linear.
-export function AutoHeight({ children, style, linear }) {
+// AutoHeight no longer clips its children.
+//
+// v17.8.0: the easing is LINEAR, always — the `linear` opt-in prop is gone. It
+// had been set on two call sites (the Week↔Month body and the reminder editor)
+// and Patryk named the first of those as the one that felt right, which is the
+// whole diagnosis: this component is never an object arriving, it is a box
+// conforming to content that has already changed. There is no arrival to
+// decelerate into, and ease-out's front-loading turned every modal resize into
+// a lurch-then-crawl. See M.resize for the reasoning in full.
+export function AutoHeight({ children, style }) {
   const inner = useRef(null);
   const hRef = useRef(null);
   const [h, setH] = useState(null);             // null = auto until first measure
@@ -352,7 +398,7 @@ export function AutoHeight({ children, style, linear }) {
   return (
     <div
       onTransitionEnd={function (e) { if (e.propertyName === "height") setAnimating(false); }}
-      style={{ height: h == null ? "auto" : h, overflow: animating ? "hidden" : "visible", transition: "height 280ms " + (linear ? "linear" : "ease"), ...(style || {}) }}
+      style={{ height: h == null ? "auto" : h, overflow: animating ? "hidden" : "visible", transition: "height " + M.resize, ...(style || {}) }}
     >
       <div ref={inner}>{children}</div>
     </div>
@@ -410,7 +456,8 @@ export function useFlip(deps) {
       if (!reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
         el.animate(
           [{ transform: "translateY(" + (prev - top) + "px)" }, { transform: "translateY(0)" }],
-          { duration: 320, easing: "ease" }
+          // WAAPI cannot read a CSS var — see the note on M.dur/M.easeOut.
+          { duration: M.dur.shift, easing: M.easeOut }
         );
       }
     });
@@ -488,10 +535,10 @@ export function ModalPresence({ show, children, outMs = 200 }) {
 export function SBadge({ status }) {
   return (
     <span style={{
-      fontSize: 12, padding: "4px 10px", borderRadius: R.pill,
+      fontSize: T.body, padding: "4px 10px", borderRadius: R.pill,
       background: BLOCK_BG[status] || BLOCK_BG.confirmed,
-      color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)",
-      fontWeight: 600, textTransform: "capitalize",
+      color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: "1px solid rgba(255,255,255,0.2)",
+      fontWeight: FW.semi, textTransform: "capitalize",
       display: "inline-block",
       boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
     }}>
@@ -506,10 +553,10 @@ export function TBadge({ id }) {
   const t = indoor ? TBL.ind : TBL.out;
   return (
     <span style={{
-      fontSize: 12, padding: "4px 10px", borderRadius: R.pill,
+      fontSize: T.body, padding: "4px 10px", borderRadius: R.pill,
       background: t.bg, color: t.text,
       border: "1px solid " + t.border,
-      fontWeight: 600, display: "inline-block",
+      fontWeight: FW.semi, display: "inline-block",
       boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
     }}>
       {id}
@@ -521,8 +568,8 @@ export function TBadge({ id }) {
 export function SmallTag({ label, style }) {
   return (
     <span style={{
-      fontSize: 11, padding: "3px 8px", borderRadius: R.pill,
-      fontWeight: 600, display: "inline-block",
+      fontSize: T.small, padding: "3px 8px", borderRadius: R.pill,
+      fontWeight: FW.semi, display: "inline-block",
       ...(style || {})
     }}>
       {label}
@@ -543,7 +590,11 @@ export function Toggle({ on, onClick }) {
         background: on ? "var(--toggle-on)" : "var(--toggle-off)",
         position: "relative", flexShrink: 0,
         boxShadow: "inset 0 1px 2px rgba(0,0,0,0.08)",
-        transition: "background-color 160ms linear"   // v15.8.0: track colour eases
+        // v17.8.0 correction: M.move, not M.tap — and `transform` is in the list
+        // because an INLINE transition beats .mgt-hover-scale's stylesheet one,
+        // so omitting it left this button's hover lift with nothing to ease
+        // (the same shorthand-collision class as the v17.8.0 hover/press fix).
+        transition: "background-color " + M.move + ", transform " + M.tap
       }}
     >
       <div style={{
@@ -553,7 +604,10 @@ export function Toggle({ on, onClick }) {
         width: 20, height: 20, borderRadius: R.pill,
         background: "var(--text-on-accent)",
         boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
-        transition: "left 160ms linear"               // v15.8.0: knob slides
+        // The knob crosses 21px. That is TRAVEL, not a control acknowledging a
+        // tap, so it takes M.move — under M.tap it arrived before the eye could
+        // follow it and the switch read as teleporting rather than sliding.
+        transition: "left " + M.move
       }} />
     </button>
   );
@@ -565,12 +619,12 @@ export function Kbd({ k }) {
     <span style={{
       display: "inline-block",
       padding: "2px 8px",
-      borderRadius: 6,
+      borderRadius: 6,   /* @canvas */
       background: "var(--bg-kbd)",
       border: "1px solid var(--border-kbd)",
       fontFamily: "-apple-system, 'SF Mono', Menlo, monospace",
-      fontSize: 12,
-      fontWeight: 600,
+      fontSize: T.body,
+      fontWeight: FW.semi,
       color: "var(--text-primary)",
       boxShadow: "0 1px 2px rgba(0,0,0,0.06), inset 0 -1px 0 rgba(0,0,0,0.08)",
       minWidth: 22,
@@ -606,7 +660,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
             onClick={() => onTapTime(t)}
             style={{
               cursor: "pointer", padding: "3px 8px", borderRadius: R.pill,
-              fontWeight: 600, fontSize: 12,
+              fontWeight: FW.semi, fontSize: T.body,
               background: "var(--suggest-bg)",
               color: "var(--success-text)",
               border: "1px solid var(--suggest-border)",
@@ -624,24 +678,24 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
     <div style={{
       padding: "10px 14px",
       borderRadius: R.card,
-      border: "2px solid " + brdClr,
+      border: "1px solid " + brdClr,
       background: bgClr,
       marginBottom: 14,
-      fontSize: 13,
+      fontSize: T.body,
       color: txtClr,
       boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
       ...(style || {})
     }}>
-      <div style={{ fontWeight: 700, marginBottom: hasSugg ? 6 : 0 }}>{message}</div>
+      <div style={{ fontWeight: FW.bold, marginBottom: hasSugg ? 6 : 0 }}>{message}</div>
       {hasEarlier ? (
         <div style={{ marginBottom: hasLater ? 4 : 0 }}>
-          <span style={{ fontWeight: 700 }}>Before: </span>
+          <span style={{ fontWeight: FW.bold }}>Before: </span>
           {renderChips(sugg.earlier)}
         </div>
       ) : null}
       {hasLater ? (
         <div>
-          <span style={{ fontWeight: 700 }}>After: </span>
+          <span style={{ fontWeight: FW.bold }}>After: </span>
           {renderChips(sugg.later)}
         </div>
       ) : null}

@@ -113,11 +113,11 @@ export var DEFAULT_LAYOUT={
 // pulled LIVE from the layout config. Any layout edit flips IS_MGT_LAYOUT false →
 // buildGenericTableGroups (below) derives the picker grouping from join-groups.
 var TABLE_GROUP_STRUCT=[
-  {name:"Tables: 1A / 1B / 7",color:"#78716c",note:"1A+1B = 6 · table 7 = 4 standalone",ids:["1A","1B","7"]},
-  {name:"Tables: 2 / 3 / 4",color:"#78716c",note:"2+3 = 5 · 3+4 = 4 · 2+3+4 = 8",ids:["2","3","4"]},
-  {name:"Tables: 5A / 5B / 6",color:"#78716c",note:"5A+5B = 5 · 5B+6 = 5 · 5A+5B+6 = 8",ids:["5A","5B","6"]},
-  {name:"Tables: i2 / i3 / i4",color:"#7c3aed",note:"i2+i3 = 6 · i3+i4 = 6 · i2+i3+i4 = 8",ids:["i2","i3","i4"]},
-  {name:"Table: i1",color:"#7c3aed",note:"Standalone cap 2 · all 4 indoor = 10",ids:["i1"]},
+  {name:"Tables: 1A / 1B / 7",color:"var(--tbl-out-text)",note:"1A+1B = 6 · table 7 = 4 standalone",ids:["1A","1B","7"]},
+  {name:"Tables: 2 / 3 / 4",color:"var(--tbl-out-text)",note:"2+3 = 5 · 3+4 = 4 · 2+3+4 = 8",ids:["2","3","4"]},
+  {name:"Tables: 5A / 5B / 6",color:"var(--tbl-out-text)",note:"5A+5B = 5 · 5B+6 = 5 · 5A+5B+6 = 8",ids:["5A","5B","6"]},
+  {name:"Tables: i2 / i3 / i4",color:"var(--tbl-ind-text)",note:"i2+i3 = 6 · i3+i4 = 6 · i2+i3+i4 = 8",ids:["i2","i3","i4"]},
+  {name:"Table: i1",color:"var(--tbl-ind-text)",note:"Standalone cap 2 · all 4 indoor = 10",ids:["i1"]},
 ];
 
 // ── Layout-derived live bindings (reassigned ONLY by setLayout, below) ─────────
@@ -177,7 +177,7 @@ function buildGenericTableGroups(tables,groups,runCapByKey,capOf,zoneOf){
     var note=contiguousRuns(g).map(function(run){
       return run.join("+")+" = "+runCapByKey[comboKey(run)];
     }).join(" · ");
-    out.push({name:"Tables: "+g.join(" / "),color:indoor?"#7c3aed":"#78716c",note:note||null,
+    out.push({name:"Tables: "+g.join(" / "),color:indoor?"var(--tbl-ind-text)":"var(--tbl-out-text)",note:note||null,
       tables:g.map(function(id){return {id:id,cap:capOf[id]};})});
   });
   // Standalone tables (in no join-group), split by zone for sensible colouring.
@@ -186,7 +186,7 @@ function buildGenericTableGroups(tables,groups,runCapByKey,capOf,zoneOf){
     if(!stand.length) return;
     out.push({
       name:stand.length>1?("Standalone ("+zone+")"):("Table: "+stand[0].id),
-      color:zone==="indoor"?"#7c3aed":"#78716c",note:null,
+      color:zone==="indoor"?"var(--tbl-ind-text)":"var(--tbl-out-text)",note:null,
       tables:stand.map(function(t){return {id:t.id,cap:t.capacity};})
     });
   });
@@ -458,6 +458,32 @@ export var ROW_H=44,LABEL_W=58;
 // confirmed recolored to accent blue in index.html (the yellow moved to pending).
 export var STATUS_COLORS={confirmed:{bg:"rgba(var(--status-confirmed-rgb),0.15)",text:"var(--status-confirmed-text)",border:"rgba(var(--status-confirmed-rgb),0.35)"},pending:{bg:"rgba(var(--status-pending-rgb),0.15)",text:"var(--status-pending-text)",border:"rgba(var(--status-pending-rgb),0.35)"},seated:{bg:"rgba(var(--status-seated-rgb),0.15)",text:"var(--status-seated-text)",border:"rgba(var(--status-seated-rgb),0.35)"},completed:{bg:"rgba(var(--status-completed-rgb),0.12)",text:"var(--status-completed-text)",border:"rgba(var(--status-completed-rgb),0.3)"},cancelled:{bg:"rgba(var(--status-cancelled-rgb),0.12)",text:"var(--status-cancelled-text)",border:"rgba(var(--status-cancelled-rgb),0.3)"}};
 export var BLOCK_BG={confirmed:"var(--block-confirmed)",pending:"var(--block-pending)",seated:"var(--block-seated)",completed:"var(--block-completed)",cancelled:"var(--block-cancelled)"};
+// v17.8.0 — the INK each block fill carries. A fill and the text on it are one
+// decision, and splitting them across two files is how "Save pending" shipped
+// white-on-yellow at 1.83:1. Pair them here; tests/contrast.test.js measures
+// every pair in both themes.
+//
+// ALL FIVE currently resolve to white. This layer briefly carried dark ink on
+// the amber pair — the alternative to darkening fills v17.0.0 engineered as a
+// matched-intensity pair — and that shipped for exactly one commit before
+// Patryk rejected it: dark ink reads as DISABLED next to the white-inked seated
+// and cancelled blocks beside it, so a status change looked like a state
+// change. The amber pair is a recorded contrast exemption instead
+// (tests/contrast.test.js), and the one piece of INFORMATION on a block, the
+// start time, moved onto its own opaque --tl-hour-pill chip.
+//
+// So the indirection is not currently buying different values. It stays because
+// a fill and the text on it are ONE decision, and the failure it prevents is
+// exactly the one that happened here: a fill retuned in index.html while the
+// ink stayed where it was in a .jsx file, unmeasured. These are CSS vars rather
+// than literals so a future ink can flip per theme without JS knowing the theme.
+//
+// Anything painting text ON a BLOCK_BG must take the matching BLOCK_INK — that
+// is a rule about the pairing, not about today's values. The translucent
+// furniture inside a timeline block (the "~Nm" chip wash, the manual-assign
+// divider) reads `--blk-wash` / `--blk-rule` from the flat `.mgt-blk` rule in
+// index.html, and the text itself just inherits `currentColor`.
+export var BLOCK_INK={confirmed:"var(--ink-confirmed)",pending:"var(--ink-pending)",seated:"var(--ink-seated)",completed:"var(--ink-completed)",cancelled:"var(--ink-cancelled)"};
 // Dark mode (v14.2.0 `S`; v14.2.1 the colour sets STATUS_COLORS / BLOCK_BG /
 // TBL / BTN): values reference CSS custom properties from index.html (:root
 // light / [data-theme="dark"]), so a theme flip re-resolves them with zero JS.
@@ -491,6 +517,86 @@ export var TBL={out:{bg:"rgba(var(--tbl-out-rgb),0.8)",text:"var(--text-on-accen
 // ticks, the floor-plan glyphs, progress-bar track+fill pairs (track and fill
 // must stay equal or the fill pokes out), and `borderRadius:"50%"` circles.
 export var R={pill:"var(--r-pill)",auth:"var(--r-auth)",sheet:"var(--r-sheet)",card:"var(--r-card)",inset:"var(--r-inset)"};
+
+// ── Type scale (v17.8.0) ─────────────────────────────────────────────────────
+// The third scale, after R (radii, v17.7.0) and M (motion, v17.8.0), and the
+// last unscaled axis in the app.
+//
+// ── What was wrong ───────────────────────────────────────────────────────────
+// 497 inline `fontSize` literals across 40 files, in THIRTEEN distinct values:
+// 9, 10, 11, 11.5, 12, 13, 14, 15, 16, 17, 18, 20, 22. Sixteen distinct
+// size/weight combinations rendered on the emptiest screen in the app — the
+// timeline with one booking. Nine of the thirteen sizes sit between 9 and 18px,
+// where 11→12 is a ratio of 1.09: below the threshold at which a reader
+// perceives a step at all. So the app had a great many type styles and almost
+// no type HIERARCHY, which is the specific way this fails — it does not look
+// broken, it looks flat.
+//
+// The cause is the other half: there was no regular weight. 93 of the 95 text
+// elements on that screen were 500 or heavier. When everything is semibold,
+// weight cannot carry emphasis, so size has to carry all of it, so sizes
+// multiply and crowd together. Fixing the weights is what lets the sizes thin
+// out; that is why these two ship as one change and not as a rename.
+//
+// ── The scale ────────────────────────────────────────────────────────────────
+// Six steps. Assign BY ROLE, never by the old number — as with R, the same
+// literal meant different things in different files.
+//   micro   — timeline chips, tiny uppercase markers. Glanced, never read.
+//   small   — tags, table badges, legend chips, dense secondary rows.
+//   body    — THE default. Labels, list text, buttons, most of the app.
+//   lead    — section headings, form-section labels, primary dialog buttons.
+//   title   — modal and dialog titles.
+//   display — the app wordmark, and nothing else.
+//
+// Merges collapse DOWNWARD (13→12, 15→14, 18→17, 11.5→11) rather than up. A
+// size that shrinks can never overflow the box it is in; a size that grows can,
+// in ways a mechanical sweep of 497 sites cannot be verified against. 9→10 and
+// 20→22 round up because those four sites have room and the steps are the
+// scale's own ends.
+export var T={micro:10,small:11,body:12,lead:14,title:17,display:22};
+
+// Weights, named. `regular` is the one that did not exist before v17.8.0 and is
+// the point of the exercise: descriptive and secondary text takes it, so the
+// semibold that everything used to wear again means something where it appears.
+export var FW={regular:400,medium:500,semi:600,bold:700};
+
+// ── Motion tokens (v17.8.0) ───────────────────────────────────────────────────
+// The same idea as `R`, for time and easing. The full rationale (why two curves
+// split by direction, what each duration step is FOR, and the two documented
+// exceptions) lives with the token definitions in index.html's :root — read it
+// there, don't restate it here.
+//
+// Usage is a template string in an inline style:
+//   transition: "opacity " + M.tap + ", transform " + M.tap
+// M.tap / M.move / M.shift / M.status already carry BOTH the duration and the
+// out-curve, because that pairing is the whole point: anything arriving,
+// opening, moving or answering a finger takes --ease-out. M.exit is the mirror
+// for things LEAVING, and it is rare in JS — almost every exit in this app runs
+// through a CSS animation class (mgt-*-out), not an inline transition.
+//
+// M.dur / M.easeOut are the raw pieces, for the one caller that cannot take a
+// CSS string: useFlip drives WAAPI, whose `easing` option needs a literal
+// cubic-bezier() and whose `duration` needs a number. A var() there resolves to
+// nothing and the animation silently runs linear — so those two MUST be kept in
+// step with the CSS tokens by hand. They are the only place that can drift.
+export var M={
+  tap:"var(--t-tap) var(--ease-out)",
+  move:"var(--t-move) var(--ease-out)",
+  shift:"var(--t-shift) var(--ease-out)",
+  status:"var(--t-status) var(--ease-out)",
+  exit:"var(--t-move) var(--ease-in)",
+  // The documented LINEAR exception (v17.8.0), alongside .mgt-dot-pulse's
+  // ease-in-out. The two direction curves describe arrival and departure — a
+  // box CONFORMING to content that has already changed has neither, so
+  // decelerating into a rest position is describing a motion that isn't
+  // happening. Front-loaded, it reads as a lurch: cubic-out covers 70% of a
+  // height change in the first third of the time, then crawls. AutoHeight is
+  // the only consumer; anything that travels still takes move/shift.
+  resize:"var(--t-shift) linear",
+  // Raw values — WAAPI only. Keep identical to index.html's :root.
+  dur:{tap:145,move:240,shift:385},
+  easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"
+};
 
 export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,10),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null};
 
