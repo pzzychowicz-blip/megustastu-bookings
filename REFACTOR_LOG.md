@@ -7722,5 +7722,5 @@ argued a future reader straight back into the rejected design.
 
 Verified live in DEV, both themes: Optimizer OFF 1.94 → 3.00, reminder
 Once/Weekly 1.70 → 3.00, reminder title 2.85 → 3.02, Week/Month 3.28 → 4.02, no
-console errors. `npm run build` · **229 tests** (contrast now 70) · lint 0
+console errors. `npm run build` · **229 tests** (contrast now 64) · lint 0
 errors · `check:style` OK.
