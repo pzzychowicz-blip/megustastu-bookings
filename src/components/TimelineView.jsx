@@ -1028,7 +1028,7 @@ export const TimelineView = memo(function TimelineView({
       }}
       className="mgt-hover-scale mgt-press"
       style={mkBtn({
-        minHeight: 44, padding: "4px 10px", fontSize: T.small,
+        minHeight: 36, padding: "4px 10px", fontSize: T.small,
         // v17.8.0: the idle fill was a hard-coded copy of --app-btn-grey's old
         // value, so the contrast pass fixed every other secondary button and
         // left this one at 1.82:1 — the lowest on the screen, on the control
@@ -1049,7 +1049,7 @@ export const TimelineView = memo(function TimelineView({
       <button
         onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 44, minWidth: 44, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
+        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
       >
         -
       </button>
@@ -1061,7 +1061,7 @@ export const TimelineView = memo(function TimelineView({
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 44, padding: "4px 10px", fontSize: T.small, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
+        style={mkBtn({ minHeight: 36, padding: "4px 10px", fontSize: T.small, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
       >
         {/* NB the child must be NULL (not an empty span) at 1× — Reveal caches its
             last truthy children for the exit ease; an always-mounted span would
@@ -1075,7 +1075,7 @@ export const TimelineView = memo(function TimelineView({
       <button
         onClick={() => setZoom((z) => Math.min(maxZoom, z + 0.5))}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 44, minWidth: 44, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
+        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
       >
         +
       </button>
@@ -1091,7 +1091,7 @@ export const TimelineView = memo(function TimelineView({
         onClick={() => setAutoOptimizer(!autoOptimizer)}
         className="mgt-hover-scale"
         style={mkBtn({
-          minHeight: 44, padding: "4px 12px", fontSize: T.small,
+          minHeight: 36, padding: "4px 12px", fontSize: T.small,
           background: autoOptimizer ? "rgba(22,101,52,0.75)" : "rgba(120,130,150,0.55)"
         })}
       >
@@ -1102,7 +1102,7 @@ export const TimelineView = memo(function TimelineView({
         <button
           onClick={onReshuffle}
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 44, padding: "4px 12px", fontSize: T.small, background: BTN.orange })}
+          style={mkBtn({ minHeight: 36, padding: "4px 12px", fontSize: T.small, background: BTN.orange })}
         >
           Reshuffle
         </button>

@@ -121,11 +121,12 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
           // supply — and that declaration is gone now (it squared off every
           // pill). Without a resting radius the hover state paints its opaque
           // --bg-hover-card as a hard-edged RECTANGLE behind the round dot.
-          // R.pill rather than "50%". v17.8.0 made the box SQUARE at 44 (it was
-          // 24x40 — a 24px-wide target for the control that opens the device
-          // list and Log out), so the pill now clamps to half of 44 and this is
-          // finally a true circle rather than the vertical egg the old
-          // width/height mismatch produced.
+          // R.pill rather than "50%". v17.8.0 made the box SQUARE (it was 24x40
+          // — a 24px-wide target for the control that opens the device list and
+          // Log out), so the pill clamps to half of a square and this is finally
+          // a true circle rather than the vertical egg the old width/height
+          // mismatch produced. 36 rather than the HIG's 44: at 44 it dominated
+          // the header row it is only an indicator in.
           borderRadius: R.pill,
           padding: 0,
           cursor: "pointer",
@@ -133,8 +134,8 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
           alignItems: "center",
           justifyContent: "center",
           lineHeight: 0,
-          width: 44,
-          height: 44,
+          width: 36,
+          height: 36,
         }}
       >
         <span

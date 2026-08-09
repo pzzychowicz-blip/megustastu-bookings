@@ -83,9 +83,10 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
             flex: "1 1 200px", minWidth: 0, boxSizing: "border-box", padding: 0,
             // v17.8.0: the box was only as tall as its text line — 17px — even
             // though it is the whole "tap to see the day" target. Wide enough
-            // to hit horizontally, but 17px is thin for a thumb, and it costs
-            // no layout here because the row already contains 44px controls.
-            minHeight: 44,
+            // to hit horizontally, but 17px is thin for a thumb. 36 to match the
+            // controls beside it (44 made the summary card visibly taller than
+            // the date row for no gain — it is already 400px+ wide).
+            minHeight: 36,
             display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
             background: "transparent", border: "none", cursor: "pointer", textAlign: "left"
           }}
@@ -125,7 +126,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
             <button
               onClick={onOpenWeek}
               className="mgt-hover-scale"
-              style={mkBtn({ minHeight: 44, padding: "4px 12px", fontSize: T.small, background: BTN.nav })}
+              style={mkBtn({ minHeight: 36, padding: "4px 12px", fontSize: T.small, background: BTN.nav })}
             >
               More
             </button>
@@ -137,7 +138,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               /* v17.8.0: was padding "4px 2px", giving a 13x21px hit area — the
                  smallest target in the app, on the control that opens the day's
                  numbers. The glyph is unchanged; only the box around it grew. */
-              padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" }}
+              padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}
           >
             {open ? "▲" : "▼"}
           </button>
