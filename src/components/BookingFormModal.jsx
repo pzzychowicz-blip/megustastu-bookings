@@ -185,15 +185,30 @@ export function BookingFormModal({
   // Regular, warn family for no-shows). Top 5 rows like WA; a muted "+N earlier"
   // tail when there are more. Reveal (below) eases it open/closed; its cached-
   // children fallback animates the collapse when the panel goes null.
-  const histList=histWhich&&custMatch?(histWhich==="regular"?custMatch.regularBookings:custMatch.noShowBookings):null;
-  const histTk=histWhich==="noshow"
-    ?{bg:"var(--warn-bg)",border:"var(--warn-border)",text:"var(--warn-text)",title:"No-shows"}
-    :{bg:"var(--suggest-bg)",border:"var(--suggest-border)",text:"var(--success-text)",title:"Past bookings"};
-  const chipHistPanel=histList&&histList.length?<div style={{marginTop:8,padding:"8px 12px",background:histTk.bg,border:"1px solid "+histTk.border,borderRadius:R.inset,fontSize:12,color:S.text}}>
-    <div style={{fontWeight:700,marginBottom:4,color:histTk.text}}>{histTk.title}</div>
-    {histList.slice(0,5).map(function(b){return <div key={b.id} style={{padding:"3px 0",borderTop:"1px solid "+histTk.border}}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</div>;})}
-    {histList.length>5?<div style={{padding:"3px 0",borderTop:"1px solid "+histTk.border,color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</div>:null}
-  </div>:null;
+  function histPanel(which){
+    const histList=custMatch?(which==="regular"?custMatch.regularBookings:custMatch.noShowBookings):null;
+    if(!histList||!histList.length) return null;
+    const histTk=which==="noshow"
+      ?{bg:"var(--warn-bg)",border:"var(--warn-border)",text:"var(--warn-text)",title:"No-shows"}
+      :{bg:"var(--suggest-bg)",border:"var(--suggest-border)",text:"var(--success-text)",title:"Past bookings"};
+    return <div style={{marginTop:8,padding:"8px 12px",background:histTk.bg,border:"1px solid "+histTk.border,borderRadius:R.inset,fontSize:12,color:S.text}}>
+      <div style={{fontWeight:700,marginBottom:4,color:histTk.text}}>{histTk.title}</div>
+      {histList.slice(0,5).map(function(b){return <div key={b.id} style={{padding:"3px 0",borderTop:"1px solid "+histTk.border}}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</div>;})}
+      {histList.length>5?<div style={{padding:"3px 0",borderTop:"1px solid "+histTk.border,color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</div>:null}
+    </div>;
+  }
+  // v17.8.0: ONE Reveal PER PANEL, not one Reveal shared by both. Switching
+  // Regular → No-shows never changed `show`, so the swap happened inside an
+  // already-open box: the rows were replaced in a single frame and the box's
+  // height snapped to the new list — the one transition in this area that was
+  // missing, and the more visible of the two because the panels differ in
+  // height. Two Reveals make the switch what it actually is (one disclosure
+  // closing while the other opens) and both ends ride the atom the rest of the
+  // app already uses. They animate on the same curve over the same duration, so
+  // the container height interpolates straight from one panel's to the other's
+  // with no bulge in between.
+  const regPanel=histWhich==="regular"?histPanel("regular"):null;
+  const nsPanel=histWhich==="noshow"?histPanel("noshow"):null;
   // v17.4.0 — SAME-PHONE double-booking warning. Same customer (matched on the
   // normalized phone, the customers.js identity primitive), same DATE, and the
   // two time windows OVERLAP → an amber advisory row under the chips. Advisory
@@ -216,7 +231,8 @@ export function BookingFormModal({
   // with its parent (it is often the only content, for a first-time guest).
   const custChips=(regularChip||noShowChip||dupPhone.length)?<div style={{paddingTop:8}}>
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{regularChip}{noShowChip}</div>
-    <Reveal show={!!chipHistPanel}>{chipHistPanel}</Reveal>
+    <Reveal show={!!regPanel}>{regPanel}</Reveal>
+    <Reveal show={!!nsPanel}>{nsPanel}</Reveal>
     <Reveal show={!!dupWarn}>{dupWarn}</Reveal>
   </div>:null;
   // Dropdown rows use onMouseDown/onTouchStart (fire BEFORE the input's blur)
