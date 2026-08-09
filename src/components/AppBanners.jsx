@@ -31,17 +31,20 @@
 
 import { mkBtn } from "./atoms";
 import { AlertIcon, OfflineIcon, SwapIcon, ClosedIcon } from "./Icons";
+import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { BTN, R } from "../lib/constants";
 
-// A section body: the row under a section header. The dot and title live in the
+// A section body: the row under a section header. The mark and title live in the
 // header the strip draws, so a one-line banner supplies only its sentence and
-// its actions. Left padding lines the text up with the section titles above it
-// (the strip's 14 + dot 8 + gap 9) rather than under the dot.
+// its actions. NOTIF_GUTTER lines the text up with the section titles above it
+// rather than under the mark — imported from the strip, never re-derived here
+// (v17.8.0 fix: this was a hard-coded 31 that went stale the day the mark
+// became an icon).
 function body(children, extra) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10,
-      padding: "9px 14px 11px 31px",
+      padding: "9px " + NOTIF_PAD_X + "px 11px " + NOTIF_GUTTER + "px",
       fontSize: 13, fontWeight: 600,
       ...(extra || null)
     }}>

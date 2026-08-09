@@ -35,6 +35,7 @@
 
 import { Reveal } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
+import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 
 export function BannerRows({ ids, renderRow }) {
   // Per-row ease-in/out lifecycle: renderIds may hold departing rows a moment
@@ -68,10 +69,10 @@ export function BannerRows({ ids, renderRow }) {
                   components stay pure content and every banner separates its
                   rows identically. `i > 0` keeps it off the first row, whose
                   separation from the header is already the header's padding.
-                  paddingLeft 31 = the strip's 14 + the dot (8) + its gap (9),
-                  so row text sits on the same left edge as the section title
-                  rather than under the dot. */}
-              <div style={{ padding: "0 14px 0 31px", ...(i > 0 ? { borderTop: "1px solid var(--border-soft)" } : null) }}>
+                  NOTIF_GUTTER puts row text on the same left edge as the
+                  section title rather than under the mark — imported from the
+                  strip that defines that geometry, never re-derived here. */}
+              <div style={{ padding: "0 " + NOTIF_PAD_X + "px 0 " + NOTIF_GUTTER + "px", ...(i > 0 ? { borderTop: "1px solid var(--border-soft)" } : null) }}>
                 {renderRow(id)}
               </div>
             </Reveal>

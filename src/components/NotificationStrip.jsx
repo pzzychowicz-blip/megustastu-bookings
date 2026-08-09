@@ -35,9 +35,31 @@ import { Reveal } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { R, M } from "../lib/constants";
 
+// ── The strip's own geometry, exported because three other files depend on it ─
+// A section BODY (the banner rows, the reminder rows, AppBanners' one-liners)
+// has to start its text on the same left edge as the section TITLE above it,
+// which means every one of them needs this arithmetic: the pane's padding, plus
+// the width of the mark, plus the gap after it.
+//
+// v17.8.0 fix: it was a literal `31` hard-coded in AppBanners, BannerRows and
+// useReminders, each with its own comment deriving it as 14 + 8 + 9 — correct
+// while the mark was an 8px dot, and silently wrong the moment the same release
+// made it a 15px icon. Measured after that change: section titles at x=55, row
+// text at x=48. Nobody would catch a 7px drift by reading, and no test could,
+// because the number was three copies of a calculation rather than one export.
+//
+// So the numbers live here, next to the styles that actually use them, and the
+// callers import the total. Change PAD_X / MARK / GAP and every body follows.
+export const NOTIF_PAD_X = 14;   // the pane's horizontal padding
+const NOTIF_MARK = 15;           // SectionMark's icon box
+const NOTIF_GAP = 9;             // the flex gap between mark and title
+export const NOTIF_GUTTER = NOTIF_PAD_X + NOTIF_MARK + NOTIF_GAP;
+
 // One section's mark. `fallbackDot` keeps the old 8px dot for a section that
 // has no icon yet, so adding a section without one degrades to the previous
-// design instead of rendering a hole.
+// design instead of rendering a hole. The dot is deliberately NOT what
+// NOTIF_GUTTER measures — a section without an icon is the exception, and the
+// bodies must stay aligned with the majority that have one.
 function SectionMark({ icon: Icon, tone, size, fallbackDot }) {
   if (!Icon) {
     if (!fallbackDot) return null;
@@ -144,9 +166,9 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
         // something that spans the viewport reads as the page flinching.
         className="mgt-nopress"
         style={{
-          display: "flex", alignItems: "center", gap: 9, width: "100%",
+          display: "flex", alignItems: "center", gap: NOTIF_GAP, width: "100%",
           background: "transparent", border: "none", cursor: "pointer",
-          padding: "10px 14px", textAlign: "left"
+          padding: "10px " + NOTIF_PAD_X + "px", textAlign: "left"
         }}>
         {/* v17.8.0: an ICON, not the 8px dot. The dot said "something is
             happening", in a colour; the icon says WHICH something and keeps the
@@ -235,7 +257,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
                         350ms before the geometry, which is the version that
                         looked broken. */}
                     <Reveal show={orderedIds.length > 1}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px 1px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: NOTIF_GAP, padding: "9px " + NOTIF_PAD_X + "px 1px" }}>
                         <SectionMark icon={s.icon} tone={s.tone} size={15} fallbackDot />
                         <span style={{ fontSize: 13, fontWeight: 700, color: s.tone, flex: 1, minWidth: 0 }}>{s.title}</span>
                         {s.count > 1 ? (

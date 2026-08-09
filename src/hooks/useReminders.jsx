@@ -30,6 +30,7 @@ import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { BTN, R } from "../lib/constants";
 import { mkBtn, SmallTag } from "../components/atoms";
+import { NOTIF_GUTTER, NOTIF_PAD_X } from "../components/NotificationStrip";
 import { genId } from "../lib/booking-logic";
 import { dbError } from "../lib/dbError";
 import { sameDraft } from "../lib/drafts";
@@ -231,8 +232,9 @@ export function useReminders({ nowMins, setWriteWarning }){
   // v17.8.0: this is a SECTION BODY now, not a pane. NotificationStrip owns the
   // one pane every notification shares (see NotificationStrip.jsx) and draws
   // the dot + "Reminder" title + count header, so each row here supplies only
-  // its time, text and actions. paddingLeft 31 lines the rows up with the
-  // section titles above them, and rows are hairline-separated like every other
+  // its time, text and actions. NOTIF_GUTTER (imported from the strip, not
+  // re-derived) lines the rows up with the section titles above them, and rows
+  // are hairline-separated like every other
   // section's. `reminderCount` is exported alongside because the strip needs the
   // count as data for its collapsed summary.
   const reminderCount=activeReminderBanners.length;
@@ -240,7 +242,7 @@ export function useReminders({ nowMins, setWriteWarning }){
       return (
         <div
           key={ab.fireKey}
-          style={{padding:"9px 14px 9px 31px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",...(i>0?{borderTop:"1px solid var(--border-soft)"}:null)}}><div
+          style={{padding:"9px "+NOTIF_PAD_X+"px 9px "+NOTIF_GUTTER+"px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",...(i>0?{borderTop:"1px solid var(--border-soft)"}:null)}}><div
             style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0,flexWrap:"wrap"}}>{/* v17.8.0: a SOLID chip on ListView's `locked` pattern — SmallTag, the
               fill carrying the colour, --text-on-accent text, a neutral
               --border-glass rim. As dimmed amber text it was the same colour and
