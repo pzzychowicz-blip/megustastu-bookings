@@ -1221,7 +1221,34 @@ function BookingApp({uid}){
     // (shared across entries — see tryFit below).
     const WAIT_SCAN_BUDGET_MS=300;
     const scanT0=Date.now();
-    waitlist.forEach(function(w){
+    // v17.8.0: matches are computed SEQUENTIALLY, and every party that lands is
+    // appended to `holds` — a synthetic booking the NEXT party's scan sees as
+    // occupied. Before this each entry was matched independently against the
+    // same `liveBookings`, so two parties waiting for the same evening were
+    // routinely handed the SAME table at the SAME time. As two banner rows that
+    // was invisible; as two timeline ghosts stacked on one row it is obviously
+    // wrong. It was never only cosmetic — the answers were individually true
+    // and jointly impossible, so booking the first party silently falsified the
+    // second one's "Table free" chip.
+    //
+    // `_locked` is what keeps a hold still: applyOpt (the reshuffling path
+    // inside trialFits) copies a locked booking's tables through verbatim, so a
+    // hold reserves its slot instead of being optimised out from under the
+    // ghost already drawn for it. Holds for other dates are harmless — every
+    // consumer filters by date first.
+    const holds=[];
+    function hold(w,size,dur,res){
+      holds.push({id:"__wait_"+w.id,name:"",phone:"",date:w.date,time:res.time,
+        size:size,duration:dur,preference:"auto",notes:"",status:"confirmed",
+        tables:res.tables,customDur:null,_manual:true,_locked:true,_conflict:false,
+        preferredTables:[],history:[]});
+    }
+    // FCFS decides who gets a contested table — the same order the waitlist
+    // panel and the banner present, not whatever order the Firebase node's
+    // children arrived in. Sequential placement only means something fair if
+    // the sequence does.
+    const queue=waitlist.slice().sort(function(a,b){return ((a&&a.createdAt)||0)-((b&&b.createdAt)||0);});
+    queue.forEach(function(w){
       if(!w||w.status!=="waiting"||!w.date||w.date<todayStr) return;
       const h=hoursFor(w.date);
       if(h.closed) return;
@@ -1257,9 +1284,10 @@ function BookingApp({uid}){
       // instead. Additive: bookFromWaitlist and WaitAvailBanner ignore it.
       let lastResh=false;
       const tryFit=function(timeStr){
-        if(!noResh){const cheap=findFreeSlot(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null);if(cheap){lastResh=false;return cheap;}}
+        const world=holds.length?liveBookings.concat(holds):liveBookings;
+        if(!noResh){const cheap=findFreeSlot(world,w.date,timeStr,size,"auto",dur,tableBlocks,null,null);if(cheap){lastResh=false;return cheap;}}
         if(Date.now()-scanT0>WAIT_SCAN_BUDGET_MS){budgetHit=true;return null;}
-        const t=trialFits(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null,noResh);
+        const t=trialFits(world,w.date,timeStr,size,"auto",dur,tableBlocks,null,null,noResh);
         // noResh === true means trialFits was forbidden from moving anyone, so
         // its answer is a clean placement too.
         if(t) lastResh=!noResh;
@@ -1269,7 +1297,7 @@ function BookingApp({uid}){
         const sm=toMins(w.prefTime);
         if(sm>=fromM&&sm+dur<=h.close*60){
           const t=tryFit(w.prefTime);
-          if(t){next[w.id]={tables:t,time:w.prefTime,resh:lastResh};return;}
+          if(t){const r={tables:t,time:w.prefTime,resh:lastResh};next[w.id]=r;hold(w,size,dur,r);return;}
         }
         // v17.0.0: the ± window is editable (settings/general waitMatchWin).
         const win=generalSettings.waitMatchWin||90;
@@ -1278,13 +1306,16 @@ function BookingApp({uid}){
       }
       for(let m=scanLo;m<=scanHi&&m<24*60;m+=15){
         const t=tryFit(toTime(m));
-        if(t){next[w.id]={tables:t,time:toTime(m),resh:lastResh};break;}
+        if(t){const r={tables:t,time:toTime(m),resh:lastResh};next[w.id]=r;hold(w,size,dur,r);break;}
       }
       // Anti-flap carry-forward: no match found AND the budget cut this entry's
       // scan short → keep the previous pass's availability (if any) rather than
       // dropping the row. A genuine "no longer fits" (budget NOT hit) still
       // clears immediately.
-      if(!next[w.id]&&budgetHit&&waitAvailRef.current[w.id]) next[w.id]=waitAvailRef.current[w.id];
+      // The carry-forward is held too, or a budget-skipped entry keeping last
+      // pass's answer would be invisible to everyone behind it in the queue —
+      // reintroducing exactly the double-booking this pass exists to prevent.
+      if(!next[w.id]&&budgetHit&&waitAvailRef.current[w.id]){const r=waitAvailRef.current[w.id];next[w.id]=r;hold(w,size,dur,r);}
     });
     waitAvailRef.current=next;
     setWaitAvail(next);
