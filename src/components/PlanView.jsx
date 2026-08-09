@@ -32,7 +32,7 @@
 
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
-import { S, BLOCK_BG, hoursFor, R, M } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, hoursFor, R, M } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
@@ -372,7 +372,7 @@ export const PlanView = memo(function PlanView({
                 <span style={{ fontSize: 13, fontWeight: 700, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
                 <span style={{ fontSize: 13, fontWeight: 600, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name + " (" + b.size + ")"}</span>
                 {/* v17.7.0: solid, like every other status label (see SBadge). */}
-                <span style={{ fontSize: 11.5, fontWeight: 600, padding: "5px 11px", borderRadius: R.pill, textTransform: "capitalize", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }}>{b.status}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 600, padding: "5px 11px", borderRadius: R.pill, textTransform: "capitalize", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, border: "1px solid var(--border-glass)" }}>{b.status}</span>
               </div>
             );
           })}
@@ -391,7 +391,7 @@ export const PlanView = memo(function PlanView({
 
   // ── Legend + slider row ─────────────────────────────────────────────────────
   const legend = ["seated", "confirmed", "pending"].map((s) => (
-    <span key={s} style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600, textTransform: "capitalize" }}>{s}</span>
+    <span key={s} style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600, textTransform: "capitalize" }}>{s}</span>
   ));
 
   return (

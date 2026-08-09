@@ -19,7 +19,7 @@
 //   onClose()      — clear the parent's popup state
 
 import { createPortal } from "react-dom";
-import { S, BLOCK_BG, BTN, R } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, BTN, R } from "../lib/constants";
 
 export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClose }) {
   if (!booking) return null;
@@ -63,7 +63,7 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
                 style={{
                   background: BLOCK_BG[st], border: "none",
                   borderRadius: R.pill, padding: "10px 18px",
-                  fontSize: 14, fontWeight: 700, color: "var(--text-on-accent)",
+                  fontSize: 14, fontWeight: 700, color: BLOCK_INK[st] || "var(--text-on-accent)",
                   cursor: "pointer", textTransform: "capitalize",
                   minHeight: 44, flex: "1 1 auto"
                 }}

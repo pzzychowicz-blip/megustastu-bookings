@@ -64,13 +64,35 @@
         --status-seated-rgb: 34, 197, 94;      --status-seated-text: #166534;
         --status-completed-rgb: 148, 163, 184; --status-completed-text: #64748b;
         --status-cancelled-rgb: 239, 68, 68;   --status-cancelled-text: #991b1b;
-        /* Timeline block fills / status buttons — saturated, white text;
-           theme-invariant (read on light + dark), defined once here. */
-        --block-confirmed: rgba(217, 119, 6, 0.92);
-        --block-pending: rgba(234, 179, 8, 0.92);
-        --block-seated: rgba(34, 160, 80, 0.85);
-        --block-completed: rgba(140, 140, 150, 0.7);
-        --block-cancelled: rgba(200, 80, 80, 0.8);
+        /* Timeline block fills / status buttons.
+           v17.8.0 — these used to be one set, declared here only, with a
+           comment claiming they were "theme-invariant (read on light + dark)".
+           They were not. An alpha fill composites toward what is BEHIND it, so
+           the same token lands somewhere different per theme: over dark-mode's
+           near-black sheet it darkens and white text pops (pending 2.2:1 — bad
+           but survivable), over light-mode's near-white sheet it washes out
+           (pending 1.83:1 — the "Save pending" button was effectively unlabelled
+           in daylight). Nobody had measured the light side in eight versions.
+           Each fill now names its own INK, and the fills that need different
+           values per theme are overridden in the dark block rather than
+           inherited. tests/contrast.test.js measures every pair, both themes.
+
+           The amber pair keeps its exact fills: v17.0.0 correction round 6
+           engineered confirmed/pending as a matched-intensity pair, and
+           darkening them far enough for white text turns one brown and the
+           other olive — losing the yellow that distinguishes them. Amber wants
+           dark ink; that is what road signs do, and it reads better besides. */
+        --block-confirmed: rgba(217, 119, 6, 0.92);  --ink-confirmed: #1a1d24;
+        --block-pending: rgba(234, 179, 8, 0.92);    --ink-pending: #1a1d24;
+        --block-seated: rgba(24, 111, 56, 0.85);     --ink-seated: #ffffff;
+        --block-completed: rgba(140, 140, 150, 0.7); --ink-completed: #1a1d24;
+        --block-cancelled: rgba(149, 59, 59, 0.8);   --ink-cancelled: #ffffff;
+        /* The translucent chips and the divider rule INSIDE a timeline block.
+           They were hard-coded white washes, which is right on a dark fill and
+           wrong on a light one — a white pill under dark text. Two sets, picked
+           by the block's own ink via the .mgt-blk rules further down. */
+        --wash-on-dark: rgba(255, 255, 255, 0.25);   --rule-on-dark: rgba(255, 255, 255, 0.3);
+        --wash-on-light: rgba(0, 0, 0, 0.14);        --rule-on-light: rgba(0, 0, 0, 0.22);
         /* Table badges — bg .8 / border .5 share a hue (triplet); white text.
            v17.8.0: outdoor was `0, 122, 255` — byte-identical to --accent. Nine
            outdoor tables therefore painted the accent at all times, on every
@@ -80,21 +102,36 @@
            selection. Teal is the only free slot: green is seated/success,
            amber is confirmed/pending, burnt orange is warn, red is danger,
            purple is indoor. It also reads as "outside" next to indoor purple,
-           which the old blue never did. */
-        --tbl-out-rgb: 48, 176, 199;
-        --tbl-ind-rgb: 175, 82, 222;
+           which the old blue never did.
+           v17.8.0 contrast pass: the teal above was picked for its hue and
+           never measured. At 0.8 alpha over a light sheet it composited to
+           2.15:1 against the white label — the LOWEST contrast in the app, on
+           the label staff read most, and a regression from the 3.08:1 the old
+           accent blue gave. Both triplets are now solved per theme (deep in
+           light, bright in dark) so white text clears AA in both. */
+        --tbl-out-rgb: 26, 94, 107;
+        --tbl-ind-rgb: 124, 58, 157;
         --text-on-accent: #ffffff;
-        /* Buttons — saturated accent fills, white text; theme-invariant. */
-        --btn-tables: rgba(0, 122, 255, 0.75);
-        --btn-edit: rgba(0, 122, 255, 0.7);
-        --btn-del: rgba(220, 60, 60, 0.75);
-        --btn-cancel: rgba(220, 60, 60, 0.75);
-        --btn-clear: rgba(220, 60, 60, 0.7);
-        --btn-reset: rgba(220, 60, 60, 0.7);
-        --btn-today: rgba(0, 122, 255, 0.7);
-        --btn-nav: rgba(120, 130, 150, 0.5);
-        --btn-dismiss: rgba(220, 60, 60, 0.7);
-        --btn-orange: rgba(230, 100, 30, 0.8);
+        /* Buttons — saturated fills, white text.
+           v17.8.0: solved to 3:1 rather than the 4.5:1 the small labels get.
+           A button is large, solid, and its meaning is carried by position and
+           shape as well as by the word on it, so the palette stays recognisable
+           instead of every control going muddy. The saturated ones barely moved
+           (2.7–2.95 -> 3.0); the two NEUTRALS moved a long way, because white
+           text on a 0.5-alpha grey over a white sheet was 1.87:1 — the inactive
+           View buttons were legible only as shapes. Darkening the grey also
+           fixes the hierarchy it broke: an inactive segment now reads as
+           secondary rather than as disabled. */
+        --btn-tables: rgba(0, 116, 244, 0.75);
+        --btn-edit: rgba(0, 108, 225, 0.7);
+        --btn-del: rgba(211, 58, 58, 0.75);
+        --btn-cancel: rgba(211, 58, 58, 0.75);
+        --btn-clear: rgba(211, 58, 58, 0.7);
+        --btn-reset: rgba(211, 58, 58, 0.7);
+        --btn-today: rgba(0, 108, 225, 0.7);
+        --btn-nav: rgba(39, 43, 49, 0.5);
+        --btn-dismiss: rgba(211, 58, 58, 0.7);
+        --btn-orange: rgba(210, 91, 28, 0.8);
         /* v17.8.0: booking-attribute FLAGS (manual / locked / preferred-tables).
            They were three unrelated hand-picked hues — #0369a1 blue (a shade off
            the accent), #854d0e (the pending-text amber) and #0d9488 teal (which
@@ -112,7 +149,7 @@
         --bg-soft: rgba(248, 250, 253, 0.95);          /* Section panel */
         --bg-input: rgba(255, 255, 255, 0.5);          /* text inputs / selects */
         --bg-kbd: rgba(255, 255, 255, 0.75);           /* keycap */
-        --btn-default: rgba(120, 130, 150, 0.55);      /* mkBtn default grey fill */
+        --btn-default: rgba(58, 62, 72, 0.55);         /* mkBtn default grey fill — v17.8.0, was rgba(120,130,150,.55) = 1.99:1 white-on-grey */
         --bg-stepper: rgba(235, 239, 246, 0.95);       /* +/- stepper buttons (form) */
         --bg-tabbar: rgba(240, 243, 248, 0.8);         /* Settings tab-strip track */
         --bg-tab-active: rgba(255, 255, 255, 0.95);    /* lifted active tab */
@@ -212,7 +249,7 @@
         /* Date input (header) */
         --app-date-bg: rgba(255, 255, 255, 0.45); --app-date-border: rgba(255, 255, 255, 0.4);
         /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
-        --app-btn-grey: rgba(120, 130, 150, 0.55); --app-btn-grey-strong: rgba(120, 130, 150, 0.75);
+        --app-btn-grey: rgba(58, 62, 72, 0.55);  --app-btn-grey-strong: rgba(105, 114, 131, 0.75);
         --app-btn-slate: #64748b;                 /* dialog secondary buttons */
         /* v17.8.0: the three popovers (QuickStatus, SplitMenu, Plan's day queue)
            all carried the same hand-written `0 8px 32px rgba(0,0,0,0.14)`, which
@@ -227,8 +264,8 @@
         --app-btn-slate-dim: #78828c;             /* write-warning dismiss */
         /* Saturated action fills (white text — read on both themes) */
         --app-walkin: rgba(22, 101, 52, 0.75);    /* Walk-in button */
-        --app-success-solid: rgba(22, 101, 52, 0.8); /* v17.8.0: reminder "Done" */
-        --app-new: rgba(0, 122, 255, 0.75);       /* + New button */
+        --app-success-solid: rgba(22, 99, 51, 0.8); /* v17.8.0: reminder "Done" */
+        --app-new: rgba(0, 116, 243, 0.75);       /* + New button */
         --app-danger-solid: #dc2626;              /* Delete (solid) */
         --app-warn-solid: #9a3412;                /* No-show / Confirm (solid warn) */
         /* ── v14.3.0: hover-lift (.mgt-hover-scale) — opaque, theme-aware card
@@ -320,14 +357,31 @@
         --text-muted: #9a9aa0;
         --accent: #0a84ff;
         --focus-ring: #ffffff;
-        /* Status chip text -> light variants for dark surfaces. Tint RGB and
-           the block/table/button tokens are theme-invariant (inherited from
-           :root); only the chip text needs to flip. */
+        /* Status chip text -> light variants for dark surfaces. */
         --status-confirmed-text: #fcd9a0;
         --status-pending-text: #fde047;
         --status-seated-text: #86efac;
         --status-completed-text: #cbd5e1;
         --status-cancelled-text: #fca5a5;
+        /* v17.8.0 — the fills that genuinely need a different value here.
+           The old comment above claimed the block/table/button tokens were
+           theme-invariant and inherited them all; that assumption is what let
+           light mode ship at 1.8–2.2:1. A fill is only theme-invariant if it is
+           OPAQUE. These are alpha, so each one composites against a different
+           backdrop per theme and has to be solved twice.
+           Light needs them DARK (they sit on near-white and must hold white
+           text); dark needs them BRIGHT (they sit on near-black and must stay
+           visible as a shape). Everything not listed here composites to the
+           same side of the line in both themes and is correctly inherited.
+           Numbers are solved, not eyeballed — see tests/contrast.test.js. */
+        --tbl-out-rgb: 41, 151, 171;
+        --tbl-ind-rgb: 175, 82, 222;
+        --block-seated: rgba(32, 152, 76, 0.85);
+        --block-cancelled: rgba(200, 80, 80, 0.8);
+        /* Completed is the one that flips its INK rather than its fill: the
+           grey reads correctly in both themes, but white text needs the dark
+           backdrop to work and dark text needs the light one. */
+        --ink-completed: #ffffff;
         /* ── v14.2.2: atoms / modal dark overrides ── */
         --bg-sheet: rgba(44, 44, 46, 0.85);
         --bg-sheet-mobile: rgba(28, 28, 30, 0.98);
@@ -606,6 +660,22 @@
          Its `transition` moved up next to .mgt-hover-scale's — see the note
          there for why the two had to become one declaration. */
       .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
+
+      /* ── v17.8.0: a timeline block's ink scheme ──────────────────────────────
+         A block sets `color` inline from BLOCK_INK[status]; its text children
+         then just inherit currentColor. What could NOT be inherited is the
+         translucent furniture — the start-time chip, the "~Nm" countdown, the
+         manual-assign divider — which were hard-coded white washes. Correct on
+         seated green and cancelled red, wrong on the amber pair, where a white
+         pill sits under near-black text.
+         Expressed here rather than in JS because `completed` flips per THEME,
+         and JS cannot see the theme. Default is the dark-fill scheme; the light
+         fills opt out; completed opts back in under dark mode. */
+      .mgt-blk { --blk-wash: var(--wash-on-dark); --blk-rule: var(--rule-on-dark); }
+      .mgt-blk[data-st="confirmed"],
+      .mgt-blk[data-st="pending"],
+      .mgt-blk[data-st="completed"] { --blk-wash: var(--wash-on-light); --blk-rule: var(--rule-on-light); }
+      [data-theme="dark"] .mgt-blk[data-st="completed"] { --blk-wash: var(--wash-on-dark); --blk-rule: var(--rule-on-dark); }
 
       /* ── v17.8.0: universal press-scale ──────────────────────────────────────
          EVERY button dips on press. Opt-IN was the old model (.mgt-press, 28 of

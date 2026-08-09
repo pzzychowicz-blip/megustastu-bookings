@@ -40,7 +40,7 @@
 import { useState, useRef, useEffect, useMemo, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
-  ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG,
+  ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
@@ -109,7 +109,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: R.pill,
         fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
         whiteSpace: "nowrap",
-        background: "rgba(255,255,255,0.25)", color: "var(--text-on-accent)",
+        background: "var(--blk-wash)",
         pointerEvents: "none", position: "relative"
       }}>{b.time}</span>
     </Reveal>
@@ -271,9 +271,10 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
 
   return (
     <div
-      className="mgt-hover-scale"
+      className="mgt-hover-scale mgt-blk"
       data-flip-id={flipId || undefined}
       data-bk={b.id}
+      data-st={b.status}
       onMouseEnter={() => setGroupHover(true)}
       onMouseLeave={() => setGroupHover(false)}
       onClick={handleClick}
@@ -289,6 +290,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         position: "absolute", top: 3, height: ROW_H - 8 + "px",
         left, width: w,
         background: bgc, borderRadius: 10, overflow: "hidden",   /* @canvas */
+        // v17.8.0: the block owns its ink; every text child inherits it. The
+        // amber fills carry near-black, the saturated ones white — see BLOCK_INK.
+        color: BLOCK_INK[b.status] || BLOCK_INK.confirmed,
         display: "flex", alignItems: "center", boxSizing: "border-box",
         cursor: dragDy != null ? "grabbing" : "pointer",
         border: border || "1px solid rgba(255,255,255,0.2)",
@@ -338,7 +342,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       {timeChip}
       <span style={{
         flex: 1, padding: "0 8px 0 6px", position: "relative",
-        fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",
+        fontSize: 11, fontWeight: 700,
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
       }}>
         {lbl}
@@ -352,7 +356,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
           flexShrink: 0, marginRight: 2, padding: "1px 5px", borderRadius: R.pill,
           fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
           whiteSpace: "nowrap", position: "relative",
-          background: "rgba(255,255,255,0.28)", color: "var(--text-on-accent)",
+          background: "var(--blk-wash)",
           pointerEvents: "none"
         }}>{"~" + freeMin + "m"}</span>
       ) : null}
@@ -360,8 +364,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
         style={{
           padding: "0 6px", fontSize: 13, cursor: "pointer", position: "relative",
-          color: "rgba(255,255,255,0.7)",
-          borderLeft: "1px solid rgba(255,255,255,0.3)",
+          opacity: 0.7,
+          borderLeft: "1px solid var(--blk-rule)",
           height: "100%", display: "flex", alignItems: "center", minWidth: 28
         }}
       >
@@ -483,8 +487,9 @@ function WaitGhost({ g, totalMins, onBook }) {
       // asymmetric: there is no matching fade-out, because a ghost disappears
       // when a REAL booking takes that table, and the eye should be on the block
       // that just appeared, not on the proposal it replaced.
-      className="mgt-hover-scale mgt-appear"
+      className="mgt-hover-scale mgt-appear mgt-blk"
       data-wg={g.id}
+      data-st="pending"
       onMouseEnter={() => setGroupHover(true)}
       onMouseLeave={() => setGroupHover(false)}
       onClick={() => onBook(g.id)}
@@ -495,6 +500,10 @@ function WaitGhost({ g, totalMins, onBook }) {
         position: "absolute", top: 3, height: (ROW_H - 8) + "px",
         left: pct(gS), width: Math.max((mins / totalMins) * 100, 0.3) + "%",
         background: BLOCK_BG.pending, borderRadius: 10, overflow: "hidden",   /* @canvas */
+        // Dims the real block, does not re-specify it — so it takes the pending
+        // fill's ink too, or the v17.8.0 contrast pass would have fixed the
+        // block and left its own ghost white-on-yellow.
+        color: BLOCK_INK.pending,
         display: "flex", alignItems: "center", boxSizing: "border-box",
         border: g.resh ? "1px dashed rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.2)",
         boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
@@ -514,7 +523,7 @@ function WaitGhost({ g, totalMins, onBook }) {
         flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: R.pill,
         fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
         whiteSpace: "nowrap",
-        background: "rgba(255,255,255,0.25)", color: "var(--text-on-accent)"
+        background: "var(--blk-wash)"
       }}>{g.time}</span>
       {/* v17.8.0 correction: the ⏳ sits BETWEEN the time and the name, not
           trailing it. Trailing, it was the first thing the ellipsis ate — the
@@ -527,7 +536,7 @@ function WaitGhost({ g, totalMins, onBook }) {
       }}><WaitIcon size={11} /></span>
       <span style={{
         flex: 1, padding: "0 8px 0 5px", position: "relative",
-        fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",
+        fontSize: 11, fontWeight: 700,
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
       }}>
         {g.name + " (" + g.size + ")"}
@@ -1009,7 +1018,12 @@ export const TimelineView = memo(function TimelineView({
       className="mgt-hover-scale mgt-press"
       style={mkBtn({
         minHeight: 32, padding: "4px 10px", fontSize: 11,
-        background: followNow ? "rgba(0,0,0,0.6)" : "rgba(120,130,150,0.5)"
+        // v17.8.0: the idle fill was a hard-coded copy of --app-btn-grey's old
+        // value, so the contrast pass fixed every other secondary button and
+        // left this one at 1.82:1 — the lowest on the screen, on the control
+        // that follows the clock during service. A literal duplicate of a token
+        // is a token that cannot be fixed.
+        background: followNow ? "rgba(0,0,0,0.6)" : "var(--app-btn-grey)"
       })}
     >
       {followNow ? "Following" : "Follow"}
@@ -1094,7 +1108,7 @@ export const TimelineView = memo(function TimelineView({
         style={{
           fontSize: 11, padding: "3px 8px", borderRadius: R.pill,
           background: BLOCK_BG[s] || "#999",
-          color: "var(--text-on-accent)",
+          color: BLOCK_INK[s] || "var(--text-on-accent)",
           border: "1px solid rgba(255,255,255,0.2)",
           fontWeight: 600, textTransform: "capitalize",
           boxShadow: "0 1px 3px rgba(0,0,0,0.08)"

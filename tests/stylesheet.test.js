@@ -131,6 +131,43 @@ describe("index.html stylesheet", () => {
     expect(bad).toEqual([]);
   });
 
+  // ── The gap the first version of this file left open ────────────────────────
+  // The two checks above only look at SELECTORS, because the v17.8.0 bug that
+  // prompted them happened between rules. Writing the contrast pass I made the
+  // same mistake one scope deeper — a stray `*/` inside `:root`'s declaration
+  // block — and every test here passed while the browser silently dropped
+  // `--tbl-out-rgb` entirely, because CSS reads from the loose prose to the next
+  // `;` as ONE bad declaration and throws it away with the real one riding on
+  // its tail. Nine table badges rendered transparent. Same failure class, same
+  // silence, different scope: prose loose in a declaration block eats the
+  // declaration AFTER it.
+  it("has no comment delimiter left anywhere, not only in selectors", () => {
+    const stray = [];
+    css.split("\n").forEach((line, i) => {
+      if (line.includes("*/") || line.includes("/*")) stray.push(i + 1 + ": " + line.trim().slice(0, 70));
+    });
+    expect(stray, "comment delimiters survived stripping — an unbalanced comment").toEqual([]);
+  });
+
+  it("has no prose loose in a declaration block", () => {
+    const bad = [];
+    // Innermost blocks only: `[^{}]*` cannot span a nested rule, so this yields
+    // declaration bodies for plain rules AND for the rules inside @media.
+    for (const m of css.matchAll(/\{([^{}]*)\}/g)) {
+      for (const decl of m[1].split(";")) {
+        const d = decl.trim();
+        if (!d) continue;
+        const colon = d.indexOf(":");
+        if (colon < 0) continue;                 // e.g. a trailing fragment
+        const prop = d.slice(0, colon).trim();
+        // A property is one identifier. Prose is several words, so the space is
+        // the whole tell — and it is what a swallowed declaration looks like.
+        if (/\s/.test(prop)) bad.push(prop.slice(0, 60));
+      }
+    }
+    expect(bad, "these read as prose, not properties — the declaration after each is being eaten").toEqual([]);
+  });
+
   it.each(CRITICAL_SELECTORS)("still defines %s", (sel) => {
     const found = preludes(css).some((p) => p.includes(sel));
     expect(found).toBe(true);

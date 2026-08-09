@@ -34,7 +34,7 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, hoursFor, INDOOR, OUTDOOR } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, hoursFor, INDOOR, OUTDOOR } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
@@ -451,7 +451,7 @@ export function BookingFormModal({
         <button
           key={s}
           className="mgt-hover-scale"
-          style={mkBtn({background:BLOCK_BG[s],textTransform:"capitalize",minHeight:40})}
+          style={mkBtn({background:BLOCK_BG[s],color:BLOCK_INK[s]||"var(--text-on-accent)",textTransform:"capitalize",minHeight:40})}
           onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}>{"> "+s}</button>
       );})}</div></Section>:null;
 
@@ -528,7 +528,7 @@ export function BookingFormModal({
             disabled={!canSave}
             onClick={onSavePending}
             className="mgt-hover-scale"
-            style={{background:canSave?BLOCK_BG.pending:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(212,165,10,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save pending</button>
+            style={{background:canSave?BLOCK_BG.pending:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:BLOCK_INK.pending,minHeight:44,boxShadow:canSave?"0 2px 8px rgba(212,165,10,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save pending</button>
         );
       })()}</div><div style={{display:"flex",gap:8}}><button
         className="mgt-hover-scale"

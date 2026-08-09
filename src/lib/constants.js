@@ -458,6 +458,24 @@ export var ROW_H=44,LABEL_W=58;
 // confirmed recolored to accent blue in index.html (the yellow moved to pending).
 export var STATUS_COLORS={confirmed:{bg:"rgba(var(--status-confirmed-rgb),0.15)",text:"var(--status-confirmed-text)",border:"rgba(var(--status-confirmed-rgb),0.35)"},pending:{bg:"rgba(var(--status-pending-rgb),0.15)",text:"var(--status-pending-text)",border:"rgba(var(--status-pending-rgb),0.35)"},seated:{bg:"rgba(var(--status-seated-rgb),0.15)",text:"var(--status-seated-text)",border:"rgba(var(--status-seated-rgb),0.35)"},completed:{bg:"rgba(var(--status-completed-rgb),0.12)",text:"var(--status-completed-text)",border:"rgba(var(--status-completed-rgb),0.3)"},cancelled:{bg:"rgba(var(--status-cancelled-rgb),0.12)",text:"var(--status-cancelled-text)",border:"rgba(var(--status-cancelled-rgb),0.3)"}};
 export var BLOCK_BG={confirmed:"var(--block-confirmed)",pending:"var(--block-pending)",seated:"var(--block-seated)",completed:"var(--block-completed)",cancelled:"var(--block-cancelled)"};
+// v17.8.0 — the INK each block fill carries. A fill and the text on it are one
+// decision, and splitting them across two files is how "Save pending" shipped
+// white-on-yellow at 1.83:1. Pair them here; tests/contrast.test.js measures
+// every pair in both themes.
+//
+// The amber pair (confirmed/pending) takes DARK ink rather than a darker fill:
+// v17.0.0 correction round 6 engineered those two as a matched-intensity pair,
+// and darkening them far enough to hold white text turns one brown and the
+// other olive. `completed` flips its ink per THEME (the grey works in both, the
+// ink cannot), which is why these are CSS vars and not literals — JS cannot see
+// the theme, and the whole point of the token layer is that it does not have to.
+//
+// Anything painting text ON a BLOCK_BG must take the matching BLOCK_INK. Inside
+// a timeline block the translucent chip washes and the divider rule have to
+// flip with the ink too, or a white pill lands on dark text; those come from
+// `--blk-wash` / `--blk-rule`, set by the `.mgt-blk[data-st]` rules in
+// index.html, and the text itself just inherits `currentColor`.
+export var BLOCK_INK={confirmed:"var(--ink-confirmed)",pending:"var(--ink-pending)",seated:"var(--ink-seated)",completed:"var(--ink-completed)",cancelled:"var(--ink-cancelled)"};
 // Dark mode (v14.2.0 `S`; v14.2.1 the colour sets STATUS_COLORS / BLOCK_BG /
 // TBL / BTN): values reference CSS custom properties from index.html (:root
 // light / [data-theme="dark"]), so a theme flip re-resolves them with zero JS.
