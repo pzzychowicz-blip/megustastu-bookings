@@ -53,7 +53,15 @@ export function BannerRows({ ids, renderRow }) {
           collapsing per-banner cannot bound the total height, which was the
           whole point. */}
       <div>
-        {renderIds.map(function (id, i) {
+        {renderIds.map(function (id) {
+          // v17.8.0 review fix: the hairline keys on this row's position among
+          // the rows that are actually OPEN, not its index in renderIds — which
+          // retains a departing row for ~350ms while its Reveal collapses. With
+          // the raw index, marking the first of two late bookings as a no-show
+          // left the survivor wearing a borderTop that ended up flush under the
+          // section header: a line appearing exactly where the design says none.
+          const visible = renderIds.filter(function (x) { return openIds.has(x); });
+          const i = visible.indexOf(id);
           return (
             <Reveal key={id} show={openIds.has(id)}>
               {/* The hairline lives HERE, not on the row, so a banner's row

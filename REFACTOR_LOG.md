@@ -7248,3 +7248,47 @@ view — a second fade inside it would only make the day change feel slow.
 DEV: every token resolves, zero legacy curves remain anywhere in the computed
 DOM, and the section collapse was sampled at 50ms (126→74→28→9→3→1→gone, no
 position jump). Main chunk 686.33 kB / 195.92 kB gz.
+
+#### /code-review fixes (commit 19)
+
+Seven findings over the branch diff; all fixed.
+
+**The one that mattered.** The token sweep (commit 11) put `--success-text` and
+`--status-pending-text` on the kitchen-suggestion chips in `BookingFormModal`
+and `WalkinForm` — but those chips' FILLS are hard-coded pale green and pale
+yellow, deliberately theme-invariant like `BLOCK_BG`. The text tokens invert
+(`#166534`→`#86efac`, `#854d0e`→`#fde047`), so in dark mode the suggested
+alternative times — which staff tap to pick a slot — rendered at roughly 1.3:1.
+Six sites are back on hex literals as `KTXT_OK` / `KTXT_TIGHT`, and that is the
+correct answer rather than debt: **triage a colour exactly like a shadow, by
+asking whether the surface under it flips.** The same commit that wrote that
+rule for shadows had inverted it for colour. Verified in dark mode live.
+
+**Presence prune vs. the clock.** The prune deletes other devices' children off
+a serverTimestamp comparison, but nothing ordered `.info/serverTimeOffset`
+before the first `presence` snapshot. With the offset still 0 on a device whose
+clock ran more than `PRUNE_MS` fast, every live child looked ancient and the
+whole node would be deleted. The prune now waits for a real offset (and stays
+armed, so the next snapshot retries); staleness *hiding* is left ungated on
+purpose, because hiding is reversible — the same asymmetry that already makes
+`PRUNE_MS` 4× `STALE_MS`. Separately, the heartbeat now rewrites the identity
+fields, not just `lastSeen`: `update()` on a removed path CREATES it, so a
+lastSeen-only beat resurrected a nameless stub reading "unknown · Device".
+
+**`Object.assign` replaces a shadow, it does not add one.** `ViewSwitcher`'s
+split-pane marker overwrote `mkBtn`'s `--shadow-btn`, so the focused pane's
+button sat flatter than the unfocused one. One comma-separated list now.
+
+Four smaller ones: `--warn-chip-bg` was defined in both theme blocks and used
+nowhere (the reminder restyle removed the chip fill it was added for, and
+CLAUDE.md still claimed it was needed — both corrected); `sinceText` had an
+unreachable `mins < 0` branch; `BannerRows`' hairline indexed `renderIds`,
+which retains a collapsing row, so the survivor briefly wore a border flush
+under the section header — it keys on visible position now; and `TL_MOVE` was
+declared between two `import` statements, working only because imports hoist.
+
+Checked and **not** a bug: `GsTextField`'s dirty flag looked like it would
+false-trigger the discard confirm on the normal close path (blur commits, but
+the Firebase echo is async). It doesn't — `saveGeneralSettings` calls `setGS`
+optimistically, so `value` updates before the click lands. The guard fires only
+on Esc, which is exactly the path it exists for.

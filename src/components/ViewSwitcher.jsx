@@ -143,8 +143,13 @@ export function ViewSwitcher({
             // is focused" device) rather than impersonating focus.
             // boxShadow, not border/outline: it must not change the button's
             // box or fight the focus ring for the outline property.
+            // v17.8.0 review fix: mkBtn ALREADY sets boxShadow, and Object.assign
+            // replaces a property rather than merging it — so this used to strip
+            // the button's drop shadow, leaving the focused pane's button sitting
+            // flatter than the unfocused one for no reason a user could read. Two
+            // shadows, one comma-separated list.
             isFocusedPaneView(v)
-              ? { boxShadow: "inset 0 -3px 0 var(--text-on-accent)" }
+              ? { boxShadow: "inset 0 -3px 0 var(--text-on-accent), var(--shadow-btn)" }
               : null
           )}
         >{v}</button>

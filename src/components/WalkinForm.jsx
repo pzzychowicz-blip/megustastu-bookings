@@ -49,6 +49,14 @@ import { WaitIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
+// v17.8.0 review fix: hex literals ON PURPOSE — see the identical pair in
+// BookingFormModal. The kitchen-suggestion chip FILLS are hard-coded pale green
+// / pale yellow and deliberately theme-invariant, so their text has to be too.
+// The token sweep briefly used --success-text / --status-pending-text here,
+// which invert between themes and left light-green text on a pale-green chip in
+// dark mode. A token may only be used where the surface under it flips as well.
+const KTXT_OK = "#166534", KTXT_TIGHT = "#854d0e";
+
 export function WalkinForm({
   draft, setDraft,
   error,
@@ -192,7 +200,7 @@ export function WalkinForm({
           cursor: "pointer", padding: "3px 8px", borderRadius: R.pill,
           fontWeight: 600, fontSize: 12,
           background: r.hasTables ? "rgba(220,252,231,0.8)" : "rgba(254,249,195,0.8)",
-          color: r.hasTables ? "var(--success-text)" : "var(--status-pending-text)",
+          color: r.hasTables ? KTXT_OK : KTXT_TIGHT,
           border: "1px solid " + (r.hasTables ? "rgba(134,239,172,0.5)" : "rgba(253,230,138,0.5)"),
           boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
         }}
@@ -206,14 +214,14 @@ export function WalkinForm({
     <div style={{ marginTop: 8 }}>
       <div style={{ fontSize: 11, color: S.muted, marginBottom: 6 }}>
         <span style={{
-          background: "rgba(220,252,231,0.8)", color: "var(--success-text)",
+          background: "rgba(220,252,231,0.8)", color: KTXT_OK,
           padding: "2px 6px", borderRadius: R.pill, fontSize: 10, fontWeight: 600
         }}>
           green
         </span>
         {" = tables available  "}
         <span style={{
-          background: "rgba(254,249,195,0.8)", color: "var(--status-pending-text)",
+          background: "rgba(254,249,195,0.8)", color: KTXT_TIGHT,
           padding: "2px 6px", borderRadius: R.pill, fontSize: 10, fontWeight: 600
         }}>
           yellow

@@ -42,8 +42,9 @@ const POPOVER_W = 286;
 // opened a minute ago — or a negative span rendered as "just now" forever.
 function sinceText(ts, offset) {
   if (!ts) return "";
+  // Negative spans (a stamp fractionally ahead of the corrected clock) fall
+  // into this same branch — deliberately one test, not two.
   const mins = Math.floor((Date.now() + (offset || 0) - ts) / 60000);
-  if (mins < 0) return "just now";
   if (mins < 1) return "just now";
   if (mins < 60) return mins + "m ago";
   const hrs = Math.floor(mins / 60);

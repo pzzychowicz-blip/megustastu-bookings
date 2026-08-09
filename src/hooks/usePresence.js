@@ -89,6 +89,10 @@ export function usePresence(){
   const offsetRef = useRef(0);
   const myRefRef = useRef(null);
   const beatRef = useRef(0);
+  // Has .info/serverTimeOffset actually delivered a value yet? The prune DELETES
+  // other devices' children off a serverTimestamp comparison, so it must not run
+  // on an assumed offset of 0 — see the gate in the presence listener.
+  const offsetReadyRef = useRef(false);
   // Set when this connection registers, consumed by the FIRST presence snapshot
   // that arrives afterwards — see the prune in the listener below.
   const pruneArmedRef = useRef(false);
@@ -101,6 +105,7 @@ export function usePresence(){
       const v=snap.val();
       const n=typeof v==="number"?v:0;
       offsetRef.current=n;
+      offsetReadyRef.current=true;
       setOffset(n);
     },dbError(".info/serverTimeOffset"));
     return unsub;
@@ -134,10 +139,16 @@ export function usePresence(){
       set(myRef,{email:email,ua:deviceLabel(),since:serverTimestamp(),lastSeen:serverTimestamp()}).catch(function(){});
       // Heartbeat: re-prove this connection every BEAT_MS for as long as it lasts.
       stopBeat();
+      // The beat rewrites the IDENTITY fields too, not just lastSeen. update()
+      // on a path that no longer exists CREATES it — so if this child is ever
+      // removed underneath us (another device's prune after a long stall, a
+      // console cleanup), a lastSeen-only beat would resurrect it as a nameless
+      // stub and the popover would list "unknown · Device" for the rest of the
+      // session. Writing the whole record makes any resurrection complete.
       beatRef.current=setInterval(function(){
         const r=myRefRef.current;
         if(!r) return;
-        update(r,{lastSeen:serverTimestamp()}).catch(function(){});
+        update(r,{email:email,ua:deviceLabel(),lastSeen:serverTimestamp()}).catch(function(){});
       },BEAT_MS);
       // Arm the prune. It cannot run HERE: `.info/connected` resolves before the
       // first `presence` snapshot lands, so at this moment we have no node to
@@ -173,7 +184,13 @@ export function usePresence(){
       // time instead of a rolling write storm. Deletion is far more conservative
       // than hiding: hiding is free and reversible (the next beat brings a device
       // back), deleting is neither, so PRUNE_MS is 4× STALE_MS.
-      if(pruneArmedRef.current){
+      // Gated on a REAL offset. Without one `now` is local time, and on a
+      // device whose clock runs more than PRUNE_MS fast every live child looks
+      // ancient — the prune would delete the whole node. Staleness HIDING is
+      // left ungated on purpose: it is reversible (the next beat brings the
+      // device back), which is the same asymmetry that makes PRUNE_MS 4x
+      // STALE_MS. Staying armed means the next snapshot retries.
+      if(pruneArmedRef.current&&offsetReadyRef.current){
         pruneArmedRef.current=false;
         const mine=myRefRef.current&&myRefRef.current.key;
         Object.keys(val).forEach(function(k){

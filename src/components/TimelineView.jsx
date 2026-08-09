@@ -42,18 +42,20 @@ import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG,
   S, TBL, BTN, TIMELINE_TABLES, hoursFor, R, M } from "../lib/constants";
+import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
+import { noShowMap, normalizePhone } from "../lib/customers";
+import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
+import { WaitIcon } from "./Icons";
+import { QuickStatusPopup } from "./QuickStatusPopup";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
 // hover/group lift answering a pointer (M.tap). One shared constant because
 // four call sites paint a block or its ghost and they must lift in lockstep —
 // the :has() ghost rule in index.html depends on exactly that.
+// (Below the imports: it worked above them only because imports hoist, which is
+// the kind of thing that stops being true the day a circular import appears.)
 const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.tap;
-import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
-import { noShowMap, normalizePhone } from "../lib/customers";
-import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
-import { WaitIcon } from "./Icons";
-import { QuickStatusPopup } from "./QuickStatusPopup";
 
 // v15.8.0: module-level status-change animation state (survives the inline Block
 // remount + any TimelineView remount during the save flow). Single timeline, so
