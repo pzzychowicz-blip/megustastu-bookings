@@ -29,7 +29,7 @@ import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { BTN, R } from "../lib/constants";
-import { mkBtn } from "../components/atoms";
+import { mkBtn, SmallTag } from "../components/atoms";
 import { genId } from "../lib/booking-logic";
 import { dbError } from "../lib/dbError";
 import { sameDraft } from "../lib/drafts";
@@ -241,8 +241,15 @@ export function useReminders({ nowMins, setWriteWarning }){
         <div
           key={ab.fireKey}
           style={{padding:"9px 14px 9px 31px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",...(i>0?{borderTop:"1px solid var(--border-soft)"}:null)}}><div
-            style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0,flexWrap:"wrap"}}><span
-              style={{fontSize:11,color:"var(--warn-text)",fontWeight:700,letterSpacing:"0.02em",whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",opacity:0.85}}>{ab.time}</span><span
+            style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0,flexWrap:"wrap"}}>{/* v17.8.0: a SOLID chip on ListView's `locked` pattern — SmallTag, the
+              fill carrying the colour, --text-on-accent text, a neutral
+              --border-glass rim. As dimmed amber text it was the same colour and
+              nearly the same weight as the sentence beside it, so the one thing
+              you scan a reminder row FOR did not separate from the thing you
+              read. Graphite (--tag-flag) rather than a semantic hue: the time is
+              metadata about the reminder, not a state of it, which is exactly
+              what that token is for. */}
+              <SmallTag label={ab.time} style={{background:"var(--tag-flag)",color:"var(--text-on-accent)",border:"1px solid var(--border-glass)",fontWeight:700,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap",flexShrink:0}} /><span
               style={{fontSize:13,color:"var(--text-primary)",fontWeight:600,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               onClick={function(){snoozeReminderFire(ab.fireKey);}}
               className="mgt-hover-scale mgt-press"

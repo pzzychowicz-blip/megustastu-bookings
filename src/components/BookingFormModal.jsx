@@ -165,18 +165,22 @@ export function BookingFormModal({
   function toggleChipHist(which){
     setChipHist(histWhich===which?null:{key:phoneKeyNow,which:which});
   }
-  const chipBase={display:"inline-flex",alignItems:"center",borderRadius:R.pill,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer"};
+  // v17.8.0: OUTLINE chips, matching the Customers tab — no fill, a 2px border
+  // in the semantic hue, the text in the same family. They are standalone
+  // disclosures above a form field rather than tags packed into a status row,
+  // so the border alone carries the colour and the fill was a third copy of it.
+  const chipBase={display:"inline-flex",alignItems:"center",borderRadius:R.pill,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer",background:"transparent"};
   const regularChip=custMatch&&custMatch.regularCount>=1?<button
     key="reg" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("regular");}}
-    style={Object.assign({},chipBase,{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",color:"var(--success-text)"})}>{(custMatch.regularCount>=(regularMin||2)?"Regular · "+custMatch.regularCount+" past visits":custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":""))+(histWhich==="regular"?" ▾":" ▸")}</button>:null;
+    style={Object.assign({},chipBase,{border:"2px solid var(--suggest-border)",color:"var(--success-text)"})}>{(custMatch.regularCount>=(regularMin||2)?"Regular · "+custMatch.regularCount+" past visits":custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":""))+(histWhich==="regular"?" ▾":" ▸")}</button>:null;
   const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<button
     key="ns" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("noshow");}}
-    style={Object.assign({},chipBase,{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",color:"var(--warn-text)"})}>{"No-show ×"+custMatch.noShowCount+(histWhich==="noshow"?" ▾":" ▸")}</button>:<button
+    style={Object.assign({},chipBase,{border:"2px solid var(--warn-border)",color:"var(--warn-text)"})}>{"No-show ×"+custMatch.noShowCount+(histWhich==="noshow"?" ▾":" ▸")}</button>:<button
     key="ns" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("noshow");}}
-    style={Object.assign({},chipBase,{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",color:"var(--text-secondary)"})}>{"1 no-show"+(histWhich==="noshow"?" ▾":" ▸")}</button>):null;
+    style={Object.assign({},chipBase,{border:"2px solid var(--border-soft)",color:"var(--text-secondary)"})}>{"1 no-show"+(histWhich==="noshow"?" ▾":" ▸")}</button>):null;
   // Disclosure panel — the WA pastListBody, on app tokens (suggest family for
   // Regular, warn family for no-shows). Top 5 rows like WA; a muted "+N earlier"
   // tail when there are more. Reveal (below) eases it open/closed; its cached-

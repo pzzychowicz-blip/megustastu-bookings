@@ -66,8 +66,14 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     return (waitlist || []).filter(function (w) { return w && normalizePhone(w.phone) === key; }).length;
   }
 
+  // v17.8.0: OUTLINE chips — no fill, a 2px border, the colour carried by the
+  // border and the text. These are standalone counts sitting on their own in a
+  // quiet row, not status tags competing inside a dense line (which is what
+  // ListView's solid tags are), so the pale-fill-plus-border-plus-bold-text
+  // stack was three encodings of one signal on something that needs one. The
+  // extra pixel of border is what keeps them legible once the fill is gone.
   const chip = function (label, colors) {
-    return <span style={{ fontSize: 10, fontWeight: 700, borderRadius: R.pill, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 3, background: colors.bg, border: "1px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
+    return <span style={{ fontSize: 10, fontWeight: 700, borderRadius: R.pill, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 3, background: "transparent", border: "2px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
   };
 
   const rows = shown.map(function (c) {
@@ -76,7 +82,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     const wlCount = waitCountOf(c.phone);
     const historyRows = open ? c.bookings.map(function (b) {
       return (
-        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: 12, fontWeight: 600, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: 12, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: 12, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: 11.5, fontWeight: 600, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: "var(--text-on-accent)", textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { bg: "var(--warn-bg)", border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
+        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: 12, fontWeight: 600, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: 12, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: 12, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: 11.5, fontWeight: 600, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: "var(--text-on-accent)", textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
       );
     }) : null;
     return (
@@ -89,7 +95,14 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
         <div
           className="mgt-hover-scale"
           onClick={function () { setOpenKey(open ? null : c.phone); setArmedKey(null); }}
-          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer" }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: 12, color: S.muted }}>{formatPhone(c.phone) + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? chip(c.visits + " visit" + (c.visits !== 1 ? "s" : ""), { bg: "var(--suggest-bg)", border: "var(--suggest-border)", text: "var(--success-text)" }) : null}{c.noShowCount > 0 ? chip(c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)", { bg: "var(--warn-bg)", border: "var(--warn-border)", text: "var(--warn-text)" }) : null}{wlCount > 0 ? chip(<><WaitIcon size={10} />{wlCount}</>, { bg: "var(--bg-input)", border: "var(--border-soft)", text: "var(--text-secondary)" }) : null}<span style={{ fontSize: 12, color: S.muted }}>{open ? "▾" : "▸"}</span></div></div>
+          // v17.8.0 fix: borderRadius is REQUIRED on any .mgt-hover-scale
+          // element. Since v17.7.0 the hover rule no longer supplies one, but it
+          // still paints an opaque --bg-hover-card — so a radius-less element
+          // renders that fill as a hard-edged rectangle and this row visibly
+          // squared off inside its own rounded card on hover. R.card matches the
+          // parent exactly. (ConnectionStatus's dot button was the first case in
+          // the app; this is the second. Check any new one.)
+          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: 12, color: S.muted }}>{formatPhone(c.phone) + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? chip(c.visits + " visit" + (c.visits !== 1 ? "s" : ""), { border: "var(--suggest-border)", text: "var(--success-text)" }) : null}{c.noShowCount > 0 ? chip(c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}{wlCount > 0 ? chip(<><WaitIcon size={10} />{wlCount}</>, { border: "var(--border-soft)", text: "var(--text-secondary)" }) : null}<span style={{ fontSize: 12, color: S.muted }}>{open ? "▾" : "▸"}</span></div></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
