@@ -153,6 +153,32 @@ src/
   When merging sizes, **collapse DOWNWARD** — a size that shrinks cannot
   overflow its box; a size that grows can, in ways a mechanical sweep cannot be
   verified against.
+- **An exemption marker must live INSIDE the style object (v17.8.0).**
+  Appending `/* @canvas */` to the end of a line that ends in `>` or `/>` puts
+  it in JSX **children** position, where React renders it as literal text —
+  eight of them shipped, printing comment syntax across the Plan view's ruler
+  and the Stats popover's bars. Worse, `check:style` only asked whether the
+  marker was PRESENT, so the sites it was meant to bless were the sites it
+  broke and it reported OK on all of them. Rule 0 now rejects the placement.
+  **A checker that cannot see its own annotation is worth less than none**,
+  because it also carries the authority of having passed.
+- **44px is a FLOOR, not a target (v17.8.0).** The tap-target pass applied
+  Apple's figure to every small control and overshot: a 44px circle beside a
+  40px date field made the date-nav row stop reading as chrome. Toolbar chrome
+  (timeline zoom cluster, Find/Settings, the connection dot, Summary's More)
+  sits at **36**; `mkBtn`'s **40** remains the app-wide standard; genuine 44s
+  are reserved for decision surfaces where a mis-tap costs something — modal
+  footers and the quick-status popup. Size by what a mistake costs, not by one
+  number from a guideline.
+- **A literal is invisible to a token audit (v17.8.0).** The contrast pass
+  measured every `--token` and still missed four fills carrying white text —
+  TableGrid's selected (2.31), blocked (3.13) and swap (~1.4, white on bright
+  yellow) cells, and ManualModal's swap panel (2.62) — because they were
+  `rgba(...)` literals, not tokens. The same sweep found **fifteen hard-coded
+  copies of token VALUES** across ten files, several of them copies of a value
+  from before that same pass retuned it. **Grep the value, not the name**, and
+  remember an audit that enumerates tokens has a blind spot exactly the size of
+  the literals.
 - **A fill that carries TEXT is chosen for its contrast against its ink, per
   theme. Alpha is for decoration (v17.8.0).** An `rgba(hue, 0.8)` fill
   composites toward what is BEHIND it, so one token lands somewhere different
@@ -163,11 +189,19 @@ src/
   dark. **Dark mode is the easy case; light is where a saturated fill washes
   out.** `tests/contrast.test.js` measures every fill/ink pair in both themes
   and fails on an unregistered text-bearing fill. Small bold labels take 4.5:1;
-  buttons take 3:1. `BLOCK_INK` pairs each block fill with its ink — the amber
-  pair takes DARK ink rather than a darker fill, because darkening amber far
-  enough for white text destroys the confirmed/pending pairing v17.0.0
-  engineered. Inside a timeline block the translucent chips and divider come
-  from `--blk-wash`/`--blk-rule` so they flip with the ink.
+  buttons take 3:1. `BLOCK_INK` pairs each block fill with its ink.
+  **The amber pair is a RECORDED EXEMPTION, not a pass**: confirmed sits at
+  2.9:1 and pending at 1.8:1 with white ink, because both alternatives were
+  tried and are worse — darkening the fills destroys the matched-intensity pair
+  v17.0.0 engineered, and dark ink (shipped for exactly one commit) reads as
+  DISABLED next to the white-inked seated and cancelled blocks, so a status
+  change looked like a state change. `tests/contrast.test.js` marks them
+  `role: "exempt"`, prints the number every run, and still fails if either drops
+  below a recorded floor — **an accepted contrast is not a licence to keep
+  going.** What made it defensible is that the one piece of *information* on a
+  block, the start time, moved onto its own opaque `--tl-hour-pill` chip —
+  the same pill the hour ruler uses — so it is legible on every fill instead of
+  being tinted by it.
 - **A literal duplicate of a token is a token that cannot be fixed (v17.8.0).**
   TimelineView's Follow button held a hard-coded copy of `--app-btn-grey`'s
   value and was the one secondary button the contrast pass could not reach; the

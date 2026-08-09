@@ -7634,3 +7634,52 @@ in the running page rather than trusted from the solver, no horizontal
 overflow, no console errors. Dark mode is verified by computation against the
 token values, not by eye — the account-level theme pref in DEV would not
 switch, and saying so is more useful than implying a visual check happened.
+
+### Corrections to the design pass (commits 53–58)
+
+Patryk reviewed the pass in the running app and four things came back.
+
+**Two of them were my bugs, and both are worth recording as classes.** Eight
+`/* @canvas */` exemption markers were appended to the end of their line, which
+for a line ending in `>` or `/>` is JSX *children* position — so React printed
+the comment syntax across the Plan view's time ruler and every bar in the Stats
+popover. It shipped because `check:style` only asked whether the marker was
+present, never where: the eight sites it was written to bless were the eight it
+broke, and it reported OK on all of them. A checker that cannot see its own
+annotation is worse than none, because it also carries the authority of having
+passed. Rule 0 rejects the placement now. Separately, the tap-target pass
+treated 44 as a target rather than a floor and made the date-nav row stop
+reading as chrome; toolbar controls settle at 36, `mkBtn`'s 40 stays the
+standard, and real 44s are kept for decision surfaces where a mis-tap costs
+something.
+
+**Dark ink on the amber blocks was wrong for a reason I should have predicted.**
+It was better contrast and a worse screen: on a timeline where seated and
+cancelled carry white text, a near-black label reads as *disabled*, so a status
+change looked like a state change. White ink is back and both fills are
+unchanged, at 2.9:1 and 1.8:1. `tests/contrast.test.js` records that as
+`role: "exempt"` — measured and printed every run, still failing if either
+drops below a recorded floor, because an accepted contrast is not a licence to
+keep going. What made it defensible was moving the one piece of *information* on
+a block — the start time — onto its own opaque `--tl-hour-pill` chip, the same
+pill the hour ruler uses. It had been a translucent white wash, so its
+appearance was a function of whatever block it sat on: pale on amber, bright on
+green, legible on neither. A time is a time wherever it appears.
+
+**Consolidating the colour families found fifteen hard-coded copies of token
+values across ten files** — eight of the green, five of the accent, two of the
+delete red, several of them copies of a value from *before* this version retuned
+it. Four were fills carrying white text that the contrast pass could not see at
+all, because it audits tokens and these were literals: TableGrid's selected cell
+at 2.31:1, its blocked cell at 3.13, its swap cell at ~1.4 (white on bright
+yellow) and ManualModal's swap panel at 2.62. **An audit that enumerates tokens
+has a blind spot exactly the size of the literals.** They now reuse tokens the
+app already had rather than four more near-duplicate hues, and `selected` takes
+the accent — accent means primary action or current selection, which is
+literally that state, and it is free now that table badges are teal and purple.
+
+**The Book Again banner** was a pale green fill plus a matching border plus bold
+green text: one signal three times, and the stock alert box. It is the outline
+pill the Regular / N-past-visits chips beside it already use. The title reads
+"Book again". The copy drops the clause that restated the title and keeps "set a
+date", which is the only thing on screen explaining why Save is disabled.
