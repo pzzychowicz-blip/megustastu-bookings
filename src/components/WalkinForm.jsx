@@ -330,7 +330,7 @@ export function WalkinForm({
           disabled={!wOk}
           className="mgt-hover-scale"
           style={{
-            background: wOk ? "rgba(22,101,52,0.8)" : "rgba(180,180,190,0.4)",
+            background: wOk ? "var(--app-success-solid)" : "rgba(180,180,190,0.4)",
             border: "1px solid rgba(255,255,255,0.2)",
             borderRadius: R.pill, padding: "10px 22px",
             cursor: wOk ? "pointer" : "not-allowed",
@@ -353,7 +353,7 @@ export function WalkinForm({
         <div style={{
           fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
           display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-          background: "rgba(22,101,52,0.75)",
+          background: "var(--app-walkin)",
           border: "1px solid rgba(255,255,255,0.2)",
           boxShadow: "var(--shadow-btn)"
         }}>

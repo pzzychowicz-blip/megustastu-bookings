@@ -119,7 +119,7 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
         <button
           onClick={onAdd}
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 36, padding: "6px 14px", background: "rgba(0,122,255,0.75)" })}
+          style={mkBtn({ minHeight: 36, padding: "6px 14px", background: "var(--accent)" })}
         >
           + New reminder
         </button>

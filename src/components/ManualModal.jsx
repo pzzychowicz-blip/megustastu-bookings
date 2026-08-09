@@ -152,8 +152,12 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   // in both themes. Follow-up: the original rgb(249,115,22) read too saturated —
   // desaturated ~30% (HSL S 95%→66%) to rgb(215,121,56), softer but still clearly
   // in the swap-cell / "Swap & Assign" orange family.
-  const swapBg = swapBusy ? "rgba(215,121,56,0.85)" : S.bg;
-  const swapBrd = "1px solid " + (swapBusy ? "rgba(215,121,56,0.95)" : "rgba(255,255,255,0.5)");
+  // v17.8.0: was a hard-coded orange at 2.62:1 under white text, invisible to
+  // the token audit. --app-warn-solid is the app's solid warn fill and is what
+  // TableGrid's swap cells use, so the panel and the cells it describes finally
+  // agree; the rim goes neutral per the solid-label convention.
+  const swapBg = swapBusy ? "var(--app-warn-solid)" : S.bg;
+  const swapBrd = "1px solid " + (swapBusy ? "var(--border-glass)" : "rgba(255,255,255,0.5)");
   const swapTitleClr = swapBusy ? "var(--text-on-accent)" : S.text;
   const swapSubClr = swapBusy ? "var(--text-on-accent)" : S.text;
 
@@ -240,7 +244,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         <div style={{
           fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
           display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-          background: "rgba(0,122,255,0.75)",
+          background: "var(--accent)",
           border: "1px solid rgba(255,255,255,0.2)",
           boxShadow: "var(--shadow-btn)"
         }}>

@@ -126,7 +126,10 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
         onClick={handleSave}
         className="mgt-hover-scale"
         style={{
-          background: "rgba(153,27,27,0.85)",
+          // v17.8.0: deep red, deliberately — this Save BLOCKS a table out of
+          // service rather than saving a booking. Tokenized onto the app's
+          // solid danger fill instead of a one-off literal.
+          background: "var(--app-danger-solid)",
           border: "1px solid rgba(255,255,255,0.2)",
           borderRadius: R.pill, padding: "10px 22px", cursor: "pointer",
           fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,

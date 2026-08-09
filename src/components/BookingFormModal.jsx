@@ -479,7 +479,7 @@ export function BookingFormModal({
       <button
         onClick={function(){onBookAgain(cur);}}
         className="mgt-hover-scale"
-        style={mkBtn({fontSize: T.body,background:"rgba(22,101,52,0.8)",padding:"8px 16px",minHeight:36})}>Book Again</button>
+        style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",padding:"8px 16px",minHeight:36})}>Book again</button>
     );
   })();
   // v14: "return guest" banner at top of form when this is a Book Again creation.
@@ -492,7 +492,18 @@ export function BookingFormModal({
     const srcTime=src.scheduledTime||src.time;
     return (
       <div
-        style={{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:R.card,padding:"10px 14px",marginBottom:10,fontSize: T.body,fontWeight: FW.semi,color:"var(--success-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Return guest — re-booking from "+src.name+" ("+src.date+" at "+srcTime+"). Please set a date."}</div>
+        /* v17.8.0 correction (Patryk): was a filled card banner — pale green
+           fill + matching border + bold green text, i.e. the exact three-copies-
+           of-one-signal shape CLAUDE.md bans, and the generic "AI wrote this"
+           alert box. It is now the OUTLINE PILL used by the Regular / N-past-
+           visits chips it sits directly above, so the two read as one family:
+           no fill, a 2px border in the semantic hue, text in the same family.
+           Copy trimmed — the old sentence restated "re-booking" after a title
+           that already says Book again — but "set a date" STAYS. Book Again
+           deliberately clears the date to force a deliberate choice, and the
+           Save button is disabled until one is set with nothing on screen
+           explaining why. That clause is the explanation, not decoration. */
+        style={{display:"inline-flex",alignItems:"center",border:"2px solid var(--suggest-border)",borderRadius:R.pill,padding:"3px 10px",marginBottom:10,fontSize: T.small,fontWeight: FW.bold,color:"var(--success-text)"}}>{"Return guest · "+src.name+" · "+src.date+" "+srcTime+" — set a date"}</div>
     );
   })();
 
@@ -575,7 +586,7 @@ export function BookingFormModal({
   // ── The form modal itself ──
   return (
     <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><div style={{textAlign:"center",marginBottom:16}}><div
-        style={{fontSize: T.title,fontWeight: FW.bold,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking")}</div></div>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><div style={{position:"relative"}}><input
+        style={{fontSize: T.title,fontWeight: FW.bold,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:form.returnOf?"var(--app-success-solid)":"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</div></div>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><div style={{position:"relative"}}><input
             value={form.name}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
             onFocus={function(){setNameFocus(true);}}

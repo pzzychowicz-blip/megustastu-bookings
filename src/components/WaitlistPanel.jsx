@@ -47,7 +47,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
         style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:R.card,background:"var(--bg-soft)",border:"1px solid "+(avail?"var(--suggest-border)":"var(--border-soft)"),marginBottom:8,boxShadow:"var(--shadow-input)"}}><span
           style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{w.name||"(no name)"}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{w.size+" pax"}</span>{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
             className="mgt-hover-scale"
-            style={mkBtn({fontSize: T.body,background:"rgba(22,101,52,0.8)",minHeight:36})}
+            style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",minHeight:36})}
             onClick={function(){onBook(w);}}>Book</button><button
             className="mgt-hover-scale mgt-press"
             style={mkBtn({fontSize: T.body,background:arming?BTN.del:BTN.cancel,minHeight:36})}
@@ -64,7 +64,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
 
   return (
     <Overlay onClose={onClose} footer={footerEl}><AutoHeight><div style={{textAlign:"center",marginBottom:16}}><div
-          style={{fontSize: T.title,fontWeight: FW.bold,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{"Waitlist — "+date}</div></div>{rows.length?rows:<div
+          style={{fontSize: T.title,fontWeight: FW.bold,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:"var(--accent)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{"Waitlist — "+date}</div></div>{rows.length?rows:<div
         style={{textAlign:"center",padding:"24px 0",color:S.muted,fontSize: T.lead}}>No one on the waitlist for this day.</div>}<div style={{fontSize: T.small,color:S.muted,textAlign:"center",marginTop:10}}>First come, first served — "Table free" means a table currently fits this party.</div></AutoHeight></Overlay>
   );
 }

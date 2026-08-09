@@ -260,7 +260,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             disabled={!!err}
             className="mgt-hover-scale"
             style={{
-              background: err ? "rgba(180,180,190,0.4)" : "rgba(22,101,52,0.8)",
+              background: err ? "rgba(180,180,190,0.4)" : "var(--app-success-solid)",
               border: "1px solid rgba(255,255,255,0.2)",
               borderRadius: R.pill,
               padding: "10px 22px",

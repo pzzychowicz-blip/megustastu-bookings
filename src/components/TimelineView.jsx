@@ -1092,7 +1092,7 @@ export const TimelineView = memo(function TimelineView({
         className="mgt-hover-scale"
         style={mkBtn({
           minHeight: 36, padding: "4px 12px", fontSize: T.small,
-          background: autoOptimizer ? "rgba(22,101,52,0.75)" : "rgba(120,130,150,0.55)"
+          background: autoOptimizer ? "var(--app-walkin)" : "rgba(120,130,150,0.55)"
         })}
       >
         {"Optimizer: " + (autoOptimizer ? "ON" : "OFF")}

@@ -57,9 +57,21 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
               const indoor = isIn(t.id);
               const tc = indoor ? TBL.ind : TBL.out;
               let bg, clr, brd;
-              if (isSel)        { bg = "rgba(249,115,22,0.8)"; clr = "#fff";  brd = "2px solid rgba(249,115,22,0.9)"; }
-              else if (blocked) { bg = "rgba(220,60,60,0.75)"; clr = "#fff";  brd = "2px solid rgba(220,60,60,0.8)"; }
-              else if (isBusyT) { bg = "rgba(250,204,21,0.7)"; clr = "#fff";  brd = "2px solid rgba(250,204,21,0.8)"; }
+              // v17.8.0: these three were hard-coded fills with white text and
+              // NO token, so the contrast pass could not see them at all —
+              // measured 2.31 (selected), 3.13 (blocked) and ~1.4 (swap, white
+              // on a bright yellow). The blocked red was also a stale copy of
+              // --btn-del's value from BEFORE that pass retuned it.
+              // Consolidated onto tokens the app already has rather than three
+              // new near-duplicate hues, and the rim is now neutral
+              // --border-glass per the solid-label convention (the fill carries
+              // the colour; a matching border is a second copy of one signal).
+              // `selected` takes the ACCENT because accent means primary action
+              // or CURRENT SELECTION — which is literally this state, and it is
+              // free now that table badges are teal and purple.
+              if (isSel)        { bg = S.accent;                 clr = "var(--text-on-accent)"; brd = "2px solid var(--border-glass)"; }
+              else if (blocked) { bg = "var(--btn-del)";         clr = "var(--text-on-accent)"; brd = "2px solid var(--border-glass)"; }
+              else if (isBusyT) { bg = "var(--app-warn-solid)";  clr = "var(--text-on-accent)"; brd = "2px solid var(--border-glass)"; }
               else              { bg = "var(--bg-input)";       clr = S.text; brd = "2px solid " + tc.bg; }
               // v17.1.1: isSel first — a Plan-view pre-selected table can be
               // selected AND busy; it paints orange (isSel wins above), so the
