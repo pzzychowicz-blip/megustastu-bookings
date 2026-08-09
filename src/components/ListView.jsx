@@ -29,7 +29,7 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, STATUS_COLORS, BTN, R, T, FW } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
@@ -290,7 +290,7 @@ export const ListView = memo(function ListView({
             <button
               key={s}
               className="mgt-hover-scale"
-              style={mkBtn({ background: BLOCK_BG[s], textTransform: "capitalize" })}
+              style={mkBtn({ background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", textTransform: "capitalize" })}
               onClick={() => onStatus(b.id, s)}
             >
               {"> " + s}

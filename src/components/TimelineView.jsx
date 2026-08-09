@@ -291,7 +291,6 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       className="mgt-hover-scale mgt-blk"
       data-flip-id={flipId || undefined}
       data-bk={b.id}
-      data-st={b.status}
       onMouseEnter={() => setGroupHover(true)}
       onMouseLeave={() => setGroupHover(false)}
       onClick={handleClick}
@@ -307,8 +306,10 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         position: "absolute", top: 3, height: ROW_H - 8 + "px",
         left, width: w,
         background: bgc, borderRadius: 10, overflow: "hidden",   /* @canvas */
-        // v17.8.0: the block owns its ink; every text child inherits it. The
-        // amber fills carry near-black, the saturated ones white — see BLOCK_INK.
+        // v17.8.0: the block owns its ink; every text child inherits it via
+        // currentColor. Every fill takes white today (see BLOCK_INK) — the
+        // indirection is here because fill and ink are ONE decision, not
+        // because the values currently differ.
         color: BLOCK_INK[b.status] || BLOCK_INK.confirmed,
         display: "flex", alignItems: "center", boxSizing: "border-box",
         cursor: dragDy != null ? "grabbing" : "pointer",
@@ -506,7 +507,6 @@ function WaitGhost({ g, totalMins, onBook }) {
       // that just appeared, not on the proposal it replaced.
       className="mgt-hover-scale mgt-appear mgt-blk"
       data-wg={g.id}
-      data-st="pending"
       onMouseEnter={() => setGroupHover(true)}
       onMouseLeave={() => setGroupHover(false)}
       onClick={() => onBook(g.id)}

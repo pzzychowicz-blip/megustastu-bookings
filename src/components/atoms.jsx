@@ -12,7 +12,7 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, TBL, S, R, M, T, FW } from "../lib/constants";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -537,7 +537,7 @@ export function SBadge({ status }) {
     <span style={{
       fontSize: T.body, padding: "4px 10px", borderRadius: R.pill,
       background: BLOCK_BG[status] || BLOCK_BG.confirmed,
-      color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)",
+      color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: "1px solid rgba(255,255,255,0.2)",
       fontWeight: FW.semi, textTransform: "capitalize",
       display: "inline-block",
       boxShadow: "0 1px 3px rgba(0,0,0,0.1)"

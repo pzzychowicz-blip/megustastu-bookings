@@ -463,17 +463,25 @@ export var BLOCK_BG={confirmed:"var(--block-confirmed)",pending:"var(--block-pen
 // white-on-yellow at 1.83:1. Pair them here; tests/contrast.test.js measures
 // every pair in both themes.
 //
-// The amber pair (confirmed/pending) takes DARK ink rather than a darker fill:
-// v17.0.0 correction round 6 engineered those two as a matched-intensity pair,
-// and darkening them far enough to hold white text turns one brown and the
-// other olive. `completed` flips its ink per THEME (the grey works in both, the
-// ink cannot), which is why these are CSS vars and not literals — JS cannot see
-// the theme, and the whole point of the token layer is that it does not have to.
+// ALL FIVE currently resolve to white. This layer briefly carried dark ink on
+// the amber pair — the alternative to darkening fills v17.0.0 engineered as a
+// matched-intensity pair — and that shipped for exactly one commit before
+// Patryk rejected it: dark ink reads as DISABLED next to the white-inked seated
+// and cancelled blocks beside it, so a status change looked like a state
+// change. The amber pair is a recorded contrast exemption instead
+// (tests/contrast.test.js), and the one piece of INFORMATION on a block, the
+// start time, moved onto its own opaque --tl-hour-pill chip.
 //
-// Anything painting text ON a BLOCK_BG must take the matching BLOCK_INK. Inside
-// a timeline block the translucent chip washes and the divider rule have to
-// flip with the ink too, or a white pill lands on dark text; those come from
-// `--blk-wash` / `--blk-rule`, set by the `.mgt-blk[data-st]` rules in
+// So the indirection is not currently buying different values. It stays because
+// a fill and the text on it are ONE decision, and the failure it prevents is
+// exactly the one that happened here: a fill retuned in index.html while the
+// ink stayed where it was in a .jsx file, unmeasured. These are CSS vars rather
+// than literals so a future ink can flip per theme without JS knowing the theme.
+//
+// Anything painting text ON a BLOCK_BG must take the matching BLOCK_INK — that
+// is a rule about the pairing, not about today's values. The translucent
+// furniture inside a timeline block (the "~Nm" chip wash, the manual-assign
+// divider) reads `--blk-wash` / `--blk-rule` from the flat `.mgt-blk` rule in
 // index.html, and the text itself just inherits `currentColor`.
 export var BLOCK_INK={confirmed:"var(--ink-confirmed)",pending:"var(--ink-pending)",seated:"var(--ink-seated)",completed:"var(--ink-completed)",cancelled:"var(--ink-cancelled)"};
 // Dark mode (v14.2.0 `S`; v14.2.1 the colour sets STATUS_COLORS / BLOCK_BG /
