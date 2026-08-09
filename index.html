@@ -77,22 +77,32 @@
            values per theme are overridden in the dark block rather than
            inherited. tests/contrast.test.js measures every pair, both themes.
 
-           The amber pair keeps its exact fills: v17.0.0 correction round 6
-           engineered confirmed/pending as a matched-intensity pair, and
-           darkening them far enough for white text turns one brown and the
-           other olive — losing the yellow that distinguishes them. Amber wants
-           dark ink; that is what road signs do, and it reads better besides. */
-        --block-confirmed: rgba(217, 119, 6, 0.92);  --ink-confirmed: #1a1d24;
-        --block-pending: rgba(234, 179, 8, 0.92);    --ink-pending: #1a1d24;
+           The amber pair keeps its exact fills AND white ink (Patryk's call,
+           v17.8.0 correction). Two options were on the table for the amber
+           pair: darken the fills until white text clears AA, or keep the fills
+           and switch to dark ink. The first destroys the matched-intensity
+           pair v17.0.0 engineered — one goes brown, the other olive. The second
+           was tried and shipped for one commit and looked wrong: dark ink on a
+           timeline block reads as disabled next to the white-inked seated and
+           cancelled blocks beside it, so a status change looked like a state
+           change. Confirmed sits at 2.9:1 and pending at 1.8:1 and that is
+           accepted — the block's colour, position and width already carry its
+           meaning, the name on it is a label rather than the information, and
+           these two have looked like this for eight versions. The START-TIME
+           CHIP is the part that had to be legible, and it now carries its own
+           solid --tl-hour-pill fill (the same pill the hour ruler uses) rather
+           than a wash tinted by whatever is underneath it. tests/contrast.test.js
+           records this as a deliberate exemption rather than passing silently. */
+        --block-confirmed: rgba(217, 119, 6, 0.92);  --ink-confirmed: #ffffff;
+        --block-pending: rgba(234, 179, 8, 0.92);    --ink-pending: #ffffff;
         --block-seated: rgba(24, 111, 56, 0.85);     --ink-seated: #ffffff;
-        --block-completed: rgba(140, 140, 150, 0.7); --ink-completed: #1a1d24;
+        --block-completed: rgba(140, 140, 150, 0.7); --ink-completed: #ffffff;
         --block-cancelled: rgba(149, 59, 59, 0.8);   --ink-cancelled: #ffffff;
-        /* The translucent chips and the divider rule INSIDE a timeline block.
-           They were hard-coded white washes, which is right on a dark fill and
-           wrong on a light one — a white pill under dark text. Two sets, picked
-           by the block's own ink via the .mgt-blk rules further down. */
+        /* The translucent furniture INSIDE a timeline block — the "~Nm"
+           countdown pill and the manual-assign divider. Named rather than
+           hard-coded so it stays tied to the block's ink: every fill takes
+           white ink today, so there is one set, but the pairing is explicit. */
         --wash-on-dark: rgba(255, 255, 255, 0.25);   --rule-on-dark: rgba(255, 255, 255, 0.3);
-        --wash-on-light: rgba(0, 0, 0, 0.14);        --rule-on-light: rgba(0, 0, 0, 0.22);
         /* Table badges — bg .8 / border .5 share a hue (triplet); white text.
            v17.8.0: outdoor was `0, 122, 255` — byte-identical to --accent. Nine
            outdoor tables therefore painted the accent at all times, on every
@@ -378,10 +388,6 @@
         --tbl-ind-rgb: 175, 82, 222;
         --block-seated: rgba(32, 152, 76, 0.85);
         --block-cancelled: rgba(200, 80, 80, 0.8);
-        /* Completed is the one that flips its INK rather than its fill: the
-           grey reads correctly in both themes, but white text needs the dark
-           backdrop to work and dark text needs the light one. */
-        --ink-completed: #ffffff;
         /* ── v14.2.2: atoms / modal dark overrides ── */
         --bg-sheet: rgba(44, 44, 46, 0.85);
         --bg-sheet-mobile: rgba(28, 28, 30, 0.98);
@@ -662,20 +668,17 @@
       .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
 
       /* ── v17.8.0: a timeline block's ink scheme ──────────────────────────────
-         A block sets `color` inline from BLOCK_INK[status]; its text children
-         then just inherit currentColor. What could NOT be inherited is the
-         translucent furniture — the start-time chip, the "~Nm" countdown, the
-         manual-assign divider — which were hard-coded white washes. Correct on
-         seated green and cancelled red, wrong on the amber pair, where a white
-         pill sits under near-black text.
-         Expressed here rather than in JS because `completed` flips per THEME,
-         and JS cannot see the theme. Default is the dark-fill scheme; the light
-         fills opt out; completed opts back in under dark mode. */
+         A block sets `color` inline from BLOCK_INK[status] and its text
+         children inherit it. Every fill currently takes white (see index.html's
+         --ink-* block for why the amber pair keeps white rather than going
+         dark), so there is ONE wash set — but the indirection stays, because
+         the fill/ink pairing is the thing that has to be changed together and
+         a future fill may not want white. The wash is what the translucent
+         furniture inside a block uses: the "~Nm" countdown and the
+         manual-assign divider. The start-time chip does NOT use it — it takes
+         a solid --tl-hour-pill, matching the hour ruler above the grid, so it
+         is legible on every fill instead of being tinted by it. */
       .mgt-blk { --blk-wash: var(--wash-on-dark); --blk-rule: var(--rule-on-dark); }
-      .mgt-blk[data-st="confirmed"],
-      .mgt-blk[data-st="pending"],
-      .mgt-blk[data-st="completed"] { --blk-wash: var(--wash-on-light); --blk-rule: var(--rule-on-light); }
-      [data-theme="dark"] .mgt-blk[data-st="completed"] { --blk-wash: var(--wash-on-dark); --blk-rule: var(--rule-on-dark); }
 
       /* ── v17.8.0: universal press-scale ──────────────────────────────────────
          EVERY button dips on press. Opt-IN was the old model (.mgt-press, 28 of

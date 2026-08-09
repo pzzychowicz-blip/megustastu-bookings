@@ -105,11 +105,21 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // span SNAPPED. With the width easing, the flex:1 name slides in lockstep.
   const timeChip = (
     <Reveal show={showChip} horizontal style={{ pointerEvents: "none" }}>
+      {/* v17.8.0 correction (Patryk): the chip now matches the HOUR PILLS on the
+          ruler above the grid — same --tl-hour-pill fill, same white text, same
+          radius. It used to be a translucent white wash, which meant its
+          appearance was a function of whatever block it happened to sit on: pale
+          on amber, bright on green, and legible on neither at 10px. A time is a
+          time wherever it appears, so it should look identical to the ruler that
+          labels the same axis. This is also what lets the amber blocks keep
+          white ink at 1.8:1 without the START TIME becoming unreadable — the
+          chip carries its own opaque background and is not affected. */}
       <span style={{
-        flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: R.pill,
-        fontSize: T.micro, fontWeight: FW.bold, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+        flexShrink: 0, marginLeft: 6, padding: "2px 5px", borderRadius: R.pill,
+        fontSize: T.micro, fontWeight: FW.semi, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
         whiteSpace: "nowrap",
-        background: "var(--blk-wash)",
+        background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
         pointerEvents: "none", position: "relative"
       }}>{b.time}</span>
     </Reveal>
@@ -520,10 +530,11 @@ function WaitGhost({ g, totalMins, onBook }) {
           all-or-nothing `chipsOn` rule); a ghost always does, because the time
           is the entire proposal — a ghost without one says nothing useful. */}
       <span style={{
-        flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: R.pill,
-        fontSize: T.micro, fontWeight: FW.bold, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+        flexShrink: 0, marginLeft: 6, padding: "2px 5px", borderRadius: R.pill,
+        fontSize: T.micro, fontWeight: FW.semi, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
         whiteSpace: "nowrap",
-        background: "var(--blk-wash)"
+        background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
       }}>{g.time}</span>
       {/* v17.8.0 correction: the ⏳ sits BETWEEN the time and the name, not
           trailing it. Trailing, it was the first thing the ellipsis ate — the
