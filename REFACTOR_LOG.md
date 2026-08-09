@@ -7365,3 +7365,89 @@ DEV: motion tokens resolve and knob travel sampled frame by frame; the popover
 caught mid-fade entering and with `mgt-card-out` leaving; the strip verified
 collapsed ("Notifications | 1 | 2 | ▾", three glyphs) and expanded; zero
 buttons under Settings still compute an inset-highlight shadow.
+
+### Polish round 6 (commits 25–28) — four things Patryk caught in round 5
+
+Round 5's own follow-up list. Two are corrections to it, two are older bugs it
+made visible.
+
+#### The strip's tally stays put when it opens
+
+The per-category icon+count row was gated on the strip being COLLAPSED, on the
+reasoning that an open strip heads every section itself. Wrong twice: it makes
+the lid's contents change under the finger that just tapped it, and the tally
+is the one part of that row still useful while open — the sections scroll, the
+lid doesn't, so with several live it is a fixed summary of a body you may be
+halfway down.
+
+#### The customer chips swap with a transition
+
+Regular and No-shows shared one `Reveal`, so switching between them never
+changed `show`: the swap happened inside an already-open box, the rows were
+replaced in a single frame, and the height snapped. One Reveal each makes the
+switch what it actually is — one disclosure closing while another opens — and
+since both ride the same curve for the same duration, the container height
+interpolates straight from one panel's to the other's with no bulge between.
+
+Generalised into CLAUDE.md, because a shared Reveal looks like the tidier code
+right up until the swap case.
+
+#### AutoHeight is always linear now
+
+Patryk: Settings' transitions and window resizing feel too fast or jumpy, and
+Summary → More is the reference. Those two are the *same component at the same
+duration* — 385ms `AutoHeight` both — differing only in the curve, because
+`AutoHeight` carried an opt-in `linear` prop that exactly two call sites had
+ever set, one of them being the reference.
+
+So the prop was the bug, not the setting of it. `AutoHeight` is never an object
+arriving; it is a box conforming to content that already changed. There is no
+arrival to decelerate into, so ease-out has nothing to describe and only
+front-loads: cubic-out puts 70% of a height change in the first third of the
+time and crawls the rest, which is precisely the lurch being reported. The
+easing is now linear unconditionally, the prop is gone, and every modal body —
+Settings, booking form, walk-in, manual, preferred-tables, search, waitlist —
+resizes like the one that felt right.
+
+Linear is a third curve in a system that documents two, so it is named:
+`M.resize`, carrying the reasoning, alongside `.mgt-dot-pulse`'s `ease-in-out`.
+Those two exceptions share a test — ask whether anything is actually going
+anywhere; if nothing is, a direction curve is describing a motion that isn't
+happening.
+
+The Settings tab crossfade moved `--t-move` → `--t-shift` with it. It rides
+inside a card resizing over `--t-shift` and the two are one event; at 240ms the
+new tab hit full strength while the card was still visibly moving. That class
+has a single call site, so the duration is a Settings decision, not a global.
+
+#### Waitlist matches are placed in a queue, not in parallel
+
+Two ghosts on one table. Every waiting entry was matched independently against
+the same `liveBookings`, so identical inputs produced identical answers — four
+parties of two on a quiet evening all offered the same best table at the same
+minute.
+
+Never only a drawing bug. The answers were individually true and jointly
+impossible: booking the first party silently falsified the second's "Table
+free" chip, and the banner had been doing that since v16.0.0. Drawing them is
+what made it visible — which is the argument for the ghosts, in miniature.
+
+Matching is sequential now. Each party that lands is appended to `holds` as a
+synthetic `_locked` booking the next party's scan sees as occupied — locked
+because `applyOpt`, on the reshuffling path inside `trialFits`, copies a locked
+booking's tables through verbatim, so a hold reserves its slot instead of being
+optimised out from under the ghost already drawn for it. The queue is
+`createdAt`-ascending: sequential placement is only fair if the sequence is,
+and FCFS is the order the panel and banner already present. A budget-skipped
+entry keeping its previous answer is held too, or the queue behind it can't see
+it and the double-booking returns.
+
+Still true and still deliberate: a `resh` match — one reachable only by
+re-optimising — can overlap a visibly occupied table. That is what its dashed
+edge says.
+
+**Verification.** Build + 103 tests + lint (0 errors) on every commit. Live in
+DEV: the tally confirmed present with the strip open and collapsed; all six
+Settings `AutoHeight`s compute `height var(--t-shift) linear`; 12 waiting
+parties all wanting 21:00 rendered 12 ghosts on 12 different tables (was 12 on
+one), with the one occupied row correctly skipped. Seeded waitlist restored.
