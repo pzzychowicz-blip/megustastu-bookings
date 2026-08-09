@@ -7683,3 +7683,44 @@ green text: one signal three times, and the stock alert box. It is the outline
 pill the Regular / N-past-visits chips beside it already use. The title reads
 "Book again". The copy drops the clause that restated the title and keeps "set a
 date", which is the only thing on screen explaining why Save is disabled.
+
+### Review fixes (commits 60–61)
+
+**The contrast pass had four fills it could not see, and the reason is the one
+this version already wrote down twice.** All four were byte copies of a token's
+*pre-retune* value, so the pass moved the token and the copy kept rendering:
+TimelineView's Optimizer OFF at 1.94:1, ReminderEditor's inactive
+Once/Weekly/weekday buttons at **1.70:1** — the worst text contrast in the app
+after a pass whose whole subject was contrast — its title pill at 2.85:1, and
+WeekView's Week/Month segment. The Optimizer one is eight lines below the Follow
+button, which was cured of the *same literal* in the *same commit*, under a
+comment reading "a literal duplicate of a token is a token that cannot be
+fixed". Writing the lesson beside one copy is not running the grep.
+
+**`--tl-now-pill` was at 3.91:1 in dark and unwatched**, because the contrast
+registry's coverage check enumerates `--block-` / `--btn-` / `--app-btn-` /
+`--tbl-` and the timeline pills are a *third* naming family — the same
+prefix-blindness that hid `--app-btn-grey` from the first draft of that file.
+The sharp one there is `--tl-hour-pill`: the amber blocks are a **recorded
+exemption** on the explicit grounds that the start time moved onto that pill, so
+the exemption's entire justification was resting on a fill nothing measured. It
+passes at 4.73/6.87 — by luck, not by check. Coverage now includes
+`--tl-*(pill|badge)`, the shape that actually carries text on that view.
+`--tl-now-pill` goes two steps deeper in the same blue (5.02:1).
+
+**BLOCK_INK's pairing was three sites short**, and its comment described a
+design that had been reverted. SBadge and ListView's status buttons paint text
+on `BLOCK_BG` and hard-code white — invisible today because all five inks *are*
+white, which is the kind of correct-by-coincidence that stops being correct the
+first time someone changes one. Worse, `constants.js` still told the next reader
+the amber pair "takes DARK ink" and that `completed` "flips its ink per THEME":
+the design that shipped for one commit and was rejected three commits later.
+TimelineView repeated it, and both pointed at `.mgt-blk[data-st]` rules that no
+longer exist (`data-st` is dropped; nothing read it). **These files are the
+architecture record, so a stale comment is not cosmetic** — this one would have
+argued a future reader straight back into the rejected design.
+
+Verified live in DEV, both themes: Optimizer OFF 1.94 → 3.00, reminder
+Once/Weekly 1.70 → 3.00, reminder title 2.85 → 3.02, Week/Month 3.28 → 4.02, no
+console errors. `npm run build` · **229 tests** (contrast now 70) · lint 0
+errors · `check:style` OK.

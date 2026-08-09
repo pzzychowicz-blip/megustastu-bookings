@@ -208,11 +208,27 @@ src/
   booking-form footer held two more, one of them a copy of
   `--app-success-solid` from *before* that same pass retuned it. Grep the token's
   VALUE, not just its name, when retuning one.
+  **It then happened again in the commit that wrote this rule** (v17.8.0 review
+  fix): the Optimizer button, eight lines below the Follow button, held the same
+  `rgba(120,130,150,.55)` and stayed at 1.94:1; ReminderEditor's inactive
+  Once/Weekly/weekday buttons held `…,0.45` and were left at **1.70:1**, the
+  worst text contrast in the app *after* a pass whose whole subject was contrast.
+  Writing the lesson into a comment beside one copy is not the same as running
+  the grep. **Fixing one copy of a literal does not fix the literal** — when you
+  retune a token, the very next command is a repo-wide search for its old value.
 - **Two names for one concept is how a thing hides from its own audit
   (v17.8.0).** The inactive View button is `--app-btn-grey`, not `--btn-nav`, so
   a coverage check written around the `--btn-*` prefix walked straight past the
   control staff look at on every screen. When writing a check that enumerates
   tokens by prefix, enumerate what is actually THERE and diff it.
+  A **third** family then hid from the same check: the timeline's own
+  `--tl-*-pill` / `--tl-*-badge` fills, one of which (`--tl-now-pill`) was below
+  the bar in dark. The one that matters is `--tl-hour-pill` — the amber blocks
+  are a *recorded exemption* on the grounds that the start time moved onto that
+  pill, so the exemption's entire justification was resting on a fill nothing
+  measured. It passed, at 4.73:1, **by luck**. When a check's verdict becomes an
+  argument for accepting something else, everything that argument leans on has
+  to be inside the check.
 
   **Corollary for pill-shaped controls (v17.8.0): `--r-pill` clamps to half the SHORTER side, so only a SQUARE box is a circle.** An icon button sized by `minHeight` + horizontal padding is ~30×40 and renders as a vertical egg — which is what the three Split-View tools were, one row above the perfectly round 34×34 🔍/⚙ pair. A single-glyph button gets explicit equal `width`/`height` and `padding: 0` (and `min-*` is not enough — a flex row will stretch it back).
 - Reusable JSX atoms in `src/components/atoms.jsx`: `Overlay`, `Fld`, `Section`, `TBadge`, `AvailBanner`, `Toggle`, `mkInp`, `mkBtn`.
