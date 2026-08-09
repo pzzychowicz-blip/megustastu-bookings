@@ -37,12 +37,15 @@ import {
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
   checkInefficent, verifyClean, findConflicts,
   nowTime,
-  trialFits, toTime, lateState, freeingSoon, rankCombosContaining, comboExistsFor,
+  lateState, freeingSoon, rankCombosContaining, comboExistsFor,
   undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
 import { normalizePhone } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
+// v17.8.0: the waitlist placement pass — pure, extracted from this file so it
+// can be unit-tested (tests/waitlist-match.test.js).
+import { placeWaitlist } from "./lib/waitlist-match";
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
@@ -1215,113 +1218,29 @@ function BookingApp({uid}){
   // transition-diff green toast was removed (superseded by the persistent banner).
   const nowQuarter=Math.floor(nowMins/15);
   useEffect(function(){
-    const todayStr=new Date().toISOString().slice(0,10);
-    const next={};
-    // v16.3.0 perf phase 2: whole-pass time budget for the expensive trials
-    // (shared across entries — see tryFit below).
-    const WAIT_SCAN_BUDGET_MS=300;
-    const scanT0=Date.now();
-    // v17.8.0: matches are computed SEQUENTIALLY, and every party that lands is
-    // appended to `holds` — a synthetic booking the NEXT party's scan sees as
-    // occupied. Before this each entry was matched independently against the
-    // same `liveBookings`, so two parties waiting for the same evening were
-    // routinely handed the SAME table at the SAME time. As two banner rows that
-    // was invisible; as two timeline ghosts stacked on one row it is obviously
-    // wrong. It was never only cosmetic — the answers were individually true
-    // and jointly impossible, so booking the first party silently falsified the
-    // second one's "Table free" chip.
-    //
-    // `_locked` is what keeps a hold still: applyOpt (the reshuffling path
-    // inside trialFits) copies a locked booking's tables through verbatim, so a
-    // hold reserves its slot instead of being optimised out from under the
-    // ghost already drawn for it. Holds for other dates are harmless — every
-    // consumer filters by date first.
-    const holds=[];
-    function hold(w,size,dur,res){
-      holds.push({id:"__wait_"+w.id,name:"",phone:"",date:w.date,time:res.time,
-        size:size,duration:dur,preference:"auto",notes:"",status:"confirmed",
-        tables:res.tables,customDur:null,_manual:true,_locked:true,_conflict:false,
-        preferredTables:[],history:[]});
-    }
-    // FCFS decides who gets a contested table — the same order the waitlist
-    // panel and the banner present, not whatever order the Firebase node's
-    // children arrived in. Sequential placement only means something fair if
-    // the sequence does.
-    const queue=waitlist.slice().sort(function(a,b){return ((a&&a.createdAt)||0)-((b&&b.createdAt)||0);});
-    queue.forEach(function(w){
-      if(!w||w.status!=="waiting"||!w.date||w.date<todayStr) return;
-      const h=hoursFor(w.date);
-      if(h.closed) return;
-      const size=Number(w.size)||2;
-      const dur=getDur(size);
-      const noResh=!optimizerActiveFor(w.date,autoOptimizer);
-      const fromM=w.date===todayStr?Math.max(nowMins,h.open*60):h.open*60;
-      // With a wanted time, only offers within ±90 min of it count as "free"
-      // (a 13:45 slot is no use to a party waiting for ~20:30); without one,
-      // any remaining time that day counts. The wanted time itself is tried
-      // first so the chip shows it exactly when it fits.
-      let scanLo=Math.ceil(fromM/15)*15;
-      let scanHi=h.close*60-dur;
-      // v16.3.0 perf: cheap-first (the findTimes pattern) — a plainly free table
-      // means the slot fits WITHOUT reshuffling anyone; only slots failing the
-      // cheap check pay for the full trial optimisation (expensive on a day
-      // with unplaceable bookings — this scan runs on every data change).
-      // Perf phase 2: a hard per-effect time budget — on an extreme day a
-      // single full trial can cost 100ms+; past the budget we skip further
-      // expensive trials this pass. /code-review anti-flap: a budget-skip is
-      // recorded (budgetHit) so an entry that was available LAST pass keeps its
-      // sticky result below instead of blinking out of the banner — a future
-      // pass (next data change / 15-min bucket) re-verifies for real, and the
-      // Book path re-validates via the form's own scan + doSave guards anyway.
-      let budgetHit=false;
-      // v17.8.0: `lastResh` records WHICH branch produced the hit, so the entry
-      // can carry a `resh` flag. The cheap findFreeSlot path (and any hit while
-      // noResh is true) places the party on tables that are free exactly as the
-      // Timeline currently draws them; the reshuffling trialFits path may only
-      // be reachable by MOVING other parties first. The waitlist ghost blocks
-      // need that distinction — a solid ghost drawn over a table that is visibly
-      // occupied would read as a bug, so those render as a dashed outline
-      // instead. Additive: bookFromWaitlist and WaitAvailBanner ignore it.
-      let lastResh=false;
-      const tryFit=function(timeStr){
-        const world=holds.length?liveBookings.concat(holds):liveBookings;
-        if(!noResh){const cheap=findFreeSlot(world,w.date,timeStr,size,"auto",dur,tableBlocks,null,null);if(cheap){lastResh=false;return cheap;}}
-        if(Date.now()-scanT0>WAIT_SCAN_BUDGET_MS){budgetHit=true;return null;}
-        const t=trialFits(world,w.date,timeStr,size,"auto",dur,tableBlocks,null,null,noResh);
-        // noResh === true means trialFits was forbidden from moving anyone, so
-        // its answer is a clean placement too.
-        if(t) lastResh=!noResh;
-        return t;
-      };
-      if(w.prefTime){
-        const sm=toMins(w.prefTime);
-        if(sm>=fromM&&sm+dur<=h.close*60){
-          const t=tryFit(w.prefTime);
-          if(t){const r={tables:t,time:w.prefTime,resh:lastResh};next[w.id]=r;hold(w,size,dur,r);return;}
-        }
-        // v17.0.0: the ± window is editable (settings/general waitMatchWin).
-        const win=generalSettings.waitMatchWin||90;
-        scanLo=Math.max(scanLo,Math.ceil((sm-win)/15)*15);
-        scanHi=Math.min(scanHi,sm+win);
-      }
-      for(let m=scanLo;m<=scanHi&&m<24*60;m+=15){
-        const t=tryFit(toTime(m));
-        if(t){const r={tables:t,time:toTime(m),resh:lastResh};next[w.id]=r;hold(w,size,dur,r);break;}
-      }
-      // Anti-flap carry-forward: no match found AND the budget cut this entry's
-      // scan short → keep the previous pass's availability (if any) rather than
-      // dropping the row. A genuine "no longer fits" (budget NOT hit) still
-      // clears immediately.
-      // The carry-forward is held too, or a budget-skipped entry keeping last
-      // pass's answer would be invisible to everyone behind it in the queue —
-      // reintroducing exactly the double-booking this pass exists to prevent.
-      if(!next[w.id]&&budgetHit&&waitAvailRef.current[w.id]){const r=waitAvailRef.current[w.id];next[w.id]=r;hold(w,size,dur,r);}
+    // v17.8.0 tech-debt: the ~90 lines of placement logic that used to sit here
+    // are `placeWaitlist` in lib/waitlist-match.js — VERBATIM, nothing about the
+    // algorithm changed. It decides which table the app offers each waiting
+    // party, which makes it the most consequential logic in this version, and
+    // inside a useEffect no test could reach it. What is left here is the part
+    // that is genuinely React: the 15-min clock bucket this keys on (never the
+    // raw nowMins tick, or the scans re-run every 15s), the ref mirror that
+    // feeds the anti-flap carry-forward, and the setState.
+    const next=placeWaitlist({
+      bookings:liveBookings,
+      waitlist:waitlist,
+      blocks:tableBlocks,
+      autoOptimizer:autoOptimizer,
+      nowMins:nowMins,
+      todayStr:new Date().toISOString().slice(0,10),
+      matchWin:generalSettings.waitMatchWin,
+      prev:waitAvailRef.current
     });
     waitAvailRef.current=next;
     setWaitAvail(next);
-    // v16.3.0: the transition-to-available cue is now the in-flow WaitAvailBanner
-    // (persistent + actionable), not a 6-second toast — so the prev-set diff that
-    // fired the old toast is gone. waitAvail alone drives the banner.
+    // v16.3.0: the transition-to-available cue is the in-flow WaitAvailBanner
+    // (persistent + actionable), not a 6-second toast — so the prev-set diff
+    // that fired the old toast is gone. waitAvail alone drives the banner.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter,generalSettings.waitMatchWin]);
 

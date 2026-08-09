@@ -47,17 +47,11 @@ import { useState, useEffect, useRef } from "react";
 import { ref, onValue, onDisconnect, push, set, update, remove, serverTimestamp } from "firebase/database";
 import { db, auth } from "../firebase";
 import { dbError } from "../lib/dbError";
+import { presenceState, BEAT_MS } from "../lib/presence-state";
 
-// How often a live connection re-proves itself, and how long a child survives
-// without doing so. STALE_MS is three missed beats — long enough that a brief
-// stall or a slow write never blinks a real device out of the list, short
-// enough that a closed tab is gone while someone is still looking at the popover.
-const BEAT_MS = 45 * 1000;
-const STALE_MS = 150 * 1000;
-// Deletion is deliberately far more conservative than hiding: hiding is free and
-// reversible (the next beat brings the device back), deleting is neither. 10
-// minutes is well past any plausible heartbeat stall.
-const PRUNE_MS = 10 * 60 * 1000;
+// v17.8.0 tech-debt: the thresholds and the read model live in
+// lib/presence-state.js — pure, and therefore testable. This file keeps the
+// subscription, the refs, and the writes.
 
 // Best-effort human label from the userAgent — "iPad · Safari", "Mac · Chrome",
 // "Windows · Edge", "Android · Chrome". Purely cosmetic; falls back to "Device".
@@ -193,44 +187,25 @@ export function usePresence(){
     const unsub=onValue(ref(db,"presence"),function(snap){
       const val=snap.val();
       if(!val){ setDevices([]); pruneArmedRef.current=false; return; }
-      const now=Date.now()+offsetRef.current;
-      // Prune leaked children — ONCE per registration (armed on connect, consumed
-      // here), rather than on a timer, so N devices cause N deletes at connect
-      // time instead of a rolling write storm. Deletion is far more conservative
-      // than hiding: hiding is free and reversible (the next beat brings a device
-      // back), deleting is neither, so PRUNE_MS is 4× STALE_MS.
-      // Gated on a REAL offset. Without one `now` is local time, and on a
-      // device whose clock runs more than PRUNE_MS fast every live child looks
-      // ancient — the prune would delete the whole node. Staleness HIDING is
-      // left ungated on purpose: it is reversible (the next beat brings the
-      // device back), which is the same asymmetry that makes PRUNE_MS 4x
-      // STALE_MS. Staying armed means the next snapshot retries.
-      if(pruneArmedRef.current&&offsetReadyRef.current){
-        pruneArmedRef.current=false;
-        const mine=myRefRef.current&&myRefRef.current.key;
-        Object.keys(val).forEach(function(k){
-          if(k===mine) return;   // never delete our own child
-          const v=val[k]||{};
-          const seen=typeof v.lastSeen==="number"?v.lastSeen:(typeof v.since==="number"?v.since:0);
-          if(seen&&now-seen>PRUNE_MS) remove(ref(db,"presence/"+k)).catch(function(){});
-        });
-      }
-      const list=[];
-      Object.keys(val).forEach(function(k){
-        const v=val[k]||{};
-        // `since` is the fallback for a child written by a pre-v17.8.0 client,
-        // which has no lastSeen. That keeps such a device visible for its first
-        // STALE_MS and then drops it until it reloads — a transitional cost on
-        // a handful of devices, and the alternative (trusting a field that is
-        // never refreshed) is the bug this whole change exists to fix.
-        // Learn our own resolved `since` so the heartbeat can rewrite it
-        // verbatim instead of stamping a fresh one every beat.
-        if(k===(myRefRef.current&&myRefRef.current.key)&&typeof v.since==="number") sinceRef.current=v.since;
-        const seen=typeof v.lastSeen==="number"?v.lastSeen:(typeof v.since==="number"?v.since:0);
-        if(!seen||now-seen>STALE_MS) return;
-        list.push({key:k,email:v.email||"unknown",ua:v.ua||"Device",since:typeof v.since==="number"?v.since:null,lastSeen:typeof v.lastSeen==="number"?v.lastSeen:null});
-      });
-      setDevices(list);
+      // presenceState decides everything; this callback only does the IO it
+      // decides on. `canPrune` is armed-on-connect AND a real server offset:
+      // without one `now` is local time, and on a device whose clock runs fast
+      // every live child looks ancient and the prune would empty the node.
+      // Staying armed means the next snapshot retries.
+      const canPrune=pruneArmedRef.current&&offsetReadyRef.current;
+      const st=presenceState(
+        val,
+        Date.now()+offsetRef.current,
+        myRefRef.current&&myRefRef.current.key,
+        canPrune
+      );
+      if(canPrune) pruneArmedRef.current=false;
+      // Fire-and-forget: a failed delete just means the next connect retries.
+      st.prunable.forEach(function(k){ remove(ref(db,"presence/"+k)).catch(function(){}); });
+      // Our own resolved `since`, so the heartbeat rewrites it verbatim rather
+      // than stamping a fresh one every beat.
+      if(st.mySince!=null) sinceRef.current=st.mySince;
+      setDevices(st.devices);
     },dbError("presence"));
     return unsub;
   },[]);
