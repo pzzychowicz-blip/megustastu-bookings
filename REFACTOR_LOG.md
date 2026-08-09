@@ -7171,3 +7171,80 @@ Settings said "Follows your account on every device." verbatim on five
 consecutive rows. Five copies of the rule buried the only useful fact — which
 settings are the exception. The rule is stated once; App width and Timeline zoom
 open with "This device only".
+
+### Polish round 4 (commits 16–18) — motion
+
+The audit's last open finding, plus the animations that were simply absent.
+
+#### One motion signature
+
+Five easing curves were in use — `ease`, `ease-out`, `ease-in-out`, `linear`,
+and Material's `cubic-bezier(.4,0,.2,1)` — chosen per site across eight
+versions with no rule behind which went where. A modal's scrim faded `linear`
+while the toast inside it used Material's curve while the button on it used
+`ease`: three materials in one glance. Twelve durations did the same job
+(120·140·160·170·180·200·220·260·280·320·340·360), several a few ms apart.
+
+Two curves now, and **the split is by direction, not by element**: `--ease-out`
+for everything that arrives, opens, moves or answers a finger, `--ease-in` (its
+exact mirror) only for things leaving. Three durations by what is moving —
+`--t-tap`, `--t-move`, `--t-shift` — plus `--t-status` and `--t-wipe`, which sit
+outside the scale because they are not interface response. `--t-status` earns
+its own name for a specific reason: TimelineView and PlanView must agree on it,
+and a shared number needs a shared name.
+
+Two exceptions survive and both are genuine. The busy dot's pulse keeps
+`ease-in-out` — a loop has no arrival and no departure, so neither direction
+curve applies. And `useFlip` keeps literal values because WAAPI cannot read a
+CSS var; it would resolve to nothing and run linear. Those two literals are the
+only thing in the system that can drift, and `M`'s comment says so.
+
+Picked up in passing, both in files already open: Settings' TabBar was
+`transition: all 0.15s` (which was trying to tween a 600→700 font-weight jump,
+and is the transition equivalent of a wildcard import), and it carried a
+hard-coded light-calibrated shadow that commit 11's sweep had missed.
+
+#### Motion where there was none
+
+Mostly the notification strip. A section that resolved while others were still
+up vanished mid-frame and everything below it jumped — worst in exactly the
+case the strip exists for. Sections now ride `useRevealRows`, the hook their
+own rows have used since v16.3.0.
+
+Three details only measurement caught:
+
+- A departing section held its old index, but the sections below had already
+  shifted up into it, so it **tied** with its replacement and the tie fell
+  through to `renderIds`, which is arrival-ordered. Measured live: "Running
+  late" jumped from first to second and *then* collapsed. Departed ranks now
+  sort half a step above their replacement.
+- Nothing caches the departing section's content, because `Reveal` already
+  holds its last truthy children for precisely this case. The strip remembers
+  only WHERE a section was — one integer.
+- Emptying the strip entirely still blanked before collapsing, because App
+  passed a live-but-empty strip as `Reveal`'s children and Reveal caches only
+  **truthy** children. It passes `null` now.
+
+Also: the strip's tint and tone cross-fade (it is recoloured by whatever is
+worst right now, and a cut between two saturated tints reads as a flicker), and
+the ▲/▼ pair became one ▾ that turns — a glyph swap is a cut with nothing to
+say the two are the same control.
+
+Outside the strip, a waitlist ghost fades in rather than blinking into
+existence beside blocks that never move on their own, and the connection dot
+cross-fades instead of cutting. That needed a new keyframe: `mgt-appear`, with
+no `to` and no fill-mode. The omitted endpoint resolves to the element's own
+computed value, so it lands on the ghost's 0.55 (or 0.4 when reshuffling)
+without the rule knowing that number; and `both` would have pinned the animated
+properties forever, which on a `.mgt-hover-scale` element kills the lift
+permanently. Verified live: opacity settles at 0.55, the group lift still
+reaches 1.08.
+
+**Deliberately not animated:** the empty-day state. It appears mostly when you
+navigate to an empty day, where `SlideView` is already animating the whole
+view — a second fade inside it would only make the day change feel slow.
+
+**Verification.** Build + 103 tests + lint (0 errors) on every commit. Live in
+DEV: every token resolves, zero legacy curves remain anywhere in the computed
+DOM, and the section collapse was sampled at 50ms (126→74→28→9→3→1→gone, no
+position jump). Main chunk 686.33 kB / 195.92 kB gz.

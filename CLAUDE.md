@@ -93,7 +93,7 @@ src/
 │   └── atoms.jsx                    Overlay (+ pinned-footer slot), Fld, Section, Collapsible (v15.0.0; optional controlled mode `open`/`onToggle` v15.1.0), Reveal (graceful height show/hide via grid-rows 0fr↔1fr + delayed unmount; overflow:visible when open+settled, clip only while animating so inner hover-lifts aren't clipped — v15.8.0; v16.1.1 optional `horizontal` = grid-COLUMNS 0fr↔1fr + inline-grid, eases occupied WIDTH — used by the timeline start-time chip so the sibling name eases in lockstep), Presence/Toast (generic enter/exit wrapper with in/out class + delayed unmount + cached children; Toast = the toast-class alias — v15.8.0), ModalPresence/usePresence (PresenceContext so Overlay/ReminderEditor self-animate close — v15.8.0), AutoHeight (ResizeObserver eases content-height changes; overflow:visible at rest, clip ONLY while the height transition runs so inner hover-lifts aren't clipped — supersedes the earlier "always hidden"; optional `linear` — used in Settings tabs / Manual·Walkin·Pref·Reminder·Week bodies — v15.8.0), SlideView (slide wrapper, clips only while animating — v15.8.0; v17.5.0 optional `fill` = `flex:1;minHeight:0;display:flex;flexDirection:column`, needed in the `shellFixed` layout where it must pass a definite height through instead of collapsing to content height), useFlip (WAAPI list-reorder hook — v15.8.0), TBadge, AvailBanner, Toggle (knob/track ease — v15.8.0), mkInp, mkBtn, **mkSel** (v17.8.0 — the dropdown mkInp: `paddingRight: 18`. A `<select>` paints its arrow inside its own padding box, hard against padding-right, and mkInp's 12px lands it deep inside a pill's right CAP — 21.5px wide on the 43px control, since CSS clamps `--r-pill` to half the box. Text is immune because it spans enough height that the curve has receded behind it, which is exactly why the LEFT 12px looks right and the right 12px does not. A single small glyph at the end of a pill wants padding ≈ the radius. `LayoutSettings`' local `SEL_INP` applies the same reasoning against its own smaller box rather than importing this), **mkArea** (v17.7.0 — the multi-line mkInp, used by ALL THREE textareas: `resize:vertical` + `alignContent:"center"` + **v17.7.1 `borderRadius: R.inset`**. A textarea starts its text at the TOP, which is where a rounded box is NARROWEST, so a radius wider than the 12px horizontal padding eats the first characters. v17.7.0 answered that with the centring alone, which fixes it ONLY while the content is shorter than the box — `align-content` has nothing to distribute once the text overflows, and every caller is `rows={2}`, so the third line typed makes the field scroll, returns the text to the top edge, and on `--r-pill` (999px → clamped to half the ~60px box = 30px vs 12px padding) slices the topmost VISIBLE line at every scroll position. **The radius, not the alignment, is the guarantee** — `R.inset` (10px) stays inside the padding at any height/scroll/resize. The centring survives as balance for short content only)
 └── lib/
     ├── booking-logic.js             pure functions (optimizer, sanitisation, derivations, daySummary); v15.0.0: isIn via ZONE_OF, date-finders read hoursFor(date); v15.9.0: ALL optimizer heuristics data-driven via PRIORITIES (IS_MGT_LAYOUT no longer imported); v16.1.0: getDur reads the DUR_TIERS live binding + lateState(b,today,nowMins,cfg) → null|"warn"|"noshow"; v17.6.0: `stayedMins(b)` → the actual stay of a COMPLETED booking or null — reads the new sanitize-whitelisted `stayedMin` stamp (written by App's two completion paths on a real seated→completed transition ONLY), falling back to `duration` when a pre-v17.6.0 booking's history records a seated entry
-    ├── constants.js                 layout config — DEFAULT_LAYOUT (incl. v15.9.0 priorities seed = the ex-hard-coded MGT heuristics) + setLayout/buildLayout reassign LIVE bindings (ALL_TABLES/INDOOR/OUTDOOR/TIMELINE_TABLES/TOTAL_SEATS/ZONE_OF/TABLE_GROUPS/VALID_COMBOS/CLUSTERS/KITCHEN_TABLE_LIMIT/IS_MGT_LAYOUT/PRIORITIES) + per-weekday hours (WEEK_HOURS/hoursFor/weekRange) + DUR_TIERS/setDurTiers duration tiers (v16.1.0) + v17.6.0 TURN_BUFFER/setTurnBuffer (the separation between bookings, in minutes; 0 = off = the default, so an unconfigured app is byte-for-byte v17.5.1); colours, S/BTN style tokens (v15.0.0) + v17.7.0 `R` = the pill-radius scale (pill/auth/sheet/card/inset → the `--r-*` tokens); assign by ROLE, never by the old number
+    ├── constants.js                 layout config — DEFAULT_LAYOUT (incl. v15.9.0 priorities seed = the ex-hard-coded MGT heuristics) + setLayout/buildLayout reassign LIVE bindings (ALL_TABLES/INDOOR/OUTDOOR/TIMELINE_TABLES/TOTAL_SEATS/ZONE_OF/TABLE_GROUPS/VALID_COMBOS/CLUSTERS/KITCHEN_TABLE_LIMIT/IS_MGT_LAYOUT/PRIORITIES) + per-weekday hours (WEEK_HOURS/hoursFor/weekRange) + DUR_TIERS/setDurTiers duration tiers (v16.1.0) + v17.6.0 TURN_BUFFER/setTurnBuffer (the separation between bookings, in minutes; 0 = off = the default, so an unconfigured app is byte-for-byte v17.5.1); colours, S/BTN style tokens (v15.0.0) + v17.7.0 `R` = the pill-radius scale (pill/auth/sheet/card/inset → the `--r-*` tokens); assign by ROLE, never by the old number + v17.8.0 `M` = the motion scale (tap/move/shift/status/exit → the `--t-*`/`--ease-*` tokens, each already pairing a duration with its direction curve; `M.dur`/`M.easeOut` are the raw WAAPI-only escape hatch)
     ├── reminders.js                 reminder helpers (validate, fire-window, prune)
     ├── drafts.js                    v17.5.0 — `sameDraft(a,b)` behind the unsaved-changes guard. NOT JSON equality: key order differs between openEdit's literal and openNew's Object.assign spread; `<input type=number>` returns a STRING; `customDur:null`/`deposit:""` are the same nothing; table arrays are sets in spirit. Values normalise to strings, arrays sort, null/undefined/""/false all collapse to "" (tests/drafts.test.js)
     ├── dbError.js                   v17.5.1 — `dbError(path)` builds the THIRD argument every `onValue()` must pass (the optional error/cancel callback), and `onDbError(fn)` lets usePersistence subscribe so any listener failure anywhere surfaces in the UI. All 16 listeners pass it. Origin: a cancelled read produced NOTHING — no log, no banner, no state change — because `setBookingsReady(true)` lives in the success path, so the app showed "⟳ Loading bookings…" forever and was structurally incapable of reporting its own failure
@@ -132,7 +132,7 @@ src/
 - Exception: `Settings.jsx` exports `SettingsContent`, `TabBar`, `GeneralTabContent`, `CogIcon`; `atoms.jsx` is the multi-export atoms file.
 
 ### Style tokens
-- All colours, spacing, button styles, badge styles, **corner radii** flow through `src/lib/constants.js` exports (`S`, `BTN`, `BLOCK_BG`, `STATUS_COLORS`, `TBL`, `R`).
+- All colours, spacing, button styles, badge styles, **corner radii** and **motion** flow through `src/lib/constants.js` exports (`S`, `BTN`, `BLOCK_BG`, `STATUS_COLORS`, `TBL`, `R`, `M`).
 - **`R` = the v17.7.0 pill-radius scale** (`R.pill`/`auth`/`sheet`/`card`/`inset` → the `--r-*` tokens in `index.html`'s `:root`; radii are theme-agnostic, so they are NOT duplicated into the dark block). Assign **by role, never by the old number** — the same `12` meant "control" in one file and "card" in another. `--r-pill` is `999px` because CSS clamps an oversized radius to half the box, so one token is a true pill at every control height. **No new `borderRadius: <number>` literal** — `grep -rn "borderRadius: [0-9]" src/` must return only the documented canvas/geometry exceptions (timeline blocks + their manual-assign handle and folded corner, TimeAxis ticks, floor-plan glyphs, progress track+fill pairs, `Kbd`, `"50%"` circles). See the v17.7.0 REFACTOR_LOG entry for the full list and why each one is exempt.
   **Hard rule for any box holding WRAPPING or SCROLLING text (v17.7.1): its radius must be ≤ its horizontal padding.** A rounded box is narrowest at its top and bottom edges, so a radius past the padding clips the first/last visible line — and no vertical-centring trick saves it, because centring stops applying the moment the content overflows (that is exactly how the v17.7.0 `mkArea` fix passed QA and still shipped a bug: it was only ever tested with short content). Pills are for SINGLE-LINE controls, where the text is centred by line-height and never reaches the curve. Multi-line ⇒ `R.inset` (10px, inside mkInp's 12px padding) — see `mkArea`, and the chat bubble / reply composer in the WA sandbox. **A `<select>` needs the same clearance on its RIGHT** (v17.8.0 `mkSel`): its arrow is painted inside the padding box against `padding-right`, so mkInp's 12px lands it inside the pill's 21.5px cap. Text is immune — it spans enough height that the curve has receded behind it, which is exactly why the LEFT 12px looks right and the right 12px doesn't.
   **Corollary for pill-shaped controls (v17.8.0): `--r-pill` clamps to half the SHORTER side, so only a SQUARE box is a circle.** An icon button sized by `minHeight` + horizontal padding is ~30×40 and renders as a vertical egg — which is what the three Split-View tools were, one row above the perfectly round 34×34 🔍/⚙ pair. A single-glyph button gets explicit equal `width`/`height` and `padding: 0` (and `min-*` is not enough — a flex row will stretch it back).
@@ -531,6 +531,63 @@ to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
 - Inline transforms still win by design (TimelineView's drag `translateY`).
 - The older `.mgt-press` brightness dim stays and composes — `filter` and
   `transform` are orthogonal.
+
+### Motion — two curves, three durations (v17.8.0)
+
+Tokens in `index.html`'s `:root` (theme-agnostic, so NOT duplicated into the
+dark block, same as the radii); JS reads them through **`M`** in
+`lib/constants.js`. **No new easing or duration literal** — `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back empty apart from `M`'s own
+WAAPI values.
+
+**The split is by DIRECTION, not by element.** `--ease-out` (quint-out) for
+everything that arrives, opens, moves, or answers a finger; `--ease-in`, its
+exact mirror, only for things leaving — an exit accelerates away because the eye
+has already moved on. Before this the app had five curves (`ease`, `ease-out`,
+`ease-in-out`, `linear`, Material's `.4,0,.2,1`) picked per site over eight
+versions, so a modal's scrim faded `linear` while the toast inside it used
+Material's curve while the button on it used `ease`: three materials in one
+glance.
+
+Durations by **what is moving**: `--t-tap` (a control answering your finger),
+`--t-move` (something arriving or leaving), `--t-shift` (geometry — heights,
+widths, positions). Two more sit outside the scale on purpose: `--t-status`,
+which exists *because* TimelineView and PlanView must agree on it (a shared
+number needs a shared name), and `--t-wipe`, which TimelineView's
+`__statusAnims.until` window depends on.
+
+Two exceptions, both real. `.mgt-dot-pulse` keeps `ease-in-out` — a loop has no
+arrival and no departure, so neither direction curve applies; it is a breath,
+not a move. And **`useFlip` keeps literal numbers because WAAPI cannot read a
+CSS var** (it resolves to nothing and the animation silently runs linear), which
+is why `M.dur`/`M.easeOut` exist and are the only values here that can drift.
+
+**Never `transition: all`** — it animates layout properties too and you cannot
+tell what moves by reading it. Name the properties.
+
+### Adding motion to something that has none
+
+- **Fading in to an element's own opacity** is `.mgt-appear`, not
+  `.mgt-fade-in`. It has no `to` (an omitted endpoint resolves to the element's
+  computed value, so the timeline's waitlist ghost lands on its 0.55/0.4 without
+  the rule knowing that number) and **no fill-mode** — `both` would pin the
+  animated properties forever, which on a `.mgt-hover-scale` element means the
+  lift never applies again. For the same reason it animates opacity only:
+  nothing may own `transform`, because the hover and press rules do.
+- **An element that must animate OUT needs its content held.** `Reveal` already
+  caches its last truthy children for exactly this — pass `null` and it fades
+  out what it was showing. Corollary that bit once: it only caches **truthy**
+  children, so a parent must pass `null`, not a live-but-empty component (that
+  is why App's strip mount site is `{notifSections.length ? <Strip…/> : null}`).
+- **A list whose items animate out must remember ORDER, not content.**
+  `useRevealRows` keeps departed ids alive but its `renderIds` is
+  arrival-ordered. If the list is sorted by anything else, a departing item's
+  remembered index **ties** with whatever shifted up into its place, and the tie
+  falls through to arrival order — so it visibly jumps before it collapses. Sort
+  departed items half a step above their replacement (`rank - 0.5`).
+- **Not everything that appears needs an animation.** The empty-day state gets
+  none: it appears mostly when you navigate to an empty day, where `SlideView`
+  is already animating the whole view, and a second fade inside it just makes
+  the day change feel slow.
 
 ---
 
