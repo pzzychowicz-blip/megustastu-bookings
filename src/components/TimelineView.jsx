@@ -474,7 +474,14 @@ function WaitGhost({ g, totalMins, onBook }) {
 
   return (
     <div
-      className="mgt-hover-scale"
+      // mgt-appear: a ghost is a SUGGESTION that comes and goes as the day's
+      // availability shifts — a party joins the waitlist, a table completes, the
+      // clock crosses a quarter — so it should arrive rather than blink into
+      // existence next to blocks that never move on their own. Deliberately
+      // asymmetric: there is no matching fade-out, because a ghost disappears
+      // when a REAL booking takes that table, and the eye should be on the block
+      // that just appeared, not on the proposal it replaced.
+      className="mgt-hover-scale mgt-appear"
       data-wg={g.id}
       onMouseEnter={() => setGroupHover(true)}
       onMouseLeave={() => setGroupHover(false)}

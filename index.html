@@ -718,7 +718,20 @@
       .mgt-view-in-left  { animation: mgt-view-in-left var(--t-move) var(--ease-out) both; }
       /* Settings tab-content crossfade on switch. */
       @keyframes mgt-fade-in { from { opacity: 0; } to { opacity: 1; } }
+      /* v17.8.0: fade in to WHATEVER OPACITY THE ELEMENT ALREADY HAS. Note
+         there is no `to` and no `both`: an omitted keyframe endpoint resolves
+         to the element's own computed value, so a timeline waitlist ghost
+         (inline opacity 0.55, or 0.4 when it needs a reshuffle) lands on its
+         own number without this rule knowing it. mgt-fade-in cannot do that —
+         its explicit `to { opacity: 1 }` would fade the ghost to full strength
+         and then snap it back down.
+         And no fill-mode ON PURPOSE: `both` would pin the animated properties
+         forever, which on a .mgt-hover-scale element means the hover lift never
+         applies again. Opacity-only for the same reason — nothing here may own
+         `transform`, because the hover and press rules do. */
+      @keyframes mgt-appear { from { opacity: 0; } }
       .mgt-fade-in { animation: mgt-fade-in var(--t-move) var(--ease-out) both; }
+      .mgt-appear  { animation: mgt-appear  var(--t-move) var(--ease-out); }
 
       /* Accessibility + weak-hardware opt-out: collapse every animation/transition
          to ~instant when the OS requests reduced motion.

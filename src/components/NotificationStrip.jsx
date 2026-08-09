@@ -30,23 +30,84 @@
 // "collapse a banner with more than N rows". It now means the same thing about
 // the strip as a whole, so the setting keeps working and gains reach.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Reveal } from "./atoms";
-import { R } from "../lib/constants";
+import { useRevealRows } from "../hooks/useRevealRows";
+import { R, M } from "../lib/constants";
 
 export function NotificationStrip({ sections, collapseMax = 2 }) {
-  const total = sections.reduce(function (n, s) { return n + (s.count || 1); }, 0);
+  const liveTotal = sections.reduce(function (n, s) { return n + (s.count || 1); }, 0);
   // Initial-only, like BannerRows' own collapse was: a strip the user opened
   // must not slam shut because a seventh late booking arrived.
-  const [open, setOpen] = useState(function () { return total <= collapseMax; });
+  const [open, setOpen] = useState(function () { return liveTotal <= collapseMax; });
 
+  // ── Sections ease in and out, on the same lifecycle their ROWS already use ──
+  // Without this a resolved notification vanished mid-frame and everything below
+  // it jumped up — which is worst in exactly the case the strip exists for, a
+  // busy evening where sections come and go while someone is reading one.
+  // useRevealRows is the hook LateBanner/Overlap/WaitAvail already share for
+  // their rows; applying it one level up means the strip's own contents behave
+  // like its contents' contents, and there is one implementation of the pattern.
+  const ids = sections.map(function (s) { return s.id; });
+  const sig = ids.join(",");
+  const { renderIds, openIds } = useRevealRows(ids);
+
+  // A departed section is gone from `sections` but must keep rendering for the
+  // ~350ms its Reveal takes to collapse. Its CONTENT needs no cache here — the
+  // Reveal atom already holds its last truthy children for exactly this reason,
+  // so passing `null` makes it fade out what it was showing. What Reveal cannot
+  // know is WHERE the section belongs: renderIds is arrival-ordered (newcomers
+  // are appended), and this list is severity-ordered, so a "Working offline"
+  // that arrives while "Running late" is up would otherwise render below it —
+  // the one thing about this component that is not allowed to drift.
+  //
+  // Hence a remembered rank, and nothing else. The effect is keyed on the id
+  // SET, so it runs on a membership change and not on every App render, and it
+  // lands AFTER the render in which a section departs — which is exactly right:
+  // that render still sees the rank the section is fading out from.
+  const [rank, setRank] = useState({});
+  useEffect(function () {
+    setRank(function (prev) {
+      const next = Object.assign({}, prev);
+      ids.forEach(function (id, i) { next[id] = i; });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the id set, see above
+  }, [sig]);
+
+  const live = {};
+  sections.forEach(function (s, i) { live[s.id] = i; });
+  function rankOf(id) {
+    if (live[id] !== undefined) return live[id];
+    // A departing section holds its OLD index — but the sections below it have
+    // already shifted up into it, so the raw index ties with whichever one took
+    // its place, and a tie is broken by renderIds, which is arrival-ordered.
+    // Measured live: "Running late" jumped from first to second and THEN
+    // collapsed. Half a step earlier puts it immediately above its replacement,
+    // which is where it visibly was, at every position in the list.
+    return rank[id] !== undefined ? rank[id] - 0.5 : Number.MAX_SAFE_INTEGER;
+  }
+  const orderedIds = renderIds.slice().sort(function (a, b) { return rankOf(a) - rankOf(b); });
+  const byId = {};
+  sections.forEach(function (s) { byId[s.id] = s; });
+
+  // `sections` is never empty here: the mount site in App passes null instead,
+  // so the Reveal wrapping this component fades out its own cached copy rather
+  // than collapsing an already-blanked box. Same mechanism, one owner.
   if (!sections.length) return null;
   const top = sections[0];
-  const others = sections.length - 1;
+  const total = liveTotal;
+  const others = orderedIds.length - 1;
 
   return (
     <div style={{
-      background: top.tint || "var(--app-overlap-bg)",
+      backgroundColor: top.tint || "var(--app-overlap-bg)",
+      // The strip is recoloured by whatever is WORST right now, so its tint and
+      // tone change under the reader when a notification arrives or resolves —
+      // amber to red as a write fails, back to amber when it recovers. A cut
+      // between two saturated tints reads as a flicker; a cross-fade reads as
+      // the same object changing state, which is what it is.
+      transition: "background-color " + M.move,
       border: "1px solid var(--border-card)",
       borderRadius: R.card,
       marginBottom: 10,
@@ -66,15 +127,16 @@ export function NotificationStrip({ sections, collapseMax = 2 }) {
           padding: "10px 14px", textAlign: "left"
         }}>
         <span aria-hidden="true" style={{
-          width: 8, height: 8, borderRadius: "50%", background: top.tone, flexShrink: 0
+          width: 8, height: 8, borderRadius: "50%", backgroundColor: top.tone, flexShrink: 0,
+          transition: "background-color " + M.move
         }} />
         {/* Collapsed, the strip summarises the WORST thing happening plus a
             count of the rest. With ONE section live, naming it here beats a generic lid plus a
             redundant sub-header underneath — so the strip simply becomes that
             banner. With several, "Notifications" is the honest label for the
             lid and each section names itself below. */}
-        <span style={{ fontSize: 13, fontWeight: 700, color: top.tone, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {open && sections.length > 1 ? "Notifications" : top.title}
+        <span style={{ fontSize: 13, fontWeight: 700, color: top.tone, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", transition: "color " + M.move }}>
+          {open && orderedIds.length > 1 ? "Notifications" : top.title}
         </span>
         {!open && others > 0 ? (
           <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", flexShrink: 0 }}>
@@ -83,34 +145,64 @@ export function NotificationStrip({ sections, collapseMax = 2 }) {
         ) : null}
         <span style={{
           fontSize: 11, fontWeight: 700, color: top.tone, opacity: 0.75,
-          fontVariantNumeric: "tabular-nums", flexShrink: 0
+          fontVariantNumeric: "tabular-nums", flexShrink: 0,
+          transition: "color " + M.move
         }}>{total}</span>
-        <span style={{ fontSize: 10, color: top.tone, opacity: 0.6, fontWeight: 700, flexShrink: 0 }}>{open ? "▲" : "▼"}</span>
+        {/* ONE glyph that turns, not two that swap. A ▲/▼ swap is a cut: the
+            chevron is gone and a different one is there, with nothing to say
+            the two are the same control. Rotating it makes the arrow the thing
+            that moves, which is also what the panel below is doing. Matches the
+            Collapsible atom's ›, which has turned since v15.8.0. */}
+        <span aria-hidden="true" style={{
+          fontSize: 10, color: top.tone, opacity: 0.6, fontWeight: 700, flexShrink: 0,
+          display: "inline-block", lineHeight: 1,
+          transform: open ? "rotate(180deg)" : "rotate(0deg)",
+          transition: "transform " + M.move + ", color " + M.move
+        }}>▾</span>
       </button>
       <Reveal show={open}>
         {/* .mgt-notif draws the hairlines between sections (index.html). A CSS
             adjacent-sibling rule rather than a per-section borderTop prop, so a
             section never has to know its own position in the list. */}
         <div className="mgt-notif">
-          {sections.map(function (s) {
+          {orderedIds.map(function (id) {
+            const s = byId[id];
             return (
-              <div key={s.id}>
-                {sections.length > 1 ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px 1px" }}>
-                    <span aria-hidden="true" style={{
-                      width: 8, height: 8, borderRadius: "50%", background: s.tone, flexShrink: 0
-                    }} />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: s.tone, flex: 1, minWidth: 0 }}>{s.title}</span>
-                    {s.count > 1 ? (
-                      <span style={{
-                        fontSize: 11, fontWeight: 700, color: s.tone, opacity: 0.75,
-                        fontVariantNumeric: "tabular-nums", flexShrink: 0
-                      }}>{s.count}</span>
-                    ) : null}
-                  </div>
+              // A departed id has no live section, so children go null and the
+              // Reveal fades out the copy it already holds. That is the atom's
+              // documented behaviour, and using it is why nothing here has to
+              // cache a node.
+              <Reveal key={id} show={openIds.has(id)}>
+                {s ? (
+                  <>
+                    {/* The sub-header is itself Revealed, not conditionally
+                        rendered. Going from two sections to one changes three
+                        things at once — a section folds away, the survivor
+                        loses its own header, and the lid stops saying
+                        "Notifications" and takes that section's title. All
+                        three key on the RENDERED count, so they happen on one
+                        frame, when the departing section is finally pruned.
+                        Keying the lid on the live count instead moved the text
+                        350ms before the geometry, which is the version that
+                        looked broken. */}
+                    <Reveal show={orderedIds.length > 1}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px 1px" }}>
+                        <span aria-hidden="true" style={{
+                          width: 8, height: 8, borderRadius: "50%", background: s.tone, flexShrink: 0
+                        }} />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: s.tone, flex: 1, minWidth: 0 }}>{s.title}</span>
+                        {s.count > 1 ? (
+                          <span style={{
+                            fontSize: 11, fontWeight: 700, color: s.tone, opacity: 0.75,
+                            fontVariantNumeric: "tabular-nums", flexShrink: 0
+                          }}>{s.count}</span>
+                        ) : null}
+                      </div>
+                    </Reveal>
+                    {s.node}
+                  </>
                 ) : null}
-                {s.node}
-              </div>
+              </Reveal>
             );
           })}
         </div>

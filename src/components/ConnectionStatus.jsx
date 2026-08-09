@@ -28,7 +28,7 @@
 // fix on its next touch (shared-pattern rule).
 
 import { useEffect, useRef, useState } from "react";
-import { S, R, BTN } from "../lib/constants";
+import { S, R, BTN, M } from "../lib/constants";
 import { mkBtn } from "./atoms";
 
 // Rendered popover width: minWidth 260 + 2×12 padding + 2×1 border.
@@ -140,9 +140,16 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
             width: 12,
             height: 12,
             borderRadius: "50%",
-            background: dotColor,
+            backgroundColor: dotColor,
             // Soft glow in the matching colour so it reads as "illuminated".
             boxShadow: "0 0 0 3px " + dotGlow,
+            // Green -> amber -> red used to be a hard cut, which is the one way
+            // to change a always-visible indicator that nobody notices: a static
+            // thing that is a different colour than it was reads as having always
+            // been that colour. Motion is what makes a glance catch it, and 200ms
+            // is not a delay — the state has already changed, this is only how it
+            // is drawn.
+            transition: "background-color " + M.move + ", box-shadow " + M.move,
           }}
         />
       </button>
