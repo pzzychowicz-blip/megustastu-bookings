@@ -46,6 +46,12 @@
         --text-muted: #5a6474;
         /* Accent */
         --accent: #007aff;
+        /* v17.8.0: the keyboard focus ring. Its own token rather than --accent
+           because it must stay legible on accent-filled buttons too, where an
+           accent ring would vanish. Deliberately NOT the same value as the
+           split-pane corner marks (--accent), so "the keyboard is here" and
+           "this pane owns the view shortcuts" never look alike. */
+        --focus-ring: #0a2540;
         /* Status chips — bg + border share a hue (RGB triplet, composed in
            constants.js as rgba(var(--…-rgb), a)); text is a solid token. */
         /* v17.0.0: confirmed left the amber family so the new PENDING status
@@ -226,6 +232,7 @@
         --text-primary: #f2f2f7;
         --text-muted: #9a9aa0;
         --accent: #0a84ff;
+        --focus-ring: #ffffff;
         /* Status chip text -> light variants for dark surfaces. Tint RGB and
            the block/table/button tokens are theme-invariant (inherited from
            :root); only the chip text needs to flip. */
@@ -551,6 +558,39 @@
       @media (hover: hover) and (pointer: fine) {
         .mgt-hover-scale:active:not(:disabled):not(.mgt-nopress) { transform: scale(1.02); }
       }
+
+      /* ── v17.8.0: the keyboard focus ring ───────────────────────────────────
+         The app had NO :focus or :focus-visible rule anywhere, so a focused
+         button computed `outline: none` and a keyboard user could not see where
+         they were. That is a real gap in an app whose shortcut system has its
+         own Settings tab — the one interface here that is explicitly driven
+         from the keyboard was the one with no keyboard feedback.
+
+         :focus-visible, not :focus — a mouse click must not leave a ring behind
+         (the whole reason browsers moved to it).
+
+         `outline-offset: 2px` is what makes ONE colour enough. The ring sits
+         outside the control, on the page background, instead of on the button's
+         own fill — so it never has to survive being drawn on top of a saturated
+         accent pill, and --focus-ring only needs to contrast with the app
+         background (near-navy on light, white on dark). An inset ring would
+         have needed a second, opposite-coloured hairline to stay visible on
+         every fill, and inline `boxShadow` from mkBtn/mkInp would have beaten
+         it on most controls anyway.
+
+         The offset does need those 2px to exist: a control flush inside an
+         `overflow:hidden` scroller has its ring clipped — the same trap as the
+         hover-lift (see the scroll-container gotcha), fixed by the same
+         `padding-inline` gutters already in place there.
+
+         Outline follows border-radius in every browser we target, so pills get
+         a pill-shaped ring for free. */
+      :focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      /* The ring is the only focus signal; never let a UA default double it. */
+      :focus:not(:focus-visible) { outline: none; }
 
       /* v17.8.0: the status-toast "busy" dot. A slow opacity pulse replaces the
          static ⟳ glyph the loading/syncing toasts used to carry — a glyph that

@@ -132,9 +132,19 @@ export function ViewSwitcher({
               WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
               touchAction: "manipulation",
             },
-            // In a split, an outline marks WHICH of the two active buttons the
+            // In a split, a mark shows WHICH of the two active buttons the
             // keyboard is pointed at — the fill alone can't say that.
-            isFocusedPaneView(v) ? { outline: "2px solid var(--text-on-accent)", outlineOffset: -4 } : null
+            // v17.8.0: it used to be `outline: 2px solid white, offset -4`,
+            // which is indistinguishable from a keyboard focus ring — and once
+            // v17.8.0 added a REAL one, two different meanings wore the same
+            // clothes. It is now an inset underline in the pane-focus colour,
+            // echoing SplitLayout's corner brackets (the established "this pane
+            // is focused" device) rather than impersonating focus.
+            // boxShadow, not border/outline: it must not change the button's
+            // box or fight the focus ring for the outline property.
+            isFocusedPaneView(v)
+              ? { boxShadow: "inset 0 -3px 0 var(--text-on-accent)" }
+              : null
           )}
         >{v}</button>
       ))}
