@@ -67,7 +67,7 @@ src/
 │   ├── SplitLayout.jsx              v17.5.0 — the two-pane container (purely presentational: it takes the two already-built view ELEMENTS). Draggable divider (`setPointerCapture` on the divider is safe — it has no child click targets, which is the actual condition of the kills-click gotcha; primary-button-only + `buttons===0` bail), ratio committed on pointer-UP only so localStorage isn't written per frame, double-click resets to 50/50, capture-phase `onPointerDownCapture` sets the focused pane. Each pane is a non-scrolling **frame** (carries the `flexBasis`) wrapping the scroller — which is what pins the focused-pane **corner brackets** (an absolutely positioned child of a scroller would scroll away with the content) and what makes the flat `4%` hover-lift gutter self-scale. Only works inside the `shellFixed` layout — the scrollers are `overflow:auto;minHeight:0` and need a definite-height ancestor chain
 │   ├── SplitMenu.jsx                v17.5.0 — the **2-step** split setup popup (direction → which second view), on QuickStatusPopup's exact shell. Opening the popup IS the intent, so there is no "Add to split view" confirm step and no Cancel button — the scrim click and the Esc chain (first branch, z=300) are the two ways out (body portal, z=300 scrim, same tokens/radius/44px buttons). Step 3 offers only the two REMAINING views, so the same view can never occupy both panes (which would collide on the singleton timelineZoom / selectedListId / showFinished state)
 │   ├── Icons.jsx                    v17.8.0 — the app's icon set (SearchIcon · WaitIcon · SwapIcon · SplitSideIcon/SplitStackIcon), in CogIcon's house style (24×24, no fill, `currentColor` stroke, round caps; strokeWidth eases up below 18px or a small icon reads heavier than a large one). **The rule for what belongs here: does the glyph render as COLOUR EMOJI, or is its font coverage patchy?** — not "is it a picture". 🔍 put a full-colour OS glyph beside a hand-drawn SVG in ViewTools' 34px pair, and U+26A0 ⚠ defaults to TEXT presentation (macOS honours it, Android's Chrome substitutes the colour emoji), so the same marker was an outline on one restaurant device and a yellow sign on another. Monochrome, universally-covered marks STAY as text: ✕ ‹ › ▲ ▼ ▸ ▾ ✓ ★ and the timeline's `[L]`/`[!]`/`!!` — they inherit colour and weight for free and truncate with their label, which an inline SVG cannot
-│   ├── NotificationStrip.jsx        v17.8.0 — the ONE pane every in-flow notification shares. Six banners could be live at once, each with its own pane and margin, and on a busy evening they pushed the timeline off the bottom of the tablet. Collapsed height is ONE row however many fire (the point: the cost of a bad evening stops scaling with how bad it is); collapsed it shows `sections[0]` + "+N more". **Severity order lives in App, not here** — it is a judgement about this restaurant's operations, and the collapsed summary reading `sections[0]` makes "worst first" load-bearing. Sections are `{id,tone,tint,title,count,node}`; the banner components keep their rows/actions/Reveal lifecycle and lose only their pane and header (the strip heads every section on the same terms, so a one-sentence section looks like a row list). With exactly ONE section live the strip takes that section's own title instead of a generic lid + redundant sub-header. `collapseMax` = settings/general lateCollapseMax, which now bounds the STRIP rather than one banner
+│   ├── NotificationStrip.jsx        v17.8.0 — the ONE pane every in-flow notification shares. Six banners could be live at once, each with its own pane and margin, and on a busy evening they pushed the timeline off the bottom of the tablet. Collapsed height is ONE row however many fire (the point: the cost of a bad evening stops scaling with how bad it is); collapsed it shows `sections[0]` + "+N more". **Severity order lives in App, not here** — it is a judgement about this restaurant's operations, and the collapsed summary reading `sections[0]` makes "worst first" load-bearing. Sections are `{id,tone,tint,icon,title,count,node}` — `icon` is a COMPONENT (re-rendered at two sizes: the section header, and the collapsed per-category tally). Collapsed with several live, the right side is an icon+count per section rather than a bare total, so "1 reminder, 2 waiting" is legible without expanding. **Adding a section means adding an icon**, or it falls back to the old dot. The strip also owns `Closed this day` and `Couldn't load bookings` (v17.8.0 audit) — the first was drawn separately in TimelineView and PlanView and missing from List, the second was a floating toast despite being permanent and unrecoverable. the banner components keep their rows/actions/Reveal lifecycle and lose only their pane and header (the strip heads every section on the same terms, so a one-sentence section looks like a row list). With exactly ONE section live the strip takes that section's own title instead of a generic lid + redundant sub-header. `collapseMax` = settings/general lateCollapseMax, which now bounds the STRIP rather than one banner
 │   ├── ViewTools.jsx                v17.0.0 round 8 — the 🔍 Find-a-booking + ⚙ Settings pair, mounted ONCE in App's date-nav row (right of Summary) so it sits in the same place for ALL THREE views; Timeline's legend + List's card-header copies are gone, Plan gains it
 │   ├── WalkinForm.jsx               walk-in entry form (v16.0.0 "Add to waitlist" under the no-tables banner; v17.1.1 the Plan-path pre-selected table (`_pre` draft flag from openWalkin) survives guest-count edits — plain-path steppers still reset tables — and wToggle deselects a selected-but-busy table)
 │   ├── WaitlistPanel.jsx            waitlist Overlay (v16.0.0) — day's entries FCFS, fits-now chip, Book (prefills the booking form) + two-tap Remove
@@ -474,8 +474,17 @@ something is dirty; browsers ignore any custom message string.
   is one row however many fire; adding a new in-flow notification means adding a
   section to App's `notifSections` in severity order, never a new pane.
 
-- **A label is SOLID, or it is TEXT (v17.8.0).** Two treatments, both already in
-  the app: **solid** — the fill carries the colour, text is `--text-on-accent`,
+- **Three label treatments (v17.8.0), and context decides which.** **SOLID**
+  where a tag competes inside a busy row (ListView's `manual`/`locked`/`★`/the
+  seated counter, the reminder's time chip). **OUTLINE** — no fill, a **2px**
+  border in the semantic hue, text in the same family — where a chip stands
+  alone as a count or a disclosure (Customers' visits/no-shows,
+  `BookingFormModal`'s Regular/no-show buttons). **TEXT** where the colour
+  carries itself unaided. The banned shape is the fourth one: pale semantic fill
+  *plus* a matching border *plus* bold text in a third shade, which encodes one
+  signal three times. The outline chip drops the fill and earns its extra border
+  pixel; do not "restore" the fill.
+- The SOLID/TEXT pair in full: **solid** — the fill carries the colour, text is `--text-on-accent`,
   the rim is neutral `--border-glass` (the v17.7.0 status-label decision:
   `SBadge`, `manual`, `locked`, `★`, the seated `N min`); or **plain text** —
   the colour carries itself, no fill, no border. The third shape — pale
@@ -517,8 +526,16 @@ something is dirty; browsers ignore any custom message string.
   (`KTXT_OK`/`KTXT_TIGHT`), and that is the correct answer, not debt. **Triage a
   colour exactly like a shadow: ask whether the SURFACE UNDER it flips.** If it
   doesn't, the thing on top must not either.
+- **`--shadow-input` is for RECESSED fields, `--shadow-btn` for RAISED controls.**
+  The input token leads with an inset white highlight, which is what makes a
+  field look sunken. Settings had ~20 BUTTONS wearing `--shadow-input` (fixed
+  v17.8.0), and that one mismatch is most of why that modal never quite looked
+  like the rest of the app despite sharing its palette and radii. Text inputs
+  and `<select>`s keep it.
+- **One stepper: `mkStep(size)` in atoms.** Settings and LayoutSettings each held
+  a private, byte-identical copy before v17.8.0.
 - **v17.8.0: shadow literals are allowed ONLY over theme-invariant fills.** The `--shadow-*` tokens are not cosmetic — light carries `inset 0 1px 1px rgba(255,255,255,0.6)`, dark drops it to `0.05` — so a hard-coded white inset ships a light-mode highlight into dark, 3–8× too bright. That was 24 call sites. The exception is real: TimelineView's blocks sit on `BLOCK_BG` fills, which are deliberately theme-invariant, so a fixed white inset is correct there in both themes (same reasoning as their `borderRadius` exemption). Triage by asking whether the SURFACE UNDER the shadow flips with the theme.
-- **v17.7.0: the hover rule no longer sets `border-radius`.** It used to hard-set `12px`, which squared off every pill the moment the pointer touched it. The declaration was **deleted**, not set to `inherit` — `inherit` resolves against the PARENT's radius, so a bare element inside a square parent would go square, which is the opposite of the intent. Each element now keeps its own resting radius on hover. Do not re-add a radius here. **Consequence: any `.mgt-hover-scale` element MUST set its own `borderRadius`** — the rule still applies an OPAQUE `--bg-hover-card`, so a radius-less element renders that background as a hard-edged rectangle on hover. `ConnectionStatus`'s dot button (transparent, no radius) was exactly that case and got `borderRadius: R.pill` in the same version (12px on its 24×40 box — exactly the shape the rule used to draw). It was the only one in the app, but check any new one.
+- **v17.7.0: the hover rule no longer sets `border-radius`.** It used to hard-set `12px`, which squared off every pill the moment the pointer touched it. The declaration was **deleted**, not set to `inherit` — `inherit` resolves against the PARENT's radius, so a bare element inside a square parent would go square, which is the opposite of the intent. Each element now keeps its own resting radius on hover. Do not re-add a radius here. **Consequence: any `.mgt-hover-scale` element MUST set its own `borderRadius`** — the rule still applies an OPAQUE `--bg-hover-card`, so a radius-less element renders that background as a hard-edged rectangle on hover. `ConnectionStatus`'s dot button (transparent, no radius) was the FIRST case and got `borderRadius: R.pill`; **`CustomersSettings`' customer row was the second**, squaring off inside its own rounded card on hover until it got `R.card`. It has been called a one-off twice now. Treat a missing radius on a `.mgt-hover-scale` element as a bug by default, and grep the class when auditing.
 - **v17.8.0: `.mgt-hover-scale` and `.mgt-press` share ONE `transition` declaration.** They are designed to compose (~30 elements carry both), they had equal specificity (0,1,0), and `transition` is a **shorthand** — so `.mgt-press`, declared later, REPLACED the hover rule's list instead of adding to it. Every element with both classes had no transform transition at all and snapped to `scale(1.08)` instead of easing: the reminder banner's Snooze/Done, the whole timeline zoom cluster, every banner ✕, the form's customer chips. Broken since v15.8.0 and invisible because the `filter` dim `.mgt-press` added still worked; v17.8.0's universal press-scale doubled it by adding a press dip that also snapped. **Two shorthand declarations of one property cannot merge — so don't have two.** One selector list, one declaration, covering every property either class animates; source order then cannot matter. Same trap applies to any future composable pair.
 - **v15.1.0: the `:hover` rule is wrapped in `@media (hover: hover) and (pointer: fine)`.** iOS Safari makes `:hover` STICKY after a tap — unguarded, the last-tapped element stayed scaled 1.08, and full-width form inputs (Date/Time in the booking form) visibly overflowed their Section on phones. Touch devices get no hover lift at all; mouse/trackpad behaviour unchanged. The guard is part of the shared contract — **ported to MGT Scheduling in its v15.1.1** (2026-06-16); keep the two in sync.
 - Opt-in per element via `className="mgt-hover-scale"`. Because `mkInp`/`mkBtn` return style objects, put the class **directly on the call-site element**, not via a prop.
@@ -554,18 +571,28 @@ dark block, same as the radii); JS reads them through **`M`** in
 `lib/constants.js`. **No new easing or duration literal** — `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back empty apart from `M`'s own
 WAAPI values.
 
-**The split is by DIRECTION, not by element.** `--ease-out` (quint-out) for
-everything that arrives, opens, moves, or answers a finger; `--ease-in`, its
-exact mirror, only for things leaving — an exit accelerates away because the eye
+**The split is by DIRECTION, not by element.** `--ease-out` (cubic-out,
+`0.33,1,0.68,1`) for everything that arrives, opens, moves, or answers a finger;
+`--ease-in`, its exact mirror, only for things leaving — an exit accelerates away because the eye
 has already moved on. Before this the app had five curves (`ease`, `ease-out`,
 `ease-in-out`, `linear`, Material's `.4,0,.2,1`) picked per site over eight
 versions, so a modal's scrim faded `linear` while the toast inside it used
 Material's curve while the button on it used `ease`: three materials in one
 glance.
 
-Durations by **what is moving**: `--t-tap` (a control answering your finger),
-`--t-move` (something arriving or leaving), `--t-shift` (geometry — heights,
-widths, positions). Two more sit outside the scale on purpose: `--t-status`,
+Durations by **what is moving**: `--t-tap` 145ms (a control answering your
+finger), `--t-move` 240ms (something arriving or leaving), `--t-shift` 385ms
+(geometry — heights, widths, positions).
+
+**The curve was a quint (`0.22,1,0.36,1`) for one version and it was wrong for
+travel.** A quint spends ~90% of the distance in the first third of the time —
+right for a press dip, where the eye only registers arrival; wrong for anything
+crossing a distance. The toggle knob proved it: the transition was applied and
+correct, and the 21px slide still read as a teleport. **Diagnose "it jumps" by
+sampling the intermediate positions before touching the duration** — the value
+may be fine and the curve the fault. Corollary: `--t-tap` is for a control
+*acknowledging* a tap. Anything that TRAVELS (a knob, a pane, a block) takes
+`--t-move` or `--t-shift`, however small the control is. Two more sit outside the scale on purpose: `--t-status`,
 which exists *because* TimelineView and PlanView must agree on it (a shared
 number needs a shared name), and `--t-wipe`, which TimelineView's
 `__statusAnims.until` window depends on.

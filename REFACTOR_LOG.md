@@ -7292,3 +7292,76 @@ false-trigger the discard confirm on the normal close path (blur commits, but
 the Firebase echo is async). It doesn't — `saveGeneralSettings` calls `setGS`
 optimistically, so `value` updates before the click lands. The guard fires only
 on Esc, which is exactly the path it exists for.
+
+### Polish round 5 (commits 19–24) — the notification strip, and motion again
+
+#### Motion: the curve was the fault, not the clock
+
+"Too fast" and "toggles just jump" were one problem, and the toggle proved it.
+Its transition WAS applied and correct at 120ms; the 21px knob slide still read
+as a teleport, because `--ease-out` was a quint — ~90% of the distance in the
+first third of the time. Right for a press dip, where the eye only registers
+arrival; wrong for anything crossing a distance.
+
+So both ends moved: a cubic-out (`0.33,1,0.68,1`), and +20% on the durations
+(145/240/385). The knob also moved from `M.tap` to `M.move`, which is the scale
+working as designed — the steps key on WHAT moves, and what moves here is a
+position. Sampled after: 3-11-18-21-23-24px. Its inline transition gained
+`transform` too, since an inline transition beats `.mgt-hover-scale`'s
+stylesheet one and its absence left that button's hover lift unanimated.
+
+The connection popover also gained an entrance. It never had one — a bare
+`open ?` since v17.3.0 — which stopped being survivable once everything else
+eased. `mgt-card-in/-out` reused, not invented.
+
+#### The strip: icons, a tally, and two exiles
+
+Every section now carries an icon instead of the 8px dot — a bell for the lid,
+a ringing bell for reminders, a stopwatch for late, the hourglass for the
+waitlist, plus four the brief didn't name (overlap, offline, failed save,
+reshuffle) so the vocabulary stays whole. All `currentColor`, so they take the
+same `tone` the dot did.
+
+That unlocked the collapsed row: "+2 more" and a total told you how much was
+wrong without telling you what. It now lists an icon and a count per section in
+severity order, so "1 reminder, 2 waiting" is legible without expanding.
+
+The membership audit moved two things. **"Couldn't load bookings"** was a
+floating toast — the only message in that layer that neither passes on its own
+nor can be acted on without a reload, and a one-slot transient layer is the
+wrong home for a permanent failure. **"Closed this day"** was drawn inside
+TimelineView AND, differently worded, inside PlanView, and not at all in List:
+three views, two implementations, one gap, for a fact about the DAY.
+
+#### Labels: a third treatment, stated
+
+The reminder's time became a SOLID chip (ListView's `locked` pattern, graphite
+`--tag-flag` — a time is metadata, not a state). The Customers counts and the
+booking form's Regular/no-show disclosures went the other way: no fill, a 2px
+border, colour in the border and the text. Both are right, and the rule is
+context: solid where a tag competes inside a busy row, outline where a chip
+stands alone. ListView's row tags are deliberately untouched.
+
+A real bug fell out: the Customers row squared off on hover. `.mgt-hover-scale`
+stopped setting `border-radius` in v17.7.0 but still paints an opaque
+`--bg-hover-card`, so a radius-less element renders it as a hard-edged
+rectangle. ConnectionStatus's dot button was called the only instance; this is
+the second.
+
+#### Settings buttons were wearing the input shadow
+
+Nearly every BUTTON in Settings carried `--shadow-input` — the token that leads
+with an inset white highlight because it describes a RECESSED field. That one
+mismatch, on ~20 sites, is most of why that modal never quite looked like the
+rest of the app despite sharing its palette and radii. Three stepper
+definitions (two of them byte-identical) collapsed into `mkStep(size)` in
+atoms. Two controls were also the wrong shape: the remove "×" was a pale danger
+wash behind danger text inside a danger border — the banned three-encodings
+badge, and on a destructive control it read as disabled — and the Add/Rename
+actions defined their own accent button. Both are `mkBtn` now.
+
+**Verification.** Build + 103 tests + lint (0 errors) on every commit. Live in
+DEV: motion tokens resolve and knob travel sampled frame by frame; the popover
+caught mid-fade entering and with `mgt-card-out` leaving; the strip verified
+collapsed ("Notifications | 1 | 2 | ▾", three glyphs) and expanded; zero
+buttons under Settings still compute an inset-highlight shadow.
