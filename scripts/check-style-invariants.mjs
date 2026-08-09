@@ -111,6 +111,25 @@ for (const file of walk(SRC)) {
       });
     }
 
+    // ── Rule 0: an exemption marker must be INSIDE the style object ─────────
+    // The v17.8.0 markers were appended to the end of the line, which for a
+    // line ending in `>` or `/>` puts them in JSX CHILDREN position — where
+    // React renders `/* @canvas */` as literal text. Eight of them shipped
+    // that way, printing comment syntax across the Plan view's time ruler and
+    // the Stats popover's bars.
+    //
+    // It shipped because this script only ever asked whether the marker was
+    // PRESENT on the line, never where — so the sites it was meant to bless
+    // were the exact sites it broke, and it reported OK on all of them. A
+    // checker that cannot see its own annotation is worth less than none.
+    if (/(?:\/>|[^{,\s])>\s*\/\*\s*@(?:canvas|fixed-fill)/.test(line)) {
+      problems.push({
+        file: rel, line: i + 1, rule: "marker-placement",
+        text: line.trim().slice(0, 90),
+        hint: "this marker is in JSX children position and RENDERS as text — move it inside the style object, next to the property it exempts",
+      });
+    }
+
     // ── Rule 3: no bare `fontSize` / `fontWeight` number ────────────────────
     // v17.8.0. Same shape as Rule 1 and for the same reason: 497 inline size
     // literals in thirteen values, and 359 weight literals, had accreted into

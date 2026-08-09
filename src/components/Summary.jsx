@@ -164,8 +164,8 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                       <span style={{ color: "var(--text-secondary)", fontWeight: FW.semi, minWidth: 104, flexShrink: 0 }}>
                         {hh(h.hour) + "–" + hh(h.hour + 1)}
                       </span>
-                      <div style={{ flex: 1, height: 7, background: "var(--bg-input)", borderRadius: 4, overflow: "hidden", minWidth: 40 }}>   /* @canvas */
-                        <div style={{ width: ((h.covers / maxHourCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: 0.8, borderRadius: 4 }} />   /* @canvas */
+                      <div style={{ flex: 1, height: 7, background: "var(--bg-input)", borderRadius: 4,   /* @canvas */  overflow: "hidden", minWidth: 40 }}>
+                        <div style={{ width: ((h.covers / maxHourCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: 0.8, borderRadius: 4,   /* @canvas */ }} />
                       </div>
                       <span style={{ color: "var(--text-primary)", fontWeight: FW.bold, minWidth: 70, textAlign: "right", flexShrink: 0 }}>
                         {coversLabel(h.covers)}

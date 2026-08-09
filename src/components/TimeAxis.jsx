@@ -194,8 +194,8 @@ export function TimeAxis({
             const w = isHour ? 2 : 1;
             return (
               <div key={"t" + m}>
-                <div style={{ position: "absolute", top: 0, left: x, width: w, height: len, background: col, borderRadius: 1 }} />   /* @canvas */
-                <div style={{ position: "absolute", bottom: 0, left: x, width: w, height: len, background: col, borderRadius: 1 }} />   /* @canvas */
+                <div style={{ position: "absolute", top: 0, left: x, width: w, height: len, background: col, borderRadius: 1,   /* @canvas */ }} />
+                <div style={{ position: "absolute", bottom: 0, left: x, width: w, height: len, background: col, borderRadius: 1,   /* @canvas */ }} />
               </div>
             );
           })}
