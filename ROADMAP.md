@@ -67,14 +67,12 @@ session and keeping it in sync.
   extraction is straightforward whenever it's worth doing; the risk is all in
   TimelineView, not in the shared piece.
 
-- **Unsaved-changes guard — the last unguarded drafts.** v17.8.0 brought the
-  reminder editor, the Block modal and Settings (`GsTextField` × 3 +
-  `LayoutSettings`' new-table / rename boxes) into the guard, so every surface
-  that holds a draft is now covered. What remains is deliberately out: the
-  Settings **steppers and toggles**, which commit on each tap rather than
-  holding a draft at all. If a future setting ever gains a typed field, wire it
-  into `SettingsContent`'s `reportDirty` aggregator with its own id — that is
-  the whole cost.
+- **Plain drop-shadow literals.** ~20 inline `boxShadow: "0 1px 4px
+  rgba(0,0,0,0.04)"`-style values remain, and `scripts/check-style-invariants.mjs`
+  deliberately does NOT flag them: a black shadow cannot invert out from under
+  itself, so this is a consistency nit rather than the bug class the white-inset
+  rule guards, and a noisy check gets muted. Fold them into `--shadow-soft` /
+  `--shadow-btn` opportunistically while touching those files; don't sweep.
 
 - **The 6-stop background gradient.** `--bg-app` is a `linear-gradient` across
   six near-identical desaturated blues spanning roughly 3% of perceptual
