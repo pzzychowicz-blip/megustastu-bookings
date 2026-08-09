@@ -228,15 +228,20 @@ export function useReminders({ nowMins, setWriteWarning }){
   // 1px border, soft tint, a semantic dot instead of the ⏰ glyph plus a 2px
   // amber ring. v17.8.0 had only just moved this off raw hex literals; the
   // literals were the correctness bug, this is the consistency one.
-  const reminderBanners=activeReminderBanners.length?<div style={{marginBottom:10}}>{activeReminderBanners.map(function(ab){
+  // v17.8.0: this is a SECTION BODY now, not a pane. NotificationStrip owns the
+  // one pane every notification shares (see NotificationStrip.jsx) and draws
+  // the dot + "Reminder" title + count header, so each row here supplies only
+  // its time, text and actions. paddingLeft 31 lines the rows up with the
+  // section titles above them, and rows are hairline-separated like every other
+  // section's. `reminderCount` is exported alongside because the strip needs the
+  // count as data for its collapsed summary.
+  const reminderCount=activeReminderBanners.length;
+  const reminderBanners=reminderCount?<div>{activeReminderBanners.map(function(ab,i){
       return (
         <div
           key={ab.fireKey}
-          style={{background:"var(--app-overlap-bg)",border:"1px solid var(--border-card)",borderRadius:R.card,padding:"10px 14px",marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",boxShadow:"var(--shadow-soft)"}}><div
+          style={{padding:"9px 14px 9px 31px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",...(i>0?{borderTop:"1px solid var(--border-soft)"}:null)}}><div
             style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0,flexWrap:"wrap"}}><span
-              aria-hidden="true"
-              style={{width:8,height:8,borderRadius:"50%",background:"var(--warn-text)",flexShrink:0}} /><span
-              style={{fontSize:13,fontWeight:700,color:"var(--warn-text)"}}>Reminder</span><span
               style={{fontSize:11,color:"var(--warn-text)",fontWeight:700,letterSpacing:"0.02em",whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums",opacity:0.85}}>{ab.time}</span><span
               style={{fontSize:13,color:"var(--text-primary)",fontWeight:600,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               onClick={function(){snoozeReminderFire(ab.fireKey);}}
@@ -257,6 +262,6 @@ export function useReminders({ nowMins, setWriteWarning }){
     doDeleteReminder,
     openNewReminder, openEditReminder,
     deleteReminder, toggleReminderActive,
-    reminderBanners,
+    reminderBanners, reminderCount,
   };
 }

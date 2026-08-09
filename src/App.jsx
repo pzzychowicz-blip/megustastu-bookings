@@ -52,7 +52,8 @@ import { sameDraft } from "./lib/drafts";
 import { Overlay, mkBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
-import { AppBanners } from "./components/AppBanners";
+import { appBannerSections } from "./components/AppBanners";
+import { NotificationStrip } from "./components/NotificationStrip";
 
 
 // ── Phase B2 (v15-refactor): secondary modals ─────────────────────────────
@@ -758,7 +759,7 @@ function BookingApp({uid}){
     doDeleteReminder,
     openNewReminder, openEditReminder,
     deleteReminder, toggleReminderActive,
-    reminderBanners,
+    reminderBanners, reminderCount,
   } = useReminders({ nowMins, setWriteWarning });
   // ── v16.0.0: Waitlist state ─────────────────────────────────────────────────
   const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
@@ -2362,6 +2363,42 @@ function BookingApp({uid}){
   },[dayWaiting,waitlist,viewDate,waitAvail,waitNotifyDismissed]);
   function dismissWaitRow(id){setWaitNotifyDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});}
   const hasWaitBanner=waitBannerEntries.length>0;
+
+  // ── v17.8.0: the ONE notification strip ────────────────────────────────────
+  // Six banners could stack at once and, on a busy evening — exactly when
+  // several fire together — they pushed the timeline off the bottom of the
+  // tablet. NotificationStrip collapses all of them into a single pane with a
+  // one-row collapsed height, so the vertical cost stops scaling with how bad
+  // the evening is.
+  //
+  // ORDER IS SEVERITY, and it lives here rather than in the strip because it
+  // is a judgement about THIS app's operations, next to the flags that produce
+  // it: a failed write can lose a booking; offline is degraded but safe;
+  // overlap means two parties are on one table; late is a guest problem;
+  // reminders are scheduled prompts; the waitlist is an opportunity, not a
+  // problem, so it sits last and stays green. The strip shows the first entry
+  // as its collapsed summary, which makes "worst thing first" load-bearing.
+  const notifSections=[].concat(
+    appBannerSections({
+      isOnline:isOnline,
+      writeWarning:writeWarning,
+      onDismissWarning:function(){setWriteWarning(null);},
+      ineffShow:ineffShow,
+      onDismissIneff:function(){setDismissedIneff(viewDate);},
+      onReshuffle:function(){setConfirmReshuffle(true);}
+    }),
+    hasOverlap?[{id:"overlap",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",
+      title:"Overlap warnings",count:Object.keys(overlapBannerMap).length,
+      node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
+    hasLate?[{id:"late",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",
+      title:"Running late",count:Object.keys(lateBannerMap).length,
+      node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
+    reminderCount?[{id:"reminders",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",
+      title:reminderCount===1?"Reminder":"Reminders",count:reminderCount,node:reminderBanners}]:[],
+    hasWaitBanner?[{id:"wait",tone:"var(--success-text)",tint:"var(--suggest-bg-soft)",
+      title:"Waitlist — table free",count:waitBannerEntries.length,
+      node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[]
+  );
   // ── v17.8.0: waitlist ghost blocks for the Timeline ─────────────────────────
   // waitAvail already knows, per waiting party, the exact tables + time that
   // would fit them — but that only ever surfaced as a banner row and the ⏳
@@ -2715,13 +2752,7 @@ function BookingApp({uid}){
                  card is the content box, so 4% padding is precisely enough at
                  any width. The negative margin puts the content back where it
                  was, so card width and position are unchanged from before. */
-              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><AppBanners
-                isOnline={isOnline}
-                writeWarning={writeWarning}
-                onDismissWarning={function(){setWriteWarning(null);}}
-                ineffShow={ineffShow}
-                onDismissIneff={function(){setDismissedIneff(viewDate);}}
-                onReshuffle={function(){setConfirmReshuffle(true);}} /><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} collapseMax={generalSettings.lateCollapseMax} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><Reveal show={notifSections.length>0}><NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} /></Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 loadStalled={loadStalled}
                 readError={readError}

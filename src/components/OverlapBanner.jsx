@@ -21,7 +21,7 @@ import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
 import { BTN } from "../lib/constants";
 
-export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, collapseMax = 2 }) {
+export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
   const byId = new Map(bookings.map(function (b) { return [b.id, b]; }));
 
   function renderRow(id) {
@@ -47,6 +47,6 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, colla
   }
 
   return (
-    <BannerRows title="Overlap warnings" ids={Object.keys(warnings)} collapseMax={collapseMax} renderRow={renderRow} />
+    <BannerRows ids={Object.keys(warnings)} renderRow={renderRow} />
   );
 }

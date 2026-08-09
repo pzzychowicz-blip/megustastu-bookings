@@ -33,71 +33,43 @@
 //   tone        — semantic colour for the dot + title (default: the warn amber)
 //   tint        — the pane's background wash (default: the soft overlap amber)
 
-import { useState } from "react";
 import { Reveal } from "./atoms";
-import { R } from "../lib/constants";
 import { useRevealRows } from "../hooks/useRevealRows";
 
-export function BannerRows({
-  title, ids, collapseMax = 2, renderRow,
-  tone = "var(--warn-text)",
-  tint = "var(--app-overlap-bg)"
-}) {
-  // Initial-only (session): won't auto-re-collapse if the count later crosses.
-  const [open, setOpen] = useState(function () { return ids.length <= collapseMax; });
+export function BannerRows({ ids, renderRow }) {
   // Per-row ease-in/out lifecycle: renderIds may hold departing rows a moment
   // longer than `ids` so their collapse animates.
   const { renderIds, openIds } = useRevealRows(ids);
 
   if (renderIds.length === 0) return null;
-  const liveCount = ids.length;
 
   return (
-    <div style={{
-      background: tint,
-      border: "1px solid var(--border-card)",
-      borderRadius: R.card,
-      padding: "2px 14px 4px",
-      marginBottom: 10,
-      boxShadow: "var(--shadow-soft)"
-    }}>
-      <button
-        onClick={function () { setOpen(!open); }}
-        aria-expanded={open}
-        className="mgt-nopress"
-        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "transparent", border: "none", cursor: "pointer", padding: "8px 0", textAlign: "left" }}>
-        {/* Status dot — the connection popover's device, reused so "something
-            needs attention" looks the same wherever it appears. */}
-        <span aria-hidden="true" style={{
-          width: 8, height: 8, borderRadius: "50%", background: tone, flexShrink: 0
-        }} />
-        <span style={{ fontSize: 13, fontWeight: 700, color: tone, flex: 1, minWidth: 0 }}>{title}</span>
-        <span style={{
-          fontSize: 11, fontWeight: 700, color: tone, opacity: 0.75,
-          fontVariantNumeric: "tabular-nums", flexShrink: 0
-        }}>{liveCount}</span>
-        <span style={{ fontSize: 10, color: tone, opacity: 0.6, fontWeight: 700, flexShrink: 0 }}>{open ? "▲" : "▼"}</span>
-      </button>
-      <Reveal show={open}>
-        <div>
-          {renderIds.map(function (id, i) {
-            return (
-              <Reveal key={id} show={openIds.has(id)}>
-                {/* The hairline lives HERE, not on the row, so a banner's row
-                    components stay pure content and every banner separates its
-                    rows identically. `i > 0` keeps it off the first row, whose
-                    separation from the header is already the header's padding.
-                    paddingLeft 17 = the dot (8) + its gap (9), so row text sits
-                    on the same left edge as the header title rather than under
-                    the dot — the dot marks the banner, not the rows. */}
-                <div style={{ paddingLeft: 17, ...(i > 0 ? { borderTop: "1px solid var(--border-soft)" } : null) }}>
-                  {renderRow(id)}
-                </div>
-              </Reveal>
-            );
-          })}
-        </div>
-      </Reveal>
+    <div>
+      {/* v17.8.0: the pane AND the header are gone — NotificationStrip owns
+          both (one pane for every notification, one collapsed height however
+          many fire, and every section headed on the same terms whether its body
+          is a row list like this or a single sentence like "Working offline").
+          What is left here is the rows. The collapse moved up too, because
+          collapsing per-banner cannot bound the total height, which was the
+          whole point. */}
+      <div>
+        {renderIds.map(function (id, i) {
+          return (
+            <Reveal key={id} show={openIds.has(id)}>
+              {/* The hairline lives HERE, not on the row, so a banner's row
+                  components stay pure content and every banner separates its
+                  rows identically. `i > 0` keeps it off the first row, whose
+                  separation from the header is already the header's padding.
+                  paddingLeft 31 = the strip's 14 + the dot (8) + its gap (9),
+                  so row text sits on the same left edge as the section title
+                  rather than under the dot. */}
+              <div style={{ padding: "0 14px 0 31px", ...(i > 0 ? { borderTop: "1px solid var(--border-soft)" } : null) }}>
+                {renderRow(id)}
+              </div>
+            </Reveal>
+          );
+        })}
+      </div>
     </div>
   );
 }

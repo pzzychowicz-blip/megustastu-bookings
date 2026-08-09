@@ -24,7 +24,7 @@ import { Presence, mkBtn } from "./atoms";
 import { lateMins } from "../lib/booking-logic";
 import { BTN } from "../lib/constants";
 
-export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, collapseMax = 2 }) {
+export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, }) {
   // v17.0.0 review fix #6: the collapsible/Reveal scaffolding moved to the
   // shared BannerRows shell (also used by OverlapBanner); this file supplies
   // only the row content. The No-show button (offerNoShow = lateMap[id]===
@@ -54,6 +54,6 @@ export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, co
   }
 
   return (
-    <BannerRows title="Running late" ids={Object.keys(lateMap)} collapseMax={collapseMax} renderRow={renderRow} />
+    <BannerRows ids={Object.keys(lateMap)} renderRow={renderRow} />
   );
 }

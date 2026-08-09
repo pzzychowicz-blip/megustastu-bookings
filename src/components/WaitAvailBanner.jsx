@@ -24,7 +24,7 @@ import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
 import { BTN } from "../lib/constants";
 
-export function WaitAvailBanner({ entries, availability, onBook, onDismiss, collapseMax = 2 }) {
+export function WaitAvailBanner({ entries, availability, onBook, onDismiss, }) {
   const byId = new Map(entries.map(function (e) { return [e.id, e]; }));
 
   function renderRow(id) {
@@ -48,12 +48,6 @@ export function WaitAvailBanner({ entries, availability, onBook, onDismiss, coll
   }
 
   return (
-    <BannerRows
-      title="Waitlist — table free"
-      ids={entries.map(function (e) { return e.id; })}
-      collapseMax={collapseMax}
-      renderRow={renderRow}
-      tone="var(--success-text)"
-      tint="var(--suggest-bg-soft)" />
+    <BannerRows ids={entries.map(function (e) { return e.id; })} renderRow={renderRow} />
   );
 }

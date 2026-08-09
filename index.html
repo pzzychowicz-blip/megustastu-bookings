@@ -622,6 +622,12 @@
       /* The ring is the only focus signal; never let a UA default double it. */
       :focus:not(:focus-visible) { outline: none; }
 
+      /* v17.8.0: hairlines BETWEEN the notification strip's sections. An
+         adjacent-sibling rule rather than a borderTop prop on each section, so
+         a section never has to know its own position in the list — App builds
+         that list by severity and the order changes as alerts come and go. */
+      .mgt-notif > div + div { border-top: 1px solid var(--border-soft); }
+
       /* v17.8.0: the status-toast "busy" dot. A slow opacity pulse replaces the
          static ⟳ glyph the loading/syncing toasts used to carry — a glyph that
          says "spinning" without spinning is worse than no glyph, and the dot is
