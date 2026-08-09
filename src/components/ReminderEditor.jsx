@@ -116,7 +116,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           <div style={{
             fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
             display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-            background: "rgba(0,122,255,0.75)",
+            background: "var(--app-new)",
             border: "1px solid rgba(255,255,255,0.2)",
             boxShadow: "var(--shadow-btn)"
           }}>
@@ -172,14 +172,14 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             <button
               onClick={() => setType("once")}
               className="mgt-hover-scale"
-              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "once" ? S.accent : "rgba(120,130,150,0.45)" })}
+              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "once" ? S.accent : "var(--app-btn-grey)" })}
             >
               One-off
             </button>
             <button
               onClick={() => setType("weekly")}
               className="mgt-hover-scale"
-              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "weekly" ? S.accent : "rgba(120,130,150,0.45)" })}
+              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "weekly" ? S.accent : "var(--app-btn-grey)" })}
             >
               Weekly
             </button>
@@ -209,7 +209,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                     key={d.i}
                     onClick={() => toggleDay(d.i)}
                     className="mgt-hover-scale"
-                    style={mkBtn({ flex: 1, minWidth: 48, minHeight: 40, padding: "8px 6px", fontSize: T.body, background: sel ? S.accent : "rgba(120,130,150,0.45)" })}
+                    style={mkBtn({ flex: 1, minWidth: 48, minHeight: 40, padding: "8px 6px", fontSize: T.body, background: sel ? S.accent : "var(--app-btn-grey)" })}
                   >
                     {d.s}
                   </button>

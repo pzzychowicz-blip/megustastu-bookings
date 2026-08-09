@@ -26,7 +26,7 @@
 import { useState, useEffect } from "react";
 import { Overlay, mkBtn, AutoHeight } from "./atoms";
 import { daySummary, rangeStats } from "../lib/booking-logic";
-import { BTN, R, T, FW } from "../lib/constants";
+import { S, BTN, R, T, FW } from "../lib/constants";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
 const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
@@ -160,7 +160,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
         style={{
           border: "none", borderRadius: R.pill, padding: "6px 18px", cursor: "pointer",
           fontSize: T.body, fontWeight: FW.bold, minHeight: 32,
-          background: active ? "rgba(0,122,255,0.85)" : "transparent",
+          background: active ? S.accent : "transparent",
           color: active ? "var(--text-on-accent)" : "var(--text-secondary)",
           boxShadow: active ? "0 1px 3px rgba(0,0,0,0.15), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"
         }}

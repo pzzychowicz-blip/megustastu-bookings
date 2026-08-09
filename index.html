@@ -409,7 +409,12 @@
         --tl-header-border: rgba(255, 255, 255, 0.1);
         --tl-header-strip: rgba(255, 255, 255, 0.06);
         --tl-hour-pill: rgba(90, 100, 120, 0.85);
-        --tl-now-pill: rgba(10, 132, 255, 0.95);
+        /* v17.8.0 review fix: was rgba(10,132,255,.95) — the dark --accent,
+           copied. White 10px on it measured 3.91:1, the one --tl-* pill that
+           missed the label bar, and nothing was watching because the contrast
+           registry's coverage regex only knew the --block-/--btn-/--tbl- names.
+           Two steps deeper in the same blue; still unmistakably the now marker. */
+        --tl-now-pill: rgba(6, 112, 228, 0.95);
         --tl-now-line: rgba(10, 132, 255, 0.85);
         --tl-unassigned-border: rgba(255, 120, 120, 0.45);
         /* block warn borders, blocked-stripe + badge, popup are theme-invariant

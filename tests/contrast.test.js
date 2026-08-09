@@ -156,6 +156,17 @@ const FILLS = [
   // the only reason they were not in the first draft of this list.
   { fill: "--app-new", alpha: null, ink: "--text-on-accent", role: "button", what: "+ New" },
   { fill: "--app-walkin", alpha: null, ink: "--text-on-accent", role: "button", what: "Walk-in" },
+
+  // The timeline's own pills — a THIRD naming family, and the third time this
+  // file has been caught by one. --tl-hour-pill in particular became
+  // load-bearing in the same version this file shipped: the amber blocks are a
+  // recorded exemption precisely BECAUSE the start time moved onto this pill,
+  // so the exemption's whole justification was resting on a fill nothing
+  // measured. It passes (4.73 light / 6.87 dark) — but it passed by luck, and
+  // --tl-now-pill, sitting eight lines from it in index.html, did not.
+  { fill: "--tl-hour-pill", alpha: null, ink: "--text-on-accent", role: "label", what: "timeline hour pill / block start time" },
+  { fill: "--tl-now-pill", alpha: null, ink: "--text-on-accent", role: "label", what: "timeline now-time pill" },
+  { fill: "--tl-blocked-badge", alpha: null, ink: "--text-on-accent", role: "label", what: "blocked table badge" },
 ];
 
 const NEED = { label: 4.5, button: 3 };
@@ -236,12 +247,18 @@ describe("registry coverage", () => {
   const DECORATIVE = {
     // Fills that never sit under text. Each is a wash, a rail, or a rim.
     "--btn-nav-quiet": "date-arrow rail, glyph is --text-primary not white",
+    "--tl-blocked-badge-border": "rim of the blocked badge, not its fill",
   };
   const registered = new Set(FILLS.map((f) => f.fill));
 
-  it("every --block-* / --btn-* / --tbl-*-rgb token is registered or declared decorative", () => {
+  it("every --block-* / --btn-* / --tbl-*-rgb / timeline pill+badge token is registered or declared decorative", () => {
+    // The `--tl-.*(pill|badge)` clause is the v17.8.0 review fix. The rest of
+    // the --tl-* family is gridlines, rails, scrims and borders, so matching
+    // the whole prefix would mean fifteen DECORATIVE entries of noise; the
+    // shape that actually carries text on this view is a pill or a badge, and
+    // that is what the next one will be called too.
     const candidates = Object.keys(LIGHT_VARS).filter((k) =>
-      /^--(block-|btn-|app-btn-|app-new|app-walkin|tbl-.*-rgb)/.test(k)
+      /^--(block-|btn-|app-btn-|app-new|app-walkin|tbl-.*-rgb|tl-.*(pill|badge))/.test(k)
     );
     const missing = candidates.filter((k) => !registered.has(k) && !(k in DECORATIVE));
     expect(

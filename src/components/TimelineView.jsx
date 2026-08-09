@@ -1099,7 +1099,11 @@ export const TimelineView = memo(function TimelineView({
         className="mgt-hover-scale"
         style={mkBtn({
           minHeight: 36, padding: "4px 12px", fontSize: T.small,
-          background: autoOptimizer ? "var(--app-walkin)" : "rgba(120,130,150,0.55)"
+          // v17.8.0 review fix: the OFF fill was the SAME hard-coded grey the
+          // Follow button above was just cured of, in the same commit, eight
+          // lines apart — 1.94:1 white-on-grey in light mode. Fixing one copy of
+          // a literal does not fix the literal; grep the VALUE.
+          background: autoOptimizer ? "var(--app-walkin)" : "var(--app-btn-grey)"
         })}
       >
         {"Optimizer: " + (autoOptimizer ? "ON" : "OFF")}
