@@ -166,14 +166,19 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
         <span style={{ fontSize: 13, fontWeight: 700, color: top.tone, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", transition: "color " + M.move }}>
           {multi ? "Notifications" : top.title}
         </span>
-        {/* Collapsed with several sections, the right side is a per-category
-            tally — an icon and a count each, in the same severity order as the
-            body. "+2 more" and a bare total told you how much was wrong without
+        {/* With several sections live, the right side is a per-category tally —
+            an icon and a count each, in the same severity order as the body.
+            "+2 more" and a bare total told you how much was wrong without
             telling you what; two glyphs and two numbers tell you it is one late
             table and one waiting party, which is the difference between needing
-            to expand and not. Expanded, this is redundant (every section heads
-            itself), so it collapses to the plain total. */}
-        {!open && multi ? (
+            to expand and not.
+            It stays put when the strip OPENS. The first version swapped it for
+            the plain total on the grounds that each section then heads itself —
+            but that made the lid's contents change under the finger that tapped
+            it, and the tally is the one part of the row that is still useful
+            while open: the sections scroll, the lid does not, so it stays a
+            fixed summary of a body you may be halfway down. */}
+        {multi ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             {ordered.map(function (s) {
               return (
