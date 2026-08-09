@@ -528,11 +528,26 @@ export function BookingFormModal({
             disabled={!canSave}
             onClick={onSavePending}
             className="mgt-hover-scale"
-            style={{background:canSave?BLOCK_BG.pending:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:BLOCK_INK.pending,minHeight:44,boxShadow:canSave?"0 2px 8px rgba(212,165,10,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save pending</button>
+            /* v17.8.0: demoted from a solid amber pill to the OUTLINE treatment
+               (CLAUDE.md's second label shape — no fill, 2px border in the
+               semantic hue, text in the same family). It used to be one of three
+               equally loud saturated pills in this footer, so the row had no
+               primary at all at the highest-stakes moment in the app. It is an
+               ALTERNATIVE save, not the main one, and it should look like it.
+               The amber pair here is a legitimate use of --status-pending-*:
+               both the text token and the sheet under it flip with the theme,
+               unlike the banned case where a flipping token sits on a fixed fill. */
+            style={{background:"transparent",border:"2px solid "+(canSave?"rgba(var(--status-pending-rgb),0.55)":"var(--border-soft)"),borderRadius:R.pill,padding:"9px 17px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:canSave?"var(--status-pending-text)":"var(--text-faint)",minHeight:44}}>Save pending</button>
         );
       })()}</div><div style={{display:"flex",gap:8}}><button
         className="mgt-hover-scale"
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
+        /* v17.8.0: was BTN.cancel — the RED one. In this app "cancel" means
+           cancel the BOOKING, which is why that token is red; this button closes
+           the FORM. CLAUDE.md names this exact trap and names the fix, and it
+           was sitting two buttons away from a red-adjacent amber and a blue
+           primary, so the footer read as three warnings. --app-btn-slate is the
+           documented neutral dialog secondary. */
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
         onClick={function(){onClose();}}>Cancel</button>{(function(){
         // v14 p1 (Issue 3): Save is disabled when date is empty. Prevents the
         // dd.mm.yyyy placeholder state from being submitted (esp. via Book Again
@@ -543,7 +558,7 @@ export function BookingFormModal({
             disabled={!canSave}
             onClick={onSave}
             className="mgt-hover-scale"
-            style={{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
+            style={{background:canSave?S.accent:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
         );
       })()}{origPendingBooking?(
         <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" outMs={190} tag="span">
@@ -551,7 +566,7 @@ export function BookingFormModal({
             disabled={!form.date}
             onClick={onSaveConfirm}
             className="mgt-hover-scale"
-            style={{background:form.date?"rgba(22,101,52,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"0 2px 8px rgba(22,101,52,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save&confirm</button>
+            style={{background:form.date?"var(--app-success-solid)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"0 2px 8px rgba(22,101,52,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save&confirm</button>
         </Presence>
       ):null}</div></div>
     </>
