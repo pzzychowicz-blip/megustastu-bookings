@@ -195,8 +195,11 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
         </div>
       </div>
 
-      {/* v15.8.0: AutoHeight (linear) eases the height when switching Week↔Month. */}
-      <AutoHeight linear>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
+      {/* v15.8.0: AutoHeight eases the height when switching Week↔Month. (v17.8.0:
+          its `linear` prop is gone — AutoHeight always eases linear now, so this
+          call site is byte-identical in behaviour and is the reference the rest
+          of the app's modal bodies were brought in line with.) */}
+      <AutoHeight>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
 
       <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-faint)", textAlign: "center" }}>
         {isStats

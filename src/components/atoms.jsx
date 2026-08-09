@@ -364,8 +364,16 @@ export function Reveal({ show, children, style, horizontal = false }) {
 // `.mgt-hover-scale` lift inside (ReminderEditor edit sections, Settings bodies, the
 // form/Manual/Walkin/Pref/Week bodies). Mirrors the SlideView pattern — the growth is
 // still clipped + revealed by the eased height (no first-frame pop), but a settled
-// AutoHeight no longer clips its children. `linear` opts the easing to linear.
-export function AutoHeight({ children, style, linear }) {
+// AutoHeight no longer clips its children.
+//
+// v17.8.0: the easing is LINEAR, always — the `linear` opt-in prop is gone. It
+// had been set on two call sites (the Week↔Month body and the reminder editor)
+// and Patryk named the first of those as the one that felt right, which is the
+// whole diagnosis: this component is never an object arriving, it is a box
+// conforming to content that has already changed. There is no arrival to
+// decelerate into, and ease-out's front-loading turned every modal resize into
+// a lurch-then-crawl. See M.resize for the reasoning in full.
+export function AutoHeight({ children, style }) {
   const inner = useRef(null);
   const hRef = useRef(null);
   const [h, setH] = useState(null);             // null = auto until first measure
@@ -390,7 +398,7 @@ export function AutoHeight({ children, style, linear }) {
   return (
     <div
       onTransitionEnd={function (e) { if (e.propertyName === "height") setAnimating(false); }}
-      style={{ height: h == null ? "auto" : h, overflow: animating ? "hidden" : "visible", transition: "height " + (linear ? "var(--t-shift) linear" : M.shift), ...(style || {}) }}
+      style={{ height: h == null ? "auto" : h, overflow: animating ? "hidden" : "visible", transition: "height " + M.resize, ...(style || {}) }}
     >
       <div ref={inner}>{children}</div>
     </div>

@@ -721,7 +721,13 @@
       @keyframes mgt-view-in-left  { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
       .mgt-view-in-right { animation: mgt-view-in-right var(--t-move) var(--ease-out) both; }
       .mgt-view-in-left  { animation: mgt-view-in-left var(--t-move) var(--ease-out) both; }
-      /* Settings tab-content crossfade on switch. */
+      /* Settings tab-content crossfade on switch. --t-shift, not --t-move: it
+         rides inside an AutoHeight that is resizing the modal card over
+         --t-shift at the same moment, and the two are one event. At --t-move
+         the new tab reached full strength while the card was still visibly
+         moving under it, which is half of why that modal read as jumpy — the
+         other half was the card's easing (see M.resize). This class has exactly
+         one call site, so the duration is a Settings decision, not a global. */
       @keyframes mgt-fade-in { from { opacity: 0; } to { opacity: 1; } }
       /* v17.8.0: fade in to WHATEVER OPACITY THE ELEMENT ALREADY HAS. Note
          there is no `to` and no `both`: an omitted keyframe endpoint resolves
@@ -735,7 +741,7 @@
          applies again. Opacity-only for the same reason — nothing here may own
          `transform`, because the hover and press rules do. */
       @keyframes mgt-appear { from { opacity: 0; } }
-      .mgt-fade-in { animation: mgt-fade-in var(--t-move) var(--ease-out) both; }
+      .mgt-fade-in { animation: mgt-fade-in var(--t-shift) var(--ease-out) both; }
       .mgt-appear  { animation: mgt-appear  var(--t-move) var(--ease-out); }
 
       /* Accessibility + weak-hardware opt-out: collapse every animation/transition

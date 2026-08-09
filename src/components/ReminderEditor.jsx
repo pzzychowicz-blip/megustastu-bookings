@@ -108,8 +108,8 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         {/* v14.4.1: body scrolls, action footer (err + buttons) pinned to the
             bottom — mirrors Overlay's `footer` slot (this modal predates it). */}
         <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "22px", boxSizing: "border-box" }}>
-        {/* v15.8.0: AutoHeight (linear) eases the body when Recurrence flips once↔weekly. */}
-        <AutoHeight linear>
+        {/* v15.8.0: AutoHeight eases the body when Recurrence flips once↔weekly. */}
+        <AutoHeight>
         {/* v14 p7: header matches New booking / Edit booking pattern —
             centered wrapper + pill-shaped inner with blue background. */}
         <div style={{ textAlign: "center", marginBottom: 16 }}>

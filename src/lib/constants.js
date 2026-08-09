@@ -517,6 +517,14 @@ export var M={
   shift:"var(--t-shift) var(--ease-out)",
   status:"var(--t-status) var(--ease-out)",
   exit:"var(--t-move) var(--ease-in)",
+  // The documented LINEAR exception (v17.8.0), alongside .mgt-dot-pulse's
+  // ease-in-out. The two direction curves describe arrival and departure — a
+  // box CONFORMING to content that has already changed has neither, so
+  // decelerating into a rest position is describing a motion that isn't
+  // happening. Front-loaded, it reads as a lurch: cubic-out covers 70% of a
+  // height change in the first third of the time, then crawls. AutoHeight is
+  // the only consumer; anything that travels still takes move/shift.
+  resize:"var(--t-shift) linear",
   // Raw values — WAAPI only. Keep identical to index.html's :root.
   dur:{tap:145,move:240,shift:385},
   easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"
