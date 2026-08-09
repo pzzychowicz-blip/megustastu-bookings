@@ -113,13 +113,20 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
           time wherever it appears, so it should look identical to the ruler that
           labels the same axis. This is also what lets the amber blocks keep
           white ink at 1.8:1 without the START TIME becoming unreadable — the
-          chip carries its own opaque background and is not affected. */}
+          chip carries its own opaque background and is not affected.
+          Held at 0.8 opacity (Patryk): at full strength an opaque slate pill on
+          every block out-shouted the guest NAME beside it, which is the thing
+          you actually read a block for. The ruler's pills can be full strength
+          because they are alone on an empty strip; this one is not. Dimming the
+          whole chip rather than lightening its fill keeps it the same object as
+          the ruler pill, just quieter — the fill and the label fade together
+          instead of the label drifting off its own background. */}
       <span style={{
         flexShrink: 0, marginLeft: 6, padding: "2px 5px", borderRadius: R.pill,
         fontSize: T.micro, fontWeight: FW.semi, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
         whiteSpace: "nowrap",
         background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.1)", opacity: 0.8,
         pointerEvents: "none", position: "relative"
       }}>{b.time}</span>
     </Reveal>
@@ -534,7 +541,7 @@ function WaitGhost({ g, totalMins, onBook }) {
         fontSize: T.micro, fontWeight: FW.semi, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
         whiteSpace: "nowrap",
         background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+        boxShadow: "0 1px 3px rgba(0,0,0,0.1)", opacity: 0.8
       }}>{g.time}</span>
       {/* v17.8.0 correction: the ⏳ sits BETWEEN the time and the name, not
           trailing it. Trailing, it was the first thing the ellipsis ate — the

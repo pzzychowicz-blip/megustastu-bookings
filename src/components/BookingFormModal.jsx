@@ -503,7 +503,11 @@ export function BookingFormModal({
            deliberately clears the date to force a deliberate choice, and the
            Save button is disabled until one is set with nothing on screen
            explaining why. That clause is the explanation, not decoration. */
-        style={{display:"inline-flex",alignItems:"center",border:"2px solid var(--suggest-border)",borderRadius:R.pill,padding:"3px 10px",marginBottom:10,fontSize: T.small,fontWeight: FW.bold,color:"var(--success-text)"}}>{"Return guest · "+src.name+" · "+src.date+" "+srcTime+" — set a date"}</div>
+        /* Centred under the title pill it belongs to. `inline-flex` alone
+           left-aligns, because the banner is a sibling of the title's centred
+           wrapper rather than inside it — so it needs `width:fit-content` plus
+           auto side margins to shrink-wrap AND centre. */
+        style={{display:"flex",width:"fit-content",margin:"0 auto 10px",alignItems:"center",border:"2px solid var(--suggest-border)",borderRadius:R.pill,padding:"3px 10px",fontSize: T.small,fontWeight: FW.bold,color:"var(--success-text)"}}>{"Return guest · "+src.name+" · "+src.date+" "+srcTime+" — set a date"}</div>
     );
   })();
 
