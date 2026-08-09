@@ -13,7 +13,7 @@
 //   onClose()  — close the panel
 
 import { useState, useRef, useEffect } from "react";
-import { S, BLOCK_BG, R } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, R } from "../lib/constants";
 import { searchBookings, formatPhone } from "../lib/customers";
 import { Overlay, mkInp, mkBtn, AutoHeight } from "./atoms";
 
@@ -45,7 +45,7 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
             text and metrics as SBadge — so one label doesn't read at two
             different weights depending on which screen you're looking at.
             Was the tinted STATUS_COLORS treatment (sc.bg/sc.text/sc.border). */}
-        <span style={{ fontSize: 11.5, fontWeight: 600, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: "var(--text-on-accent)", textTransform: "capitalize" }}>{b.status}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 600, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>
       </button>
     );
   });

@@ -19,7 +19,7 @@
 //                           waitlist entries and reports the outcome
 
 import { useState, useEffect, useMemo } from "react";
-import { S, BTN, BLOCK_BG, R } from "../lib/constants";
+import { S, BTN, BLOCK_BG, BLOCK_INK, R } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, hasRealPhone, isNoShow } from "../lib/customers";
 import { Section, Reveal, mkInp, mkBtn } from "./atoms";
 import { WaitIcon } from "./Icons";
@@ -82,7 +82,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     const wlCount = waitCountOf(c.phone);
     const historyRows = open ? c.bookings.map(function (b) {
       return (
-        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: 12, fontWeight: 600, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: 12, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: 12, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: 11.5, fontWeight: 600, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: "var(--text-on-accent)", textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
+        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: 12, fontWeight: 600, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: 12, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: 12, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: 11.5, fontWeight: 600, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
       );
     }) : null;
     return (
