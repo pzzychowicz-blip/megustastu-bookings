@@ -329,12 +329,21 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           own surfaces are still light in both themes at v14.2.0 (Overlay /
           Section migrate in a later wave), so this row keeps light literals to
           stay readable here for now. */}
+      {/* v17.8.0: "Follows your account on every device." used to appear
+          verbatim on FIVE consecutive rows. Five copies of the rule buried the
+          only fact a reader actually needs — which settings are the exception.
+          The rule is stated once, here, and the two exceptions say "This device
+          only" in those same words so they are recognisable rather than
+          paraphrased twice. */}
+      <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", textAlign: "center", marginBottom: 10 }}>
+        Settings follow your account on every device, except where noted.
+      </div>
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Dark mode</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Follows your account on every device. Defaults to your system setting.
+              Defaults to your system setting.
             </div>
           </div>
           <Toggle on={isDark} onClick={onToggleDark} />
@@ -346,7 +355,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>App width</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Maximum content width on this device. Lower it if the app overflows your screen.
+              This device only. Lower it if the app overflows your screen.
             </div>
           </div>
           <MiniStepper value={appWidth} fmt={(v) => v + " px"}
@@ -360,7 +369,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Reduce animations</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Turns off transitions and wipes. Follows your account on every device. Helps on slower tablets.
+              Turns off transitions and wipes. Helps on slower tablets.
             </div>
           </div>
           <Toggle on={reduceMotion} onClick={onToggleReduceMotion} />
@@ -371,7 +380,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Plan zoom &amp; pan</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Scroll/pinch to zoom, drag to pan and double-tap to reset in the Plan view. Follows your account on every device.
+              Scroll/pinch to zoom, drag to pan and double-tap to reset in the Plan view.
             </div>
           </div>
           <Toggle on={planGestures} onClick={onTogglePlanGestures} />
@@ -383,7 +392,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Lock navigation</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Keeps the title bar and the date row in place while the timeline, list or plan scrolls underneath. Follows your account on every device. Best on a tablet or desktop — on a phone those rows wrap and can take most of the screen.
+              Keeps the title bar and the date row in place while the timeline, list or plan scrolls underneath. Best on a tablet or desktop; on a phone those rows wrap and can take most of the screen.
             </div>
           </div>
           <Toggle on={navLocked} onClick={onToggleNavLock} />
@@ -395,7 +404,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Split view</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Right-click or press and hold a view button (Timeline, List, Plan) to show two views at once. Follows your account on every device; the two views you pick are remembered per device. Tablet and desktop only.
+              Right-click or press and hold a view button (Timeline, List, Plan) to show two views at once. Tablet and desktop only. Which two views you pick is remembered per device.
             </div>
           </div>
           <Toggle on={splitEnabled} onClick={onToggleSplitEnabled} />
@@ -408,7 +417,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           <div style={{ textAlign: "left", marginBottom: 10 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Timeline zoom</div>
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
-              Zoom and Follow behaviour of the timeline, on this device.
+              This device only. Zoom and Follow behaviour of the timeline.
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

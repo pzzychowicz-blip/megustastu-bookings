@@ -2437,7 +2437,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -2450,6 +2450,7 @@ function BookingApp({uid}){
       onBlock:function(id){R.current.setBlockTarget(id);},
       onDelete:function(id){R.current.setConfirmDel(id);},
       onReshuffle:function(){R.current.setConfirmReshuffle(true);},
+      onNew:function(){R.current.openNew();},
       onToggleFinished:function(next){R.current.toggleShowFinished(next);},
       onSelect:function(id){R.current.setSelectedListId(id);},
       onSummaryToggle:function(){R.current.setSummaryOpen(function(o){return !o;});},
@@ -2536,6 +2537,10 @@ function BookingApp({uid}){
     onSelect={VA.onSelect}
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
+    onNew={VA.onNew}
+    // Walk-in only on TODAY: a walk-in is a party standing at the door now, so
+    // offering it on a future day would open a form for the wrong date.
+    onWalkin={viewDate===new Date().toISOString().slice(0,10)?VA.onWalkin:null}
     currency={generalSettings.currency} />;
   const viewEl={timeline:timelineEl,list:listEl,plan:planView};
   const mainView=viewEl[view];

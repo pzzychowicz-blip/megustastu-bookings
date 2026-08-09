@@ -48,6 +48,7 @@ export const ListView = memo(function ListView({
   late = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {}, focusReq = 0,
   showFinished = false, onToggleFinished = () => {},
+  onNew = null, onWalkin = null,
   currency = "€"
 }) {
   // v17.0.0 round 8 (Patryk): the 🔍/⚙ pair moved OUT to App's date-nav row
@@ -136,12 +137,30 @@ export const ListView = memo(function ListView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusReq]);
 
+  // v17.8.0: an empty day used to be one grey sentence centred in ~500px of
+  // nothing, with the only useful action (+ New) at the far top of the screen.
+  // A first-shift host learned nothing from it. It now says what the day is and
+  // offers the two things you can actually do with an empty one — the same two
+  // actions the header carries, put where the user is already looking.
   if (!day.length) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ textAlign: "center", padding: "48px 0", color: S.text, fontSize: 15 }}>
-          No bookings for this date.
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "56px 16px" }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: S.text }}>Nothing booked for this day yet.</div>
+        <div style={{ fontSize: 13, color: S.muted, textAlign: "center", maxWidth: 340 }}>
+          Take a reservation, or seat someone who has just walked in.
         </div>
+        {onNew || onWalkin ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 2 }}>
+            {onNew ? (
+              <button className="mgt-hover-scale" onClick={onNew}
+                style={mkBtn({ background: "var(--accent)", padding: "8px 18px" })}>New booking</button>
+            ) : null}
+            {onWalkin ? (
+              <button className="mgt-hover-scale" onClick={function () { onWalkin(null); }}
+                style={mkBtn({ background: "var(--app-walkin)", padding: "8px 18px" })}>Walk-in</button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     );
   }
