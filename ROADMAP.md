@@ -82,13 +82,26 @@ session and keeping it in sync.
   decision for Patryk rather than a consistency fix. Either commit to a gradient
   that is actually visible, or collapse it to one flat tinted neutral.
 
-- **The type and control scales.** 13 distinct `fontSize` values (9 → 22,
-  including an `11.5`) and 8 distinct button heights (28/30/32/34/36/40/44/54).
-  A 1.125-step scale would cover the same range in about 7 sizes, and 34/36
-  appear 11 times between them where 32 or 40 would serve. Deferred because it
-  is a wide, low-risk-per-site but high-site-count sweep with no user-visible
-  defect behind it — unlike the shadow/colour token debt, which was a real
-  dark-mode bug and shipped in v17.8.0.
+- **The control-height and spacing scales.** The TYPE half of this entry
+  shipped in v17.8.0 (`T` + `FW`, thirteen sizes down to six, enforced by
+  `check:style`). What is left is the other two axes. Button heights are still
+  28/30/32/34/36/40/44/54 — v17.8.0 lifted the service-critical ones to 44 and
+  deliberately left the 40px `mkBtn` standard, so the remaining spread is
+  28/32/34/36 across ~40 sites that are mostly inside modals. Spacing has no
+  scale at all: **96 distinct `padding` strings and 14 distinct `gap` values.**
+  Both are wide, low-risk-per-site sweeps with no user-visible defect behind
+  them, which is exactly why they keep losing to work that has one. If they get
+  done, they get a `check:style` rule each or they will drift straight back.
+
+- **Dark mode cannot be verified visually in DEV.** Since v17.6.0 the theme
+  follows the signed-in ACCOUNT (`settings/users/{uid}/prefs`), and that
+  overrides both `localStorage["mgt-theme"]` and OS emulation — so a session
+  that wants to eyeball dark mode has to actually toggle it in Settings and
+  write to the prefs node. The v17.8.0 contrast pass verified dark by
+  computation against the token values instead, which is sound but is not the
+  same as looking. Worth a dev-only escape hatch (a query param, or honouring
+  `localStorage` when it is set AFTER prefs load) so a theme check does not
+  require mutating the signed-in user's saved settings.
 
 - **Modal title pills have no colour rule.** "New booking" and "Waitlist" are
   accent; "Settings" is grey. Pick one convention (probably: accent for a

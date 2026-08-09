@@ -7550,3 +7550,87 @@ these bugs could be named as an instance of a known trap.
 **Verification.** Build + lint (0 errors) + `check:style` + 163 tests across 6
 files, green on every commit. Live in DEV: strip titles and row text both at
 x=55, ghosts unchanged after the extraction.
+
+### Design pass over the whole app (commits 47–52)
+
+An `/impeccable` critique of the repo, then the four items Patryk picked from
+it. The deterministic detector found four things and all four were false
+positives (a CSS-triangle "side stripe", three documented layout transitions),
+so everything below came from measuring the running app.
+
+**Light mode had never had its contrast checked.** Every saturated fill was
+`rgba(hue, 0.7–0.92)` declared in `:root` only, under a comment asserting the
+block/table/button tokens were "theme-invariant (saturated fills read on both
+themes)". An alpha fill composites toward what is behind it, so one token lands
+somewhere different per theme — over dark-mode's near-black sheet it darkens
+and white text pops, over light-mode's near-white sheet it washes out. Measured
+in light: Save pending 1.83:1, Follow 1.82:1, the inactive View buttons 1.94:1,
+mkBtn's default 1.99:1, the outdoor table pill 2.15:1. In dark the same tokens
+were 2.20, 7.65, 8.35, 7.12 and 3.54. Dark passed, light failed, and light is
+what runs on a terrace tablet in Canary Islands daylight.
+
+The four fills that did pass were the four authored as opaque and picked
+deliberately (`--app-*-solid`, `--tag-flag`), which is the rule now: a fill
+carrying text is chosen for its contrast against its ink, per theme. Small bold
+labels take 4.5:1, buttons 3:1 (large, solid, meaning also carried by position —
+Patryk's call, so the palette stays recognisable). The amber pair keeps its
+exact fills and takes dark ink instead, because v17.0.0 engineered
+confirmed/pending as a matched-intensity pair and darkening them far enough for
+white text turns one brown and the other olive. `BLOCK_INK` pairs every fill
+with its ink; `--blk-wash`/`--blk-rule` flip the translucent furniture inside a
+block with it. Light mode went from 46 sub-AA text elements to 2.
+
+Two findings inside that one. **A literal duplicate of a token is a token that
+cannot be fixed** — TimelineView's Follow button held a hard-coded copy of
+`--app-btn-grey`'s old value and was the one secondary button the token fix
+could not reach; the form footer held two more, one of them a copy of
+`--app-success-solid` from *before* the retune. And **two names for one concept
+is how a fill hides from its own audit**: the inactive View button is
+`--app-btn-grey`, not `--btn-nav`, so the first draft of the coverage check
+walked straight past the control staff look at on every screen.
+
+**I reproduced the v17.8.0 stray-`*/` bug while writing the fix, one scope
+deeper, and the guard written earlier this version did not catch it.**
+`tests/stylesheet.test.js` only inspected selectors, because that is where the
+original defect landed. Loose prose inside a *declaration block* eats the
+declaration after it instead: `--tbl-out-rgb` resolved to empty and nine table
+badges would have rendered transparent, with every test passing. Two checks
+added, both validated by reintroducing the defect. Worth carrying forward: a
+regex reading of CSS is not what the browser sees, so parse validity needs its
+own guard and cannot be inferred from a token-extracting test passing.
+
+**A type scale, and the regular weight that makes it work.** 497 inline
+`fontSize` literals in thirteen values, sixteen distinct size/weight
+combinations on the app's *emptiest* screen, nine sizes between 9 and 18px
+where 11→12 is a ratio of 1.09 — below the threshold at which a reader
+perceives a step. The app had many type styles and almost no hierarchy. The
+cause was the other half: 93 of 95 elements were 500 or heavier, so weight
+could not carry emphasis, so size carried all of it and the sizes crowded
+together. `T` (six role-named steps) and `FW` ship together for that reason.
+Merges collapse downward, because a size that shrinks cannot overflow its box
+and a size that grows can, in ways a sweep of 497 sites cannot be verified
+against. The weight pass had a judgement half expressed as a rule a script
+could apply — `fontWeight: 500` beside a muted colour is describing, not
+labelling — and 56 sites became regular. After: 12 type styles, six sizes, 13
+elements at weight 400.
+
+**Tap targets were inversely proportional to use.** The timeline zoom cluster,
+touched constantly during service, was 32px; "+ New", touched a few times an
+hour, 40. The control opening the day's numbers was a 13×21px chevron. Those
+went to 44 along with the Find/Settings pair and the connection dot; the 40px
+`mkBtn` standard was deliberately left, being 91% of the HIG figure rather than
+a third of it. Two were also shape bugs — `--r-pill` clamps to half the shorter
+side, so the 24×40 connection dot rendered as a vertical egg beside a round pair.
+
+**The booking form's footer had no primary action** — three saturated pills,
+one of them `--btn-cancel` red used as a dialog dismiss, which is a trap
+CLAUDE.md names explicitly. Cancel is neutral slate, "Save pending" takes the
+outline treatment as the alternative save it is, and the primary is the opaque
+accent.
+
+**Verification.** Build + lint (0 errors) + `check:style` + 223 tests across 8
+files, green on every commit. Live in DEV at each step: contrast re-measured
+in the running page rather than trusted from the solver, no horizontal
+overflow, no console errors. Dark mode is verified by computation against the
+token values, not by eye — the account-level theme pref in DEV would not
+switch, and saying so is more useful than implying a visual check happened.

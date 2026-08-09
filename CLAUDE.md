@@ -134,9 +134,52 @@ src/
 - Exception: `Settings.jsx` exports `SettingsContent`, `TabBar`, `GeneralTabContent`, `CogIcon`; `atoms.jsx` is the multi-export atoms file.
 
 ### Style tokens
-- All colours, spacing, button styles, badge styles, **corner radii** and **motion** flow through `src/lib/constants.js` exports (`S`, `BTN`, `BLOCK_BG`, `STATUS_COLORS`, `TBL`, `R`, `M`).
+- All colours, spacing, button styles, badge styles, **corner radii**, **motion** and **type** flow through `src/lib/constants.js` exports (`S`, `BTN`, `BLOCK_BG`, `BLOCK_INK`, `STATUS_COLORS`, `TBL`, `R`, `M`, `T`, `FW`).
 - **`R` = the v17.7.0 pill-radius scale** (`R.pill`/`auth`/`sheet`/`card`/`inset` → the `--r-*` tokens in `index.html`'s `:root`; radii are theme-agnostic, so they are NOT duplicated into the dark block). Assign **by role, never by the old number** — the same `12` meant "control" in one file and "card" in another. `--r-pill` is `999px` because CSS clamps an oversized radius to half the box, so one token is a true pill at every control height. **No new `borderRadius: <number>` literal.** **v17.8.0: ENFORCED, not described** — `npm run check:style` (`scripts/check-style-invariants.mjs`, a CI gate after lint) fails on any bare numeric radius unless its line carries an inline `/* @canvas */`. The 17 genuine exceptions (timeline blocks + their manual-assign handle and folded corner, TimeAxis ticks, progress track+fill pairs, `Kbd`) are marked at their sites, so an exemption is visible where you are reading rather than in a paragraph three files away.
   **Hard rule for any box holding WRAPPING or SCROLLING text (v17.7.1): its radius must be ≤ its horizontal padding.** A rounded box is narrowest at its top and bottom edges, so a radius past the padding clips the first/last visible line — and no vertical-centring trick saves it, because centring stops applying the moment the content overflows (that is exactly how the v17.7.0 `mkArea` fix passed QA and still shipped a bug: it was only ever tested with short content). Pills are for SINGLE-LINE controls, where the text is centred by line-height and never reaches the curve. Multi-line ⇒ `R.inset` (10px, inside mkInp's 12px padding) — see `mkArea`, and the chat bubble / reply composer in the WA sandbox. **A `<select>` needs the same clearance on its RIGHT** (v17.8.0 `mkSel`): its arrow is painted inside the padding box against `padding-right`, so mkInp's 12px lands it inside the pill's 21.5px cap. Text is immune — it spans enough height that the curve has receded behind it, which is exactly why the LEFT 12px looks right and the right 12px doesn't.
+- **`T` = the v17.8.0 type scale, `FW` the weight scale.** Six role-named steps
+  (`micro`/`small`/`body`/`lead`/`title`/`display`) and four named weights.
+  Assign by role, never by the old number. **No new `fontSize:`/`fontWeight:`
+  literal** — `npm run check:style` fails on one unless the line carries
+  `/* @canvas */`. Before this there were 497 size literals in THIRTEEN values
+  and sixteen distinct size/weight combinations on the app's emptiest screen,
+  nine of the sizes between 9 and 18px where 11→12 is a ratio of 1.09 — below
+  the threshold at which a reader perceives a step. The result is many type
+  styles and no hierarchy, which does not look broken, it looks flat.
+  **The two halves are one change.** There was no regular weight: 93 of 95
+  elements were 500+. When everything is semibold, weight cannot carry
+  emphasis, so size carries all of it, so sizes multiply and crowd. `FW.regular`
+  on descriptive text is what lets the scale have six steps instead of thirteen.
+  When merging sizes, **collapse DOWNWARD** — a size that shrinks cannot
+  overflow its box; a size that grows can, in ways a mechanical sweep cannot be
+  verified against.
+- **A fill that carries TEXT is chosen for its contrast against its ink, per
+  theme. Alpha is for decoration (v17.8.0).** An `rgba(hue, 0.8)` fill
+  composites toward what is BEHIND it, so one token lands somewhere different
+  in each theme. The app shipped eight versions of fills declared in `:root`
+  only, under a comment asserting they were theme-invariant; in light mode
+  "Save pending" was 1.83:1, the Follow button 1.82:1, the inactive View buttons
+  1.94:1 and the outdoor table pill 2.15:1, while every one of them passed in
+  dark. **Dark mode is the easy case; light is where a saturated fill washes
+  out.** `tests/contrast.test.js` measures every fill/ink pair in both themes
+  and fails on an unregistered text-bearing fill. Small bold labels take 4.5:1;
+  buttons take 3:1. `BLOCK_INK` pairs each block fill with its ink — the amber
+  pair takes DARK ink rather than a darker fill, because darkening amber far
+  enough for white text destroys the confirmed/pending pairing v17.0.0
+  engineered. Inside a timeline block the translucent chips and divider come
+  from `--blk-wash`/`--blk-rule` so they flip with the ink.
+- **A literal duplicate of a token is a token that cannot be fixed (v17.8.0).**
+  TimelineView's Follow button held a hard-coded copy of `--app-btn-grey`'s
+  value and was the one secondary button the contrast pass could not reach; the
+  booking-form footer held two more, one of them a copy of
+  `--app-success-solid` from *before* that same pass retuned it. Grep the token's
+  VALUE, not just its name, when retuning one.
+- **Two names for one concept is how a thing hides from its own audit
+  (v17.8.0).** The inactive View button is `--app-btn-grey`, not `--btn-nav`, so
+  a coverage check written around the `--btn-*` prefix walked straight past the
+  control staff look at on every screen. When writing a check that enumerates
+  tokens by prefix, enumerate what is actually THERE and diff it.
+
   **Corollary for pill-shaped controls (v17.8.0): `--r-pill` clamps to half the SHORTER side, so only a SQUARE box is a circle.** An icon button sized by `minHeight` + horizontal padding is ~30×40 and renders as a vertical egg — which is what the three Split-View tools were, one row above the perfectly round 34×34 🔍/⚙ pair. A single-glyph button gets explicit equal `width`/`height` and `padding: 0` (and `min-*` is not enough — a flex row will stretch it back).
 - Reusable JSX atoms in `src/components/atoms.jsx`: `Overlay`, `Fld`, `Section`, `TBadge`, `AvailBanner`, `Toggle`, `mkInp`, `mkBtn`.
 - New UI composes from atoms, not redefining them. Add new atoms there if needed.
@@ -754,10 +797,11 @@ tell what moves by reading it. Name the properties.
 
 - **Multi-tenancy** — single-restaurant app; no plans to generalise.
 - **Mobile app** — web-only; mobile is responsive layout (`useWinW` → `isMobile`).
-- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS — `booking-logic` · `customers` · `drafts` · **`waitlist-match`** · **`presence-state`** · **`stylesheet`**, **163 tests** as of v17.8.0 (`npm test`). CI gates build + test + **lint (0 errors, hard)** + **`npm run check:style`** on every PR via `.github/workflows/ci.yml`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
+- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS — `booking-logic` · `customers` · `drafts` · `waitlist-match` · `presence-state` · `stylesheet` · **`contrast`**, **223 tests** as of v17.8.0 (`npm test`). CI gates build + test + **lint (0 errors, hard)** + **`npm run check:style`** on every PR via `.github/workflows/ci.yml`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
   **The rule v17.8.0 added: logic that decides something the restaurant acts on does not live in a `useEffect`.** `placeWaitlist` and `presenceState` were both extracted for that reason — a double-booking fix had shipped on "it looked right in DEV". If a behaviour is worth a REFACTOR_LOG paragraph it is worth being reachable by a test: put the pure core in `lib/`, leave the hook its subscription, refs and setState.
   **Fixture trap:** `ALL_TABLES` holds `{id, capacity}` OBJECTS, not ids. A "fill every table" fixture built straight from it silently occupies nothing, and the failures point at the code. Use `ALL_TABLES.map(t => t.id)`.
-  **`tests/stylesheet.test.js` guards `index.html`'s `<style>`** — a stylesheet has no syntax errors, only rules that silently don't exist (v17.8.0 lost `.mgt-press:active` to a stray `*/` and nothing noticed). It checks comment hygiene, brace balance, and a CRITICAL_SELECTORS list. Entry criterion for that list: does the rule fail SILENTLY when missing?
+  **`tests/stylesheet.test.js` guards `index.html`'s `<style>`** — a stylesheet has no syntax errors, only rules that silently don't exist (v17.8.0 lost `.mgt-press:active` to a stray `*/` and nothing noticed). It checks comment hygiene, brace balance, a CRITICAL_SELECTORS list, and — added after the same defect recurred one scope deeper — **loose prose inside a DECLARATION block**, which eats the declaration *after* it rather than the rule after it. That version made `--tbl-out-rgb` resolve to empty, which would have rendered nine table badges transparent, while every existing test passed. Entry criterion for CRITICAL_SELECTORS: does the rule fail SILENTLY when missing?
+  **A regex reading of CSS is not what the browser sees.** `tests/contrast.test.js` extracts tokens with a regex and would happily measure a declaration the browser has thrown away, so parse validity needs its OWN guard and cannot be inferred from a token-reading test passing.
 - **TypeScript** — pure JavaScript; no plans to migrate.
 - **Storybook / component dev environment** — components are developed against the live (DEV) app.
 
