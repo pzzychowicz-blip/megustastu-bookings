@@ -29,7 +29,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { S, R, BTN, M } from "../lib/constants";
-import { mkBtn } from "./atoms";
+import { mkBtn, Presence } from "./atoms";
 
 // Rendered popover width: minWidth 260 + 2×12 padding + 2×1 border.
 const POPOVER_W = 286;
@@ -155,22 +155,37 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
         />
       </button>
 
-      {open ? (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 8px)",
-            right: alignRight ? 0 : "auto",
-            left: alignRight ? "auto" : 0,
-            zIndex: 30,
-            minWidth: 260,
-            padding: 12,
-            background: "var(--bg-ac-menu)",
-            border: "1px solid var(--border-card)",
-            borderRadius: R.card,
-            boxShadow: "var(--shadow-sheet)",
-          }}
-        >
+      {/* v17.8.0: the popover appears and disappears through Presence rather
+          than a bare `open ?` — it never had an entrance, which stopped being
+          survivable once every other surface in the app eased. mgt-card-in /
+          -out are reused rather than invented: they fade and translateY(8px),
+          which on a top-anchored popover reads as it dropping out of the dot,
+          exactly the motion this needs. outMs must match --t-move (240ms) or
+          the node unmounts mid-animation.
+          Presence renders the positioned element ITSELF (its `style` prop) —
+          no extra wrapper, so `wrapRef.current.contains()` and the absolute
+          anchoring are untouched. */}
+      <Presence
+        show={open}
+        inClass="mgt-card-in"
+        outClass="mgt-card-out"
+        outMs={240}
+        style={{
+          position: "absolute",
+          top: "calc(100% + 8px)",
+          right: alignRight ? 0 : "auto",
+          left: alignRight ? "auto" : 0,
+          zIndex: 30,
+          minWidth: 260,
+          padding: 12,
+          background: "var(--bg-ac-menu)",
+          border: "1px solid var(--border-card)",
+          borderRadius: R.card,
+          boxShadow: "var(--shadow-sheet)",
+        }}
+      >
+        {open ? (
+          <>
           {/* v17.8.0: Log out moved OFF the header row and in here, right-aligned
               on the status line. It belongs with the identity this popover
               already shows ("Signed in as" sits two rows below), and the header
@@ -258,8 +273,9 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
               </div>
             </div>
           ) : null}
-        </div>
-      ) : null}
+          </>
+        ) : null}
+      </Presence>
     </div>
   );
 }

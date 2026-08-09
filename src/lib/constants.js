@@ -518,8 +518,8 @@ export var M={
   status:"var(--t-status) var(--ease-out)",
   exit:"var(--t-move) var(--ease-in)",
   // Raw values — WAAPI only. Keep identical to index.html's :root.
-  dur:{tap:120,move:200,shift:320},
-  easeOut:"cubic-bezier(0.22, 1, 0.36, 1)"
+  dur:{tap:145,move:240,shift:385},
+  easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"
 };
 
 export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,10),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null};

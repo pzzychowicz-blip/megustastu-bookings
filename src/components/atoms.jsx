@@ -559,7 +559,11 @@ export function Toggle({ on, onClick }) {
         background: on ? "var(--toggle-on)" : "var(--toggle-off)",
         position: "relative", flexShrink: 0,
         boxShadow: "inset 0 1px 2px rgba(0,0,0,0.08)",
-        transition: "background-color " + M.tap      // v15.8.0: track colour eases
+        // v17.8.0 correction: M.move, not M.tap — and `transform` is in the list
+        // because an INLINE transition beats .mgt-hover-scale's stylesheet one,
+        // so omitting it left this button's hover lift with nothing to ease
+        // (the same shorthand-collision class as the v17.8.0 hover/press fix).
+        transition: "background-color " + M.move + ", transform " + M.tap
       }}
     >
       <div style={{
@@ -569,7 +573,10 @@ export function Toggle({ on, onClick }) {
         width: 20, height: 20, borderRadius: R.pill,
         background: "var(--text-on-accent)",
         boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
-        transition: "left " + M.tap                  // v15.8.0: knob slides
+        // The knob crosses 21px. That is TRAVEL, not a control acknowledging a
+        // tap, so it takes M.move — under M.tap it arrived before the eye could
+        // follow it and the switch read as teleporting rather than sliding.
+        transition: "left " + M.move
       }} />
     </button>
   );

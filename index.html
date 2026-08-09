@@ -265,14 +265,21 @@
            Two curves now, and the split is by DIRECTION, not by element:
 
            --ease-out  everything that arrives, opens, moves, or answers a
-                       finger. A quint-out: ~90% of the distance in the first
-                       third of the time, then a long settle. Fast to respond,
-                       unhurried to land — which is the feel of a physical
-                       thing with mass coming to rest, and the reason a control
-                       can be 120ms and still not look abrupt.
+                       finger. Fast to respond, unhurried to land.
            --ease-in   its exact mirror, and ONLY for things leaving. An exit
                        accelerates away: the eye is already moving on, so the
                        slow part belongs at the start, not the end.
+
+           v17.8.0 correction: this WAS a quint (0.22,1,0.36,1) and it was too
+           front-loaded to describe travel. A quint covers ~90% of the distance
+           in the first third of the time — which is right for a press dip,
+           where the eye only registers arrival, and wrong for anything that
+           moves ACROSS a distance. The toggle knob proved it: its 145ms
+           transition was applied and correct, and the 21px slide still read as
+           a jump, because almost all of it happened in the first 45ms. A
+           cubic-out settles just as clearly and spends the time on the journey.
+           Durations went up 20% in the same pass; the two changes fix the same
+           complaint from opposite ends.
 
            There are two documented exceptions in the stylesheet below, both
            genuine: --mgt-dot-pulse is an infinite symmetric loop (ease-in-out
@@ -297,11 +304,11 @@
                       window (`__statusAnims.until`) must stay >= this.
 
            JS reads all of these through the `M` object in lib/constants.js. */
-        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-        --ease-in:  cubic-bezier(0.55, 0, 1, 0.45);
-        --t-tap: 120ms;
-        --t-move: 200ms;
-        --t-shift: 320ms;
+        --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+        --ease-in:  cubic-bezier(0.32, 0, 0.67, 0);
+        --t-tap: 145ms;
+        --t-move: 240ms;
+        --t-shift: 385ms;
         --t-status: 360ms;
         --t-wipe: 760ms;
       }
