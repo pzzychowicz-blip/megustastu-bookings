@@ -186,7 +186,7 @@ export const ListView = memo(function ListView({
         // which is the point: never assert a stay that didn't happen.
         const stayed = b.status === "completed" ? stayedMins(b) : null;
         const durationTag = b.status === "seated" ? (
-          <SmallTag label={elapsedMin + " min"} style={{ background: "#166534", color: "var(--text-on-accent)", border: "none" }} />
+          <SmallTag label={elapsedMin + " min"} style={{ background: "var(--app-success-solid)", color: "var(--text-on-accent)", border: "none" }} />
         ) : stayed != null ? (
           <SmallTag label={"stayed " + stayed + " min"} style={{ background: "var(--bg-soft)", color: "var(--text-secondary)", border: "1px solid var(--border-soft)" }} />
         ) : null;
@@ -197,7 +197,7 @@ export const ListView = memo(function ListView({
             padding: "6px 10px", borderRadius: R.pill,
             background: warn.overdue ? "var(--danger-bg)" : "var(--warn-bg)",
             color: warn.overdue ? "var(--danger-text)" : "var(--warn-text)",
-            border: "2px solid " + (warn.overdue ? "var(--danger-border)" : "var(--warn-border)")
+            border: "1px solid " + (warn.overdue ? "var(--danger-border)" : "var(--warn-border)")
           }}>
             {warn.overdue
               ? "Overdue — next booking (" + warn.next + ") at " + warn.nextTime + " is waiting"
@@ -209,7 +209,7 @@ export const ListView = memo(function ListView({
           <div style={{
             fontSize: 13, color: "var(--danger-text)", fontWeight: 700, marginBottom: 8,
             background: "var(--danger-bg)",
-            border: "2px solid var(--danger-border)",
+            border: "1px solid var(--danger-border)",
             borderRadius: R.pill, padding: "6px 10px"
           }}>
             No table assigned — use manual assignment.

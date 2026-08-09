@@ -103,7 +103,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         width: "100%", maxWidth: 520, maxHeight: "90dvh",
         display: "flex", flexDirection: "column", overflow: "hidden",
         boxSizing: "border-box",
-        boxShadow: "0 8px 40px rgba(0,0,0,0.15), inset 0 1px 1px rgba(255,255,255,0.8)"
+        boxShadow: "var(--shadow-sheet)"
       }}>
         {/* v14.4.1: body scrolls, action footer (err + buttons) pinned to the
             bottom — mirrors Overlay's `footer` slot (this modal predates it). */}
@@ -118,7 +118,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
             background: "rgba(0,122,255,0.75)",
             border: "1px solid rgba(255,255,255,0.2)",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
+            boxShadow: "var(--shadow-btn)"
           }}>
             {isNew ? "New reminder" : "Edit reminder"}
           </div>

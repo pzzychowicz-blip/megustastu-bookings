@@ -637,7 +637,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
     <div style={{
       padding: "10px 14px",
       borderRadius: R.card,
-      border: "2px solid " + brdClr,
+      border: "1px solid " + brdClr,
       background: bgClr,
       marginBottom: 14,
       fontSize: 13,

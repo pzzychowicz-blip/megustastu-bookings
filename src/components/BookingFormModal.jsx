@@ -381,17 +381,17 @@ export function BookingFormModal({
         key={r.timeStr}
         className="mgt-hover-scale"
         onClick={function(){setForm(function(f){return Object.assign({},f,{time:r.timeStr});});}}
-        style={{cursor:"pointer",padding:"3px 8px",borderRadius:R.pill,fontWeight:600,fontSize:12,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?"#166534":"#854d0e",border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>{r.timeStr}</span>
+        style={{cursor:"pointer",padding:"3px 8px",borderRadius:R.pill,fontWeight:600,fontSize:12,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?"var(--success-text)":"var(--status-pending-text)",border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>{r.timeStr}</span>
     );});
   }
   // v15.8.0 cont.4: the kitchen suggestion sub-panel (the part that appears when the
   // kitchen is busy) eases in/out via Reveal — the same effect as the Summary panel.
   const kitchenSugBlock=(kitchenSugg&&(kitchenSugg.before.length||kitchenSugg.after.length))?<div style={{marginTop:8}}><div style={{fontSize:11,color:S.muted,marginBottom:6}}><span
-          style={{background:"rgba(220,252,231,0.8)",color:"#166534",padding:"2px 6px",borderRadius:R.pill,fontSize:10,fontWeight:600}}>green</span>= tables available  <span
-          style={{background:"rgba(254,249,195,0.8)",color:"#854d0e",padding:"2px 6px",borderRadius:R.pill,fontSize:10,fontWeight:600}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight:700,fontSize:12}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight:700,fontSize:12}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
+          style={{background:"rgba(220,252,231,0.8)",color:"var(--success-text)",padding:"2px 6px",borderRadius:R.pill,fontSize:10,fontWeight:600}}>green</span>= tables available  <span
+          style={{background:"rgba(254,249,195,0.8)",color:"var(--status-pending-text)",padding:"2px 6px",borderRadius:R.pill,fontSize:10,fontWeight:600}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight:700,fontSize:12}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight:700,fontSize:12}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
     (kitchenBusy?<div style={{marginTop:6,fontSize:12,color:"var(--danger-text)"}}>No kitchen-friendly alternatives found nearby.</div>:null);
   const kitchenSection=kitchenLoad?<div
-    style={{padding:"10px 14px",borderRadius:R.card,border:"2px solid "+(kitchenBusy?"var(--warn-border)":"var(--border-soft)"),background:kitchenBusy?"var(--warn-bg)":"var(--bg-soft)",marginBottom:14,fontSize:13,color:kitchenBusy?"var(--warn-text)":S.muted}}><div
+    style={{padding:"10px 14px",borderRadius:R.card,border:"1px solid "+(kitchenBusy?"var(--warn-border)":"var(--border-soft)"),background:kitchenBusy?"var(--warn-bg)":"var(--bg-soft)",marginBottom:14,fontSize:13,color:kitchenBusy?"var(--warn-text)":S.muted}}><div
       style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span><span style={{fontWeight:700}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<span
         style={{fontWeight:700,color:"var(--text-required)",fontSize:13,padding:"4px 12px",borderRadius:R.pill,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}}>Kitchen busy</span>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>:null;
 
@@ -433,7 +433,7 @@ export function BookingFormModal({
       <button
         onClick={function(){onOpenHistory();}}
         className="mgt-hover-scale"
-        style={mkBtn({fontSize:12,background:"#64748b",padding:"8px 16px",minHeight:36})}>{"History ("+cur.history.length+")"}</button>
+        style={mkBtn({fontSize:12,background:"var(--app-btn-slate)",padding:"8px 16px",minHeight:36})}>{"History ("+cur.history.length+")"}</button>
     );
   })();
   // v14: Book Again button — visible only in Edit Booking modal when status is
@@ -462,12 +462,12 @@ export function BookingFormModal({
     const srcTime=src.scheduledTime||src.time;
     return (
       <div
-        style={{background:"var(--suggest-bg)",border:"2px solid var(--suggest-border)",borderRadius:R.card,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Return guest — re-booking from "+src.name+" ("+src.date+" at "+srcTime+"). Please set a date."}</div>
+        style={{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:R.card,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Return guest — re-booking from "+src.name+" ("+src.date+" at "+srcTime+"). Please set a date."}</div>
     );
   })();
 
   const errorEl=error?<div
-    style={{color:"var(--danger-text)",fontSize:13,padding:"10px 14px",background:"var(--danger-bg)",borderRadius:R.card,border:"2px solid var(--danger-border)",marginBottom:14}}>{error}</div>:null;
+    style={{color:"var(--danger-text)",fontSize:13,padding:"10px 14px",background:"var(--danger-bg)",borderRadius:R.card,border:"1px solid var(--danger-border)",marginBottom:14}}>{error}</div>:null;
 
   const resetDurBtn=form.customDur?<button
     key="rd"

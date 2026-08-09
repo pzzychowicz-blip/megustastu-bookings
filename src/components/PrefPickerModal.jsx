@@ -80,7 +80,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       ) : null}
       <button
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "#64748b" })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
         onClick={onClose}
       >
         Done
@@ -97,7 +97,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
           display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
           background: "var(--btn-tables)",
           border: "1px solid rgba(255,255,255,0.2)",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
+          boxShadow: "var(--shadow-btn)"
         }}>
           Preferred table
         </div>
@@ -108,7 +108,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       <div style={{
         marginBottom: 14, padding: "10px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
-        border: "2px solid " + (capOk ? "var(--suggest-border)" : "var(--border-sheet)"),
+        border: "1px solid " + (capOk ? "var(--suggest-border)" : "var(--border-sheet)"),
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
       }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: S.text }}>
@@ -136,14 +136,14 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                   style={{
                     width: 64, height: 52, padding: 0, borderRadius: R.pill,
                     border: "2px solid " + (isPref ? "var(--accent)" : tc.bg),
-                    background: isPref ? "var(--btn-tables)" : "rgba(255,255,255,0.4)",
+                    background: isPref ? "var(--btn-tables)" : "var(--bg-input)",
                     color: isPref ? "#fff" : S.text,
                     fontWeight: 600, fontSize: 14,
                     cursor: "pointer",
                     display: "flex", flexDirection: "column",
                     alignItems: "center", justifyContent: "center",
                     gap: 2, boxSizing: "border-box",
-                    boxShadow: "0 1px 4px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.3)"
+                    boxShadow: "var(--shadow-btn)"
                   }}
                 >
                   <span>{t.id}</span>

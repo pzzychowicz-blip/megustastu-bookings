@@ -60,7 +60,7 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
   return (
     <Overlay onClose={onClose} footer={footerEl}>
       <div style={{ textAlign: "center", marginBottom: 14 }}><div
-        style={{ fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)", display: "inline-block", padding: "8px 16px", borderRadius: R.pill, background: "rgba(0,122,255,0.75)", border: "1px solid rgba(255,255,255,0.2)", boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)" }}>Find a booking</div></div>
+        style={{ fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)", display: "inline-block", padding: "8px 16px", borderRadius: R.pill, background: "rgba(0,122,255,0.75)", border: "1px solid rgba(255,255,255,0.2)", boxShadow: "var(--shadow-btn)" }}>Find a booking</div></div>
       <input
         ref={inputRef}
         value={query}

@@ -113,11 +113,11 @@ export var DEFAULT_LAYOUT={
 // pulled LIVE from the layout config. Any layout edit flips IS_MGT_LAYOUT false →
 // buildGenericTableGroups (below) derives the picker grouping from join-groups.
 var TABLE_GROUP_STRUCT=[
-  {name:"Tables: 1A / 1B / 7",color:"#78716c",note:"1A+1B = 6 · table 7 = 4 standalone",ids:["1A","1B","7"]},
-  {name:"Tables: 2 / 3 / 4",color:"#78716c",note:"2+3 = 5 · 3+4 = 4 · 2+3+4 = 8",ids:["2","3","4"]},
-  {name:"Tables: 5A / 5B / 6",color:"#78716c",note:"5A+5B = 5 · 5B+6 = 5 · 5A+5B+6 = 8",ids:["5A","5B","6"]},
-  {name:"Tables: i2 / i3 / i4",color:"#7c3aed",note:"i2+i3 = 6 · i3+i4 = 6 · i2+i3+i4 = 8",ids:["i2","i3","i4"]},
-  {name:"Table: i1",color:"#7c3aed",note:"Standalone cap 2 · all 4 indoor = 10",ids:["i1"]},
+  {name:"Tables: 1A / 1B / 7",color:"var(--tbl-out-text)",note:"1A+1B = 6 · table 7 = 4 standalone",ids:["1A","1B","7"]},
+  {name:"Tables: 2 / 3 / 4",color:"var(--tbl-out-text)",note:"2+3 = 5 · 3+4 = 4 · 2+3+4 = 8",ids:["2","3","4"]},
+  {name:"Tables: 5A / 5B / 6",color:"var(--tbl-out-text)",note:"5A+5B = 5 · 5B+6 = 5 · 5A+5B+6 = 8",ids:["5A","5B","6"]},
+  {name:"Tables: i2 / i3 / i4",color:"var(--tbl-ind-text)",note:"i2+i3 = 6 · i3+i4 = 6 · i2+i3+i4 = 8",ids:["i2","i3","i4"]},
+  {name:"Table: i1",color:"var(--tbl-ind-text)",note:"Standalone cap 2 · all 4 indoor = 10",ids:["i1"]},
 ];
 
 // ── Layout-derived live bindings (reassigned ONLY by setLayout, below) ─────────
@@ -177,7 +177,7 @@ function buildGenericTableGroups(tables,groups,runCapByKey,capOf,zoneOf){
     var note=contiguousRuns(g).map(function(run){
       return run.join("+")+" = "+runCapByKey[comboKey(run)];
     }).join(" · ");
-    out.push({name:"Tables: "+g.join(" / "),color:indoor?"#7c3aed":"#78716c",note:note||null,
+    out.push({name:"Tables: "+g.join(" / "),color:indoor?"var(--tbl-ind-text)":"var(--tbl-out-text)",note:note||null,
       tables:g.map(function(id){return {id:id,cap:capOf[id]};})});
   });
   // Standalone tables (in no join-group), split by zone for sensible colouring.
@@ -186,7 +186,7 @@ function buildGenericTableGroups(tables,groups,runCapByKey,capOf,zoneOf){
     if(!stand.length) return;
     out.push({
       name:stand.length>1?("Standalone ("+zone+")"):("Table: "+stand[0].id),
-      color:zone==="indoor"?"#7c3aed":"#78716c",note:null,
+      color:zone==="indoor"?"var(--tbl-ind-text)":"var(--tbl-out-text)",note:null,
       tables:stand.map(function(t){return {id:t.id,cap:t.capacity};})
     });
   });

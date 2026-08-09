@@ -56,7 +56,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: "#64748b" })}
+          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: "var(--app-btn-slate)" })}
           onClick={() => setMode("add")}
         >
           + Add block
@@ -90,7 +90,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "10px 14px", borderRadius: R.card,
               background: "var(--danger-bg)",
-              border: "2px solid var(--danger-border)",
+              border: "1px solid var(--danger-border)",
               marginBottom: 8
             }}>
               <div>

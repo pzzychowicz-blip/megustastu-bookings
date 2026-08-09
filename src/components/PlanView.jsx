@@ -360,7 +360,7 @@ export const PlanView = memo(function PlanView({
       <div onClick={() => setTablePop(null)} className="mgt-scrim-in"
         style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--tl-popup-scrim)" }}>
         <div onClick={(e) => e.stopPropagation()} className="mgt-card-in"
-          style={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "0 8px 32px rgba(0,0,0,0.14)", padding: "18px 20px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}>
+          style={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "var(--shadow-popover)", padding: "18px 20px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: S.text, marginBottom: 12 }}>{"Table " + id}</div>
           {queue.length === 0 ? (
             <div style={{ fontSize: 13, color: S.muted, marginBottom: 4 }}>No bookings on this table today.</div>

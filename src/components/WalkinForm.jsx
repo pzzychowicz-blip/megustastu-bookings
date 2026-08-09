@@ -191,7 +191,7 @@ export function WalkinForm({
           cursor: "pointer", padding: "3px 8px", borderRadius: R.pill,
           fontWeight: 600, fontSize: 12,
           background: r.hasTables ? "rgba(220,252,231,0.8)" : "rgba(254,249,195,0.8)",
-          color: r.hasTables ? "#166534" : "#854d0e",
+          color: r.hasTables ? "var(--success-text)" : "var(--status-pending-text)",
           border: "1px solid " + (r.hasTables ? "rgba(134,239,172,0.5)" : "rgba(253,230,138,0.5)"),
           boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
         }}
@@ -205,14 +205,14 @@ export function WalkinForm({
     <div style={{ marginTop: 8 }}>
       <div style={{ fontSize: 11, color: S.muted, marginBottom: 6 }}>
         <span style={{
-          background: "rgba(220,252,231,0.8)", color: "#166534",
+          background: "rgba(220,252,231,0.8)", color: "var(--success-text)",
           padding: "2px 6px", borderRadius: R.pill, fontSize: 10, fontWeight: 600
         }}>
           green
         </span>
         {" = tables available  "}
         <span style={{
-          background: "rgba(254,249,195,0.8)", color: "#854d0e",
+          background: "rgba(254,249,195,0.8)", color: "var(--status-pending-text)",
           padding: "2px 6px", borderRadius: R.pill, fontSize: 10, fontWeight: 600
         }}>
           yellow
@@ -246,7 +246,7 @@ export function WalkinForm({
     <div style={{
       padding: "10px 14px",
       borderRadius: R.card,
-      border: "2px solid " + (wKitchenBusy ? "var(--warn-border)" : "var(--border-soft)"),
+      border: "1px solid " + (wKitchenBusy ? "var(--warn-border)" : "var(--border-soft)"),
       background: wKitchenBusy ? "var(--warn-bg)" : "var(--bg-soft)",
       marginBottom: 14, fontSize: 13,
       color: wKitchenBusy ? "var(--warn-text)" : S.muted
@@ -283,7 +283,7 @@ export function WalkinForm({
     cursor: "pointer", color: S.text, fontWeight: 600,
     display: "flex", alignItems: "center", justifyContent: "center",
     flexShrink: 0,
-    boxShadow: "inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"
+    boxShadow: "var(--shadow-input)"
   };
   // Helper for the centered stepper value display.
   const stepperValueStyle = {
@@ -302,7 +302,7 @@ export function WalkinForm({
           padding: "10px 14px",
           background: "var(--danger-bg)",
           borderRadius: R.card,
-          border: "2px solid var(--danger-border)",
+          border: "1px solid var(--danger-border)",
           marginBottom: 14
         }}>
           {error}
@@ -346,7 +346,7 @@ export function WalkinForm({
           display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
           background: "rgba(22,101,52,0.75)",
           border: "1px solid rgba(255,255,255,0.2)",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
+          boxShadow: "var(--shadow-btn)"
         }}>
           Walk-in
         </div>
@@ -475,7 +475,7 @@ export function WalkinForm({
       <div style={{
         marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
-        border: "2px solid " + (wOk ? "var(--suggest-border)" : "var(--border-sheet)"),
+        border: "1px solid " + (wOk ? "var(--suggest-border)" : "var(--border-sheet)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: 8, flexWrap: "wrap",
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)"

@@ -22,7 +22,7 @@ const BTN_STYLE = {
   display: "flex", alignItems: "center", justifyContent: "center",
   flexShrink: 0, padding: 0,
   color: S.text,
-  boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
+  boxShadow: "var(--shadow-btn)"
 };
 
 export function ViewTools({ onOpenSearch = () => {}, onOpenSettings = () => {} }) {

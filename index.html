@@ -215,6 +215,16 @@
         /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
         --app-btn-grey: rgba(120, 130, 150, 0.55); --app-btn-grey-strong: rgba(120, 130, 150, 0.75);
         --app-btn-slate: #64748b;                 /* dialog secondary buttons */
+        /* v17.8.0: the three popovers (QuickStatus, SplitMenu, Plan's day queue)
+           all carried the same hand-written `0 8px 32px rgba(0,0,0,0.14)`, which
+           never deepened for dark mode the way every --shadow-* token does. */
+        --shadow-popover: 0 8px 32px rgba(0, 0, 0, 0.14);
+        /* v17.8.0: TABLE_GROUP_STRUCT heading colours, ex-hex in constants.js.
+           #7c3aed was a third purple, unrelated to --tbl-ind-rgb; both are now
+           tied to their zone and both flip for dark, where the originals were
+           near-unreadable on the dark sheet. */
+        --tbl-out-text: #3f7f8c;
+        --tbl-ind-text: #7c3aed;
         --app-btn-slate-dim: #78828c;             /* write-warning dismiss */
         /* Saturated action fills (white text — read on both themes) */
         --app-walkin: rgba(22, 101, 52, 0.75);    /* Walk-in button */
@@ -318,6 +328,9 @@
         --status-online: #34c759;  --status-online-glow: rgba(52, 199, 89, 0.25);
         --status-offline: #ff3b30; --status-offline-glow: rgba(255, 59, 48, 0.25);
         --status-connecting: #eab308; --status-connecting-glow: rgba(234, 179, 8, 0.25);
+        --shadow-popover: 0 8px 32px rgba(0, 0, 0, 0.55);
+        --tbl-out-text: #7fd3e0;
+        --tbl-ind-text: #cba6f7;
         --warn-bg: rgba(120, 70, 20, 0.3);    --warn-border: rgba(253, 186, 116, 0.4);
         /* Inverted for dark: a LIGHT tint on the dark amber shell (the light
            theme's dark-brown tint would disappear into it). */

@@ -60,7 +60,7 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
               if (isSel)        { bg = "rgba(249,115,22,0.8)"; clr = "#fff";  brd = "2px solid rgba(249,115,22,0.9)"; }
               else if (blocked) { bg = "rgba(220,60,60,0.75)"; clr = "#fff";  brd = "2px solid rgba(220,60,60,0.8)"; }
               else if (isBusyT) { bg = "rgba(250,204,21,0.7)"; clr = "#fff";  brd = "2px solid rgba(250,204,21,0.8)"; }
-              else              { bg = "rgba(255,255,255,0.4)"; clr = S.text; brd = "2px solid " + tc.bg; }
+              else              { bg = "var(--bg-input)";       clr = S.text; brd = "2px solid " + tc.bg; }
               // v17.1.1: isSel first — a Plan-view pre-selected table can be
               // selected AND busy; it paints orange (isSel wins above), so the
               // label must agree.
@@ -84,7 +84,7 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
                     display: "flex", flexDirection: "column",
                     alignItems: "center", justifyContent: "center",
                     gap: 2, boxSizing: "border-box",
-                    boxShadow: "0 1px 4px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.3)"
+                    boxShadow: "var(--shadow-btn)"
                   }}
                 >
                   <span>{t.id}</span>

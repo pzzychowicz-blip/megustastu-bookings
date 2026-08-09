@@ -58,7 +58,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
   const footerEl=(
     <div style={{display:"flex",justifyContent:"flex-end"}}><button
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:"#64748b"})}
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
         onClick={onClose}>Done</button></div>
   );
 

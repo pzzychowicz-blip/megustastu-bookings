@@ -102,7 +102,7 @@ export function LoginScreen() {
               padding: "8px 12px",
               background: "var(--danger-bg)",
               borderRadius: R.pill,
-              border: "2px solid var(--danger-border)"
+              border: "1px solid var(--danger-border)"
             }}>
               {error}
             </div>

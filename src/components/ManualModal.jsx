@@ -153,7 +153,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   // desaturated ~30% (HSL S 95%→66%) to rgb(215,121,56), softer but still clearly
   // in the swap-cell / "Swap & Assign" orange family.
   const swapBg = swapBusy ? "rgba(215,121,56,0.85)" : S.bg;
-  const swapBrd = "2px solid " + (swapBusy ? "rgba(215,121,56,0.95)" : "rgba(255,255,255,0.5)");
+  const swapBrd = "1px solid " + (swapBusy ? "rgba(215,121,56,0.95)" : "rgba(255,255,255,0.5)");
   const swapTitleClr = swapBusy ? "var(--text-on-accent)" : S.text;
   const swapSubClr = swapBusy ? "var(--text-on-accent)" : S.text;
 
@@ -242,7 +242,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
           display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
           background: "rgba(0,122,255,0.75)",
           border: "1px solid rgba(255,255,255,0.2)",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
+          boxShadow: "var(--shadow-btn)"
         }}>
           {titleText || "Manual table assignment"}
         </div>
@@ -278,7 +278,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
       <div style={{
         marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
-        border: "2px solid " + (conflict ? "var(--danger-border)" : ok ? "var(--suggest-border)" : "var(--border-sheet)"),
+        border: "1px solid " + (conflict ? "var(--danger-border)" : ok ? "var(--suggest-border)" : "var(--border-sheet)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: 8, flexWrap: "wrap",
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
@@ -305,7 +305,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         <div style={{
           marginTop: 8, padding: "10px 14px", borderRadius: R.card,
           background: "var(--warn-bg)",
-          border: "2px solid var(--warn-border)"
+          border: "1px solid var(--warn-border)"
         }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--warn-text)", marginBottom: 4 }}>
             Will reassign:

@@ -43,7 +43,7 @@ export function HistoryPopup({ booking, onClose }) {
       <div style={{
         maxHeight: 300, overflowY: "auto",
         borderRadius: R.card,
-        border: "2px solid rgba(160,170,190,0.4)",
+        border: "1px solid rgba(160,170,190,0.4)",
         background: "rgba(255,255,255,0.35)",
         padding: "10px 12px",
         boxShadow: "inset 0 1px 4px rgba(0,0,0,0.06)"
@@ -77,7 +77,7 @@ export function HistoryPopup({ booking, onClose }) {
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "#64748b" })}
+          style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })}
           onClick={onClose}
         >
           Close
