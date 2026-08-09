@@ -30,7 +30,7 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp } from "./atoms";
-import { BTN, R } from "../lib/constants";
+import { BTN, R, M } from "../lib/constants";
 
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
 const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -82,8 +82,12 @@ export function TabBar({ tabs, current, onSelect }) {
               fontWeight: active ? 700 : 600,
               fontSize: 13,
               cursor: "pointer",
-              boxShadow: active ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-              transition: "all 0.15s"
+              boxShadow: active ? "var(--shadow-btn)" : "none",
+              // Not `all`: `all` animates layout properties too (this button's
+              // font-weight jumps 600->700 on activation, and `all` would have
+              // tried to tween it), and it is the transition equivalent of a
+              // wildcard import — you cannot tell what moves by reading it.
+              transition: "background-color " + M.tap + ", color " + M.tap + ", box-shadow " + M.tap
             }}
           >
             {t.label}

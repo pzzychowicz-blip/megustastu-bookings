@@ -24,7 +24,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, M
 } from "./lib/constants";
 
 import {
@@ -2728,7 +2728,7 @@ function BookingApp({uid}){
               aria-label={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               title={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={15} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div>{/* v17.0.0 round 8: 🔍 + ⚙ live HERE (right of Summary) for every
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={15} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.0.0 round 8: 🔍 + ⚙ live HERE (right of Summary) for every
               view — Timeline's legend and List's card-header each used to carry
               their own copy and Plan had none. minHeight 40 aligns them with the
               date controls; marginLeft:auto keeps them right-aligned when the

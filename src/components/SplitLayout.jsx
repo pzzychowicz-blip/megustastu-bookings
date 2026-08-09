@@ -20,7 +20,7 @@
 //   paneA / paneB  — the view elements
 
 import { useRef, useState } from "react";
-import { R } from "../lib/constants";
+import { R, M } from "../lib/constants";
 
 const MIN_RATIO = 0.2;
 const MAX_RATIO = 0.8;
@@ -139,7 +139,7 @@ export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", on
             position: "absolute", width: MARK, height: MARK,
             pointerEvents: "none",
             opacity: isFocused ? 1 : 0,
-            transition: "opacity 160ms ease",
+            transition: "opacity " + M.tap,
           }, c.style)} />
         ))}
       </div>
@@ -176,7 +176,7 @@ export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", on
           width: row ? 2 : "70%", height: row ? "70%" : 2,
           borderRadius: 2,
           background: dragRatio != null ? "var(--accent)" : "var(--border-soft)",
-          transition: "background 140ms ease",
+          transition: "background " + M.tap,
         }} />
       </div>
       {pane(paneB, "b")}

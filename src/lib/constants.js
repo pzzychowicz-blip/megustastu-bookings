@@ -492,6 +492,36 @@ export var TBL={out:{bg:"rgba(var(--tbl-out-rgb),0.8)",text:"var(--text-on-accen
 // must stay equal or the fill pokes out), and `borderRadius:"50%"` circles.
 export var R={pill:"var(--r-pill)",auth:"var(--r-auth)",sheet:"var(--r-sheet)",card:"var(--r-card)",inset:"var(--r-inset)"};
 
+// ── Motion tokens (v17.8.0) ───────────────────────────────────────────────────
+// The same idea as `R`, for time and easing. The full rationale (why two curves
+// split by direction, what each duration step is FOR, and the two documented
+// exceptions) lives with the token definitions in index.html's :root — read it
+// there, don't restate it here.
+//
+// Usage is a template string in an inline style:
+//   transition: "opacity " + M.tap + ", transform " + M.tap
+// M.tap / M.move / M.shift / M.status already carry BOTH the duration and the
+// out-curve, because that pairing is the whole point: anything arriving,
+// opening, moving or answering a finger takes --ease-out. M.exit is the mirror
+// for things LEAVING, and it is rare in JS — almost every exit in this app runs
+// through a CSS animation class (mgt-*-out), not an inline transition.
+//
+// M.dur / M.easeOut are the raw pieces, for the one caller that cannot take a
+// CSS string: useFlip drives WAAPI, whose `easing` option needs a literal
+// cubic-bezier() and whose `duration` needs a number. A var() there resolves to
+// nothing and the animation silently runs linear — so those two MUST be kept in
+// step with the CSS tokens by hand. They are the only place that can drift.
+export var M={
+  tap:"var(--t-tap) var(--ease-out)",
+  move:"var(--t-move) var(--ease-out)",
+  shift:"var(--t-shift) var(--ease-out)",
+  status:"var(--t-status) var(--ease-out)",
+  exit:"var(--t-move) var(--ease-in)",
+  // Raw values — WAAPI only. Keep identical to index.html's :root.
+  dur:{tap:120,move:200,shift:320},
+  easeOut:"cubic-bezier(0.22, 1, 0.36, 1)"
+};
+
 export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,10),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null};
 
 // ── Button colour tokens ──────────────────────────────────────────────────────

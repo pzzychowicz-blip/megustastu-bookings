@@ -32,7 +32,7 @@
 
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
-import { S, BLOCK_BG, hoursFor, R } from "../lib/constants";
+import { S, BLOCK_BG, hoursFor, R, M } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
@@ -476,7 +476,7 @@ export const PlanView = memo(function PlanView({
                   // Seated→Completed timing (.mgt-fade-overlay). CSS can't
                   // interpolate the blocked url(#pv-blocked) pattern fill, so
                   // entering/leaving a table block snaps — accepted.
-                  shapeStyle={{ transition: "fill 360ms ease-out, stroke 360ms ease-out" }}
+                  shapeStyle={{ transition: "fill " + M.status + ", stroke " + M.status }}
                   onClick={() => { if (!movedRef.current) setTablePop(t.id); }}
                   onPointerDown={(ev) => { if (ev.pointerType === "touch") startPress(t.id); }}
                   onContextMenu={(ev) => {

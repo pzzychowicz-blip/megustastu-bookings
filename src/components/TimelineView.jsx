@@ -41,7 +41,14 @@ import { useState, useRef, useEffect, useMemo, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG,
-  S, TBL, BTN, TIMELINE_TABLES, hoursFor, R } from "../lib/constants";
+  S, TBL, BTN, TIMELINE_TABLES, hoursFor, R, M } from "../lib/constants";
+
+// A block moves in two ways at once and they are NOT the same kind of motion:
+// left/width is the schedule changing (geometry — M.shift), transform is the
+// hover/group lift answering a pointer (M.tap). One shared constant because
+// four call sites paint a block or its ghost and they must lift in lockstep —
+// the :has() ghost rule in index.html depends on exactly that.
+const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.tap;
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
@@ -298,7 +305,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         // re-added so the .mgt-hover-scale lift eases again — the inline transition had
         // been overriding the class's `transform 120ms`, making the hover scale instant.
         // The seated ghost outline mirrors this exact transition so the two lift together.
-        transition: dragDy != null ? "none" : "left 320ms ease, width 320ms ease, transform 120ms ease"
+        transition: dragDy != null ? "none" : TL_MOVE
       }}
     >
       {animOverlay}
@@ -487,7 +494,7 @@ function WaitGhost({ g, totalMins, onBook }) {
         // is turned down further because it can sit over a table that is visibly
         // occupied right now.
         opacity: g.resh ? 0.4 : 0.55,
-        transition: "left 320ms ease, width 320ms ease, transform 120ms ease"
+        transition: TL_MOVE
       }}
     >
       {/* The start-time chip, in TimelineBlock's exact chip style. A real block
@@ -866,7 +873,7 @@ export const TimelineView = memo(function TimelineView({
                   opacity: 0.28,
                   borderRadius: "0 10px 10px 0",
                   boxSizing: "border-box", pointerEvents: "none",
-                  transition: "left 320ms ease, width 320ms ease"
+                  transition: "left " + M.shift + ", width " + M.shift
                 }}
               />
             );
@@ -887,7 +894,7 @@ export const TimelineView = memo(function TimelineView({
                   background: "transparent", borderRadius: 10,
                   border: "2px dashed " + BLOCK_BG.seated,
                   boxSizing: "border-box", pointerEvents: "none",
-                  transition: "left 320ms ease, width 320ms ease, transform 120ms ease"
+                  transition: TL_MOVE
                 }}
               />
             );
@@ -956,7 +963,7 @@ export const TimelineView = memo(function TimelineView({
           the new scale. Blocks/gridlines are %-positioned against this width, so
           they re-scale with it for free. (The one layout-bound animation — see
           REFACTOR_LOG perf note; the global prefers-reduced-motion guard zeroes it.) */}
-      <div ref={flipRef} style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width 340ms ease-in-out" }}>
+      <div ref={flipRef} style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width " + M.shift }}>
         <div style={{
           position: "relative",
           borderBottom: "2px solid var(--tl-header-border)",

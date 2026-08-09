@@ -29,7 +29,7 @@
 // source. The duplicate in WalkinForm has been replaced with the same import.
 
 import { useState, useEffect, useRef } from "react";
-import { S, BTN, R } from "../lib/constants";
+import { S, BTN, R, M } from "../lib/constants";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
 } from "../lib/booking-logic";
@@ -255,7 +255,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         padding: "10px 14px", borderRadius: R.card,
         background: swapBg, border: swapBrd,
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
-        transition: "background-color 160ms linear, border-color 160ms linear"
+        transition: "background-color " + M.tap + ", border-color " + M.tap
       }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: swapTitleClr }}>Swap busy</div>

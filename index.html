@@ -251,6 +251,60 @@
         --r-sheet: 20px;   /* modals, popovers */
         --r-card: 14px;    /* cards, banners, panels */
         --r-inset: 10px;   /* nested rows inside a card */
+        /* ── v17.8.0: the motion scale. Like the radii above, motion is
+           theme-agnostic, so these live ONLY here.
+
+           The app had FIVE easing curves — `ease`, `ease-out`, `ease-in-out`,
+           `linear` and Material's cubic-bezier(.4,0,.2,1) — chosen per site
+           over eight versions with no rule behind which went where. A modal's
+           scrim faded `linear` while the toast inside it used Material's curve
+           while the button on it used `ease`: three materials in one glance.
+           Twelve durations did the same job (120·140·160·170·180·200·220·260·
+           280·320·340·360), several of them a few ms apart and none of them
+           meaningfully different to look at.
+
+           Two curves now, and the split is by DIRECTION, not by element:
+
+           --ease-out  everything that arrives, opens, moves, or answers a
+                       finger. A quint-out: ~90% of the distance in the first
+                       third of the time, then a long settle. Fast to respond,
+                       unhurried to land — which is the feel of a physical
+                       thing with mass coming to rest, and the reason a control
+                       can be 120ms and still not look abrupt.
+           --ease-in   its exact mirror, and ONLY for things leaving. An exit
+                       accelerates away: the eye is already moving on, so the
+                       slow part belongs at the start, not the end.
+
+           There are two documented exceptions in the stylesheet below, both
+           genuine: --mgt-dot-pulse is an infinite symmetric loop (ease-in-out
+           is correct for a breath — it has no arrival and no departure), and
+           the status wipe is narrative rather than responsive.
+
+           Three durations, by what is moving:
+
+           --t-tap    a control answering your finger: hover lift, press dip,
+                      a tint, a toggle knob, the TimeAxis detent.
+           --t-move   something arriving or leaving: toasts, modals, sheets,
+                      the view switch, a slide-in button.
+           --t-shift  geometry: heights, widths, positions — a Reveal opening,
+                      a timeline block repositioning, the split divider.
+
+           Plus two that are deliberately outside the scale because they are
+           not interface response:
+           --t-status the status colour change, shared by TimelineView and
+                      PlanView. Its own token precisely BECAUSE two files must
+                      agree; a shared number needs a shared name.
+           --t-wipe   the left-to-right status wipe. TimelineView's overlay
+                      window (`__statusAnims.until`) must stay >= this.
+
+           JS reads all of these through the `M` object in lib/constants.js. */
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+        --ease-in:  cubic-bezier(0.55, 0, 1, 0.45);
+        --t-tap: 120ms;
+        --t-move: 200ms;
+        --t-shift: 320ms;
+        --t-status: 360ms;
+        --t-wipe: 760ms;
       }
       [data-theme="dark"] {
         --bg-app: linear-gradient(135deg, #15171c 0%, #191c22 20%, #1c1a23 40%, #161c26 60%, #1b1f28 80%, #17191f 100%);
@@ -416,14 +470,16 @@
          `border-radius` is deliberately NOT in the list — v17.7.0 removed the
          radius change from the hover rule, so it had nothing left to ease. */
       .mgt-hover-scale, .mgt-press {
-        transition: transform 120ms ease, background-color 120ms ease,
-                    box-shadow 120ms ease, filter 160ms ease-out;
+        transition: transform var(--t-tap) var(--ease-out),
+                    background-color var(--t-tap) var(--ease-out),
+                    box-shadow var(--t-tap) var(--ease-out),
+                    filter var(--t-tap) var(--ease-out);
       }
       /* v16.4.0: autocomplete dropdown rows (phone + name pickers in the booking
          form) — a hover tint so the cursor's target row is visible. Not a
          .mgt-hover-scale (rows shouldn't scale); plain background swap, and no
          touch sticky-hover concern (the rows are tapped, not lifted). */
-      .mgt-ac-row { transition: background-color 120ms ease; }
+      .mgt-ac-row { transition: background-color var(--t-tap) var(--ease-out); }
       @media (hover: hover) and (pointer: fine) {
         .mgt-ac-row:hover { background-color: var(--bg-ac-hover); }
       }
@@ -438,7 +494,7 @@
         40%  { transform: translateX(-50%) scaleY(1.22); }
         100% { transform: translateX(-50%) scaleY(1); }
       }
-      .mgt-detent { animation: mgt-detent 170ms ease-out; }
+      .mgt-detent { animation: mgt-detent var(--t-tap) var(--ease-out); }
       /* v17.5.0 correction 2: the Plan header row (Now · selected time · status
          legend). The badge sits in the middle column, directly above TimeAxis's
          fixed centre marker — the two are siblings of equal width, so 50% of one
@@ -505,36 +561,39 @@
         from { opacity: 1; transform: translateY(0); }
         to   { opacity: 0; transform: translateY(-6px); }
       }
-      .mgt-toast-in  { animation: mgt-toast-in 220ms cubic-bezier(.4, 0, .2, 1) both; }
-      .mgt-toast-out { animation: mgt-toast-out 200ms cubic-bezier(.4, 0, .2, 1) both; }
+      .mgt-toast-in  { animation: mgt-toast-in var(--t-move) var(--ease-out) both; }
+      .mgt-toast-out { animation: mgt-toast-out var(--t-move) var(--ease-in) both; }
 
-      /* v15.8.0 animation pass. Modal open/close (symmetric, linear) — desktop:
-         scrim fade + card fade/scale; mobile: slide-up/down sheet. Driven by the
-         <ModalPresence> wrapper (atoms.jsx) toggling the *-in / *-out class. */
+      /* v15.8.0 animation pass. Modal open/close — desktop: scrim fade + card
+         fade/scale; mobile: slide-up/down sheet. Driven by the <ModalPresence>
+         wrapper (atoms.jsx) toggling the *-in / *-out class.
+         v17.8.0: these were `linear`, the one curve that reads as nothing
+         physical — a sheet sliding up at a constant speed has no mass. In and
+         out now take the two direction curves like everything else. */
       @keyframes mgt-scrim-in  { from { opacity: 0; } to { opacity: 1; } }
       @keyframes mgt-scrim-out { from { opacity: 1; } to { opacity: 0; } }
       @keyframes mgt-card-in   { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
       @keyframes mgt-card-out  { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px) scale(.97); } }
       @keyframes mgt-sheet-in  { from { transform: translateY(100%); } to { transform: translateY(0); } }
       @keyframes mgt-sheet-out { from { transform: translateY(0); } to { transform: translateY(100%); } }
-      .mgt-scrim-in  { animation: mgt-scrim-in  180ms linear both; }
-      .mgt-scrim-out { animation: mgt-scrim-out 180ms linear both; }
-      .mgt-card-in   { animation: mgt-card-in   180ms linear both; }
-      .mgt-card-out  { animation: mgt-card-out  180ms linear both; }
-      .mgt-sheet-in  { animation: mgt-sheet-in  200ms linear both; }
-      .mgt-sheet-out { animation: mgt-sheet-out 200ms linear both; }
+      .mgt-scrim-in  { animation: mgt-scrim-in var(--t-move) var(--ease-out) both; }
+      .mgt-scrim-out { animation: mgt-scrim-out var(--t-move) var(--ease-in) both; }
+      .mgt-card-in   { animation: mgt-card-in var(--t-move) var(--ease-out) both; }
+      .mgt-card-out  { animation: mgt-card-out var(--t-move) var(--ease-in) both; }
+      .mgt-sheet-in  { animation: mgt-sheet-in var(--t-move) var(--ease-out) both; }
+      .mgt-sheet-out { animation: mgt-sheet-out var(--t-move) var(--ease-in) both; }
 
       /* Slide in (L→R) / slide out (→L) — Reshuffle + Today buttons (via Presence). */
       @keyframes mgt-slide-in  { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
       @keyframes mgt-slide-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-12px); } }
-      .mgt-slide-in  { animation: mgt-slide-in  180ms linear both; display: inline-flex; }
-      .mgt-slide-out { animation: mgt-slide-out 180ms linear both; display: inline-flex; }
+      .mgt-slide-in  { animation: mgt-slide-in var(--t-move) var(--ease-out) both; display: inline-flex; }
+      .mgt-slide-out { animation: mgt-slide-out var(--t-move) var(--ease-in) both; display: inline-flex; }
       /* v17.0.0: rightward mirror — the form's Save&confirm button slides out to
          the RIGHT (Patryk-specified direction; same timing as the Today button). */
       @keyframes mgt-slide-in-r  { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
       @keyframes mgt-slide-out-r { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(12px); } }
-      .mgt-slide-in-r  { animation: mgt-slide-in-r  180ms linear both; display: inline-flex; }
-      .mgt-slide-out-r { animation: mgt-slide-out-r 180ms linear both; display: inline-flex; }
+      .mgt-slide-in-r  { animation: mgt-slide-in-r var(--t-move) var(--ease-out) both; display: inline-flex; }
+      .mgt-slide-out-r { animation: mgt-slide-out-r var(--t-move) var(--ease-in) both; display: inline-flex; }
 
       /* Press feedback (ease-out, v15.8.0 cont.4) — the brightness dim, opt-in via
          .mgt-press on ~28 elements. v17.8.0 keeps it: brightness and scale read as
@@ -577,7 +636,7 @@
            fighting. (The class wins this declaration on hover-scale elements
            anyway — matching it here keeps the other few hundred buttons
            identical to them.) */
-        transition: transform 120ms ease;
+        transition: transform var(--t-tap) var(--ease-out);
       }
       button:active:not(:disabled):not(.mgt-nopress),
       [role="button"]:active:not(.mgt-nopress) {
@@ -636,6 +695,9 @@
          block below, where it settles at full opacity (a solid dot, still
          legible as "in progress" alongside the text). */
       @keyframes mgt-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+      /* The ONE legitimate ease-in-out left in the app: a loop has no arrival and
+         no departure, so neither direction curve applies. It is a breath, not a
+         move. */
       .mgt-dot-pulse { animation: mgt-dot-pulse 1.4s ease-in-out infinite; }
 
       /* v15.8.0 animation pass #2. */
@@ -645,18 +707,18 @@
          the reveal sweeps left→right. NB the timeline's overlay window
          (__statusAnims `until` in TimelineView) must stay ≥ this duration. */
       @keyframes mgt-wipe-ltr { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }
-      .mgt-wipe-ltr { animation: mgt-wipe-ltr 760ms ease-out both; }
+      .mgt-wipe-ltr { animation: mgt-wipe-ltr var(--t-wipe) var(--ease-out) both; }
       /* Seated→Completed: the old (seated) colour overlay fades out, revealing completed. */
       @keyframes mgt-fade-overlay { from { opacity: 1; } to { opacity: 0; } }
-      .mgt-fade-overlay { animation: mgt-fade-overlay 360ms ease-out both; }
+      .mgt-fade-overlay { animation: mgt-fade-overlay var(--t-status) var(--ease-out) both; }
       /* Timeline↔List view switch — incoming view slides in (direction by switch). */
       @keyframes mgt-view-in-right { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
       @keyframes mgt-view-in-left  { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
-      .mgt-view-in-right { animation: mgt-view-in-right 220ms ease-out both; }
-      .mgt-view-in-left  { animation: mgt-view-in-left  220ms ease-out both; }
+      .mgt-view-in-right { animation: mgt-view-in-right var(--t-move) var(--ease-out) both; }
+      .mgt-view-in-left  { animation: mgt-view-in-left var(--t-move) var(--ease-out) both; }
       /* Settings tab-content crossfade on switch. */
       @keyframes mgt-fade-in { from { opacity: 0; } to { opacity: 1; } }
-      .mgt-fade-in { animation: mgt-fade-in 180ms ease-out both; }
+      .mgt-fade-in { animation: mgt-fade-in var(--t-move) var(--ease-out) both; }
 
       /* Accessibility + weak-hardware opt-out: collapse every animation/transition
          to ~instant when the OS requests reduced motion.

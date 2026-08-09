@@ -12,7 +12,7 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, TBL, S, R } from "../lib/constants";
+import { BLOCK_BG, TBL, S, R, M } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -255,7 +255,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
           <span style={{
             fontSize: 18, fontWeight: 700, color: "var(--text-muted)", lineHeight: 1,
             display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)",
-            transition: "transform 0.18s ease"
+            transition: "transform " + M.tap
           }}>›</span>
         </div>
       </button>
@@ -313,8 +313,10 @@ export function Reveal({ show, children, style, horizontal = false }) {
   }, [show]);
   if (!mounted) return null;
   const track = horizontal
-    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns 280ms cubic-bezier(.4,0,.2,1), opacity 220ms ease" }
-    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows 280ms cubic-bezier(.4,0,.2,1), opacity 220ms ease" };
+    // A Reveal changes GEOMETRY (the 0fr↔1fr track), so it takes M.shift; the
+    // opacity riding along takes the same timing so the two land together.
+    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + M.shift + ", opacity " + M.shift }
+    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + M.shift + ", opacity " + M.shift };
   // v16.1.1: the horizontal inner track is a flex box (align-items:center) so the
   // revealed child is vertically centred without an inherited-font line-box strut
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).
@@ -365,7 +367,7 @@ export function AutoHeight({ children, style, linear }) {
   return (
     <div
       onTransitionEnd={function (e) { if (e.propertyName === "height") setAnimating(false); }}
-      style={{ height: h == null ? "auto" : h, overflow: animating ? "hidden" : "visible", transition: "height 280ms " + (linear ? "linear" : "ease"), ...(style || {}) }}
+      style={{ height: h == null ? "auto" : h, overflow: animating ? "hidden" : "visible", transition: "height " + (linear ? "var(--t-shift) linear" : M.shift), ...(style || {}) }}
     >
       <div ref={inner}>{children}</div>
     </div>
@@ -423,7 +425,8 @@ export function useFlip(deps) {
       if (!reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
         el.animate(
           [{ transform: "translateY(" + (prev - top) + "px)" }, { transform: "translateY(0)" }],
-          { duration: 320, easing: "ease" }
+          // WAAPI cannot read a CSS var — see the note on M.dur/M.easeOut.
+          { duration: M.dur.shift, easing: M.easeOut }
         );
       }
     });
@@ -556,7 +559,7 @@ export function Toggle({ on, onClick }) {
         background: on ? "var(--toggle-on)" : "var(--toggle-off)",
         position: "relative", flexShrink: 0,
         boxShadow: "inset 0 1px 2px rgba(0,0,0,0.08)",
-        transition: "background-color 160ms linear"   // v15.8.0: track colour eases
+        transition: "background-color " + M.tap      // v15.8.0: track colour eases
       }}
     >
       <div style={{
@@ -566,7 +569,7 @@ export function Toggle({ on, onClick }) {
         width: 20, height: 20, borderRadius: R.pill,
         background: "var(--text-on-accent)",
         boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
-        transition: "left 160ms linear"               // v15.8.0: knob slides
+        transition: "left " + M.tap                  // v15.8.0: knob slides
       }} />
     </button>
   );
