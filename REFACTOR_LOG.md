@@ -7493,3 +7493,60 @@ blur, and React flushes the resulting passive effect before dispatching the
 click. Confirmed by doing it: real typing, real click, no dialog, name saved.
 The first attempt "reproduced" it only because a synthetic blur never fired the
 commit at all — the field was genuinely dirty and the guard was right.
+
+#### Tech-debt pass over the version (commits 30–33)
+
+A `/engineering:tech-debt` scan scoped to v17.8.0's own diff. The finding that
+framed the rest: **this version's debt was not in the code it wrote, it was in
+the code it could not check.** Three of the four items existed because an
+invariant had been written into prose instead of into a test, and the release
+proved that gap twice — the review pass found a CSS rule silently deleted by a
+comment typo, and the scan found a 7px misalignment underneath it that no
+reader would ever catch.
+
+Token discipline, measured, was the opposite: 17 `borderRadius` literals all on
+the documented exemption list, zero stray easing or duration literals outside
+`M`'s own WAAPI values. The `R`/`M` scales held.
+
+**The gutter was three copies of a calculation.** `AppBanners`, `BannerRows`
+and `useReminders` each hard-coded `paddingLeft: 31` with its own comment
+deriving it as 14 + 8 + 9 — right while the section mark was an 8px dot, and
+silently wrong the moment this same release made it a 15px icon. Measured:
+titles at x=55, bodies at x=48, three comments all claiming they matched.
+`NOTIF_GUTTER` is exported from the strip and imported by all three, and the
+strip uses the same constants in its own styles so definition and consumers
+cannot drift.
+
+**A stylesheet has no syntax errors — only rules that silently don't exist.**
+`tests/stylesheet.test.js` (20 cases) checks comment hygiene, brace balance, no
+prose in a selector, and a list of 15 rules whose absence is invisible.
+Validated by reintroducing the exact v17.8.0 defect and watching it fail.
+
+**Two cores were extracted so they could be tested at all.** `placeWaitlist`
+decides which table the app offers each waiting party — the most consequential
+logic this version changed — and lived in a `useEffect` in a 2,900-line
+component, so the double-booking fix shipped on "it looked right in DEV".
+`presenceState` has the same shape: v17.8.0 turned "who is connected" from a
+fact into an inference from timestamps, and inferences have edge cases. Both
+are now pure modules with the algorithms transcribed verbatim, 40 tests between
+them, App.jsx down to 2,888. The regression test that matters: four identical
+parties wanting 19:00 get four different tables, and twelve get twelve.
+
+**Two style rules are enforced instead of described.**
+`scripts/check-style-invariants.mjs` runs in CI after lint. Notable: all 22
+surviving white-inset shadow literals turned out to be correct — every one sits
+on a saturated solid that is theme-invariant by intent — so that rule guards
+the next one rather than a backlog. Its fill resolver needed real care, because
+these are one-line JSX style objects and a naive "rest of the line" grab
+swallows the `border:"1px solid rgba(255,255,255,0.2)"` beside almost every one
+of these shadows, reporting 12 correct sites as violations.
+
+Left alone deliberately: the three production `npm audit` advisories, which are
+Firebase transitives in its Node-only path and absent from the browser bundle
+(settled 2026-07-24 — do not `npm audit fix`, it can force-bump firebase), and
+CLAUDE.md's size, which is a real per-session cost but is also why each of
+these bugs could be named as an instance of a known trap.
+
+**Verification.** Build + lint (0 errors) + `check:style` + 163 tests across 6
+files, green on every commit. Live in DEV: strip titles and row text both at
+x=55, ghosts unchanged after the extraction.
