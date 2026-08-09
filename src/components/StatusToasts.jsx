@@ -97,40 +97,20 @@ function toast(tone, body, opts) {
   );
 }
 
-export function StatusToasts({bookingsReady,loadStalled,readError,hasConnected,resyncing,reconnectShown,syncFix,waitAddedShown,undoInfo,onUndo,undoNote,dragMsg,reshuffled,reshuffledMsg,loadShown,loadMsg}){
-  // v17.5.1: the first read has not completed within the watchdog window. Say
-  // what is actually wrong rather than spinning forever — this toast is the
-  // whole reason the Android-tablet outage took two releases to diagnose. It
-  // names the Firebase error code when a listener was cancelled, and otherwise
-  // distinguishes "never connected" from "connected but no data".
-  // v17.8.0: same pane as every other toast; the red STATUS dot carries the
-  // alarm instead of a 2px danger ring, and only the title keeps danger-red.
-  const stallNode=(
-    <div style={{display:"flex",alignItems:"flex-start",gap:9,textAlign:"left",background:"var(--bg-ac-menu)",border:"1px solid var(--border-card)",borderRadius:R.card,padding:"10px 14px",boxShadow:toastShadow,maxWidth:340,pointerEvents:"auto"}}>
-      <span aria-hidden="true" style={{width:8,height:8,borderRadius:"50%",background:"var(--status-offline)",flexShrink:0,marginTop:5}} />
-      <div style={{minWidth:0}}>
-        <div style={{fontSize:13,fontWeight:700,color:"var(--danger-text)",marginBottom:3}}>Couldn’t load bookings</div>
-        <div style={{fontSize:13,fontWeight:500,lineHeight:1.4,color:"var(--text-primary)"}}>
-          {readError
-            ? "The database refused the read ("+readError.code+" on /"+readError.path+")."
-            : hasConnected
-              ? "Connected, but no data has arrived."
-              : "Can’t reach the database — no connection has been established."}
-        </div>
-        <button
-          onClick={function(){window.location.reload();}}
-          className="mgt-hover-scale mgt-press"
-          style={mkBtn({background:BTN.today,marginTop:8,fontSize:12,padding:"5px 12px",minHeight:32})}>Reload</button>
-      </div>
-    </div>
-  );
-
+export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown,syncFix,waitAddedShown,undoInfo,onUndo,undoNote,dragMsg,reshuffled,reshuffledMsg,loadShown,loadMsg}){
+  // v17.8.0: the "Couldn't load bookings" node USED to live here. It moved to
+  // NotificationStrip (see appBannerSections) in the strip audit: it is the one
+  // message this layer carried that neither passes on its own nor can be acted
+  // on without a reload, and a one-slot transient layer is the wrong home for
+  // a permanent failure. bookingsReady / loadStalled / readError / hasConnected
+  // readError / hasConnected went WITH it — they only ever fed that node's
+  // message, so keeping them here would be dead props. bookingsReady and
+  // loadStalled stay: the "Loading bookings…" toast below still gates on them.
   // v15.8.0: the status toasts share ONE slot — only the highest-priority
   // active one is shown (order below), so they never stack vertically. When the
   // top one changes, the old floats out as the new floats in; they overlap in
   // the same grid cell (gridArea 1/1) so the swap is a crossfade in place.
   const statusToasts=[
-    {key:"loadfail",on:!bookingsReady&&loadStalled,node:stallNode},
     // Connection-shaped toasts borrow the header dot's OWN tokens, so
     // "connecting" and "connected" are literally the same amber and green the
     // user already reads in the connection dot.

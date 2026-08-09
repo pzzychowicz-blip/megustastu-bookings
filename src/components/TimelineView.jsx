@@ -41,7 +41,7 @@ import { useState, useRef, useEffect, useMemo, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG,
-  S, TBL, BTN, TIMELINE_TABLES, hoursFor, R, M } from "../lib/constants";
+  S, TBL, BTN, TIMELINE_TABLES, R, M } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
@@ -1149,17 +1149,10 @@ export const TimelineView = memo(function TimelineView({
         {optBtns || <div />}
         {zoomBtns}
       </div>
-      {/* v15.0.0: per-weekday hours — a "Closed" notice over the (still-dimensioned)
-          grid when the viewed day is marked closed in Settings → Opening hours. */}
-      {hoursFor(date).closed ? (
-        <div style={{
-          background: "var(--warn-bg)", border: "1px solid var(--warn-border)",
-          borderRadius: R.card, padding: "8px 14px", marginBottom: 8,
-          fontSize: 13, fontWeight: 700, color: "var(--warn-text)", textAlign: "center"
-        }}>
-          Closed this day — no bookings or walk-ins. Adjust in Settings → Opening hours.
-        </div>
-      ) : null}
+      {/* v17.8.0: the "Closed this day" notice that used to sit here moved to
+          NotificationStrip. It was a day-level fact drawn per-view — here and,
+          differently worded, in PlanView — while List had none. One section now
+          says it once, above whichever view is showing. */}
       <div style={{ display: "flex" }}>
         {labelCol}
         {gridCol}

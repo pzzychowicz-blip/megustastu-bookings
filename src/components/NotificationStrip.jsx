@@ -35,7 +35,26 @@ import { Reveal } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { R, M } from "../lib/constants";
 
-export function NotificationStrip({ sections, collapseMax = 2 }) {
+// One section's mark. `fallbackDot` keeps the old 8px dot for a section that
+// has no icon yet, so adding a section without one degrades to the previous
+// design instead of rendering a hole.
+function SectionMark({ icon: Icon, tone, size, fallbackDot }) {
+  if (!Icon) {
+    if (!fallbackDot) return null;
+    return <span aria-hidden="true" style={{
+      width: 8, height: 8, borderRadius: "50%", backgroundColor: tone, flexShrink: 0,
+      transition: "background-color " + M.move
+    }} />;
+  }
+  return (
+    <span aria-hidden="true" style={{
+      display: "inline-flex", alignItems: "center", color: tone, flexShrink: 0,
+      transition: "color " + M.move
+    }}><Icon size={size} /></span>
+  );
+}
+
+export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null }) {
   const liveTotal = sections.reduce(function (n, s) { return n + (s.count || 1); }, 0);
   // Initial-only, like BannerRows' own collapse was: a strip the user opened
   // must not slam shut because a seventh late booking arrived.
@@ -97,7 +116,10 @@ export function NotificationStrip({ sections, collapseMax = 2 }) {
   if (!sections.length) return null;
   const top = sections[0];
   const total = liveTotal;
-  const others = orderedIds.length - 1;
+  const multi = orderedIds.length > 1;
+  // The live sections in render order — the collapsed tally reads this, so it
+  // stays in the same severity order the body uses.
+  const ordered = orderedIds.map(function (id) { return byId[id]; }).filter(Boolean);
 
   return (
     <div style={{
@@ -126,28 +148,50 @@ export function NotificationStrip({ sections, collapseMax = 2 }) {
           background: "transparent", border: "none", cursor: "pointer",
           padding: "10px 14px", textAlign: "left"
         }}>
-        <span aria-hidden="true" style={{
-          width: 8, height: 8, borderRadius: "50%", backgroundColor: top.tone, flexShrink: 0,
-          transition: "background-color " + M.move
-        }} />
-        {/* Collapsed, the strip summarises the WORST thing happening plus a
-            count of the rest. With ONE section live, naming it here beats a generic lid plus a
-            redundant sub-header underneath — so the strip simply becomes that
-            banner. With several, "Notifications" is the honest label for the
-            lid and each section names itself below. */}
+        {/* v17.8.0: an ICON, not the 8px dot. The dot said "something is
+            happening", in a colour; the icon says WHICH something and keeps the
+            colour, because every glyph is currentColor and takes `tone`. With
+            several sections live the lid is the generic bell (it labels the
+            container); with one, the strip IS that section, so it wears that
+            section's own mark. */}
+        <SectionMark
+          icon={multi ? lidIcon : top.icon}
+          tone={top.tone} size={15} fallbackDot />
+        {/* With ONE section live the strip IS that banner, so the lid takes its
+            title and mark — a generic lid plus a redundant sub-header would be
+            two rows saying one thing. With several it says "Notifications",
+            collapsed as well as open: collapsed, the per-category tally on the
+            right already names them, and repeating the top one in the title
+            drew its icon twice in the same row. */}
         <span style={{ fontSize: 13, fontWeight: 700, color: top.tone, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", transition: "color " + M.move }}>
-          {open && orderedIds.length > 1 ? "Notifications" : top.title}
+          {multi ? "Notifications" : top.title}
         </span>
-        {!open && others > 0 ? (
-          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", flexShrink: 0 }}>
-            {"+" + others + " more"}
+        {/* Collapsed with several sections, the right side is a per-category
+            tally — an icon and a count each, in the same severity order as the
+            body. "+2 more" and a bare total told you how much was wrong without
+            telling you what; two glyphs and two numbers tell you it is one late
+            table and one waiting party, which is the difference between needing
+            to expand and not. Expanded, this is redundant (every section heads
+            itself), so it collapses to the plain total. */}
+        {!open && multi ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            {ordered.map(function (s) {
+              return (
+                <span key={s.id} title={s.title}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4, color: s.tone }}>
+                  <SectionMark icon={s.icon} tone={s.tone} size={13} fallbackDot />
+                  <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{s.count || 1}</span>
+                </span>
+              );
+            })}
           </span>
-        ) : null}
-        <span style={{
-          fontSize: 11, fontWeight: 700, color: top.tone, opacity: 0.75,
-          fontVariantNumeric: "tabular-nums", flexShrink: 0,
-          transition: "color " + M.move
-        }}>{total}</span>
+        ) : (
+          <span style={{
+            fontSize: 11, fontWeight: 700, color: top.tone, opacity: 0.75,
+            fontVariantNumeric: "tabular-nums", flexShrink: 0,
+            transition: "color " + M.move
+          }}>{total}</span>
+        )}
         {/* ONE glyph that turns, not two that swap. A ▲/▼ swap is a cut: the
             chevron is gone and a different one is there, with nothing to say
             the two are the same control. Rotating it makes the arrow the thing
@@ -187,9 +231,7 @@ export function NotificationStrip({ sections, collapseMax = 2 }) {
                         looked broken. */}
                     <Reveal show={orderedIds.length > 1}>
                       <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 14px 1px" }}>
-                        <span aria-hidden="true" style={{
-                          width: 8, height: 8, borderRadius: "50%", background: s.tone, flexShrink: 0
-                        }} />
+                        <SectionMark icon={s.icon} tone={s.tone} size={15} fallbackDot />
                         <span style={{ fontSize: 13, fontWeight: 700, color: s.tone, flex: 1, minWidth: 0 }}>{s.title}</span>
                         {s.count > 1 ? (
                           <span style={{

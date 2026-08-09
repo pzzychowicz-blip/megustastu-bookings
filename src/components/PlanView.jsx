@@ -442,9 +442,8 @@ export const PlanView = memo(function PlanView({
           autoScrollKey={autoScroll.k}
           autoScrollSmooth={autoScroll.smooth} />
       )}
-      {h.closed ? (
-        <div style={{ textAlign: "center", padding: "10px 0", fontSize: 13, fontWeight: 700, color: "var(--warn-text)" }}>Closed on this day.</div>
-      ) : null}
+      {/* v17.8.0: the closed-day line moved to NotificationStrip — see the note
+          in TimelineView. */}
       <div style={{ borderRadius: R.card, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)" }}>
         <svg ref={svgRef} viewBox={"0 0 " + fp.room.w + " " + fp.room.h}
           style={{ display: "block", width: "100%", touchAction: gesturesEnabled ? "none" : "auto" }}

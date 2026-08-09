@@ -118,7 +118,7 @@ import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
 import { ViewTools }    from "./components/ViewTools";
-import { WaitIcon }     from "./components/Icons";
+import { WaitIcon, BellIcon, BellRingIcon, LateIcon, OverlapIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -2385,17 +2385,25 @@ function BookingApp({uid}){
       onDismissWarning:function(){setWriteWarning(null);},
       ineffShow:ineffShow,
       onDismissIneff:function(){setDismissedIneff(viewDate);},
-      onReshuffle:function(){setConfirmReshuffle(true);}
+      onReshuffle:function(){setConfirmReshuffle(true);},
+      // v17.8.0 strip audit: two notices that were living elsewhere. The load
+      // failure was a floating toast (persistent + unrecoverable, so the wrong
+      // layer); the closed-day notice was drawn twice, inside TimelineView and
+      // PlanView, and not at all in List.
+      loadFailed:!bookingsReady&&loadStalled,
+      readError:readError,
+      hasConnected:hasConnected,
+      dayClosed:hoursFor(viewDate).closed
     }),
-    hasOverlap?[{id:"overlap",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",
+    hasOverlap?[{id:"overlap",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:OverlapIcon,
       title:"Overlap warnings",count:Object.keys(overlapBannerMap).length,
       node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
-    hasLate?[{id:"late",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",
+    hasLate?[{id:"late",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:LateIcon,
       title:"Running late",count:Object.keys(lateBannerMap).length,
       node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
-    reminderCount?[{id:"reminders",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",
+    reminderCount?[{id:"reminders",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:BellRingIcon,
       title:reminderCount===1?"Reminder":"Reminders",count:reminderCount,node:reminderBanners}]:[],
-    hasWaitBanner?[{id:"wait",tone:"var(--success-text)",tint:"var(--suggest-bg-soft)",
+    hasWaitBanner?[{id:"wait",tone:"var(--success-text)",tint:"var(--suggest-bg-soft)",icon:WaitIcon,
       title:"Waitlist — table free",count:waitBannerEntries.length,
       node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[]
   );
@@ -2759,11 +2767,9 @@ function BookingApp({uid}){
                  was, so card width and position are unchanged from before. */
               split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
                   children, so the pane fades out fully drawn instead of blanking a
-                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} />:null}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
+                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} />:null}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 loadStalled={loadStalled}
-                readError={readError}
-                hasConnected={hasConnected}
                 resyncing={resyncing}
                 reconnectShown={reconnectShown}
                 syncFix={syncFix}
