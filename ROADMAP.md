@@ -75,3 +75,23 @@ session and keeping it in sync.
   holding a draft at all. If a future setting ever gains a typed field, wire it
   into `SettingsContent`'s `reportDirty` aggregator with its own id — that is
   the whole cost.
+
+- **The 6-stop background gradient.** `--bg-app` is a `linear-gradient` across
+  six near-identical desaturated blues spanning roughly 3% of perceptual
+  difference — imperceptible as a gradient, and the kind of thing that reads as
+  stock SaaS wallpaper. The v17.8.0 design audit flagged it but left it alone:
+  it is the app's whole backdrop in both themes, so changing it is a look
+  decision for Patryk rather than a consistency fix. Either commit to a gradient
+  that is actually visible, or collapse it to one flat tinted neutral.
+
+- **The type and control scales.** 13 distinct `fontSize` values (9 → 22,
+  including an `11.5`) and 8 distinct button heights (28/30/32/34/36/40/44/54).
+  A 1.125-step scale would cover the same range in about 7 sizes, and 34/36
+  appear 11 times between them where 32 or 40 would serve. Deferred because it
+  is a wide, low-risk-per-site but high-site-count sweep with no user-visible
+  defect behind it — unlike the shadow/colour token debt, which was a real
+  dark-mode bug and shipped in v17.8.0.
+
+- **Modal title pills have no colour rule.** "New booking" and "Waitlist" are
+  accent; "Settings" is grey. Pick one convention (probably: accent for a
+  create/act surface, neutral for a configure/read one) and apply it.

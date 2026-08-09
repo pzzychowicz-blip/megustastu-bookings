@@ -7053,3 +7053,121 @@ between the time chip and the name where a real block puts its ★ / ⚠ / [L].
 horizontal padding ≈ 30×40; CSS clamps `--r-pill` to half the *shorter* side, so
 an unequal box can only ever be an egg. Square 40×40 makes them circles by the
 same rule that already makes the 34×34 🔍 one.
+
+### Polish round 3 (commits 9–15) — the design-consistency audit
+
+Ran `impeccable critique` + `high-end-visual-design` over the whole app. The two
+skills disagree by construction — the second is a BRAND-register generator
+(macro-whitespace, double-bezel nested containers, glass everywhere, banned
+system fonts) and this is a product-register operational tool, where impeccable's
+own product reference says system fonts are legitimate, density is a permission,
+and nested cards are always wrong. It was used as a craft lens (icon precision,
+motion discipline) and its layout mandates rejected. Two of its rules did land:
+the icon one, and "no default easings".
+
+Scored 34/40 on Nielsen. The deficit was concentrated in exactly two heuristics
+— Consistency (2/4) and Aesthetic/Minimalist (3/4) — which is what made the fix
+list short.
+
+#### The accent had five jobs, and one of them was invisible
+
+`--tbl-out-rgb: 0, 122, 255` and `--accent: #007aff` are the same colour. Nine
+outdoor table pills therefore painted the accent on every screen at all times,
+so nothing in the app could outrank a table label — the strongest colour was
+permanently spent on identity, which is neither an action nor a selection.
+Outdoor moved to teal, the only hue left free (green is seated/success, amber
+confirmed/pending, burnt orange warn, red danger, purple indoor).
+
+That forced a second question: the three booking-attribute FLAGS (`manual`,
+`locked`, `★preferred`) carried three unrelated hand-picked hues for three tags
+of the same kind in the same row. The hue never meant anything. One graphite
+`--tag-flag`, deeper than the slate-400 `completed` so a flag can't read as a
+status. Where "preferred" is a SELECTION (the PrefPicker's chosen cells) it
+takes the now-free accent, which is what accent is for.
+
+#### No focus ring at all, in the app with a shortcuts tab
+
+Zero `:focus`/`:focus-visible` rules existed; a focused button computed
+`outline: none`. The one interface here that is explicitly keyboard-driven was
+the one with no keyboard feedback.
+
+The fix is one rule, and `outline-offset: 2px` is what makes a single colour
+enough: the ring lands on the page background rather than the control's fill, so
+it never has to survive being drawn over a saturated accent pill. A first draft
+added a white inner hairline for that case; it was removed after checking, since
+mkBtn/mkInp's inline `boxShadow` beats a stylesheet `box-shadow` on most
+controls and the declaration would have applied inconsistently or not at all.
+
+It also exposed a collision: `ViewSwitcher`'s split-pane marker was
+`outline: 2px solid white` — indistinguishable from a focus ring, and once a
+real one existed two meanings wore the same clothes. Now an inset underline,
+echoing SplitLayout's corner brackets.
+
+#### The hard-coded shadows were a dark-mode bug, not untidiness
+
+24 hand-written shadow strings sat beside four `--shadow-*` tokens, and the
+tokens are not cosmetic: light carries `inset 0 1px 1px rgba(255,255,255,0.6)`,
+dark drops the same inset to `0.05`. Every hard-coded white inset was therefore
+shipping a LIGHT-mode top highlight into dark, 3–8× too bright, worst on the
+TableGrid/PrefPicker cells at 0.3. Several others were byte-equivalents of a
+token already and just needed pointing at it.
+
+**Triaged, not swept.** TimelineView's block shadows keep their literals: those
+sit on `BLOCK_BG` fills, which are deliberately theme-INVARIANT, so a fixed
+white inset is correct there in both themes — the same reason their
+`borderRadius` is a documented exception. Three identical `0 8px 32px` popover
+shadows became `--shadow-popover`.
+
+#### Emoji were the strongest remaining "AI made this" tell
+
+`ViewTools` put a full-colour OS emoji (🔍) beside a hand-drawn monochrome SVG
+(CogIcon) in the same 34px pair — different renderers, different weights, and
+only one of them follows `currentColor`.
+
+The device-specific half matters more. An emoji is painted from the OS font, so
+U+26A0 ⚠ (which Unicode defaults to TEXT presentation, macOS honours, and
+Android's Chrome overrides with the colour emoji) made the repeat-no-show marker
+a thin outline on one device in the restaurant and a yellow sign on another.
+
+New `Icons.jsx` in CogIcon's house style. Two cases resolved without an icon:
+the timeline label's ⚠ became `[!]`, joining that label's own bracket vocabulary
+(`[L]` = locked), because an inline SVG cannot truncate with the name the way
+that label must; and the two "Checking table availability…" rows took the
+toast layer's pulsing busy DOT, since "in progress" already had a device here
+and an hourglass that doesn't run was never it.
+
+Kept as text on purpose: ✕ ‹ › ▲ ▼ ▸ ▾ ✓ ★. **The line is "does this render as
+colour emoji, or is its font coverage patchy" — not "is this a picture."**
+
+#### One notification strip
+
+Six banners could be live at once, each its own pane with its own margin. On a
+busy evening — exactly when several fire together — they pushed the timeline off
+the bottom of the tablet: the alerts displaced the thing the alerts are about.
+
+The earlier v17.8.0 pass made them all *look* like one system. `NotificationStrip`
+makes them *be* one: a single pane whose collapsed height is one row however many
+fire, so the cost of a bad evening stops scaling with how bad it is.
+
+Severity ordering lives in App, not the strip, because it is a judgement about
+this restaurant's operations rather than a property of the widget — and the strip
+shows `sections[0]` as its collapsed summary, which makes "worst first"
+load-bearing. The waitlist sits last and keeps its green: it is an opportunity,
+not a problem.
+
+`AppBanners` now exports a section FACTORY rather than a component. The strip
+needs each section's tone/title/count as DATA to build its summary and sort; a
+component could only return opaque JSX and App would have had to repeat the same
+facts beside it.
+
+#### Two smaller ones
+
+`mkSel` — a `<select>` paints its arrow against `padding-right`, and mkInp's 12px
+put it inside the pill's 21.5px right cap. Text is immune because it spans enough
+height that the curve has receded, which is exactly why the left 12px looked
+right and the right 12px didn't.
+
+Settings said "Follows your account on every device." verbatim on five
+consecutive rows. Five copies of the rule buried the only useful fact — which
+settings are the exception. The rule is stated once; App width and Timeline zoom
+open with "This device only".
