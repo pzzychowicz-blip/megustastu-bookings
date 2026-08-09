@@ -510,6 +510,48 @@ export var TBL={out:{bg:"rgba(var(--tbl-out-rgb),0.8)",text:"var(--text-on-accen
 // must stay equal or the fill pokes out), and `borderRadius:"50%"` circles.
 export var R={pill:"var(--r-pill)",auth:"var(--r-auth)",sheet:"var(--r-sheet)",card:"var(--r-card)",inset:"var(--r-inset)"};
 
+// ── Type scale (v17.8.0) ─────────────────────────────────────────────────────
+// The third scale, after R (radii, v17.7.0) and M (motion, v17.8.0), and the
+// last unscaled axis in the app.
+//
+// ── What was wrong ───────────────────────────────────────────────────────────
+// 497 inline `fontSize` literals across 40 files, in THIRTEEN distinct values:
+// 9, 10, 11, 11.5, 12, 13, 14, 15, 16, 17, 18, 20, 22. Sixteen distinct
+// size/weight combinations rendered on the emptiest screen in the app — the
+// timeline with one booking. Nine of the thirteen sizes sit between 9 and 18px,
+// where 11→12 is a ratio of 1.09: below the threshold at which a reader
+// perceives a step at all. So the app had a great many type styles and almost
+// no type HIERARCHY, which is the specific way this fails — it does not look
+// broken, it looks flat.
+//
+// The cause is the other half: there was no regular weight. 93 of the 95 text
+// elements on that screen were 500 or heavier. When everything is semibold,
+// weight cannot carry emphasis, so size has to carry all of it, so sizes
+// multiply and crowd together. Fixing the weights is what lets the sizes thin
+// out; that is why these two ship as one change and not as a rename.
+//
+// ── The scale ────────────────────────────────────────────────────────────────
+// Six steps. Assign BY ROLE, never by the old number — as with R, the same
+// literal meant different things in different files.
+//   micro   — timeline chips, tiny uppercase markers. Glanced, never read.
+//   small   — tags, table badges, legend chips, dense secondary rows.
+//   body    — THE default. Labels, list text, buttons, most of the app.
+//   lead    — section headings, form-section labels, primary dialog buttons.
+//   title   — modal and dialog titles.
+//   display — the app wordmark, and nothing else.
+//
+// Merges collapse DOWNWARD (13→12, 15→14, 18→17, 11.5→11) rather than up. A
+// size that shrinks can never overflow the box it is in; a size that grows can,
+// in ways a mechanical sweep of 497 sites cannot be verified against. 9→10 and
+// 20→22 round up because those four sites have room and the steps are the
+// scale's own ends.
+export var T={micro:10,small:11,body:12,lead:14,title:17,display:22};
+
+// Weights, named. `regular` is the one that did not exist before v17.8.0 and is
+// the point of the exercise: descriptive and secondary text takes it, so the
+// semibold that everything used to wear again means something where it appears.
+export var FW={regular:400,medium:500,semi:600,bold:700};
+
 // ── Motion tokens (v17.8.0) ───────────────────────────────────────────────────
 // The same idea as `R`, for time and easing. The full rationale (why two curves
 // split by direction, what each duration step is FOR, and the two documented

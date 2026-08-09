@@ -28,7 +28,7 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { S, R } from "../lib/constants";
+import { S, R, T, FW } from "../lib/constants";
 import { mkBtn } from "./atoms";
 import { SplitSideIcon, SplitStackIcon } from "./Icons";
 
@@ -70,8 +70,8 @@ export function SplitMenu({ view, onConfirm, onClose }) {
           minWidth: 240, maxWidth: 320, zIndex: 301,
         }}
       >
-        <div style={{ fontSize: 17, fontWeight: 700, color: S.text, marginBottom: 4 }}>{title}</div>
-        <div style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 14 }}>{sub}</div>
+        <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: T.body, color: "var(--text-faint)", marginBottom: 14 }}>{sub}</div>
 
         {step === 1 ? (
           <div style={row}>
@@ -89,7 +89,7 @@ export function SplitMenu({ view, onConfirm, onClose }) {
           </div>
         )}
 
-        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 12, textAlign: "center" }}>
+        <div style={{ fontSize: T.small, color: "var(--text-faint)", marginTop: 12, textAlign: "center" }}>
           tap outside or press Esc to close
         </div>
       </div>

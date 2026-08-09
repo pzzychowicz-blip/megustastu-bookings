@@ -17,7 +17,7 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { S, TBL, TABLE_GROUPS, R } from "../lib/constants";
+import { S, TBL, TABLE_GROUPS, R, T, FW } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 
 // TABLE_GROUPS lives in ../lib/constants because it's also consumed by the
@@ -41,11 +41,11 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
     <div>
       {TABLE_GROUPS.map((grp) => (
         <div key={grp.name} style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: grp.color, marginBottom: 2, textAlign: "center" }}>
+          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: grp.color, marginBottom: 2, textAlign: "center" }}>
             {grp.name}
           </div>
           {grp.note ? (
-            <div style={{ fontSize: 12, color: S.text, marginBottom: 6, fontStyle: "italic", textAlign: "center" }}>
+            <div style={{ fontSize: T.body, color: S.text, marginBottom: 6, fontStyle: "italic", textAlign: "center" }}>
               {grp.note}
             </div>
           ) : null}
@@ -78,7 +78,7 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
                   style={{
                     width: 64, height: 52, padding: 0, borderRadius: R.pill,
                     border: brd, background: bg, color: clr,
-                    fontWeight: 600, fontSize: 14,
+                    fontWeight: FW.semi, fontSize: T.lead,
                     cursor: blocked && !isSel ? "not-allowed" : "pointer",
                     opacity: blocked && !isSel ? 0.5 : 1,
                     display: "flex", flexDirection: "column",
@@ -88,7 +88,7 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
                   }}
                 >
                   <span>{t.id}</span>
-                  <span style={{ fontSize: 10, fontWeight: 500, color: subClr }}>{label}</span>
+                  <span style={{ fontSize: T.micro, fontWeight: FW.medium, color: subClr }}>{label}</span>
                 </button>
               );
             })}

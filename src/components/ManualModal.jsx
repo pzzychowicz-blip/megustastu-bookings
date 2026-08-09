@@ -29,7 +29,7 @@
 // source. The duplicate in WalkinForm has been replaced with the same import.
 
 import { useState, useEffect, useRef } from "react";
-import { S, BTN, R, M } from "../lib/constants";
+import { S, BTN, R, M, T, FW } from "../lib/constants";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
 } from "../lib/booking-logic";
@@ -222,7 +222,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
           border: "1px solid rgba(255,255,255,0.2)",
           borderRadius: R.pill, padding: "10px 20px",
           cursor: ok ? "pointer" : "not-allowed",
-          fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
+          fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
           boxShadow: ok ? "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"
         }}
       >
@@ -238,7 +238,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
       <AutoHeight>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
-          fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
+          fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
           display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
           background: "rgba(0,122,255,0.75)",
           border: "1px solid rgba(255,255,255,0.2)",
@@ -247,7 +247,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
           {titleText || "Manual table assignment"}
         </div>
       </div>
-      <div style={{ fontSize: 13, color: S.text, marginBottom: 4, marginTop: 6, textAlign: "center" }}>
+      <div style={{ fontSize: T.body, color: S.text, marginBottom: 4, marginTop: 6, textAlign: "center" }}>
         {booking.name + " · " + booking.size + " pax · " + booking.time + "–" + toTime(e)}
       </div>
       <div style={{
@@ -258,8 +258,8 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         transition: "background-color " + M.tap + ", border-color " + M.tap
       }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: swapTitleClr }}>Swap busy</div>
-          <div style={{ fontSize: 11, color: swapSubClr, marginTop: 2 }}>
+          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: swapTitleClr }}>Swap busy</div>
+          <div style={{ fontSize: T.small, color: swapSubClr, marginTop: 2 }}>
             Reassign confirmed bookings to other tables (not seated)
           </div>
         </div>
@@ -272,7 +272,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
           }}
         />
       </div>
-      <div style={{ fontSize: 13, color: S.text, marginBottom: 14, textAlign: "center" }}>
+      <div style={{ fontSize: T.body, color: S.text, marginBottom: 14, textAlign: "center" }}>
         Tap tables to select / deselect.
       </div>
       <div style={{
@@ -284,17 +284,17 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
       }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: S.text }}>
+          <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
             {"Selected: " + (selected.length ? selected.join(" + ") : "none")}
           </div>
-          <div style={{ fontSize: 13, color: summaryColor, fontWeight: 500, marginTop: 2 }}>
+          <div style={{ fontSize: T.body, color: summaryColor, fontWeight: FW.medium, marginTop: 2 }}>
             {summaryText}
           </div>
         </div>
         {selected.length > 0 ? (
           <button
             className="mgt-hover-scale mgt-press"
-            style={mkBtn({ fontSize: 12, padding: "6px 12px", background: BTN.clear })}
+            style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.clear })}
             onClick={() => setSelected([])}
           >
             Clear
@@ -307,11 +307,11 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
           background: "var(--warn-bg)",
           border: "1px solid var(--warn-border)"
         }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--warn-text)", marginBottom: 4 }}>
+          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--warn-text)", marginBottom: 4 }}>
             Will reassign:
           </div>
           {affectedBookings.map((ab) => (
-            <div key={ab.id} style={{ fontSize: 12, color: "var(--warn-text)" }}>
+            <div key={ab.id} style={{ fontSize: T.body, color: "var(--warn-text)" }}>
               {ab.name + " — losing table " + ab.tables.join(", ")}
             </div>
           ))}

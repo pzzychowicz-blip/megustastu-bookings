@@ -28,7 +28,7 @@ import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
-import { BTN, R } from "../lib/constants";
+import { BTN, R, T, FW } from "../lib/constants";
 import { mkBtn, SmallTag } from "../components/atoms";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "../components/NotificationStrip";
 import { genId } from "../lib/booking-logic";
@@ -251,14 +251,14 @@ export function useReminders({ nowMins, setWriteWarning }){
               read. Graphite (--tag-flag) rather than a semantic hue: the time is
               metadata about the reminder, not a state of it, which is exactly
               what that token is for. */}
-              <SmallTag label={ab.time} style={{background:"var(--tag-flag)",color:"var(--text-on-accent)",border:"1px solid var(--border-glass)",fontWeight:700,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap",flexShrink:0}} /><span
-              style={{fontSize:13,color:"var(--text-primary)",fontWeight:600,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
+              <SmallTag label={ab.time} style={{background:"var(--tag-flag)",color:"var(--text-on-accent)",border:"1px solid var(--border-glass)",fontWeight: FW.bold,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap",flexShrink:0}} /><span
+              style={{fontSize: T.body,color:"var(--text-primary)",fontWeight: FW.semi,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               onClick={function(){snoozeReminderFire(ab.fireKey);}}
               className="mgt-hover-scale mgt-press"
-              style={mkBtn({fontSize:12,minHeight:34,padding:"4px 12px",background:BTN.nav})}>Snooze 15m</button><button
+              style={mkBtn({fontSize: T.body,minHeight:34,padding:"4px 12px",background:BTN.nav})}>Snooze 15m</button><button
               onClick={function(){markReminderDone(ab.fireKey);}}
               className="mgt-hover-scale mgt-press"
-              style={mkBtn({fontSize:12,minHeight:34,padding:"6px 14px",background:"var(--app-success-solid)"})}>Done</button></div></div>
+              style={mkBtn({fontSize: T.body,minHeight:34,padding:"6px 14px",background:"var(--app-success-solid)"})}>Done</button></div></div>
       );
     })}</div>:null;
 

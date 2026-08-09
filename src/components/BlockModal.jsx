@@ -16,7 +16,7 @@
 // original.
 
 import { useState, useEffect } from "react";
-import { S, BTN, TBL, OPEN, GRID_CLOSE, R } from "../lib/constants";
+import { S, BTN, TBL, OPEN, GRID_CLOSE, R, T, FW } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
 import { Overlay, Section, Fld, mkBtn, mkInp } from "./atoms";
 
@@ -74,12 +74,12 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
       <Overlay onClose={onClose} footer={footerViewEl}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
           <span style={{
-            fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: R.pill,
+            fontSize: T.body, fontWeight: FW.bold, padding: "4px 10px", borderRadius: R.pill,
             background: tc.bg, color: tc.text, border: "1px solid " + tc.border
           }}>
             {tableId}
           </span>
-          <span style={{ fontSize: 17, fontWeight: 700, color: S.text }}>
+          <span style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text }}>
             {"Table " + tableId + " — " + date}
           </span>
         </div>
@@ -94,13 +94,13 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               marginBottom: 8
             }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--danger-text)" }}>Blocked</div>
-                <div style={{ fontSize: 13, color: "var(--danger-text)" }}>{label}</div>
+                <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--danger-text)" }}>Blocked</div>
+                <div style={{ fontSize: T.body, color: "var(--danger-text)" }}>{label}</div>
               </div>
               <button
                 onClick={() => onRemove(bl)}
                 className="mgt-hover-scale"
-                style={mkBtn({ background: BTN.del, fontSize: 12 })}
+                style={mkBtn({ background: BTN.del, fontSize: T.body })}
               >
                 Unblock
               </button>
@@ -129,7 +129,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           background: "rgba(153,27,27,0.85)",
           border: "1px solid rgba(255,255,255,0.2)",
           borderRadius: R.pill, padding: "10px 22px", cursor: "pointer",
-          fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
+          fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
           boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"
         }}
       >
@@ -141,16 +141,16 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
     <Overlay onClose={onClose} footer={footerAddEl}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <span style={{
-          fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: R.pill,
+          fontSize: T.body, fontWeight: FW.bold, padding: "4px 10px", borderRadius: R.pill,
           background: tc.bg, color: tc.text, border: "1px solid " + tc.border
         }}>
           {tableId}
         </span>
-        <span style={{ fontSize: 17, fontWeight: 700, color: S.text }}>
+        <span style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text }}>
           {"Block table " + tableId}
         </span>
       </div>
-      <div style={{ fontSize: 13, color: S.muted, marginBottom: 16 }}>{date}</div>
+      <div style={{ fontSize: T.body, color: S.muted, marginBottom: 16 }}>{date}</div>
       <Section>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Fld label="From">

@@ -34,7 +34,7 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, hoursFor, INDOOR, OUTDOOR } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, hoursFor, INDOOR, OUTDOOR, T, FW } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
@@ -169,7 +169,7 @@ export function BookingFormModal({
   // in the semantic hue, the text in the same family. They are standalone
   // disclosures above a form field rather than tags packed into a status row,
   // so the border alone carries the colour and the fill was a third copy of it.
-  const chipBase={display:"inline-flex",alignItems:"center",borderRadius:R.pill,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer",background:"transparent"};
+  const chipBase={display:"inline-flex",alignItems:"center",borderRadius:R.pill,padding:"3px 10px",fontSize: T.small,fontWeight: FW.bold,cursor:"pointer",background:"transparent"};
   const regularChip=custMatch&&custMatch.regularCount>=1?<button
     key="reg" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("regular");}}
@@ -191,8 +191,8 @@ export function BookingFormModal({
     const histTk=which==="noshow"
       ?{bg:"var(--warn-bg)",border:"var(--warn-border)",text:"var(--warn-text)",title:"No-shows"}
       :{bg:"var(--suggest-bg)",border:"var(--suggest-border)",text:"var(--success-text)",title:"Past bookings"};
-    return <div style={{marginTop:8,padding:"8px 12px",background:histTk.bg,border:"1px solid "+histTk.border,borderRadius:R.inset,fontSize:12,color:S.text}}>
-      <div style={{fontWeight:700,marginBottom:4,color:histTk.text}}>{histTk.title}</div>
+    return <div style={{marginTop:8,padding:"8px 12px",background:histTk.bg,border:"1px solid "+histTk.border,borderRadius:R.inset,fontSize: T.body,color:S.text}}>
+      <div style={{fontWeight: FW.bold,marginBottom:4,color:histTk.text}}>{histTk.title}</div>
       {histList.slice(0,5).map(function(b){return <div key={b.id} style={{padding:"3px 0",borderTop:"1px solid "+histTk.border}}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</div>;})}
       {histList.length>5?<div style={{padding:"3px 0",borderTop:"1px solid "+histTk.border,color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</div>:null}
     </div>;
@@ -221,10 +221,10 @@ export function BookingFormModal({
     return findPhoneOverlaps(bookings,{phone:form.phone,date:form.date,time:form.time,
       size:form.size,dur:form.customDur,excludeId:editId});
   },[bookings,form.phone,form.date,form.time,form.size,form.customDur,editId]);
-  const dupWarn=dupPhone.length?<div style={{marginTop:8,padding:"8px 12px",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.inset,fontSize:12,fontWeight:600,color:"var(--warn-text)"}}>
+  const dupWarn=dupPhone.length?<div style={{marginTop:8,padding:"8px 12px",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.inset,fontSize: T.body,fontWeight: FW.semi,color:"var(--warn-text)"}}>
     {"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}
-    {dupPhone.slice(0,3).map(function(b){return <div key={b.id} style={{fontWeight:500,paddingTop:2}}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</div>;})}
-    {dupPhone.length>3?<div style={{fontWeight:500,paddingTop:2}}>{"+ "+(dupPhone.length-3)+" more"}</div>:null}
+    {dupPhone.slice(0,3).map(function(b){return <div key={b.id} style={{fontWeight: FW.medium,paddingTop:2}}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</div>;})}
+    {dupPhone.length>3?<div style={{fontWeight: FW.medium,paddingTop:2}}>{"+ "+(dupPhone.length-3)+" more"}</div>:null}
   </div>:null;
   // The container stays mounted while ANY of the three can render, so the
   // dupWarn Reveal below can animate its collapse instead of being torn out
@@ -243,7 +243,7 @@ export function BookingFormModal({
       key={c.phone}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickCustomer(c);})}
-      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize:11,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{c.visits>0?<span style={{fontSize:10,fontWeight:700,color:"var(--success-text)",background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:R.pill,padding:"2px 6px"}}>{c.visits+" visit"+(c.visits!==1?"s":"")}</span>:null}{c.noShowCount>0?<span style={{fontSize:10,fontWeight:700,color:"var(--warn-text)",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.pill,padding:"2px 6px"}}>{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</span>:null}</div></div>
+      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{c.visits>0?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--success-text)",background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:R.pill,padding:"2px 6px"}}>{c.visits+" visit"+(c.visits!==1?"s":"")}</span>:null}{c.noShowCount>0?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--warn-text)",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.pill,padding:"2px 6px"}}>{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</span>:null}</div></div>
   );})}</div>:null;
   // v16.4.0: name-search dropdown — same opaque-sheet chrome as phoneDropdown.
   // Each row shows the phone (or "no phone") + last date so two same-name
@@ -253,7 +253,7 @@ export function BookingFormModal({
       key={r.key}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickGuest(r);})}
-      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize:11,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")}</div></div>{r.isPhoneless?<span style={{fontSize:10,fontWeight:700,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
+      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
   );})}</div>:null;
 
   const formCols=isMobile?"1fr":"1fr 1fr";
@@ -306,7 +306,7 @@ export function BookingFormModal({
     const hasPref=prefs.length>0;
     const prefBtn=<button
       className="mgt-hover-scale"
-      style={mkBtn({background:hasPref?"var(--btn-tables)":BTN.nav,fontSize:12,padding:"6px 10px"})}
+      style={mkBtn({background:hasPref?"var(--btn-tables)":BTN.nav,fontSize: T.body,padding:"6px 10px"})}
       onClick={function(){onOpenPrefPicker();}}>{hasPref?"★ "+prefs.join("+"):"★ Preferred"}</button>;
     if(editId){
       const cur=bookings.find(function(b){return b.id===editId;});
@@ -321,19 +321,19 @@ export function BookingFormModal({
       const showTbl=mt||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
       const showClearManual=isManual&&!mt&&!cleared;
       const leftEls=[
-        <span key="lbl" style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600}}>Tables</span>];
+        <span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.semi}}>Tables</span>];
       if(showTbl) showTbl.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
-      else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize:11,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
-      if((changed||cleared)&&!mt&&curTbl) leftEls.push(<span key="prev" style={{fontSize:11,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
+      else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
+      if((changed||cleared)&&!mt&&curTbl) leftEls.push(<span key="prev" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
       if(mt) leftEls.push(<button
         key="clrmt"
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({fontSize:12,background:BTN.clear})}
+        style={mkBtn({fontSize: T.body,background:BTN.clear})}
         onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>);
       if(showClearManual) leftEls.push(<button
         key="clrman"
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({fontSize:12,background:BTN.clear})}
+        style={mkBtn({fontSize: T.body,background:BTN.clear})}
         onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});onClearSwap();}}>Clear</button>);
       return (
         <Section><div
@@ -344,13 +344,13 @@ export function BookingFormModal({
                 onClick={function(){onOpenManualAssign(editId);}}>= Assign</button>{prefBtn}</div></div></Section>
       );
     }
-    const leftEls=[<span key="lbl" style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600}}>Tables</span>];
+    const leftEls=[<span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.semi}}>Tables</span>];
     if(mt) mt.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
-    else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize:11,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
+    else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
     if(mt) leftEls.push(<button
       key="clrmt"
       className="mgt-hover-scale mgt-press"
-      style={mkBtn({fontSize:12,background:BTN.clear})}
+      style={mkBtn({fontSize: T.body,background:BTN.clear})}
       onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>);
     return (
       <Section><div
@@ -369,11 +369,11 @@ export function BookingFormModal({
     sugg={formAvail.sugg}
     onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />{!editId&&onAddToWaitlist?<div style={{display:"flex",justifyContent:"center",marginTop:-4,marginBottom:12}}><button
       className="mgt-hover-scale"
-      style={mkBtn({fontSize:13,background:BTN.orange,minHeight:40,padding:"8px 16px",display:"inline-flex",alignItems:"center",gap:6})}
+      style={mkBtn({fontSize: T.body,background:BTN.orange,minHeight:40,padding:"8px 16px",display:"inline-flex",alignItems:"center",gap:6})}
       onClick={function(){onAddToWaitlist();}}><WaitIcon size={15} />Add to waitlist</button></div>:null}</>:null;
   // v15.0.0: closed-day notice — the chosen date falls on a weekday marked Closed
   // (Settings → General → Opening hours). doSave blocks the write; this explains why.
-  const closedBanner=fh.closed?<div style={{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:600,color:"var(--warn-text)",textAlign:"center"}}>{"Closed on "+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."}</div>:null;
+  const closedBanner=fh.closed?<div style={{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.semi,color:"var(--warn-text)",textAlign:"center"}}>{"Closed on "+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."}</div>:null;
 
   // Pre-E1's showForm guard is dropped — component is only mounted when showForm=true.
   const kitchenLoad=form.time?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
@@ -394,7 +394,7 @@ export function BookingFormModal({
   // having barely opened (imperceptible sliver), a slow scan shows it fully.
   // One shared row covers both scans; it sits in the availBanner's slot region.
   const availChecking=availScan.pending||(kitchenBusy&&kitchenScan.pending);
-  const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:600,color:"var(--text-muted)",display:"flex",alignItems:"center",justifyContent:"center",gap:9}}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>;
+  const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.semi,color:"var(--text-muted)",display:"flex",alignItems:"center",justifyContent:"center",gap:9}}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>;
   // v17.8.0 review fix: these two colours are hex literals ON PURPOSE, and must
   // stay that way. The chip FILLS below are hard-coded pale green / pale yellow
   // — deliberately theme-invariant, like the timeline's BLOCK_BG. The token
@@ -411,19 +411,19 @@ export function BookingFormModal({
         key={r.timeStr}
         className="mgt-hover-scale"
         onClick={function(){setForm(function(f){return Object.assign({},f,{time:r.timeStr});});}}
-        style={{cursor:"pointer",padding:"3px 8px",borderRadius:R.pill,fontWeight:600,fontSize:12,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?KTXT_OK:KTXT_TIGHT,border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>{r.timeStr}</span>
+        style={{cursor:"pointer",padding:"3px 8px",borderRadius:R.pill,fontWeight: FW.semi,fontSize: T.body,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?KTXT_OK:KTXT_TIGHT,border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>{r.timeStr}</span>
     );});
   }
   // v15.8.0 cont.4: the kitchen suggestion sub-panel (the part that appears when the
   // kitchen is busy) eases in/out via Reveal — the same effect as the Summary panel.
-  const kitchenSugBlock=(kitchenSugg&&(kitchenSugg.before.length||kitchenSugg.after.length))?<div style={{marginTop:8}}><div style={{fontSize:11,color:S.muted,marginBottom:6}}><span
-          style={{background:"rgba(220,252,231,0.8)",color:KTXT_OK,padding:"2px 6px",borderRadius:R.pill,fontSize:10,fontWeight:600}}>green</span>= tables available  <span
-          style={{background:"rgba(254,249,195,0.8)",color:KTXT_TIGHT,padding:"2px 6px",borderRadius:R.pill,fontSize:10,fontWeight:600}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight:700,fontSize:12}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight:700,fontSize:12}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
-    (kitchenBusy?<div style={{marginTop:6,fontSize:12,color:"var(--danger-text)"}}>No kitchen-friendly alternatives found nearby.</div>:null);
+  const kitchenSugBlock=(kitchenSugg&&(kitchenSugg.before.length||kitchenSugg.after.length))?<div style={{marginTop:8}}><div style={{fontSize: T.small,color:S.muted,marginBottom:6}}><span
+          style={{background:"rgba(220,252,231,0.8)",color:KTXT_OK,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>green</span>= tables available  <span
+          style={{background:"rgba(254,249,195,0.8)",color:KTXT_TIGHT,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight: FW.bold,fontSize: T.body}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight: FW.bold,fontSize: T.body}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
+    (kitchenBusy?<div style={{marginTop:6,fontSize: T.body,color:"var(--danger-text)"}}>No kitchen-friendly alternatives found nearby.</div>:null);
   const kitchenSection=kitchenLoad?<div
-    style={{padding:"10px 14px",borderRadius:R.card,border:"1px solid "+(kitchenBusy?"var(--warn-border)":"var(--border-soft)"),background:kitchenBusy?"var(--warn-bg)":"var(--bg-soft)",marginBottom:14,fontSize:13,color:kitchenBusy?"var(--warn-text)":S.muted}}><div
-      style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span><span style={{fontWeight:700}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<span
-        style={{fontWeight:700,color:"var(--text-required)",fontSize:13,padding:"4px 12px",borderRadius:R.pill,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}}>Kitchen busy</span>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>:null;
+    style={{padding:"10px 14px",borderRadius:R.card,border:"1px solid "+(kitchenBusy?"var(--warn-border)":"var(--border-soft)"),background:kitchenBusy?"var(--warn-bg)":"var(--bg-soft)",marginBottom:14,fontSize: T.body,color:kitchenBusy?"var(--warn-text)":S.muted}}><div
+      style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<span
+        style={{fontWeight: FW.bold,color:"var(--text-required)",fontSize: T.body,padding:"4px 12px",borderRadius:R.pill,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}}>Kitchen busy</span>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>:null;
 
   // v17.6.0: which statuses the edit form offers.
   //
@@ -447,7 +447,7 @@ export function BookingFormModal({
   })();
   const quickStatusBtns=editId?<Section style={{position:"relative"}}>{statusFlash?(
         <div key={statusFlash.k} className="mgt-wipe-ltr" style={{position:"absolute",inset:0,borderRadius:R.card,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
-      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:13,color:"var(--text-secondary)",fontWeight:600,marginRight:4}}>Status:</span>{statusTargets.map(function(s){return (
+      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.semi,marginRight:4}}>Status:</span>{statusTargets.map(function(s){return (
         <button
           key={s}
           className="mgt-hover-scale"
@@ -463,7 +463,7 @@ export function BookingFormModal({
       <button
         onClick={function(){onOpenHistory();}}
         className="mgt-hover-scale"
-        style={mkBtn({fontSize:12,background:"var(--app-btn-slate)",padding:"8px 16px",minHeight:36})}>{"History ("+cur.history.length+")"}</button>
+        style={mkBtn({fontSize: T.body,background:"var(--app-btn-slate)",padding:"8px 16px",minHeight:36})}>{"History ("+cur.history.length+")"}</button>
     );
   })();
   // v14: Book Again button — visible only in Edit Booking modal when status is
@@ -479,7 +479,7 @@ export function BookingFormModal({
       <button
         onClick={function(){onBookAgain(cur);}}
         className="mgt-hover-scale"
-        style={mkBtn({fontSize:12,background:"rgba(22,101,52,0.8)",padding:"8px 16px",minHeight:36})}>Book Again</button>
+        style={mkBtn({fontSize: T.body,background:"rgba(22,101,52,0.8)",padding:"8px 16px",minHeight:36})}>Book Again</button>
     );
   })();
   // v14: "return guest" banner at top of form when this is a Book Again creation.
@@ -492,17 +492,17 @@ export function BookingFormModal({
     const srcTime=src.scheduledTime||src.time;
     return (
       <div
-        style={{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:R.card,padding:"10px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:"var(--success-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Return guest — re-booking from "+src.name+" ("+src.date+" at "+srcTime+"). Please set a date."}</div>
+        style={{background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:R.card,padding:"10px 14px",marginBottom:10,fontSize: T.body,fontWeight: FW.semi,color:"var(--success-text)",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>{"Return guest — re-booking from "+src.name+" ("+src.date+" at "+srcTime+"). Please set a date."}</div>
     );
   })();
 
   const errorEl=error?<div
-    style={{color:"var(--danger-text)",fontSize:13,padding:"10px 14px",background:"var(--danger-bg)",borderRadius:R.card,border:"1px solid var(--danger-border)",marginBottom:14}}>{error}</div>:null;
+    style={{color:"var(--danger-text)",fontSize: T.body,padding:"10px 14px",background:"var(--danger-bg)",borderRadius:R.card,border:"1px solid var(--danger-border)",marginBottom:14}}>{error}</div>:null;
 
   const resetDurBtn=form.customDur?<button
     key="rd"
     className="mgt-hover-scale mgt-press"
-    style={mkBtn({fontSize:12,background:BTN.reset})}
+    style={mkBtn({fontSize: T.body,background:BTN.reset})}
     onPointerDown={function(){setForm(function(f){return Object.assign({},f,{customDur:null});})}}>Reset</button>:null;
   const endTime=form.time?toTime(toMins(form.time)+dur):"--";
 
@@ -528,7 +528,7 @@ export function BookingFormModal({
             disabled={!canSave}
             onClick={onSavePending}
             className="mgt-hover-scale"
-            style={{background:canSave?BLOCK_BG.pending:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:BLOCK_INK.pending,minHeight:44,boxShadow:canSave?"0 2px 8px rgba(212,165,10,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save pending</button>
+            style={{background:canSave?BLOCK_BG.pending:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:BLOCK_INK.pending,minHeight:44,boxShadow:canSave?"0 2px 8px rgba(212,165,10,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save pending</button>
         );
       })()}</div><div style={{display:"flex",gap:8}}><button
         className="mgt-hover-scale"
@@ -543,7 +543,7 @@ export function BookingFormModal({
             disabled={!canSave}
             onClick={onSave}
             className="mgt-hover-scale"
-            style={{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
+            style={{background:canSave?"rgba(0,122,255,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 22px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
         );
       })()}{origPendingBooking?(
         <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" outMs={190} tag="span">
@@ -551,7 +551,7 @@ export function BookingFormModal({
             disabled={!form.date}
             onClick={onSaveConfirm}
             className="mgt-hover-scale"
-            style={{background:form.date?"rgba(22,101,52,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"0 2px 8px rgba(22,101,52,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save&confirm</button>
+            style={{background:form.date?"rgba(22,101,52,0.8)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"0 2px 8px rgba(22,101,52,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save&confirm</button>
         </Presence>
       ):null}</div></div>
     </>
@@ -560,7 +560,7 @@ export function BookingFormModal({
   // ── The form modal itself ──
   return (
     <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><div style={{textAlign:"center",marginBottom:16}}><div
-        style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking")}</div></div>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><div style={{position:"relative"}}><input
+        style={{fontSize: T.title,fontWeight: FW.bold,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:form.returnOf?"rgba(22,101,52,0.8)":"rgba(0,122,255,0.75)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"New booking (Book Again)":"New booking")}</div></div>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><div style={{position:"relative"}}><input
             value={form.name}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
             onFocus={function(){setNameFocus(true);}}
@@ -593,19 +593,19 @@ export function BookingFormModal({
             className="mgt-hover-scale"
             style={mkSel()}><option value="auto">Auto (recommended)</option>{INDOOR.length>0?<option value="indoor">Indoor</option>:null}{OUTDOOR.length>0?<option value="outdoor">Outdoor</option>:null}</select></Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
               className="mgt-hover-scale"
-              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
+              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:42,height:42,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}}>-</button><span
-              style={{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}}>{String(Number(form.size)||2)}</span><button
+              style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{String(Number(form.size)||2)}</span><button
               className="mgt-hover-scale"
-              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
+              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:42,height:42,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});}}>+</button></div></Fld><Fld label="Duration"><div style={{display:"flex",alignItems:"center",gap:6}}><button
               className="mgt-hover-scale"
-              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
+              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:42,height:42,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>-</button><span
-              style={{minWidth:56,textAlign:"center",fontSize:15,fontWeight:700,color:S.text}}>{dur+" min"}</span><button
+              style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{dur+" min"}</span><button
               className="mgt-hover-scale"
-              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:42,height:42,fontSize:22,cursor:"pointer",color:S.text,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
-              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize:13,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal><Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes"><textarea
+              style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:42,height:42,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
+              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal><Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes"><textarea
           value={form.notes}
           onChange={function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});}}
           rows={2}
@@ -623,8 +623,8 @@ export function BookingFormModal({
         <Section>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <div style={{textAlign:"left"}}>
-              <div style={{fontSize:14,fontWeight:600,color:"var(--text-primary)"}}>Repeat weekly</div>
-              <div style={{fontSize:12,fontWeight:500,color:"var(--text-faint)",marginTop:2}}>
+              <div style={{fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-primary)"}}>Repeat weekly</div>
+              <div style={{fontSize: T.body,fontWeight: FW.regular,color:"var(--text-faint)",marginTop:2}}>
                 {"Create a standing booking every "+(WEEKDAY_NAMES[new Date(form.date).getUTCDay()]||"week")+(form.time?" at "+form.time:"")+". Manage it in Settings → General → Standing bookings."}
               </div>
             </div>

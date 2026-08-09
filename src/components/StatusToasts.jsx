@@ -51,7 +51,7 @@
 //  loadMsg         — "Firebase connected — N bookings loaded."
 
 import { mkBtn, Toast } from "./atoms";
-import { BTN, R } from "../lib/constants";
+import { BTN, R, T, FW } from "../lib/constants";
 
 const toastShadow="0 6px 20px rgba(0,0,0,0.18)";
 
@@ -84,7 +84,7 @@ function toast(tone, body, opts) {
       border: "1px solid var(--border-card)",
       borderRadius: R.card,
       padding: "9px 14px",
-      fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
+      fontSize: T.body, fontWeight: FW.semi, color: "var(--text-primary)",
       boxShadow: toastShadow,
       ...styleOverrides
     }}>
@@ -133,7 +133,7 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
         <button
           onClick={function(e){e.stopPropagation();onUndo();}}
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({fontSize:12,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button>
+          style={mkBtn({fontSize: T.body,minHeight:30,padding:"4px 12px",background:BTN.nav})}>Undo</button>
       </span>,{pointerEvents:"auto",padding:"7px 10px 7px 14px"})},
     {key:"dragmsg",on:!!dragMsg,
       node:toast(dragMsg&&dragMsg.good?"var(--success-text)":"var(--warn-text)",dragMsg?dragMsg.text:"")},

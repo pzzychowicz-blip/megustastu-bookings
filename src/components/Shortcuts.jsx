@@ -20,6 +20,7 @@
 
 import { Fragment } from "react";
 import { Kbd } from "./atoms";
+import { T, FW } from "../lib/constants";
 
 // ── One row: keycap(s) + label ────────────────────────────────────────────────
 export function ShortcutRow({ keys, label }) {
@@ -29,13 +30,13 @@ export function ShortcutRow({ keys, label }) {
         {keys.map((k, i) => (
           <Fragment key={i}>
             {i > 0 ? (
-              <span style={{ fontSize: 11, color: "var(--text-muted)", margin: "0 3px" }}>/</span>
+              <span style={{ fontSize: T.small, color: "var(--text-muted)", margin: "0 3px" }}>/</span>
             ) : null}
             <Kbd k={k} />
           </Fragment>
         ))}
       </div>
-      <span style={{ fontSize: 13, color: "var(--text-primary)" }}>{label}</span>
+      <span style={{ fontSize: T.body, color: "var(--text-primary)" }}>{label}</span>
     </div>
   );
 }
@@ -113,7 +114,7 @@ export function ShortcutsContent() {
     <div>
       {SHORTCUT_SECTIONS.map((sec, si) => (
         <div key={si} style={{ marginBottom: si < SHORTCUT_SECTIONS.length - 1 ? 14 : 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <div style={{ fontSize: T.small, fontWeight: FW.bold, color: "var(--accent)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
             {sec.title}
           </div>
           <div>

@@ -12,7 +12,7 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, TBL, S, R, M } from "../lib/constants";
+import { BLOCK_BG, TBL, S, R, M, T, FW } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -27,9 +27,9 @@ export function mkInp() {
     border: "1px solid var(--border-input)",
     borderRadius: R.pill,
     padding: "10px 12px",
-    fontSize: 16,
+    fontSize: T.title,
     color: S.text,
-    fontWeight: 500,
+    fontWeight: FW.medium,
     boxShadow: "var(--shadow-input)"
   };
 }
@@ -94,7 +94,7 @@ export function mkStep(size) {
   return {
     background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
     borderRadius: R.pill, width: d, height: d,
-    fontSize: d >= 36 ? 20 : 17, fontWeight: 600,
+    fontSize: d >= 36 ? 20 : 17, fontWeight: FW.semi,
     color: "var(--text-primary)",
     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
     boxShadow: "var(--shadow-btn)"
@@ -108,9 +108,9 @@ export function mkBtn(extra) {
     borderRadius: R.pill,
     padding: "8px 14px",
     cursor: "pointer",
-    fontSize: 13,
+    fontSize: T.body,
     color: "var(--text-on-accent)",
-    fontWeight: 600,
+    fontWeight: FW.semi,
     minHeight: 40,
     boxShadow: "var(--shadow-btn)",
     letterSpacing: "0.01em",
@@ -205,7 +205,7 @@ export function Overlay({ onClose, children, footer }) {
 export function Fld({ label, req, style, children }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, ...(style || {}) }}>
-      <label style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.01em" }}>
+      <label style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.semi, letterSpacing: "0.01em" }}>
         {label}
         {req ? <span style={{ color: "var(--text-required)" }}>*</span> : null}
       </label>
@@ -266,17 +266,17 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{title}</div>
+          <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>{title}</div>
           {open && subtitle ? (
-            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>{subtitle}</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>{subtitle}</div>
           ) : null}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {!open && summary ? (
-            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
           ) : null}
           <span style={{
-            fontSize: 18, fontWeight: 700, color: "var(--text-muted)", lineHeight: 1,
+            fontSize: T.title, fontWeight: FW.bold, color: "var(--text-muted)", lineHeight: 1,
             display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)",
             transition: "transform " + M.tap
           }}>›</span>
@@ -535,10 +535,10 @@ export function ModalPresence({ show, children, outMs = 200 }) {
 export function SBadge({ status }) {
   return (
     <span style={{
-      fontSize: 12, padding: "4px 10px", borderRadius: R.pill,
+      fontSize: T.body, padding: "4px 10px", borderRadius: R.pill,
       background: BLOCK_BG[status] || BLOCK_BG.confirmed,
       color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)",
-      fontWeight: 600, textTransform: "capitalize",
+      fontWeight: FW.semi, textTransform: "capitalize",
       display: "inline-block",
       boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
     }}>
@@ -553,10 +553,10 @@ export function TBadge({ id }) {
   const t = indoor ? TBL.ind : TBL.out;
   return (
     <span style={{
-      fontSize: 12, padding: "4px 10px", borderRadius: R.pill,
+      fontSize: T.body, padding: "4px 10px", borderRadius: R.pill,
       background: t.bg, color: t.text,
       border: "1px solid " + t.border,
-      fontWeight: 600, display: "inline-block",
+      fontWeight: FW.semi, display: "inline-block",
       boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
     }}>
       {id}
@@ -568,8 +568,8 @@ export function TBadge({ id }) {
 export function SmallTag({ label, style }) {
   return (
     <span style={{
-      fontSize: 11, padding: "3px 8px", borderRadius: R.pill,
-      fontWeight: 600, display: "inline-block",
+      fontSize: T.small, padding: "3px 8px", borderRadius: R.pill,
+      fontWeight: FW.semi, display: "inline-block",
       ...(style || {})
     }}>
       {label}
@@ -623,8 +623,8 @@ export function Kbd({ k }) {
       background: "var(--bg-kbd)",
       border: "1px solid var(--border-kbd)",
       fontFamily: "-apple-system, 'SF Mono', Menlo, monospace",
-      fontSize: 12,
-      fontWeight: 600,
+      fontSize: T.body,
+      fontWeight: FW.semi,
       color: "var(--text-primary)",
       boxShadow: "0 1px 2px rgba(0,0,0,0.06), inset 0 -1px 0 rgba(0,0,0,0.08)",
       minWidth: 22,
@@ -660,7 +660,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
             onClick={() => onTapTime(t)}
             style={{
               cursor: "pointer", padding: "3px 8px", borderRadius: R.pill,
-              fontWeight: 600, fontSize: 12,
+              fontWeight: FW.semi, fontSize: T.body,
               background: "var(--suggest-bg)",
               color: "var(--success-text)",
               border: "1px solid var(--suggest-border)",
@@ -681,21 +681,21 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
       border: "1px solid " + brdClr,
       background: bgClr,
       marginBottom: 14,
-      fontSize: 13,
+      fontSize: T.body,
       color: txtClr,
       boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
       ...(style || {})
     }}>
-      <div style={{ fontWeight: 700, marginBottom: hasSugg ? 6 : 0 }}>{message}</div>
+      <div style={{ fontWeight: FW.bold, marginBottom: hasSugg ? 6 : 0 }}>{message}</div>
       {hasEarlier ? (
         <div style={{ marginBottom: hasLater ? 4 : 0 }}>
-          <span style={{ fontWeight: 700 }}>Before: </span>
+          <span style={{ fontWeight: FW.bold }}>Before: </span>
           {renderChips(sugg.earlier)}
         </div>
       ) : null}
       {hasLater ? (
         <div>
-          <span style={{ fontWeight: 700 }}>After: </span>
+          <span style={{ fontWeight: FW.bold }}>After: </span>
           {renderChips(sugg.later)}
         </div>
       ) : null}

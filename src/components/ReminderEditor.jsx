@@ -18,7 +18,7 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { S, BTN, R } from "../lib/constants";
+import { S, BTN, R, T, FW } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
 import { Fld, Toggle, mkBtn, mkInp, mkArea, usePresence, AutoHeight } from "./atoms";
 
@@ -114,7 +114,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             centered wrapper + pill-shaped inner with blue background. */}
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <div style={{
-            fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
+            fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
             display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
             background: "rgba(0,122,255,0.75)",
             border: "1px solid rgba(255,255,255,0.2)",
@@ -150,7 +150,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                   <button
                     onClick={() => removeTime(i)}
                     className="mgt-hover-scale"
-                    style={mkBtn({ minHeight: 40, minWidth: 40, padding: "0", fontSize: 18, background: BTN.del, lineHeight: 1 })}
+                    style={mkBtn({ minHeight: 40, minWidth: 40, padding: "0", fontSize: T.title, background: BTN.del, lineHeight: 1 })}
                   >
                     ×
                   </button>
@@ -160,7 +160,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             <button
               onClick={addTime}
               className="mgt-hover-scale"
-              style={mkBtn({ minHeight: 36, padding: "6px 12px", fontSize: 12, background: BTN.nav })}
+              style={mkBtn({ minHeight: 36, padding: "6px 12px", fontSize: T.body, background: BTN.nav })}
             >
               + Add time
             </button>
@@ -209,7 +209,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                     key={d.i}
                     onClick={() => toggleDay(d.i)}
                     className="mgt-hover-scale"
-                    style={mkBtn({ flex: 1, minWidth: 48, minHeight: 40, padding: "8px 6px", fontSize: 12, background: sel ? S.accent : "rgba(120,130,150,0.45)" })}
+                    style={mkBtn({ flex: 1, minWidth: 48, minHeight: 40, padding: "8px 6px", fontSize: T.body, background: sel ? S.accent : "rgba(120,130,150,0.45)" })}
                   >
                     {d.s}
                   </button>
@@ -227,7 +227,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           border: "1px solid var(--border-soft)"
         }}>
           <Toggle on={draft.active} onClick={toggleActive} />
-          <span style={{ fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>
+          <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.semi }}>
             {draft.active ? "Active" : "Inactive"}
           </span>
         </div>
@@ -236,7 +236,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         <div style={{ flexShrink: 0, padding: "16px 22px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
         {err ? (
           <div style={{
-            color: "var(--danger-text)", fontSize: 13,
+            color: "var(--danger-text)", fontSize: T.body,
             padding: "8px 12px",
             background: "var(--danger-bg)",
             borderRadius: R.card,
@@ -265,7 +265,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               borderRadius: R.pill,
               padding: "10px 22px",
               cursor: err ? "not-allowed" : "pointer",
-              fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 40,
+              fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 40,
               boxShadow: err ? "none" : "0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)"
             }}
           >

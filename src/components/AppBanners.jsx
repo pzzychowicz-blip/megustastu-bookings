@@ -32,7 +32,7 @@
 import { mkBtn } from "./atoms";
 import { AlertIcon, OfflineIcon, SwapIcon, ClosedIcon } from "./Icons";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
-import { BTN, R } from "../lib/constants";
+import { BTN, R, T, FW } from "../lib/constants";
 
 // A section body: the row under a section header. The mark and title live in the
 // header the strip draws, so a one-line banner supplies only its sentence and
@@ -45,7 +45,7 @@ function body(children, extra) {
     <div style={{
       display: "flex", alignItems: "center", gap: 10,
       padding: "9px " + NOTIF_PAD_X + "px 11px " + NOTIF_GUTTER + "px",
-      fontSize: 13, fontWeight: 600,
+      fontSize: T.body, fontWeight: FW.semi,
       ...(extra || null)
     }}>
       {children}
@@ -68,7 +68,7 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, in
     title: "Couldn't load bookings", count: 1,
     node: body(
       <>
-        <span style={{ flex: 1, minWidth: 0, fontWeight: 500, color: "var(--text-primary)" }}>
+        <span style={{ flex: 1, minWidth: 0, fontWeight: FW.medium, color: "var(--text-primary)" }}>
           {readError
             ? "The database refused the read (" + readError.code + " on /" + readError.path + ")."
             : hasConnected
@@ -78,7 +78,7 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, in
         <button
           onClick={function () { window.location.reload(); }}
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ background: BTN.today, fontSize: 12, padding: "5px 12px", minHeight: 32 })}>Reload</button>
+          style={mkBtn({ background: BTN.today, fontSize: T.body, padding: "5px 12px", minHeight: 32 })}>Reload</button>
       </>
     , { flexWrap: "wrap" })
   });
@@ -95,7 +95,7 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, in
         <span style={{ flex: 1, minWidth: 0, color: "var(--danger-text)" }}>{writeWarning}</span>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: 12, background: "var(--app-btn-slate-dim)", minHeight: 32, padding: "4px 12px" })}
+          style={mkBtn({ fontSize: T.body, background: "var(--app-btn-slate-dim)", minHeight: 32, padding: "4px 12px" })}
           onClick={onDismissWarning}>Dismiss</button>
       </>
     )
@@ -144,10 +144,10 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, in
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}><button
           onClick={onDismissIneff}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: 13, minHeight: 36, padding: "6px 14px", background: BTN.dismiss })}>Dismiss</button><button
+          style={mkBtn({ fontSize: T.body, minHeight: 36, padding: "6px 14px", background: BTN.dismiss })}>Dismiss</button><button
           onClick={onReshuffle}
           className="mgt-hover-scale"
-          style={{ background: BTN.orange, color: "var(--text-on-accent)", border: "1px solid var(--border-glass)", borderRadius: R.pill, padding: "6px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600, minHeight: 36, boxShadow: "var(--shadow-btn)" }}>Reshuffle</button></div>
+          style={{ background: BTN.orange, color: "var(--text-on-accent)", border: "1px solid var(--border-glass)", borderRadius: R.pill, padding: "6px 14px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, minHeight: 36, boxShadow: "var(--shadow-btn)" }}>Reshuffle</button></div>
       </>
     , { flexWrap: "wrap" })
   });

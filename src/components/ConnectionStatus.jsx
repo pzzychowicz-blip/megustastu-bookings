@@ -28,7 +28,7 @@
 // fix on its next touch (shared-pattern rule).
 
 import { useEffect, useRef, useState } from "react";
-import { S, R, BTN, M } from "../lib/constants";
+import { S, R, BTN, M, T, FW } from "../lib/constants";
 import { mkBtn, Presence } from "./atoms";
 
 // Rendered popover width: minWidth 260 + 2×12 padding + 2×1 border.
@@ -203,7 +203,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                   flexShrink: 0,
                 }}
               />
-              <span style={{ fontSize: 13, fontWeight: 600, color: S.text }}>
+              <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text }}>
                 {statusText}
               </span>
             </div>
@@ -212,13 +212,13 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                 type="button"
                 className="mgt-hover-scale"
                 onClick={onLogout}
-                style={mkBtn({ fontSize: 12, minHeight: 32, padding: "6px 12px", background: BTN.nav })}
+                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "6px 12px", background: BTN.nav })}
               >
                 Log out
               </button>
             ) : null}
           </div>
-          <div style={{ fontSize: 11, marginBottom: 8, color: S.muted }}>
+          <div style={{ fontSize: T.small, marginBottom: 8, color: S.muted }}>
             {connecting
               ? "Establishing the first connection to the Realtime Database…"
               : connected
@@ -226,14 +226,14 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                 : "Lost connection to the Realtime Database. Changes will sync when it reconnects."}
           </div>
           <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
-            <div style={{ fontSize: 11, marginBottom: 2, color: S.muted }}>Signed in as</div>
-            <div style={{ fontSize: 13, color: S.text, wordBreak: "break-all" }}>
+            <div style={{ fontSize: T.small, marginBottom: 2, color: S.muted }}>Signed in as</div>
+            <div style={{ fontSize: T.body, color: S.text, wordBreak: "break-all" }}>
               {userEmail || "—"}
             </div>
           </div>
           {deviceList.length ? (
             <div style={{ borderTop: "1px solid var(--border-soft)", marginTop: 8, paddingTop: 8 }}>
-              <div style={{ fontSize: 11, marginBottom: 6, color: S.muted }}>
+              <div style={{ fontSize: T.small, marginBottom: 6, color: S.muted }}>
                 {"Connected device" + (deviceList.length === 1 ? "" : "s") + " (" + deviceList.length + ")"}
               </div>
               <div style={{ maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -248,8 +248,8 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                         }}
                       />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, color: S.text, wordBreak: "break-all" }}>{d.email}</div>
-                        <div style={{ fontSize: 11, color: S.muted }}>
+                        <div style={{ fontSize: T.body, color: S.text, wordBreak: "break-all" }}>{d.email}</div>
+                        <div style={{ fontSize: T.small, color: S.muted }}>
                           {d.ua + (sinceText(d.since, offset) ? "  ·  " + sinceText(d.since, offset) : "")}
                         </div>
                       </div>
@@ -260,7 +260,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                         // is the only status the line has to carry.
                         <span
                           style={{
-                            fontSize: 10, fontWeight: 700, color: "var(--text-secondary)",
+                            fontSize: T.micro, fontWeight: FW.bold, color: "var(--text-secondary)",
                             letterSpacing: "0.03em", flexShrink: 0, whiteSpace: "nowrap",
                           }}
                         >

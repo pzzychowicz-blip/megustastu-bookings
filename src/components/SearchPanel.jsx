@@ -13,7 +13,7 @@
 //   onClose()  — close the panel
 
 import { useState, useRef, useEffect } from "react";
-import { S, BLOCK_BG, BLOCK_INK, R } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, R, T, FW } from "../lib/constants";
 import { searchBookings, formatPhone } from "../lib/customers";
 import { Overlay, mkInp, mkBtn, AutoHeight } from "./atoms";
 
@@ -36,16 +36,16 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
           background: "var(--bg-soft)", border: "1px solid var(--border-soft)", textAlign: "left",
           boxShadow: "var(--shadow-input)"
         }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: S.text, minWidth: 84 }}>{b.date}</span>
-        <span style={{ fontSize: 12, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span>
-        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "(no name)"}</span>
-        <span style={{ fontSize: 12, color: S.muted }}>{b.size + " pax"}</span>
-        {b.phone ? <span style={{ fontSize: 12, color: S.muted }}>{formatPhone(b.phone)}</span> : null}
+        <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, minWidth: 84 }}>{b.date}</span>
+        <span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "(no name)"}</span>
+        <span style={{ fontSize: T.body, color: S.muted }}>{b.size + " pax"}</span>
+        {b.phone ? <span style={{ fontSize: T.body, color: S.muted }}>{formatPhone(b.phone)}</span> : null}
         {/* v17.7.0: a status LABEL renders solid everywhere — the same fill,
             text and metrics as SBadge — so one label doesn't read at two
             different weights depending on which screen you're looking at.
             Was the tinted STATUS_COLORS treatment (sc.bg/sc.text/sc.border). */}
-        <span style={{ fontSize: 11.5, fontWeight: 600, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>
+        <span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>
       </button>
     );
   });
@@ -60,7 +60,7 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
   return (
     <Overlay onClose={onClose} footer={footerEl}>
       <div style={{ textAlign: "center", marginBottom: 14 }}><div
-        style={{ fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)", display: "inline-block", padding: "8px 16px", borderRadius: R.pill, background: "rgba(0,122,255,0.75)", border: "1px solid rgba(255,255,255,0.2)", boxShadow: "var(--shadow-btn)" }}>Find a booking</div></div>
+        style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)", display: "inline-block", padding: "8px 16px", borderRadius: R.pill, background: "rgba(0,122,255,0.75)", border: "1px solid rgba(255,255,255,0.2)", boxShadow: "var(--shadow-btn)" }}>Find a booking</div></div>
       <input
         ref={inputRef}
         value={query}
@@ -71,8 +71,8 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
       <AutoHeight>
         <div style={{ marginTop: 12 }}>
           {query.trim()
-            ? (rows.length ? rows : <div style={{ textAlign: "center", padding: "20px 0", color: S.muted, fontSize: 13 }}>No bookings match.</div>)
-            : <div style={{ textAlign: "center", padding: "16px 0", color: S.muted, fontSize: 13 }}>Type a name or phone number to search every date.</div>}
+            ? (rows.length ? rows : <div style={{ textAlign: "center", padding: "20px 0", color: S.muted, fontSize: T.body }}>No bookings match.</div>)
+            : <div style={{ textAlign: "center", padding: "16px 0", color: S.muted, fontSize: T.body }}>Type a name or phone number to search every date.</div>}
         </div>
       </AutoHeight>
     </Overlay>

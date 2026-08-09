@@ -41,7 +41,7 @@ import { useState, useRef, useEffect, useMemo, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
-  S, TBL, BTN, TIMELINE_TABLES, R, M } from "../lib/constants";
+  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
@@ -107,7 +107,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     <Reveal show={showChip} horizontal style={{ pointerEvents: "none" }}>
       <span style={{
         flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: R.pill,
-        fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+        fontSize: T.micro, fontWeight: FW.bold, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
         whiteSpace: "nowrap",
         background: "var(--blk-wash)",
         pointerEvents: "none", position: "relative"
@@ -342,7 +342,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       {timeChip}
       <span style={{
         flex: 1, padding: "0 8px 0 6px", position: "relative",
-        fontSize: 11, fontWeight: 700,
+        fontSize: T.small, fontWeight: FW.bold,
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
       }}>
         {lbl}
@@ -354,7 +354,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       {freeMin != null ? (
         <span style={{
           flexShrink: 0, marginRight: 2, padding: "1px 5px", borderRadius: R.pill,
-          fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+          fontSize: T.micro, fontWeight: FW.bold, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
           whiteSpace: "nowrap", position: "relative",
           background: "var(--blk-wash)",
           pointerEvents: "none"
@@ -363,7 +363,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       <span
         onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
         style={{
-          padding: "0 6px", fontSize: 13, cursor: "pointer", position: "relative",
+          padding: "0 6px", fontSize: T.body, cursor: "pointer", position: "relative",
           opacity: 0.7,
           borderLeft: "1px solid var(--blk-rule)",
           height: "100%", display: "flex", alignItems: "center", minWidth: 28
@@ -421,7 +421,7 @@ function BlockBar({ bl, totalMins }) {
       display: "flex", alignItems: "center", justifyContent: "center",
       pointerEvents: "none"
     }}>
-      <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-on-accent)", textTransform: "uppercase", letterSpacing: 1 }}>
+      <span style={{ fontSize: T.micro, fontWeight: FW.bold, color: "var(--text-on-accent)", textTransform: "uppercase", letterSpacing: 1 }}>
         blocked
       </span>
     </div>
@@ -521,7 +521,7 @@ function WaitGhost({ g, totalMins, onBook }) {
           is the entire proposal — a ghost without one says nothing useful. */}
       <span style={{
         flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: R.pill,
-        fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+        fontSize: T.micro, fontWeight: FW.bold, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
         whiteSpace: "nowrap",
         background: "var(--blk-wash)"
       }}>{g.time}</span>
@@ -536,7 +536,7 @@ function WaitGhost({ g, totalMins, onBook }) {
       }}><WaitIcon size={11} /></span>
       <span style={{
         flex: 1, padding: "0 8px 0 5px", position: "relative",
-        fontSize: 11, fontWeight: 700,
+        fontSize: T.small, fontWeight: FW.bold,
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
       }}>
         {g.name + " (" + g.size + ")"}
@@ -743,7 +743,7 @@ export const TimelineView = memo(function TimelineView({
           key={"h" + m}
           style={{
             position: "absolute", top: 3, left: center + "%", transform: "translateX(-50%)",
-            fontSize: 10, fontWeight: 600, color: "var(--text-on-accent)",
+            fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
             whiteSpace: "nowrap", pointerEvents: "none",
             background: "var(--tl-hour-pill)",
             padding: "2px 5px", borderRadius: R.pill, zIndex: 1,
@@ -783,7 +783,7 @@ export const TimelineView = memo(function TimelineView({
             }}
           >
             <span className="mgt-hover-scale" style={{
-              fontSize: 11, fontWeight: 600, padding: "3px 0", borderRadius: R.pill,
+              fontSize: T.small, fontWeight: FW.semi, padding: "3px 0", borderRadius: R.pill,
               background: hasBlock ? "var(--tl-blocked-badge)" : indoor ? TBL.ind.bg : TBL.out.bg,
               color: hasBlock ? "var(--text-on-accent)" : indoor ? TBL.ind.text : TBL.out.text,
               border: "1px solid " + (hasBlock ? "var(--tl-blocked-badge-border)" : indoor ? TBL.ind.border : TBL.out.border),
@@ -804,7 +804,7 @@ export const TimelineView = memo(function TimelineView({
           borderTop: "1px dashed var(--tl-unassigned-border)",
           marginTop: 4, boxSizing: "border-box"
         }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "var(--danger-text)" }}>
+          <span style={{ fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}>
             unassigned
           </span>
         </div>
@@ -953,7 +953,7 @@ export const TimelineView = memo(function TimelineView({
     >
       <div style={{
         position: "absolute", top: 3, left: "50%", transform: "translateX(-50%)",
-        fontSize: 10, fontWeight: 600, color: "var(--text-on-accent)",
+        fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
         background: "var(--tl-now-pill)",
         padding: "2px 5px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
         boxShadow: "0 1px 4px rgba(0,0,0,0.15)"
@@ -1017,7 +1017,7 @@ export const TimelineView = memo(function TimelineView({
       }}
       className="mgt-hover-scale mgt-press"
       style={mkBtn({
-        minHeight: 32, padding: "4px 10px", fontSize: 11,
+        minHeight: 32, padding: "4px 10px", fontSize: T.small,
         // v17.8.0: the idle fill was a hard-coded copy of --app-btn-grey's old
         // value, so the contrast pass fixed every other secondary button and
         // left this one at 1.82:1 — the lowest on the screen, on the control
@@ -1038,7 +1038,7 @@ export const TimelineView = memo(function TimelineView({
       <button
         onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 32, minWidth: 32, padding: "4px 10px", fontSize: 16, background: BTN.nav })}
+        style={mkBtn({ minHeight: 32, minWidth: 32, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
       >
         -
       </button>
@@ -1050,7 +1050,7 @@ export const TimelineView = memo(function TimelineView({
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 32, padding: "4px 10px", fontSize: 11, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
+        style={mkBtn({ minHeight: 32, padding: "4px 10px", fontSize: T.small, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
       >
         {/* NB the child must be NULL (not an empty span) at 1× — Reveal caches its
             last truthy children for the exit ease; an always-mounted span would
@@ -1064,7 +1064,7 @@ export const TimelineView = memo(function TimelineView({
       <button
         onClick={() => setZoom((z) => Math.min(maxZoom, z + 0.5))}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 32, minWidth: 32, padding: "4px 10px", fontSize: 16, background: BTN.nav })}
+        style={mkBtn({ minHeight: 32, minWidth: 32, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
       >
         +
       </button>
@@ -1080,7 +1080,7 @@ export const TimelineView = memo(function TimelineView({
         onClick={() => setAutoOptimizer(!autoOptimizer)}
         className="mgt-hover-scale"
         style={mkBtn({
-          minHeight: 32, padding: "4px 12px", fontSize: 11,
+          minHeight: 32, padding: "4px 12px", fontSize: T.small,
           background: autoOptimizer ? "rgba(22,101,52,0.75)" : "rgba(120,130,150,0.55)"
         })}
       >
@@ -1091,7 +1091,7 @@ export const TimelineView = memo(function TimelineView({
         <button
           onClick={onReshuffle}
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 32, padding: "4px 12px", fontSize: 11, background: BTN.orange })}
+          style={mkBtn({ minHeight: 32, padding: "4px 12px", fontSize: T.small, background: BTN.orange })}
         >
           Reshuffle
         </button>
@@ -1106,11 +1106,11 @@ export const TimelineView = memo(function TimelineView({
       <span
         key={s}
         style={{
-          fontSize: 11, padding: "3px 8px", borderRadius: R.pill,
+          fontSize: T.small, padding: "3px 8px", borderRadius: R.pill,
           background: BLOCK_BG[s] || "#999",
           color: BLOCK_INK[s] || "var(--text-on-accent)",
           border: "1px solid rgba(255,255,255,0.2)",
-          fontWeight: 600, textTransform: "capitalize",
+          fontWeight: FW.semi, textTransform: "capitalize",
           boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
         }}
       >
@@ -1119,17 +1119,17 @@ export const TimelineView = memo(function TimelineView({
     );
   });
   legendEls.push(
-    <span key="in" style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="in" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       indoor
     </span>
   );
   legendEls.push(
-    <span key="out" style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="out" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       outdoor
     </span>
   );
   legendEls.push(
-    <span key="blocked" style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="blocked" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       blocked
     </span>
   );
@@ -1181,7 +1181,7 @@ export const TimelineView = memo(function TimelineView({
         {/* v17.0.0 round 8: the 🔍/⚙ pair moved OUT to App's date-nav row
             (ViewTools.jsx) so it sits in one place for all three views. */}
       </div>
-      <div style={{ marginTop: 6, fontSize: 11, color: S.muted }}>
+      <div style={{ marginTop: 6, fontSize: T.small, color: S.muted }}>
         tap booking to edit  ·  = assign  ·  hold to change status  ·  tap table label to block
       </div>
       {quickPopup}

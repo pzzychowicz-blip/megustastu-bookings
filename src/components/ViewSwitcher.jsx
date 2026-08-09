@@ -23,7 +23,7 @@
 // left-click behaviour below is then exactly what App.jsx did before.
 
 import { useRef, useEffect } from "react";
-import { S, BTN } from "../lib/constants";
+import { S, BTN, T } from "../lib/constants";
 import { mkBtn, Presence } from "./atoms";
 import { SwapIcon, SplitSideIcon, SplitStackIcon } from "./Icons";
 
@@ -109,7 +109,7 @@ export function ViewSwitcher({
   // they sit beside. `width`/`height` rather than min-*, or the flex row
   // stretches them back into an egg.
   const toolBtn = (extra) => mkBtn(Object.assign({
-    width: 40, height: 40, minHeight: 40, padding: 0, fontSize: 15,
+    width: 40, height: 40, minHeight: 40, padding: 0, fontSize: T.lead,
     background: BTN.nav,
     display: "inline-flex", alignItems: "center", justifyContent: "center",
     flexShrink: 0, lineHeight: 1

@@ -38,7 +38,7 @@
 // on each 15s clock tick (the v17.1.0 GridLines lesson).
 
 import { useRef, useLayoutEffect, useEffect } from "react";
-import { OPEN, GRID_CLOSE, QUARTER_HOURS, S, R } from "../lib/constants";
+import { OPEN, GRID_CLOSE, QUARTER_HOURS, S, R, T, FW } from "../lib/constants";
 // v17.5.0 correction: no toTime here any more — the selected-time badge moved
 // up into PlanView's Now/legend row, so the tape renders no text of its own
 // beyond the hour labels.
@@ -205,7 +205,7 @@ export function TimeAxis({
             <div key={"h" + m} style={{
               position: "absolute", left: xOf(m), top: "50%",
               transform: "translate(-50%,-50%)",
-              fontSize: 12, fontWeight: 600, color: "var(--text-secondary)",
+              fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)",
               fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", pointerEvents: "none",
             }}>{String(Math.floor(m / 60) % 24).padStart(2, "0") + ":00"}</div>
           ))}

@@ -33,7 +33,7 @@
 import { useState, useEffect } from "react";
 import { Reveal } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
-import { R, M } from "../lib/constants";
+import { R, M, T, FW } from "../lib/constants";
 
 // ── The strip's own geometry, exported because three other files depend on it ─
 // A section BODY (the banner rows, the reminder rows, AppBanners' one-liners)
@@ -185,7 +185,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
             collapsed as well as open: collapsed, the per-category tally on the
             right already names them, and repeating the top one in the title
             drew its icon twice in the same row. */}
-        <span style={{ fontSize: 13, fontWeight: 700, color: top.tone, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", transition: "color " + M.move }}>
+        <span style={{ fontSize: T.body, fontWeight: FW.bold, color: top.tone, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", transition: "color " + M.move }}>
           {multi ? "Notifications" : top.title}
         </span>
         {/* With several sections live, the right side is a per-category tally —
@@ -207,14 +207,14 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
                 <span key={s.id} title={s.title}
                   style={{ display: "inline-flex", alignItems: "center", gap: 4, color: s.tone }}>
                   <SectionMark icon={s.icon} tone={s.tone} size={13} fallbackDot />
-                  <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{s.count || 1}</span>
+                  <span style={{ fontSize: T.small, fontWeight: FW.bold, fontVariantNumeric: "tabular-nums" }}>{s.count || 1}</span>
                 </span>
               );
             })}
           </span>
         ) : (
           <span style={{
-            fontSize: 11, fontWeight: 700, color: top.tone, opacity: 0.75,
+            fontSize: T.small, fontWeight: FW.bold, color: top.tone, opacity: 0.75,
             fontVariantNumeric: "tabular-nums", flexShrink: 0,
             transition: "color " + M.move
           }}>{total}</span>
@@ -225,7 +225,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
             that moves, which is also what the panel below is doing. Matches the
             Collapsible atom's ›, which has turned since v15.8.0. */}
         <span aria-hidden="true" style={{
-          fontSize: 10, color: top.tone, opacity: 0.6, fontWeight: 700, flexShrink: 0,
+          fontSize: T.micro, color: top.tone, opacity: 0.6, fontWeight: FW.bold, flexShrink: 0,
           display: "inline-block", lineHeight: 1,
           transform: open ? "rotate(180deg)" : "rotate(0deg)",
           transition: "transform " + M.move + ", color " + M.move
@@ -259,10 +259,10 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
                     <Reveal show={orderedIds.length > 1}>
                       <div style={{ display: "flex", alignItems: "center", gap: NOTIF_GAP, padding: "9px " + NOTIF_PAD_X + "px 1px" }}>
                         <SectionMark icon={s.icon} tone={s.tone} size={15} fallbackDot />
-                        <span style={{ fontSize: 13, fontWeight: 700, color: s.tone, flex: 1, minWidth: 0 }}>{s.title}</span>
+                        <span style={{ fontSize: T.body, fontWeight: FW.bold, color: s.tone, flex: 1, minWidth: 0 }}>{s.title}</span>
                         {s.count > 1 ? (
                           <span style={{
-                            fontSize: 11, fontWeight: 700, color: s.tone, opacity: 0.75,
+                            fontSize: T.small, fontWeight: FW.bold, color: s.tone, opacity: 0.75,
                             fontVariantNumeric: "tabular-nums", flexShrink: 0
                           }}>{s.count}</span>
                         ) : null}

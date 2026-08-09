@@ -111,6 +111,20 @@ for (const file of walk(SRC)) {
       });
     }
 
+    // ── Rule 3: no bare `fontSize` / `fontWeight` number ────────────────────
+    // v17.8.0. Same shape as Rule 1 and for the same reason: 497 inline size
+    // literals in thirteen values, and 359 weight literals, had accreted into
+    // sixteen distinct type styles on the app's emptiest screen. Use T and FW
+    // (lib/constants.js); mark a genuine one-off with /* @canvas */.
+    const bareType = line.match(/font(?:Size|Weight):\s*"?[0-9]/);
+    if (bareType && !/@canvas/.test(line)) {
+      problems.push({
+        file: rel, line: i + 1, rule: "type-scale",
+        text: line.trim().slice(0, 90),
+        hint: "use the T scale (T.micro/small/body/lead/title/display) and FW (FW.regular/medium/semi/bold)",
+      });
+    }
+
     // ── Rule 2 ──────────────────────────────────────────────────────────────
     const whiteInset = /inset[^"']*rgba\(\s*255,\s*255,\s*255/.test(line);
     if (whiteInset && !/@fixed-fill/.test(line)) {
@@ -135,7 +149,7 @@ for (const file of walk(SRC)) {
 }
 
 if (problems.length === 0) {
-  console.log("style invariants: OK (radius scale + white-inset-over-fixed-fill)");
+  console.log("style invariants: OK (radius scale + type scale + white-inset-over-fixed-fill)");
   process.exit(0);
 }
 

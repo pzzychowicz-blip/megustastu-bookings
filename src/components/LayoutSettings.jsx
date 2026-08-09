@@ -13,7 +13,7 @@
 import { useState, useEffect } from "react";
 import { Section, Collapsible, Toggle, mkStep, mkBtn } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
-import { contiguousRuns, comboKey, R } from "../lib/constants";
+import { contiguousRuns, comboKey, R, T, FW } from "../lib/constants";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
@@ -25,7 +25,7 @@ const STEP_BTN = mkStep(30);
 // (BTN.del) is a solid red button with white text; this is one of them now.
 const X_BTN = {
   background: "var(--btn-del)", border: "1px solid var(--border-glass)",
-  borderRadius: R.pill, width: 28, height: 28, fontSize: 16, fontWeight: 700,
+  borderRadius: R.pill, width: 28, height: 28, fontSize: T.title, fontWeight: FW.bold,
   color: "var(--text-on-accent)", lineHeight: 1,
   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   cursor: "pointer", boxShadow: "var(--shadow-btn)"
@@ -38,19 +38,19 @@ const GCHIP = {
 };
 const GCHIP_BTN = {
   background: "transparent", border: "none", padding: 0, width: 18, height: 22,
-  fontSize: 14, fontWeight: 700, color: "var(--text-muted)", cursor: "pointer",
+  fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-muted)", cursor: "pointer",
   display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1
 };
 // An "available table" chip in the add-to-group / new-group pickers.
 const PICK_CHIP = {
-  fontSize: 12, fontWeight: 700, borderRadius: R.pill, padding: "4px 9px", cursor: "pointer",
+  fontSize: T.body, fontWeight: FW.bold, borderRadius: R.pill, padding: "4px 9px", cursor: "pointer",
   border: "1px solid var(--accent)", background: "var(--accent)", color: "var(--text-on-accent)",
   boxShadow: "var(--shadow-btn)"
 };
 // Small text input — table id (rename / add).
 const TXT_INP = {
   background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.pill,
-  padding: "6px 9px", fontSize: 13, fontWeight: 700, color: "var(--text-primary)",
+  padding: "6px 9px", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)",
   width: 70, boxSizing: "border-box", boxShadow: "var(--shadow-input)"
 };
 // Small select — combo / table pickers in the priorities editor (v15.9.0).
@@ -58,13 +58,13 @@ const SEL_INP = {
   background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.pill,
   // v17.8.0: paddingRight ~= this control's own pill radius (~15px on its 30px
   // box), for the same reason mkSel exists — the arrow sat inside the curve.
-  padding: "6px 9px", paddingRight: 14, fontSize: 13, fontWeight: 700, color: "var(--text-primary)",
+  padding: "6px 9px", paddingRight: 14, fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)",
   boxShadow: "var(--shadow-input)", cursor: "pointer"
 };
 // Segmented mini-button (zone-order / prefer-avoid toggles in the priorities editor).
 const SEG_BTN = {
   border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 10px",
-  fontSize: 12, fontWeight: 700, cursor: "pointer", background: "var(--bg-stepper)",
+  fontSize: T.body, fontWeight: FW.bold, cursor: "pointer", background: "var(--bg-stepper)",
   color: "var(--text-primary)", boxShadow: "var(--shadow-btn)"
 };
 // Accent action button (Add / Rename / confirm).
@@ -81,7 +81,7 @@ function Stepper({ value, onDec, onInc, disableDec, disableInc, width = 30 }) {
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
         style={{ ...STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
-      <span style={{ minWidth: width, textAlign: "center", fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>{value}</span>
+      <span style={{ minWidth: width, textAlign: "center", fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)" }}>{value}</span>
       <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
         style={{ ...STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
     </div>
@@ -347,7 +347,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
     return (
       <div style={{ marginTop: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>{label}</span>
+          <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>{label}</span>
           {list.length ? list.map(function (id, idx) {
             return (
               <span key={id} style={GCHIP}>
@@ -355,19 +355,19 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   <button onClick={function () { onChange(moveInList(list, idx, -1)); }} disabled={idx === 0}
                     title="Move up in rank" style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}>‹</button>
                 ) : null}
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
                 {ranked ? (
                   <button onClick={function () { onChange(moveInList(list, idx, 1)); }} disabled={idx === last}
                     title="Move down in rank" style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}>›</button>
                 ) : null}
                 <button onClick={function () { onChange(list.filter(function (x) { return x !== id; })); }} title="Remove"
-                  style={{ ...GCHIP_BTN, color: "var(--danger-text)", fontSize: 15 }}>×</button>
+                  style={{ ...GCHIP_BTN, color: "var(--danger-text)", fontSize: T.lead }}>×</button>
               </span>
             );
-          }) : <span style={{ fontSize: 11, color: "var(--text-faint)" }}>—</span>}
+          }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>—</span>}
           <button onClick={function () { setPriPick(open ? null : { kind: kind, band: bandIdx }); }} className="mgt-hover-scale"
             title={"Add a table"} disabled={!avail.length}
-            style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: 18, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: avail.length ? 1 : 0.3, cursor: avail.length ? "pointer" : "not-allowed" }}>+</button>
+            style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: T.title, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: avail.length ? 1 : 0.3, cursor: avail.length ? "pointer" : "not-allowed" }}>+</button>
         </div>
         {open ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "6px 0 2px 58px" }}>
@@ -390,7 +390,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         subtitle="Each table's id, capacity and zone. Shared across all devices."
         summary={tables.length + " tables · " + totalSeats + " seats"}
       >
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 2 }}>
+        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", marginBottom: 2 }}>
           {outdoorCount} outdoor · {indoorCount} indoor · {totalSeats} seats total
         </div>
         {tables.map(function (t) {
@@ -409,15 +409,15 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     onChange={function (e) { setEditVal(e.target.value); }}
                     onKeyDown={function (e) { if (e.key === "Enter" && editValid) commitEdit(t.id); if (e.key === "Escape") cancelEdit(); }} />
                 ) : (
-                  <span style={{ width: 44, fontSize: 13, fontWeight: 700, color: "var(--text-primary)", flexShrink: 0 }}>{t.id}</span>
+                  <span style={{ width: 44, fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", flexShrink: 0 }}>{t.id}</span>
                 )}
-                <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>cap</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>cap</span>
                 <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 20}
                   onDec={function () { updateTable(t.id, { capacity: cap - 1 }); }} onInc={function () { updateTable(t.id, { capacity: cap + 1 }); }} />
                 <button onClick={function () { updateTable(t.id, { zone: indoor ? "outdoor" : "indoor" }); }} className="mgt-hover-scale"
                   style={{
                     marginLeft: "auto", border: "1px solid var(--border-soft)", borderRadius: R.pill,
-                    padding: "4px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+                    padding: "4px 12px", fontSize: T.body, fontWeight: FW.bold, cursor: "pointer", flexShrink: 0,
                     background: indoor ? "rgba(var(--tbl-ind-rgb),0.18)" : "rgba(var(--tbl-out-rgb),0.18)",
                     color: "var(--text-primary)", boxShadow: "var(--shadow-btn)"
                   }}>
@@ -432,7 +432,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 ) : (
                   <>
                     <button onClick={function () { startEdit(t.id); }} className="mgt-hover-scale" title="Rename table"
-                      style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: 14, border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)" }}>✎</button>
+                      style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: T.lead, border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)" }}>✎</button>
                     <button onClick={function () { setEditId(null); setPendingRemove(t.id); }} disabled={tables.length <= 1}
                       className={tables.length <= 1 ? undefined : "mgt-hover-scale"}
                       title={tables.length <= 1 ? "A layout needs at least one table" : "Remove table"}
@@ -441,28 +441,28 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 )}
               </div>
               {editing && renameOrph > 0 ? (
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warn-text)", marginTop: 4 }}>
+                <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>
                   {renameOrph} upcoming booking{renameOrph === 1 ? " still references" : "s still reference"} “{t.id}” — they won’t follow the rename.
                 </div>
               ) : null}
               {/* Why the ✓ is disabled — mirrors the Add form's messages (v15.0.1). */}
               {editing && editTrim && editTrim.indexOf("|") >= 0 ? (
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warn-text)", marginTop: 4 }}>A table id can’t contain “|”.</div>
+                <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table id can’t contain “|”.</div>
               ) : editing && editTrim && editTrim !== t.id && idSet[editTrim] ? (
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warn-text)", marginTop: 4 }}>A table “{editTrim}” already exists.</div>
+                <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table “{editTrim}” already exists.</div>
               ) : null}
               {confirming ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6, padding: "6px 8px", borderRadius: R.inset, background: "var(--warn-bg)", border: "1px solid var(--warn-border)" }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--warn-text)" }}>
+                  <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--warn-text)" }}>
                     {orph > 0
                       ? orph + " upcoming booking" + (orph === 1 ? " uses “" : "s use “") + t.id + "”. Remove anyway?"
                       : "Remove table “" + t.id + "”?"}
                   </span>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                     <button onClick={function () { setPendingRemove(null); }} className="mgt-hover-scale"
-                      style={{ border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "5px 12px", fontSize: 12, fontWeight: 700, background: "var(--bg-stepper)", color: "var(--text-primary)", cursor: "pointer", boxShadow: "var(--shadow-btn)" }}>Cancel</button>
+                      style={{ border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "5px 12px", fontSize: T.body, fontWeight: FW.bold, background: "var(--bg-stepper)", color: "var(--text-primary)", cursor: "pointer", boxShadow: "var(--shadow-btn)" }}>Cancel</button>
                     <button onClick={function () { removeTable(t.id); }} className="mgt-hover-scale"
-                      style={mkBtn({ padding: "5px 12px", fontSize: 12, minHeight: 30, background: "var(--btn-del)" })}>{orph > 0 ? "Remove anyway" : "Remove"}</button>
+                      style={mkBtn({ padding: "5px 12px", fontSize: T.body, minHeight: 30, background: "var(--btn-del)" })}>{orph > 0 ? "Remove anyway" : "Remove"}</button>
                   </div>
                 </div>
               ) : null}
@@ -475,12 +475,12 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <input value={newId} autoFocus placeholder="id" style={{ ...TXT_INP }}
               onChange={function (e) { setNewId(e.target.value); }}
               onKeyDown={function (e) { if (e.key === "Enter" && newIdValid) addTable(); if (e.key === "Escape") { setAdding(false); setNewId(""); } }} />
-            <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>cap</span>
+            <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>cap</span>
             <Stepper value={newCap} disableDec={newCap <= 1} disableInc={newCap >= 20}
               onDec={function () { setNewCap(Math.max(1, newCap - 1)); }} onInc={function () { setNewCap(Math.min(20, newCap + 1)); }} />
             <button onClick={function () { setNewZone(newZone === "indoor" ? "outdoor" : "indoor"); }} className="mgt-hover-scale"
               style={{
-                border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 12px", fontSize: T.body, fontWeight: FW.bold, cursor: "pointer",
                 background: newZone === "indoor" ? "rgba(var(--tbl-ind-rgb),0.18)" : "rgba(var(--tbl-out-rgb),0.18)",
                 color: "var(--text-primary)", boxShadow: "var(--shadow-btn)"
               }}>
@@ -492,9 +492,9 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               <button onClick={function () { setAdding(false); setNewId(""); }} className="mgt-hover-scale" title="Cancel" style={X_BTN}>×</button>
             </div>
             {newIdTrim && newIdTrim.indexOf("|") >= 0 ? (
-              <div style={{ width: "100%", fontSize: 11, fontWeight: 600, color: "var(--warn-text)" }}>A table id can’t contain “|”.</div>
+              <div style={{ width: "100%", fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)" }}>A table id can’t contain “|”.</div>
             ) : newIdTrim && idSet[newIdTrim] ? (
-              <div style={{ width: "100%", fontSize: 11, fontWeight: 600, color: "var(--warn-text)" }}>A table “{newIdTrim}” already exists.</div>
+              <div style={{ width: "100%", fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)" }}>A table “{newIdTrim}” already exists.</div>
             ) : null}
           </div>
         ) : (
@@ -507,7 +507,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         subtitle="Joined tables for larger parties. Edit a combo's seat count; the optimizer uses these caps."
         summary={(autoCount + mega.length) + " combos"}
       >
-        <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)", marginBottom: 10 }}>
+        <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
           Join-groups are adjacent tables that can be pushed together. Reorder with ‹ ›, remove with ×; the seat counts below update automatically.
         </div>
         {joinGroups.map(function (group, gi) {
@@ -521,17 +521,17 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     <span key={id} style={GCHIP}>
                       <button onClick={function () { moveInGroup(gi, idx, -1); }} disabled={idx === 0}
                         title="Move left" style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}>‹</button>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
+                      <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
                       <button onClick={function () { moveInGroup(gi, idx, 1); }} disabled={idx === last}
                         title="Move right" style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}>›</button>
                       <button onClick={function () { removeFromGroup(gi, id); }} title="Remove from group"
-                        style={{ ...GCHIP_BTN, color: "var(--danger-text)", fontSize: 15 }}>×</button>
+                        style={{ ...GCHIP_BTN, color: "var(--danger-text)", fontSize: T.lead }}>×</button>
                     </span>
                   );
                 })}
                 <button onClick={function () { setPickFor(pickFor === gi ? null : gi); }} className="mgt-hover-scale"
                   title="Add a table to this group" disabled={!ungrouped.length}
-                  style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: 18, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: ungrouped.length ? 1 : 0.3, cursor: ungrouped.length ? "pointer" : "not-allowed" }}>+</button>
+                  style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: T.title, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: ungrouped.length ? 1 : 0.3, cursor: ungrouped.length ? "pointer" : "not-allowed" }}>+</button>
                 <button onClick={function () { removeGroup(gi); }} className="mgt-hover-scale" title="Remove whole group"
                   style={{ ...X_BTN, marginLeft: "auto" }}>×</button>
               </div>
@@ -541,7 +541,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     return (
                       <button key={id} onClick={function () { addToGroup(gi, id); }} className="mgt-hover-scale" style={PICK_CHIP}>{id}</button>
                     );
-                  }) : <span style={{ fontSize: 11, color: "var(--text-faint)" }}>No ungrouped tables.</span>}
+                  }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>No ungrouped tables.</span>}
                 </div>
               ) : null}
               {runs.map(function (run) {
@@ -551,12 +551,12 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 const cap = overridden ? comboCaps[key] : sum;
                 return (
                   <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 0", borderTop: "1px solid var(--border-soft)" }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{run.join(" + ")}</span>
+                    <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{run.join(" + ")}</span>
                     {overridden && cap !== sum ? (
-                      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)" }}>sum {sum}</span>
+                      <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-muted)" }}>sum {sum}</span>
                     ) : null}
                     <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>seats</span>
+                      <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>seats</span>
                       <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 60}
                         onDec={function () { setComboCap(key, cap - 1); }} onInc={function () { setComboCap(key, cap + 1); }} />
                     </div>
@@ -568,9 +568,9 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         })}
         <div style={{ paddingTop: 8, borderTop: "1px solid var(--border-soft)", marginBottom: 4 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>Ungrouped</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Ungrouped</span>
             {ungrouped.length ? (
-              <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)" }}>tap to start a new group</span>
+              <span style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>tap to start a new group</span>
             ) : null}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
@@ -578,19 +578,19 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               return (
                 <button key={id} onClick={function () { newGroupFrom(id); }} className="mgt-hover-scale" style={PICK_CHIP}>{id}</button>
               );
-            }) : <span style={{ fontSize: 11, color: "var(--text-faint)" }}>none — every table is in a group</span>}
+            }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>none — every table is in a group</span>}
           </div>
         </div>
         <div style={{ marginTop: 8, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 6 }}>
+          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)", marginBottom: 6 }}>
             Cross-group combos · {mega.length}
           </div>
           {mega.map(function (mc, i) {
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 0", borderTop: "1px solid var(--border-soft)" }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{mc.ids.join(" + ")}</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{mc.ids.join(" + ")}</span>
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>seats</span>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>seats</span>
                   <Stepper value={mc.cap} disableDec={mc.cap <= 1} disableInc={mc.cap >= 60}
                     onDec={function () { setMegaCap(i, mc.cap - 1); }} onInc={function () { setMegaCap(i, mc.cap + 1); }} />
                   <button onClick={function () { removeMega(i); }} className="mgt-hover-scale" title="Remove combo" style={X_BTN}>×</button>
@@ -601,7 +601,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
 
           {/* Add a cross-group combo: pick ≥2 tables + a seat count. */}
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 6, textAlign: "center" }}>
+            <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)", marginBottom: 6, textAlign: "center" }}>
               Add a combo
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", marginBottom: 8 }}>
@@ -610,7 +610,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 return (
                   <button key={t.id} onClick={function () { toggleAdd(t.id); }} className="mgt-hover-scale"
                     style={{
-                      fontSize: 12, fontWeight: 700, borderRadius: R.pill, padding: "5px 10px", cursor: "pointer",
+                      fontSize: T.body, fontWeight: FW.bold, borderRadius: R.pill, padding: "5px 10px", cursor: "pointer",
                       border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)",
                       background: on ? "var(--accent)" : "var(--bg-stepper)",
                       color: on ? "var(--text-on-accent)" : "var(--text-primary)",
@@ -622,7 +622,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               })}
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>seats</span>
+              <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>seats</span>
               <Stepper value={addCap} disableDec={addCap <= 1} disableInc={addCap >= 60}
                 onDec={function () { setAddCap(Math.max(1, addCap - 1)); }} onInc={function () { setAddCap(Math.min(60, addCap + 1)); }} />
               <button onClick={addMega} disabled={!canAdd} className={canAdd ? "mgt-hover-scale" : undefined}
@@ -634,11 +634,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               </button>
             </div>
             {addDup ? (
-              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--warn-text)", textAlign: "center", marginTop: 6 }}>
+              <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", textAlign: "center", marginTop: 6 }}>
                 That combo already exists.
               </div>
             ) : addIds.length === 1 ? (
-              <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)", textAlign: "center", marginTop: 6 }}>
+              <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", textAlign: "center", marginTop: 6 }}>
                 Pick at least 2 tables.
               </div>
             ) : null}
@@ -651,21 +651,21 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         subtitle="Which tables the optimizer picks first, per party size. Shared across all devices."
         summary={priBands.length + (priBands.length === 1 ? " size rule · " : " size rules · ") + priRules.length + (priRules.length === 1 ? " combo rule" : " combo rules")}
       >
-        <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)", marginBottom: 10 }}>
+        <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
           Rules are checked top to bottom — the first match wins. A party size with no rule gets the smallest free table (or best combo) that fits.
         </div>
 
         {/* ── Party-size rules (bands) ── */}
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>Party-size rules · {priBands.length}</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Party-size rules · {priBands.length}</div>
         {priBands.map(function (b, i) {
           const zm = zoneMode(b);
           return (
             <div key={i} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)", marginTop: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>Party of</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>Party of</span>
                 <Stepper value={b.min} disableDec={b.min <= 1} disableInc={b.min >= b.max}
                   onDec={function () { setBand(i, { min: b.min - 1 }); }} onInc={function () { setBand(i, { min: b.min + 1 }); }} />
-                <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>to</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>to</span>
                 <Stepper value={b.max} disableDec={b.max <= b.min} disableInc={b.max >= 30}
                   onDec={function () { setBand(i, { max: b.max - 1 }); }} onInc={function () { setBand(i, { max: b.max + 1 }); }} />
                 <button onClick={function () { removeBand(i); }} className="mgt-hover-scale" title="Remove rule"
@@ -674,7 +674,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               {chipRow("Prefer", b.prefer || [], true, "prefer", i, function (l) { setBand(i, { prefer: l }); })}
               {chipRow("Avoid", b.avoid || [], false, "avoid", i, function (l) { setBand(i, { avoid: l }); })}
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>Try first</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>Try first</span>
                 {[["any", "Table order"], ["indoor", "Indoor"], ["outdoor", "Outdoor"]].map(function (opt) {
                   const on = zm === opt[0];
                   return (
@@ -687,7 +687,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
                 <Toggle on={!!b.combosFirst} onClick={function () { setBand(i, { combosFirst: !b.combosFirst }); }} />
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>Try joined tables before single tables</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)" }}>Try joined tables before single tables</span>
               </div>
             </div>
           );
@@ -697,8 +697,8 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
 
         {/* ── Combo preferences ── */}
         <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>Combo preferences · {priRules.length}</div>
-          <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Combo preferences · {priRules.length}</div>
+          <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
             Which combo the optimizer reaches for first, by party size. Higher priority wins; “avoid” combos are used only when nothing else fits.
           </div>
           {priRules.map(function (r, i) {
@@ -709,10 +709,10 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   {known ? null : <option value={r.key}>{String(r.key).split("|").join(" + ")}</option>}
                   {declared.map(function (d) { return <option key={d.key} value={d.key}>{d.label}</option>; })}
                 </select>
-                <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>party</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>party</span>
                 <Stepper value={r.min} disableDec={r.min <= 1} disableInc={r.min >= r.max}
                   onDec={function () { setRule(i, { min: r.min - 1 }); }} onInc={function () { setRule(i, { min: r.min + 1 }); }} />
-                <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>to</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>to</span>
                 <Stepper value={r.max} disableDec={r.max <= r.min} disableInc={r.max >= 30}
                   onDec={function () { setRule(i, { max: r.max - 1 }); }} onInc={function () { setRule(i, { max: r.max + 1 }); }} />
                 <button onClick={function () { setRule(i, { avoid: !r.avoid }); }} className="mgt-hover-scale"
@@ -722,7 +722,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 </button>
                 {r.avoid ? null : (
                   <>
-                    <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>priority</span>
+                    <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>priority</span>
                     <Stepper value={r.weight} disableDec={r.weight <= 1} disableInc={r.weight >= 10}
                       onDec={function () { setRule(i, { weight: r.weight - 1 }); }} onInc={function () { setRule(i, { weight: r.weight + 1 }); }} />
                   </>
@@ -738,13 +738,13 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
 
         {/* ── Cross-zone combos ── */}
         <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>Cross-zone combos</div>
-          <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Cross-zone combos</div>
+          <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
             “Anchors” are ranked tables the optimizer favours inside a combo that spans indoor + outdoor.
           </div>
           {chipRow("Anchors", priAnchors, true, "anchor", -1, function (l) { savePri({ anchors: l }); })}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>Require</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>Require</span>
             {tableIds.map(function (id) {
               const on = priMixed.indexOf(id) >= 0;
               return (
@@ -755,29 +755,29 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               );
             })}
           </div>
-          <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)", marginTop: 4, paddingLeft: 58 }}>
+          <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 4, paddingLeft: 58 }}>
             Cross-zone combos are only auto-assigned when they include all selected tables. None selected = any cross-zone combo.
           </div>
         </div>
 
         {/* ── Swap rules ── */}
         <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>Swap rules · {priSwaps.length}</div>
-          <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Swap rules · {priSwaps.length}</div>
+          <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
             Free a table from a bigger party when a smaller overlapping party needs it (only applied when nobody loses a table).
           </div>
           {priSwaps.map(function (r, i) {
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
-                <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>Free</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>Free</span>
                 <select value={r.table} onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
                   {tableIds.indexOf(r.table) >= 0 ? null : <option value={r.table}>{r.table}</option>}
                   {tableIds.map(function (id) { return <option key={id} value={id}>{id}</option>; })}
                 </select>
-                <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>from a party of</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>from a party of</span>
                 <Stepper value={r.fromSize} disableDec={r.fromSize <= 1} disableInc={r.fromSize >= 30}
                   onDec={function () { setSwap(i, { fromSize: r.fromSize - 1 }); }} onInc={function () { setSwap(i, { fromSize: r.fromSize + 1 }); }} />
-                <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>for a party of</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>for a party of</span>
                 <Stepper value={r.toSize} disableDec={r.toSize <= 1} disableInc={r.toSize >= 30}
                   onDec={function () { setSwap(i, { toSize: r.toSize - 1 }); }} onInc={function () { setSwap(i, { toSize: r.toSize + 1 }); }} />
                 <button onClick={function () { removeSwap(i); }} className="mgt-hover-scale" title="Remove rule"
@@ -801,8 +801,8 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
       <Section style={{ marginBottom: 8 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Kitchen limit</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Kitchen limit</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
               Max simultaneous booking starts before a kitchen-load warning.
             </div>
           </div>
