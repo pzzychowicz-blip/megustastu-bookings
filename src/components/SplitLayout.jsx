@@ -174,7 +174,7 @@ export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", on
             comfortable on touch without looking like a 10px gutter. */}
         <div style={{
           width: row ? 2 : "70%", height: row ? "70%" : 2,
-          borderRadius: 2,
+          borderRadius: 2,   /* @canvas */
           background: dragRatio != null ? "var(--accent)" : "var(--border-soft)",
           transition: "background " + M.tap,
         }} />

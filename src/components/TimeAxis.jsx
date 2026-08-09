@@ -194,8 +194,8 @@ export function TimeAxis({
             const w = isHour ? 2 : 1;
             return (
               <div key={"t" + m}>
-                <div style={{ position: "absolute", top: 0, left: x, width: w, height: len, background: col, borderRadius: 1 }} />
-                <div style={{ position: "absolute", bottom: 0, left: x, width: w, height: len, background: col, borderRadius: 1 }} />
+                <div style={{ position: "absolute", top: 0, left: x, width: w, height: len, background: col, borderRadius: 1 }} />   /* @canvas */
+                <div style={{ position: "absolute", bottom: 0, left: x, width: w, height: len, background: col, borderRadius: 1 }} />   /* @canvas */
               </div>
             );
           })}
@@ -216,7 +216,7 @@ export function TimeAxis({
             <div style={{
               position: "absolute", left: xOf(nowMins), top: 0, bottom: 0,
               width: 2, background: "var(--tl-now-line)",
-              borderRadius: 1, pointerEvents: "none", opacity: 0.9,
+              borderRadius: 1, pointerEvents: "none", opacity: 0.9,   /* @canvas */
             }} />
           ) : null}
         </div>
@@ -232,7 +232,7 @@ export function TimeAxis({
         style={{
           position: "absolute", left: "50%", top: 4, height: H - 8,
           transform: "translateX(-50%)", transformOrigin: "center",
-          width: 2, borderRadius: 1,
+          width: 2, borderRadius: 1,   /* @canvas */
           background: S.accent, pointerEvents: "none",
         }}
       />

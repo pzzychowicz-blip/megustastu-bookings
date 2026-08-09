@@ -619,7 +619,7 @@ export function Kbd({ k }) {
     <span style={{
       display: "inline-block",
       padding: "2px 8px",
-      borderRadius: 6,
+      borderRadius: 6,   /* @canvas */
       background: "var(--bg-kbd)",
       border: "1px solid var(--border-kbd)",
       fontFamily: "-apple-system, 'SF Mono', Menlo, monospace",

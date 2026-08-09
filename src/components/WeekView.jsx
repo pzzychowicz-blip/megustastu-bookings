@@ -244,8 +244,8 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                 <div style={{ fontSize: 13, fontWeight: 700, color: isToday ? "var(--accent)" : "var(--text-primary)" }}>{WD[i]}</div>
                 <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>{dnum + (isToday ? " · today" : "")}</div>
               </div>
-              <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4, overflow: "hidden", minWidth: 30 }}>
-                <div style={{ width: ((r.covers / maxCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: r.covers ? 0.8 : 0, borderRadius: 4 }} />
+              <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4, overflow: "hidden", minWidth: 30 }}>   /* @canvas */
+                <div style={{ width: ((r.covers / maxCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: r.covers ? 0.8 : 0, borderRadius: 4 }} />   /* @canvas */
               </div>
               <div style={{ minWidth: 86, textAlign: "right", flexShrink: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>{r.covers + " cover" + (r.covers !== 1 ? "s" : "")}</div>
@@ -279,8 +279,8 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
       return (
         <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 4 }}>
           <span style={{ color: "var(--text-secondary)", fontWeight: 600, minWidth: 64, flexShrink: 0 }}>{label}</span>
-          <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4, overflow: "hidden", minWidth: 30 }}>
-            <div style={{ width: ((val / max) * 100) + "%", height: "100%", background: color || "var(--accent)", opacity: 0.8, borderRadius: 4 }} />
+          <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4, overflow: "hidden", minWidth: 30 }}>   /* @canvas */
+            <div style={{ width: ((val / max) * 100) + "%", height: "100%", background: color || "var(--accent)", opacity: 0.8, borderRadius: 4 }} />   /* @canvas */
           </div>
           <span style={{ color: "var(--text-primary)", fontWeight: 700, minWidth: 64, textAlign: "right", flexShrink: 0 }}>{val}</span>
         </div>

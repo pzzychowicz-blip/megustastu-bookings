@@ -207,7 +207,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     <div
       className={anim === "wipe" ? "mgt-wipe-ltr" : "mgt-fade-overlay"}
       style={{
-        position: "absolute", inset: 0, borderRadius: 10, pointerEvents: "none",
+        position: "absolute", inset: 0, borderRadius: 10, pointerEvents: "none",   /* @canvas */
         background: anim === "wipe" ? BLOCK_BG.confirmed : BLOCK_BG.seated
       }}
     />
@@ -288,7 +288,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       style={{
         position: "absolute", top: 3, height: ROW_H - 8 + "px",
         left, width: w,
-        background: bgc, borderRadius: 10, overflow: "hidden",
+        background: bgc, borderRadius: 10, overflow: "hidden",   /* @canvas */
         display: "flex", alignItems: "center", boxSizing: "border-box",
         cursor: dragDy != null ? "grabbing" : "pointer",
         border: border || "1px solid rgba(255,255,255,0.2)",
@@ -299,7 +299,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         // MagicOS/Chrome. pan-x keeps horizontal timeline scrolling from a block
         // while reserving vertical gestures for the drag.
         touchAction: "pan-x",
-        boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" : "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
+        boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" : "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",   /* @fixed-fill: BLOCK_BG[b.status], ~40 lines up */
         // v17.0.0: while dragging, the inline transform/zIndex/opacity lift the
         // block and follow the pointer (inline transform beats the hover class).
         ...(dragDy != null ? { transform: "translateY(" + dragDy + "px)", zIndex: 30, opacity: 0.85 } : null),
@@ -413,7 +413,7 @@ function BlockBar({ bl, totalMins }) {
       position: "absolute", top: 1, height: ROW_H - 4 + "px",
       left, width: w,
       background: "repeating-linear-gradient(45deg,var(--tl-blocked-a),var(--tl-blocked-a) 4px,var(--tl-blocked-b) 4px,var(--tl-blocked-b) 8px)",
-      borderRadius: 4, opacity: 0.6,
+      borderRadius: 4, opacity: 0.6,   /* @canvas */
       display: "flex", alignItems: "center", justifyContent: "center",
       pointerEvents: "none"
     }}>
@@ -494,7 +494,7 @@ function WaitGhost({ g, totalMins, onBook }) {
         // Geometry, radius, border, shadow: TimelineBlock's, verbatim.
         position: "absolute", top: 3, height: (ROW_H - 8) + "px",
         left: pct(gS), width: Math.max((mins / totalMins) * 100, 0.3) + "%",
-        background: BLOCK_BG.pending, borderRadius: 10, overflow: "hidden",
+        background: BLOCK_BG.pending, borderRadius: 10, overflow: "hidden",   /* @canvas */
         display: "flex", alignItems: "center", boxSizing: "border-box",
         border: g.resh ? "1px dashed rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.2)",
         boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
@@ -900,7 +900,7 @@ export const TimelineView = memo(function TimelineView({
                 style={{
                   position: "absolute", top: 3, height: (ROW_H - 8) + "px",
                   left: gLeft, width: gW,
-                  background: "transparent", borderRadius: 10,
+                  background: "transparent", borderRadius: 10,   /* @canvas */
                   border: "2px dashed " + BLOCK_BG.seated,
                   boxSizing: "border-box", pointerEvents: "none",
                   transition: TL_MOVE
