@@ -1,0 +1,138 @@
+// tests/stylesheet.test.js
+//
+// v17.8.0 — a parse guard for index.html's <style> block.
+//
+// ── Why this exists ──────────────────────────────────────────────────────────
+// A stylesheet has no syntax errors. It has rules that silently don't exist.
+//
+// v17.8.0 shipped a stray `*/` after an already-closed comment. Two lines of
+// English prose were then loose in the stylesheet, and CSS error recovery does
+// the worst possible thing with that: it folds the text into the NEXT rule's
+// *selector*, so the rule after it — `.mgt-press:active { filter: … }` — was
+// dropped outright and the press dim died on ~28 controls across the app.
+//
+// Nothing caught it. `npm run build` passed (Vite does not parse inline CSS in
+// index.html), eslint passed (not its file), 103 tests passed, and the source
+// reads fine at a glance. It was found by walking the live CSSOM in a browser
+// and noticing a rule that should have been there wasn't.
+//
+// ── What this checks ─────────────────────────────────────────────────────────
+// 1. Comment hygiene: after stripping comments the way a CSS parser does, no
+//    selector may contain `*/` or `/*`. This is the exact fingerprint of the
+//    v17.8.0 bug and of every other unbalanced-comment mistake.
+// 2. Brace balance.
+// 3. CRITICAL_SELECTORS: rules whose absence is invisible in review but
+//    load-bearing in the app — an interaction affordance nobody would notice
+//    was missing until a user reported "the buttons feel dead". Add to the list
+//    when you add a rule that fails silently.
+//
+// This is deliberately a small hand-rolled walk rather than a real CSS parser:
+// the dependency is not worth it, and the failure mode being guarded (text
+// where a selector should be) is visible without full spec compliance.
+
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const HTML = readFileSync(join(ROOT, "index.html"), "utf8");
+
+// Every rule here fails SILENTLY when it goes missing — no error, no visual
+// hole, just an affordance that quietly stops working. That is the entry
+// criterion for this list, not importance in the abstract.
+const CRITICAL_SELECTORS = [
+  ".mgt-hover-scale",                 // the hover lift's transition
+  ".mgt-press:active",                // the press dim — the v17.8.0 casualty
+  "button:active",                    // the universal press-scale
+  ":focus-visible",                   // the keyboard ring
+  ".mgt-notif",                       // the strip's section hairlines
+  ".mgt-card-in",                     // modal/popover entrance
+  ".mgt-card-out",                    // modal/popover exit
+  ".mgt-appear",                      // fade-in-to-own-opacity (timeline ghosts)
+  ".mgt-fade-in",                     // Settings tab crossfade
+  ".mgt-dot-pulse",                   // the "busy" toast dot
+  ".mgt-tlghost",                     // the seated ghost's lockstep hover
+  ".mgt-group-hover",                 // multi-table group lift
+  ".mgt-plan-headrow",                // Plan header grid (has a media fallback)
+  ".mgt-detent",                      // TimeAxis snap
+  "@media print",                     // DaySheet is print-only; nothing else shows it
+];
+
+function styleBlocks(html) {
+  const out = [];
+  const re = /<style[^>]*>([\s\S]*?)<\/style>/g;
+  let m;
+  while ((m = re.exec(html)) !== null) out.push(m[1]);
+  return out;
+}
+
+// Strip comments exactly as a CSS tokenizer does: from `/*` to the FIRST `*/`.
+// A trailing `*/` with no opener is therefore left in place — which is the
+// whole point, because that is what leaks into a selector.
+function stripComments(css) {
+  let out = "";
+  let i = 0;
+  while (i < css.length) {
+    const open = css.indexOf("/*", i);
+    if (open === -1) { out += css.slice(i); break; }
+    out += css.slice(i, open);
+    const close = css.indexOf("*/", open + 2);
+    if (close === -1) { out += "\n/* UNTERMINATED */"; break; }   // flagged below
+    i = close + 2;
+  }
+  return out;
+}
+
+// Collect every rule prelude (the text before a `{`), at any nesting depth.
+function preludes(css) {
+  const out = [];
+  let buf = "";
+  for (let i = 0; i < css.length; i++) {
+    const c = css[i];
+    if (c === "{") { out.push(buf.trim()); buf = ""; }
+    else if (c === "}") { buf = ""; }
+    else buf += c;
+  }
+  return out.filter(Boolean);
+}
+
+describe("index.html stylesheet", () => {
+  const blocks = styleBlocks(HTML);
+
+  it("has exactly one <style> block", () => {
+    expect(blocks.length).toBe(1);
+  });
+
+  const css = stripComments(blocks[0]);
+
+  it("has no unterminated comment", () => {
+    expect(css).not.toContain("/* UNTERMINATED */");
+  });
+
+  it("has balanced braces", () => {
+    const open = (css.match(/\{/g) || []).length;
+    const close = (css.match(/\}/g) || []).length;
+    expect(open).toBe(close);
+  });
+
+  // THE regression test for v17.8.0. A leftover `*/` (or a `/*` that survived
+  // stripping) can only be sitting in a selector, and a selector containing
+  // one is dropped by the browser along with its whole rule.
+  it("has no comment delimiter left inside a selector", () => {
+    const bad = preludes(css).filter((p) => p.includes("*/") || p.includes("/*"));
+    expect(bad).toEqual([]);
+  });
+
+  // A selector should not contain a full stop followed by a space — prose leaks
+  // in as sentences, and no real selector in this app looks like that.
+  it("has no prose in a selector", () => {
+    const bad = preludes(css).filter((p) => /\.\s+[A-Za-z]/.test(p) && !p.startsWith("@"));
+    expect(bad).toEqual([]);
+  });
+
+  it.each(CRITICAL_SELECTORS)("still defines %s", (sel) => {
+    const found = preludes(css).some((p) => p.includes(sel));
+    expect(found).toBe(true);
+  });
+});
