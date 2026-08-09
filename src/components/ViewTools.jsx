@@ -12,6 +12,7 @@
 //   onOpenSettings() — App's setShowSettings(true)
 
 import { CogIcon } from "./SettingsChrome"; // v17.1.0: light import — Settings.jsx is lazy-loaded now
+import { SearchIcon } from "./Icons";       // v17.8.0: was the 🔍 emoji, beside a hand-drawn SVG cog
 import { S, R } from "../lib/constants";
 
 const BTN_STYLE = {
@@ -33,9 +34,9 @@ export function ViewTools({ onOpenSearch = () => {}, onOpenSettings = () => {} }
         title="Find a booking"
         aria-label="Find a booking"
         className="mgt-hover-scale"
-        style={{ ...BTN_STYLE, fontSize: 15, lineHeight: 1 }}
+        style={BTN_STYLE}
       >
-        🔍
+        <SearchIcon size={17} />
       </button>
       <button
         onClick={onOpenSettings}

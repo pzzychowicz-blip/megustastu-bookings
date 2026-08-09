@@ -43,6 +43,7 @@ import {
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone, findPhoneOverlaps } from "../lib/customers";
 import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { WaitIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
@@ -172,7 +173,7 @@ export function BookingFormModal({
   const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<button
     key="ns" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("noshow");}}
-    style={Object.assign({},chipBase,{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",color:"var(--warn-text)"})}>{"⚠ No-show ×"+custMatch.noShowCount+(histWhich==="noshow"?" ▾":" ▸")}</button>:<button
+    style={Object.assign({},chipBase,{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",color:"var(--warn-text)"})}>{"No-show ×"+custMatch.noShowCount+(histWhich==="noshow"?" ▾":" ▸")}</button>:<button
     key="ns" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("noshow");}}
     style={Object.assign({},chipBase,{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",color:"var(--text-secondary)"})}>{"1 no-show"+(histWhich==="noshow"?" ▾":" ▸")}</button>):null;
@@ -202,7 +203,7 @@ export function BookingFormModal({
       size:form.size,dur:form.customDur,excludeId:editId});
   },[bookings,form.phone,form.date,form.time,form.size,form.customDur,editId]);
   const dupWarn=dupPhone.length?<div style={{marginTop:8,padding:"8px 12px",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.inset,fontSize:12,fontWeight:600,color:"var(--warn-text)"}}>
-    {"⚠ This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}
+    {"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}
     {dupPhone.slice(0,3).map(function(b){return <div key={b.id} style={{fontWeight:500,paddingTop:2}}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</div>;})}
     {dupPhone.length>3?<div style={{fontWeight:500,paddingTop:2}}>{"+ "+(dupPhone.length-3)+" more"}</div>:null}
   </div>:null;
@@ -348,8 +349,8 @@ export function BookingFormModal({
     sugg={formAvail.sugg}
     onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />{!editId&&onAddToWaitlist?<div style={{display:"flex",justifyContent:"center",marginTop:-4,marginBottom:12}}><button
       className="mgt-hover-scale"
-      style={mkBtn({fontSize:13,background:BTN.orange,minHeight:40,padding:"8px 16px"})}
-      onClick={function(){onAddToWaitlist();}}>⏳ Add to waitlist</button></div>:null}</>:null;
+      style={mkBtn({fontSize:13,background:BTN.orange,minHeight:40,padding:"8px 16px",display:"inline-flex",alignItems:"center",gap:6})}
+      onClick={function(){onAddToWaitlist();}}><WaitIcon size={15} />Add to waitlist</button></div>:null}</>:null;
   // v15.0.0: closed-day notice — the chosen date falls on a weekday marked Closed
   // (Settings → General → Opening hours). doSave blocks the write; this explains why.
   const closedBanner=fh.closed?<div style={{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:600,color:"var(--warn-text)",textAlign:"center"}}>{"Closed on "+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."}</div>:null;
@@ -373,7 +374,7 @@ export function BookingFormModal({
   // having barely opened (imperceptible sliver), a slow scan shows it fully.
   // One shared row covers both scans; it sits in the availBanner's slot region.
   const availChecking=availScan.pending||(kitchenBusy&&kitchenScan.pending);
-  const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:600,color:"var(--text-muted)",textAlign:"center"}}>⏳ Checking table availability…</div>;
+  const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:600,color:"var(--text-muted)",display:"flex",alignItems:"center",justifyContent:"center",gap:9}}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>;
   function renderKitchenTimes(arr){
     if(!arr||!arr.length) return null;
     return arr.map(function(r){return (

@@ -22,6 +22,7 @@ import { useState, useEffect, useMemo } from "react";
 import { S, BTN, BLOCK_BG, R } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, hasRealPhone, isNoShow } from "../lib/customers";
 import { Section, Reveal, mkInp, mkBtn } from "./atoms";
+import { WaitIcon } from "./Icons";
 
 export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2 }) {
   const [query, setQuery] = useState("");
@@ -66,7 +67,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   }
 
   const chip = function (label, colors) {
-    return <span style={{ fontSize: 10, fontWeight: 700, borderRadius: R.pill, padding: "2px 6px", background: colors.bg, border: "1px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
+    return <span style={{ fontSize: 10, fontWeight: 700, borderRadius: R.pill, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 3, background: colors.bg, border: "1px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
   };
 
   const rows = shown.map(function (c) {
@@ -88,7 +89,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
         <div
           className="mgt-hover-scale"
           onClick={function () { setOpenKey(open ? null : c.phone); setArmedKey(null); }}
-          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer" }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: 12, color: S.muted }}>{formatPhone(c.phone) + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? chip(c.visits + " visit" + (c.visits !== 1 ? "s" : ""), { bg: "var(--suggest-bg)", border: "var(--suggest-border)", text: "var(--success-text)" }) : null}{c.noShowCount > 0 ? chip(c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)", { bg: "var(--warn-bg)", border: "var(--warn-border)", text: "var(--warn-text)" }) : null}{wlCount > 0 ? chip("⏳ " + wlCount, { bg: "var(--bg-input)", border: "var(--border-soft)", text: "var(--text-secondary)" }) : null}<span style={{ fontSize: 12, color: S.muted }}>{open ? "▾" : "▸"}</span></div></div>
+          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer" }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: 12, color: S.muted }}>{formatPhone(c.phone) + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? chip(c.visits + " visit" + (c.visits !== 1 ? "s" : ""), { bg: "var(--suggest-bg)", border: "var(--suggest-border)", text: "var(--success-text)" }) : null}{c.noShowCount > 0 ? chip(c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)", { bg: "var(--warn-bg)", border: "var(--warn-border)", text: "var(--warn-text)" }) : null}{wlCount > 0 ? chip(<><WaitIcon size={10} />{wlCount}</>, { bg: "var(--bg-input)", border: "var(--border-soft)", text: "var(--text-secondary)" }) : null}<span style={{ fontSize: 12, color: S.muted }}>{open ? "▾" : "▸"}</span></div></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>

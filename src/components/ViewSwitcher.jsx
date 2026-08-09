@@ -25,6 +25,7 @@
 import { useRef, useEffect } from "react";
 import { S, BTN } from "../lib/constants";
 import { mkBtn, Presence } from "./atoms";
+import { SwapIcon, SplitSideIcon, SplitStackIcon } from "./Icons";
 
 const ORD = ["timeline", "list", "plan"];
 const HOLD_MS = 450;
@@ -152,11 +153,11 @@ export function ViewSwitcher({
         <span style={{ display: "inline-flex", gap: 6 }}>
           <button className="mgt-hover-scale" onClick={onSwapSides}
             title="Swap the two views" aria-label="Swap the two views"
-            style={toolBtn()}>⇄</button>
+            style={toolBtn()}><SwapIcon size={17} /></button>
           <button className="mgt-hover-scale" onClick={onToggleDir}
             title={split && split.dir === "v" ? "Switch to top and bottom" : "Switch to side by side"}
             aria-label="Change split direction"
-            style={toolBtn()}>{split && split.dir === "v" ? "⬓" : "◧"}</button>
+            style={toolBtn()}>{split && split.dir === "v" ? <SplitStackIcon size={17} /> : <SplitSideIcon size={17} />}</button>
           <button className="mgt-hover-scale" onClick={onExitSplit}
             title="Leave split view" aria-label="Leave split view"
             style={toolBtn({ background: BTN.dismiss })}>✕</button>

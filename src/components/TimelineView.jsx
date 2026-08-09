@@ -45,6 +45,7 @@ import {
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
+import { WaitIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 
 // v15.8.0: module-level status-change animation state (survives the inline Block
@@ -81,7 +82,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   const lbl = b.name + " (" + b.size + ")"
     + (isLocked(b) ? " [L]" : "")
     + (hasPrefT ? " ★" : "")
-    + (noShows >= 2 ? " ⚠" : "")
+    + (noShows >= 2 ? " [!]" : "")
     + ((Number(b.deposit) || 0) > 0 ? " " + currency : "")   // v16.3.0 deposit marker (v17.0.0: currency from settings/general)
     + (warn && warn.overdue ? " !!" : "");
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
@@ -506,8 +507,8 @@ function WaitGhost({ g, totalMins, onBook }) {
           it is fixed-width and unclippable, and it lines up with the marker
           column a real block uses for its ★ / ⚠ / [L] flags. */}
       <span aria-hidden="true" style={{
-        flexShrink: 0, marginLeft: 6, fontSize: 10, lineHeight: "12px"
-      }}>⏳</span>
+        flexShrink: 0, marginLeft: 6, display: "flex", alignItems: "center"
+      }}><WaitIcon size={11} /></span>
       <span style={{
         flex: 1, padding: "0 8px 0 5px", position: "relative",
         fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",

@@ -45,6 +45,7 @@ import {
   comboCapBest, nowTime
 } from "../lib/booking-logic";
 import { Overlay, Section, Fld, AvailBanner, mkInp, mkArea, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { WaitIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
@@ -503,7 +504,7 @@ export function WalkinForm({
           Reveal-wrapped — its ~300ms ease is the grace, so a fast scan shows
           only an imperceptible sliver instead of a flash. */}
       <Reveal show={wChecking && wSel.length === 0}>
-        <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: 13, fontWeight: 600, color: "var(--text-muted)", textAlign: "center" }}>⏳ Checking table availability…</div>
+        <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>
       </Reveal>
       {wAutoCheck && wSel.length === 0 ? (
         <>
@@ -519,10 +520,10 @@ export function WalkinForm({
             <div style={{ display: "flex", justifyContent: "center", marginTop: -4, marginBottom: 12 }}>
               <button
                 className="mgt-hover-scale"
-                style={mkBtn({ fontSize: 13, background: BTN.orange, minHeight: 40, padding: "8px 16px" })}
+                style={mkBtn({ fontSize: 13, background: BTN.orange, minHeight: 40, padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6 })}
                 onClick={() => onAddToWaitlist()}
               >
-                ⏳ Add to waitlist
+                <WaitIcon size={15} />Add to waitlist
               </button>
             </div>
           ) : null}
