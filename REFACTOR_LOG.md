@@ -7451,3 +7451,45 @@ DEV: the tally confirmed present with the strip open and collapsed; all six
 Settings `AutoHeight`s compute `height var(--t-shift) linear`; 12 waiting
 parties all wanting 21:00 rendered 12 ghosts on 12 different tables (was 12 on
 one), with the one occupied row correctly skipped. Seeded waitlist restored.
+
+#### /code-review over all 33 commits (commit 29)
+
+Three findings, all introduced by this version, all reproduced in the running
+app before the fix and re-checked after.
+
+**A dead CSS rule.** An extra `*/` after an already-closed comment left two
+lines of prose loose in the stylesheet. CSS error recovery folds that text into
+the next rule's *selector*, so `.mgt-press:active { filter: brightness(0.86) }`
+was dropped outright — the press dim was gone on all ~28 opted-in controls,
+while the commit responsible stated in as many words that the dim was being
+kept. Found by walking the live CSSOM for rules matching the class rather than
+by reading the file, which is the only way this one shows up: the source looks
+fine at a glance and the build says nothing, because a stylesheet has no syntax
+errors, only rules that silently don't exist.
+
+**A snapped tab.** Settings' TabBar button carries `.mgt-hover-scale` and set
+an inline `transition` naming background-color, color and box-shadow. An inline
+shorthand replaces the class's declaration wholesale, so the tabs had no
+transform transition at all and both the hover lift and the new press dip
+snapped. That is the same collision this release diagnosed and fixed one layer
+up in `index.html` — committed one layer down, in the same commit that
+documented it. The rule generalises past two CSS classes: **an inline
+`transition` on a `.mgt-hover-scale` element must list `transform`.**
+
+**A lost `since`.** `usePresence`'s heartbeat rewrites the identity fields
+precisely so a child deleted underneath us (another device's prune) comes back
+complete — and omitted `since`, the one field only that write can restore. Now
+included, from a new `sinceRef` holding this connection's own resolved value:
+a beat restores the original start time instead of stamping a fresh one every
+45s, which would have pinned every device to "just now" forever. Verified live
+by watching one child across a beat — `since=93s` while `seen=3s`.
+
+One finding was investigated and **withdrawn**: `GsTextField` looked like it
+would raise a false "unsaved changes" confirm when Settings is closed straight
+after a text edit, because its dirty test compares the draft to a `value` that
+only updates on the Firebase echo. It does not — `saveGeneralSettings` calls
+`setGS` synchronously, so `value` lands in the same discrete-event flush as the
+blur, and React flushes the resulting passive effect before dispatching the
+click. Confirmed by doing it: real typing, real click, no dialog, name saved.
+The first attempt "reproduced" it only because a synthetic blur never fired the
+commit at all — the field was genuinely dirty and the guard was right.
