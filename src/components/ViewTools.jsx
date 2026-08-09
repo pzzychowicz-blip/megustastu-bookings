@@ -18,7 +18,11 @@ import { S, R } from "../lib/constants";
 const BTN_STYLE = {
   background: "var(--cog-bg)",
   border: "1px solid var(--cog-border)",
-  borderRadius: R.pill, width: 34, height: 34,
+  // v17.8.0: 34 → 44. These are the two controls that sit in the same place on
+  // all three views, and they were the smallest square targets in the header on
+  // a device operated with one hand while carrying plates. Equal width/height
+  // keeps --r-pill a true circle (it clamps to half the SHORTER side).
+  borderRadius: R.pill, width: 44, height: 44,
   cursor: "pointer",
   display: "flex", alignItems: "center", justifyContent: "center",
   flexShrink: 0, padding: 0,

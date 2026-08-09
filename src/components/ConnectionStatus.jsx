@@ -121,18 +121,20 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
           // supply — and that declaration is gone now (it squared off every
           // pill). Without a resting radius the hover state paints its opaque
           // --bg-hover-card as a hard-edged RECTANGLE behind the round dot.
-          // R.pill rather than "50%": the button is 24x40, so 50% would give a
-          // pointed ELLIPSE, while the pill clamps to half the narrow axis =
-          // 12px — which is exactly the shape the deleted hover rule used to
-          // draw, now expressed through the token.
+          // R.pill rather than "50%". v17.8.0 made the box SQUARE at 44 (it was
+          // 24x40 — a 24px-wide target for the control that opens the device
+          // list and Log out), so the pill now clamps to half of 44 and this is
+          // finally a true circle rather than the vertical egg the old
+          // width/height mismatch produced.
           borderRadius: R.pill,
-          padding: 6,
+          padding: 0,
           cursor: "pointer",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
           lineHeight: 0,
-          minHeight: 40,
+          width: 44,
+          height: 44,
         }}
       >
         <span
