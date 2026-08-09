@@ -217,13 +217,13 @@ export const ListView = memo(function ListView({
         ) : null;
 
         const manualTag = (b._manual && !isLocked(b)) ? (
-          <SmallTag label="manual" style={{ background: "#0369a1", color: "var(--text-on-accent)", border: "none" }} />
+          <SmallTag label="manual" style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         const lockedTag = b._locked ? (
-          <SmallTag label="locked" style={{ background: "#854d0e", color: "var(--text-on-accent)", border: "none" }} />
+          <SmallTag label="locked" style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (
-          <SmallTag label={"★ " + b.preferredTables.join("+")} style={{ background: "#0d9488", color: "var(--text-on-accent)", border: "none" }} />
+          <SmallTag label={"★ " + b.preferredTables.join("+")} style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         // v16.0.0: repeat no-show offender chip (same threshold as the timeline ⚠).
         const noShowCt = nsMap[normalizePhone(b.phone)] || 0;

@@ -285,7 +285,7 @@ export function BookingFormModal({
     const hasPref=prefs.length>0;
     const prefBtn=<button
       className="mgt-hover-scale"
-      style={mkBtn({background:hasPref?"#0d9488":"#64748b",fontSize:12,padding:"6px 10px"})}
+      style={mkBtn({background:hasPref?"var(--btn-tables)":BTN.nav,fontSize:12,padding:"6px 10px"})}
       onClick={function(){onOpenPrefPicker();}}>{hasPref?"★ "+prefs.join("+"):"★ Preferred"}</button>;
     if(editId){
       const cur=bookings.find(function(b){return b.id===editId;});

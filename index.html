@@ -71,8 +71,17 @@
         --block-seated: rgba(34, 160, 80, 0.85);
         --block-completed: rgba(140, 140, 150, 0.7);
         --block-cancelled: rgba(200, 80, 80, 0.8);
-        /* Table badges — bg .8 / border .5 share a hue (triplet); white text. */
-        --tbl-out-rgb: 0, 122, 255;
+        /* Table badges — bg .8 / border .5 share a hue (triplet); white text.
+           v17.8.0: outdoor was `0, 122, 255` — byte-identical to --accent. Nine
+           outdoor tables therefore painted the accent at all times, on every
+           screen, so nothing in the app could ever outrank a table label. A
+           table number is an IDENTITY, not an action or a state, and the
+           product rule is that accent means primary action or current
+           selection. Teal is the only free slot: green is seated/success,
+           amber is confirmed/pending, burnt orange is warn, red is danger,
+           purple is indoor. It also reads as "outside" next to indoor purple,
+           which the old blue never did. */
+        --tbl-out-rgb: 48, 176, 199;
         --tbl-ind-rgb: 175, 82, 222;
         --text-on-accent: #ffffff;
         /* Buttons — saturated accent fills, white text; theme-invariant. */
@@ -86,6 +95,14 @@
         --btn-nav: rgba(120, 130, 150, 0.5);
         --btn-dismiss: rgba(220, 60, 60, 0.7);
         --btn-orange: rgba(230, 100, 30, 0.8);
+        /* v17.8.0: booking-attribute FLAGS (manual / locked / preferred-tables).
+           They were three unrelated hand-picked hues — #0369a1 blue (a shade off
+           the accent), #854d0e (the pending-text amber) and #0d9488 teal (which
+           now collides with the outdoor tables) — for three tags of the SAME
+           kind sitting in the same row. The hue never carried meaning; the label
+           does. One graphite, deliberately deeper than the slate-400 `completed`
+           status so a flag can't be mistaken for a status. */
+        --tag-flag: #475569;
         /* ── v14.2.2: atoms / modal surfaces, borders, semantic text, banners ── */
         /* Surfaces */
         --bg-sheet: rgba(255, 255, 255, 0.72);         /* Overlay desktop dialog card */

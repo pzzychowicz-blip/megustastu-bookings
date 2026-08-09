@@ -95,7 +95,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
         <div style={{
           fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
           display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-          background: "#0d9488",
+          background: "var(--btn-tables)",
           border: "1px solid rgba(255,255,255,0.2)",
           boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
         }}>
@@ -135,8 +135,8 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                   onClick={() => togglePref(t.id)}
                   style={{
                     width: 64, height: 52, padding: 0, borderRadius: R.pill,
-                    border: "2px solid " + (isPref ? "#0d9488" : tc.bg),
-                    background: isPref ? "rgba(13,148,136,0.8)" : "rgba(255,255,255,0.4)",
+                    border: "2px solid " + (isPref ? "var(--accent)" : tc.bg),
+                    background: isPref ? "var(--btn-tables)" : "rgba(255,255,255,0.4)",
                     color: isPref ? "#fff" : S.text,
                     fontWeight: 600, fontSize: 14,
                     cursor: "pointer",
