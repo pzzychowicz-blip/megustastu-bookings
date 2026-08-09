@@ -79,7 +79,7 @@ export function TabBar({ tabs, current, onSelect }) {
               border: "none",
               background: active ? "var(--bg-tab-active)" : "transparent",
               color: active ? "var(--accent)" : "var(--text-muted)",
-              fontWeight: active ? 700 : 600,
+              fontWeight: active ? FW.bold : FW.semi,
               fontSize: T.body,
               cursor: "pointer",
               boxShadow: active ? "var(--shadow-btn)" : "none",

@@ -135,7 +135,33 @@ for (const file of walk(SRC)) {
     // literals in thirteen values, and 359 weight literals, had accreted into
     // sixteen distinct type styles on the app's emptiest screen. Use T and FW
     // (lib/constants.js); mark a genuine one-off with /* @canvas */.
-    const bareType = line.match(/font(?:Size|Weight):\s*"?[0-9]/);
+    //
+    // The value must START with T. or FW. — matching a bare DIGIT is not
+    // enough. The first version of this rule did exactly that, and three sites
+    // walked through it because their value is COMPUTED:
+    //   fontSize: isMobile ? 18 : 22        (the wordmark)
+    //   fontSize: d >= 36 ? 20 : 17         (mkStep's glyph)
+    //   fontWeight: active ? 700 : 600      (Settings' TabBar)
+    // Two of those numbers were not even on the scale. Same shape as the
+    // marker-placement bug: a check written around the form the violations
+    // happened to take, rather than around the invariant.
+    //
+    // Read the whole VALUE with styleValue, then judge it — two cheaper
+    // approaches were both wrong. Matching a bare digit after the colon misses
+    // a computed value (`fontSize: isMobile ? 18 : 22` — and 18 is not even on
+    // the scale). A negative lookahead misses too: `\s*` backtracks, so on
+    // `fontSize: T.body` it gives the space back, the lookahead reads " T."
+    // which does not start with "T.", and every correct site reports.
+    //
+    // So: strip the legitimate T./FW. references out of the value, then look
+    // for a number sitting where a font value would sit — the whole value, or
+    // a ternary branch. That leaves comparison operands alone, which is what
+    // makes `d >= 36 ? T.display : T.title` read as correct.
+    const bareType = ["fontSize", "fontWeight"].some((k) => {
+      const v = styleValue(line, k);
+      if (v == null) return false;
+      return /(^|[?:])\s*"?\d/.test(v.replace(/\b(?:T|FW)\.[a-zA-Z]+/g, ""));
+    });
     if (bareType && !/@canvas/.test(line)) {
       problems.push({
         file: rel, line: i + 1, rule: "type-scale",

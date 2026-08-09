@@ -94,7 +94,7 @@ export function mkStep(size) {
   return {
     background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
     borderRadius: R.pill, width: d, height: d,
-    fontSize: d >= 36 ? 20 : 17, fontWeight: FW.semi,
+    fontSize: d >= 36 ? T.display : T.title, fontWeight: FW.semi,
     color: "var(--text-primary)",
     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
     boxShadow: "var(--shadow-btn)"
