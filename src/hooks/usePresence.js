@@ -89,6 +89,13 @@ export function usePresence(){
   const offsetRef = useRef(0);
   const myRefRef = useRef(null);
   const beatRef = useRef(0);
+  // This connection's OWN resolved `since`, learned from the first presence
+  // snapshot that contains our child. The heartbeat rewrites the whole record
+  // (see below), and it must not reset `since` to "now" every 45s — that would
+  // make every device permanently read "just now". Null until the echo lands;
+  // the beat falls back to serverTimestamp() only in that first window, which
+  // is the one moment where "now" IS the right answer.
+  const sinceRef = useRef(null);
   // Has .info/serverTimeOffset actually delivered a value yet? The prune DELETES
   // other devices' children off a serverTimestamp comparison, so it must not run
   // on an assumed offset of 0 — see the gate in the presence listener.
@@ -126,12 +133,14 @@ export function usePresence(){
         // the guard below would block re-registration and the device would vanish
         // from `presence` for the rest of the session (sleep/wake, offline blip).
         myRefRef.current=null;
+        sinceRef.current=null;   // the next connection is a new child, new since
         stopBeat();
         return;
       }
       if(myRefRef.current) return;                // already registered this connection
       const myRef=push(ref(db,"presence"));
       myRefRef.current=myRef;
+      sinceRef.current=null;
       setMyKey(myRef.key);
       // onDisconnect FIRST so a clean drop is cleaned up immediately. The
       // heartbeat below is what covers the cases this cannot (see the header).
@@ -148,7 +157,13 @@ export function usePresence(){
       beatRef.current=setInterval(function(){
         const r=myRefRef.current;
         if(!r) return;
-        update(r,{email:email,ua:deviceLabel(),lastSeen:serverTimestamp()}).catch(function(){});
+        // `since` is in here for the same reason as email/ua: on a resurrection
+        // this update() is the ONLY write that will ever recreate the child, so
+        // anything left out is gone for the rest of the session. Without it the
+        // row came back with no "connected since" text. It is NOT a lie about
+        // when the connection started — the socket has been up continuously
+        // since this child was first registered; only the record was deleted.
+        update(r,{email:email,ua:deviceLabel(),since:sinceRef.current||serverTimestamp(),lastSeen:serverTimestamp()}).catch(function(){});
       },BEAT_MS);
       // Arm the prune. It cannot run HERE: `.info/connected` resolves before the
       // first `presence` snapshot lands, so at this moment we have no node to
@@ -208,6 +223,9 @@ export function usePresence(){
         // STALE_MS and then drops it until it reloads — a transitional cost on
         // a handful of devices, and the alternative (trusting a field that is
         // never refreshed) is the bug this whole change exists to fix.
+        // Learn our own resolved `since` so the heartbeat can rewrite it
+        // verbatim instead of stamping a fresh one every beat.
+        if(k===(myRefRef.current&&myRefRef.current.key)&&typeof v.since==="number") sinceRef.current=v.since;
         const seen=typeof v.lastSeen==="number"?v.lastSeen:(typeof v.since==="number"?v.since:0);
         if(!seen||now-seen>STALE_MS) return;
         list.push({key:k,email:v.email||"unknown",ua:v.ua||"Device",since:typeof v.since==="number"?v.since:null,lastSeen:typeof v.lastSeen==="number"?v.lastSeen:null});

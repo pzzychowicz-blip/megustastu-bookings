@@ -87,7 +87,14 @@ export function TabBar({ tabs, current, onSelect }) {
               // font-weight jumps 600->700 on activation, and `all` would have
               // tried to tween it), and it is the transition equivalent of a
               // wildcard import — you cannot tell what moves by reading it.
-              transition: "background-color " + M.tap + ", color " + M.tap + ", box-shadow " + M.tap
+              // `transform` IS in the list, and has to be: this button carries
+              // .mgt-hover-scale, an inline shorthand REPLACES the class's
+              // declaration (and `button {}`'s), and naming three properties
+              // here silently dropped the fourth — so the tab's hover lift and
+              // its press dip both snapped. Exactly the collision documented at
+              // index.html's .mgt-hover-scale rule, one layer up: an inline
+              // transition on a hover-scale element must list transform.
+              transition: "transform " + M.tap + ", background-color " + M.tap + ", color " + M.tap + ", box-shadow " + M.tap
             }}
           >
             {t.label}

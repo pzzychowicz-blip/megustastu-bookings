@@ -602,9 +602,9 @@
 
       /* Press feedback (ease-out, v15.8.0 cont.4) — the brightness dim, opt-in via
          .mgt-press on ~28 elements. v17.8.0 keeps it: brightness and scale read as
-         one press, and the two are orthogonal (filter vs transform). */
-         (Its `transition` moved up next to .mgt-hover-scale's — see the note
-         there for why the two had to become one declaration.) */
+         one press, and the two are orthogonal (filter vs transform).
+         Its `transition` moved up next to .mgt-hover-scale's — see the note
+         there for why the two had to become one declaration. */
       .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
 
       /* ── v17.8.0: universal press-scale ──────────────────────────────────────
