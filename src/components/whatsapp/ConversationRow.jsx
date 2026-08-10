@@ -47,7 +47,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{ cursor: "pointer", padding: "12px 14px", borderRadius: R.card, background: hover ? bgHover : bg, border, marginBottom: 6, transition: "background " + M.tap, boxShadow: (selHi || (active && !selectMode)) ? "0 2px 8px rgba(0,122,255,0.12)" : "var(--shadow-soft)", opacity: archivedDimming, display: "flex", alignItems: "center", gap: 10 }}
+      style={{ cursor: "pointer", padding: "12px 14px", borderRadius: R.card, background: hover ? bgHover : bg, border, marginBottom: 6, transition: "background " + M.tap, boxShadow: (selHi || (active && !selectMode)) ? "var(--wa-row-active-glow)" : "var(--shadow-soft)", opacity: archivedDimming, display: "flex", alignItems: "center", gap: 10 }}
     >
       {selectMode ? (
         <input
@@ -62,7 +62,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1 }}>
           {conv.unread
-            ? <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--wa-unread-dot)", flexShrink: 0, boxShadow: "0 0 0 1px rgba(220,38,38,0.25)" }} />
+            ? <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--wa-unread-dot)", flexShrink: 0, boxShadow: "var(--wa-unread-ring)" }} />
             : <span style={{ width: 8, height: 8, borderRadius: "50%", background: "transparent", border: "1px solid var(--wa-bubble-in-border)", flexShrink: 0, boxSizing: "border-box" }} />}
           <span style={{ fontSize: T.lead, fontWeight: conv.unread ? FW.bold : FW.semi, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
           {tagEl}

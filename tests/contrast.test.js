@@ -167,6 +167,43 @@ const FILLS = [
   { fill: "--tl-hour-pill", alpha: null, ink: "--text-on-accent", role: "label", what: "timeline hour pill / block start time" },
   { fill: "--tl-now-pill", alpha: null, ink: "--text-on-accent", role: "label", what: "timeline now-time pill" },
   { fill: "--tl-blocked-badge", alpha: null, ink: "--text-on-accent", role: "label", what: "blocked table badge" },
+
+  // ── The WhatsApp module (sandbox) ──────────────────────────────────────────
+  // A FOURTH naming family, and it was outside this file entirely — so the
+  // module reproduced the exact defect this file exists to catch, under a
+  // comment in index.html asserting almost word for word that its saturated
+  // fills were "theme-invariant". They were rgba(hue, 0.78-0.85): --wa-green
+  // measured 2.90:1 in light against 4.79 in dark, --wa-btn-open 2.98 / 5.42,
+  // and the outgoing chat bubble — the most-read text in the module — 3.15 /
+  // 5.13. All four are opaque now, which is why each pair below reads the same
+  // number in both themes: an opaque fill composites against nothing.
+  //
+  // --wa-green is held to the LABEL bar even though it is mostly a button,
+  // because its strictest use is the needs-action count chip at 10px bold.
+  // Register a fill by its hardest job, not its most common one.
+  { fill: "--wa-green", alpha: null, ink: "--text-on-accent", role: "label", what: "WA brand / needs-action count" },
+  { fill: "--wa-green-dark", alpha: null, ink: "--text-on-accent", role: "button", what: "Send" },
+  { fill: "--wa-btn-open", alpha: null, ink: "--text-on-accent", role: "button", what: "Accept & open / Apply changes" },
+  { fill: "--wa-btn-cancel", alpha: null, ink: "--text-on-accent", role: "button", what: "Cancel booking / Delete conversation" },
+  { fill: "--wa-btn-handled", alpha: null, ink: "--text-on-accent", role: "button", what: "Mark as handled / Restore" },
+  { fill: "--wa-bubble-out", alpha: null, ink: "--text-on-accent", role: "label", what: "outgoing chat bubble" },
+  { fill: "--wa-unread-dot", alpha: null, ink: "--text-on-accent", role: "label", what: "unread count badge" },
+  { fill: "--wa-sim-accent", alpha: null, ink: "--text-on-accent", role: "label", what: "simulator pill" },
+
+  // The module's SOFT fills. These already flipped correctly — they are here so
+  // that stays true, and because leaving half a family out of a coverage check
+  // is how the other half got missed.
+  { fill: "--wa-bubble-in", alpha: null, ink: "--text-primary", role: "label", what: "incoming chat bubble" },
+  { fill: "--wa-draft-bg", alpha: null, ink: "--wa-draft-text", role: "label", what: "draft card" },
+  { fill: "--wa-draft-bg", alpha: null, ink: "--wa-draft-text-dim", role: "label", what: "draft card (dim ink)" },
+  { fill: "--wa-accept-bg", alpha: null, ink: "--wa-accept-text", role: "label", what: "accepted-booking notice" },
+  { fill: "--wa-teal-bg", alpha: null, ink: "--wa-teal-text", role: "label", what: "linked-booking chip" },
+  { fill: "--wa-panel-bg", alpha: null, ink: "--text-primary", role: "label", what: "inbox panel" },
+  { fill: "--wa-row-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation row" },
+  { fill: "--wa-row-bg-hover", alpha: null, ink: "--text-primary", role: "label", what: "conversation row (hover)" },
+  { fill: "--wa-row-active-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation row (selected)" },
+  { fill: "--wa-list-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation-list pane" },
+  { fill: "--wa-header-bg", alpha: null, ink: "--text-primary", role: "label", what: "panel header strip" },
 ];
 
 const NEED = { label: 4.5, button: 3 };
@@ -248,6 +285,18 @@ describe("registry coverage", () => {
     // Fills that never sit under text. Each is a wash, a rail, or a rim.
     "--btn-nav-quiet": "date-arrow rail, glyph is --text-primary not white",
     "--tl-blocked-badge-border": "rim of the blocked badge, not its fill",
+    // WhatsApp module — rims, rails, scrims and two shadow values.
+    "--wa-bubble-in-border": "rim of the incoming bubble",
+    "--wa-bubble-out-border": "rim of the outgoing bubble",
+    "--wa-draft-border": "rim of the draft card",
+    "--wa-accept-border": "rim of the accepted notice",
+    "--wa-teal-border": "rim of the linked-booking chip",
+    "--wa-row-active-border": "rim of the selected row",
+    "--wa-divider": "hairline between rows / header strips",
+    "--wa-panel-scrim": "scrim behind the panel, nothing sits on it",
+    "--wa-shimmer": "the parsing sweep, a moving gradient stop",
+    "--wa-unread-ring": "a box-shadow, not a fill",
+    "--wa-row-active-glow": "a box-shadow, not a fill",
   };
   const registered = new Set(FILLS.map((f) => f.fill));
 
@@ -258,9 +307,13 @@ describe("registry coverage", () => {
     // shape that actually carries text on this view is a pill or a badge, and
     // that is what the next one will be called too.
     const candidates = Object.keys(LIGHT_VARS).filter((k) =>
-      /^--(block-|btn-|app-btn-|app-new|app-walkin|tbl-.*-rgb|tl-.*(pill|badge))/.test(k)
+      /^--(block-|btn-|app-btn-|app-new|app-walkin|tbl-.*-rgb|tl-.*(pill|badge)|wa-)/.test(k)
     );
-    const missing = candidates.filter((k) => !registered.has(k) && !(k in DECORATIVE));
+    // `*-text*` tokens are INKS, not fills — they are checked by the
+    // ink-exists test below and measured as the ink half of a pair above.
+    const missing = candidates.filter(
+      (k) => !registered.has(k) && !(k in DECORATIVE) && !/-text(-dim)?$/.test(k)
+    );
     expect(
       missing,
       "unregistered text-bearing fill(s): " + missing.join(", ") +

@@ -284,10 +284,25 @@
            with Scheduling — keep this value identical across both apps. */
         --bg-hover-card: #ffffff;
         /* ── WhatsApp module (sandbox) — green brand + module surfaces/banners.
-           Saturated fills (green, action buttons, unread dot, bubble-out) are
-           theme-invariant and kept here; only the soft surfaces/banners flip. */
-        --wa-green: rgba(20, 150, 110, 0.82);
-        --wa-green-dark: rgba(15, 120, 88, 0.9);
+           The soft surfaces/banners below flip with the theme (see the dark
+           block); the saturated, TEXT-BEARING fills are OPAQUE, which is what
+           makes them genuinely theme-invariant rather than merely asserted to
+           be. They used to be `rgba(hue, 0.78–0.85)` under a comment claiming
+           exactly that — the same sentence, almost word for word, that v17.8.0
+           disproved for the --block, --btn and --tbl families one module over.
+           An alpha fill composites toward what is BEHIND it, so it lands
+           somewhere different per theme: measured with white ink, --wa-green
+           was 2.90:1 in light and 4.79 in dark, --wa-btn-open 2.98 / 5.42, and
+           the outgoing chat BUBBLE — the module's most-read text — 3.15 / 5.13.
+           Dark passed every time; light, the one running on a terrace tablet in
+           Canary daylight, failed every time.
+           Dropping the alpha fixes both themes with ONE value, because an
+           opaque fill composites against nothing: three of them needed no other
+           change, and green / bubble-out / sim-accent took a small darkening on
+           top. Registered in tests/contrast.test.js, which now fails on an
+           unregistered --wa-* fill. */
+        --wa-green: rgb(18, 134, 98);
+        --wa-green-dark: rgb(15, 120, 88);
         --wa-panel-bg: rgba(248, 250, 253, 0.96);    /* inbox panel card */
         --wa-panel-scrim: rgba(0, 0, 0, 0.28);
         --wa-header-bg: rgba(255, 255, 255, 0.55);   /* panel/conversation header strips */
@@ -298,15 +313,20 @@
         --wa-row-active-border: rgba(0, 122, 255, 0.5);
         --wa-divider: rgba(200, 210, 225, 0.7);
         --wa-bubble-in: rgba(255, 255, 255, 0.85);   --wa-bubble-in-border: rgba(200, 210, 225, 0.7);
-        --wa-bubble-out: rgba(0, 122, 255, 0.82);    --wa-bubble-out-border: rgba(0, 122, 255, 0.5);
+        --wa-bubble-out: rgb(0, 114, 238);           --wa-bubble-out-border: rgba(0, 90, 190, 0.55);
         --wa-draft-bg: rgba(254, 249, 195, 0.8);  --wa-draft-border: rgba(253, 224, 71, 0.65);  --wa-draft-text: #854d0e;  --wa-draft-text-dim: #713f12;
         --wa-accept-bg: rgba(220, 252, 231, 0.7); --wa-accept-border: rgba(134, 239, 172, 0.6); --wa-accept-text: #166534;
         --wa-teal-text: #0f766e;  --wa-teal-bg: rgba(13, 148, 136, 0.10);  --wa-teal-border: rgba(13, 148, 136, 0.35);
-        --wa-btn-open: rgba(0, 122, 255, 0.78);
-        --wa-btn-cancel: rgba(220, 38, 38, 0.85);
-        --wa-btn-handled: rgba(13, 148, 136, 0.85);
+        --wa-btn-open: rgb(0, 122, 255);
+        --wa-btn-cancel: rgb(220, 38, 38);
+        --wa-btn-handled: rgb(13, 148, 136);
         --wa-unread-dot: #dc2626;
-        --wa-sim-accent: rgba(168, 85, 247, 0.85);   /* dev-only simulator chrome */
+        /* Two rings that were hard-coded COPIES of the two values above —
+           the failure mode CLAUDE.md names: retune the token and the copy
+           silently keeps the old hue. Grep the value, not the name. */
+        --wa-unread-ring: 0 0 0 1px rgba(220, 38, 38, 0.25);
+        --wa-row-active-glow: 0 2px 8px rgba(0, 122, 255, 0.12);
+        --wa-sim-accent: rgb(155, 79, 228);          /* dev-only simulator chrome */
         /* ── v17.7.0: corner-radius scale. Radii are theme-agnostic, so these
            live ONLY here and are deliberately NOT duplicated into the
            [data-theme="dark"] block below.
