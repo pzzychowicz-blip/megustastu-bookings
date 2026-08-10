@@ -19,7 +19,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
     // re-shown when a new inbound message clears that stamp.
     if (conv.acceptedBadgeDismissedAt) return null;
     return (
-      <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--wa-accept-bg)", border: "2px solid var(--wa-accept-border)", marginBottom: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.04)", position: "relative" }}>
+      <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--wa-accept-bg)", border: "2px solid var(--wa-accept-border)", marginBottom: 12, boxShadow: "var(--shadow-soft)", position: "relative" }}>
         <button
           onClick={() => { if (onDismissAcceptedBadge) onDismissAcceptedBadge(conv.phoneKey); }}
           title="Dismiss"
@@ -75,7 +75,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   if (compact) {
     const smallBtn = (bg, fw, border) => ({ background: bg, border, borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: fw, color: "var(--text-on-accent)", minHeight: 32, flexShrink: 0 });
     return (
-      <div style={{ borderRadius: R.card, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", marginBottom: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+      <div style={{ borderRadius: R.card, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", marginBottom: 12, boxShadow: "var(--shadow-soft)", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", flexWrap: "wrap" }}>
           {/* The draft section itself is the toggle (when there's detail to show). */}
           <div
@@ -105,7 +105,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   }
 
   return (
-    <div style={{ padding: "14px 16px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", marginBottom: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+    <div style={{ padding: "14px 16px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", marginBottom: 12, boxShadow: "var(--shadow-soft)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: T.lead }}>📋</span>
@@ -124,12 +124,12 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
         <button
           onClick={onAccept}
           className="mgt-hover-scale mgt-press"
-          style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "9px 16px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 40, boxShadow: "0 2px 6px rgba(0,122,255,0.22), inset 0 1px 1px rgba(255,255,255,0.2)" }}
+          style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "9px 16px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 40, boxShadow: "var(--shadow-btn)" }}
         >Accept &amp; open</button>
         <button
           onClick={onDismiss}
           className="mgt-hover-scale mgt-press"
-          style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, padding: "9px 16px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 40, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}
+          style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, padding: "9px 16px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 40, boxShadow: "var(--shadow-btn)" }}
         >Dismiss</button>
       </div>
     </div>

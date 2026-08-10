@@ -330,7 +330,7 @@ export function InboxPanel({
   function tabBtn(key, label, badge) {
     const isActive = tab === key;
     return (
-      <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: R.pill, padding: "5px 12px", fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.08)" : "none" }}>
+      <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: R.pill, padding: "5px 12px", fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: isActive ? "var(--shadow-btn)" : "none" }}>
         {label}
         {badge != null && badge > 0 ? <span style={{ fontSize: T.micro, fontWeight: FW.bold, padding: "1px 6px", borderRadius: R.pill, background: isActive ? "var(--wa-unread-dot)" : "var(--btn-default)", color: "var(--text-on-accent)", lineHeight: 1.4 }}>{badge}</span> : null}
       </button>

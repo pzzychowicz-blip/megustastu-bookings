@@ -23,7 +23,7 @@ function TemplateChips({ templates, convLang, onInsert, scrollLang }) {
       key={t.id}
       className="mgt-hover-scale"
       onClick={() => onInsert(outLang === "es" ? t.textEs : t.textEn)}
-      style={{ flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-primary)", boxShadow: "0 1px 2px rgba(0,0,0,0.04)", whiteSpace: "nowrap" }}
+      style={{ flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-primary)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
     >{outLang === "es" ? t.labelEs : t.labelEn}</button>
   ));
 
@@ -122,7 +122,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
           onClick={() => setTplOpen((v) => !v)}
           title="Templates"
           className="mgt-hover-scale mgt-press"
-          style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: R.pill, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "0 1px 2px rgba(0,0,0,0.04)", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
+          style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: R.pill, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "var(--shadow-btn)", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
         ><TemplatesIcon size={18} /></button>
         <textarea
           ref={areaRef}
@@ -148,7 +148,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
           onClick={send}
           disabled={!canSend}
           className="mgt-hover-scale mgt-press"
-          style={{ background: canSend ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "10px 18px", cursor: canSend ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44, boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)" }}
+          style={{ background: canSend ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "10px 18px", cursor: canSend ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44, boxShadow: "var(--shadow-btn)" }}
         >Send</button>
       </div>
     </div>

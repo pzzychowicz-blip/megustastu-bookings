@@ -48,7 +48,7 @@ export function MessageBubble({ msg, isLast, onRetry }) {
             ever retuned, and it cannot be a pill — the bubble wraps to any
             height, and on --r-pill a multi-line bubble's corner curve eats the
             first and last characters (the same trap that produced mkArea). */}
-        <div style={{ background: bg, color, border, borderRadius: 14, padding: "8px 12px", fontSize: T.lead, lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", opacity: msg.status === "sending" ? 0.7 : 1 }}>{msg.text}</div>
+        <div style={{ background: bg, color, border, borderRadius: 14 /* @canvas */, padding: "8px 12px", fontSize: T.lead, lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word", boxShadow: "var(--shadow-soft)", opacity: msg.status === "sending" ? 0.7 : 1 }}>{msg.text}</div>
         <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: 3, padding: "0 4px", display: "flex", alignItems: "center" }}>
           {formatClockTime(msg.ts)}{ackTag}{statusEl}{retryEl}
         </div>

@@ -173,7 +173,7 @@ export function ConversationView({
       disabled={running}
       title={running ? "Checking…" : "Re-check this conversation for requested changes"}
       className={running ? undefined : "mgt-hover-scale mgt-press"}
-      style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 9px", cursor: running ? "default" : "pointer", color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "center", opacity: running ? 0.6 : 1 }}
+      style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 9px", cursor: running ? "default" : "pointer", color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "var(--shadow-btn)", display: "flex", alignItems: "center", justifyContent: "center", opacity: running ? 0.6 : 1 }}
     >
       {/* The spin is a LOOP — nothing arrives and nothing leaves, so neither
           direction curve describes it and it keeps `linear`. Documented
@@ -187,15 +187,15 @@ export function ConversationView({
     headerActionBtns = (
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
-        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 10px", cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>↺ Restore</button>
-        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 10px", cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>🗑 Delete</button>
+        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 10px", cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }}>↺ Restore</button>
+        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 10px", cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }}>🗑 Delete</button>
       </div>
     );
   } else {
     headerActionBtns = (
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
-        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 10px", cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>📦 Archive</button>
+        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 10px", cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "var(--shadow-btn)" }}>📦 Archive</button>
       </div>
     );
   }

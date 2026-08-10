@@ -48,7 +48,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
           onClick={() => { if (onApplyChanges) onApplyChanges(); }}
           title="Open the booking pre-filled with the requested changes"
           className="mgt-hover-scale mgt-press"
-          style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "0 1px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
+          style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
         >✎ Apply changes</button>
       ) : null}
       <button
@@ -59,7 +59,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
         }}
         title="Mark this request as handled"
         className="mgt-hover-scale mgt-press"
-        style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: leaving ? "default" : "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "0 1px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
+        style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: leaving ? "default" : "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
       >✓ Mark as handled</button>
     </div>
   );
@@ -68,7 +68,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
   // header stays put and the details ease open/closed instead of the
   // collapsed-strip ⇄ full-card swap snapping the layout.
   return (
-    <div style={{ padding: "10px 14px", borderRadius: R.card, background: bg, border, marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", opacity: leaving ? 0 : 1, transition: "opacity " + M.exit }}>
+    <div style={{ padding: "10px 14px", borderRadius: R.card, background: bg, border, marginBottom: 10, boxShadow: "var(--shadow-soft)", opacity: leaving ? 0 : 1, transition: "opacity " + M.exit }}>
       <div onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
         <span style={{ fontSize: T.lead, flexShrink: 0 }}>{icon}</span>
         <span style={{ fontSize: T.body, fontWeight: FW.semi, color, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>

@@ -61,6 +61,13 @@ const FIXED_FILL = [
 const THEME_FILL = [
   /var\(--bg-[a-z-]+\)/, /var\(--(warn|danger|suggest)-bg[a-z-]*\)/,
   /var\(--border-[a-z-]+\)/, /var\(--text-[a-z-]+\)/,
+  // The whole --wa-* family (WA sandbox). Listed as FLIPPING, not as fixed:
+  // several of them already had dark overrides and the rest gained one in the
+  // 17.8.0-wa-sandbox contrast pass, so a white inset over any of them is the
+  // bug this rule exists for. Without this line the checker walked past the
+  // module entirely — the same prefix-blindness CLAUDE.md records for
+  // --app-btn-grey.
+  /var\(--wa-[a-z-]+\)/,
 ];
 
 // Read a style value: everything after `key:` up to the first TOP-LEVEL comma.

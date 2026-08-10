@@ -24,13 +24,13 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
       <button
         onClick={onOpen}
         className="mgt-hover-scale mgt-press"
-        style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
+        style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
       >Open booking</button>
       {canCancel ? (
         <button
           onClick={onCancel}
           className="mgt-hover-scale mgt-press"
-          style={{ background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "0 1px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
+          style={{ background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
         >Cancel booking</button>
       ) : null}
     </div>
@@ -39,7 +39,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
   // Unified header + Reveal body (the app's Collapsible pattern) so the
   // collapse/expand eases instead of the strip ⇄ card swap snapping.
   return (
-    <div style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", marginBottom: 8, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+    <div style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", marginBottom: 8, boxShadow: "var(--shadow-soft)" }}>
       <div onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
         <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--wa-teal-text)", textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0 }}>🔗 Linked booking</span>
         <span style={{ fontSize: T.micro, padding: "2px 8px", borderRadius: R.pill, background: statusColor, color: "var(--text-on-accent)", fontWeight: FW.bold, textTransform: "capitalize", flexShrink: 0 }}>{booking.status}</span>

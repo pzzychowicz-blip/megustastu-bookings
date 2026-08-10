@@ -47,7 +47,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{ cursor: "pointer", padding: "12px 14px", borderRadius: R.card, background: hover ? bgHover : bg, border, marginBottom: 6, transition: "background " + M.tap, boxShadow: (selHi || (active && !selectMode)) ? "0 2px 8px rgba(0,122,255,0.12)" : "0 1px 3px rgba(0,0,0,0.04)", opacity: archivedDimming, display: "flex", alignItems: "center", gap: 10 }}
+      style={{ cursor: "pointer", padding: "12px 14px", borderRadius: R.card, background: hover ? bgHover : bg, border, marginBottom: 6, transition: "background " + M.tap, boxShadow: (selHi || (active && !selectMode)) ? "0 2px 8px rgba(0,122,255,0.12)" : "var(--shadow-soft)", opacity: archivedDimming, display: "flex", alignItems: "center", gap: 10 }}
     >
       {selectMode ? (
         <input
