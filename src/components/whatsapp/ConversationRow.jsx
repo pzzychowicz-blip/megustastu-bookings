@@ -18,7 +18,11 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
   // Parsing/typing tag (sandbox inbound path) takes visual priority — the
   // message is mid-parse, so the intent/draft tag isn't known yet.
   let tagEl = null;
-  if (isParsing(conv)) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: T.micro, fontWeight: FW.semi, marginLeft: 6, padding: "1px 7px", borderRadius: R.pill, color: "var(--accent)", border: "1px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
+  // The ink is --text-secondary, not --accent: at 10px bold, accent-on-row
+  // measures 4.02:1 light / 3.62 dark, under the 4.5 a small label needs.
+  // Nothing is lost — the SHIMMER is what says "in progress", and the
+  // accent was decorating a state the animation already announces.
+  if (isParsing(conv)) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: T.micro, fontWeight: FW.semi, marginLeft: 6, padding: "1px 7px", borderRadius: R.pill, color: "var(--text-secondary)", border: "2px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
   else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--danger-text)", fontWeight: FW.semi }}>⚠</span>;
   else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--warn-text)", fontWeight: FW.semi }}>✎</span>;
   else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ fontSize: T.body, marginLeft: 6 }}>📋</span>;

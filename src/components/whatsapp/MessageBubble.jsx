@@ -17,14 +17,22 @@ export function MessageBubble({ msg, isLast, onRetry }) {
   const border = incoming ? "1px solid var(--wa-bubble-in-border)" : "1px solid var(--wa-bubble-out-border)";
   const align = incoming ? "flex-start" : "flex-end";
 
+  // The meta row these three live in sits BELOW the bubble, on the panel — not
+  // inside it. They were coloured as if they were inside: white-on-white
+  // literals picked against the blue outgoing bubble, rendered over a near-white
+  // panel. In light mode "auto · delivered" was invisible and "· failed" nearly
+  // so; in dark mode all three read fine, which is why it survived. Same shape
+  // as the fills this version made opaque — dark is the easy case.
+  // They take the row's own tokens now, and `auto` is TEXT rather than a chip:
+  // it sits among plain text and the row is already muted.
   const ackTag = msg.isAutoAck ? (
-    <span style={{ fontSize: T.micro, fontWeight: FW.regular, color: incoming ? "var(--text-muted)" : "rgba(255,255,255,0.75)", marginLeft: 6, padding: "1px 6px", borderRadius: R.pill, background: incoming ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.18)" }}>auto</span>
+    <span style={{ fontSize: T.micro, fontWeight: FW.regular, color: "var(--text-muted)", marginLeft: 6, fontStyle: "italic" }}>auto</span>
   ) : null;
 
   let statusEl = null;
   if (!incoming && msg.status) {
     const map = { sending: "· sending", delivered: "· delivered", read: "· read", failed: "· failed" };
-    const statColor = msg.status === "failed" ? "rgba(254,202,202,0.95)" : "rgba(255,255,255,0.75)";
+    const statColor = msg.status === "failed" ? "var(--danger-text)" : "var(--text-muted)";
     statusEl = <span style={{ fontSize: T.micro, color: statColor, marginLeft: 4 }}>{map[msg.status] || ""}</span>;
   }
 
@@ -35,7 +43,7 @@ export function MessageBubble({ msg, isLast, onRetry }) {
       onClick={() => onRetry(msg.id)}
       className="mgt-hover-scale mgt-press"
       title="Resend this message"
-      style={{ marginLeft: 6, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", borderRadius: R.pill, padding: "1px 7px", cursor: "pointer", fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}
+      style={{ marginLeft: 6, background: "transparent", border: "2px solid var(--danger-border)", borderRadius: R.pill, padding: "1px 7px", cursor: "pointer", fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}
     >↻ Retry</button>
   ) : null;
 

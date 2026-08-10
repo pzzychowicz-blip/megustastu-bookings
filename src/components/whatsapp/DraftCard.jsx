@@ -56,7 +56,11 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   // was saved as "high").
   const conf = clampConfidence(d.confidence, d);
   const confColor = conf === "low" ? "var(--danger-text)" : conf === "medium" ? "var(--warn-text)" : "var(--success-text)";
-  const confBg = conf === "low" ? "var(--danger-bg)" : conf === "medium" ? "var(--warn-bg)" : "var(--suggest-bg)";
+  // v17.8.0 label treatments: OUTLINE, not a pale fill. This chip lives
+  // INSIDE the draft card, which already has its own fill and 2px rim — a
+  // filled chip in a filled container is the card-inside-a-card shape the
+  // sweep bans. The border hue carries the confidence on its own.
+  const confBorder = conf === "low" ? "var(--danger-border)" : conf === "medium" ? "var(--warn-border)" : "var(--suggest-border)";
   const confLbl = conf;
   // Seating preference suffix — only shown when the customer stated an area
   // (indoor/outdoor); "auto"/unset adds nothing (it's the default).
@@ -88,7 +92,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
             {hasDetail ? <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)", flexShrink: 0 }}>{expanded ? "▾" : "▸"}</span> : null}
           </div>
           {/* Confidence level — always shown, immediately left of Accept. */}
-          <span title={confLbl + " confidence"} style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 8px", borderRadius: R.pill, background: confBg, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em", flexShrink: 0 }}>{confLbl}</span>
+          <span title={confLbl + " confidence"} style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", border: "2px solid " + confBorder, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em", flexShrink: 0 }}>{confLbl}</span>
           <button onClick={onAccept} className="mgt-hover-scale mgt-press" style={smallBtn("var(--wa-btn-open)", 700, "1px solid rgba(255,255,255,0.2)")}>Accept</button>
           <button onClick={onDismiss} className="mgt-hover-scale mgt-press" style={smallBtn("var(--btn-default)", 600, "1px solid var(--border-glass)")}>Dismiss</button>
         </div>
@@ -111,7 +115,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           <span style={{ fontSize: T.lead }}>📋</span>
           <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)" }}>Draft booking — parsed from message</span>
         </div>
-        <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 8px", borderRadius: R.pill, background: confBg, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl + " confidence"}</span>
+        <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", border: "2px solid " + confBorder, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl + " confidence"}</span>
       </div>
       <div style={{ fontSize: T.lead, color: "var(--wa-draft-text-dim)", lineHeight: 1.6, marginBottom: d.ambiguity ? 8 : 12 }}>
         <span style={{ fontWeight: FW.semi }}>{(d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time") + prefSuffix}</span>

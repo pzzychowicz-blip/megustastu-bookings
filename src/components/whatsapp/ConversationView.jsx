@@ -124,7 +124,7 @@ export function ConversationView({
   // "Booking confirmed" header chip — non-dismissable (the big DraftCard banner
   // is the dismissable element instead).
   const acceptedBadge = conv.draftStatus === "accepted"
-    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 8px", borderRadius: R.pill, background: "var(--wa-accept-bg)", color: "var(--wa-accept-text)", border: "1px solid var(--wa-accept-border)" }}>✓ Booking confirmed</span>
+    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", color: "var(--wa-accept-text)", border: "2px solid var(--wa-accept-border)" }}>✓ Booking confirmed</span>
     : null;
   // The disclosure lists the customer's OTHER visits. The linked booking is
   // already rendered in full by LinkedBookingCard a few lines below, and now the
@@ -141,7 +141,7 @@ export function ConversationView({
   // It is only a BUTTON when there is something to disclose: a customer whose
   // single completed visit is the linked one still earns the chip, but tapping
   // it would open an empty "Past bookings" box.
-  const chipStyle = { background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", borderRadius: R.pill, padding: "3px 10px", fontSize: T.small, fontWeight: FW.semi, color: "var(--wa-teal-text)" };
+  const chipStyle = { background: "transparent", border: "2px solid var(--wa-teal-border)", borderRadius: R.pill, padding: "3px 10px", fontSize: T.small, fontWeight: FW.semi, color: "var(--wa-teal-text)" };
   const regularChip = match && match.regularCount >= 1
     ? (pastList.length
       ? <button className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)} style={Object.assign({}, chipStyle, { cursor: "pointer" })}>{regularChipLabel(match.regularCount, regularMin) + (histOpen ? " ▾" : " ▸")}</button>
@@ -159,7 +159,7 @@ export function ConversationView({
     </div>
   ) : null;
   const windowEl = win
-    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 8px", borderRadius: R.pill, background: win.expired ? "var(--danger-bg)" : "var(--suggest-bg)", color: win.expired ? "var(--danger-text)" : "var(--success-text)", border: "1px solid " + (win.expired ? "var(--danger-border)" : "var(--suggest-border)") }}>{win.label}</span>
+    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", color: win.expired ? "var(--danger-text)" : "var(--success-text)", border: "2px solid " + (win.expired ? "var(--danger-border)" : "var(--suggest-border)") }}>{win.label}</span>
     : null;
 
   // Manual LLM re-check — leftmost of the header actions in BOTH states (an
@@ -226,7 +226,7 @@ export function ConversationView({
         <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
         {regularChip}
         {acceptedBadge}
-        {conv.archived ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 8px", borderRadius: R.pill, background: "var(--bg-soft)", color: "var(--text-muted)", border: "1px solid var(--border-soft)" }}>📦 Archived</span> : null}
+        {conv.archived ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", color: "var(--text-muted)", border: "2px solid var(--border-soft)" }}>📦 Archived</span> : null}
         {windowEl}
         <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
       </div>
