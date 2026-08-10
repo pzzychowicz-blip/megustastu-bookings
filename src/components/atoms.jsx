@@ -312,9 +312,22 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // the only shape prod ever uses, and it is byte-for-byte prod's Reveal — the
 // M.shift token pair plus the fixed 300/320 timeouts. PASSED, the transition
 // becomes an explicit millisecond value on the same --ease-out curve and the
-// two timeouts scale with it, so they keep the relationship they were tuned in
-// (the unmount lands after the height; `revealed` after that). Used by the WA
-// conversation list, whose per-row collapse runs slower than the house speed.
+// two timeouts scale with it, so the unmount lands after the height and
+// `revealed` after that. Used by the WA conversation list, whose per-row
+// collapse runs slower than the house speed.
+//
+// KNOWN, and PROD's, not the sandbox's — do not "fix" it here or the next sync
+// conflicts: on the DEFAULT path those two timeouts do NOT hold that ordering.
+// The track runs M.shift (--t-shift, 385ms) while the unmount fires at 300 and
+// `revealed` at 320, both inherited from when the house Reveal was 280ms. So
+// the children are dropped at 78% of the collapse. It is invisible in practice
+// — cubic-out is ~97% travelled by then, leaving ~2% of height and 0.02 opacity
+// — which is exactly why it has survived. Same arithmetic in useRevealRows,
+// whose PRUNE_MS is 350 under a comment reading "> Reveal's ~300ms collapse".
+// The `k = ms / 280` divisor is the same fossil: 280 is a duration that no
+// longer exists anywhere. Any ms ≥ 280 still scales safely (k ≥ 1 ⇒ unmount
+// ≥ 300 > ms only holds from ms ≈ 300 up; the one live caller passes 365 → 391,
+// which is correct). Fix belongs on main, in one commit with PRUNE_MS.
 export function Reveal({ show, children, style, horizontal = false, ms = null }) {
   const trackMs = ms == null ? M.shift : ms + "ms var(--ease-out)";
   const k = ms == null ? 1 : ms / 280;

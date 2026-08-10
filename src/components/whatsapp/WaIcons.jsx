@@ -153,7 +153,17 @@ export function PencilIcon({ size = 16, color = "currentColor" }) {
 }
 
 // ── Dev-simulator chrome (sandbox only) ───────────────────────────────────────
-// FlaskIcon (was 🧪), DiceIcon (was 🎲), SparkIcon (was ✨), BurstIcon (was 🌊).
+// FlaskIcon (was 🧪) heads the panel button and the modal title; DiceIcon
+// (was 🎲) heads the Generate-scenario section.
+//
+// There were two more here — a SparkIcon for ✨ Suggest and a BurstIcon for
+// 🌊 Simulate a burst — and they were dead on arrival: the sweep deleted those
+// two emoji from the button LABELS and never mounted the replacements, so both
+// components shipped with zero call sites under a comment claiming they were in
+// use. Removed rather than wired up, because "Suggest reply" and "Simulate a
+// burst" are full-word labels on a dev-only panel and the glyph was decoration.
+// Note that lint cannot catch this class of thing: an unused *export* has no
+// unused-variable to report. Grep a new icon's call sites before trusting it.
 export function FlaskIcon({ size = 16, color = "currentColor" }) {
   return (
     <Svg size={size} color={color}>
@@ -172,23 +182,6 @@ export function DiceIcon({ size = 16, color = "currentColor" }) {
       <line x1="12" y1="12" x2="12.1" y2="12" />
       <line x1="8.5" y1="15.5" x2="8.6" y2="15.5" />
       <line x1="15.5" y1="15.5" x2="15.6" y2="15.5" />
-    </Svg>
-  );
-}
-export function SparkIcon({ size = 16, color = "currentColor" }) {
-  return (
-    <Svg size={size} color={color}>
-      <path d="M12 3.5 13.7 9 19 10.7 13.7 12.4 12 18l-1.7-5.6L5 10.7 10.3 9Z" />
-      <path d="M18.5 16.5l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z" />
-    </Svg>
-  );
-}
-export function BurstIcon({ size = 16, color = "currentColor" }) {
-  return (
-    <Svg size={size} color={color}>
-      <path d="M2.5 8.5c2-2 3.6-2 5.5 0s3.5 2 5.5 0 3.6-2 5.5 0" />
-      <path d="M2.5 13.5c2-2 3.6-2 5.5 0s3.5 2 5.5 0 3.6-2 5.5 0" />
-      <path d="M2.5 18.5c2-2 3.6-2 5.5 0s3.5 2 5.5 0 3.6-2 5.5 0" />
     </Svg>
   );
 }
