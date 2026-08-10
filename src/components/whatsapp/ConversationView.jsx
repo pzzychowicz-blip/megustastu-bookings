@@ -7,7 +7,7 @@
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, regularChipLabel, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal } from "../atoms";
-import { RecheckIcon } from "./WaIcons";
+import { RecheckIcon, TrashIcon, ArchiveIcon, DraftIcon } from "./WaIcons";
 import { MessageBubble } from "./MessageBubble";
 import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
@@ -164,7 +164,7 @@ export function ConversationView({
 
   // Manual LLM re-check — leftmost of the header actions in BOTH states (an
   // archived thread can be re-checked too; that's often exactly why you opened
-  // it). Icon-only to match the panel header's Templates/🧪 buttons, and it
+  // it). Icon-only to match the panel header's Templates / simulator buttons, and it
   // spins while the round-trip is in flight.
   const running = recheck === "running";
   const recheckBtn = onRecheck ? (
@@ -188,14 +188,14 @@ export function ConversationView({
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
         <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }}>↺ Restore</button>
-        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }}>🗑 Delete</button>
+        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }} ><TrashIcon size={13} />Delete</button>
       </div>
     );
   } else {
     headerActionBtns = (
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
-        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "var(--shadow-btn)" }}>📦 Archive</button>
+        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "var(--shadow-btn)" }} ><ArchiveIcon size={13} />Archive</button>
       </div>
     );
   }
@@ -226,7 +226,7 @@ export function ConversationView({
         <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
         {regularChip}
         {acceptedBadge}
-        {conv.archived ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", color: "var(--text-muted)", border: "2px solid var(--border-soft)" }}>📦 Archived</span> : null}
+        {conv.archived ? <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", color: "var(--text-muted)", border: "2px solid var(--border-soft)" }} ><ArchiveIcon size={12} />Archived</span> : null}
         {windowEl}
         <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
       </div>
@@ -261,7 +261,7 @@ export function ConversationView({
           lands). The real DraftCard Reveals in as this Reveals out. */}
       <Reveal show={isParsing(conv)} style={{ padding: "0 14px" }}>
         <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: T.lead }}>📋</span>
+          <span style={{ color: "var(--wa-draft-text)", display: "inline-flex" }}><DraftIcon size={15} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)", marginBottom: 6 }}>Reading the message…</div>
             <div className="mgt-shimmer" style={{ height: 8, borderRadius: R.pill, background: "var(--wa-draft-border)" }} />

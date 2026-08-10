@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, formatPhone, formatRelativeTime, isParsing } from "../../lib/whatsapp";
 import { R, T, FW, M } from "../../lib/constants";
+import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon } from "./WaIcons";
 
 export function ConversationRow({ conv, active, onClick, bookings, flipId, selectMode, checked }) {
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
@@ -23,9 +24,9 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
   // Nothing is lost — the SHIMMER is what says "in progress", and the
   // accent was decorating a state the animation already announces.
   if (isParsing(conv)) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: T.micro, fontWeight: FW.semi, marginLeft: 6, padding: "1px 7px", borderRadius: R.pill, color: "var(--text-secondary)", border: "2px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
-  else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--danger-text)", fontWeight: FW.semi }}>⚠</span>;
-  else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--warn-text)", fontWeight: FW.semi }}>✎</span>;
-  else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ fontSize: T.body, marginLeft: 6 }}>📋</span>;
+  else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--danger-text)", fontWeight: FW.semi, display: "inline-flex", alignItems: "center" }}><WarnIcon size={13} /></span>;
+  else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--warn-text)", fontWeight: FW.semi, display: "inline-flex", alignItems: "center" }}><PencilIcon size={13} /></span>;
+  else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ marginLeft: 6, color: "var(--text-secondary)", display: "inline-flex", alignItems: "center" }}><DraftIcon size={13} /></span>;
   else if (hasAccepted) tagEl = <span title="Booking confirmed" style={{ fontSize: T.body, marginLeft: 6, color: "var(--success-text)", fontWeight: FW.semi }}>✓</span>;
 
   const archivedDimming = conv.archived ? 0.65 : 1;
@@ -70,7 +71,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
             : <span style={{ width: 8, height: 8, borderRadius: "50%", background: "transparent", border: "1px solid var(--wa-bubble-in-border)", flexShrink: 0, boxSizing: "border-box" }} />}
           <span style={{ fontSize: T.lead, fontWeight: conv.unread ? FW.bold : FW.semi, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
           {tagEl}
-          {conv.archived ? <span title="Archived" style={{ fontSize: T.small, marginLeft: 4 }}>📦</span> : null}
+          {conv.archived ? <span title="Archived" style={{ marginLeft: 4, color: "var(--text-muted)", display: "inline-flex", alignItems: "center" }}><ArchiveIcon size={12} /></span> : null}
         </div>
         <span style={{ fontSize: T.small, color: "var(--text-muted)", flexShrink: 0, fontWeight: FW.regular }}>{formatRelativeTime(conv.lastMessageAt)}</span>
       </div>

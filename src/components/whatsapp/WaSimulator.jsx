@@ -20,6 +20,7 @@ import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from
 import { simulateInbound } from "../../lib/wa-sim";
 import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL, suggestCustomerReply, generateScenario } from "../../lib/wa-backend";
 import { WA_SANDBOX } from "../../lib/waSandbox";
+import { FlaskIcon, DiceIcon } from "./WaIcons";
 
 export function WaSimulator({ ctx, onClose }) {
   const [status, setStatus] = useState("Ready.");
@@ -53,13 +54,13 @@ export function WaSimulator({ ctx, onClose }) {
   // ── Reply as customer — continue an existing conversation from the customer
   // side, so staff-reply ⇄ customer-reply reads like a real WhatsApp exchange.
   // Manual text always works (client mode = message-only inbound, draft/links
-  // untouched; Backend mode = real webhook + server re-parse). ✨ Suggest asks
+  // untouched; Backend mode = real webhook + server re-parse). Suggest asks
   // the harness's /dev/customer-reply to draft the customer's next message
   // (Gemini, key stays server-side) into the field for editing before sending.
   const [custKey, setCustKey] = useState("");
   const [custText, setCustText] = useState("");
   const [suggesting, setSuggesting] = useState(false);
-  // 🎲 Generate scenario (Gemini invents a varied message + injects it)
+  // Generate scenario (Gemini invents a varied message + injects it)
   const [genHint, setGenHint] = useState("");
   const [genBusy, setGenBusy] = useState(false);
   const custList = sortConversations(ctx.conversations || [], false)
@@ -72,7 +73,7 @@ export function WaSimulator({ ctx, onClose }) {
   function custLabel(c) {
     const who = c.profileName || c.phone || c.phoneKey;
     const snippet = (c.lastMessageSnippet || "").slice(0, 32);
-    return (c.archived ? "📦 " : "") + who + " · " + snippet;
+    return (c.archived ? "archived · " : "") + who + " · " + snippet;
   }
   function sendAsCustomer() {
     if (!custConv || !custText.trim()) return;
@@ -83,14 +84,14 @@ export function WaSimulator({ ctx, onClose }) {
   async function suggestReply() {
     if (!custConv || suggesting) return;
     setSuggesting(true);
-    setStatus("✨ Asking Gemini for the customer's next message…");
+    setStatus("Asking Gemini for the customer's next message…");
     try {
       const history = ((ctx.messagesMap || {})[custConv.phoneKey] || []).map((m) => ({ direction: m.direction, text: m.text }));
       const data = await suggestCustomerReply({ language: custConv.language, history });
       setCustText(data.text || "");
-      setStatus("✨ Suggestion ready — edit if you like, then send.");
+      setStatus("Suggestion ready — edit if you like, then send.");
     } catch (e) {
-      setStatus("⚠ Suggest failed: " + e.message + (import.meta.env.DEV ? " (is the harness running? npm run wa:backend)" : ""));
+      setStatus("Suggest failed: " + e.message + (import.meta.env.DEV ? " (is the harness running? npm run wa:backend)" : ""));
     } finally {
       setSuggesting(false);
     }
@@ -99,14 +100,14 @@ export function WaSimulator({ ctx, onClose }) {
   async function runGenerate(count) {
     if (genBusy) return;
     setGenBusy(true);
-    setStatus(count > 1 ? "🎲 Inventing " + count + " scenarios with Gemini…" : "🎲 Inventing a scenario with Gemini…");
+    setStatus(count > 1 ? "Inventing " + count + " scenarios with Gemini…" : "Inventing a scenario with Gemini…");
     try {
       const data = await generateScenario({ hint: genHint, count });
       const n = data.generated || 0;
       const eg = data.samples && data.samples[0] ? " — e.g. “" + String(data.samples[0].text).slice(0, 48) + "…”" : "";
-      setStatus("🎲 Generated " + n + " scenario" + (n === 1 ? "" : "s") + eg);
+      setStatus("Generated " + n + " scenario" + (n === 1 ? "" : "s") + eg);
     } catch (e) {
-      setStatus("⚠ Generate failed: " + e.message + (import.meta.env.DEV ? " (is the harness running? npm run wa:backend)" : ""));
+      setStatus("Generate failed: " + e.message + (import.meta.env.DEV ? " (is the harness running? npm run wa:backend)" : ""));
     } finally {
       setGenBusy(false);
     }
@@ -125,7 +126,7 @@ export function WaSimulator({ ctx, onClose }) {
   }
   function onFailNext() {
     if (ctx.simFailNextSend) ctx.simFailNextSend();
-    setStatus("⚠ Next staff reply (client mode) will fail — then use ↻ Retry on the bubble.");
+    setStatus("Next staff reply (client mode) will fail — then use ↻ Retry on the bubble.");
   }
   function onSeed() { const n = seedSampleBookings(ctx); setStatus(n > 0 ? "Seeded " + n + " WA-SIM booking(s)." : "Sample bookings already present."); }
   function onClearBookings() { clearWaSimBookings(ctx); setStatus("Cleared WA-SIM bookings."); }
@@ -145,7 +146,7 @@ export function WaSimulator({ ctx, onClose }) {
   return (
     <Overlay onClose={onClose} footer={footer}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>🧪 WhatsApp Simulator</span>
+        <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><FlaskIcon size={17} />WhatsApp Simulator</span>
         <span style={{ fontSize: T.micro, fontWeight: FW.bold, padding: "2px 7px", borderRadius: R.pill, background: "var(--wa-sim-accent)", color: "var(--text-on-accent)", letterSpacing: "0.04em" }}>DEV</span>
       </div>
       <div style={{ fontSize: T.body, color: "var(--text-muted)", marginBottom: 14 }}>Injects mock inbound messages into the DEV Firebase inbox. Never shown in production.</div>
@@ -164,7 +165,7 @@ export function WaSimulator({ ctx, onClose }) {
                 ? (import.meta.env.DEV
                   ? (health
                     ? "Harness alive on " + WA_BACKEND_URL + " — llm=" + health.llm + " · send=" + health.send + " · db " + (health.db === "configured" ? "✓" : "✗ not configured")
-                    : "⚠ Harness NOT reachable — run `npm run wa:backend` first.")
+                    : "Harness NOT reachable — run `npm run wa:backend` first.")
                   : "ON — messages run server-side via /api/wa-sim-inbound (staff-auth) with live Gemini parsing.")
                 : "OFF — scenarios write Firebase client-side (canned parses, no Gemini)."}
             </div>
@@ -178,11 +179,11 @@ export function WaSimulator({ ctx, onClose }) {
       ) : null}
 
       <Section>
-        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>🎲 Generate scenario (Gemini)</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><DiceIcon size={14} />Generate scenario (Gemini)</div>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginBottom: 8 }}>Gemini invents a fresh, varied customer message (new sender) and runs it through the live pipeline — variety beyond the canned scenarios. Optional steer below; leave blank to surprise.</div>
         <input className="mgt-hover-scale" value={genHint} onChange={(e) => setGenHint(e.target.value)} placeholder="Optional steer — e.g. birthday for 10, running late, cancel…" style={Object.assign({}, mkInp(), { marginBottom: 8 })} />
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(1)} style={mkBtn({ minHeight: 40, padding: "8px 14px", background: "var(--wa-sim-accent)" })}>{genBusy ? "🎲 Thinking…" : "🎲 Generate"}</button>
+          <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(1)} style={mkBtn({ minHeight: 40, padding: "8px 14px", background: "var(--wa-sim-accent)" })}>{genBusy ? "Thinking…" : "Generate"}</button>
           <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(3)} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent })}>Generate 3</button>
         </div>
       </Section>
@@ -202,13 +203,13 @@ export function WaSimulator({ ctx, onClose }) {
               <textarea className="mgt-hover-scale" value={custText} onChange={(e) => setCustText(e.target.value)} rows={2} style={mkArea()} placeholder={custConv && custConv.language === "en" ? "Type as the customer…" : "Escribe como el cliente…"} />
             </Fld>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {/* ✨ Suggest = Gemini plays the customer. DEV → harness
+              {/* Suggest = Gemini plays the customer. DEV → harness
                   /dev/customer-reply; online → staff-auth /api/wa-sim-suggest
                   (see suggestCustomerReply). Key stays server-side either way. */}
-              <button className="mgt-hover-scale" disabled={suggesting} onClick={suggestReply} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--wa-sim-accent)" })}>{suggesting ? "✨ Thinking…" : "✨ Suggest reply"}</button>
+              <button className="mgt-hover-scale" disabled={suggesting} onClick={suggestReply} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--wa-sim-accent)" })}>{suggesting ? "Thinking…" : "Suggest reply"}</button>
               <button className="mgt-hover-scale" onClick={sendAsCustomer} style={mkBtn({ minHeight: 40, padding: "8px 14px", background: S.accent })}>Send as customer</button>
             </div>
-            <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>Arrives as a real inbound (window resets, unread). ✨ asks Gemini to write the customer's next message — edit before sending.</div>
+            <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>Arrives as a real inbound (window resets, unread). asks Gemini to write the customer's next message — edit before sending.</div>
           </div>
         )}
       </Section>
@@ -225,13 +226,13 @@ export function WaSimulator({ ctx, onClose }) {
 
       <Section>
         <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Send failure (test Retry)</div>
-        <button className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.del, width: "100%" })} onClick={onFailNext}>⚠ Make next staff reply fail</button>
+        <button className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.del, width: "100%" })} onClick={onFailNext}>Make next staff reply fail</button>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Client mode only. Then send a reply in the inbox — the bubble shows “failed” with a ↻ Retry button. (Backend mode handles failures server-side.)</div>
       </Section>
 
       <Section>
         <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Busy moment</div>
-        <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "9px 14px", background: "var(--wa-sim-accent)", width: "100%" })} onClick={onBurst}>🌊 Simulate a burst (ongoing + new)</button>
+        <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "9px 14px", background: "var(--wa-sim-accent)", width: "100%" })} onClick={onBurst}>Simulate a burst (ongoing + new)</button>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Moves the open conversations forward (a draft adds a detail, a confirmed booking asks to change, an unhandled request gets a nudge) and adds a couple of new ones.</div>
       </Section>
 
