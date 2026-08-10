@@ -330,7 +330,7 @@ export function InboxPanel({
   function tabBtn(key, label, badge) {
     const isActive = tab === key;
     return (
-      <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: R.pill, padding: "5px 12px", fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: isActive ? "var(--shadow-btn)" : "none" }}>
+      <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: isActive ? "var(--shadow-btn)" : "none" }}>
         {label}
         {badge != null && badge > 0 ? <span style={{ fontSize: T.micro, fontWeight: FW.bold, padding: "1px 6px", borderRadius: R.pill, background: isActive ? "var(--wa-unread-dot)" : "var(--btn-default)", color: "var(--text-on-accent)", lineHeight: 1.4 }}>{badge}</span> : null}
       </button>
@@ -353,10 +353,10 @@ export function InboxPanel({
                 quick-reply Templates button per Patryk (2026-07-16); the sim
                 opens on top of this window. */}
             {onOpenSim ? (
-              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ minHeight: 36, padding: "6px 12px", background: "var(--btn-default)" }), { display: "flex", alignItems: "center", justifyContent: "center", fontSize: T.lead, lineHeight: 1 })}>🧪</button>
+              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: T.lead, lineHeight: 1 })}>🧪</button>
             ) : null}
-            <button onClick={() => setShowTpl(true)} title="Templates" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ minHeight: 36, padding: "6px 12px", background: "var(--btn-default)" }), { display: "flex", alignItems: "center", justifyContent: "center" })}><TemplatesIcon size={17} /></button>
-            <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={mkBtn({ fontSize: T.title, minHeight: 36, padding: "4px 12px", background: "var(--btn-default)" })}>✕</button>
+            <button onClick={() => setShowTpl(true)} title="Templates" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 })}><TemplatesIcon size={17} /></button>
+            <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}>✕</button>
           </div>
         </div>
         {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav.
@@ -373,7 +373,7 @@ export function InboxPanel({
             onClick={() => setNeedsAction((v) => !v)}
             title="Show only conversations that need a response"
             className="mgt-hover-scale mgt-press"
-            style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "7px 12px", fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap" }}
+            style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap" }}
           >● Needs action</button>
           <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
             <input

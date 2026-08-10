@@ -38,8 +38,8 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
           <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>{"ES: " + t.textEs}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
-          <button className="mgt-hover-scale" style={mkBtn({ fontSize: T.small, minHeight: 30, padding: "4px 10px", background: BTN.edit })} onClick={() => openEdit(t)}>Edit</button>
-          <button className="mgt-hover-scale" style={mkBtn({ fontSize: T.small, minHeight: 30, padding: "4px 10px", background: BTN.del })} onClick={() => removeT(t.id)}>Delete</button>
+          <button className="mgt-hover-scale" style={mkBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", background: BTN.edit })} onClick={() => openEdit(t)}>Edit</button>
+          <button className="mgt-hover-scale" style={mkBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", background: BTN.del })} onClick={() => removeT(t.id)}>Delete</button>
         </div>
       </div>
     </div>
@@ -47,8 +47,8 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
 
   const editFooter = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 16px", background: "var(--app-btn-slate)" })} onClick={() => setEditing(null)}>Cancel</button>
-      <button onClick={saveEdit} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 16px", background: S.accent })}>Save template</button>
+      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })} onClick={() => setEditing(null)}>Cancel</button>
+      <button onClick={saveEdit} className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: S.accent })}>Save template</button>
     </div>
   );
   const listFooter = (

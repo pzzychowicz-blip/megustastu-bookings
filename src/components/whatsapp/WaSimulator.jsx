@@ -182,8 +182,8 @@ export function WaSimulator({ ctx, onClose }) {
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginBottom: 8 }}>Gemini invents a fresh, varied customer message (new sender) and runs it through the live pipeline — variety beyond the canned scenarios. Optional steer below; leave blank to surprise.</div>
         <input className="mgt-hover-scale" value={genHint} onChange={(e) => setGenHint(e.target.value)} placeholder="Optional steer — e.g. birthday for 10, running late, cancel…" style={Object.assign({}, mkInp(), { marginBottom: 8 })} />
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(1)} style={mkBtn({ minHeight: 38, padding: "8px 14px", background: "var(--wa-sim-accent)" })}>{genBusy ? "🎲 Thinking…" : "🎲 Generate"}</button>
-          <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(3)} style={mkBtn({ minHeight: 38, padding: "8px 12px", background: S.accent })}>Generate 3</button>
+          <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(1)} style={mkBtn({ minHeight: 40, padding: "8px 14px", background: "var(--wa-sim-accent)" })}>{genBusy ? "🎲 Thinking…" : "🎲 Generate"}</button>
+          <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(3)} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent })}>Generate 3</button>
         </div>
       </Section>
 
@@ -205,8 +205,8 @@ export function WaSimulator({ ctx, onClose }) {
               {/* ✨ Suggest = Gemini plays the customer. DEV → harness
                   /dev/customer-reply; online → staff-auth /api/wa-sim-suggest
                   (see suggestCustomerReply). Key stays server-side either way. */}
-              <button className="mgt-hover-scale" disabled={suggesting} onClick={suggestReply} style={mkBtn({ minHeight: 38, padding: "8px 12px", background: "var(--wa-sim-accent)" })}>{suggesting ? "✨ Thinking…" : "✨ Suggest reply"}</button>
-              <button className="mgt-hover-scale" onClick={sendAsCustomer} style={mkBtn({ minHeight: 38, padding: "8px 14px", background: S.accent })}>Send as customer</button>
+              <button className="mgt-hover-scale" disabled={suggesting} onClick={suggestReply} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--wa-sim-accent)" })}>{suggesting ? "✨ Thinking…" : "✨ Suggest reply"}</button>
+              <button className="mgt-hover-scale" onClick={sendAsCustomer} style={mkBtn({ minHeight: 40, padding: "8px 14px", background: S.accent })}>Send as customer</button>
             </div>
             <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>Arrives as a real inbound (window resets, unread). ✨ asks Gemini to write the customer's next message — edit before sending.</div>
           </div>
@@ -216,16 +216,16 @@ export function WaSimulator({ ctx, onClose }) {
       <Section>
         <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Sample data</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="mgt-hover-scale" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: BTN.today })} onClick={onSeed}>Seed sample bookings</button>
-          <button className="mgt-hover-scale" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: BTN.del })} onClick={onClearBookings}>Clear WA-SIM bookings</button>
-          <button className="mgt-hover-scale" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: BTN.del })} onClick={onClearConvos}>Clear conversations</button>
+          <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.today })} onClick={onSeed}>Seed sample bookings</button>
+          <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.del })} onClick={onClearBookings}>Clear WA-SIM bookings</button>
+          <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.del })} onClick={onClearConvos}>Clear conversations</button>
         </div>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Seed first — the linked cancel/modify and Regular-chip scenarios reference these bookings.</div>
       </Section>
 
       <Section>
         <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Send failure (test Retry)</div>
-        <button className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: BTN.del, width: "100%" })} onClick={onFailNext}>⚠ Make next staff reply fail</button>
+        <button className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.del, width: "100%" })} onClick={onFailNext}>⚠ Make next staff reply fail</button>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Client mode only. Then send a reply in the inbox — the bubble shows “failed” with a ↻ Retry button. (Backend mode handles failures server-side.)</div>
       </Section>
 
@@ -241,7 +241,7 @@ export function WaSimulator({ ctx, onClose }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {groups[g].map((s) => (
               <div key={s.id}>
-                <button className="mgt-hover-scale" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: "var(--btn-default)", width: "100%", textAlign: "left" })} onClick={() => runScenario(s)}>{s.label}</button>
+                <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)", width: "100%", textAlign: "left" })} onClick={() => runScenario(s)}>{s.label}</button>
                 {s.note ? <div style={{ fontSize: T.small, color: "var(--text-muted)", margin: "3px 2px 0" }}>{s.note}</div> : null}
               </div>
             ))}

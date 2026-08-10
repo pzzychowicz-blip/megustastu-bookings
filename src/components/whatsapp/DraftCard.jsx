@@ -73,7 +73,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   // the confidence badge sits inline (left of Accept), always visible. Saves
   // ~120px so the message thread stays readable.
   if (compact) {
-    const smallBtn = (bg, fw, border) => ({ background: bg, border, borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: fw, color: "var(--text-on-accent)", minHeight: 32, flexShrink: 0 });
+    const smallBtn = (bg, fw, border) => ({ background: bg, border, borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: fw, color: "var(--text-on-accent)", minHeight: 36, flexShrink: 0 });
     return (
       <div style={{ borderRadius: R.card, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", marginBottom: 12, boxShadow: "var(--shadow-soft)", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", flexWrap: "wrap" }}>
@@ -124,12 +124,12 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
         <button
           onClick={onAccept}
           className="mgt-hover-scale mgt-press"
-          style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "9px 16px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 40, boxShadow: "var(--shadow-btn)" }}
+          style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "10px 18px", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44, boxShadow: "var(--shadow-btn)" }}
         >Accept &amp; open</button>
         <button
           onClick={onDismiss}
           className="mgt-hover-scale mgt-press"
-          style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, padding: "9px 16px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 40, boxShadow: "var(--shadow-btn)" }}
+          style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, padding: "10px 18px", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44, boxShadow: "var(--shadow-btn)" }}
         >Dismiss</button>
       </div>
     </div>
