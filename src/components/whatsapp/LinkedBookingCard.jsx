@@ -27,11 +27,17 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
         className="mgt-hover-scale mgt-press"
         style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
       >Open booking</button>
+      {/* Secondary = OUTLINE in its own hue. A solid red pill next to a solid
+          blue one made the destructive action compete with the safe one for the
+          eye, and on the quietened green pane the pair read as two primaries
+          bolted onto a background. Red outline still says danger — the hue is
+          intact, only the fill is gone — while "Open booking" keeps the single
+          saturated fill the accent rule reserves for the primary action. */}
       {canCancel ? (
         <button
           onClick={onCancel}
           className="mgt-hover-scale mgt-press"
-          style={{ background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
+          style={{ background: "transparent", border: "2px solid var(--danger-border)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--danger-text)", whiteSpace: "nowrap" }}
         >Cancel booking</button>
       ) : null}
     </div>
@@ -39,14 +45,21 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
 
   // Unified header + Reveal body (the app's Collapsible pattern) so the
   // collapse/expand eases instead of the strip ⇄ card swap snapping.
+  // v17.8.0-wa-sandbox: the notification-pane idiom, in the WAITLIST palette.
+  // This card was the module's last teal surface — a 0.10-alpha teal wash in a
+  // teal rim, a hue the booking app does not otherwise use, sitting one line
+  // under a green "Past bookings" panel and a green "Booking confirmed" notice.
+  // The --wa-teal-* family is deleted: teal was a fourth green nobody had
+  // registered, and a token whose NAME disagrees with its value is exactly how
+  // a surface stays outside its own family's audit.
   return (
-    <div style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", marginBottom: 8, boxShadow: "var(--shadow-soft)" }}>
+    <div style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--suggest-bg-soft)", border: "1px solid var(--border-card)", marginBottom: 8, boxShadow: "var(--shadow-soft)" }}>
       <div onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
-        <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--wa-teal-text)", textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5 }}><LinkIcon size={13} />Linked booking</span>
+        <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)", textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5 }}><LinkIcon size={13} />Linked booking</span>
         <span style={{ fontSize: T.micro, padding: "2px 8px", borderRadius: R.pill, background: statusColor, color: "var(--text-on-accent)", fontWeight: FW.bold, textTransform: "capitalize", flexShrink: 0 }}>{booking.status}</span>
         {collapsed ? <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span> : <span style={{ flex: 1 }} />}
         {actionBtns}
-        <span style={{ fontSize: T.lead, color: "var(--wa-teal-text)", fontWeight: FW.semi, flexShrink: 0, display: "inline-block", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}>▸</span>
+        <span style={{ fontSize: T.lead, color: "var(--success-text)", fontWeight: FW.semi, flexShrink: 0, display: "inline-block", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}>▸</span>
       </div>
       <Reveal show={!collapsed}>
         <div style={{ marginTop: 8 }}>

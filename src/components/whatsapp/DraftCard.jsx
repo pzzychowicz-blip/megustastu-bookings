@@ -19,20 +19,44 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
     // Dismissable via the ✕; hidden once acceptedBadgeDismissedAt is set, and
     // re-shown when a new inbound message clears that stamp.
     if (conv.acceptedBadgeDismissedAt) return null;
+    // v17.8.0-wa-sandbox: the notification-pane idiom, in the WAITLIST palette.
+    // This is an OPPORTUNITY resolved, not a warning, and the app already has a
+    // green for exactly that — the "table free" banner's --suggest-* family. It
+    // used to be a --wa-accept-* card: a 0.7-alpha green wash inside a 2px green
+    // rim, which is the fill-plus-matching-border-plus-third-shade shape the
+    // v17.8.0 sweep banned, and at pane size it shouted louder than the running-
+    // late amber above it. Now: a whisper of tint, a 1px NEUTRAL --border-card,
+    // and the green carried by the ✓ mark and the text.
+    //
+    // The ✓ stays a text glyph rather than becoming a WaIcon — it is on
+    // Icons.jsx's explicit keep-as-text list (monochrome, universal font
+    // coverage), and at the mark's 15px in `tone` it is visually the same object
+    // as a SectionMark icon. It sized T.title before, which made it decoration.
+    //
+    // The ✕ moved out of `position:absolute` into the flex row: every other
+    // dismiss in the notification system is the last item of its row, and the
+    // absolute version needed a paddingRight fudge on the sibling to avoid it.
     return (
-      <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--wa-accept-bg)", border: "2px solid var(--wa-accept-border)", marginBottom: 12, boxShadow: "var(--shadow-soft)", position: "relative" }}>
+      <div style={{ padding: "10px 14px", borderRadius: R.card, background: "var(--suggest-bg-soft)", border: "1px solid var(--border-card)", marginBottom: 12, boxShadow: "var(--shadow-soft)", display: "flex", alignItems: "flex-start", gap: 9 }}>
+        <span aria-hidden="true" style={{ fontSize: T.body, lineHeight: "18px", width: 15, flexShrink: 0, color: "var(--success-text)", textAlign: "center" }}>✓</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--success-text)" }}>Booking confirmed</div>
+          <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--success-text)", opacity: 0.85, marginTop: 2 }}>This request has been added to the bookings list.</div>
+        </div>
+        {/* 32×32, the size every other banner dismiss in the app already is
+            (LateBanner / OverlapBanner / WaitAvailBanner all sit at minHeight
+            32). What this replaced was `padding:"2px 4px"` on a 12px glyph — a
+            ~16px hit area, on a device that is only ever touched, for the only
+            control on the notice. `--r-pill` clamps to half the SHORTER side,
+            so equal width/height with padding:0 is what makes it an actual
+            circle rather than a vertical egg. */}
         <button
           onClick={() => { if (onDismissAcceptedBadge) onDismissAcceptedBadge(conv.phoneKey); }}
           title="Dismiss"
-          style={{ position: "absolute", top: 6, right: 8, background: "transparent", border: "none", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--wa-accept-text)", padding: "4px 6px", lineHeight: 1, opacity: 0.6, borderRadius: R.pill }}
+          aria-label="Dismiss this notice"
+          className="mgt-hover-scale mgt-press"
+          style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--success-text)", width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, opacity: 0.6, borderRadius: R.pill, flexShrink: 0 }}
         >✕</button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 20 }}>
-          <span style={{ fontSize: T.title }}>✓</span>
-          <div>
-            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--wa-accept-text)" }}>Booking confirmed</div>
-            <div style={{ fontSize: T.body, color: "var(--wa-accept-text)", marginTop: 2 }}>This request has been added to the bookings list.</div>
-          </div>
-        </div>
       </div>
     );
   }
@@ -78,9 +102,9 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   // the confidence badge sits inline (left of Accept), always visible. Saves
   // ~120px so the message thread stays readable.
   if (compact) {
-    const smallBtn = (bg, fw, border) => ({ background: bg, border, borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: fw, color: "var(--text-on-accent)", minHeight: 36, flexShrink: 0 });
+    const smallBtn = (bg, fw, border, color) => ({ background: bg, border, borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: fw, color: color || "var(--text-on-accent)", minHeight: 36, flexShrink: 0 });
     return (
-      <div style={{ borderRadius: R.card, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", marginBottom: 12, boxShadow: "var(--shadow-soft)", overflow: "hidden" }}>
+      <div style={{ borderRadius: R.card, background: "var(--wa-draft-bg)", border: "1px solid var(--border-card)", marginBottom: 12, boxShadow: "var(--shadow-soft)", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", flexWrap: "wrap" }}>
           {/* The draft section itself is the toggle (when there's detail to show). */}
           <div
@@ -95,7 +119,9 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           {/* Confidence level — always shown, immediately left of Accept. */}
           <span title={confLbl + " confidence"} style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", border: "2px solid " + confBorder, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em", flexShrink: 0 }}>{confLbl}</span>
           <button onClick={onAccept} className="mgt-hover-scale mgt-press" style={smallBtn("var(--wa-btn-open)", 700, "1px solid rgba(255,255,255,0.2)")}>Accept</button>
-          <button onClick={onDismiss} className="mgt-hover-scale mgt-press" style={smallBtn("var(--btn-default)", 600, "1px solid var(--border-glass)")}>Dismiss</button>
+          {/* Secondary = OUTLINE (see the full card's note): one saturated pill
+              per pane, so the eye can find the primary without reading. */}
+          <button onClick={onDismiss} className="mgt-hover-scale mgt-press" style={smallBtn("transparent", 600, "2px solid var(--border-soft)", "var(--text-secondary)")}>Dismiss</button>
         </div>
         {hasDetail ? (
           <Reveal show={expanded} style={{ padding: "0 10px" }}>
@@ -109,8 +135,13 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
     );
   }
 
+  // v17.8.0-wa-sandbox: the notification-pane idiom. The draft stays AMBER —
+  // only the green surfaces moved to the waitlist palette — but the pane is now
+  // a wash inside a 1px NEUTRAL rim instead of a 0.8-alpha yellow inside a 2px
+  // yellow one. The hue is carried by the DraftIcon and the text, exactly as
+  // NotificationStrip carries a section's tone.
   return (
-    <div style={{ padding: "14px 16px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", marginBottom: 12, boxShadow: "var(--shadow-soft)" }}>
+    <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "1px solid var(--border-card)", marginBottom: 12, boxShadow: "var(--shadow-soft)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ color: "var(--wa-draft-text)", display: "inline-flex", flexShrink: 0 }}><DraftIcon size={15} /></span>
@@ -131,10 +162,18 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           className="mgt-hover-scale mgt-press"
           style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "10px 18px", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44, boxShadow: "var(--shadow-btn)" }}
         >Accept &amp; open</button>
+        {/* Secondary = OUTLINE, not a second filled pill. Two saturated buttons
+            side by side meant neither read as the primary — and once the pane
+            went quiet they were the loudest things in the thread. The size is
+            deliberately UNCHANGED at 44: accepting or discarding a parsed draft
+            is a decision surface where a mis-tap costs something, which is the
+            documented reason a control earns 44 over mkBtn's 40. Dropping the
+            fill also drops --shadow-btn: that token is for RAISED controls, and
+            an outline button is not one. */}
         <button
           onClick={onDismiss}
           className="mgt-hover-scale mgt-press"
-          style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, padding: "10px 18px", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44, boxShadow: "var(--shadow-btn)" }}
+          style={{ background: "transparent", border: "2px solid var(--border-soft)", borderRadius: R.pill, padding: "10px 18px", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-secondary)", minHeight: 44 }}
         >Dismiss</button>
       </div>
     </div>

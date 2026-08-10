@@ -196,8 +196,18 @@ const FILLS = [
   { fill: "--wa-bubble-in", alpha: null, ink: "--text-primary", role: "label", what: "incoming chat bubble" },
   { fill: "--wa-draft-bg", alpha: null, ink: "--wa-draft-text", role: "label", what: "draft card" },
   { fill: "--wa-draft-bg", alpha: null, ink: "--wa-draft-text-dim", role: "label", what: "draft card (dim ink)" },
-  { fill: "--wa-accept-bg", alpha: null, ink: "--wa-accept-text", role: "label", what: "accepted-booking notice" },
-  { fill: "--wa-teal-bg", alpha: null, ink: "--wa-teal-text", role: "label", what: "linked-booking chip" },
+  // --wa-accept-* and --wa-teal-* were deleted when the accepted-booking notice,
+  // the linked-booking card and the past-bookings disclosure moved onto the
+  // waitlist palette — the point of not keeping a second and third green.
+  // What that exposed: the NOTIFICATION-PANE tints were never registered at
+  // all, in prod either. Every in-flow banner in the app puts a semantic ink on
+  // one of these three, and the coverage check could not see them because it
+  // enumerates by the --block/--btn/--tbl/--tl/--wa prefixes and these carry
+  // none of them — the same prefix-blindness that hid --app-btn-grey. Three WA
+  // surfaces now depend on them too, so they are measured here.
+  { fill: "--suggest-bg-soft", alpha: null, ink: "--success-text", role: "label", what: "notification pane, suggest/green" },
+  { fill: "--app-overlap-bg", alpha: null, ink: "--warn-text", role: "label", what: "notification pane, warn/amber" },
+  { fill: "--danger-bg-soft", alpha: null, ink: "--danger-text", role: "label", what: "notification pane, danger/red" },
   { fill: "--wa-panel-bg", alpha: null, ink: "--text-primary", role: "label", what: "inbox panel" },
   { fill: "--wa-row-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation row" },
   { fill: "--wa-row-bg-hover", alpha: null, ink: "--text-primary", role: "label", what: "conversation row (hover)" },
@@ -288,9 +298,7 @@ describe("registry coverage", () => {
     // WhatsApp module — rims, rails, scrims and two shadow values.
     "--wa-bubble-in-border": "rim of the incoming bubble",
     "--wa-bubble-out-border": "rim of the outgoing bubble",
-    "--wa-draft-border": "rim of the draft card",
-    "--wa-accept-border": "rim of the accepted notice",
-    "--wa-teal-border": "rim of the linked-booking chip",
+    "--wa-draft-border": "shimmer bar fill in the parsing card; no longer a rim",
     "--wa-row-active-border": "rim of the selected row",
     "--wa-divider": "hairline between rows / header strips",
     "--wa-panel-scrim": "scrim behind the panel, nothing sits on it",

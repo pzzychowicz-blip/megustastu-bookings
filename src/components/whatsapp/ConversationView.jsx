@@ -124,7 +124,7 @@ export function ConversationView({
   // "Booking confirmed" header chip — non-dismissable (the big DraftCard banner
   // is the dismissable element instead).
   const acceptedBadge = conv.draftStatus === "accepted"
-    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", color: "var(--wa-accept-text)", border: "2px solid var(--wa-accept-border)" }}>✓ Booking confirmed</span>
+    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", color: "var(--success-text)", border: "2px solid var(--suggest-border)" }}>✓ Booking confirmed</span>
     : null;
   // The disclosure lists the customer's OTHER visits. The linked booking is
   // already rendered in full by LinkedBookingCard a few lines below, and now the
@@ -141,7 +141,7 @@ export function ConversationView({
   // It is only a BUTTON when there is something to disclose: a customer whose
   // single completed visit is the linked one still earns the chip, but tapping
   // it would open an empty "Past bookings" box.
-  const chipStyle = { background: "transparent", border: "2px solid var(--wa-teal-border)", borderRadius: R.pill, padding: "3px 10px", fontSize: T.small, fontWeight: FW.semi, color: "var(--wa-teal-text)" };
+  const chipStyle = { background: "transparent", border: "2px solid var(--suggest-border)", borderRadius: R.pill, padding: "3px 10px", fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)" };
   const regularChip = match && match.regularCount >= 1
     ? (pastList.length
       ? <button className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)} style={Object.assign({}, chipStyle, { cursor: "pointer" })}>{regularChipLabel(match.regularCount, regularMin) + (histOpen ? " ▾" : " ▸")}</button>
@@ -151,10 +151,14 @@ export function ConversationView({
   // it open/closed off histOpen so the disclosure doesn't snap.
   const hasRegulars = pastList.length > 0;
   const pastListBody = hasRegulars ? (
-    <div style={{ padding: "8px 12px", background: "var(--wa-teal-bg)", border: "1px solid var(--wa-teal-border)", borderRadius: R.card, marginBottom: 10, fontSize: T.body, color: "var(--text-primary)" }}>
-      <div style={{ fontWeight: FW.semi, marginBottom: 4, color: "var(--wa-teal-text)" }}>Past bookings</div>
+    // Carried onto the waitlist palette with the linked-booking card it sits
+    // directly above — the same customer-history green, and the row hairlines
+    // move to --border-soft, which is what separates rows everywhere else in
+    // the notification system. A semantic border was never a row divider.
+    <div style={{ padding: "8px 12px", background: "var(--suggest-bg-soft)", border: "1px solid var(--border-card)", borderRadius: R.card, marginBottom: 10, fontSize: T.body, color: "var(--text-primary)" }}>
+      <div style={{ fontWeight: FW.semi, marginBottom: 4, color: "var(--success-text)" }}>Past bookings</div>
       {pastList.slice(0, 5).map((b) => (
-        <div key={b.id} style={{ padding: "3px 0", borderTop: "1px solid var(--wa-teal-border)" }}>{(b.date || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</div>
+        <div key={b.id} style={{ padding: "3px 0", borderTop: "1px solid var(--border-soft)" }}>{(b.date || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</div>
       ))}
     </div>
   ) : null;
@@ -260,7 +264,11 @@ export function ConversationView({
           (conv.parsing, set by the sandbox inbound path; cleared when the draft
           lands). The real DraftCard Reveals in as this Reveals out. */}
       <Reveal show={isParsing(conv)} style={{ padding: "0 14px" }}>
-        <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "2px solid var(--wa-draft-border)", display: "flex", alignItems: "center", gap: 10 }}>
+        {/* Matches the DraftCard it turns into: same pane, same rim, so the
+            hand-off from "Reading the message…" to the parsed draft is a change
+            of CONTENT, not of surface. --wa-draft-border stays below as the
+            shimmer bar's fill, where it is decoration rather than a rim. */}
+        <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "1px solid var(--border-card)", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ color: "var(--wa-draft-text)", display: "inline-flex" }}><DraftIcon size={15} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)", marginBottom: 6 }}>Reading the message…</div>

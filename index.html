@@ -321,9 +321,24 @@
         --wa-divider: rgba(200, 210, 225, 0.7);
         --wa-bubble-in: rgba(255, 255, 255, 0.85);   --wa-bubble-in-border: rgba(200, 210, 225, 0.7);
         --wa-bubble-out: rgb(0, 114, 238);           --wa-bubble-out-border: rgba(0, 90, 190, 0.55);
-        --wa-draft-bg: rgba(254, 249, 195, 0.8);  --wa-draft-border: rgba(253, 224, 71, 0.65);  --wa-draft-text: #854d0e;  --wa-draft-text-dim: #713f12;
-        --wa-accept-bg: rgba(220, 252, 231, 0.7); --wa-accept-border: rgba(134, 239, 172, 0.6); --wa-accept-text: #166534;
-        --wa-teal-text: #0f766e;  --wa-teal-bg: rgba(13, 148, 136, 0.10);  --wa-teal-border: rgba(13, 148, 136, 0.35);
+        /* v17.8.0-wa-sandbox: the draft card joined the notification-pane idiom
+           (soft tint, 1px --border-card, hue carried by the mark and the text),
+           so this fill drops from a 0.8-alpha CHIP wash to a PANE wash at
+           --app-overlap-bg's weight. Same move the suggest green made when it
+           gained a soft variant — a pane must never be as loud as a chip.
+           (And never write "--token" followed by a colon in here. The regex in
+           tests/contrast.test.js reads a declaration as name-colon-value-semi
+           over the RAW block, comments included, so a sentence in that shape
+           eats the real declaration that follows it. It caught this one.)
+           --wa-draft-border survives only as the shimmer bar's fill in the
+           "Reading the message…" card, where it is decoration, not a rim.
+           The --wa-accept and --wa-teal families are GONE. The accepted-booking
+           notice, the linked-booking card and the past-bookings disclosure all
+           follow the WAITLIST palette now (--suggest-bg-soft, --suggest-border,
+           --success-text), so no token named "teal" is left holding a green
+           value — the two-names-for-one-concept trap CLAUDE.md names, and the
+           reason a green surface could sit outside the green family's audit. */
+        --wa-draft-bg: rgba(254, 252, 232, 0.6);  --wa-draft-border: rgba(253, 224, 71, 0.65);  --wa-draft-text: #854d0e;  --wa-draft-text-dim: #713f12;
         --wa-btn-open: rgb(0, 122, 255);
         --wa-btn-cancel: rgb(220, 38, 38);
         --wa-btn-handled: rgb(13, 148, 136);
@@ -542,9 +557,7 @@
         --wa-row-active-border: rgba(10, 132, 255, 0.6);
         --wa-divider: rgba(255, 255, 255, 0.1);
         --wa-bubble-in: rgba(255, 255, 255, 0.1);   --wa-bubble-in-border: rgba(255, 255, 255, 0.14);
-        --wa-draft-bg: rgba(90, 75, 20, 0.35);  --wa-draft-border: rgba(253, 224, 71, 0.4);  --wa-draft-text: #fde68a;  --wa-draft-text-dim: #fcd34d;
-        --wa-accept-bg: rgba(34, 90, 50, 0.4);  --wa-accept-border: rgba(134, 239, 172, 0.35); --wa-accept-text: #86efac;
-        --wa-teal-text: #5eead4; --wa-teal-bg: rgba(13, 148, 136, 0.18); --wa-teal-border: rgba(13, 148, 136, 0.4);
+        --wa-draft-bg: rgba(72, 60, 15, 0.3);  --wa-draft-border: rgba(253, 224, 71, 0.4);  --wa-draft-text: #fde68a;  --wa-draft-text-dim: #fcd34d;
       }
       html, body { margin: 0; }
       body {
