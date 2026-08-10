@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { Reveal } from "../atoms";
 import { useCollapseState } from "../../hooks/useCollapseState";
-import { R } from "../../lib/constants";
+import { R, T, FW } from "../../lib/constants";
 
 export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMarkHandled, onApplyChanges }) {
   const [collapsed, toggle] = useCollapseState(phoneKey, "intent", false);
@@ -48,7 +48,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
           onClick={() => { if (onApplyChanges) onApplyChanges(); }}
           title="Open the booking pre-filled with the requested changes"
           className="mgt-hover-scale mgt-press"
-          style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "var(--text-on-accent)", boxShadow: "0 1px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
+          style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "0 1px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
         >✎ Apply changes</button>
       ) : null}
       <button
@@ -59,7 +59,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
         }}
         title="Mark this request as handled"
         className="mgt-hover-scale mgt-press"
-        style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: leaving ? "default" : "pointer", fontSize: 12, fontWeight: 700, color: "var(--text-on-accent)", boxShadow: "0 1px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
+        style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: leaving ? "default" : "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "0 1px 4px rgba(0,0,0,0.1)", whiteSpace: "nowrap" }}
       >✓ Mark as handled</button>
     </div>
   );
@@ -70,15 +70,15 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
   return (
     <div style={{ padding: "10px 14px", borderRadius: R.card, background: bg, border, marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", opacity: leaving ? 0 : 1, transition: "opacity 300ms ease" }}>
       <div onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
-        <span style={{ fontSize: 15, flexShrink: 0 }}>{icon}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+        <span style={{ fontSize: T.lead, flexShrink: 0 }}>{icon}</span>
+        <span style={{ fontSize: T.body, fontWeight: FW.semi, color, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
         {actionBtns}
-        <span style={{ fontSize: 14, color, fontWeight: 700, flexShrink: 0, display: "inline-block", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform 0.18s ease" }}>▸</span>
+        <span style={{ fontSize: T.lead, color, fontWeight: FW.semi, flexShrink: 0, display: "inline-block", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform 0.18s ease" }}>▸</span>
       </div>
       <Reveal show={!collapsed}>
         <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 12, color, opacity: 0.85 }}>{subtitle}</div>
-          {showApply ? <div style={{ fontSize: 12, color, fontWeight: 700, marginTop: 4 }}>{"Requested: " + reqParts.join(" · ")}</div> : null}
+          <div style={{ fontSize: T.body, color, opacity: 0.85 }}>{subtitle}</div>
+          {showApply ? <div style={{ fontSize: T.body, color, fontWeight: FW.semi, marginTop: 4 }}>{"Requested: " + reqParts.join(" · ")}</div> : null}
         </div>
       </Reveal>
     </div>

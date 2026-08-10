@@ -860,8 +860,8 @@ function WhatsAppTabContent({ waSettings, onSaveWaSettings }) {
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 4 }}>
           <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Archive when the booking is completed</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-faint)", marginTop: 2 }}>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Archive when the booking is completed</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
               A conversation whose linked booking reaches <strong>Completed</strong> moves itself to Archived — the visit is over, so it drops out of the inbox. Restoring one by hand sticks; it won&rsquo;t re-archive itself. Only bookings completed from now on are affected.
             </div>
           </div>

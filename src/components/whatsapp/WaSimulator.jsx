@@ -14,7 +14,7 @@
 
 import { useState, useEffect } from "react";
 import { Overlay, Fld, Section, Toggle, mkInp, mkArea, mkBtn } from "../atoms";
-import { S, BTN, R } from "../../lib/constants";
+import { S, BTN, R, T, FW } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
 import { simulateInbound } from "../../lib/wa-sim";
@@ -137,7 +137,7 @@ export function WaSimulator({ ctx, onClose }) {
 
   const footer = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-      <span style={{ fontSize: 12, color: "var(--text-muted)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{status}</span>
+      <span style={{ fontSize: T.body, color: "var(--text-muted)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{status}</span>
       <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })} onClick={onClose}>Close</button>
     </div>
   );
@@ -145,10 +145,10 @@ export function WaSimulator({ ctx, onClose }) {
   return (
     <Overlay onClose={onClose} footer={footer}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: 17, fontWeight: 700, color: "var(--text-primary)" }}>🧪 WhatsApp Simulator</span>
-        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: R.pill, background: "var(--wa-sim-accent)", color: "var(--text-on-accent)", letterSpacing: "0.04em" }}>DEV</span>
+        <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>🧪 WhatsApp Simulator</span>
+        <span style={{ fontSize: T.micro, fontWeight: FW.bold, padding: "2px 7px", borderRadius: R.pill, background: "var(--wa-sim-accent)", color: "var(--text-on-accent)", letterSpacing: "0.04em" }}>DEV</span>
       </div>
-      <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>Injects mock inbound messages into the DEV Firebase inbox. Never shown in production.</div>
+      <div style={{ fontSize: T.body, color: "var(--text-muted)", marginBottom: 14 }}>Injects mock inbound messages into the DEV Firebase inbox. Never shown in production.</div>
 
       {/* Backend mode = route through the REAL pipeline (server-side Gemini).
           DEV → the local harness (:3999); deployed sandbox → the staff-auth
@@ -158,8 +158,8 @@ export function WaSimulator({ ctx, onClose }) {
       <Section>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)" }}>{import.meta.env.DEV ? "Backend mode (local Phase-1b pipeline)" : "Live pipeline (server Gemini)"}</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+            <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)" }}>{import.meta.env.DEV ? "Backend mode (local Phase-1b pipeline)" : "Live pipeline (server Gemini)"}</div>
+            <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 2 }}>
               {backendOn
                 ? (import.meta.env.DEV
                   ? (health
@@ -171,15 +171,15 @@ export function WaSimulator({ ctx, onClose }) {
           </div>
           <Toggle on={backendOn} onClick={toggleBackend} />
         </div>
-        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{import.meta.env.DEV
+        <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>{import.meta.env.DEV
           ? "ON: scenarios POST a Meta-shaped webhook to /api/wa-inbound (server parses — pre-baked drafts/links don't apply) and replies go through /api/wa-send."
           : "ON: scenarios POST to /api/wa-sim-inbound (staff-auth — no public webhook); the server re-parses with Gemini, so pre-baked drafts/links don't apply. Needs WA_LLM_MODE=live + GEMINI_API_KEY on Vercel."}</div>
       </Section>
       ) : null}
 
       <Section>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 6 }}>🎲 Generate scenario (Gemini)</div>
-        <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8 }}>Gemini invents a fresh, varied customer message (new sender) and runs it through the live pipeline — variety beyond the canned scenarios. Optional steer below; leave blank to surprise.</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>🎲 Generate scenario (Gemini)</div>
+        <div style={{ fontSize: T.small, color: "var(--text-muted)", marginBottom: 8 }}>Gemini invents a fresh, varied customer message (new sender) and runs it through the live pipeline — variety beyond the canned scenarios. Optional steer below; leave blank to surprise.</div>
         <input className="mgt-hover-scale" value={genHint} onChange={(e) => setGenHint(e.target.value)} placeholder="Optional steer — e.g. birthday for 10, running late, cancel…" style={Object.assign({}, mkInp(), { marginBottom: 8 })} />
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(1)} style={mkBtn({ minHeight: 38, padding: "8px 14px", background: "var(--wa-sim-accent)" })}>{genBusy ? "🎲 Thinking…" : "🎲 Generate"}</button>
@@ -188,9 +188,9 @@ export function WaSimulator({ ctx, onClose }) {
       </Section>
 
       <Section>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 8 }}>Reply as customer</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Reply as customer</div>
         {custList.length === 0 ? (
-          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No conversations yet — fire a scenario first.</div>
+          <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>No conversations yet — fire a scenario first.</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <Fld label="Conversation">
@@ -208,41 +208,41 @@ export function WaSimulator({ ctx, onClose }) {
               <button className="mgt-hover-scale" disabled={suggesting} onClick={suggestReply} style={mkBtn({ minHeight: 38, padding: "8px 12px", background: "var(--wa-sim-accent)" })}>{suggesting ? "✨ Thinking…" : "✨ Suggest reply"}</button>
               <button className="mgt-hover-scale" onClick={sendAsCustomer} style={mkBtn({ minHeight: 38, padding: "8px 14px", background: S.accent })}>Send as customer</button>
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Arrives as a real inbound (window resets, unread). ✨ asks Gemini to write the customer's next message — edit before sending.</div>
+            <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>Arrives as a real inbound (window resets, unread). ✨ asks Gemini to write the customer's next message — edit before sending.</div>
           </div>
         )}
       </Section>
 
       <Section>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 8 }}>Sample data</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Sample data</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="mgt-hover-scale" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: BTN.today })} onClick={onSeed}>Seed sample bookings</button>
           <button className="mgt-hover-scale" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: BTN.del })} onClick={onClearBookings}>Clear WA-SIM bookings</button>
           <button className="mgt-hover-scale" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: BTN.del })} onClick={onClearConvos}>Clear conversations</button>
         </div>
-        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>Seed first — the linked cancel/modify and Regular-chip scenarios reference these bookings.</div>
+        <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Seed first — the linked cancel/modify and Regular-chip scenarios reference these bookings.</div>
       </Section>
 
       <Section>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 8 }}>Send failure (test Retry)</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Send failure (test Retry)</div>
         <button className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: BTN.del, width: "100%" })} onClick={onFailNext}>⚠ Make next staff reply fail</button>
-        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>Client mode only. Then send a reply in the inbox — the bubble shows “failed” with a ↻ Retry button. (Backend mode handles failures server-side.)</div>
+        <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Client mode only. Then send a reply in the inbox — the bubble shows “failed” with a ↻ Retry button. (Backend mode handles failures server-side.)</div>
       </Section>
 
       <Section>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 8 }}>Busy moment</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Busy moment</div>
         <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "9px 14px", background: "var(--wa-sim-accent)", width: "100%" })} onClick={onBurst}>🌊 Simulate a burst (ongoing + new)</button>
-        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>Moves the open conversations forward (a draft adds a detail, a confirmed booking asks to change, an unhandled request gets a nudge) and adds a couple of new ones.</div>
+        <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Moves the open conversations forward (a draft adds a detail, a confirmed booking asks to change, an unhandled request gets a nudge) and adds a couple of new ones.</div>
       </Section>
 
       {Object.keys(groups).map((g) => (
         <Section key={g}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 8 }}>{g}</div>
+          <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>{g}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {groups[g].map((s) => (
               <div key={s.id}>
                 <button className="mgt-hover-scale" style={mkBtn({ minHeight: 38, padding: "8px 12px", background: "var(--btn-default)", width: "100%", textAlign: "left" })} onClick={() => runScenario(s)}>{s.label}</button>
-                {s.note ? <div style={{ fontSize: 11, color: "var(--text-muted)", margin: "3px 2px 0" }}>{s.note}</div> : null}
+                {s.note ? <div style={{ fontSize: T.small, color: "var(--text-muted)", margin: "3px 2px 0" }}>{s.note}</div> : null}
               </div>
             ))}
           </div>
@@ -250,7 +250,7 @@ export function WaSimulator({ ctx, onClose }) {
       ))}
 
       <Section>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 10 }}>Custom message</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 10 }}>Custom message</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <Fld label="Phone"><input className="mgt-hover-scale" value={form.phone} onChange={upd("phone")} style={mkInp()} placeholder="+34600000000" /></Fld>
           <Fld label="Language">
@@ -278,7 +278,7 @@ export function WaSimulator({ ctx, onClose }) {
           <Fld label="Message" style={{ gridColumn: "1 / -1" }}><textarea className="mgt-hover-scale" value={form.text} onChange={upd("text")} rows={2} style={mkArea()} placeholder="What the customer typed…" /></Fld>
         </div>
         <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "9px 16px", background: S.accent, marginTop: 10 })} onClick={sendCustom}>Send custom message</button>
-        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>Intent question/other → message only (no draft). Size/date/time apply to new_booking.</div>
+        <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Intent question/other → message only (no draft). Size/date/time apply to new_booking.</div>
       </Section>
     </Overlay>
   );

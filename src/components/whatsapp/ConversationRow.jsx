@@ -5,7 +5,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, formatPhone, formatRelativeTime, isParsing } from "../../lib/whatsapp";
-import { R } from "../../lib/constants";
+import { R, T, FW } from "../../lib/constants";
 
 export function ConversationRow({ conv, active, onClick, bookings, flipId, selectMode, checked }) {
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
@@ -18,11 +18,11 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
   // Parsing/typing tag (sandbox inbound path) takes visual priority — the
   // message is mid-parse, so the intent/draft tag isn't known yet.
   let tagEl = null;
-  if (isParsing(conv)) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: 10, fontWeight: 700, marginLeft: 6, padding: "1px 7px", borderRadius: R.pill, color: "var(--accent)", border: "1px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
-  else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: 12, marginLeft: 6, color: "var(--danger-text)", fontWeight: 700 }}>⚠</span>;
-  else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: 12, marginLeft: 6, color: "var(--warn-text)", fontWeight: 700 }}>✎</span>;
-  else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ fontSize: 12, marginLeft: 6 }}>📋</span>;
-  else if (hasAccepted) tagEl = <span title="Booking confirmed" style={{ fontSize: 12, marginLeft: 6, color: "var(--success-text)", fontWeight: 700 }}>✓</span>;
+  if (isParsing(conv)) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: T.micro, fontWeight: FW.semi, marginLeft: 6, padding: "1px 7px", borderRadius: R.pill, color: "var(--accent)", border: "1px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
+  else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--danger-text)", fontWeight: FW.semi }}>⚠</span>;
+  else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--warn-text)", fontWeight: FW.semi }}>✎</span>;
+  else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ fontSize: T.body, marginLeft: 6 }}>📋</span>;
+  else if (hasAccepted) tagEl = <span title="Booking confirmed" style={{ fontSize: T.body, marginLeft: 6, color: "var(--success-text)", fontWeight: FW.semi }}>✓</span>;
 
   const archivedDimming = conv.archived ? 0.65 : 1;
   // In select mode the "active" highlight gives way to the checked highlight so
@@ -64,14 +64,14 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
           {conv.unread
             ? <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--wa-unread-dot)", flexShrink: 0, boxShadow: "0 0 0 1px rgba(220,38,38,0.25)" }} />
             : <span style={{ width: 8, height: 8, borderRadius: "50%", background: "transparent", border: "1px solid var(--wa-bubble-in-border)", flexShrink: 0, boxSizing: "border-box" }} />}
-          <span style={{ fontSize: 14, fontWeight: conv.unread ? 700 : 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
+          <span style={{ fontSize: T.lead, fontWeight: conv.unread ? FW.bold : FW.semi, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
           {tagEl}
-          {conv.archived ? <span title="Archived" style={{ fontSize: 11, marginLeft: 4 }}>📦</span> : null}
+          {conv.archived ? <span title="Archived" style={{ fontSize: T.small, marginLeft: 4 }}>📦</span> : null}
         </div>
-        <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0, fontWeight: 500 }}>{formatRelativeTime(conv.lastMessageAt)}</span>
+        <span style={{ fontSize: T.small, color: "var(--text-muted)", flexShrink: 0, fontWeight: FW.regular }}>{formatRelativeTime(conv.lastMessageAt)}</span>
       </div>
-      {phoneLine ? <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 3, marginLeft: 14 }}>{phoneLine}</div> : null}
-      <div style={{ fontSize: 13, color: conv.unread ? "var(--text-primary)" : "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginLeft: 14, fontWeight: conv.unread ? 500 : 400 }}>{conv.lastMessageSnippet || ""}</div>
+      {phoneLine ? <div style={{ fontSize: T.small, color: "var(--text-muted)", marginBottom: 3, marginLeft: 14 }}>{phoneLine}</div> : null}
+      <div style={{ fontSize: T.body, color: conv.unread ? "var(--text-primary)" : "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginLeft: 14, fontWeight: conv.unread ? FW.medium : FW.regular }}>{conv.lastMessageSnippet || ""}</div>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import { sortConversations, conversationOrder } from "../../lib/whatsapp";
 import { useFlip, Reveal } from "../atoms";
 import { useRevealRows } from "../../hooks/useRevealRows";
 import { ConversationRow } from "./ConversationRow";
+import { T } from "../../lib/constants";
 
 // Per-row collapse speed. 365 = the house 280ms Reveal + 30% (Patryk, on the
 // "Needs action" toggle reading as a snap in the Inbox tab where it removes many
@@ -91,7 +92,7 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
   const flipRef = useFlip([orderSig], () => collapsing || wasCollapsing.current);
   if (!rows.length) {
     return (
-      <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
+      <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--text-muted)", fontSize: T.lead }}>
         {emptyLabel || (archivedView ? "No archived conversations." : "No conversations yet.")}
       </div>
     );
