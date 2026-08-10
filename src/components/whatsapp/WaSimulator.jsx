@@ -13,7 +13,7 @@
 // the conversations/messages nodes.
 
 import { useState, useEffect } from "react";
-import { Overlay, Fld, Section, Toggle, mkInp, mkArea, mkBtn } from "../atoms";
+import { Overlay, Fld, Section, Toggle, mkInp, mkSel, mkArea, mkBtn } from "../atoms";
 import { S, BTN, R, T, FW } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
@@ -195,7 +195,7 @@ export function WaSimulator({ ctx, onClose }) {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <Fld label="Conversation">
-              <select className="mgt-hover-scale" value={effectiveKey} onChange={(e) => setCustKey(e.target.value)} style={mkInp()}>
+              <select className="mgt-hover-scale" value={effectiveKey} onChange={(e) => setCustKey(e.target.value)} style={mkSel()}>
                 {custList.map((c) => <option key={c.phoneKey} value={c.phoneKey}>{custLabel(c)}</option>)}
               </select>
             </Fld>
@@ -209,7 +209,7 @@ export function WaSimulator({ ctx, onClose }) {
               <button className="mgt-hover-scale" disabled={suggesting} onClick={suggestReply} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--wa-sim-accent)" })}>{suggesting ? "Thinking…" : "Suggest reply"}</button>
               <button className="mgt-hover-scale" onClick={sendAsCustomer} style={mkBtn({ minHeight: 40, padding: "8px 14px", background: S.accent })}>Send as customer</button>
             </div>
-            <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>Arrives as a real inbound (window resets, unread). asks Gemini to write the customer's next message — edit before sending.</div>
+            <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>Arrives as a real inbound (window resets, unread). Suggest reply asks Gemini to write the customer's next message — edit before sending.</div>
           </div>
         )}
       </Section>
@@ -255,12 +255,12 @@ export function WaSimulator({ ctx, onClose }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <Fld label="Phone"><input className="mgt-hover-scale" value={form.phone} onChange={upd("phone")} style={mkInp()} placeholder="+34600000000" /></Fld>
           <Fld label="Language">
-            <select className="mgt-hover-scale" value={form.language} onChange={upd("language")} style={mkInp()}>
+            <select className="mgt-hover-scale" value={form.language} onChange={upd("language")} style={mkSel()}>
               <option value="es">ES</option><option value="en">EN</option>
             </select>
           </Fld>
           <Fld label="Intent">
-            <select className="mgt-hover-scale" value={form.intent} onChange={upd("intent")} style={mkInp()}>
+            <select className="mgt-hover-scale" value={form.intent} onChange={upd("intent")} style={mkSel()}>
               <option value="new_booking">new_booking</option>
               <option value="cancel">cancel</option>
               <option value="modify">modify</option>
@@ -269,7 +269,7 @@ export function WaSimulator({ ctx, onClose }) {
             </select>
           </Fld>
           <Fld label="Confidence">
-            <select className="mgt-hover-scale" value={form.confidence} onChange={upd("confidence")} style={mkInp()}>
+            <select className="mgt-hover-scale" value={form.confidence} onChange={upd("confidence")} style={mkSel()}>
               <option value="high">high</option><option value="medium">medium</option><option value="low">low</option>
             </select>
           </Fld>
