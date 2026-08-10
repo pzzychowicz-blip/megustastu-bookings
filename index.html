@@ -256,6 +256,13 @@
            pane directly above it, which inverts the hierarchy — a suggestion
            must never shout over a warning. Tuned to --app-overlap-bg's weight. */
         --suggest-bg-soft: rgba(240, 253, 244, 0.6);
+        /* The PANE-scale danger tint, added for the WA sandbox's intent banner
+           (17.8.0 sweep). Same reasoning as --suggest-bg-soft one line up:
+           --danger-bg is a CHIP fill, and at banner size it shouted over the
+           amber pane idiom the rest of the app uses. Tuned to
+           --app-overlap-bg's weight so a cancellation request and a running-late
+           warning read as the same KIND of surface, differing only in hue. */
+        --danger-bg-soft: rgba(255, 241, 241, 0.6);
         /* Date input (header) */
         --app-date-bg: rgba(255, 255, 255, 0.45); --app-date-border: rgba(255, 255, 255, 0.4);
         /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
@@ -515,6 +522,7 @@
         --app-reconnect-bg: rgba(20, 45, 95, 0.45); --app-reconnect-border: rgba(147, 197, 253, 0.4); --app-reconnect-text: #93c5fd;
         --app-overlap-bg: rgba(80, 55, 15, 0.3);   --app-overlap-border: rgba(253, 186, 116, 0.35);
         --suggest-bg-soft: rgba(28, 66, 42, 0.3);
+        --danger-bg-soft: rgba(80, 25, 25, 0.3);
         --app-date-bg: rgba(118, 118, 128, 0.24);  --app-date-border: rgba(255, 255, 255, 0.12);
         --app-btn-grey: rgba(110, 118, 135, 0.5);  --app-btn-grey-strong: rgba(110, 118, 135, 0.6);
         --app-btn-slate: rgba(100, 116, 139, 0.7);

@@ -236,7 +236,7 @@ export function ConversationView({
           banner. Eased in and self-clearing, so it never becomes chrome. */}
       <Reveal show={!!(recheck && recheck !== "running")} style={{ padding: "0 14px" }}>
         <div style={{ paddingTop: 8 }}>
-          <div style={{ padding: "8px 12px", borderRadius: R.card, fontSize: T.body, fontWeight: FW.regular, background: recheck && recheck.ok ? "var(--suggest-bg)" : "var(--danger-bg)", border: "1px solid " + (recheck && recheck.ok ? "var(--suggest-border)" : "var(--danger-border)"), color: recheck && recheck.ok ? "var(--success-text)" : "var(--danger-text)" }}>
+          <div style={{ padding: "8px 12px", borderRadius: R.card, fontSize: T.body, fontWeight: FW.regular, background: recheck && recheck.ok ? "var(--suggest-bg-soft)" : "var(--danger-bg-soft)", border: "1px solid var(--border-card)", color: recheck && recheck.ok ? "var(--success-text)" : "var(--danger-text)" }}>
             {recheck && recheck !== "running" ? recheck.msg : ""}
           </div>
         </div>

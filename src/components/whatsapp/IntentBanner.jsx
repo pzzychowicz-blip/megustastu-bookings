@@ -30,8 +30,14 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
     if (draftData.preference === "indoor" || draftData.preference === "outdoor") reqParts.push(draftData.preference === "indoor" ? "Indoor" : "Outdoor");
   }
   const showApply = isModify && linkedBooking && onApplyChanges && reqParts.length > 0;
-  const bg = isCancel ? "var(--danger-bg)" : "var(--warn-bg)";
-  const border = isCancel ? "2px solid var(--danger-border)" : "2px solid var(--warn-border)";
+  // v17.8.0: notifications are ONE surface. A soft semantic TINT (pane scale,
+  // not the chip-scale --danger-bg/--warn-bg this used to wear), a 1px neutral
+  // --border-card, R.card, and the hue carried by the mark and the text. The
+  // old shape — a 2px ring in the semantic hue around a saturated wash — is
+  // exactly the bolted-on alert box the sweep removed app-wide, and at banner
+  // size it outshouted every real warning the app had.
+  const bg = isCancel ? "var(--danger-bg-soft)" : "var(--app-overlap-bg)";
+  const border = "1px solid var(--border-card)";
   const color = isCancel ? "var(--danger-text)" : "var(--warn-text)";
   const Icon = isCancel ? WarnIcon : PencilIcon;
   const title = isCancel ? "Customer is requesting to cancel" : "Customer is requesting changes";
