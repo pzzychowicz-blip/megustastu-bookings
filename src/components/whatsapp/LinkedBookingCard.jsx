@@ -6,7 +6,7 @@
 
 import { Reveal } from "../atoms";
 import { useCollapseState } from "../../hooks/useCollapseState";
-import { BLOCK_BG, R, T, FW } from "../../lib/constants";
+import { BLOCK_BG, R, T, FW, M } from "../../lib/constants";
 
 export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, defaultCollapsed }) {
   const [collapsed, toggle] = useCollapseState(phoneKey, "linked", !!defaultCollapsed);
@@ -45,7 +45,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
         <span style={{ fontSize: T.micro, padding: "2px 8px", borderRadius: R.pill, background: statusColor, color: "var(--text-on-accent)", fontWeight: FW.bold, textTransform: "capitalize", flexShrink: 0 }}>{booking.status}</span>
         {collapsed ? <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span> : <span style={{ flex: 1 }} />}
         {actionBtns}
-        <span style={{ fontSize: T.lead, color: "var(--wa-teal-text)", fontWeight: FW.semi, flexShrink: 0, display: "inline-block", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform 0.18s ease" }}>▸</span>
+        <span style={{ fontSize: T.lead, color: "var(--wa-teal-text)", fontWeight: FW.semi, flexShrink: 0, display: "inline-block", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}>▸</span>
       </div>
       <Reveal show={!collapsed}>
         <div style={{ marginTop: 8 }}>

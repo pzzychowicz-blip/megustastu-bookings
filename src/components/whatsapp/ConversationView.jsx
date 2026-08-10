@@ -175,6 +175,9 @@ export function ConversationView({
       className={running ? undefined : "mgt-hover-scale mgt-press"}
       style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "6px 9px", cursor: running ? "default" : "pointer", color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "center", opacity: running ? 0.6 : 1 }}
     >
+      {/* The spin is a LOOP — nothing arrives and nothing leaves, so neither
+          direction curve describes it and it keeps `linear`. Documented
+          exception, alongside .mgt-shimmer and .mgt-dot-pulse. */}
       <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" } : { display: "block" }}><RecheckIcon size={15} /></span>
     </button>
   ) : null;

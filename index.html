@@ -861,24 +861,28 @@
       .mgt-fade-in { animation: mgt-fade-in var(--t-shift) var(--ease-out) both; }
       .mgt-appear  { animation: mgt-appear  var(--t-move) var(--ease-out); }
 
-      /* WhatsApp inbox: the Inbox⇄Archived tab crossfade runs 50% longer than
-         the house 180ms (Patryk, 2026-08-01) — the whole list pane swaps there,
-         which needs longer to read than a Settings tab body. Its OWN class on
-         purpose: .mgt-fade-in is shared with the Settings tabs and the composer
-         language chips, and those were not asked to change.
-         NOTE (17.8.0 sync): prod's .mgt-fade-in moved to --t-shift (385ms), so
-         this "slow" class is now FASTER than the class it was defined against.
-         Left verbatim by the merge — retuning it is a WA sweep decision. */
-      .mgt-fade-in-slow { animation: mgt-fade-in 270ms ease-out both; }
+      /* (.mgt-fade-in-slow is GONE — 17.8.0 sweep.) It existed only to run 50%
+         longer than a 180ms .mgt-fade-in, so that the Inbox⇄Archived swap — the
+         whole list pane, not a tab body — had time to read. v17.8.0 moved
+         .mgt-fade-in itself to --t-shift (385ms), which is longer than the
+         "slow" class ever was, so the class had inverted into the faster of the
+         two. A duration defined RELATIVE to another one does not survive the
+         other one being retuned; the Inbox tabs use .mgt-fade-in now. */
 
       /* WhatsApp module (animation parity, post-port): a new chat bubble eases
          in (fade + small rise). Applied to the NEWEST bubble only — see
-         MessageBubble.jsx — so opening a thread doesn't cascade-animate history. */
+         MessageBubble.jsx — so opening a thread doesn't cascade-animate history.
+         A bubble ARRIVES, so --ease-out at --t-move (this used to be Material's
+         .4,0,.2,1 at 200ms — one of the five curves v17.8.0 collapsed). */
       @keyframes mgt-bubble-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
-      .mgt-bubble-in { animation: mgt-bubble-in 200ms cubic-bezier(.4, 0, .2, 1) both; }
+      .mgt-bubble-in { animation: mgt-bubble-in var(--t-move) var(--ease-out) both; }
       /* Parsing/typing indicator (WA inbox): a sweeping highlight across a muted
          track while the inbound message is being parsed (Gemini round-trip). The
-         reduced-motion guard below stops the sweep. */
+         reduced-motion guard below stops the sweep.
+         Keeps ease-in-out, and the duration stays a literal: this is a LOOP, so
+         nothing arrives and nothing leaves and neither direction curve describes
+         it — the same documented exception as .mgt-dot-pulse. Same for mgt-spin
+         below, which is linear for the same reason. */
       @keyframes mgt-shimmer { from { background-position: -160px 0; } to { background-position: 160px 0; } }
       .mgt-shimmer {
         background-image: linear-gradient(90deg, transparent 0%, var(--wa-shimmer, rgba(0,122,255,0.18)) 50%, transparent 100%);

@@ -7,7 +7,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Reveal } from "../atoms";
 import { TemplatesIcon } from "./WaIcons";
-import { R, T, FW } from "../../lib/constants";
+import { R, T, FW, M } from "../../lib/constants";
 
 // TemplateChips — private to the composer. Tapping a chip inserts its text.
 // scrollLang (compact mode): the language switch joins the chips inside ONE
@@ -36,7 +36,7 @@ function TemplateChips({ templates, convLang, onInsert, scrollLang }) {
           key={l}
           className="mgt-hover-scale"
           onClick={() => setOutLang(l)}
-          style={{ background: outLang === l ? "var(--accent)" : "transparent", color: outLang === l ? "var(--text-on-accent)" : "var(--text-primary)", border: "none", borderRadius: R.pill, padding: "4px 10px", fontSize: T.small, fontWeight: FW.semi, cursor: "pointer", textTransform: "uppercase", transition: "background-color 160ms linear, color 160ms linear" }}
+          style={{ background: outLang === l ? "var(--accent)" : "transparent", color: outLang === l ? "var(--text-on-accent)" : "var(--text-primary)", border: "none", borderRadius: R.pill, padding: "4px 10px", fontSize: T.small, fontWeight: FW.semi, cursor: "pointer", textTransform: "uppercase", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
         >{l}</button>
       ))}
     </div>
@@ -122,7 +122,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
           onClick={() => setTplOpen((v) => !v)}
           title="Templates"
           className="mgt-hover-scale mgt-press"
-          style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: R.pill, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "0 1px 2px rgba(0,0,0,0.04)", transition: "background-color 160ms linear, color 160ms linear" }}
+          style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: R.pill, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "0 1px 2px rgba(0,0,0,0.04)", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
         ><TemplatesIcon size={18} /></button>
         <textarea
           ref={areaRef}

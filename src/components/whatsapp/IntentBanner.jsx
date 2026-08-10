@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { Reveal } from "../atoms";
 import { useCollapseState } from "../../hooks/useCollapseState";
-import { R, T, FW } from "../../lib/constants";
+import { R, T, FW, M } from "../../lib/constants";
 
 export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMarkHandled, onApplyChanges }) {
   const [collapsed, toggle] = useCollapseState(phoneKey, "intent", false);
@@ -68,12 +68,12 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
   // header stays put and the details ease open/closed instead of the
   // collapsed-strip ⇄ full-card swap snapping the layout.
   return (
-    <div style={{ padding: "10px 14px", borderRadius: R.card, background: bg, border, marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", opacity: leaving ? 0 : 1, transition: "opacity 300ms ease" }}>
+    <div style={{ padding: "10px 14px", borderRadius: R.card, background: bg, border, marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", opacity: leaving ? 0 : 1, transition: "opacity " + M.exit }}>
       <div onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
         <span style={{ fontSize: T.lead, flexShrink: 0 }}>{icon}</span>
         <span style={{ fontSize: T.body, fontWeight: FW.semi, color, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
         {actionBtns}
-        <span style={{ fontSize: T.lead, color, fontWeight: FW.semi, flexShrink: 0, display: "inline-block", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform 0.18s ease" }}>▸</span>
+        <span style={{ fontSize: T.lead, color, fontWeight: FW.semi, flexShrink: 0, display: "inline-block", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}>▸</span>
       </div>
       <Reveal show={!collapsed}>
         <div style={{ marginTop: 8 }}>

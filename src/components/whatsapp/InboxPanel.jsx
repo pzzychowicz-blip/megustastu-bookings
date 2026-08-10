@@ -15,7 +15,7 @@ import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { TemplatesIcon, SelectIcon } from "./WaIcons";
 import { mkBtn, mkInp, usePresence, ModalPresence, Overlay, Reveal } from "../atoms";
-import { R, T, FW } from "../../lib/constants";
+import { R, T, FW, M } from "../../lib/constants";
 
 // A conversation is "actionable" when it needs a staff response. For a
 // cancel/modify request that's the intent banner being VISIBLE (i.e. not yet
@@ -299,7 +299,7 @@ export function InboxPanel({
   const listEl = (
     <div style={{ width: twoPane ? 320 : "100%", flexShrink: 0, borderRight: twoPane ? "1px solid var(--wa-divider)" : "none", background: "var(--wa-list-bg)", height: "100%", overflow: "hidden", display: twoPane || !activeKey ? "flex" : "none", flexDirection: "column" }}>
       {/* keyed by tab → Inbox⇄Archived switch crossfades the list */}
-      <div key={tab} className="mgt-fade-in-slow" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div key={tab} className="mgt-fade-in" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <ConversationList conversations={filteredConvs} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
       </div>
     </div>
@@ -367,7 +367,7 @@ export function InboxPanel({
             onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
             title={selectMode ? "Exit selection" : "Select conversations"}
             className="mgt-hover-scale mgt-press"
-            style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color 160ms linear, color 160ms linear" }}
+            style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
           ><SelectIcon size={17} /></button>
           <button
             onClick={() => setNeedsAction((v) => !v)}
