@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "check:style": "node scripts/check-style-invariants.mjs",
     "test:watch": "vitest",
     "wa:backend": "node scripts/wa-backend-dev.mjs"
   },

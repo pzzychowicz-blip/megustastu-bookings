@@ -22,7 +22,7 @@
 // only positions what exists (a new table gets an auto slot via sanitize).
 
 import { useState, useRef, useEffect } from "react";
-import { S, R } from "../lib/constants";
+import { S, R, T, FW } from "../lib/constants";
 import { mkBtn } from "./atoms";
 // v17.1.0 (Tier 3 code-splitting): the shared geometry moved to FloorGlyphs.jsx
 // so PlanView (main chunk) no longer pulls this whole editor in. Re-exported
@@ -37,16 +37,16 @@ function snap(n){ return Math.round(n / SNAP) * SNAP; }
 function Step({ label, value, fmt, onDec, onInc, disableDec, disableInc }){
   const btn = {
     background: "var(--bg-stepper)", border: "1px solid var(--border-soft)", borderRadius: R.pill,
-    width: 28, height: 28, fontSize: 15, fontWeight: 600, color: "var(--text-primary)",
+    width: 28, height: 28, fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)",
     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "var(--shadow-input)"
   };
   return (
     <div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
           style={{ ...btn, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
-        <span style={{ minWidth: 46, textAlign: "center", fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{fmt ? fmt(value) : value}</span>
+        <span style={{ minWidth: 46, textAlign: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{fmt ? fmt(value) : value}</span>
         <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
           style={{ ...btn, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
       </div>
@@ -239,12 +239,12 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
     };
     inspector = (
       <div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: S.text, marginBottom: 8 }}>{"Table " + id + " · seats " + cap}</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, marginBottom: 8 }}>{"Table " + id + " · seats " + cap}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
           {["round", "square", "rect"].map(function(sh){
             return <button key={sh} onClick={function(){ patchTable(id, { shape: sh }); }}
               className="mgt-hover-scale"
-              style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: e.shape === sh ? S.accent : "var(--app-btn-grey)", textTransform: "capitalize" })}>{sh === "rect" ? "Rectangle" : sh}</button>;
+              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: e.shape === sh ? S.accent : "var(--app-btn-grey)", textTransform: "capitalize" })}>{sh === "rect" ? "Rectangle" : sh}</button>;
           })}
         </div>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 12 }}>
@@ -260,7 +260,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             disableDec={false} disableInc={false}
             onDec={function(){ patchTable(id, { rot: ((e.rot || 0) + 345) % 360 }); }} onInc={function(){ patchTable(id, { rot: ((e.rot || 0) + 15) % 360 }); }} />
         </div>
-        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>
+        <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>
           {e.shape === "round" ? "Chairs (spread evenly around)" : "Chairs per side"}
         </div>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
@@ -269,7 +269,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             : [chairStep("top", "Top"), chairStep("right", "Right"), chairStep("bottom", "Bottom"), chairStep("left", "Left")]}
         </div>
         {totalChairs !== cap ? (
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--warn-text)", marginTop: 8 }}>
+          <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 8 }}>
             {totalChairs + " chair" + (totalChairs !== 1 ? "s" : "") + " drawn, but the table seats " + cap + " (capacity is set in the Tables editor above)."}
           </div>
         ) : null}
@@ -279,7 +279,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
     const i = sel.key, d = fp.doors[i];
     inspector = (
       <div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: S.text, marginBottom: 8 }}>Door</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, marginBottom: 8 }}>Door</div>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
           <Step label="Rotation" value={d.rot || 0} fmt={function(n){ return n + "°"; }}
             onDec={function(){ patchDoor(i, { rot: ((d.rot || 0) + 345) % 360 }); }} onInc={function(){ patchDoor(i, { rot: ((d.rot || 0) + 15) % 360 }); }} />
@@ -288,17 +288,17 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             onDec={function(){ patchDoor(i, { width: d.width - 10 }); }} onInc={function(){ patchDoor(i, { width: d.width + 10 }); }} />
           {/* v17.0.0 correction: which side the door opens toward (hinge side) */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>Opens</div>
+            <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 4 }}>Opens</div>
             <div style={{ display: "flex", gap: 6 }}>
               {[["left", !d.flip], ["right", !!d.flip]].map(function(o){
                 return <button key={o[0]} onClick={function(){ patchDoor(i, { flip: o[0] === "right" }); }}
                   className="mgt-hover-scale"
-                  style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: o[1] ? S.accent : "var(--app-btn-grey)", textTransform: "capitalize" })}>{o[0]}</button>;
+                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: o[1] ? S.accent : "var(--app-btn-grey)", textTransform: "capitalize" })}>{o[0]}</button>;
               })}
             </div>
           </div>
           <button onClick={function(){ commitFp({ ...fp, doors: fp.doors.filter(function(_, j){ return j !== i; }) }); setSel(null); }}
-            className="mgt-hover-scale" style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: "var(--btn-del)" })}>Delete door</button>
+            className="mgt-hover-scale" style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: "var(--btn-del)" })}>Delete door</button>
         </div>
       </div>
     );
@@ -307,10 +307,10 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
     const len = Math.round(Math.sqrt(Math.pow(wl.x2 - wl.x1, 2) + Math.pow(wl.y2 - wl.y1, 2)));
     inspector = (
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: S.text }}>{"Wall · " + len + " cm"}</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text }}>{"Wall · " + len + " cm"}</div>
         <button onClick={function(){ commitFp({ ...fp, walls: fp.walls.filter(function(_, j){ return j !== i; }) }); setSel(null); }}
-          className="mgt-hover-scale" style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: "var(--btn-del)" })}>Delete wall</button>
-        <span style={{ fontSize: 12, color: S.muted }}>Drag the wall to move it, or drag its endpoint handles to reshape it.</span>
+          className="mgt-hover-scale" style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: "var(--btn-del)" })}>Delete wall</button>
+        <span style={{ fontSize: T.body, color: S.muted }}>Drag the wall to move it, or drag its endpoint handles to reshape it.</span>
       </div>
     );
   }
@@ -318,7 +318,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
   const modeBtn = function(m, lbl){
     return <button key={m} onClick={function(){ setMode(m); setWallStart(null); setHoverPt(null); }}
       className="mgt-hover-scale"
-      style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: mode === m ? S.accent : "var(--app-btn-grey)" })}>{lbl}</button>;
+      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: mode === m ? S.accent : "var(--app-btn-grey)" })}>{lbl}</button>;
   };
 
   return (
@@ -330,14 +330,14 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         {/* v17.0.0 correction round 6: zoom controls */}
         <div style={{ display: "flex", gap: 4, marginLeft: 6, alignItems: "center" }}>
           <button onClick={function(){ zoomBy(1 / 1.25); }} disabled={zoom.k <= 1} className={zoom.k <= 1 ? undefined : "mgt-hover-scale"}
-            style={mkBtn({ fontSize: 15, fontWeight: 700, minHeight: 32, width: 34, padding: 0, background: "var(--app-btn-grey)", opacity: zoom.k <= 1 ? 0.4 : 1 })}>−</button>
-          <span style={{ fontSize: 11, color: S.muted, minWidth: 30, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom.k * 100) + "%"}</span>
+            style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, minHeight: 32, width: 34, padding: 0, background: "var(--app-btn-grey)", opacity: zoom.k <= 1 ? 0.4 : 1 })}>−</button>
+          <span style={{ fontSize: T.small, color: S.muted, minWidth: 30, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom.k * 100) + "%"}</span>
           <button onClick={function(){ zoomBy(1.25); }} disabled={zoom.k >= 4} className={zoom.k >= 4 ? undefined : "mgt-hover-scale"}
-            style={mkBtn({ fontSize: 15, fontWeight: 700, minHeight: 32, width: 34, padding: 0, background: "var(--app-btn-grey)", opacity: zoom.k >= 4 ? 0.4 : 1 })}>+</button>
+            style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, minHeight: 32, width: 34, padding: 0, background: "var(--app-btn-grey)", opacity: zoom.k >= 4 ? 0.4 : 1 })}>+</button>
           <button onClick={resetZoom} disabled={zoom.k === 1 && zoom.x === 0 && zoom.y === 0} className={zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? undefined : "mgt-hover-scale"}
-            style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 10px", background: "var(--app-btn-grey)", opacity: zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? 0.4 : 1 })}>Reset</button>
+            style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: "var(--app-btn-grey)", opacity: zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? 0.4 : 1 })}>Reset</button>
         </div>
-        <span style={{ fontSize: 12, color: S.muted, marginLeft: 6 }}>
+        <span style={{ fontSize: T.body, color: S.muted, marginLeft: 6 }}>
           {mode === "wall" ? (wallStart ? "Tap the wall's END point." : "Tap the wall's START point.")
             : mode === "door" ? "Tap where the door sits."
             : "Tap an element to edit it; drag tables and doors to move them."}
@@ -448,7 +448,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
           {inspector}
         </div>
       ) : null}
-      <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 10 }}>
+      <div style={{ fontSize: T.small, color: "var(--text-faint)", marginTop: 10 }}>
         All distances are in centimeters — grid squares are 50 cm, positions snap to 10 cm.
         The plan mirrors your Tables list — add, remove or rename tables in the Tables editor above; new tables appear here automatically. Shared across all devices.
       </div>

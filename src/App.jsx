@@ -24,8 +24,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES
-} from "./lib/constants";
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, M, T, FW } from "./lib/constants";
 
 import {
   getDur, toMins, genId,
@@ -37,12 +36,15 @@ import {
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
   checkInefficent, verifyClean, findConflicts,
   nowTime,
-  trialFits, toTime, lateState, freeingSoon, rankCombosContaining, comboExistsFor,
+  lateState, freeingSoon, rankCombosContaining, comboExistsFor,
   undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
 import { normalizePhone } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
+// v17.8.0: the waitlist placement pass — pure, extracted from this file so it
+// can be unit-tested (tests/waitlist-match.test.js).
+import { placeWaitlist } from "./lib/waitlist-match";
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
@@ -52,7 +54,8 @@ import { sameDraft } from "./lib/drafts";
 import { Overlay, mkBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
-import { AppBanners } from "./components/AppBanners";
+import { appBannerSections } from "./components/AppBanners";
+import { NotificationStrip } from "./components/NotificationStrip";
 
 
 // ── Phase B2 (v15-refactor): secondary modals ─────────────────────────────
@@ -99,7 +102,7 @@ function lazyChunk(load,name){
         }
       }catch{/* ignore */}
       return {default:function ChunkLoadError(){
-        return <div style={{padding:16,fontSize:13,fontWeight:600,color:"var(--danger-text)"}}>Couldn’t load this screen — the app may have been updated. Please reload.</div>;
+        return <div style={{padding:16,fontSize: T.body,fontWeight: FW.semi,color:"var(--danger-text)"}}>Couldn’t load this screen — the app may have been updated. Please reload.</div>;
       }};
     });
   });
@@ -117,6 +120,7 @@ import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
 import { ViewTools }    from "./components/ViewTools";
+import { WaitIcon, BellIcon, BellRingIcon, LateIcon, OverlapIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -274,7 +278,7 @@ const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
   // Sandbox build marker — WhatsApp module under local test, NOT a release.
   // The formal version bump happens on "give me the deployment version".
-  version:"17.7.0-wa-sandbox",
+  version:"17.8.0-wa-sandbox",
   sandbox:"WhatsApp inbox + simulator (localhost only)",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
@@ -650,11 +654,15 @@ function BookingApp({uid}){
   const [formBaseline, setFormBaseline] = useState(EMPTY_FORM);
   function openForm(next){setFormBaseline(next);setForm(next);}
   // Which surface the discard confirm is asking about: "form" | "walkin" |
-  // "manual" | null. One shared modal, three callers.
+  // "manual" | "reminder" | "block" | "settings" | null. One shared modal, six
+  // callers as of v17.8.0.
   const [confirmDiscard, setConfirmDiscard] = useState(null);
   // ManualModal owns its table-pick state internally, so it reports dirtiness
-  // up rather than App reaching in (see its onDirty prop).
+  // up rather than App reaching in (see its onDirty prop). v17.8.0: BlockModal
+  // and Settings do the same — their drafts are component-local too.
   const [manualDirty, setManualDirty] = useState(false);
+  const [blockDirty, setBlockDirty] = useState(false);
+  const [settingsDirty, setSettingsDirty] = useState(false);
   // v17.0.0: status override for the pending flow — set by save("pending"/
   // "confirmed") ("Save pending" / "Save&confirm" buttons) and read by doSave.
   // A ref (not an arg) because the kitchen-confirm modal + its Enter shortcut
@@ -756,7 +764,7 @@ function BookingApp({uid}){
   } = usePersistence({ autoOptimizer, nowMins });
   // v17.3.0: real-time device presence (connection-dot popover). Ephemeral node,
   // exempt from the CAS rule — see ./hooks/usePresence.js.
-  const { devices: presenceDevices, myKey: presenceKey } = usePresence();
+  const { devices: presenceDevices, myKey: presenceKey, offset: presenceOffset } = usePresence();
   // ── v14.4.0 / v15.0.0: Operating hours (Firebase settings/operatingHours, shared) ──
   // Now PER-WEEKDAY. The hook applies the ACTIVE view-day's hours to constants.js's
   // live OPEN/CLOSE/GRID_CLOSE on each render (keyed to viewDate); `weekHours` drives
@@ -832,12 +840,13 @@ function BookingApp({uid}){
   const {
     reminders,
     reminderEditor, setReminderEditor,
+    reminderDirty,
     confirmReminderDel, setConfirmReminderDel,
     saveReminderFromEditor,
     doDeleteReminder,
     openNewReminder, openEditReminder,
     deleteReminder, toggleReminderActive,
-    reminderBanners,
+    reminderBanners, reminderCount,
   } = useReminders({ nowMins, setWriteWarning });
   // ── v16.0.0: Waitlist state ─────────────────────────────────────────────────
   const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
@@ -1293,69 +1302,29 @@ function BookingApp({uid}){
   // transition-diff green toast was removed (superseded by the persistent banner).
   const nowQuarter=Math.floor(nowMins/15);
   useEffect(function(){
-    const todayStr=new Date().toISOString().slice(0,10);
-    const next={};
-    // v16.3.0 perf phase 2: whole-pass time budget for the expensive trials
-    // (shared across entries — see tryFit below).
-    const WAIT_SCAN_BUDGET_MS=300;
-    const scanT0=Date.now();
-    waitlist.forEach(function(w){
-      if(!w||w.status!=="waiting"||!w.date||w.date<todayStr) return;
-      const h=hoursFor(w.date);
-      if(h.closed) return;
-      const size=Number(w.size)||2;
-      const dur=getDur(size);
-      const noResh=!optimizerActiveFor(w.date,autoOptimizer);
-      const fromM=w.date===todayStr?Math.max(nowMins,h.open*60):h.open*60;
-      // With a wanted time, only offers within ±90 min of it count as "free"
-      // (a 13:45 slot is no use to a party waiting for ~20:30); without one,
-      // any remaining time that day counts. The wanted time itself is tried
-      // first so the chip shows it exactly when it fits.
-      let scanLo=Math.ceil(fromM/15)*15;
-      let scanHi=h.close*60-dur;
-      // v16.3.0 perf: cheap-first (the findTimes pattern) — a plainly free table
-      // means the slot fits WITHOUT reshuffling anyone; only slots failing the
-      // cheap check pay for the full trial optimisation (expensive on a day
-      // with unplaceable bookings — this scan runs on every data change).
-      // Perf phase 2: a hard per-effect time budget — on an extreme day a
-      // single full trial can cost 100ms+; past the budget we skip further
-      // expensive trials this pass. /code-review anti-flap: a budget-skip is
-      // recorded (budgetHit) so an entry that was available LAST pass keeps its
-      // sticky result below instead of blinking out of the banner — a future
-      // pass (next data change / 15-min bucket) re-verifies for real, and the
-      // Book path re-validates via the form's own scan + doSave guards anyway.
-      let budgetHit=false;
-      const tryFit=function(timeStr){
-        if(!noResh){const cheap=findFreeSlot(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null);if(cheap) return cheap;}
-        if(Date.now()-scanT0>WAIT_SCAN_BUDGET_MS){budgetHit=true;return null;}
-        return trialFits(liveBookings,w.date,timeStr,size,"auto",dur,tableBlocks,null,null,noResh);
-      };
-      if(w.prefTime){
-        const sm=toMins(w.prefTime);
-        if(sm>=fromM&&sm+dur<=h.close*60){
-          const t=tryFit(w.prefTime);
-          if(t){next[w.id]={tables:t,time:w.prefTime};return;}
-        }
-        // v17.0.0: the ± window is editable (settings/general waitMatchWin).
-        const win=generalSettings.waitMatchWin||90;
-        scanLo=Math.max(scanLo,Math.ceil((sm-win)/15)*15);
-        scanHi=Math.min(scanHi,sm+win);
-      }
-      for(let m=scanLo;m<=scanHi&&m<24*60;m+=15){
-        const t=tryFit(toTime(m));
-        if(t){next[w.id]={tables:t,time:toTime(m)};break;}
-      }
-      // Anti-flap carry-forward: no match found AND the budget cut this entry's
-      // scan short → keep the previous pass's availability (if any) rather than
-      // dropping the row. A genuine "no longer fits" (budget NOT hit) still
-      // clears immediately.
-      if(!next[w.id]&&budgetHit&&waitAvailRef.current[w.id]) next[w.id]=waitAvailRef.current[w.id];
+    // v17.8.0 tech-debt: the ~90 lines of placement logic that used to sit here
+    // are `placeWaitlist` in lib/waitlist-match.js — VERBATIM, nothing about the
+    // algorithm changed. It decides which table the app offers each waiting
+    // party, which makes it the most consequential logic in this version, and
+    // inside a useEffect no test could reach it. What is left here is the part
+    // that is genuinely React: the 15-min clock bucket this keys on (never the
+    // raw nowMins tick, or the scans re-run every 15s), the ref mirror that
+    // feeds the anti-flap carry-forward, and the setState.
+    const next=placeWaitlist({
+      bookings:liveBookings,
+      waitlist:waitlist,
+      blocks:tableBlocks,
+      autoOptimizer:autoOptimizer,
+      nowMins:nowMins,
+      todayStr:new Date().toISOString().slice(0,10),
+      matchWin:generalSettings.waitMatchWin,
+      prev:waitAvailRef.current
     });
     waitAvailRef.current=next;
     setWaitAvail(next);
-    // v16.3.0: the transition-to-available cue is now the in-flow WaitAvailBanner
-    // (persistent + actionable), not a 6-second toast — so the prev-set diff that
-    // fired the old toast is gone. waitAvail alone drives the banner.
+    // v16.3.0: the transition-to-available cue is the in-flow WaitAvailBanner
+    // (persistent + actionable), not a 6-second toast — so the prev-set diff
+    // that fired the old toast is gone. waitAvail alone drives the banner.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter,generalSettings.waitMatchWin]);
 
@@ -1603,6 +1572,14 @@ function BookingApp({uid}){
   function requestCloseForm(){if(formDirty) setConfirmDiscard("form");else setShowForm(false);}
   function requestCloseWalkin(){if(walkinDirty) setConfirmDiscard("walkin");else setShowWalkin(false);}
   function requestCloseManual(){if(manualDirty) setConfirmDiscard("manual");else setManualTarget(null);}
+  // v17.8.0: the remaining three drafting surfaces (ROADMAP "Ideas"). Settings
+  // keeps its tab reset on BOTH paths — the clean close here and the discard
+  // below — because that was part of the close behaviour before the guard, not
+  // part of the guard.
+  function closeSettings(){setShowSettings(false);setSettingsTab("general");}
+  function requestCloseReminderEditor(){if(reminderDirty) setConfirmDiscard("reminder");else setReminderEditor(null);}
+  function requestCloseBlock(){if(blockDirty) setConfirmDiscard("block");else setBlockTarget(null);}
+  function requestCloseSettings(){if(settingsDirty) setConfirmDiscard("settings");else closeSettings();}
   // Commit the discard: shut the surface the modal was asked about.
   function doDiscard(){
     const which=confirmDiscard;
@@ -1610,12 +1587,15 @@ function BookingApp({uid}){
     if(which==="form") setShowForm(false);
     else if(which==="walkin") setShowWalkin(false);
     else if(which==="manual") setManualTarget(null);
+    else if(which==="reminder") setReminderEditor(null);
+    else if(which==="block") setBlockTarget(null);
+    else if(which==="settings") closeSettings();
   }
 
   // Tab/window close + reload. Registered ONLY while something is dirty, so the
   // browser never nags on a clean page. Custom text is not possible — every
   // modern browser shows its own generic wording and ignores the string.
-  const anyDirty=formDirty||walkinDirty||manualDirty;
+  const anyDirty=formDirty||walkinDirty||manualDirty||reminderDirty||blockDirty||settingsDirty;
   useEffect(function(){
     if(!anyDirty) return undefined;
     function onBeforeUnload(e){e.preventDefault();e.returnValue="";}
@@ -2033,7 +2013,7 @@ function BookingApp({uid}){
             if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
             return b;
           });});
-          if(ok) flashDragMsg(src.name+" ⇄ "+other.name+" — tables swapped.",true);
+          if(ok) flashDragMsg(src.name+" and "+other.name+" — tables swapped.",true);
           return;
         }
       }
@@ -2180,7 +2160,9 @@ function BookingApp({uid}){
     // v17.5.0 correction: Esc closes the split-setup popup (it has no Cancel).
     splitMenuFor:splitMenuFor,setSplitMenuFor:setSplitMenuFor,
     confirmDiscard:confirmDiscard,setConfirmDiscard:setConfirmDiscard,doDiscard:doDiscard,
-    requestCloseForm:requestCloseForm,requestCloseWalkin:requestCloseWalkin,requestCloseManual:requestCloseManual
+    requestCloseForm:requestCloseForm,requestCloseWalkin:requestCloseWalkin,requestCloseManual:requestCloseManual,
+    // v17.8.0: the three surfaces added to the guard — same reason as above.
+    requestCloseReminderEditor:requestCloseReminderEditor,requestCloseBlock:requestCloseBlock,requestCloseSettings:requestCloseSettings
   });
 
   function updateStatus(id,status){
@@ -2431,6 +2413,71 @@ function BookingApp({uid}){
   },[dayWaiting,waitlist,viewDate,waitAvail,waitNotifyDismissed]);
   function dismissWaitRow(id){setWaitNotifyDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});}
   const hasWaitBanner=waitBannerEntries.length>0;
+
+  // ── v17.8.0: the ONE notification strip ────────────────────────────────────
+  // Six banners could stack at once and, on a busy evening — exactly when
+  // several fire together — they pushed the timeline off the bottom of the
+  // tablet. NotificationStrip collapses all of them into a single pane with a
+  // one-row collapsed height, so the vertical cost stops scaling with how bad
+  // the evening is.
+  //
+  // ORDER IS SEVERITY, and it lives here rather than in the strip because it
+  // is a judgement about THIS app's operations, next to the flags that produce
+  // it: a failed write can lose a booking; offline is degraded but safe;
+  // overlap means two parties are on one table; late is a guest problem;
+  // reminders are scheduled prompts; the waitlist is an opportunity, not a
+  // problem, so it sits last and stays green. The strip shows the first entry
+  // as its collapsed summary, which makes "worst thing first" load-bearing.
+  const notifSections=[].concat(
+    appBannerSections({
+      isOnline:isOnline,
+      writeWarning:writeWarning,
+      onDismissWarning:function(){setWriteWarning(null);},
+      ineffShow:ineffShow,
+      onDismissIneff:function(){setDismissedIneff(viewDate);},
+      onReshuffle:function(){setConfirmReshuffle(true);},
+      // v17.8.0 strip audit: two notices that were living elsewhere. The load
+      // failure was a floating toast (persistent + unrecoverable, so the wrong
+      // layer); the closed-day notice was drawn twice, inside TimelineView and
+      // PlanView, and not at all in List.
+      loadFailed:!bookingsReady&&loadStalled,
+      readError:readError,
+      hasConnected:hasConnected,
+      dayClosed:hoursFor(viewDate).closed
+    }),
+    hasOverlap?[{id:"overlap",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:OverlapIcon,
+      title:"Overlap warnings",count:Object.keys(overlapBannerMap).length,
+      node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
+    hasLate?[{id:"late",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:LateIcon,
+      title:"Running late",count:Object.keys(lateBannerMap).length,
+      node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
+    reminderCount?[{id:"reminders",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:BellRingIcon,
+      title:reminderCount===1?"Reminder":"Reminders",count:reminderCount,node:reminderBanners}]:[],
+    hasWaitBanner?[{id:"wait",tone:"var(--success-text)",tint:"var(--suggest-bg-soft)",icon:WaitIcon,
+      title:"Waitlist — table free",count:waitBannerEntries.length,
+      node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[]
+  );
+  // ── v17.8.0: waitlist ghost blocks for the Timeline ─────────────────────────
+  // waitAvail already knows, per waiting party, the exact tables + time that
+  // would fit them — but that only ever surfaced as a banner row and the ⏳
+  // badge, so staff could not see WHERE the party would go and had to guess
+  // whether taking them was a good idea. This projects each match onto the
+  // viewed day's timeline as a dimmed, pending-coloured block.
+  //
+  // Scoped to the VIEWED date (waitAvail spans every date ≥ today, the timeline
+  // draws one day) and memoised — TimelineView is React.memo'd, so an inline
+  // array literal here would defeat the memo on every BookingApp render.
+  const waitGhosts=useMemo(function(){
+    const out=[];
+    waitlist.forEach(function(w){
+      if(!w||w.status!=="waiting"||w.date!==viewDate) return;
+      const a=waitAvail[w.id];
+      if(!a||!a.tables||!a.tables.length||!a.time) return;
+      const size=Number(w.size)||2;
+      out.push({id:w.id,name:w.name||"Waiting",size:size,time:a.time,dur:getDur(size),tables:a.tables,resh:!!a.resh});
+    });
+    return out;
+  },[waitlist,viewDate,waitAvail]);
   const waitlistModal=<ModalPresence show={showWaitlist}>{showWaitlist?<WaitlistPanel
     entries={dayWaiting}
     availability={waitAvail}
@@ -2448,7 +2495,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -2461,10 +2508,16 @@ function BookingApp({uid}){
       onBlock:function(id){R.current.setBlockTarget(id);},
       onDelete:function(id){R.current.setConfirmDel(id);},
       onReshuffle:function(){R.current.setConfirmReshuffle(true);},
+      onNew:function(){R.current.openNew();},
       onToggleFinished:function(next){R.current.toggleShowFinished(next);},
       onSelect:function(id){R.current.setSelectedListId(id);},
       onSummaryToggle:function(){R.current.setSummaryOpen(function(o){return !o;});},
       onOpenWeek:function(){R.current.setShowWeek(true);},
+      // v17.8.0: tapping a waitlist ghost on the Timeline. The ghost only
+      // carries the entry id, so resolve it here against the live waitlist and
+      // hand the whole entry to the existing bookFromWaitlist (which prefills
+      // the booking form from it + its waitAvail time).
+      onBookWait:function(id){const A=R.current;const w=(A.waitlist||[]).find(function(x){return x&&x.id===id;});if(w) A.bookFromWaitlist(w);},
       onPrint:function(){window.print();}
     };
   });
@@ -2521,6 +2574,8 @@ function BookingApp({uid}){
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={VA.onReshuffle}
     turnBuffer={turnBuffer}
+    waitGhosts={waitGhosts}
+    onBookWait={VA.onBookWait}
     hoursSig={weekHours}
     layoutSig={layout}
     currency={generalSettings.currency} />;
@@ -2540,6 +2595,10 @@ function BookingApp({uid}){
     onSelect={VA.onSelect}
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
+    onNew={VA.onNew}
+    // Walk-in only on TODAY: a walk-in is a party standing at the door now, so
+    // offering it on a future day would open a form for the wrong date.
+    onWalkin={viewDate===new Date().toISOString().slice(0,10)?VA.onWalkin:null}
     currency={generalSettings.currency} />;
   const viewEl={timeline:timelineEl,list:listEl,plan:planView};
   const mainView=viewEl[view];
@@ -2603,7 +2662,7 @@ function BookingApp({uid}){
         onClick={function(){setConfirmDel(null);}}>Cancel</button><button
         onClick={function(){delBooking(confirmDel);}}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete booking?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
 
   // v17.5.0: the ONE discard confirm, shared by the booking form, the walk-in
   // form and ManualModal (requestClose* raise it; doDiscard commits).
@@ -2622,7 +2681,10 @@ function BookingApp({uid}){
   const DISCARD_BODY={
     form:"The booking you're editing hasn't been saved yet.",
     walkin:"This walk-in hasn't been saved yet.",
-    manual:"Your table selection hasn't been applied yet."
+    manual:"Your table selection hasn't been applied yet.",
+    reminder:"This reminder hasn't been saved yet.",
+    block:"This table block hasn't been applied yet.",
+    settings:"A setting you were editing hasn't been saved yet."
   };
   const discardModal=<div style={{position:"relative",zIndex:260}}><ModalPresence show={!!confirmDiscard}>{confirmDiscard?<Overlay onClose={function(){setConfirmDiscard(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
@@ -2630,7 +2692,7 @@ function BookingApp({uid}){
         onClick={function(){setConfirmDiscard(null);}}>Keep editing</button><button
         onClick={doDiscard}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Discard</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Discard unsaved changes?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Discard</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Discard unsaved changes?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
 
   const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
     booking={manualBooking}
@@ -2676,7 +2738,7 @@ function BookingApp({uid}){
            only ever belt-and-braces: html+body are already overflow:hidden in
            this mode (see the body effect above), so nothing can scroll here. */
         shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}><div><div style={{fontSize:isMobile?18:22,fontWeight:700}}>{generalSettings.restaurantName}</div><div style={{fontSize:12,color:S.text,fontWeight:500}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}><ViewSwitcher
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}><div><div style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold}}>{generalSettings.restaurantName}</div><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -2689,30 +2751,30 @@ function BookingApp({uid}){
               onExitSplit={exitSplit} /><button
               onClick={openWalkin}
               className="mgt-hover-scale"
-              style={{background:"var(--app-walkin)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Walk-in</button><button
+              style={{background:"var(--app-walkin)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
-              style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>+ New</button>{/* PROD-leak guard: the whole WA entry point is WA_SANDBOX-gated — a
+              style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>+ New</button>{/* PROD-leak guard: the whole WA entry point is WA_SANDBOX-gated — a
               build without VITE_FB_TARGET=dev (e.g. a main-project Vercel preview
               of this branch) runs on PROD Firebase and must show no WA UI. */}
             {WA_SANDBOX?<button
               onClick={function(){setShowInbox(true);}}
               className="mgt-hover-scale"
               title="WhatsApp inbox (I)"
-              style={{position:"relative",background:"var(--wa-green)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:R.pill,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button>:null}<button
-              onClick={function(){signOut(auth);}}
-              className="mgt-hover-scale"
-              style={mkBtn({fontSize:12,minHeight:40,padding:"8px 14px",background:BTN.nav})}>Log out</button><ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} /></div></div><div
+              style={{position:"relative",background:"var(--wa-green)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize:13,cursor:"pointer",fontWeight:600,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:R.pill,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button>:null}{/* v17.8.0: the Log-out button used to sit here, right of the WA
+              button. It now lives INSIDE this popover, on the status row — see
+              ConnectionStatus. That also drops one item from a header that
+              wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onLogout={function(){signOut(auth);}} /></div></div><div
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
+              style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Previous day"
               title="Previous day (←)"
               dangerouslySetInnerHTML={{__html:"&#8249;"}} /><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize:18,background:BTN.nav})}
+              style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Next day"
               title="Next day (→)"
               dangerouslySetInnerHTML={{__html:"&#8250;"}} /><input
@@ -2720,7 +2782,7 @@ function BookingApp({uid}){
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
               className="mgt-hover-scale"
-              style={{fontSize:14,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight:600,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center"}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
+              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center"}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){goToDate(new Date().toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
@@ -2731,7 +2793,7 @@ function BookingApp({uid}){
               aria-label={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               title={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav})}>{"⏳ "+dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis 260ms ease"}}>{summaryPanel}</div>{/* v17.0.0 round 8: 🔍 + ⚙ live HERE (right of Summary) for every
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={15} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.0.0 round 8: 🔍 + ⚙ live HERE (right of Summary) for every
               view — Timeline's legend and List's card-header each used to carry
               their own copy and Plan had none. minHeight 40 aligns them with the
               date controls; marginLeft:auto keeps them right-aligned when the
@@ -2760,17 +2822,11 @@ function BookingApp({uid}){
                  card is the content box, so 4% padding is precisely enough at
                  any width. The negative margin puts the content back where it
                  was, so card width and position are unchanged from before. */
-              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><AppBanners
-                isOnline={isOnline}
-                writeWarning={writeWarning}
-                onDismissWarning={function(){setWriteWarning(null);}}
-                ineffShow={ineffShow}
-                onDismissIneff={function(){setDismissedIneff(viewDate);}}
-                onReshuffle={function(){setConfirmReshuffle(true);}} /><Reveal show={hasOverlap}><OverlapBanner warnings={overlapBannerMap} bookings={bookings} collapseMax={generalSettings.lateCollapseMax} onReassign={reassignBooking} onDismiss={dismissOverlapRow} /></Reveal><Reveal show={hasLate}><LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} collapseMax={generalSettings.lateCollapseMax} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} /></Reveal><Reveal show={hasWaitBanner}><WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} collapseMax={generalSettings.lateCollapseMax} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} /></Reveal><Reveal show={!!reminderBanners}>{reminderBanners}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
+                  children, so the pane fades out fully drawn instead of blanking a
+                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} />:null}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 loadStalled={loadStalled}
-                readError={readError}
-                hasConnected={hasConnected}
                 resyncing={resyncing}
                 reconnectShown={reconnectShown}
                 syncFix={syncFix}
@@ -2821,37 +2877,39 @@ function BookingApp({uid}){
           blocks={tableBlocks}
           onSave={addBlock}
           onRemove={removeBlock}
-          onClose={function(){setBlockTarget(null);}} />:null}</ModalPresence><ModalPresence show={!!confirmCancel}>{confirmCancel?<Overlay onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+          onDirty={setBlockDirty}
+          onClose={requestCloseBlock} />:null}</ModalPresence><ModalPresence show={!!confirmCancel}>{confirmCancel?<Overlay onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmCancel(null);}}>Back</button><button
               onClick={function(){doCancelBooking(confirmCancel,true);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>No show</button><button
+              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>No show</button><button
               onClick={function(){doCancelBooking(confirmCancel,false);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Cancel booking</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Cancel booking?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Cancel booking</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Cancel booking?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Confirm</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</div><div style={{fontSize:14,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Confirm</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</div><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
               onClick={function(){setConfirmReshuffle(false);forceReshuffle();}}
               className="mgt-hover-scale"
-              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
+              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
-        showSettings?<Overlay onClose={function(){setShowSettings(false);setSettingsTab("general");}} footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
+        showSettings?<Overlay onClose={requestCloseSettings} footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"8px 18px",background:"var(--app-btn-slate)"})}
-              onClick={function(){setShowSettings(false);setSettingsTab("general");}}>Close</button></div>}><div style={{textAlign:"center",marginBottom:14}}><div
-              style={{fontSize:16,fontWeight:700,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:"var(--app-btn-grey-strong)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Settings</div></div><Suspense fallback={null}><SettingsContent
+              onClick={requestCloseSettings}>Close</button></div>}><div style={{textAlign:"center",marginBottom:14}}><div
+              style={{fontSize: T.title,fontWeight: FW.bold,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:"var(--app-btn-grey-strong)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Settings</div></div><Suspense fallback={null}><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
+            onDirty={setSettingsDirty}
             isDark={isDark}
             onToggleDark={onToggleDark}
             appWidth={appWidth}
@@ -2908,12 +2966,12 @@ function BookingApp({uid}){
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
               onClick={function(){doDeleteReminder(confirmReminderDel);}}
               className="mgt-hover-scale"
-              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize:14,fontWeight:600,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize:17,fontWeight:700,marginBottom:8,color:S.text}}>Delete reminder?</div><div style={{fontSize:14,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
+              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete reminder?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
         reminderEditor?<ReminderEditor
           draft={reminderEditor.draft}
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
           onSave={saveReminderFromEditor}
-          onCancel={function(){setReminderEditor(null);}}
+          onCancel={requestCloseReminderEditor}
           isNew={reminderEditor.id==="new"} />:null}</ModalPresence><ModalPresence show={showInbox}>{showInbox?<InboxPanel
           conversations={wa.conversations}
           messages={wa.messagesMap}
@@ -2974,7 +3032,7 @@ export default function App(){
   },[]);
   if(checking) return (
     <div
-      style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-app)",color:S.text,fontSize:15}}>Loading...</div>
+      style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-app)",color:S.text,fontSize: T.lead}}>Loading...</div>
   );
   if(!user) return <LoginScreen />;
   // v17.6.0: `key={user.uid}` remounts BookingApp on an account switch, so a

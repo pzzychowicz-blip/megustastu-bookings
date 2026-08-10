@@ -40,12 +40,22 @@
 import { useState, useRef, useEffect, useMemo, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
-  ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG,
-  S, TBL, BTN, TIMELINE_TABLES, hoursFor, R } from "../lib/constants";
+  ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
+  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
+import { WaitIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
+
+// A block moves in two ways at once and they are NOT the same kind of motion:
+// left/width is the schedule changing (geometry — M.shift), transform is the
+// hover/group lift answering a pointer (M.tap). One shared constant because
+// four call sites paint a block or its ghost and they must lift in lockstep —
+// the :has() ghost rule in index.html depends on exactly that.
+// (Below the imports: it worked above them only because imports hoist, which is
+// the kind of thing that stops being true the day a circular import appears.)
+const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.tap;
 
 // v15.8.0: module-level status-change animation state (survives the inline Block
 // remount + any TimelineView remount during the save flow). Single timeline, so
@@ -81,7 +91,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   const lbl = b.name + " (" + b.size + ")"
     + (isLocked(b) ? " [L]" : "")
     + (hasPrefT ? " ★" : "")
-    + (noShows >= 2 ? " ⚠" : "")
+    + (noShows >= 2 ? " [!]" : "")
     + ((Number(b.deposit) || 0) > 0 ? " " + currency : "")   // v16.3.0 deposit marker (v17.0.0: currency from settings/general)
     + (warn && warn.overdue ? " !!" : "");
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
@@ -95,11 +105,28 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // span SNAPPED. With the width easing, the flex:1 name slides in lockstep.
   const timeChip = (
     <Reveal show={showChip} horizontal style={{ pointerEvents: "none" }}>
+      {/* v17.8.0 correction (Patryk): the chip now matches the HOUR PILLS on the
+          ruler above the grid — same --tl-hour-pill fill, same white text, same
+          radius. It used to be a translucent white wash, which meant its
+          appearance was a function of whatever block it happened to sit on: pale
+          on amber, bright on green, and legible on neither at 10px. A time is a
+          time wherever it appears, so it should look identical to the ruler that
+          labels the same axis. This is also what lets the amber blocks keep
+          white ink at 1.8:1 without the START TIME becoming unreadable — the
+          chip carries its own opaque background and is not affected.
+          Held at 0.8 opacity (Patryk): at full strength an opaque slate pill on
+          every block out-shouted the guest NAME beside it, which is the thing
+          you actually read a block for. The ruler's pills can be full strength
+          because they are alone on an empty strip; this one is not. Dimming the
+          whole chip rather than lightening its fill keeps it the same object as
+          the ruler pill, just quieter — the fill and the label fade together
+          instead of the label drifting off its own background. */}
       <span style={{
-        flexShrink: 0, marginLeft: 6, padding: "1px 4px", borderRadius: R.pill,
-        fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+        flexShrink: 0, marginLeft: 6, padding: "2px 5px", borderRadius: R.pill,
+        fontSize: T.micro, fontWeight: FW.semi, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
         whiteSpace: "nowrap",
-        background: "rgba(255,255,255,0.25)", color: "var(--text-on-accent)",
+        background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.1)", opacity: 0.8,
         pointerEvents: "none", position: "relative"
       }}>{b.time}</span>
     </Reveal>
@@ -197,7 +224,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     <div
       className={anim === "wipe" ? "mgt-wipe-ltr" : "mgt-fade-overlay"}
       style={{
-        position: "absolute", inset: 0, borderRadius: 10, pointerEvents: "none",
+        position: "absolute", inset: 0, borderRadius: 10, pointerEvents: "none",   /* @canvas */
         background: anim === "wipe" ? BLOCK_BG.confirmed : BLOCK_BG.seated
       }}
     />
@@ -261,7 +288,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
 
   return (
     <div
-      className="mgt-hover-scale"
+      className="mgt-hover-scale mgt-blk"
       data-flip-id={flipId || undefined}
       data-bk={b.id}
       onMouseEnter={() => setGroupHover(true)}
@@ -278,7 +305,12 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       style={{
         position: "absolute", top: 3, height: ROW_H - 8 + "px",
         left, width: w,
-        background: bgc, borderRadius: 10, overflow: "hidden",
+        background: bgc, borderRadius: 10, overflow: "hidden",   /* @canvas */
+        // v17.8.0: the block owns its ink; every text child inherits it via
+        // currentColor. Every fill takes white today (see BLOCK_INK) — the
+        // indirection is here because fill and ink are ONE decision, not
+        // because the values currently differ.
+        color: BLOCK_INK[b.status] || BLOCK_INK.confirmed,
         display: "flex", alignItems: "center", boxSizing: "border-box",
         cursor: dragDy != null ? "grabbing" : "pointer",
         border: border || "1px solid rgba(255,255,255,0.2)",
@@ -289,7 +321,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         // MagicOS/Chrome. pan-x keeps horizontal timeline scrolling from a block
         // while reserving vertical gestures for the drag.
         touchAction: "pan-x",
-        boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" : "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
+        boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" : "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",   /* @fixed-fill: BLOCK_BG[b.status], ~40 lines up */
         // v17.0.0: while dragging, the inline transform/zIndex/opacity lift the
         // block and follow the pointer (inline transform beats the hover class).
         ...(dragDy != null ? { transform: "translateY(" + dragDy + "px)", zIndex: 30, opacity: 0.85 } : null),
@@ -297,7 +329,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         // re-added so the .mgt-hover-scale lift eases again — the inline transition had
         // been overriding the class's `transform 120ms`, making the hover scale instant.
         // The seated ghost outline mirrors this exact transition so the two lift together.
-        transition: dragDy != null ? "none" : "left 320ms ease, width 320ms ease, transform 120ms ease"
+        transition: dragDy != null ? "none" : TL_MOVE
       }}
     >
       {animOverlay}
@@ -328,7 +360,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       {timeChip}
       <span style={{
         flex: 1, padding: "0 8px 0 6px", position: "relative",
-        fontSize: 11, fontWeight: 700, color: "var(--text-on-accent)",
+        fontSize: T.small, fontWeight: FW.bold,
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
       }}>
         {lbl}
@@ -340,18 +372,18 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       {freeMin != null ? (
         <span style={{
           flexShrink: 0, marginRight: 2, padding: "1px 5px", borderRadius: R.pill,
-          fontSize: 9, fontWeight: 700, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+          fontSize: T.micro, fontWeight: FW.bold, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
           whiteSpace: "nowrap", position: "relative",
-          background: "rgba(255,255,255,0.28)", color: "var(--text-on-accent)",
+          background: "var(--blk-wash)",
           pointerEvents: "none"
         }}>{"~" + freeMin + "m"}</span>
       ) : null}
       <span
         onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
         style={{
-          padding: "0 6px", fontSize: 13, cursor: "pointer", position: "relative",
-          color: "rgba(255,255,255,0.7)",
-          borderLeft: "1px solid rgba(255,255,255,0.3)",
+          padding: "0 6px", fontSize: T.body, cursor: "pointer", position: "relative",
+          opacity: 0.7,
+          borderLeft: "1px solid var(--blk-rule)",
           height: "100%", display: "flex", alignItems: "center", minWidth: 28
         }}
       >
@@ -403,12 +435,129 @@ function BlockBar({ bl, totalMins }) {
       position: "absolute", top: 1, height: ROW_H - 4 + "px",
       left, width: w,
       background: "repeating-linear-gradient(45deg,var(--tl-blocked-a),var(--tl-blocked-a) 4px,var(--tl-blocked-b) 4px,var(--tl-blocked-b) 8px)",
-      borderRadius: 4, opacity: 0.6,
+      borderRadius: 4, opacity: 0.6,   /* @canvas */
       display: "flex", alignItems: "center", justifyContent: "center",
       pointerEvents: "none"
     }}>
-      <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-on-accent)", textTransform: "uppercase", letterSpacing: 1 }}>
+      <span style={{ fontSize: T.micro, fontWeight: FW.bold, color: "var(--text-on-accent)", textTransform: "uppercase", letterSpacing: 1 }}>
         blocked
+      </span>
+    </div>
+  );
+}
+
+// ── v17.8.0: waitlist ghost block (restyled v17.8.0) ─────────────────────────
+// A preview of where a waiting party WOULD go, drawn on the table row that
+// waitAvail picked for them.
+//
+// v17.8.0: it IS a pending block now — same geometry, radius, border, shadow,
+// label typography and label GRAMMAR ("Name (size)") as TimelineBlock, in
+// BLOCK_BG.pending because a waiting party is precisely awaiting a decision —
+// and the whole element is simply turned down with `opacity`.
+//
+// The v17.8.0 version instead layered a 0.3-alpha fill under a full-strength
+// label, and got two things wrong. The label had to pick its own colour, so it
+// used `--text-secondary` — a token that INVERTS between themes, which is why
+// the ghost's text visibly changed colour on a theme flip while every real
+// block's `--text-on-accent` stayed put. And with its own font size, weight and
+// separator it read as a different kind of object rather than a quieter version
+// of the same one. Dimming the whole block fixes both at once: nothing has to
+// choose a second set of values, so nothing can drift from the block it mirrors.
+//
+// The trailing ⏳ follows the block's own marker convention (★ preferred, ⚠
+// repeat no-show, [L] locked, !! overdue all append to the label) rather than
+// inventing a leading badge.
+//
+// `resh` = the match only exists AFTER re-optimising (the reshuffling trialFits
+// branch in App's waitAvail effect). Those tables can be visibly occupied right
+// now, so it is dimmer still and takes a dashed edge in the block's own
+// rgba-white border family: "there is room here, once the day is re-shuffled".
+//
+// Hoisted to module scope per CLAUDE.md's inline-sub-component rule (a component
+// defined inside another's body is a new TYPE every render → full remount).
+function WaitGhost({ g, totalMins, onBook }) {
+  const gS = toMins(g.time);
+  // Clamp to the grid's right edge, exactly as the turnaround tail does — an
+  // absolutely-positioned child past GRID_CLOSE still counts toward the
+  // scroller's scrollWidth and would add empty scroll that grows with zoom.
+  const gE = Math.min(gS + g.dur, GRID_CLOSE * 60);
+  const mins = gE - gS;
+  if (mins <= 0) return null;
+  // v17.8.0 correction: group hover-lift, TimelineBlock's mechanism verbatim.
+  // A ghost for a party that needs two tables renders one cell per row exactly
+  // as a real multi-table booking does, so hovering one cell has to lift both —
+  // otherwise the ghost breaks the very block behaviour it is a quiet copy of.
+  // Own attribute rather than data-bk: a waitlist id and a booking id come from
+  // the same genId(), and one shared namespace is one collision away from a
+  // ghost lifting an unrelated booking.
+  function setGroupHover(on) {
+    document.querySelectorAll('[data-wg="' + g.id + '"]').forEach(function (el) {
+      el.classList.toggle("mgt-group-hover", on);
+    });
+  }
+
+  return (
+    <div
+      // mgt-appear: a ghost is a SUGGESTION that comes and goes as the day's
+      // availability shifts — a party joins the waitlist, a table completes, the
+      // clock crosses a quarter — so it should arrive rather than blink into
+      // existence next to blocks that never move on their own. Deliberately
+      // asymmetric: there is no matching fade-out, because a ghost disappears
+      // when a REAL booking takes that table, and the eye should be on the block
+      // that just appeared, not on the proposal it replaced.
+      className="mgt-hover-scale mgt-appear mgt-blk"
+      data-wg={g.id}
+      onMouseEnter={() => setGroupHover(true)}
+      onMouseLeave={() => setGroupHover(false)}
+      onClick={() => onBook(g.id)}
+      title={"Waiting: " + g.name + " (" + g.size + ") at " + g.time
+        + (g.resh ? " — fits after re-optimising" : "") + ". Tap to book."}
+      style={{
+        // Geometry, radius, border, shadow: TimelineBlock's, verbatim.
+        position: "absolute", top: 3, height: (ROW_H - 8) + "px",
+        left: pct(gS), width: Math.max((mins / totalMins) * 100, 0.3) + "%",
+        background: BLOCK_BG.pending, borderRadius: 10, overflow: "hidden",   /* @canvas */
+        // Dims the real block, does not re-specify it — so it takes the pending
+        // fill's ink too, or the v17.8.0 contrast pass would have fixed the
+        // block and left its own ghost white-on-yellow.
+        color: BLOCK_INK.pending,
+        display: "flex", alignItems: "center", boxSizing: "border-box",
+        border: g.resh ? "1px dashed rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.2)",
+        boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
+        cursor: "pointer",
+        // The one deliberate difference from a real block. A reshuffle-only match
+        // is turned down further because it can sit over a table that is visibly
+        // occupied right now.
+        opacity: g.resh ? 0.4 : 0.55,
+        transition: TL_MOVE
+      }}
+    >
+      {/* The start-time chip, in TimelineBlock's exact chip style. A real block
+          shows it only when the whole day's blocks are wide enough (the
+          all-or-nothing `chipsOn` rule); a ghost always does, because the time
+          is the entire proposal — a ghost without one says nothing useful. */}
+      <span style={{
+        flexShrink: 0, marginLeft: 6, padding: "2px 5px", borderRadius: R.pill,
+        fontSize: T.micro, fontWeight: FW.semi, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
+        whiteSpace: "nowrap",
+        background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.1)", opacity: 0.8
+      }}>{g.time}</span>
+      {/* v17.8.0 correction: the ⏳ sits BETWEEN the time and the name, not
+          trailing it. Trailing, it was the first thing the ellipsis ate — the
+          marker that says "this is a proposal, not a booking" vanished on
+          exactly the narrow blocks where the dimming is hardest to read. Here
+          it is fixed-width and unclippable, and it lines up with the marker
+          column a real block uses for its ★ / ⚠ / [L] flags. */}
+      <span aria-hidden="true" style={{
+        flexShrink: 0, marginLeft: 6, display: "flex", alignItems: "center"
+      }}><WaitIcon size={11} /></span>
+      <span style={{
+        flex: 1, padding: "0 8px 0 5px", position: "relative",
+        fontSize: T.small, fontWeight: FW.bold,
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+      }}>
+        {g.name + " (" + g.size + ")"}
       </span>
     </div>
   );
@@ -440,6 +589,12 @@ export const TimelineView = memo(function TimelineView({
   // from App rather than the TURN_BUFFER live binding, because React.memo cannot
   // see a live binding — the same reason hoursSig/layoutSig exist.
   turnBuffer = 0,
+  // v17.8.0: waitlist ghost blocks — one entry per waiting party the viewed day
+  // currently has room for, [{id,name,size,time,dur,tables,resh}]. Computed and
+  // MEMOISED in App (an inline array literal would defeat this component's
+  // React.memo on every BookingApp render), scoped there to the viewed date.
+  waitGhosts = [],
+  onBookWait = () => {},
 }) {
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
@@ -606,7 +761,7 @@ export const TimelineView = memo(function TimelineView({
           key={"h" + m}
           style={{
             position: "absolute", top: 3, left: center + "%", transform: "translateX(-50%)",
-            fontSize: 10, fontWeight: 600, color: "var(--text-on-accent)",
+            fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
             whiteSpace: "nowrap", pointerEvents: "none",
             background: "var(--tl-hour-pill)",
             padding: "2px 5px", borderRadius: R.pill, zIndex: 1,
@@ -646,7 +801,7 @@ export const TimelineView = memo(function TimelineView({
             }}
           >
             <span className="mgt-hover-scale" style={{
-              fontSize: 11, fontWeight: 600, padding: "3px 0", borderRadius: R.pill,
+              fontSize: T.small, fontWeight: FW.semi, padding: "3px 0", borderRadius: R.pill,
               background: hasBlock ? "var(--tl-blocked-badge)" : indoor ? TBL.ind.bg : TBL.out.bg,
               color: hasBlock ? "var(--text-on-accent)" : indoor ? TBL.ind.text : TBL.out.text,
               border: "1px solid " + (hasBlock ? "var(--tl-blocked-badge-border)" : indoor ? TBL.ind.border : TBL.out.border),
@@ -667,7 +822,7 @@ export const TimelineView = memo(function TimelineView({
           borderTop: "1px dashed var(--tl-unassigned-border)",
           marginTop: 4, boxSizing: "border-box"
         }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "var(--danger-text)" }}>
+          <span style={{ fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}>
             unassigned
           </span>
         </div>
@@ -709,6 +864,13 @@ export const TimelineView = memo(function TimelineView({
       >
         <GridLines />
         {tblBlocks.map((bl, i) => <BlockBar key={"blk" + i} bl={bl} totalMins={totalMins} />)}
+        {/* v17.8.0: waitlist ghosts — rendered BEFORE the real blocks so a live
+            booking always paints on top of a preview. */}
+        {waitGhosts.map((g) =>
+          (g.tables || []).includes(id)
+            ? <WaitGhost key={"wg" + g.id + id} g={g} totalMins={totalMins} onBook={onBookWait} />
+            : null
+        )}
         {/* v15.8.1: render each seated booking's dashed "ghost" (original-duration
             outline) IMMEDIATELY BEFORE its block, so the ghost mirrors EVERY cell
             effect: (1) reposition — same left/width + transform transition; (2) vertical
@@ -747,7 +909,7 @@ export const TimelineView = memo(function TimelineView({
                   opacity: 0.28,
                   borderRadius: "0 10px 10px 0",
                   boxSizing: "border-box", pointerEvents: "none",
-                  transition: "left 320ms ease, width 320ms ease"
+                  transition: "left " + M.shift + ", width " + M.shift
                 }}
               />
             );
@@ -765,10 +927,10 @@ export const TimelineView = memo(function TimelineView({
                 style={{
                   position: "absolute", top: 3, height: (ROW_H - 8) + "px",
                   left: gLeft, width: gW,
-                  background: "transparent", borderRadius: 10,
+                  background: "transparent", borderRadius: 10,   /* @canvas */
                   border: "2px dashed " + BLOCK_BG.seated,
                   boxSizing: "border-box", pointerEvents: "none",
-                  transition: "left 320ms ease, width 320ms ease, transform 120ms ease"
+                  transition: TL_MOVE
                 }}
               />
             );
@@ -809,7 +971,7 @@ export const TimelineView = memo(function TimelineView({
     >
       <div style={{
         position: "absolute", top: 3, left: "50%", transform: "translateX(-50%)",
-        fontSize: 10, fontWeight: 600, color: "var(--text-on-accent)",
+        fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
         background: "var(--tl-now-pill)",
         padding: "2px 5px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
         boxShadow: "0 1px 4px rgba(0,0,0,0.15)"
@@ -837,7 +999,7 @@ export const TimelineView = memo(function TimelineView({
           the new scale. Blocks/gridlines are %-positioned against this width, so
           they re-scale with it for free. (The one layout-bound animation — see
           REFACTOR_LOG perf note; the global prefers-reduced-motion guard zeroes it.) */}
-      <div ref={flipRef} style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width 340ms ease-in-out" }}>
+      <div ref={flipRef} style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width " + M.shift }}>
         <div style={{
           position: "relative",
           borderBottom: "2px solid var(--tl-header-border)",
@@ -873,8 +1035,13 @@ export const TimelineView = memo(function TimelineView({
       }}
       className="mgt-hover-scale mgt-press"
       style={mkBtn({
-        minHeight: 32, padding: "4px 10px", fontSize: 11,
-        background: followNow ? "rgba(0,0,0,0.6)" : "rgba(120,130,150,0.5)"
+        minHeight: 36, padding: "4px 10px", fontSize: T.small,
+        // v17.8.0: the idle fill was a hard-coded copy of --app-btn-grey's old
+        // value, so the contrast pass fixed every other secondary button and
+        // left this one at 1.82:1 — the lowest on the screen, on the control
+        // that follows the clock during service. A literal duplicate of a token
+        // is a token that cannot be fixed.
+        background: followNow ? "rgba(0,0,0,0.6)" : "var(--app-btn-grey)"
       })}
     >
       {followNow ? "Following" : "Follow"}
@@ -889,7 +1056,7 @@ export const TimelineView = memo(function TimelineView({
       <button
         onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 32, minWidth: 32, padding: "4px 10px", fontSize: 16, background: BTN.nav })}
+        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
       >
         -
       </button>
@@ -901,7 +1068,7 @@ export const TimelineView = memo(function TimelineView({
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 32, padding: "4px 10px", fontSize: 11, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
+        style={mkBtn({ minHeight: 36, padding: "4px 10px", fontSize: T.small, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
       >
         {/* NB the child must be NULL (not an empty span) at 1× — Reveal caches its
             last truthy children for the exit ease; an always-mounted span would
@@ -915,7 +1082,7 @@ export const TimelineView = memo(function TimelineView({
       <button
         onClick={() => setZoom((z) => Math.min(maxZoom, z + 0.5))}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 32, minWidth: 32, padding: "4px 10px", fontSize: 16, background: BTN.nav })}
+        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
       >
         +
       </button>
@@ -931,8 +1098,12 @@ export const TimelineView = memo(function TimelineView({
         onClick={() => setAutoOptimizer(!autoOptimizer)}
         className="mgt-hover-scale"
         style={mkBtn({
-          minHeight: 32, padding: "4px 12px", fontSize: 11,
-          background: autoOptimizer ? "rgba(22,101,52,0.75)" : "rgba(120,130,150,0.55)"
+          minHeight: 36, padding: "4px 12px", fontSize: T.small,
+          // v17.8.0 review fix: the OFF fill was the SAME hard-coded grey the
+          // Follow button above was just cured of, in the same commit, eight
+          // lines apart — 1.94:1 white-on-grey in light mode. Fixing one copy of
+          // a literal does not fix the literal; grep the VALUE.
+          background: autoOptimizer ? "var(--app-walkin)" : "var(--app-btn-grey)"
         })}
       >
         {"Optimizer: " + (autoOptimizer ? "ON" : "OFF")}
@@ -942,7 +1113,7 @@ export const TimelineView = memo(function TimelineView({
         <button
           onClick={onReshuffle}
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 32, padding: "4px 12px", fontSize: 11, background: BTN.orange })}
+          style={mkBtn({ minHeight: 36, padding: "4px 12px", fontSize: T.small, background: BTN.orange })}
         >
           Reshuffle
         </button>
@@ -957,11 +1128,11 @@ export const TimelineView = memo(function TimelineView({
       <span
         key={s}
         style={{
-          fontSize: 11, padding: "3px 8px", borderRadius: R.pill,
+          fontSize: T.small, padding: "3px 8px", borderRadius: R.pill,
           background: BLOCK_BG[s] || "#999",
-          color: "var(--text-on-accent)",
+          color: BLOCK_INK[s] || "var(--text-on-accent)",
           border: "1px solid rgba(255,255,255,0.2)",
-          fontWeight: 600, textTransform: "capitalize",
+          fontWeight: FW.semi, textTransform: "capitalize",
           boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
         }}
       >
@@ -970,17 +1141,17 @@ export const TimelineView = memo(function TimelineView({
     );
   });
   legendEls.push(
-    <span key="in" style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="in" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       indoor
     </span>
   );
   legendEls.push(
-    <span key="out" style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="out" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       outdoor
     </span>
   );
   legendEls.push(
-    <span key="blocked" style={{ fontSize: 11, padding: "3px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: 600 }}>
+    <span key="blocked" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       blocked
     </span>
   );
@@ -1014,17 +1185,10 @@ export const TimelineView = memo(function TimelineView({
         {optBtns || <div />}
         {zoomBtns}
       </div>
-      {/* v15.0.0: per-weekday hours — a "Closed" notice over the (still-dimensioned)
-          grid when the viewed day is marked closed in Settings → Opening hours. */}
-      {hoursFor(date).closed ? (
-        <div style={{
-          background: "var(--warn-bg)", border: "1px solid var(--warn-border)",
-          borderRadius: R.card, padding: "8px 14px", marginBottom: 8,
-          fontSize: 13, fontWeight: 700, color: "var(--warn-text)", textAlign: "center"
-        }}>
-          Closed this day — no bookings or walk-ins. Adjust in Settings → Opening hours.
-        </div>
-      ) : null}
+      {/* v17.8.0: the "Closed this day" notice that used to sit here moved to
+          NotificationStrip. It was a day-level fact drawn per-view — here and,
+          differently worded, in PlanView — while List had none. One section now
+          says it once, above whichever view is showing. */}
       <div style={{ display: "flex" }}>
         {labelCol}
         {gridCol}
@@ -1040,7 +1204,7 @@ export const TimelineView = memo(function TimelineView({
             (ViewTools.jsx) so it sits in one place for all three views. The WA
             sandbox 🧪 button moved with them (mounted beside ViewTools in App). */}
       </div>
-      <div style={{ marginTop: 6, fontSize: 11, color: S.muted }}>
+      <div style={{ marginTop: 6, fontSize: T.small, color: S.muted }}>
         tap booking to edit  ·  = assign  ·  hold to change status  ·  tap table label to block
       </div>
       {quickPopup}

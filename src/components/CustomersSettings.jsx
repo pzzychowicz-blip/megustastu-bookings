@@ -19,9 +19,10 @@
 //                           waitlist entries and reports the outcome
 
 import { useState, useEffect, useMemo } from "react";
-import { S, BTN, BLOCK_BG, R } from "../lib/constants";
+import { S, BTN, BLOCK_BG, BLOCK_INK, R, T, FW } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, hasRealPhone, isNoShow } from "../lib/customers";
 import { Section, Reveal, mkInp, mkBtn } from "./atoms";
+import { WaitIcon } from "./Icons";
 
 export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2 }) {
   const [query, setQuery] = useState("");
@@ -65,8 +66,14 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     return (waitlist || []).filter(function (w) { return w && normalizePhone(w.phone) === key; }).length;
   }
 
+  // v17.8.0: OUTLINE chips — no fill, a 2px border, the colour carried by the
+  // border and the text. These are standalone counts sitting on their own in a
+  // quiet row, not status tags competing inside a dense line (which is what
+  // ListView's solid tags are), so the pale-fill-plus-border-plus-bold-text
+  // stack was three encodings of one signal on something that needs one. The
+  // extra pixel of border is what keeps them legible once the fill is gone.
   const chip = function (label, colors) {
-    return <span style={{ fontSize: 10, fontWeight: 700, borderRadius: R.pill, padding: "2px 6px", background: colors.bg, border: "1px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
+    return <span style={{ fontSize: T.micro, fontWeight: FW.bold, borderRadius: R.pill, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 3, background: "transparent", border: "2px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
   };
 
   const rows = shown.map(function (c) {
@@ -75,7 +82,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     const wlCount = waitCountOf(c.phone);
     const historyRows = open ? c.bookings.map(function (b) {
       return (
-        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: 12, fontWeight: 600, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: 12, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: 12, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: 11.5, fontWeight: 600, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: "var(--text-on-accent)", textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { bg: "var(--warn-bg)", border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
+        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
       );
     }) : null;
     return (
@@ -88,16 +95,23 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
         <div
           className="mgt-hover-scale"
           onClick={function () { setOpenKey(open ? null : c.phone); setArmedKey(null); }}
-          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer" }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: 12, color: S.muted }}>{formatPhone(c.phone) + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? chip(c.visits + " visit" + (c.visits !== 1 ? "s" : ""), { bg: "var(--suggest-bg)", border: "var(--suggest-border)", text: "var(--success-text)" }) : null}{c.noShowCount > 0 ? chip(c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)", { bg: "var(--warn-bg)", border: "var(--warn-border)", text: "var(--warn-text)" }) : null}{wlCount > 0 ? chip("⏳ " + wlCount, { bg: "var(--bg-input)", border: "var(--border-soft)", text: "var(--text-secondary)" }) : null}<span style={{ fontSize: 12, color: S.muted }}>{open ? "▾" : "▸"}</span></div></div>
+          // v17.8.0 fix: borderRadius is REQUIRED on any .mgt-hover-scale
+          // element. Since v17.7.0 the hover rule no longer supplies one, but it
+          // still paints an opaque --bg-hover-card — so a radius-less element
+          // renders that fill as a hard-edged rectangle and this row visibly
+          // squared off inside its own rounded card on hover. R.card matches the
+          // parent exactly. (ConnectionStatus's dot button was the first case in
+          // the app; this is the second. Check any new one.)
+          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted }}>{formatPhone(c.phone) + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? chip(c.visits + " visit" + (c.visits !== 1 ? "s" : ""), { border: "var(--suggest-border)", text: "var(--success-text)" }) : null}{c.noShowCount > 0 ? chip(c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}{wlCount > 0 ? chip(<><WaitIcon size={10} />{wlCount}</>, { border: "var(--border-soft)", text: "var(--text-secondary)" }) : null}<span style={{ fontSize: T.body, color: S.muted }}>{open ? "▾" : "▸"}</span></div></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.bold, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
             {historyRows}
             <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-              {armed ? <span style={{ fontSize: 12, fontWeight: 700, color: "var(--danger-text)" }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymized as “Data removed” for statistics. Tap again to confirm.</span> : null}
+              {armed ? <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymized as “Data removed” for statistics. Tap again to confirm.</span> : null}
               <button
                 className="mgt-hover-scale mgt-press"
-                style={mkBtn({ fontSize: 12, minHeight: 36, background: BTN.del, opacity: armed ? 1 : 0.85 })}
+                style={mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.del, opacity: armed ? 1 : 0.85 })}
                 onClick={function () {
                   if (armed) { onDeleteCustomer(c.phone); setArmedKey(null); setOpenKey(null); }
                   else setArmedKey(c.phone);
@@ -119,7 +133,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
         key={key}
         onClick={function () { setFilter(key); setOpenKey(null); setArmedKey(null); }}
         className="mgt-hover-scale"
-        style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: active ? "var(--accent)" : BTN.nav, opacity: searching ? 0.5 : 1 })}>{label}</button>
+        style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: active ? "var(--accent)" : BTN.nav, opacity: searching ? 0.5 : 1 })}>{label}</button>
     );
   };
 
@@ -129,21 +143,21 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
         {/* v16.3.0: insight totals */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
           <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{totalCustomers}</div>
-            <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>customers</div>
+            <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{totalCustomers}</div>
+            <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>customers</div>
           </div>
           <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--success-text)" }}>{totalVisits}</div>
-            <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>completed visits</div>
+            <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--success-text)" }}>{totalVisits}</div>
+            <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>completed visits</div>
           </div>
           <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--warn-text)" }}>{noShowCustomers}</div>
-            <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>with a no-show</div>
+            <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--warn-text)" }}>{noShowCustomers}</div>
+            <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>with a no-show</div>
           </div>
           {phonelessNoShowCount > 0 ? (
             <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--warn-text)" }}>{phonelessNoShowCount}</div>
-              <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>no-show, no phone</div>
+              <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--warn-text)" }}>{phonelessNoShowCount}</div>
+              <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>no-show, no phone</div>
             </div>
           ) : null}
         </div>
@@ -165,19 +179,19 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                 onClick={function () { setRegularMin(function (m) { return Math.max(1, m - 1); }); }}
                 disabled={regularMin <= 1}
                 className={regularMin <= 1 ? undefined : "mgt-hover-scale"}
-                style={mkBtn({ fontSize: 14, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin <= 1 ? 0.4 : 1, cursor: regularMin <= 1 ? "not-allowed" : "pointer" })}>−</button>
-              <span style={{ fontSize: 12, fontWeight: 700, color: S.text, minWidth: 62, textAlign: "center" }}>{regularMin + "+ visit" + (regularMin !== 1 ? "s" : "")}</span>
+                style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin <= 1 ? 0.4 : 1, cursor: regularMin <= 1 ? "not-allowed" : "pointer" })}>−</button>
+              <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, minWidth: 62, textAlign: "center" }}>{regularMin + "+ visit" + (regularMin !== 1 ? "s" : "")}</span>
               <button
                 onClick={function () { setRegularMin(function (m) { return Math.min(50, m + 1); }); }}
                 disabled={regularMin >= 50}
                 className={regularMin >= 50 ? undefined : "mgt-hover-scale"}
-                style={mkBtn({ fontSize: 14, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin >= 50 ? 0.4 : 1, cursor: regularMin >= 50 ? "not-allowed" : "pointer" })}>+</button>
+                style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin >= 50 ? 0.4 : 1, cursor: regularMin >= 50 ? "not-allowed" : "pointer" })}>+</button>
             </span>
           ) : null}
         </div>
-        <div style={{ fontSize: 11, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number across all bookings. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymized as “Data removed” for statistics.</div>
+        <div style={{ fontSize: T.small, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number across all bookings. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymized as “Data removed” for statistics.</div>
       </Section>
-      {rows.length ? rows : <div style={{ textAlign: "center", padding: "20px 0", color: S.muted, fontSize: 13 }}>{query.trim() ? "No customers match." : "No customers yet — bookings with a phone number appear here."}</div>}
+      {rows.length ? rows : <div style={{ textAlign: "center", padding: "20px 0", color: S.muted, fontSize: T.body }}>{query.trim() ? "No customers match." : "No customers yet — bookings with a phone number appear here."}</div>}
     </div>
   );
 }

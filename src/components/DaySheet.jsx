@@ -18,6 +18,7 @@
 
 import { useMemo, memo } from "react";
 import { createPortal } from "react-dom";
+import { T, FW } from "../lib/constants";
 import { daySummary } from "../lib/booking-logic";
 
 const WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -26,8 +27,8 @@ function weekdayOf(dateStr) {
   return isNaN(d) ? "" : WD[d.getUTCDay()] || "";
 }
 // Inline light-only styles (no tokens — print stays light).
-const cell = { border: "1px solid #999", padding: "5px 7px", fontSize: 12, textAlign: "left", verticalAlign: "top", color: "#000" };
-const th = Object.assign({}, cell, { fontWeight: 700, background: "#eee" });
+const cell = { border: "1px solid #999", padding: "5px 7px", fontSize: T.body, textAlign: "left", verticalAlign: "top", color: "#000" };
+const th = Object.assign({}, cell, { fontWeight: FW.bold, background: "#eee" });
 
 // v17.1.0 perf: React.memo — always-mounted (print-only DOM) so it used to
 // re-render on every BookingApp render; props are state objects + primitives.
@@ -57,9 +58,9 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
   return createPortal(
     <div className="mgt-print-sheet" style={{ color: "#000", background: "#fff", padding: 24, fontFamily: "-apple-system, system-ui, sans-serif" }}>
       <div style={{ borderBottom: "2px solid #000", paddingBottom: 8, marginBottom: 12 }}>
-        <div style={{ fontSize: 20, fontWeight: 800 }}>{(restaurantName || "Me Gustas Tú") + " — Day sheet"}</div>
-        <div style={{ fontSize: 14, marginTop: 2 }}>{weekdayOf(date) + " · " + date}</div>
-        <div style={{ fontSize: 13, marginTop: 4 }}>
+        <div style={{ fontSize: T.display, fontWeight: FW.bold }}>{(restaurantName || "Me Gustas Tú") + " — Day sheet"}</div>
+        <div style={{ fontSize: T.lead, marginTop: 2 }}>{weekdayOf(date) + " · " + date}</div>
+        <div style={{ fontSize: T.body, marginTop: 4 }}>
           {s.totalBookings + " booking" + (s.totalBookings !== 1 ? "s" : "") + " · " + s.totalCovers + " cover" + (s.totalCovers !== 1 ? "s" : "")
             + " · Afternoon " + s.afternoon.covers + " / Evening " + s.evening.covers}
         </div>
@@ -83,7 +84,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
               return (
                 <tr key={b.id}>
                   <td style={cell}>{b.scheduledTime || b.time}</td>
-                  <td style={Object.assign({}, cell, { fontWeight: 700 })}>{b.name || "—"}{b.status === "seated" ? " (seated)" : b.status === "completed" ? " (done)" : b.status === "pending" ? " (pending)" : ""}</td>
+                  <td style={Object.assign({}, cell, { fontWeight: FW.bold })}>{b.name || "—"}{b.status === "seated" ? " (seated)" : b.status === "completed" ? " (done)" : b.status === "pending" ? " (pending)" : ""}</td>
                   <td style={cell}>{b.size}</td>
                   <td style={cell}>{(b.tables || []).join(", ") || "—"}</td>
                   <td style={cell}>{b.phone || "—"}</td>
@@ -94,11 +95,11 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
             })}
           </tbody>
         </table>
-      ) : <div style={{ fontSize: 13, marginBottom: 16 }}>No bookings for this day.</div>}
+      ) : <div style={{ fontSize: T.body, marginBottom: 16 }}>No bookings for this day.</div>}
 
       {dayBlocks.length ? (
-        <div style={{ marginBottom: 12, fontSize: 12 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Blocked tables</div>
+        <div style={{ marginBottom: 12, fontSize: T.body }}>
+          <div style={{ fontWeight: FW.bold, marginBottom: 4 }}>Blocked tables</div>
           {dayBlocks.map(function (bl, i) {
             return <div key={i}>{bl.tableId + " — " + (bl.allDay ? "all day" : (bl.from + "–" + bl.to)) + (bl.reason ? " (" + bl.reason + ")" : "")}</div>;
           })}
@@ -106,15 +107,15 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
       ) : null}
 
       {dayWait.length ? (
-        <div style={{ fontSize: 12 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Waitlist</div>
+        <div style={{ fontSize: T.body }}>
+          <div style={{ fontWeight: FW.bold, marginBottom: 4 }}>Waitlist</div>
           {dayWait.map(function (w, i) {
             return <div key={w.id}>{(i + 1) + ". " + (w.name || "—") + " · " + w.size + " pax" + (w.prefTime ? " · wants " + w.prefTime : "") + (w.phone ? " · " + w.phone : "")}</div>;
           })}
         </div>
       ) : null}
 
-      <div style={{ marginTop: 20, fontSize: 10, color: "#666" }}>{(restaurantName || "Me Gustas Tú") + " Booking System"}</div>
+      <div style={{ marginTop: 20, fontSize: T.micro, color: "#666" }}>{(restaurantName || "Me Gustas Tú") + " Booking System"}</div>
     </div>,
     document.body
   );

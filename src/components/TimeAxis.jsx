@@ -38,7 +38,7 @@
 // on each 15s clock tick (the v17.1.0 GridLines lesson).
 
 import { useRef, useLayoutEffect, useEffect } from "react";
-import { OPEN, GRID_CLOSE, QUARTER_HOURS, S, R } from "../lib/constants";
+import { OPEN, GRID_CLOSE, QUARTER_HOURS, S, R, T, FW } from "../lib/constants";
 // v17.5.0 correction: no toTime here any more — the selected-time badge moved
 // up into PlanView's Now/legend row, so the tape renders no text of its own
 // beyond the hour labels.
@@ -194,8 +194,8 @@ export function TimeAxis({
             const w = isHour ? 2 : 1;
             return (
               <div key={"t" + m}>
-                <div style={{ position: "absolute", top: 0, left: x, width: w, height: len, background: col, borderRadius: 1 }} />
-                <div style={{ position: "absolute", bottom: 0, left: x, width: w, height: len, background: col, borderRadius: 1 }} />
+                <div style={{ position: "absolute", top: 0, left: x, width: w, height: len, background: col, borderRadius: 1,   /* @canvas */ }} />
+                <div style={{ position: "absolute", bottom: 0, left: x, width: w, height: len, background: col, borderRadius: 1,   /* @canvas */ }} />
               </div>
             );
           })}
@@ -205,7 +205,7 @@ export function TimeAxis({
             <div key={"h" + m} style={{
               position: "absolute", left: xOf(m), top: "50%",
               transform: "translate(-50%,-50%)",
-              fontSize: 12, fontWeight: 600, color: "var(--text-secondary)",
+              fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)",
               fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", pointerEvents: "none",
             }}>{String(Math.floor(m / 60) % 24).padStart(2, "0") + ":00"}</div>
           ))}
@@ -216,7 +216,7 @@ export function TimeAxis({
             <div style={{
               position: "absolute", left: xOf(nowMins), top: 0, bottom: 0,
               width: 2, background: "var(--tl-now-line)",
-              borderRadius: 1, pointerEvents: "none", opacity: 0.9,
+              borderRadius: 1, pointerEvents: "none", opacity: 0.9,   /* @canvas */
             }} />
           ) : null}
         </div>
@@ -232,7 +232,7 @@ export function TimeAxis({
         style={{
           position: "absolute", left: "50%", top: 4, height: H - 8,
           transform: "translateX(-50%)", transformOrigin: "center",
-          width: 2, borderRadius: 1,
+          width: 2, borderRadius: 1,   /* @canvas */
           background: S.accent, pointerEvents: "none",
         }}
       />

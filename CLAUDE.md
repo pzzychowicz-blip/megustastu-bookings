@@ -30,8 +30,8 @@ src/
 ├── firebase.js                      DEV/PROD env switch (import.meta.env.DEV) — DO NOT bypass the split; v17.5.1 also calls `forceWebSockets()` BEFORE `getDatabase()` (must precede it — the SDK asserts transports are chosen before the first Database instance). Do not remove: the long-poll fallback it disables is JSONP, which our CSP blocks, and one cached WebSocket failure would otherwise brick a device permanently
 ├── hooks/
 │   ├── usePersistence.js            Firebase + write-guards (loaded/empty + v15.2.0 freshness-resync gate + v16.0.0 wake-race fix: a gap trip resets isConnectedRef so resync waits for a FRESH .info/connected) + v15.5.0 per-booking-node diff-write (+ v16.0.0 baseUpdatedAt CAS + StrictMode patch-dedupe; blocks via revGuard) + lazy array→keyed migration + auto-extend + auto-complete-after-close (v15.1.0) + v17.3.0 `bookingsReady` state (false until the FIRST bookings snapshot lands — drives App's "⟳ Loading bookings…" floating toast)
-│   ├── usePresence.js               v17.3.0 — real-time device presence for the connection-dot popover. Subscribes to .info/connected → on connect pushes ONE ephemeral child `presence/{pushKey}` {email, ua (deviceLabel from userAgent), since:serverTimestamp} with onDisconnect().remove() (self-cleans on tab-close/sleep/drop); subscribes to `presence` → returns {devices[], myKey}. EXEMPT from the CAS/revGuard rule (ephemeral, per-connection, disjoint push-key path — no stale-overwrite class); `presence` inherits the top-level .write:auth!=null with NO .validate, so NO Firebase console step
-│   ├── useReminders.jsx             reminder state + listeners + banner JSX (v16.0.0: ref-mirror saves — the set()-in-updater shape is GONE — + revGuard CAS writes)
+│   ├── usePresence.js               v17.3.0 — real-time device presence for the connection-dot popover. Subscribes to .info/connected → on connect pushes ONE ephemeral child `presence/{pushKey}` {email, ua (deviceLabel from userAgent), since:serverTimestamp} with onDisconnect().remove() (self-cleans on tab-close/sleep/drop); subscribes to `presence` → returns {devices[], myKey, offset}. **v17.8.0: onDisconnect alone leaks.** It arms ONE fire-once server op; if the socket drops between arming it and the `set()` landing, the server fires the (empty) removal and the SDK then REPLAYS the queued `set()` on reconnect — writing a child with no onDisconnect, i.e. immortal. Reordering the calls only moves the window. So a live connection re-proves itself with a 45s `lastSeen` heartbeat, a child counts as connected only inside STALE_MS (150s), and children past PRUNE_MS (10min) are deleted. **The staleness filter is enforced on READ**, so a pre-existing leak is hidden the moment the code runs, with no write needing to succeed; deletion is 4× more conservative because hiding is reversible and deleting isn't. The prune is ARMED on connect and CONSUMED by the next `presence` snapshot — it cannot run in the `.info/connected` handler, which resolves before the first snapshot exists (the first version did, and never fired). A pre-v17.8.0 child has no `lastSeen`, so the filter falls back to `since`. `.info/serverTimeOffset` is subscribed because the whole model compares a serverTimestamp to local time. EXEMPT from the CAS/revGuard rule (ephemeral, per-connection; the prune touches other keys but only to delete already-dead ones, which is idempotent); `presence` inherits the top-level .write:auth!=null with NO .validate, so NO Firebase console step
+│   ├── useReminders.jsx             reminder state + listeners + banner JSX — the ONLY hook that returns JSX, which is why the v14.2.x token sweep of `src/components` never saw its banner (themed at last in v17.8.0; needed a new `--app-success-solid` token) (v16.0.0: ref-mirror saves — the set()-in-updater shape is GONE — + revGuard CAS writes; v17.8.0 owns `reminderBaseline`/`reminderDirty` for the unsaved-changes guard, diffed via a local `flatReminder()`)
 │   ├── useNowMins.js                15s clock tick
 │   ├── useAutoOptimizer.js          optimizer thermostat + daily reset (cutoff/auto-switch editable via useOptimizerSettings — v15.0.0)
 │   ├── useWalkin.js                 walk-in state + handlers (v17.5.0: `walkinBaseline` STATE snapshot set in openWalkin only → returns `walkinDirty` for the unsaved-changes guard)
@@ -51,14 +51,14 @@ src/
 │   └── useLayout.js                 editable table layout (tables add/remove/rename · capacity · zone · join-groups · combos · v15.9.0 optimizer priorities · v17.0.0 floorPlan {room,tables:{id:{x,y,shape,w,h,rot,chairs}},walls,doors} — sanitizeFloorPlan auto-places missing tables, NOT in layoutSignature) → constants.js live bindings via setLayout; sanitize enforces single-group membership + normalizes priorities (whole-object DEFAULT fallback, per-field empty); Firebase settings/layout (v15.0.0; 4th settings node)
 ├── components/
 │   ├── BookingFormModal.jsx         booking form (controlled component; v16.0.0 phone-autocomplete dropdown + Regular/no-show customer chips — CLICKABLE (▸/▾): reveal the past-bookings / no-shows list via Reveal, the WA ConversationView disclosure ported; chipHist keyed by normalized phone so a phone edit self-closes it + "Add to waitlist" under the no-tables banner) — v16.4.0: NAME-field autocomplete too (searchGuestsByName, new bookings only — phone customers collapse by phone, phone-LESS guests are ONE ROW PER BOOKING/never merged, each row shows phone-or-"no phone" + last date); Regular chip = "Regular · N past visits" ONLY at regularCount≥2, else "1 past visit". v17.3.0: both autocomplete dropdowns fetch up to 20 matches and scroll (maxHeight 264, overflowY:auto) instead of hard-capping at 5/6 — ~5 rows visible, the rest reachable by scroll (better on small screens)
-│   ├── TimelineView.jsx             Gantt-style timeline (horizontal scroller; v16.0.0 start-time chips — CONFIRMED blocks only (seated/completed never chip) + ALL-OR-NOTHING across the day's confirmed blocks (shown only when every confirmed block ≥140px — completed blocks' frozen tiny widths must never kill the others' chips), v16.1.1 chip wrapped in a HORIZONTAL Reveal so the sibling name eases in lockstep instead of snapping (was a Presence transform-slide → jump) + " ⚠" label marker for 2+ no-show phones; v16.1.0 running-late amber border on confirmed blocks + quick-status "No show" option at the noshow stage — overstay warnings keep border precedence; v16.1.1 quick-status popup buttons get .mgt-hover-scale; v17.0.0-correction drag&drop — drag a block vertically to another row (mouse 6px threshold; touch hold ~800ms past the quick-status) → App's dropOnTable moves or SWAPS table sets; v17.2.0 per-device zoom/follow settings via scalar props followZoom/followLeadMins/maxZoom (App's tlSettings — the ex-hard-coded 4×/30min/5×) + group hover-lift: data-bk + mouseenter/leave toggle .mgt-group-hover on ALL of a multi-table booking's cells (DOM classList, no React state))
+│   ├── TimelineView.jsx             Gantt-style timeline (horizontal scroller; v16.0.0 start-time chips — CONFIRMED blocks only (seated/completed never chip) + ALL-OR-NOTHING across the day's confirmed blocks (shown only when every confirmed block ≥140px — completed blocks' frozen tiny widths must never kill the others' chips), v16.1.1 chip wrapped in a HORIZONTAL Reveal so the sibling name eases in lockstep instead of snapping (was a Presence transform-slide → jump) + " ⚠" label marker for 2+ no-show phones; v16.1.0 running-late amber border on confirmed blocks + quick-status "No show" option at the noshow stage — overstay warnings keep border precedence; v16.1.1 quick-status popup buttons get .mgt-hover-scale; v17.0.0-correction drag&drop — drag a block vertically to another row (mouse 6px threshold; touch hold ~800ms past the quick-status) → App's dropOnTable moves or SWAPS table sets; v17.2.0 per-device zoom/follow settings via scalar props followZoom/followLeadMins/maxZoom (App's tlSettings — the ex-hard-coded 4×/30min/5×) + group hover-lift: data-bk + mouseenter/leave toggle .mgt-group-hover on ALL of a multi-table booking's cells (DOM classList, no React state); v17.8.0 **waitlist ghosts** — `waitGhosts` (memo'd in App, scoped to the viewed date) draws each waiting party a table currently fits as a dimmed PENDING block on its matched row, tappable → `onBookWait` → App's `bookFromWaitlist`. **It is TimelineBlock's own style object verbatim** (geometry, radius, border, shadow, chip, `Name (size)` label grammar, and — v17.8.0 — the group hover-lift, under its OWN `data-wg` attribute rather than `data-bk`, because waitlist and booking ids both come from `genId()` and one shared namespace is one collision away from a ghost lifting an unrelated booking) with `opacity` turned down — 0.55, or 0.4 + a dashed edge when `resh` (a match only reachable by re-optimising, which can sit over a visibly occupied table). The polish round rewrote it this way after the first version layered a 0.3-alpha fill under a full-strength label: a label above its own fill must pick its own colour, it picked `--text-secondary`, and that token INVERTS between themes — so the ghost's text changed colour on a theme flip while every real block's `--text-on-accent` did not. **Rule: a "quieter version of X" dims X, it does not re-specify X** — anything that re-specifies is free to drift from it. The `⏳` sits BETWEEN the time chip and the name, in the column a real block uses for its ★ / ⚠ / [L]: trailing the name it was the first thing the ellipsis ate, so the marker meaning "proposal, not booking" vanished on exactly the narrow blocks where the dimming is hardest to read)
 │   ├── ListView.jsx                 sorted card list; completed/cancelled fold into a controlled Collapsible — open state in BookingApp for keyboard-nav sync (v15.1.0); v16.0.0 amber "⚠ no-show ×N" tag; v16.1.0 running-late amber border + "N min late" tag + one-tap "No show" button at the noshow stage; v17.3.1 `focusReq` prop — a scroll-REQUEST counter (App's `listFocusReq`, bumped only at the PROGRAMMATIC selection sites: search-jump + ↑/↓ nav, never a card click) scrolls the focused card into view via its existing `data-flip-id`, re-firing on a rAF+120/300/550/850ms schedule so the SlideView/finished-fold animations can't land it off-centre; App also clears the selection on a mousedown/touchstart with no `closest("[data-flip-id]")` ancestor — neutral space — gated on List view + the keyboard handler's `anyModal`, and on **Esc** as the last branch of the Escape z-order chain (v17.0.0 round 8: the 🔍/⚙ pair it carried since v16.4.0 moved OUT to App's date-nav row — see ViewTools.jsx; List has no chrome of its own again); v17.6.0 the duration tag survives the visit — seated keeps the live green "N min", completed gains a muted "stayed N min" from `stayedMins(b)`, and renders NOTHING when that returns null (a direct confirmed→completed never had its duration truncated, so its number would be the schedule, not the stay)
 │   ├── LateBanner.jsx               "Running late" in-flow banner — one Reveal-eased row per today's late confirmed booking (lifecycle now in useRevealRows, v16.3.0); No-show button slides in via Presence → onNoShow=doCancelBooking(id,true); byId Map avoids O(n·m); v16.3.0 COLLAPSIBLE header (count) + per-row ✕ dismiss (App's lateDismissed Set → lateBannerMap; list/timeline keep the unfiltered lateMap); v16.4.0 default-COLLAPSED when >2 late (open init = lateMap size ≤2; initial-only, no auto-recollapse)
-│   ├── BannerRows.jsx               v17.0.0 review fix #6 — shared shell for the in-flow rows banners (collapsible count header · outer Reveal · per-row Reveal via useRevealRows). LateBanner + OverlapBanner + (v17.1.0) WaitAvailBanner supply only title + a renderRow(id) render-prop; v17.1.0 optional bg/border/textColor token props (default amber warn family; waitlist passes the green suggest family). collapseMax = settings/general lateCollapseMax for ALL THREE
+│   ├── BannerRows.jsx               v17.0.0 review fix #6 — the shared per-row Reveal lifecycle (useRevealRows) for Late/Overlap/WaitAvail, which supply a `renderRow(id)` render-prop. **v17.8.0: it renders ROWS ONLY.** Its pane, its collapsible count header and its `tone`/`tint`/`collapseMax` props all moved up to NotificationStrip, so every section — a row list or a single sentence — is headed on identical terms and one collapse bounds the total height (per-banner collapse structurally cannot)
 │   ├── OverlapBanner.jsx            v17.0.0 round 7 — Overlap warnings on the BannerRows shell (per-row Reassign + ✕ dismiss); master switch settings/bookingDefaults.overlapWarnEnabled; dismissed Set in App (overlapDismissed, session-only, day-change reset)
 │   ├── WaitAvailBanner.jsx          v16.3.0 waitlist "table free" in-flow banner (suggest/green) — one row per TODAY'S waiting party a table currently fits (App's waitAvail), Book (bookFromWaitlist) + ✕ dismiss. v17.1.0: on the BannerRows shell (green tokens via the shell's token props) + honors "Collapse banners above". Replaced the old 6s waitFreeToast
 │   ├── StatusToasts.jsx             v17.3.4 — the v15.8.0 floating TRANSIENT-toast layer extracted VERBATIM from App.jsx (de-monolith #2): one-slot priority crossfade (loading→resync→reconnect→syncfix→waitadded→undo→dragmsg→reshuffled→load), always-mounted container, Undo pill via onUndo prop. Rendering ONLY — all state stays in BookingApp (Phase D3); App mounts it in the relative wrapper around SlideView{mainView}
-│   ├── AppBanners.jsx               v17.3.4 — the three simple PERSISTENT in-flow banners (offline / write-error / inefficiency), each in its own Reveal, extracted VERBATIM from App.jsx (de-monolith #2). ineffShow is computed in App and passed as a boolean; the row banners (Overlap/Late/WaitAvail/reminders) were already components and stay mounted by App right after this
+│   ├── AppBanners.jsx               v17.3.4 — offline / write-error / inefficiency. **v17.8.0: exports `appBannerSections(props)` — a FUNCTION, not a component.** NotificationStrip needs each section's tone/title/count as DATA (to build its collapsed summary and to sort by severity); a component could only hand back opaque JSX and App would have had to duplicate the same facts beside it. ineffShow is still computed in App and passed as a boolean
 │   ├── SearchPanel.jsx              v16.3.0 global booking search Overlay — auto-focused input, searchBookings across ALL dates (upcoming-first), tap → jump to the day + focus in List (pendingSelectRef survives the day-change reset). Header 🔍 + "/" shortcut
 │   ├── DaySheet.jsx                 v16.3.0 printable day sheet — print-ONLY DOM portalled to <body> (sibling of #root); @media print in index.html hides #root + reveals it; HARD-CODED LIGHT (print stays light); Print button in the Summary body
 │   ├── Summary.jsx                  day-summary panel — covers by hour + shift; lives IN the date-nav row (flex:1, grows downward when expanded) + today-only live status bar (seated·upcoming·seats-filled) (v14.6.0; relocated + status bar v14.8.0; "Summary" word dropped + Week→"More" button v14.9.0)
@@ -66,6 +66,8 @@ src/
 │   ├── ViewSwitcher.jsx             v17.5.0 — the T/L/P buttons (extracted from App's inline .map) + the Split View gesture and toolbar. RMB / 450ms press-and-hold opens SplitMenu, matching the timeline/plan quick-status idiom. **The hold timer is cancelled from WINDOW-level pointerup/pointercancel**, not the button's — SplitMenu portals a scrim above the button, so the button's own release may never arrive (the portalled-scrim gotcha). `didLongRef` swallows the trailing click. Both gestures fully inert when `splitEnabled` is off or `isMobile`; in a split BOTH pane views render accent and the focused one is marked by SplitLayout's corner brackets
 │   ├── SplitLayout.jsx              v17.5.0 — the two-pane container (purely presentational: it takes the two already-built view ELEMENTS). Draggable divider (`setPointerCapture` on the divider is safe — it has no child click targets, which is the actual condition of the kills-click gotcha; primary-button-only + `buttons===0` bail), ratio committed on pointer-UP only so localStorage isn't written per frame, double-click resets to 50/50, capture-phase `onPointerDownCapture` sets the focused pane. Each pane is a non-scrolling **frame** (carries the `flexBasis`) wrapping the scroller — which is what pins the focused-pane **corner brackets** (an absolutely positioned child of a scroller would scroll away with the content) and what makes the flat `4%` hover-lift gutter self-scale. Only works inside the `shellFixed` layout — the scrollers are `overflow:auto;minHeight:0` and need a definite-height ancestor chain
 │   ├── SplitMenu.jsx                v17.5.0 — the **2-step** split setup popup (direction → which second view), on QuickStatusPopup's exact shell. Opening the popup IS the intent, so there is no "Add to split view" confirm step and no Cancel button — the scrim click and the Esc chain (first branch, z=300) are the two ways out (body portal, z=300 scrim, same tokens/radius/44px buttons). Step 3 offers only the two REMAINING views, so the same view can never occupy both panes (which would collide on the singleton timelineZoom / selectedListId / showFinished state)
+│   ├── Icons.jsx                    v17.8.0 — the app's icon set (SearchIcon · WaitIcon · SwapIcon · SplitSideIcon/SplitStackIcon), in CogIcon's house style (24×24, no fill, `currentColor` stroke, round caps; strokeWidth eases up below 18px or a small icon reads heavier than a large one). **The rule for what belongs here: does the glyph render as COLOUR EMOJI, or is its font coverage patchy?** — not "is it a picture". 🔍 put a full-colour OS glyph beside a hand-drawn SVG in ViewTools' 34px pair, and U+26A0 ⚠ defaults to TEXT presentation (macOS honours it, Android's Chrome substitutes the colour emoji), so the same marker was an outline on one restaurant device and a yellow sign on another. Monochrome, universally-covered marks STAY as text: ✕ ‹ › ▲ ▼ ▸ ▾ ✓ ★ and the timeline's `[L]`/`[!]`/`!!` — they inherit colour and weight for free and truncate with their label, which an inline SVG cannot
+│   ├── NotificationStrip.jsx        v17.8.0 — the ONE pane every in-flow notification shares. Six banners could be live at once, each with its own pane and margin, and on a busy evening they pushed the timeline off the bottom of the tablet. Collapsed height is ONE row however many fire (the point: the cost of a bad evening stops scaling with how bad it is); collapsed it shows `sections[0]` + "+N more". **Severity order lives in App, not here** — it is a judgement about this restaurant's operations, and the collapsed summary reading `sections[0]` makes "worst first" load-bearing. Sections are `{id,tone,tint,icon,title,count,node}` — `icon` is a COMPONENT (re-rendered at two sizes: the section header, and the collapsed per-category tally). With several live, the right side is an icon+count per section rather than a bare total, so "1 reminder, 2 waiting" is legible without expanding — and it does NOT disappear when the strip opens (v17.8.0 correction): the lid's contents must not change under the finger that tapped it, and the tally is the one part that stays useful open, because the sections scroll and the lid doesn't. **Adding a section means adding an icon**, or it falls back to the old dot. The strip also owns `Closed this day` and `Couldn't load bookings` (v17.8.0 audit) — the first was drawn separately in TimelineView and PlanView and missing from List, the second was a floating toast despite being permanent and unrecoverable. the banner components keep their rows/actions/Reveal lifecycle and lose only their pane and header (the strip heads every section on the same terms, so a one-sentence section looks like a row list). With exactly ONE section live the strip takes that section's own title instead of a generic lid + redundant sub-header. `collapseMax` = settings/general lateCollapseMax, which now bounds the STRIP rather than one banner
 │   ├── ViewTools.jsx                v17.0.0 round 8 — the 🔍 Find-a-booking + ⚙ Settings pair, mounted ONCE in App's date-nav row (right of Summary) so it sits in the same place for ALL THREE views; Timeline's legend + List's card-header copies are gone, Plan gains it
 │   ├── WalkinForm.jsx               walk-in entry form (v16.0.0 "Add to waitlist" under the no-tables banner; v17.1.1 the Plan-path pre-selected table (`_pre` draft flag from openWalkin) survives guest-count edits — plain-path steppers still reset tables — and wToggle deselects a selected-but-busy table)
 │   ├── WaitlistPanel.jsx            waitlist Overlay (v16.0.0) — day's entries FCFS, fits-now chip, Book (prefills the booking form) + two-tap Remove
@@ -77,10 +79,10 @@ src/
 │   ├── TimeAxis.jsx                 v17.5.0 — the Plan view's time scrubber: a **tape-measure ruler that scrolls under a FIXED centre marker** (replaced the `<input type=range>`, then the first attempt's row of tappable blocks, which read as a segmented control). Drag/scroll → whatever is under the centre is selected, snapping to 15 min on idle; tapping anywhere scrolls that time to centre. Mirrored ticks top+bottom with hour labels between (the two edges are what make it read as a tape), occupancy heat-tint per quarter, full-height now marker, and a `mgt-detent` squash replayed via `key={selected}`. Spans OPEN…**GRID_CLOSE** = TimelineView's exact range. **`padding-inline: 50%` on the scroller** lets the ends reach the centre AND makes the maths fall out: the track position under the marker is exactly `scrollLeft` (verified live). Scrolling is cheap because React re-renders only when the selected QUARTER changes — a per-pixel update would re-run PlanView's occupancy scan and repaint the floor SVG. NOT memo'd on purpose: it reads live bindings memo can't see, so gating happens in its memo'd parent via `hoursSig`
 │   ├── QuickStatusPopup.jsx         v17.0.0 — the quick-status popup extracted VERBATIM from TimelineView so PlanView shares the gating (pending → Confirmed+Cancelled only; late one-tap No show)
 │   ├── PrefPickerModal.jsx          preferred-tables picker
-│   ├── BlockModal.jsx               table-block editor
+│   ├── BlockModal.jsx               table-block editor (v17.8.0 `onDirty` prop — its From/To are component-local so it REPORTS dirtiness up, ManualModal-style, with the unmount-only `onDirty(false)` cleanup; dirty = add-mode with a time actually changed from the default window)
 │   ├── HistoryPopup.jsx             per-booking audit trail
 │   ├── LoginScreen.jsx              auth gate (unauthenticated entry)
-│   ├── ConnectionStatus.jsx         Firebase connection dot right of Log out (v16.2.0; ported from MGT Scheduling) — green/red illuminated dot (from usePersistence `isOnline`); click → popover with status line + signed-in email; closes on outside-click/Esc. v17.3.0: also lists ALL connected devices (from usePresence — email · deviceLabel · "since", current tagged "This device", list scrolls at maxHeight 200)
+│   ├── ConnectionStatus.jsx         Firebase connection dot in the header (v16.2.0; ported from MGT Scheduling) — green/red illuminated dot (from usePersistence `isOnline`); click → popover with status line + signed-in email; closes on outside-click/Esc. v17.3.0: also lists ALL connected devices (from usePresence — email · deviceLabel · "since", current tagged "This device", list scrolls at maxHeight 200). v17.8.0: **Log out lives HERE**, right-aligned on the status row — it belongs with the identity the popover already shows, and the header flexWrapped to three rows on a phone with it there; rendered only when `onLogout` is passed. `sinceText` takes the `offset` prop (see usePresence) because these are serverTimestamps
 │   ├── ReminderEditor.jsx           reminder edit modal (z=250)
 │   ├── Reminders.jsx                reminder list tab body
 │   ├── Settings.jsx                 settings modal shell + tabs (General/Layout/Customers/Reminders/Shortcuts — 5th tab v16.0.0); LAZY-loaded as of v17.1.0 (React.lazy chunk with all tab bodies + the floor-plan editor); SETTINGS_TABS + CogIcon live in SettingsChrome.jsx (re-exported here) — still ONE tab list, never duplicate; General = per-weekday hours · optimizer cutoff(0–24)/auto-switch · shifts · booking-duration tiers · running-late thresholds (v16.1.0) · v17.1.0 "Reduce animations" + v17.1.2 "Plan zoom & pan" + v17.5.0 "Lock navigation" (default OFF, so only `"1"` is stored — the INVERSE of the usual convention) and "Split view" (default ON, normal convention: only `"0"` is stored) per-device toggles + v17.2.0 "Timeline zoom" per-device steppers (default/Follow/max zoom + follow lead — App's tlSettings/onSetTlSetting) and Preferences party-size steppers, sections collapsible (v15.0.0)
@@ -88,11 +90,13 @@ src/
 │   ├── LayoutSettings.jsx           Layout-tab body (v15.0.0) — FULL layout editor: Tables (add/remove/rename·cap·zone, orphan-booking warning on remove/rename) + collapsible Combos (editable join-groups → auto-combo cap overrides + cross-group mega add/edit/remove) + collapsible Table priorities (v15.9.0 — size bands · combo preferences · anchors/mixed-require · swap rules; rename remaps priorities refs too) + kitchen limit; takes `bookings` for orphan detection
 │   ├── Shortcuts.jsx                keyboard cheatsheet
 │   ├── TableGrid.jsx                13-table picker (used by Manual/Block modals)
-│   └── atoms.jsx                    Overlay (+ pinned-footer slot), Fld, Section, Collapsible (v15.0.0; optional controlled mode `open`/`onToggle` v15.1.0), Reveal (graceful height show/hide via grid-rows 0fr↔1fr + delayed unmount; overflow:visible when open+settled, clip only while animating so inner hover-lifts aren't clipped — v15.8.0; v16.1.1 optional `horizontal` = grid-COLUMNS 0fr↔1fr + inline-grid, eases occupied WIDTH — used by the timeline start-time chip so the sibling name eases in lockstep), Presence/Toast (generic enter/exit wrapper with in/out class + delayed unmount + cached children; Toast = the toast-class alias — v15.8.0), ModalPresence/usePresence (PresenceContext so Overlay/ReminderEditor self-animate close — v15.8.0), AutoHeight (ResizeObserver eases content-height changes; overflow:visible at rest, clip ONLY while the height transition runs so inner hover-lifts aren't clipped — supersedes the earlier "always hidden"; optional `linear` — used in Settings tabs / Manual·Walkin·Pref·Reminder·Week bodies — v15.8.0), SlideView (slide wrapper, clips only while animating — v15.8.0; v17.5.0 optional `fill` = `flex:1;minHeight:0;display:flex;flexDirection:column`, needed in the `shellFixed` layout where it must pass a definite height through instead of collapsing to content height), useFlip (WAAPI list-reorder hook — v15.8.0), TBadge, AvailBanner, Toggle (knob/track ease — v15.8.0), mkInp, mkBtn, **mkArea** (v17.7.0 — the multi-line mkInp: `resize:vertical` + `alignContent:"center"`, used by ALL THREE textareas. The centring is load-bearing, not cosmetic: a textarea starts its text at the TOP, which on a pill is where the box is NARROWEST, so the corner curve was clipping the first characters of the placeholder. Centring moves the text to the pill's widest point. No effect once content fills the box; degrades to top-aligned where `align-content` is unsupported)
+│   └── atoms.jsx                    Overlay (+ pinned-footer slot), Fld, Section, Collapsible (v15.0.0; optional controlled mode `open`/`onToggle` v15.1.0), Reveal (graceful height show/hide via grid-rows 0fr↔1fr + delayed unmount; overflow:visible when open+settled, clip only while animating so inner hover-lifts aren't clipped — v15.8.0; v16.1.1 optional `horizontal` = grid-COLUMNS 0fr↔1fr + inline-grid, eases occupied WIDTH — used by the timeline start-time chip so the sibling name eases in lockstep), Presence/Toast (generic enter/exit wrapper with in/out class + delayed unmount + cached children; Toast = the toast-class alias — v15.8.0), ModalPresence/usePresence (PresenceContext so Overlay/ReminderEditor self-animate close — v15.8.0), AutoHeight (ResizeObserver eases content-height changes; overflow:visible at rest, clip ONLY while the height transition runs so inner hover-lifts aren't clipped — supersedes the earlier "always hidden" — v15.8.0; **v17.8.0 the `linear` opt-in prop is GONE and the easing is `M.resize` unconditionally** — exactly two call sites had ever set it, Patryk named one of them as the reference for how a modal should resize, and the reason generalises to every AutoHeight: see the motion section's linear exception), SlideView (slide wrapper, clips only while animating — v15.8.0; v17.5.0 optional `fill` = `flex:1;minHeight:0;display:flex;flexDirection:column`, needed in the `shellFixed` layout where it must pass a definite height through instead of collapsing to content height), useFlip (WAAPI list-reorder hook — v15.8.0), TBadge, AvailBanner, Toggle (knob/track ease — v15.8.0), mkInp, mkBtn, **mkSel** (v17.8.0 — the dropdown mkInp: `paddingRight: 18`. A `<select>` paints its arrow inside its own padding box, hard against padding-right, and mkInp's 12px lands it deep inside a pill's right CAP — 21.5px wide on the 43px control, since CSS clamps `--r-pill` to half the box. Text is immune because it spans enough height that the curve has receded behind it, which is exactly why the LEFT 12px looks right and the right 12px does not. A single small glyph at the end of a pill wants padding ≈ the radius. `LayoutSettings`' local `SEL_INP` applies the same reasoning against its own smaller box rather than importing this), **mkArea** (v17.7.0 — the multi-line mkInp, used by ALL THREE textareas: `resize:vertical` + `alignContent:"center"` + **v17.7.1 `borderRadius: R.inset`**. A textarea starts its text at the TOP, which is where a rounded box is NARROWEST, so a radius wider than the 12px horizontal padding eats the first characters. v17.7.0 answered that with the centring alone, which fixes it ONLY while the content is shorter than the box — `align-content` has nothing to distribute once the text overflows, and every caller is `rows={2}`, so the third line typed makes the field scroll, returns the text to the top edge, and on `--r-pill` (999px → clamped to half the ~60px box = 30px vs 12px padding) slices the topmost VISIBLE line at every scroll position. **The radius, not the alignment, is the guarantee** — `R.inset` (10px) stays inside the padding at any height/scroll/resize. The centring survives as balance for short content only)
 └── lib/
     ├── booking-logic.js             pure functions (optimizer, sanitisation, derivations, daySummary); v15.0.0: isIn via ZONE_OF, date-finders read hoursFor(date); v15.9.0: ALL optimizer heuristics data-driven via PRIORITIES (IS_MGT_LAYOUT no longer imported); v16.1.0: getDur reads the DUR_TIERS live binding + lateState(b,today,nowMins,cfg) → null|"warn"|"noshow"; v17.6.0: `stayedMins(b)` → the actual stay of a COMPLETED booking or null — reads the new sanitize-whitelisted `stayedMin` stamp (written by App's two completion paths on a real seated→completed transition ONLY), falling back to `duration` when a pre-v17.6.0 booking's history records a seated entry
-    ├── constants.js                 layout config — DEFAULT_LAYOUT (incl. v15.9.0 priorities seed = the ex-hard-coded MGT heuristics) + setLayout/buildLayout reassign LIVE bindings (ALL_TABLES/INDOOR/OUTDOOR/TIMELINE_TABLES/TOTAL_SEATS/ZONE_OF/TABLE_GROUPS/VALID_COMBOS/CLUSTERS/KITCHEN_TABLE_LIMIT/IS_MGT_LAYOUT/PRIORITIES) + per-weekday hours (WEEK_HOURS/hoursFor/weekRange) + DUR_TIERS/setDurTiers duration tiers (v16.1.0) + v17.6.0 TURN_BUFFER/setTurnBuffer (the separation between bookings, in minutes; 0 = off = the default, so an unconfigured app is byte-for-byte v17.5.1); colours, S/BTN style tokens (v15.0.0) + v17.7.0 `R` = the pill-radius scale (pill/auth/sheet/card/inset → the `--r-*` tokens); assign by ROLE, never by the old number
+    ├── constants.js                 layout config — DEFAULT_LAYOUT (incl. v15.9.0 priorities seed = the ex-hard-coded MGT heuristics) + setLayout/buildLayout reassign LIVE bindings (ALL_TABLES/INDOOR/OUTDOOR/TIMELINE_TABLES/TOTAL_SEATS/ZONE_OF/TABLE_GROUPS/VALID_COMBOS/CLUSTERS/KITCHEN_TABLE_LIMIT/IS_MGT_LAYOUT/PRIORITIES) + per-weekday hours (WEEK_HOURS/hoursFor/weekRange) + DUR_TIERS/setDurTiers duration tiers (v16.1.0) + v17.6.0 TURN_BUFFER/setTurnBuffer (the separation between bookings, in minutes; 0 = off = the default, so an unconfigured app is byte-for-byte v17.5.1); colours, S/BTN style tokens (v15.0.0) + v17.7.0 `R` = the pill-radius scale (pill/auth/sheet/card/inset → the `--r-*` tokens); assign by ROLE, never by the old number + v17.8.0 `M` = the motion scale (tap/move/shift/status/exit → the `--t-*`/`--ease-*` tokens, each already pairing a duration with its direction curve; `M.resize` is the documented LINEAR exception, AutoHeight-only; `M.dur`/`M.easeOut` are the raw WAAPI-only escape hatch)
     ├── reminders.js                 reminder helpers (validate, fire-window, prune)
+    ├── waitlist-match.js            v17.8.0 — `placeWaitlist(...)`, the pass that decides WHICH TABLE the app offers each waiting party. Extracted VERBATIM from App.jsx's `waitAvail` effect so it could be tested at all (tests/waitlist-match.test.js). **Matching is SEQUENTIAL and FCFS** (`createdAt` asc): each party that lands is appended to a local `holds` array as a synthetic `_locked` booking the NEXT party's scan sees as occupied. Before v17.8.0 every entry was matched independently against the same snapshot, so identical inputs gave identical answers and several parties were offered the same table at the same minute — individually true, jointly impossible, and booking the first silently falsified the rest. `_locked` is load-bearing: `applyOpt` copies a locked booking's tables through verbatim, so a hold reserves its slot instead of being optimised out from under the ghost drawn for it. Cheap-first (`findFreeSlot` before `trialFits`), a whole-pass time budget, and an anti-flap carry-forward that is ALSO held — or the queue behind it can't see it. App keeps only the React parts: the 15-min clock bucket, the ref mirror, setState
+    ├── presence-state.js            v17.8.0 — `presenceState(node, now, myKey, canPrune)` → `{devices, prunable, mySince}`, extracted from usePresence. v17.8.0 turned "who is connected" from a FACT into an INFERENCE from timestamps, and an inference has edge cases the hook could not test. **The module is shaped by one asymmetry: hiding a device is free and reversible (the next 45s beat brings it back), deleting one is neither** — hence `PRUNE_MS` at 4× `STALE_MS`, hence the prune refusing to run without a real server-clock offset (on a device whose clock runs fast, an assumed 0 makes every live child look ancient and the prune empties the node), and hence a child with NO usable timestamp being hidden but never pruned. `mySince` feeds the heartbeat so it rewrites `since` verbatim instead of stamping a fresh one every beat (tests/presence-state.test.js)
     ├── drafts.js                    v17.5.0 — `sameDraft(a,b)` behind the unsaved-changes guard. NOT JSON equality: key order differs between openEdit's literal and openNew's Object.assign spread; `<input type=number>` returns a STRING; `customDur:null`/`deposit:""` are the same nothing; table arrays are sets in spirit. Values normalise to strings, arrays sort, null/undefined/""/false all collapse to "" (tests/drafts.test.js)
     ├── dbError.js                   v17.5.1 — `dbError(path)` builds the THIRD argument every `onValue()` must pass (the optional error/cancel callback), and `onDbError(fn)` lets usePersistence subscribe so any listener failure anywhere surfaces in the UI. All 16 listeners pass it. Origin: a cancelled read produced NOTHING — no log, no banner, no state change — because `setBookingsReady(true)` lives in the success path, so the app showed "⟳ Loading bookings…" forever and was structurally incapable of reporting its own failure
     ├── revGuard.js                  revision-CAS writer for whole-node collections (v16.0.0) — attachRev/writeWithRev; every write = atomic update({node, nodeRev: base+1}), Security Rules reject a non-+1 rev; recovery is free via the SDK's rollback echo
@@ -130,10 +134,110 @@ src/
 - Exception: `Settings.jsx` exports `SettingsContent`, `TabBar`, `GeneralTabContent`, `CogIcon`; `atoms.jsx` is the multi-export atoms file.
 
 ### Style tokens
-- All colours, spacing, button styles, badge styles, **corner radii** flow through `src/lib/constants.js` exports (`S`, `BTN`, `BLOCK_BG`, `STATUS_COLORS`, `TBL`, `R`).
-- **`R` = the v17.7.0 pill-radius scale** (`R.pill`/`auth`/`sheet`/`card`/`inset` → the `--r-*` tokens in `index.html`'s `:root`; radii are theme-agnostic, so they are NOT duplicated into the dark block). Assign **by role, never by the old number** — the same `12` meant "control" in one file and "card" in another. `--r-pill` is `999px` because CSS clamps an oversized radius to half the box, so one token is a true pill at every control height. **No new `borderRadius: <number>` literal** — `grep -rn "borderRadius: [0-9]" src/` must return only the documented canvas/geometry exceptions (timeline blocks + their manual-assign handle and folded corner, TimeAxis ticks, floor-plan glyphs, progress track+fill pairs, `Kbd`, `"50%"` circles). See the v17.7.0 REFACTOR_LOG entry for the full list and why each one is exempt.
+- All colours, spacing, button styles, badge styles, **corner radii**, **motion** and **type** flow through `src/lib/constants.js` exports (`S`, `BTN`, `BLOCK_BG`, `BLOCK_INK`, `STATUS_COLORS`, `TBL`, `R`, `M`, `T`, `FW`).
+- **`R` = the v17.7.0 pill-radius scale** (`R.pill`/`auth`/`sheet`/`card`/`inset` → the `--r-*` tokens in `index.html`'s `:root`; radii are theme-agnostic, so they are NOT duplicated into the dark block). Assign **by role, never by the old number** — the same `12` meant "control" in one file and "card" in another. `--r-pill` is `999px` because CSS clamps an oversized radius to half the box, so one token is a true pill at every control height. **No new `borderRadius: <number>` literal.** **v17.8.0: ENFORCED, not described** — `npm run check:style` (`scripts/check-style-invariants.mjs`, a CI gate after lint) fails on any bare numeric radius unless its line carries an inline `/* @canvas */`. The 17 genuine exceptions (timeline blocks + their manual-assign handle and folded corner, TimeAxis ticks, progress track+fill pairs, `Kbd`) are marked at their sites, so an exemption is visible where you are reading rather than in a paragraph three files away.
+  **Hard rule for any box holding WRAPPING or SCROLLING text (v17.7.1): its radius must be ≤ its horizontal padding.** A rounded box is narrowest at its top and bottom edges, so a radius past the padding clips the first/last visible line — and no vertical-centring trick saves it, because centring stops applying the moment the content overflows (that is exactly how the v17.7.0 `mkArea` fix passed QA and still shipped a bug: it was only ever tested with short content). Pills are for SINGLE-LINE controls, where the text is centred by line-height and never reaches the curve. Multi-line ⇒ `R.inset` (10px, inside mkInp's 12px padding) — see `mkArea`, and the chat bubble / reply composer in the WA sandbox. **A `<select>` needs the same clearance on its RIGHT** (v17.8.0 `mkSel`): its arrow is painted inside the padding box against `padding-right`, so mkInp's 12px lands it inside the pill's 21.5px cap. Text is immune — it spans enough height that the curve has receded behind it, which is exactly why the LEFT 12px looks right and the right 12px doesn't.
+- **`T` = the v17.8.0 type scale, `FW` the weight scale.** Six role-named steps
+  (`micro`/`small`/`body`/`lead`/`title`/`display`) and four named weights.
+  Assign by role, never by the old number. **No new `fontSize:`/`fontWeight:`
+  literal** — `npm run check:style` fails on one unless the line carries
+  `/* @canvas */`. Before this there were 497 size literals in THIRTEEN values
+  and sixteen distinct size/weight combinations on the app's emptiest screen,
+  nine of the sizes between 9 and 18px where 11→12 is a ratio of 1.09 — below
+  the threshold at which a reader perceives a step. The result is many type
+  styles and no hierarchy, which does not look broken, it looks flat.
+  **The two halves are one change.** There was no regular weight: 93 of 95
+  elements were 500+. When everything is semibold, weight cannot carry
+  emphasis, so size carries all of it, so sizes multiply and crowd. `FW.regular`
+  on descriptive text is what lets the scale have six steps instead of thirteen.
+  When merging sizes, **collapse DOWNWARD** — a size that shrinks cannot
+  overflow its box; a size that grows can, in ways a mechanical sweep cannot be
+  verified against.
+- **An exemption marker must live INSIDE the style object (v17.8.0).**
+  Appending `/* @canvas */` to the end of a line that ends in `>` or `/>` puts
+  it in JSX **children** position, where React renders it as literal text —
+  eight of them shipped, printing comment syntax across the Plan view's ruler
+  and the Stats popover's bars. Worse, `check:style` only asked whether the
+  marker was PRESENT, so the sites it was meant to bless were the sites it
+  broke and it reported OK on all of them. Rule 0 now rejects the placement.
+  **A checker that cannot see its own annotation is worth less than none**,
+  because it also carries the authority of having passed.
+- **44px is a FLOOR, not a target (v17.8.0).** The tap-target pass applied
+  Apple's figure to every small control and overshot: a 44px circle beside a
+  40px date field made the date-nav row stop reading as chrome. Toolbar chrome
+  (timeline zoom cluster, Find/Settings, the connection dot, Summary's More)
+  sits at **36**; `mkBtn`'s **40** remains the app-wide standard; genuine 44s
+  are reserved for decision surfaces where a mis-tap costs something — modal
+  footers and the quick-status popup. Size by what a mistake costs, not by one
+  number from a guideline.
+- **A literal is invisible to a token audit (v17.8.0).** The contrast pass
+  measured every `--token` and still missed four fills carrying white text —
+  TableGrid's selected (2.31), blocked (3.13) and swap (~1.4, white on bright
+  yellow) cells, and ManualModal's swap panel (2.62) — because they were
+  `rgba(...)` literals, not tokens. The same sweep found **fifteen hard-coded
+  copies of token VALUES** across ten files, several of them copies of a value
+  from before that same pass retuned it. **Grep the value, not the name**, and
+  remember an audit that enumerates tokens has a blind spot exactly the size of
+  the literals.
+- **A fill that carries TEXT is chosen for its contrast against its ink, per
+  theme. Alpha is for decoration (v17.8.0).** An `rgba(hue, 0.8)` fill
+  composites toward what is BEHIND it, so one token lands somewhere different
+  in each theme. The app shipped eight versions of fills declared in `:root`
+  only, under a comment asserting they were theme-invariant; in light mode
+  "Save pending" was 1.83:1, the Follow button 1.82:1, the inactive View buttons
+  1.94:1 and the outdoor table pill 2.15:1, while every one of them passed in
+  dark. **Dark mode is the easy case; light is where a saturated fill washes
+  out.** `tests/contrast.test.js` measures every fill/ink pair in both themes
+  and fails on an unregistered text-bearing fill. Small bold labels take 4.5:1;
+  buttons take 3:1. `BLOCK_INK` pairs each block fill with its ink.
+  **The amber pair is a RECORDED EXEMPTION, not a pass**: confirmed sits at
+  2.9:1 and pending at 1.8:1 with white ink, because both alternatives were
+  tried and are worse — darkening the fills destroys the matched-intensity pair
+  v17.0.0 engineered, and dark ink (shipped for exactly one commit) reads as
+  DISABLED next to the white-inked seated and cancelled blocks, so a status
+  change looked like a state change. `tests/contrast.test.js` marks them
+  `role: "exempt"`, prints the number every run, and still fails if either drops
+  below a recorded floor — **an accepted contrast is not a licence to keep
+  going.** What made it defensible is that the one piece of *information* on a
+  block, the start time, moved onto its own opaque `--tl-hour-pill` chip —
+  the same pill the hour ruler uses — so it is legible on every fill instead of
+  being tinted by it.
+- **A literal duplicate of a token is a token that cannot be fixed (v17.8.0).**
+  TimelineView's Follow button held a hard-coded copy of `--app-btn-grey`'s
+  value and was the one secondary button the contrast pass could not reach; the
+  booking-form footer held two more, one of them a copy of
+  `--app-success-solid` from *before* that same pass retuned it. Grep the token's
+  VALUE, not just its name, when retuning one.
+  **It then happened again in the commit that wrote this rule** (v17.8.0 review
+  fix): the Optimizer button, eight lines below the Follow button, held the same
+  `rgba(120,130,150,.55)` and stayed at 1.94:1; ReminderEditor's inactive
+  Once/Weekly/weekday buttons held `…,0.45` and were left at **1.70:1**, the
+  worst text contrast in the app *after* a pass whose whole subject was contrast.
+  Writing the lesson into a comment beside one copy is not the same as running
+  the grep. **Fixing one copy of a literal does not fix the literal** — when you
+  retune a token, the very next command is a repo-wide search for its old value.
+- **Two names for one concept is how a thing hides from its own audit
+  (v17.8.0).** The inactive View button is `--app-btn-grey`, not `--btn-nav`, so
+  a coverage check written around the `--btn-*` prefix walked straight past the
+  control staff look at on every screen. When writing a check that enumerates
+  tokens by prefix, enumerate what is actually THERE and diff it.
+  A **third** family then hid from the same check: the timeline's own
+  `--tl-*-pill` / `--tl-*-badge` fills, one of which (`--tl-now-pill`) was below
+  the bar in dark. The one that matters is `--tl-hour-pill` — the amber blocks
+  are a *recorded exemption* on the grounds that the start time moved onto that
+  pill, so the exemption's entire justification was resting on a fill nothing
+  measured. It passed, at 4.73:1, **by luck**. When a check's verdict becomes an
+  argument for accepting something else, everything that argument leans on has
+  to be inside the check.
+
+  **Corollary for pill-shaped controls (v17.8.0): `--r-pill` clamps to half the SHORTER side, so only a SQUARE box is a circle.** An icon button sized by `minHeight` + horizontal padding is ~30×40 and renders as a vertical egg — which is what the three Split-View tools were, one row above the perfectly round 34×34 🔍/⚙ pair. A single-glyph button gets explicit equal `width`/`height` and `padding: 0` (and `min-*` is not enough — a flex row will stretch it back).
 - Reusable JSX atoms in `src/components/atoms.jsx`: `Overlay`, `Fld`, `Section`, `TBadge`, `AvailBanner`, `Toggle`, `mkInp`, `mkBtn`.
 - New UI composes from atoms, not redefining them. Add new atoms there if needed.
+- **`mkBtn` already sets `boxShadow`, so `Object.assign`-ing another one REPLACES it** — a
+  property, not a shadow list. `ViewSwitcher`'s split-pane marker silently stripped
+  the button's `--shadow-btn` this way (v17.8.0 review fix); the fix is one
+  comma-separated value, `"inset 0 -3px 0 …, var(--shadow-btn)"`. Same trap for
+  any property `mkBtn`/`mkInp` already own.
 - **`mkInp` / `mkBtn` return *style objects*** (not JSX) — usage is `<input style={mkInp()}>` /
   `<button style={mkBtn({...})}>`. (Note: the sibling Scheduling app's equivalents return JSX;
   Bookings differs. Don't assume a `className`/prop passthrough — it isn't there.)
@@ -213,7 +317,7 @@ function saveBookings(next, isSilent) {
 
 **Per-booking-node storage + diff-write (v15.5.0) — the structural multi-device-merge layer.** `bookings` is now a **keyed object `/bookings/{id}`** (one child per booking), NOT a single array — so two devices editing **different** bookings (even both offline) write **disjoint paths** and Firebase merges them, instead of racing on one array node. Reads are unchanged: `sanitizeAll` already `Object.values()`-es an object, so `onValue`/`resync` deserialize a keyed node to the same in-memory array, and **all ~39 `saveBookings`/`bookingsAfterAction` call sites are untouched** (the app still thinks in arrays). The change is in `persist()`: instead of writing the whole array, it **diffs** `prev` vs `computed` (both forms now route through the functional `setBookings` updater so `prev` is available) and pushes a **multi-path `update(ref(db,"bookings"), patch)`** of ONLY changed children (`{id: stamped}`) + deletions (`{id: null}`); an empty diff skips the write. **Conflict protection replaces `bookingsRev`** with a per-booking **`updatedAt`** stamp (added to the `sanitize` whitelist so it survives reads; `bookingChanged` compares content *excluding* it so a server echo isn't a false change). `stampForWrite` issues a stamp monotonic-per-device (`lastStampRef`) AND strictly above the booking's last-seen server value — **clock-skew-proof** (a behind-clock device still writes an acceptable stamp) and **StrictMode-proof** (the dev double-write gets a *higher* stamp → accepted, no spurious reject). **Per-`$id` Security Rule:** allow a delete, else require numeric `updatedAt` strictly greater than the stored value (create allowed when none) — rejects a stale same-booking write AND any pre-v15.5.0 whole-array write (no `updatedAt`). **Lazy migration:** the first v15.5.0 client to load a legacy **array** node (`Array.isArray` — Firebase returns an array only for sequential integer keys) writes it back once as keyed (`migratedRef` + connected-gated; `genId()` is path-safe `[0-9a-z]`); an `arrayShapeRef` **holds** per-child writes until the keyed shape echoes so a string key is never mixed into the integer array (held writes queue + replay via the v15.4.0 path). **Deploy is a HARD CUTOVER** (the new app and the v15.3.0 rule are mutually incompatible) — swap the rule + refresh all devices together at a quiet time; see `database.rules.README.md`.
 
-**True compare-and-swap — `baseUpdatedAt` + revision CAS everywhere (v16.0.0) — the FOURTH write-guard dimension, server-side.** Origin: the 2026-07-05 incident — a laptop asleep at home woke and its stale snapshot overwrote a night of tablet status changes, because the v15.5.0 rule only required `updatedAt` to be **greater** than stored, and a stale device stamps with its current wall clock (always greater). Greater-than is last-writer-wins, NOT staleness protection. v16.0.0 makes every write **prove it was based on the data it overwrites**: (1) **bookings** — `stampForWrite` also writes `baseUpdatedAt` (the `updatedAt` of the version this device last saw; 0 on create); the per-`$id` rule requires `baseUpdatedAt === stored updatedAt` (creates need only the stamp; deletes stay unconditional — a multi-path null can't carry a base). A stale writer (sleep/wake, zombie socket, offline-queue flush) is rejected server-side regardless of clocks; the existing `.catch → markStale → resync → drainPending` recovery replays user intent on fresh data. `baseUpdatedAt` is per-write metadata — deliberately NOT in the `sanitize` whitelist. A `lastPatchSigRef` dedupes StrictMode's dev double-dispatch (same content+base within 2s = the same write; re-dispatching would self-reject). (2) **Every whole-node collection** (`tableBlocks`, `waitlist`, `reminders`, `reminderFires`, 4× `settings/*`) — the proven v15.3.0 revision CAS, generalised in **`src/lib/revGuard.js`**: sibling `<name>Rev` integer, atomic `update({node, nodeRev: base+1})`, rule pair rejects a non-+1 rev (an empty-array write deletes the node and skips its own validate, but the REV child's rule still gates the atomic update — wipes are covered). Recovery is free: the SDK rolls back a rejected write locally and re-fires the node+rev `onValue` listeners. Rev refs advance optimistically (back-to-back + StrictMode writes chain +1,+2). (3) **Wake-race client fix**: a heartbeat-gap trip now also resets `isConnectedRef=false` (`gapTrip()`), because on wake the ref still holds its pre-sleep `true` and `resync()`'s `get()` could be served from the local cache, "succeed" with stale data, and clear the gate. Deploy: **app first, rules second** (rolling-safe — old rules ignore the new fields) — see `database.rules.README.md`. **Rule of law: any NEW persisted node must ship with either a per-child stamp CAS or a revGuard rev pair — never a bare `set()`.** **Exception (v17.3.0): the `presence` node.** It is NOT persisted app data — it's ephemeral device-presence (see `usePresence.js`): each connection writes only its OWN disjoint push-key child and self-removes via `onDisconnect().remove()`, so there is no stale-overwrite class and CAS/revGuard does not apply. It inherits the top-level `.write: auth != null` with no `.validate`, so it ships with NO rules/console step (rolling-safe). This exemption is ONLY for genuinely ephemeral, per-connection-owned nodes — never for real data.
+**True compare-and-swap — `baseUpdatedAt` + revision CAS everywhere (v16.0.0) — the FOURTH write-guard dimension, server-side.** Origin: the 2026-07-05 incident — a laptop asleep at home woke and its stale snapshot overwrote a night of tablet status changes, because the v15.5.0 rule only required `updatedAt` to be **greater** than stored, and a stale device stamps with its current wall clock (always greater). Greater-than is last-writer-wins, NOT staleness protection. v16.0.0 makes every write **prove it was based on the data it overwrites**: (1) **bookings** — `stampForWrite` also writes `baseUpdatedAt` (the `updatedAt` of the version this device last saw; 0 on create); the per-`$id` rule requires `baseUpdatedAt === stored updatedAt` (creates need only the stamp; deletes stay unconditional — a multi-path null can't carry a base). A stale writer (sleep/wake, zombie socket, offline-queue flush) is rejected server-side regardless of clocks; the existing `.catch → markStale → resync → drainPending` recovery replays user intent on fresh data. `baseUpdatedAt` is per-write metadata — deliberately NOT in the `sanitize` whitelist. A `lastPatchSigRef` dedupes StrictMode's dev double-dispatch (same content+base within 2s = the same write; re-dispatching would self-reject). (2) **Every whole-node collection** (`tableBlocks`, `waitlist`, `reminders`, `reminderFires`, 4× `settings/*`) — the proven v15.3.0 revision CAS, generalised in **`src/lib/revGuard.js`**: sibling `<name>Rev` integer, atomic `update({node, nodeRev: base+1})`, rule pair rejects a non-+1 rev (an empty-array write deletes the node and skips its own validate, but the REV child's rule still gates the atomic update — wipes are covered). Recovery is free: the SDK rolls back a rejected write locally and re-fires the node+rev `onValue` listeners. Rev refs advance optimistically (back-to-back + StrictMode writes chain +1,+2). (3) **Wake-race client fix**: a heartbeat-gap trip now also resets `isConnectedRef=false` (`gapTrip()`), because on wake the ref still holds its pre-sleep `true` and `resync()`'s `get()` could be served from the local cache, "succeed" with stale data, and clear the gate. Deploy: **app first, rules second** (rolling-safe — old rules ignore the new fields) — see `database.rules.README.md`. **Rule of law: any NEW persisted node must ship with either a per-child stamp CAS or a revGuard rev pair — never a bare `set()`.** **Exception (v17.3.0): the `presence` node.** It is NOT persisted app data — it's ephemeral device-presence (see `usePresence.js`): each connection writes only its OWN disjoint push-key child and self-removes via `onDisconnect().remove()`, so there is no stale-overwrite class and CAS/revGuard does not apply. **v17.8.0 widens this slightly and the exemption still holds:** the staleness prune deletes OTHER devices' children, but only ones already proven dead by a missing heartbeat, and deleting a dead key is idempotent — two devices racing on the same one is harmless. It inherits the top-level `.write: auth != null` with no `.validate`, so it ships with NO rules/console step (rolling-safe). This exemption is ONLY for genuinely ephemeral, per-connection-owned nodes — never for real data.
 
 **Optimistic visibility for held writes (v15.6.0).** When the freshness gate HOLDS a quick-action write (device woke from sleep), `saveBookings` now ALSO applies it to local state (`setBookings(next)`) in the hold branch — so the change is **visible immediately** instead of staying invisible until `resync()` finishes (the reported "my tap did nothing" confusion). The server write is still held (no stale data written): the persist happens when the queued function replays on FRESH data. A shared **`drainPending()`** helper (the v15.4.0 retry-drain) is called from BOTH `resync()` and the live `bookings` `onValue` (after `clearStale`) so a fresh snapshot arriving mid-recovery never wipes the optimistically-shown change before it's re-applied + persisted (batched into one commit → no flicker). Scope = function-form non-silent writes only (the existing condition) — so until v15.7.0 `doSave` (value-form) kept its "keep the form open + tap Save again" behaviour, and silent auto-effects are unaffected. The `resyncing` banner was reworded from "Writes are paused" to "your changes are saved and will finish syncing".
 
@@ -241,7 +345,9 @@ Mirrors the operating-hours mechanism for the physical table layout. **`ALL_TABL
 Customers are **DERIVED from the bookings list by normalized phone** (`src/lib/customers.js`) — there is NO `customers` collection, so there is nothing to migrate or keep in sync. `normalizePhone`/`formatPhone`/`matchCustomerByPhone` are the WA sandbox's primitives ported VERBATIM (same names/signatures); **complementarity contract:** when the WhatsApp module merges, its `whatsapp.js` must delete its copies and import from `customers.js` — one phone-identity primitive, never two. `isNoShow(b)` = the v16.0.0 `noShow` flag OR a legacy history entry `action:"no show"` (zero-migration backfill). "Delete a customer" (Settings → Customers) = delete every booking with that phone + their waitlist entries — permanent (no backups on the free plan), hence the armed-confirm UI. Known edge: if the customer's bookings are the ENTIRE database, the empty-array write-guard refuses the delete (safety wins; don't bypass).
 
 ### Waitlist active matching (v16.0.0)
-`waitAvail` is **state computed by a BookingApp effect**, not a render-time derivation — the `trialFits` scans are heavy, so the effect keys on `[bookings, tableBlocks, waitlist, autoOptimizer, nowQuarter]` where `nowQuarter = Math.floor(nowMins/15)` (never the raw 15s tick). Per waiting entry: try `prefTime` first; else a 15-min first-fit scan **clamped to ±90 min around the wanted time** (a 13:45 slot is no use to a party waiting for ~20:30); no wanted time → the whole remaining day. Transition-to-available (prev-id-set diff in a ref, first pass exempt) fires the green toast. The "⏳ N" badge lives in the Today slot (Presence slide; orange when someone fits now); Book prefills the form + `pendingWaitlistRef`, consumed in `doSave`'s new-booking path.
+`waitAvail` is **state computed by a BookingApp effect**, not a render-time derivation — the `trialFits` scans are heavy, so the effect keys on `[bookings, tableBlocks, waitlist, autoOptimizer, nowQuarter]` where `nowQuarter = Math.floor(nowMins/15)` (never the raw 15s tick). Per waiting entry: try `prefTime` first; else a 15-min first-fit scan **clamped to ±90 min around the wanted time** (a 13:45 slot is no use to a party waiting for ~20:30); no wanted time → the whole remaining day.
+
+**v17.8.0 — entries are matched SEQUENTIALLY, in a FCFS queue, never in parallel.** Each party that lands is appended to a local `holds` array as a synthetic `_locked` booking, and the next party scans `liveBookings.concat(holds)`. Before this every entry was matched independently against the same snapshot, so identical inputs gave identical answers and several waiting parties were offered the *same table at the same minute* — individually true, jointly impossible, and it silently falsified every chip but the first the moment one was booked. `_locked` is load-bearing: `applyOpt` (the reshuffling path inside `trialFits`) copies a locked booking's tables through verbatim, so a hold reserves its slot instead of being optimised out from under the ghost already drawn for it. The queue is `createdAt`-ascending because sequential placement is only *fair* if the sequence is. A budget-skipped entry keeping its previous answer is held too, or the queue behind it can't see it. Transition-to-available (prev-id-set diff in a ref, first pass exempt) fires the green toast. The "⏳ N" badge lives in the Today slot (Presence slide; orange when someone fits now); Book prefills the form + `pendingWaitlistRef`, consumed in `doSave`'s new-booking path.
 
 ### Per-user preferences (v17.6.0) — the one non-restaurant-wide settings node
 `settings/users/{uid}/prefs` + `prefsRev` (`useUserPrefs.js`). Five settings
@@ -370,9 +476,11 @@ mid-render, and a `const` used before its declaration is a TDZ ReferenceError
 declarations and genuinely do hoist, which is what makes the asymmetry easy to
 miss).
 
-### Unsaved-changes guard (v17.5.0) — every drafting surface must register
-Three surfaces hold real drafts: the booking form, the walk-in form, and
-`ManualModal`'s table picks. Each snapshots the draft it was **opened** with and
+### Unsaved-changes guard (v17.5.0, completed v17.8.0) — every drafting surface must register
+**Six** surfaces hold real drafts: the booking form, the walk-in form,
+`ManualModal`'s table picks, and — added in v17.8.0 — `ReminderEditor`,
+`BlockModal`, and Settings (`GsTextField` ×3 + `LayoutTabContent`'s new-table /
+rename boxes). Each snapshots the draft it was **opened** with and
 diffs the live state against it (`sameDraft`, `src/lib/drafts.js`) — an untouched
 form closes **silently**, because a confirm on every Cancel trains staff to tap
 straight through it. `openForm` (App.jsx) is the ONE door that sets the booking
@@ -382,6 +490,20 @@ NOT touch it. Same shape in `useWalkin` (`openWalkin` only). Both baselines are
 **state, not refs** — they're read during render to derive a rendered value.
 `ManualModal` owns its picks and reports up via `onDirty`, with an unmount-only
 cleanup firing `onDirty(false)` so a closed modal can't leave `beforeunload` armed.
+`BlockModal` (v17.8.0) uses that identical shape.
+
+**Two v17.8.0 details worth carrying forward.** (1) `ReminderEditor`'s draft is
+diffed through a `flatReminder()` first: `sameDraft`'s `norm()` falls back to
+key-order-sensitive `JSON.stringify` for a nested object, and `recurrence` is
+rebuilt by spreads throughout the editor, so the raw draft could read as
+permanently dirty. Flatten any nested draft before diffing it. (2) Settings
+aggregates several independent draft holders through `SettingsContent`'s
+`reportDirty(id, on)` into the ONE boolean App wants, backed by a **Set of ids,
+not a counter** — an unmounting field always clears its own entry, so a tab
+switch (which unmounts the whole body) can't leave a phantom count and strand
+`beforeunload` armed. Its tab reset lives in `closeSettings()` so it runs on
+both the clean and the discard path. Settings' steppers/toggles are deliberately
+unguarded: they commit on each tap and hold no draft.
 
 **Adding a new drafting surface = three wirings, not one:** (1) snapshot a
 baseline at its open site, (2) point its mount-site `onClose` at a
@@ -410,6 +532,76 @@ something is dirty; browsers ignore any custom message string.
 - Every modal uses the **`Overlay` atom** (owns blur + mobile-sheet / desktop-card branching).
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
 - ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above).
+- **Keyboard focus is a designed state (v17.8.0).** One `:focus-visible` rule in
+  `index.html` + a `--focus-ring` token per theme. Before this the app had NO
+  focus rule at all and a focused button computed `outline: none` — in the one
+  app here that is explicitly keyboard-driven. **`outline-offset: 2px` is what
+  makes a single colour enough**: the ring lands on the page background instead
+  of the control's own fill, so it never has to survive being drawn over a
+  saturated accent pill. Don't add an inner hairline for that case — mkBtn's and
+  mkInp's inline `boxShadow` beats a stylesheet `box-shadow` on most controls, so
+  it would apply inconsistently or not at all (tried and removed). The offset
+  needs 2px of room: a control flush inside an `overflow:hidden` scroller has its
+  ring clipped, the same trap as the hover-lift and fixed by the same
+  `padding-inline` gutters. **Nothing else in the app may wear a plain outline** —
+  `ViewSwitcher`'s split-pane marker was `outline: 2px solid white` and became
+  indistinguishable from focus the moment a real ring existed; it is an inset
+  underline now.
+
+- **Accent = primary action or current selection. Nothing else (v17.8.0).** It is
+  not for identity and not for decoration. `--tbl-out-rgb` used to be byte-identical
+  to `--accent`, so nine outdoor table pills painted the accent on every screen at
+  all times and nothing could outrank a table label; outdoor is teal now. Before
+  reaching for accent, check the hue is actually free — the app's slots are green
+  seated/success, amber confirmed/pending, burnt orange warn, red danger, purple
+  indoor, teal outdoor, graphite `--tag-flag` for booking flags.
+
+- **Notifications are ONE surface (v17.8.0).** Every in-flow banner
+  (`BannerRows` + Late/Overlap/WaitAvail, `AppBanners`, the reminder banner) and
+  every floating toast (`StatusToasts`) uses the same pane: a soft semantic
+  tint, a **1px** border, `R.card`, and the colour carried by a leading 8px
+  **dot** — the connection popover's device. Never a 2px ring around a
+  saturated wash, and **never a card inside a card**: banner rows are
+  transparent and hairline-separated (`--border-soft`), because a fill+border
+  row inside a fill+border container is what made these read as bolted-on alert
+  boxes. Connection-shaped toasts use the header dot's own `--status-*` tokens
+  so the same event is the same colour everywhere. No ⚠/⏰/⟳ glyphs — a glyph
+  plus a coloured dot plus coloured text is three signals for one message.
+  **All of them now live in ONE `NotificationStrip` pane** whose collapsed height
+  is one row however many fire; adding a new in-flow notification means adding a
+  section to App's `notifSections` in severity order, never a new pane.
+
+- **Three label treatments (v17.8.0), and context decides which.** **SOLID**
+  where a tag competes inside a busy row (ListView's `manual`/`locked`/`★`/the
+  seated counter, the reminder's time chip). **OUTLINE** — no fill, a **2px**
+  border in the semantic hue, text in the same family — where a chip stands
+  alone as a count or a disclosure (Customers' visits/no-shows,
+  `BookingFormModal`'s Regular/no-show buttons). **TEXT** where the colour
+  carries itself unaided. The banned shape is the fourth one: pale semantic fill
+  *plus* a matching border *plus* bold text in a third shade, which encodes one
+  signal three times. The outline chip drops the fill and earns its extra border
+  pixel; do not "restore" the fill.
+- The SOLID/TEXT pair in full: **solid** — the fill carries the colour, text is `--text-on-accent`,
+  the rim is neutral `--border-glass` (the v17.7.0 status-label decision:
+  `SBadge`, `manual`, `locked`, `★`, the seated `N min`); or **plain text** —
+  the colour carries itself, no fill, no border. The third shape — pale
+  semantic fill + border in the matching hue + bold text in a third shade of
+  it — is banned. It encodes one signal three times and is the stock badge
+  every framework ships. **Which of the two you pick is decided by context,
+  not taste: match whatever sits next to you.** ListView's `no-show ×N` /
+  `N min late` / `€N deposit` share a row with four solid tags, so they are
+  solid; `Table free · HH:MM`, `This device` and the reminder banner's time sit
+  among plain text (and each already has a plain-text twin elsewhere — the
+  waitlist string is printed verbatim by `WaitAvailBanner`), so they are text.
+  Clickable chips are the documented exception: `BookingFormModal`'s
+  Regular/no-show disclosures are buttons and a fill is their affordance.
+  Watch the copy when you strip a chip — dropping the waitlist pill left the
+  panel's footnote describing "a green chip" that no longer existed.
+
+- **`--suggest-bg` is a CHIP fill, `--suggest-bg-soft` is the pane fill.** At
+  banner size the 0.8-alpha chip green outshouted the amber "Running late" pane
+  above it, inverting the hierarchy. A suggestion must never be louder than a
+  warning.
 
 ### Theming / dark mode (mechanism shipped v14.2.0 — ported from Scheduling; see `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`)
 - Light + dark via CSS custom properties: `:root` (light) + `[data-theme="dark"]` overrides in `index.html`; `<html data-theme="…">` set via `document.documentElement.dataset.theme`. A theme flip is **one DOM attribute change — zero React re-render** of the tree.
@@ -421,13 +613,137 @@ something is dirty; browsers ignore any custom message string.
 
 ### Hover affordance — COMPLETE (v14.3.0 → v14.3.2; see `MGT_Bookings_hover-scale_PORT_INSTRUCTIONS.md`)
 - Shared `.mgt-hover-scale` utility in `index.html` `<style>`: `scale(1.08)`, `120ms ease`, opaque theme-aware `--bg-hover-card` (`#ffffff` light / `rgb(50,50,53)` dark, both theme blocks), the `:hover:not(:disabled)` guard, reuses `--shadow-soft`.
-- **v17.7.0: the hover rule no longer sets `border-radius`.** It used to hard-set `12px`, which squared off every pill the moment the pointer touched it. The declaration was **deleted**, not set to `inherit` — `inherit` resolves against the PARENT's radius, so a bare element inside a square parent would go square, which is the opposite of the intent. Each element now keeps its own resting radius on hover. Do not re-add a radius here. **Consequence: any `.mgt-hover-scale` element MUST set its own `borderRadius`** — the rule still applies an OPAQUE `--bg-hover-card`, so a radius-less element renders that background as a hard-edged rectangle on hover. `ConnectionStatus`'s dot button (transparent, no radius) was exactly that case and got `borderRadius: R.pill` in the same version (12px on its 24×40 box — exactly the shape the rule used to draw). It was the only one in the app, but check any new one.
+- **A colour token may only sit on a surface that flips with it (v17.8.0 review fix).** The
+  `--*-text` tokens INVERT between themes (`--success-text` `#166534`→`#86efac`,
+  `--status-pending-text` `#854d0e`→`#fde047`). Painted on a **hard-coded** pale
+  fill — which is theme-invariant by intent, like `BLOCK_BG` — that inverts the
+  text out from under itself: the kitchen-suggestion chips in
+  `BookingFormModal`/`WalkinForm` shipped light-green text on pale green at
+  ~1.3:1 in dark mode. Those six sites are deliberately **back on hex literals**
+  (`KTXT_OK`/`KTXT_TIGHT`), and that is the correct answer, not debt. **Triage a
+  colour exactly like a shadow: ask whether the SURFACE UNDER it flips.** If it
+  doesn't, the thing on top must not either.
+- **`--shadow-input` is for RECESSED fields, `--shadow-btn` for RAISED controls.**
+  The input token leads with an inset white highlight, which is what makes a
+  field look sunken. Settings had ~20 BUTTONS wearing `--shadow-input` (fixed
+  v17.8.0), and that one mismatch is most of why that modal never quite looked
+  like the rest of the app despite sharing its palette and radii. Text inputs
+  and `<select>`s keep it.
+- **One stepper: `mkStep(size)` in atoms.** Settings and LayoutSettings each held
+  a private, byte-identical copy before v17.8.0.
+- **v17.8.0: shadow literals are allowed ONLY over theme-invariant fills — and `npm run check:style` enforces it.** The script resolves the nearest governing `background` above a white-inset shadow and fails when it is a theme token; `/* @fixed-fill */` marks the one site whose fill is beyond a line-scanner's reach. All 22 surviving white-inset literals were audited and are correct (each sits on `BLOCK_BG` / `--app-*-solid` / `BTN.*` / a raw rgba), so the rule guards the NEXT one, not a backlog. Plain dark drop-shadow literals are deliberately unchecked — a black shadow cannot invert out from under itself, and a noisy check gets muted. The `--shadow-*` tokens are not cosmetic — light carries `inset 0 1px 1px rgba(255,255,255,0.6)`, dark drops it to `0.05` — so a hard-coded white inset ships a light-mode highlight into dark, 3–8× too bright. That was 24 call sites. The exception is real: TimelineView's blocks sit on `BLOCK_BG` fills, which are deliberately theme-invariant, so a fixed white inset is correct there in both themes (same reasoning as their `borderRadius` exemption). Triage by asking whether the SURFACE UNDER the shadow flips with the theme.
+- **v17.7.0: the hover rule no longer sets `border-radius`.** It used to hard-set `12px`, which squared off every pill the moment the pointer touched it. The declaration was **deleted**, not set to `inherit` — `inherit` resolves against the PARENT's radius, so a bare element inside a square parent would go square, which is the opposite of the intent. Each element now keeps its own resting radius on hover. Do not re-add a radius here. **Consequence: any `.mgt-hover-scale` element MUST set its own `borderRadius`** — the rule still applies an OPAQUE `--bg-hover-card`, so a radius-less element renders that background as a hard-edged rectangle on hover. `ConnectionStatus`'s dot button (transparent, no radius) was the FIRST case and got `borderRadius: R.pill`; **`CustomersSettings`' customer row was the second**, squaring off inside its own rounded card on hover until it got `R.card`. It has been called a one-off twice now. Treat a missing radius on a `.mgt-hover-scale` element as a bug by default, and grep the class when auditing.
+- **v17.8.0: `.mgt-hover-scale` and `.mgt-press` share ONE `transition` declaration.** They are designed to compose (~30 elements carry both), they had equal specificity (0,1,0), and `transition` is a **shorthand** — so `.mgt-press`, declared later, REPLACED the hover rule's list instead of adding to it. Every element with both classes had no transform transition at all and snapped to `scale(1.08)` instead of easing: the reminder banner's Snooze/Done, the whole timeline zoom cluster, every banner ✕, the form's customer chips. Broken since v15.8.0 and invisible because the `filter` dim `.mgt-press` added still worked; v17.8.0's universal press-scale doubled it by adding a press dip that also snapped. **Two shorthand declarations of one property cannot merge — so don't have two.** One selector list, one declaration, covering every property either class animates; source order then cannot matter. Same trap applies to any future composable pair.
+  **And to INLINE styles, the third copy of it** (v17.8.0 review fix): an inline `transition` beats both the class rule and `button {}`, so **any `.mgt-hover-scale` element with an inline `transition` must list `transform`** or its hover lift and its press dip both snap. Settings' TabBar named three properties and dropped the fourth — in the same commit that documented the class-level version. Grep `transition:` under `src/` when auditing.
+- **v17.8.0: a stylesheet has no syntax errors, only rules that silently don't exist.** A stray `*/` after an already-closed comment left two lines of prose loose in `index.html`; CSS error recovery folds that text into the NEXT rule's *selector*, so `.mgt-press:active` was dropped outright and the press dim died app-wide. The build says nothing, lint says nothing, and the source reads fine at a glance. **Verify a CSS change by walking the live CSSOM** — `[...document.styleSheets].flatMap(s=>[...s.cssRules]).filter(r=>/yourClass/.test(r.cssText))` — for the rule you think you wrote. Reading the file cannot catch this class of bug.
 - **v15.1.0: the `:hover` rule is wrapped in `@media (hover: hover) and (pointer: fine)`.** iOS Safari makes `:hover` STICKY after a tap — unguarded, the last-tapped element stayed scaled 1.08, and full-width form inputs (Date/Time in the booking form) visibly overflowed their Section on phones. Touch devices get no hover lift at all; mouse/trackpad behaviour unchanged. The guard is part of the shared contract — **ported to MGT Scheduling in its v15.1.1** (2026-06-16); keep the two in sync.
 - Opt-in per element via `className="mgt-hover-scale"`. Because `mkInp`/`mkBtn` return style objects, put the class **directly on the call-site element**, not via a prop.
 - **In Bookings the lift is `transform: scale(1.08)` ONLY.** Every tagged surface uses `mkBtn`/`mkInp` (inline `background`+`boxShadow`+`borderRadius`), which beat the hover rule at higher specificity (Fix 2), so each keeps its own colour/shadow/radius and only scales. `--bg-hover-card`/`--shadow-soft` still apply to a bare (background-less) element — see the radius consequence above. Disabled controls stay flat via `:not(:disabled)`; for non-`disabled` "blocked" controls (TableGrid busy cells) the class is withheld instead (`className={blocked ? undefined : ...}`).
 - **`Overlay` gained an optional pinned-`footer` slot (v14.4.1).** Pass `footer={…}` and the action buttons render fixed at the modal bottom while `children` scroll above (desktop = flex-column card with a `minHeight:0` scroll body; mobile = sticky bottom bar with safe-area padding). Omitting `footer` keeps the original single-scroll behaviour (back-compat for read-only popups like `HistoryPopup`). **All action modals pass `footer`** — the 5 component modals, the inline App.jsx confirm dialogs (delete/cancel/kitchen/reshuffle/reminder-del) + the Settings modal, and `ReminderEditor` (its own z-250 modal, restructured to the same scroll-body + pinned-footer shape). Blur budget unchanged (one card renders → scrim blur(8) + card blur(20) = 2). The Hover-scale Fix-4 inner-scroller is still NOT used — the footer region has its own padding, so hover-lifts don't clip there.
 - **Fix-3 timeline (`TimelineView`):** pad the *scroller* (`padding:8`), NOT the inner grid — the grid is `pct()`-positioned against the inner width, so padding the inner div shifts every block. `labelCol` mirrors the scroller's `paddingTop:8` so rows stay aligned (verified: row-top delta 0).
 - **Coverage:** v14.3.0 header chrome · v14.3.1 ListView cards+buttons, TimelineView controls+blocks, Settings tabs · v14.3.2 `Toggle` atom + every modal's buttons/steppers/cells/inputs + App.jsx confirm-dialog & banner buttons.
+
+### Press feedback — universal, opt-OUT (v17.8.0)
+Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip
+to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
+`index.html` next to the hover rule.
+
+- **The specificity is load-bearing.** `.mgt-hover-scale:hover` is (0,2,0), so a
+  plain `button:active` (0,1,1) LOSES and the press is invisible on desktop —
+  a mouse user is always hovering the button they press. The shipped selector is
+  `button:active:not(:disabled):not(.mgt-nopress)` = (0,3,1). Don't "simplify" it.
+- **`.mgt-nopress` is the opt-out**, for controls that are inert but NOT
+  `disabled` (TableGrid's blocked cells) — animating a tap that does nothing is
+  a lie about what happened. Same principle as withholding the hover lift there.
+- **iOS needs the touch listener.** Safari only delivers `:active` when a touch
+  listener exists somewhere on the document; the empty passive one in
+  `index.html`'s boot script is the only reason this works on the tablets.
+  Remove it and the whole effect silently becomes desktop-only.
+- Inline transforms still win by design (TimelineView's drag `translateY`).
+- The older `.mgt-press` brightness dim stays and composes — `filter` and
+  `transform` are orthogonal.
+
+### Motion — two curves, three durations (v17.8.0)
+
+Tokens in `index.html`'s `:root` (theme-agnostic, so NOT duplicated into the
+dark block, same as the radii); JS reads them through **`M`** in
+`lib/constants.js`. **No new easing or duration literal** — `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back empty apart from `M`'s own
+WAAPI values.
+
+**The split is by DIRECTION, not by element.** `--ease-out` (cubic-out,
+`0.33,1,0.68,1`) for everything that arrives, opens, moves, or answers a finger;
+`--ease-in`, its exact mirror, only for things leaving — an exit accelerates away because the eye
+has already moved on. Before this the app had five curves (`ease`, `ease-out`,
+`ease-in-out`, `linear`, Material's `.4,0,.2,1`) picked per site over eight
+versions, so a modal's scrim faded `linear` while the toast inside it used
+Material's curve while the button on it used `ease`: three materials in one
+glance.
+
+Durations by **what is moving**: `--t-tap` 145ms (a control answering your
+finger), `--t-move` 240ms (something arriving or leaving), `--t-shift` 385ms
+(geometry — heights, widths, positions).
+
+**The curve was a quint (`0.22,1,0.36,1`) for one version and it was wrong for
+travel.** A quint spends ~90% of the distance in the first third of the time —
+right for a press dip, where the eye only registers arrival; wrong for anything
+crossing a distance. The toggle knob proved it: the transition was applied and
+correct, and the 21px slide still read as a teleport. **Diagnose "it jumps" by
+sampling the intermediate positions before touching the duration** — the value
+may be fine and the curve the fault. Corollary: `--t-tap` is for a control
+*acknowledging* a tap. Anything that TRAVELS (a knob, a pane, a block) takes
+`--t-move` or `--t-shift`, however small the control is. Two more sit outside the scale on purpose: `--t-status`,
+which exists *because* TimelineView and PlanView must agree on it (a shared
+number needs a shared name), and `--t-wipe`, which TimelineView's
+`__statusAnims.until` window depends on.
+
+Three exceptions, all real, and the first two are the same idea. `.mgt-dot-pulse`
+keeps `ease-in-out` — a loop has no arrival and no departure, so neither
+direction curve applies; it is a breath, not a move. **`M.resize`
+(`--t-shift linear`) is `AutoHeight`, and only `AutoHeight`** (v17.8.0): a box
+conforming to content that already changed is not travelling either, so there is
+no arrival to decelerate into and ease-out only front-loads — cubic-out covers
+70% of a height change in the first third of the time, then crawls, which is
+exactly what "jumpy" describes. **The tell for both: ask whether anything is
+going anywhere.** If nothing is, a direction curve is describing a motion that
+isn't happening. Third, **`useFlip` keeps literal numbers because WAAPI cannot
+read a CSS var** (it resolves to nothing and the animation silently runs
+linear), which is why `M.dur`/`M.easeOut` exist and are the only values here
+that can drift.
+
+**Never `transition: all`** — it animates layout properties too and you cannot
+tell what moves by reading it. Name the properties.
+
+### Adding motion to something that has none
+
+- **Fading in to an element's own opacity** is `.mgt-appear`, not
+  `.mgt-fade-in`. It has no `to` (an omitted endpoint resolves to the element's
+  computed value, so the timeline's waitlist ghost lands on its 0.55/0.4 without
+  the rule knowing that number) and **no fill-mode** — `both` would pin the
+  animated properties forever, which on a `.mgt-hover-scale` element means the
+  lift never applies again. For the same reason it animates opacity only:
+  nothing may own `transform`, because the hover and press rules do.
+- **An element that must animate OUT needs its content held.** `Reveal` already
+  caches its last truthy children for exactly this — pass `null` and it fades
+  out what it was showing. Corollary that bit once: it only caches **truthy**
+  children, so a parent must pass `null`, not a live-but-empty component (that
+  is why App's strip mount site is `{notifSections.length ? <Strip…/> : null}`).
+- **One `Reveal` cannot animate a SWAP.** Two disclosures sharing a Reveal
+  (`show={!!panel}`, content chosen by which one is open) never change `show`
+  when you switch between them, so the rows are replaced in a single frame and
+  the height snaps. Give each its own Reveal: the switch is then what it really
+  is, one closing while the other opens, and because both ride the same curve
+  for the same duration the container height interpolates straight from A to B
+  with no bulge. `BookingFormModal`'s Regular / No-shows chips, v17.8.0.
+- **A list whose items animate out must remember ORDER, not content.**
+  `useRevealRows` keeps departed ids alive but its `renderIds` is
+  arrival-ordered. If the list is sorted by anything else, a departing item's
+  remembered index **ties** with whatever shifted up into its place, and the tie
+  falls through to arrival order — so it visibly jumps before it collapses. Sort
+  departed items half a step above their replacement (`rank - 0.5`).
+- **Not everything that appears needs an animation.** The empty-day state gets
+  none: it appears mostly when you navigate to an empty day, where `SlideView`
+  is already animating the whole view, and a second fade inside it just makes
+  the day change feel slow.
 
 ---
 
@@ -531,7 +847,11 @@ something is dirty; browsers ignore any custom message string.
 
 - **Multi-tenancy** — single-restaurant app; no plans to generalise.
 - **Mobile app** — web-only; mobile is responsive layout (`useWinW` → `isMobile`).
-- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS (`tests/booking-logic.test.js` + `tests/customers.test.js` + `tests/drafts.test.js`, 88 tests as of v17.5.0, `npm test`; CI gates build+test+**lint (0 errors, a hard gate)** on every PR via `.github/workflows/ci.yml`). Run/extend it when touching `booking-logic.js`, `customers.js` or `drafts.js`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
+- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS — `booking-logic` · `customers` · `drafts` · `waitlist-match` · `presence-state` · `stylesheet` · **`contrast`**, **223 tests** as of v17.8.0 (`npm test`). CI gates build + test + **lint (0 errors, hard)** + **`npm run check:style`** on every PR via `.github/workflows/ci.yml`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
+  **The rule v17.8.0 added: logic that decides something the restaurant acts on does not live in a `useEffect`.** `placeWaitlist` and `presenceState` were both extracted for that reason — a double-booking fix had shipped on "it looked right in DEV". If a behaviour is worth a REFACTOR_LOG paragraph it is worth being reachable by a test: put the pure core in `lib/`, leave the hook its subscription, refs and setState.
+  **Fixture trap:** `ALL_TABLES` holds `{id, capacity}` OBJECTS, not ids. A "fill every table" fixture built straight from it silently occupies nothing, and the failures point at the code. Use `ALL_TABLES.map(t => t.id)`.
+  **`tests/stylesheet.test.js` guards `index.html`'s `<style>`** — a stylesheet has no syntax errors, only rules that silently don't exist (v17.8.0 lost `.mgt-press:active` to a stray `*/` and nothing noticed). It checks comment hygiene, brace balance, a CRITICAL_SELECTORS list, and — added after the same defect recurred one scope deeper — **loose prose inside a DECLARATION block**, which eats the declaration *after* it rather than the rule after it. That version made `--tbl-out-rgb` resolve to empty, which would have rendered nine table badges transparent, while every existing test passed. Entry criterion for CRITICAL_SELECTORS: does the rule fail SILENTLY when missing?
+  **A regex reading of CSS is not what the browser sees.** `tests/contrast.test.js` extracts tokens with a regex and would happily measure a declaration the browser has thrown away, so parse validity needs its OWN guard and cannot be inferred from a token-reading test passing.
 - **TypeScript** — pure JavaScript; no plans to migrate.
 - **Storybook / component dev environment** — components are developed against the live (DEV) app.
 

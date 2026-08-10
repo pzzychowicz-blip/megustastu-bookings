@@ -18,7 +18,7 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { S, BTN, R } from "../lib/constants";
+import { S, BTN, R, T, FW } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
 import { Fld, Toggle, mkBtn, mkInp, mkArea, usePresence, AutoHeight } from "./atoms";
 
@@ -103,22 +103,22 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         width: "100%", maxWidth: 520, maxHeight: "90dvh",
         display: "flex", flexDirection: "column", overflow: "hidden",
         boxSizing: "border-box",
-        boxShadow: "0 8px 40px rgba(0,0,0,0.15), inset 0 1px 1px rgba(255,255,255,0.8)"
+        boxShadow: "var(--shadow-sheet)"
       }}>
         {/* v14.4.1: body scrolls, action footer (err + buttons) pinned to the
             bottom — mirrors Overlay's `footer` slot (this modal predates it). */}
         <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "22px", boxSizing: "border-box" }}>
-        {/* v15.8.0: AutoHeight (linear) eases the body when Recurrence flips once↔weekly. */}
-        <AutoHeight linear>
+        {/* v15.8.0: AutoHeight eases the body when Recurrence flips once↔weekly. */}
+        <AutoHeight>
         {/* v14 p7: header matches New booking / Edit booking pattern —
             centered wrapper + pill-shaped inner with blue background. */}
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <div style={{
-            fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
+            fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
             display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-            background: "rgba(0,122,255,0.75)",
+            background: "var(--app-new)",
             border: "1px solid rgba(255,255,255,0.2)",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
+            boxShadow: "var(--shadow-btn)"
           }}>
             {isNew ? "New reminder" : "Edit reminder"}
           </div>
@@ -150,7 +150,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                   <button
                     onClick={() => removeTime(i)}
                     className="mgt-hover-scale"
-                    style={mkBtn({ minHeight: 40, minWidth: 40, padding: "0", fontSize: 18, background: BTN.del, lineHeight: 1 })}
+                    style={mkBtn({ minHeight: 40, minWidth: 40, padding: "0", fontSize: T.title, background: BTN.del, lineHeight: 1 })}
                   >
                     ×
                   </button>
@@ -160,7 +160,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             <button
               onClick={addTime}
               className="mgt-hover-scale"
-              style={mkBtn({ minHeight: 36, padding: "6px 12px", fontSize: 12, background: BTN.nav })}
+              style={mkBtn({ minHeight: 36, padding: "6px 12px", fontSize: T.body, background: BTN.nav })}
             >
               + Add time
             </button>
@@ -172,14 +172,14 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             <button
               onClick={() => setType("once")}
               className="mgt-hover-scale"
-              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "once" ? S.accent : "rgba(120,130,150,0.45)" })}
+              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "once" ? S.accent : "var(--app-btn-grey)" })}
             >
               One-off
             </button>
             <button
               onClick={() => setType("weekly")}
               className="mgt-hover-scale"
-              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "weekly" ? S.accent : "rgba(120,130,150,0.45)" })}
+              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "weekly" ? S.accent : "var(--app-btn-grey)" })}
             >
               Weekly
             </button>
@@ -209,7 +209,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                     key={d.i}
                     onClick={() => toggleDay(d.i)}
                     className="mgt-hover-scale"
-                    style={mkBtn({ flex: 1, minWidth: 48, minHeight: 40, padding: "8px 6px", fontSize: 12, background: sel ? S.accent : "rgba(120,130,150,0.45)" })}
+                    style={mkBtn({ flex: 1, minWidth: 48, minHeight: 40, padding: "8px 6px", fontSize: T.body, background: sel ? S.accent : "var(--app-btn-grey)" })}
                   >
                     {d.s}
                   </button>
@@ -227,7 +227,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           border: "1px solid var(--border-soft)"
         }}>
           <Toggle on={draft.active} onClick={toggleActive} />
-          <span style={{ fontSize: 13, color: "var(--text-primary)", fontWeight: 600 }}>
+          <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.semi }}>
             {draft.active ? "Active" : "Inactive"}
           </span>
         </div>
@@ -236,7 +236,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         <div style={{ flexShrink: 0, padding: "16px 22px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
         {err ? (
           <div style={{
-            color: "var(--danger-text)", fontSize: 13,
+            color: "var(--danger-text)", fontSize: T.body,
             padding: "8px 12px",
             background: "var(--danger-bg)",
             borderRadius: R.card,
@@ -260,12 +260,12 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             disabled={!!err}
             className="mgt-hover-scale"
             style={{
-              background: err ? "rgba(180,180,190,0.4)" : "rgba(22,101,52,0.8)",
+              background: err ? "rgba(180,180,190,0.4)" : "var(--app-success-solid)",
               border: "1px solid rgba(255,255,255,0.2)",
               borderRadius: R.pill,
               padding: "10px 22px",
               cursor: err ? "not-allowed" : "pointer",
-              fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 40,
+              fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 40,
               boxShadow: err ? "none" : "0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)"
             }}
           >

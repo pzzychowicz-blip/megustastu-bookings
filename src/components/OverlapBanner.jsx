@@ -19,36 +19,34 @@
 
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
-import { BTN, R } from "../lib/constants";
+import { BTN, T, FW } from "../lib/constants";
 
-export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, collapseMax = 2 }) {
+export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
   const byId = new Map(bookings.map(function (b) { return [b.id, b]; }));
 
   function renderRow(id) {
     const w = warnings[id];
     const sb = byId.get(id);
     if (!sb || !w) return null;
-    const rowBg = w.overdue ? "var(--danger-bg)" : "var(--warn-bg)";
-    const rowBrd = w.overdue ? "var(--danger-border)" : "var(--warn-border)";
     const rowTxt = w.overdue ? "var(--danger-text)" : "var(--warn-text)";
     const msg = sb.name + " (overstaying) → " + w.next + " at " + w.nextTime + (w.overdue ? " — overdue" : " — in " + w.gap + " min");
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 12px", borderRadius: R.inset, background: rowBg, border: "1px solid " + rowBrd, marginTop: 6 }}>
-        <span style={{ fontSize: 13, color: rowTxt, fontWeight: 600, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "9px 0" }}>
+        <span style={{ fontSize: T.body, color: rowTxt, fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
         <button
           onClick={function () { onReassign(w.nextId); }}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: BTN.orange })}>{"Reassign " + w.next}</button>
+          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.orange })}>{"Reassign " + w.next}</button>
         <button
           onClick={function () { onDismiss(id); }}
           aria-label="Dismiss this warning"
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}>✕</button>
+          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}>✕</button>
       </div>
     );
   }
 
   return (
-    <BannerRows title="Overlap warnings" ids={Object.keys(warnings)} collapseMax={collapseMax} renderRow={renderRow} />
+    <BannerRows ids={Object.keys(warnings)} renderRow={renderRow} />
   );
 }

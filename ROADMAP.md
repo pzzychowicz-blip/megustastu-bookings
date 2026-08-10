@@ -14,16 +14,6 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **The reminder banner in `useReminders.jsx` is unthemed.** Lines ~209–216 use
-  raw hex/rgba literals (`#78350f`, `rgba(254,243,199,0.8)`, `rgba(22,101,52,0.8)`)
-  instead of CSS custom properties, so the banner — its amber shell, its time
-  chip and its green "Done" button — renders identically in light and dark and
-  reads wrong in dark mode. It is the last surface the v14.2.x token migration
-  missed, most likely because it lives in a **hook**, not a component, so a
-  `src/components` sweep never sees it. Spotted during the v17.7.0 radius
-  rollout (same reason: it wasn't in the design brief's file list). Fix = swap
-  each literal for the matching `--warn-*` / `--app-*` token; no logic change.
-
 - **PWA / offline shell — withdrawn in v17.4.1. The worker may have been
   innocent (v17.5.1 finding).** v17.5.1 root-caused the *Android* tablet's
   identical "⟳ Loading bookings…" freeze to something else entirely: the CSP's
@@ -77,12 +67,42 @@ session and keeping it in sync.
   extraction is straightforward whenever it's worth doing; the risk is all in
   TimelineView, not in the shared piece.
 
-- **Extend the unsaved-changes guard to the remaining draft surfaces.**
-  v17.5.0 guards the booking form, the walk-in form and `ManualModal`. Still
-  unguarded, by explicit scope decision: the **reminder editor** (`ReminderEditor`
-  has its own z-250 modal, not `Overlay`, and re-implements the scrim click
-  itself), the **Block modal**, and **Settings** drafts (`GsTextField` commits on
-  blur, so closing Settings mid-edit can drop it; `LayoutSettings`' half-typed
-  new table likewise). See CLAUDE.md's "Unsaved-changes guard" section for the
-  three wirings each new surface needs — the Esc branch is the one that's easy
-  to miss.
+- **Plain drop-shadow literals.** ~20 inline `boxShadow: "0 1px 4px
+  rgba(0,0,0,0.04)"`-style values remain, and `scripts/check-style-invariants.mjs`
+  deliberately does NOT flag them: a black shadow cannot invert out from under
+  itself, so this is a consistency nit rather than the bug class the white-inset
+  rule guards, and a noisy check gets muted. Fold them into `--shadow-soft` /
+  `--shadow-btn` opportunistically while touching those files; don't sweep.
+
+- **The 6-stop background gradient.** `--bg-app` is a `linear-gradient` across
+  six near-identical desaturated blues spanning roughly 3% of perceptual
+  difference — imperceptible as a gradient, and the kind of thing that reads as
+  stock SaaS wallpaper. The v17.8.0 design audit flagged it but left it alone:
+  it is the app's whole backdrop in both themes, so changing it is a look
+  decision for Patryk rather than a consistency fix. Either commit to a gradient
+  that is actually visible, or collapse it to one flat tinted neutral.
+
+- **The control-height and spacing scales.** The TYPE half of this entry
+  shipped in v17.8.0 (`T` + `FW`, thirteen sizes down to six, enforced by
+  `check:style`). What is left is the other two axes. Button heights are still
+  28/30/32/34/36/40/44/54 — v17.8.0 lifted the service-critical ones to 44 and
+  deliberately left the 40px `mkBtn` standard, so the remaining spread is
+  28/32/34/36 across ~40 sites that are mostly inside modals. Spacing has no
+  scale at all: **96 distinct `padding` strings and 14 distinct `gap` values.**
+  Both are wide, low-risk-per-site sweeps with no user-visible defect behind
+  them, which is exactly why they keep losing to work that has one. If they get
+  done, they get a `check:style` rule each or they will drift straight back.
+
+- **Dark mode cannot be verified visually in DEV.** Since v17.6.0 the theme
+  follows the signed-in ACCOUNT (`settings/users/{uid}/prefs`), and that
+  overrides both `localStorage["mgt-theme"]` and OS emulation — so a session
+  that wants to eyeball dark mode has to actually toggle it in Settings and
+  write to the prefs node. The v17.8.0 contrast pass verified dark by
+  computation against the token values instead, which is sound but is not the
+  same as looking. Worth a dev-only escape hatch (a query param, or honouring
+  `localStorage` when it is set AFTER prefs load) so a theme check does not
+  require mutating the signed-in user's saved settings.
+
+- **Modal title pills have no colour rule.** "New booking" and "Waitlist" are
+  accent; "Settings" is grey. Pick one convention (probably: accent for a
+  create/act surface, neutral for a configure/read one) and apply it.

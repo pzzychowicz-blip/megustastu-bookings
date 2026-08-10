@@ -28,3 +28,7 @@ jobs:
         run: npm test
       - name: Lint (hard gate since the 2026-07-24 cleanup)
         run: npm run lint
+      # v17.8.0: two CLAUDE.md style rules that were prose-only until a
+      # dark-mode bug shipped past both. See scripts/check-style-invariants.mjs.
+      - name: Style invariants (radius scale, white-inset shadows)
+        run: npm run check:style

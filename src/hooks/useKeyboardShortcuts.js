@@ -73,12 +73,16 @@ export function useKeyboardShortcuts(ctx){
         // the form out from under the confirm.
         if(K.confirmDiscard){e.preventDefault();K.setConfirmDiscard(null);return;}
         // v14 p7: reminderEditor sits above Settings (z=250). Close it first.
-        if(K.reminderEditor){e.preventDefault();K.setReminderEditor(null);return;}
+        // v17.8.0: through the GUARDED close — see the v17.5.0 note below; this
+        // chain never touches a modal's onClose, so each drafting surface has
+        // to be guarded here in its own right or Esc is a silent back door.
+        if(K.reminderEditor){e.preventDefault();K.requestCloseReminderEditor();return;}
         // v14 p7 fix: delete-confirm renders above Settings in DOM order.
         if(K.confirmReminderDel){e.preventDefault();K.setConfirmReminderDel(null);return;}
         // v14 p7 fix: reset tab to 'general' on Esc close — matches the
-        // Close button and backdrop-click onClose behavior.
-        if(K.showSettings){e.preventDefault();K.setShowSettings(false);K.setSettingsTab("general");return;}
+        // Close button and backdrop-click onClose behavior. v17.8.0: the tab
+        // reset now lives inside requestCloseSettings, on both its paths.
+        if(K.showSettings){e.preventDefault();K.requestCloseSettings();return;}
         if(K.showHistory){e.preventDefault();K.setShowHistory(false);return;}
         if(K.confirmKitchen){e.preventDefault();K.setConfirmKitchen(null);return;}
         if(K.confirmReshuffle){e.preventDefault();K.setConfirmReshuffle(false);return;}
@@ -87,7 +91,7 @@ export function useKeyboardShortcuts(ctx){
         if(K.showPrefPicker){e.preventDefault();K.setShowPrefPicker(false);return;}
         // v16.3.0 correction: Esc dismisses the search panel (its "Done" button).
         if(K.showSearch){e.preventDefault();K.setShowSearch(false);return;}
-        if(K.blockTarget){e.preventDefault();K.setBlockTarget(null);return;}
+        if(K.blockTarget){e.preventDefault();K.requestCloseBlock();return;}
         // v17.5.0: these three hold user drafts, so Esc goes through the GUARDED
         // close (clean → closes as before; dirty → raises the discard confirm).
         // This chain calls the setters directly and never touches the modals'

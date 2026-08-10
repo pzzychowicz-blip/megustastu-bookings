@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor, R } from "../lib/constants";
+import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
@@ -45,8 +45,17 @@ import {
   comboCapBest, nowTime
 } from "../lib/booking-logic";
 import { Overlay, Section, Fld, AvailBanner, mkInp, mkArea, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { WaitIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
+
+// v17.8.0 review fix: hex literals ON PURPOSE — see the identical pair in
+// BookingFormModal. The kitchen-suggestion chip FILLS are hard-coded pale green
+// / pale yellow and deliberately theme-invariant, so their text has to be too.
+// The token sweep briefly used --success-text / --status-pending-text here,
+// which invert between themes and left light-green text on a pale-green chip in
+// dark mode. A token may only be used where the surface under it flips as well.
+const KTXT_OK = "#166534", KTXT_TIGHT = "#854d0e";
 
 export function WalkinForm({
   draft, setDraft,
@@ -157,7 +166,7 @@ export function WalkinForm({
     <button
       key="clr"
       className="mgt-hover-scale mgt-press"
-      style={mkBtn({ fontSize: 12, padding: "6px 12px", background: BTN.clear })}
+      style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.clear })}
       onClick={() => setDraft({ ...wf, tables: [], _pre: false })}
     >
       Clear
@@ -189,9 +198,9 @@ export function WalkinForm({
         onClick={() => setDraft({ ...wf, tables: [], time: r.timeStr, _pre: false })}
         style={{
           cursor: "pointer", padding: "3px 8px", borderRadius: R.pill,
-          fontWeight: 600, fontSize: 12,
+          fontWeight: FW.semi, fontSize: T.body,
           background: r.hasTables ? "rgba(220,252,231,0.8)" : "rgba(254,249,195,0.8)",
-          color: r.hasTables ? "#166534" : "#854d0e",
+          color: r.hasTables ? KTXT_OK : KTXT_TIGHT,
           border: "1px solid " + (r.hasTables ? "rgba(134,239,172,0.5)" : "rgba(253,230,138,0.5)"),
           boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
         }}
@@ -203,17 +212,17 @@ export function WalkinForm({
 
   const wKitchenSugBlock = (wKitchenSugg && (wKitchenSugg.before.length || wKitchenSugg.after.length)) ? (
     <div style={{ marginTop: 8 }}>
-      <div style={{ fontSize: 11, color: S.muted, marginBottom: 6 }}>
+      <div style={{ fontSize: T.small, color: S.muted, marginBottom: 6 }}>
         <span style={{
-          background: "rgba(220,252,231,0.8)", color: "#166534",
-          padding: "2px 6px", borderRadius: R.pill, fontSize: 10, fontWeight: 600
+          background: "rgba(220,252,231,0.8)", color: KTXT_OK,
+          padding: "2px 6px", borderRadius: R.pill, fontSize: T.micro, fontWeight: FW.semi
         }}>
           green
         </span>
         {" = tables available  "}
         <span style={{
-          background: "rgba(254,249,195,0.8)", color: "#854d0e",
-          padding: "2px 6px", borderRadius: R.pill, fontSize: 10, fontWeight: 600
+          background: "rgba(254,249,195,0.8)", color: KTXT_TIGHT,
+          padding: "2px 6px", borderRadius: R.pill, fontSize: T.micro, fontWeight: FW.semi
         }}>
           yellow
         </span>
@@ -221,7 +230,7 @@ export function WalkinForm({
       </div>
       {wKitchenSugg.before.length ? (
         <div style={{ marginBottom: 4 }}>
-          <span style={{ fontWeight: 700, fontSize: 12 }}>Before: </span>
+          <span style={{ fontWeight: FW.bold, fontSize: T.body }}>Before: </span>
           <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
             {wRenderKT(wKitchenSugg.before)}
           </span>
@@ -229,7 +238,7 @@ export function WalkinForm({
       ) : null}
       {wKitchenSugg.after.length ? (
         <div>
-          <span style={{ fontWeight: 700, fontSize: 12 }}>After: </span>
+          <span style={{ fontWeight: FW.bold, fontSize: T.body }}>After: </span>
           <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
             {wRenderKT(wKitchenSugg.after)}
           </span>
@@ -237,7 +246,7 @@ export function WalkinForm({
       ) : null}
     </div>
   ) : (wKitchenBusy ? (
-    <div style={{ marginTop: 6, fontSize: 12, color: "var(--danger-text)" }}>
+    <div style={{ marginTop: 6, fontSize: T.body, color: "var(--danger-text)" }}>
       No kitchen-friendly alternatives found nearby.
     </div>
   ) : null);
@@ -246,20 +255,20 @@ export function WalkinForm({
     <div style={{
       padding: "10px 14px",
       borderRadius: R.card,
-      border: "2px solid " + (wKitchenBusy ? "var(--warn-border)" : "var(--border-soft)"),
+      border: "1px solid " + (wKitchenBusy ? "var(--warn-border)" : "var(--border-soft)"),
       background: wKitchenBusy ? "var(--warn-bg)" : "var(--bg-soft)",
-      marginBottom: 14, fontSize: 13,
+      marginBottom: 14, fontSize: T.body,
       color: wKitchenBusy ? "var(--warn-text)" : S.muted
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span>
-          <span style={{ fontWeight: 700 }}>Starting at this time: </span>
+          <span style={{ fontWeight: FW.bold }}>Starting at this time: </span>
           {wKitchenStarts + " booking" + (wKitchenStarts !== 1 ? "s" : "")
             + " · " + wKitchenGuests + " guest" + (wKitchenGuests !== 1 ? "s" : "")}
         </span>
         {wKitchenBusy ? (
           <span style={{
-            fontWeight: 700, color: "var(--text-required)", fontSize: 13,
+            fontWeight: FW.bold, color: "var(--text-required)", fontSize: T.body,
             padding: "4px 12px", borderRadius: R.pill,
             border: "1.5px solid rgba(220,38,38,0.4)",
             flexShrink: 0
@@ -279,16 +288,16 @@ export function WalkinForm({
   const stepperBtnStyle = {
     background: "var(--bg-stepper)",
     border: "1px solid var(--border-soft)",
-    borderRadius: R.pill, width: 42, height: 42, fontSize: 22,
-    cursor: "pointer", color: S.text, fontWeight: 600,
+    borderRadius: R.pill, width: 42, height: 42, fontSize: T.display,
+    cursor: "pointer", color: S.text, fontWeight: FW.semi,
     display: "flex", alignItems: "center", justifyContent: "center",
     flexShrink: 0,
-    boxShadow: "inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.06)"
+    boxShadow: "var(--shadow-input)"
   };
   // Helper for the centered stepper value display.
   const stepperValueStyle = {
     minWidth: 56, textAlign: "center",
-    fontSize: 15, fontWeight: 700, color: S.text
+    fontSize: T.lead, fontWeight: FW.bold, color: S.text
   };
 
   // v14.4.1: action row + error pinned via Overlay's `footer` slot (marginTop
@@ -298,11 +307,11 @@ export function WalkinForm({
     <>
       {error ? (
         <div style={{
-          color: "var(--danger-text)", fontSize: 13,
+          color: "var(--danger-text)", fontSize: T.body,
           padding: "10px 14px",
           background: "var(--danger-bg)",
           borderRadius: R.card,
-          border: "2px solid var(--danger-border)",
+          border: "1px solid var(--danger-border)",
           marginBottom: 14
         }}>
           {error}
@@ -321,11 +330,11 @@ export function WalkinForm({
           disabled={!wOk}
           className="mgt-hover-scale"
           style={{
-            background: wOk ? "rgba(22,101,52,0.8)" : "rgba(180,180,190,0.4)",
+            background: wOk ? "var(--app-success-solid)" : "rgba(180,180,190,0.4)",
             border: "1px solid rgba(255,255,255,0.2)",
             borderRadius: R.pill, padding: "10px 22px",
             cursor: wOk ? "pointer" : "not-allowed",
-            fontSize: 14, fontWeight: 600, color: "var(--text-on-accent)", minHeight: 44,
+            fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
             boxShadow: wOk
               ? "0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)"
               : "none"
@@ -342,16 +351,16 @@ export function WalkinForm({
       <AutoHeight>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
-          fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
+          fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
           display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-          background: "rgba(22,101,52,0.75)",
+          background: "var(--app-walkin)",
           border: "1px solid rgba(255,255,255,0.2)",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
+          boxShadow: "var(--shadow-btn)"
         }}>
           Walk-in
         </div>
       </div>
-      <div style={{ fontSize: 13, color: S.text, marginBottom: 16, textAlign: "center" }}>
+      <div style={{ fontSize: T.body, color: S.text, marginBottom: 16, textAlign: "center" }}>
         {"Walk-in " + walkinNum + " · Seated"}
       </div>
 
@@ -436,13 +445,13 @@ export function WalkinForm({
               >
                 +
               </button>
-              <span style={{ fontSize: 13, color: S.muted, marginLeft: 4 }}>
+              <span style={{ fontSize: T.body, color: S.muted, marginLeft: 4 }}>
                 {"End: " + toTime(toMins(wTime) + wDur)}
               </span>
               {wf.customDur ? (
                 <button
                   className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: 12, background: BTN.reset })}
+                  style={mkBtn({ fontSize: T.body, background: BTN.reset })}
                   onPointerDown={(e) => {
                     e.preventDefault();
                     setDraft({ ...wf, customDur: null });
@@ -468,23 +477,23 @@ export function WalkinForm({
 
       {wKitchenSection}
 
-      <div style={{ fontSize: 13, color: S.text, marginBottom: 14, textAlign: "center" }}>
+      <div style={{ fontSize: T.body, color: S.text, marginBottom: 14, textAlign: "center" }}>
         Tap tables to select / deselect.
       </div>
 
       <div style={{
         marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
-        border: "2px solid " + (wOk ? "var(--suggest-border)" : "var(--border-sheet)"),
+        border: "1px solid " + (wOk ? "var(--suggest-border)" : "var(--border-sheet)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: 8, flexWrap: "wrap",
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
       }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: S.text }}>
+          <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
             {"Selected: " + (wSel.length ? wSel.join(" + ") : "none")}
           </div>
-          <div style={{ fontSize: 13, color: wSummaryColor, fontWeight: 500, marginTop: 2 }}>
+          <div style={{ fontSize: T.body, color: wSummaryColor, fontWeight: FW.medium, marginTop: 2 }}>
             {wSummaryText}
           </div>
         </div>
@@ -503,7 +512,7 @@ export function WalkinForm({
           Reveal-wrapped — its ~300ms ease is the grace, so a fast scan shows
           only an imperceptible sliver instead of a flash. */}
       <Reveal show={wChecking && wSel.length === 0}>
-        <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: 13, fontWeight: 600, color: "var(--text-muted)", textAlign: "center" }}>⏳ Checking table availability…</div>
+        <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>
       </Reveal>
       {wAutoCheck && wSel.length === 0 ? (
         <>
@@ -519,10 +528,10 @@ export function WalkinForm({
             <div style={{ display: "flex", justifyContent: "center", marginTop: -4, marginBottom: 12 }}>
               <button
                 className="mgt-hover-scale"
-                style={mkBtn({ fontSize: 13, background: BTN.orange, minHeight: 40, padding: "8px 16px" })}
+                style={mkBtn({ fontSize: T.body, background: BTN.orange, minHeight: 40, padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6 })}
                 onClick={() => onAddToWaitlist()}
               >
-                ⏳ Add to waitlist
+                <WaitIcon size={15} />Add to waitlist
               </button>
             </div>
           ) : null}

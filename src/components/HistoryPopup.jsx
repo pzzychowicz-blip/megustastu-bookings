@@ -18,7 +18,7 @@
 // IIFE) and converted RC() → JSX. Behaviour, output markup, and all inline
 // styles are byte-identical to the original.
 
-import { S, R } from "../lib/constants";
+import { S, R, T, FW } from "../lib/constants";
 import { Overlay, mkBtn } from "./atoms";
 
 export function HistoryPopup({ booking, onClose }) {
@@ -34,16 +34,16 @@ export function HistoryPopup({ booking, onClose }) {
 
   return (
     <Overlay onClose={onClose}>
-      <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 12, color: S.text }}>
+      <div style={{ fontSize: T.title, fontWeight: FW.bold, marginBottom: 12, color: S.text }}>
         Booking history
       </div>
-      <div style={{ fontSize: 13, color: S.muted, marginBottom: 12 }}>
+      <div style={{ fontSize: T.body, color: S.muted, marginBottom: 12 }}>
         {booking.name + " — " + booking.date + " " + booking.time}
       </div>
       <div style={{
         maxHeight: 300, overflowY: "auto",
         borderRadius: R.card,
-        border: "2px solid rgba(160,170,190,0.4)",
+        border: "1px solid rgba(160,170,190,0.4)",
         background: "rgba(255,255,255,0.35)",
         padding: "10px 12px",
         boxShadow: "inset 0 1px 4px rgba(0,0,0,0.06)"
@@ -59,25 +59,25 @@ export function HistoryPopup({ booking, onClose }) {
             <div
               key={i}
               style={{
-                fontSize: 12, color: S.muted,
+                fontSize: T.body, color: S.muted,
                 padding: "6px 0",
                 borderBottom: i < reversed.length - 1 ? "1px solid rgba(160,170,190,0.25)" : "none"
               }}
             >
-              <span style={{ fontWeight: 600, color: S.text }}>{dateStr + " " + timeStr}</span>
+              <span style={{ fontWeight: FW.semi, color: S.text }}>{dateStr + " " + timeStr}</span>
               {" — "}
-              <span style={{ color: "var(--accent)", fontWeight: 600 }}>{h.by || "staff"}</span>
+              <span style={{ color: "var(--accent)", fontWeight: FW.semi }}>{h.by || "staff"}</span>
               <div style={{ marginTop: 2, color: S.text }}>{h.action}</div>
             </div>
           );
         }) : (
-          <div style={{ fontSize: 12, color: S.muted }}>No history yet.</div>
+          <div style={{ fontSize: T.body, color: S.muted }}>No history yet.</div>
         )}
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "#64748b" })}
+          style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })}
           onClick={onClose}
         >
           Close

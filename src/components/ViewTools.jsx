@@ -12,17 +12,25 @@
 //   onOpenSettings() — App's setShowSettings(true)
 
 import { CogIcon } from "./SettingsChrome"; // v17.1.0: light import — Settings.jsx is lazy-loaded now
+import { SearchIcon } from "./Icons";       // v17.8.0: was the 🔍 emoji, beside a hand-drawn SVG cog
 import { S, R } from "../lib/constants";
 
 const BTN_STYLE = {
   background: "var(--cog-bg)",
   border: "1px solid var(--cog-border)",
-  borderRadius: R.pill, width: 34, height: 34,
+  // v17.8.0: 34 → 36. These are the two controls that sit in the same place on
+  // all three views, on a device operated one-handed while carrying plates.
+  // It went to 44 (the HIG floor) first and that was too big — a 44px circle in
+  // the date-nav row out-weighed the date field beside it and the header stopped
+  // reading as chrome. 36 is the compromise Patryk picked: a real increase on
+  // the old 34, still visibly secondary. Equal width/height keeps --r-pill a
+  // true circle (it clamps to half the SHORTER side).
+  borderRadius: R.pill, width: 36, height: 36,
   cursor: "pointer",
   display: "flex", alignItems: "center", justifyContent: "center",
   flexShrink: 0, padding: 0,
   color: S.text,
-  boxShadow: "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.4)"
+  boxShadow: "var(--shadow-btn)"
 };
 
 export function ViewTools({ onOpenSearch = () => {}, onOpenSettings = () => {} }) {
@@ -33,9 +41,9 @@ export function ViewTools({ onOpenSearch = () => {}, onOpenSettings = () => {} }
         title="Find a booking"
         aria-label="Find a booking"
         className="mgt-hover-scale"
-        style={{ ...BTN_STYLE, fontSize: 15, lineHeight: 1 }}
+        style={BTN_STYLE}
       >
-        🔍
+        <SearchIcon size={17} />
       </button>
       <button
         onClick={onOpenSettings}

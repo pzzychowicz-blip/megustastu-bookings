@@ -17,7 +17,7 @@
 // original. `var DAY_SHORT_LABELS` (previously a top-level App.jsx constant)
 // is co-located here as a module-level `const`.
 
-import { BTN, R } from "../lib/constants";
+import { BTN, R, T, FW } from "../lib/constants";
 import { Toggle, mkBtn } from "./atoms";
 
 // ── Day-of-week labels for recurrence summary ────────────────────────────────
@@ -50,10 +50,10 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 2, wordBreak: "break-word" }}>
+          <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)", marginBottom: 2, wordBreak: "break-word" }}>
             {r.text}
           </div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>
             {timesText + "  ·  " + recText}
           </div>
         </div>
@@ -63,14 +63,14 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
         <button
           onClick={() => onEdit(r)}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: BTN.edit })}
+          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.edit })}
         >
           Edit
         </button>
         <button
           onClick={() => onDelete(r.id)}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: 12, minHeight: 32, padding: "4px 12px", background: BTN.del })}
+          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.del })}
         >
           Delete
         </button>
@@ -89,7 +89,7 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
       textAlign: "center",
       padding: "28px 14px",
       color: "var(--text-muted)",
-      fontSize: 13,
+      fontSize: T.body,
       background: "var(--bg-soft)",
       borderRadius: R.card,
       border: "1px dashed var(--border-soft)"
@@ -113,13 +113,13 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+        <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>
           {list.length + " reminder" + (list.length !== 1 ? "s" : "")}
         </div>
         <button
           onClick={onAdd}
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 36, padding: "6px 14px", background: "rgba(0,122,255,0.75)" })}
+          style={mkBtn({ minHeight: 36, padding: "6px 14px", background: "var(--accent)" })}
         >
           + New reminder
         </button>

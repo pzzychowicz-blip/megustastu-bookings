@@ -29,7 +29,7 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, STATUS_COLORS, BTN, R } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
@@ -48,6 +48,7 @@ export const ListView = memo(function ListView({
   late = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {}, focusReq = 0,
   showFinished = false, onToggleFinished = () => {},
+  onNew = null, onWalkin = null,
   currency = "€"
 }) {
   // v17.0.0 round 8 (Patryk): the 🔍/⚙ pair moved OUT to App's date-nav row
@@ -136,12 +137,30 @@ export const ListView = memo(function ListView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusReq]);
 
+  // v17.8.0: an empty day used to be one grey sentence centred in ~500px of
+  // nothing, with the only useful action (+ New) at the far top of the screen.
+  // A first-shift host learned nothing from it. It now says what the day is and
+  // offers the two things you can actually do with an empty one — the same two
+  // actions the header carries, put where the user is already looking.
   if (!day.length) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ textAlign: "center", padding: "48px 0", color: S.text, fontSize: 15 }}>
-          No bookings for this date.
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "56px 16px" }}>
+        <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: S.text }}>Nothing booked for this day yet.</div>
+        <div style={{ fontSize: T.body, color: S.muted, textAlign: "center", maxWidth: 340 }}>
+          Take a reservation, or seat someone who has just walked in.
         </div>
+        {onNew || onWalkin ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 2 }}>
+            {onNew ? (
+              <button className="mgt-hover-scale" onClick={onNew}
+                style={mkBtn({ background: "var(--accent)", padding: "8px 18px" })}>New booking</button>
+            ) : null}
+            {onWalkin ? (
+              <button className="mgt-hover-scale" onClick={function () { onWalkin(null); }}
+                style={mkBtn({ background: "var(--app-walkin)", padding: "8px 18px" })}>Walk-in</button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -186,18 +205,18 @@ export const ListView = memo(function ListView({
         // which is the point: never assert a stay that didn't happen.
         const stayed = b.status === "completed" ? stayedMins(b) : null;
         const durationTag = b.status === "seated" ? (
-          <SmallTag label={elapsedMin + " min"} style={{ background: "#166534", color: "var(--text-on-accent)", border: "none" }} />
+          <SmallTag label={elapsedMin + " min"} style={{ background: "var(--app-success-solid)", color: "var(--text-on-accent)", border: "none" }} />
         ) : stayed != null ? (
           <SmallTag label={"stayed " + stayed + " min"} style={{ background: "var(--bg-soft)", color: "var(--text-secondary)", border: "1px solid var(--border-soft)" }} />
         ) : null;
 
         const warnEl = warn ? (
           <div style={{
-            fontSize: 13, fontWeight: 700, marginBottom: 8,
+            fontSize: T.body, fontWeight: FW.bold, marginBottom: 8,
             padding: "6px 10px", borderRadius: R.pill,
             background: warn.overdue ? "var(--danger-bg)" : "var(--warn-bg)",
             color: warn.overdue ? "var(--danger-text)" : "var(--warn-text)",
-            border: "2px solid " + (warn.overdue ? "var(--danger-border)" : "var(--warn-border)")
+            border: "1px solid " + (warn.overdue ? "var(--danger-border)" : "var(--warn-border)")
           }}>
             {warn.overdue
               ? "Overdue — next booking (" + warn.next + ") at " + warn.nextTime + " is waiting"
@@ -207,9 +226,9 @@ export const ListView = memo(function ListView({
 
         const conflictEl = (b._conflict && b.status !== "completed") ? (
           <div style={{
-            fontSize: 13, color: "var(--danger-text)", fontWeight: 700, marginBottom: 8,
+            fontSize: T.body, color: "var(--danger-text)", fontWeight: FW.bold, marginBottom: 8,
             background: "var(--danger-bg)",
-            border: "2px solid var(--danger-border)",
+            border: "1px solid var(--danger-border)",
             borderRadius: R.pill, padding: "6px 10px"
           }}>
             No table assigned — use manual assignment.
@@ -217,31 +236,39 @@ export const ListView = memo(function ListView({
         ) : null;
 
         const manualTag = (b._manual && !isLocked(b)) ? (
-          <SmallTag label="manual" style={{ background: "#0369a1", color: "var(--text-on-accent)", border: "none" }} />
+          <SmallTag label="manual" style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         const lockedTag = b._locked ? (
-          <SmallTag label="locked" style={{ background: "#854d0e", color: "var(--text-on-accent)", border: "none" }} />
+          <SmallTag label="locked" style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (
-          <SmallTag label={"★ " + b.preferredTables.join("+")} style={{ background: "#0d9488", color: "var(--text-on-accent)", border: "none" }} />
+          <SmallTag label={"★ " + b.preferredTables.join("+")} style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         // v16.0.0: repeat no-show offender chip (same threshold as the timeline ⚠).
         const noShowCt = nsMap[normalizePhone(b.phone)] || 0;
+        // v17.8.0: solid, like every other tag in this row. The pale-fill +
+        // colour-matched-border + bold-coloured-text combination these three
+        // carried is the generic badge shape, and it sat inches from `manual`
+        // / `locked` / `★` / the seated `N min`, which are all solid-with-white.
+        // One row, two label systems. Solid wins because it is the app's own
+        // v17.7.0 status-label decision, already applied everywhere else.
+        // The ⚠ goes with it: an amber fill plus an amber warning glyph is the
+        // same signal twice (the banner restyle dropped its glyphs for this).
         const noShowTag = noShowCt >= 2 ? (
-          <SmallTag label={"⚠ no-show ×" + noShowCt} style={{ background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)" }} />
+          <SmallTag label={"no-show ×" + noShowCt} style={{ background: "var(--app-warn-solid)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         // v16.1.0: running-late tag (minutes past the booked time).
         const lateTag = lateSt ? (
-          <SmallTag label={lateMins(b, nowMins) + " min late"} style={{ background: "var(--warn-bg)", color: "var(--warn-text)", border: "1px solid var(--warn-border)" }} />
+          <SmallTag label={lateMins(b, nowMins) + " min late"} style={{ background: "var(--app-warn-solid)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         // v16.3.0: deposit chip (suggest/green tokens — a prepaid booking).
         const depositTag = (Number(b.deposit) || 0) > 0 ? (
-          <SmallTag label={(currency || "€") + b.deposit + " deposit"} style={{ background: "var(--suggest-bg)", color: "var(--success-text)", border: "1px solid var(--suggest-border)" }} />
+          <SmallTag label={(currency || "€") + b.deposit + " deposit"} style={{ background: "var(--app-success-solid)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
 
         const notesEl = b.notes ? (
           <div style={{
-            fontSize: 13, color: S.text,
+            fontSize: T.body, color: S.text,
             borderTop: "0.5px solid " + S.border,
             paddingTop: 8, marginTop: 8
           }}>
@@ -250,7 +277,7 @@ export const ListView = memo(function ListView({
         ) : null;
 
         const phonEl = b.phone ? (
-          <span style={{ fontSize: 13, color: S.text, marginLeft: 4 }}>{b.phone}</span>
+          <span style={{ fontSize: T.body, color: S.text, marginLeft: 4 }}>{b.phone}</span>
         ) : null;
 
         // v14.4.0: Cancel + Delete are pulled into a right-aligned group (Cancel
@@ -263,7 +290,7 @@ export const ListView = memo(function ListView({
             <button
               key={s}
               className="mgt-hover-scale"
-              style={mkBtn({ background: BLOCK_BG[s], textTransform: "capitalize" })}
+              style={mkBtn({ background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", textTransform: "capitalize" })}
               onClick={() => onStatus(b.id, s)}
             >
               {"> " + s}
@@ -318,9 +345,9 @@ export const ListView = memo(function ListView({
               flexWrap: "wrap", gap: 8
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 700, fontSize: 16, color: S.text }}>{b.name}</span>
+                <span style={{ fontWeight: FW.bold, fontSize: T.title, color: S.text }}>{b.name}</span>
                 <SBadge status={b.status} />
-                <span style={{ fontSize: 13, color: S.text, fontWeight: 700 }}>{b.size + " pax"}</span>
+                <span style={{ fontSize: T.body, color: S.text, fontWeight: FW.bold }}>{b.size + " pax"}</span>
                 {manualTag}
                 {lockedTag}
                 {prefTag}
@@ -329,7 +356,7 @@ export const ListView = memo(function ListView({
                 {depositTag}
                 {durationTag}
               </div>
-              <span style={{ fontSize: 14, fontWeight: 700, color: S.text }}>{b.time + "–" + end}</span>
+              <span style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>{b.time + "–" + end}</span>
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
               {(b.tables || []).map((t) => <TBadge key={t} id={t} />)}

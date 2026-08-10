@@ -34,7 +34,7 @@
 // different export (`comboCapBest`) which adds a greedy best-subset branch;
 // for soft-hint preferences here, the simpler version is correct.
 
-import { S, BTN, TBL, TABLE_GROUPS, R } from "../lib/constants";
+import { S, BTN, TBL, TABLE_GROUPS, R, T, FW } from "../lib/constants";
 import { isIn, comboCap } from "../lib/booking-logic";
 import { Overlay, mkBtn, AutoHeight } from "./atoms";
 
@@ -80,7 +80,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       ) : null}
       <button
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "#64748b" })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
         onClick={onClose}
       >
         Done
@@ -93,34 +93,34 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       <AutoHeight>
       <div style={{ textAlign: "center", marginBottom: 4 }}>
         <div style={{
-          fontSize: 16, fontWeight: 700, color: "var(--text-on-accent)",
+          fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
           display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-          background: "#0d9488",
+          background: "var(--btn-tables)",
           border: "1px solid rgba(255,255,255,0.2)",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"
+          boxShadow: "var(--shadow-btn)"
         }}>
           Preferred table
         </div>
       </div>
-      <div style={{ fontSize: 13, color: S.text, marginBottom: 14, textAlign: "center" }}>
+      <div style={{ fontSize: T.body, color: S.text, marginBottom: 14, textAlign: "center" }}>
         Soft hint — optimizer tries this first, falls back if unavailable.
       </div>
       <div style={{
         marginBottom: 14, padding: "10px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
-        border: "2px solid " + (capOk ? "var(--suggest-border)" : "var(--border-sheet)"),
+        border: "1px solid " + (capOk ? "var(--suggest-border)" : "var(--border-sheet)"),
         boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
       }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: S.text }}>
+        <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
           {"Selected: " + (prefs.length ? prefs.join(" + ") : "none")}
         </div>
-        <div style={{ fontSize: 13, color: capColor, fontWeight: 500, marginTop: 2 }}>
+        <div style={{ fontSize: T.body, color: capColor, fontWeight: FW.medium, marginTop: 2 }}>
           {capText}
         </div>
       </div>
       {TABLE_GROUPS.map((grp) => (
         <div key={grp.name} style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: grp.color, marginBottom: 4, textAlign: "center" }}>
+          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: grp.color, marginBottom: 4, textAlign: "center" }}>
             {grp.name}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
@@ -135,20 +135,20 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                   onClick={() => togglePref(t.id)}
                   style={{
                     width: 64, height: 52, padding: 0, borderRadius: R.pill,
-                    border: "2px solid " + (isPref ? "#0d9488" : tc.bg),
-                    background: isPref ? "rgba(13,148,136,0.8)" : "rgba(255,255,255,0.4)",
+                    border: "2px solid " + (isPref ? "var(--accent)" : tc.bg),
+                    background: isPref ? "var(--btn-tables)" : "var(--bg-input)",
                     color: isPref ? "#fff" : S.text,
-                    fontWeight: 600, fontSize: 14,
+                    fontWeight: FW.semi, fontSize: T.lead,
                     cursor: "pointer",
                     display: "flex", flexDirection: "column",
                     alignItems: "center", justifyContent: "center",
                     gap: 2, boxSizing: "border-box",
-                    boxShadow: "0 1px 4px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.3)"
+                    boxShadow: "var(--shadow-btn)"
                   }}
                 >
                   <span>{t.id}</span>
                   <span style={{
-                    fontSize: 10, fontWeight: 500,
+                    fontSize: T.micro, fontWeight: FW.medium,
                     color: isPref ? "rgba(255,255,255,0.8)" : S.text
                   }}>
                     {"cap " + t.cap}
