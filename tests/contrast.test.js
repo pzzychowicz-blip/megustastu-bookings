@@ -208,6 +208,78 @@ function measure(entry, theme) {
   return +ratio(ink, surface).toFixed(2);
 }
 
+// ── v17.9.0: the hour pill measured where it ACTUALLY SITS ───────────────────
+// The FILLS entry above measures --tl-hour-pill over the page background, and
+// reported 4.73 light / 6.87 dark. That is the RULER's pill. The block start-time
+// chip is the same token in a different place — composited over a saturated
+// BLOCK, and until v17.9.0 also at `opacity: 0.8`. Measured as it renders, it
+// was 3.72–4.62:1 across the ten status×theme cases: below AA, on all ten, while
+// this file reported the token as passing.
+//
+// That is the v17.8.0 lesson recurring one level down. The comment above says
+// the amber exemption's "whole justification was resting on a fill nothing
+// measured" — and the fix measured the fill but not the COMPOSITE the argument
+// actually depends on. A token's number is not the screen's number wherever the
+// token is reused over something else.
+//
+// v17.9.0 dropped the 0.8 (the hierarchy is carried by FW.medium instead).
+//
+// The opacity is read back OUT OF TimelineView.jsx rather than assumed, because
+// the first version of this test asserted "if the opacity comes back, this
+// fails" and that was not true: the opacity lives in JSX and this file only ever
+// read index.html, so re-adding it would have left all ten cases green. A guard
+// that names the thing it is guarding and then does not look at it is the same
+// defect as the v17.8.0 marker check. Now the number the test uses is the number
+// the component renders.
+const BLOCK_FILLS = ["--block-confirmed", "--block-pending", "--block-seated",
+                     "--block-completed", "--block-cancelled"];
+
+const TIMELINE_SRC = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "TimelineView.jsx"),
+  "utf8"
+);
+
+// The chip's own opacity, as authored. Each block chip is a style object that
+// spreads HOUR_PILL; anything dimming it sits on the same or the next line.
+function chipOpacity() {
+  const lines = TIMELINE_SRC.split("\n");
+  let worst = 1;
+  lines.forEach((line, i) => {
+    if (!/\.\.\.HOUR_PILL/.test(line)) return;
+    for (let k = i; k < Math.min(i + 4, lines.length); k++) {
+      const m = lines[k].match(/opacity:\s*([\d.]+)/);
+      if (m) worst = Math.min(worst, parseFloat(m[1]));
+      if (/\}\}/.test(lines[k]) && k > i) break;
+    }
+  });
+  return worst;
+}
+
+describe("timeline start-time chip — the hour pill over each block, as rendered", () => {
+  for (const theme of ["light", "dark"]) {
+    for (const blockTok of BLOCK_FILLS) {
+      it(`${blockTok} start-time chip is legible in ${theme}`, () => {
+        const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+        const block = over(parse(vars[blockTok]), BASE[theme]);
+        const a = chipOpacity();
+        // element opacity composites the ALREADY-COMPOSED chip (fill + its ink)
+        // back over the block, so fill and label fade together.
+        const chipFull = over(parse(vars["--tl-hour-pill"]), block);
+        const chip = over({ ...chipFull, a }, block);
+        const inkFull = over(parse(vars["--text-on-accent"]), chipFull);
+        const ink = over({ ...inkFull, a }, block);
+        const got = +ratio(ink, chip).toFixed(2);
+        expect(
+          got,
+          `start-time chip on ${blockTok} in ${theme}: ${got}:1, needs 4.5:1. ` +
+          `This is the one piece of INFORMATION a block carries, and the amber ` +
+          `exemption is recorded on the grounds that it stays legible.`
+        ).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+});
+
 describe("fill/ink contrast — every text-bearing fill, both themes", () => {
   for (const entry of FILLS) {
     for (const theme of ["light", "dark"]) {

@@ -67,8 +67,8 @@ const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.ta
 //
 // Deliberately NOT in lib/time-grid.js: every user is in this file, and there is
 // no reason to export a style across a module boundary that nothing else reads.
-// The two chips add their own `opacity: 0.8` — see the note at the block chip for
-// why they are quieter than the ruler's.
+// The two block chips drop to FW.medium — see the note at the block chip for why
+// they are quieter than the ruler's, and why that is weight and not opacity.
 const HOUR_PILL = {
   padding: "2px 4px", borderRadius: R.pill,
   fontSize: T.micro, fontWeight: FW.semi,
@@ -138,16 +138,31 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
           labels the same axis. This is also what lets the amber blocks keep
           white ink at 1.8:1 without the START TIME becoming unreadable — the
           chip carries its own opaque background and is not affected.
-          Held at 0.8 opacity (Patryk): at full strength an opaque slate pill on
-          every block out-shouted the guest NAME beside it, which is the thing
-          you actually read a block for. The ruler's pills can be full strength
-          because they are alone on an empty strip; this one is not. Dimming the
-          whole chip rather than lightening its fill keeps it the same object as
-          the ruler pill, just quieter — the fill and the label fade together
-          instead of the label drifting off its own background. */}
+          v17.8.0 held this at `opacity: 0.8`, because at full strength an opaque
+          slate pill on every block out-shouted the guest NAME beside it — the
+          thing you actually read a block for. The goal was right; the mechanism
+          was not, and v17.9.0 measured why.
+
+          Opacity conflates QUIET with FAINT. Composited over each block fill it
+          put the chip at 3.72–4.62:1 in every status and both themes — below AA
+          in all ten cases, on the one piece of INFORMATION a block carries and
+          the exact element the amber exemption in constants.js leans on. At full
+          strength the same chip is 5.15–6.10:1, comfortably AA, with no token
+          touched.
+
+          And the diagnosis underneath: the chip was not too loud in absolute
+          terms. It out-shouted the name because the NAME sits at 1.86–2.97:1 on
+          the amber fills (the recorded exemption). Dimming the one legible
+          element to match the illegible ones is levelling down.
+
+          So the hierarchy is set by WEIGHT instead, which is what separates the
+          two ideas: the chip drops to FW.medium against the name's FW.bold, so
+          it recedes without going faint. Type weight is the app's own answer to
+          this — it is the whole argument behind the v17.8.0 `T`/`FW` scale, that
+          weight carries emphasis so size (or here, opacity) does not have to. */}
       <span style={{
         ...HOUR_PILL,
-        flexShrink: 0, marginLeft: 6, lineHeight: "12px", opacity: 0.8,
+        flexShrink: 0, marginLeft: 6, lineHeight: "12px", fontWeight: FW.medium,
         pointerEvents: "none", position: "relative"
       }}>{b.time}</span>
     </Reveal>
@@ -564,7 +579,7 @@ function WaitGhost({ g, totalMins, onBook }) {
           is the entire proposal — a ghost without one says nothing useful. */}
       <span style={{
         ...HOUR_PILL,
-        flexShrink: 0, marginLeft: 6, lineHeight: "12px", opacity: 0.8
+        flexShrink: 0, marginLeft: 6, lineHeight: "12px", fontWeight: FW.medium
       }}>{g.time}</span>
       {/* v17.8.0 correction: the ⏳ sits BETWEEN the time and the name, not
           trailing it. Trailing, it was the first thing the ellipsis ate — the
