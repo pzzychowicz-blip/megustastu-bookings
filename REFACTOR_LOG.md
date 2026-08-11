@@ -7746,7 +7746,7 @@ eventual sweep.
 Two findings changed the plan before any code was written; both are recorded
 under their commits.
 
-### 1/N — A DEV-only way to look at dark mode
+### 1/5 — A DEV-only way to look at dark mode
 
 **Files:** `src/App.jsx`, `index.html`.
 
@@ -7789,7 +7789,7 @@ Verified live in DEV against a signed-in account whose saved theme is `dark`:
 reads `"dark"`, and a plain load with no parameter goes back to honouring the
 account. No console errors.
 
-### 2/N — The backdrop: one flat tint, was a 6-stop gradient
+### 2/5 — The backdrop: one flat tint, was a 6-stop gradient
 
 **Files:** `index.html`.
 
@@ -7821,7 +7821,7 @@ If a gradient is ever wanted here again, ~8 L\* is the bar it has to clear. A
 backdrop either commits to being seen or it commits to being a surface; what it
 cannot usefully be is a gradient that reads as a flat colour and costs six stops.
 
-### 3/N — `lib/time-grid.js`: the narrow half of a roadmap idea
+### 3/5 — `lib/time-grid.js`: the narrow half of a roadmap idea
 
 **Files:** new `src/lib/time-grid.js`, new `tests/time-grid.test.js`,
 `src/App.jsx`, `src/components/TimelineView.jsx`, `TimeAxis.jsx`, `Summary.jsx`,
@@ -7875,7 +7875,7 @@ subtitle (a seventh call site, spotted in the grep and initially skipped) threw
 `hourLabel is not defined` in the browser while `npm run build` reported success.
 Reading the console was what found it.
 
-### 4/N — `SP` and `H`: the last two unscaled axes, linted rather than tokenised
+### 4/5 — `SP` and `H`: the last two unscaled axes, linted rather than tokenised
 
 **Files:** `src/lib/constants.js`, `scripts/check-style-invariants.mjs`, new
 `tests/style-check.test.js`, ~25 component files.
@@ -7929,3 +7929,35 @@ at it. **229 → 249 tests.**
 Verified live in DEV, both themes: no control under its previous height, nothing
 overflowing or clipped, steppers still true circles at 40/36/32, the booking
 form, Settings and the List empty state all composed correctly.
+
+### 5/5 — docs
+
+`ROADMAP.md` loses four Ideas entries: the control-height/spacing scales, the
+dark-mode-verification gap, the TimeAxis unification, and the gradient. The
+TimeAxis one goes even though the work it proposed was **not** done — the
+finding in 3/N is its resolution, and a finding belongs here, not as a standing
+pending item.
+
+One new entry replaces them, found while verifying and unrelated to this
+version: Settings' `Collapsible` headers measure 17px against a 19px
+`scrollHeight`, so four section titles on the first screen of Settings have a
+descender shaved. Pre-existing — the v17.9.0 diff does not touch `Collapsible`.
+
+`CLAUDE.md` gains `time-grid.js` in the file-structure block, the `SP`/`H` entry
+(including *why* they are linted rather than tokenised, so a later pass doesn't
+"finish the job" by sweeping tokens through), the checker-blind-spot rule, the
+DEV theme override as the fourth site in the theme-key contract, and the flat
+backdrop.
+
+**Bundle:** main chunk 197.48 kB gz — unchanged. **249 tests**, lint 0 errors,
+`check:style` OK, build clean.
+
+### A DEV-data note
+
+While driving the Settings UI to verify, a mis-aimed click changed DEV's
+`settings/operatingHours` for Tuesday (13:00–01:00 → 17:00–00:00). Caught by
+noticing the header subtitle had changed between two screenshots, and restored
+through the app's own `writeWithRev` so the CAS rev advanced properly. The first
+restore attempt over-corrected — it also flattened Sunday (06:00) and Saturday
+(09:00), which were pre-existing values — and was itself corrected; the node is
+back to exactly its prior state. No PROD data was touched at any point.

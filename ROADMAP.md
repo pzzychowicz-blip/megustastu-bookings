@@ -57,16 +57,6 @@ session and keeping it in sync.
 
 ## Ideas
 
-- **Unify TimelineView's grid header with `TimeAxis`.** v17.5.0 added
-  `src/components/TimeAxis.jsx` for the Plan view, drawing the same 24px hour
-  strip / quarter ticks / centred hour pills / now marker as `TimelineView`'s
-  grid header — deliberately as a second implementation rather than a refactor,
-  because TimelineView's scroll-follow (`centerNow`'s fraction-per-frame loop),
-  FLIP reordering, drag-and-drop and zoom are heavily tuned and entangled with
-  that markup. Both now span OPEN…GRID_CLOSE and both use `pct()`, so the
-  extraction is straightforward whenever it's worth doing; the risk is all in
-  TimelineView, not in the shared piece.
-
 - **Plain drop-shadow literals.** ~20 inline `boxShadow: "0 1px 4px
   rgba(0,0,0,0.04)"`-style values remain, and `scripts/check-style-invariants.mjs`
   deliberately does NOT flag them: a black shadow cannot invert out from under
@@ -74,35 +64,15 @@ session and keeping it in sync.
   rule guards, and a noisy check gets muted. Fold them into `--shadow-soft` /
   `--shadow-btn` opportunistically while touching those files; don't sweep.
 
-- **The 6-stop background gradient.** `--bg-app` is a `linear-gradient` across
-  six near-identical desaturated blues spanning roughly 3% of perceptual
-  difference — imperceptible as a gradient, and the kind of thing that reads as
-  stock SaaS wallpaper. The v17.8.0 design audit flagged it but left it alone:
-  it is the app's whole backdrop in both themes, so changing it is a look
-  decision for Patryk rather than a consistency fix. Either commit to a gradient
-  that is actually visible, or collapse it to one flat tinted neutral.
-
-- **The control-height and spacing scales.** The TYPE half of this entry
-  shipped in v17.8.0 (`T` + `FW`, thirteen sizes down to six, enforced by
-  `check:style`). What is left is the other two axes. Button heights are still
-  28/30/32/34/36/40/44/54 — v17.8.0 lifted the service-critical ones to 44 and
-  deliberately left the 40px `mkBtn` standard, so the remaining spread is
-  28/32/34/36 across ~40 sites that are mostly inside modals. Spacing has no
-  scale at all: **96 distinct `padding` strings and 14 distinct `gap` values.**
-  Both are wide, low-risk-per-site sweeps with no user-visible defect behind
-  them, which is exactly why they keep losing to work that has one. If they get
-  done, they get a `check:style` rule each or they will drift straight back.
-
-- **Dark mode cannot be verified visually in DEV.** Since v17.6.0 the theme
-  follows the signed-in ACCOUNT (`settings/users/{uid}/prefs`), and that
-  overrides both `localStorage["mgt-theme"]` and OS emulation — so a session
-  that wants to eyeball dark mode has to actually toggle it in Settings and
-  write to the prefs node. The v17.8.0 contrast pass verified dark by
-  computation against the token values instead, which is sound but is not the
-  same as looking. Worth a dev-only escape hatch (a query param, or honouring
-  `localStorage` when it is set AFTER prefs load) so a theme check does not
-  require mutating the signed-in user's saved settings.
-
 - **Modal title pills have no colour rule.** "New booking" and "Waitlist" are
   accent; "Settings" is grey. Pick one convention (probably: accent for a
   create/act surface, neutral for a configure/read one) and apply it.
+
+- **Settings' `Collapsible` headers clip their own text by 2px.** Found while
+  verifying v17.9.0, pre-existing and unrelated to it (the v17.9.0 diff does not
+  touch `Collapsible`). The header `<button>` measures 17px tall against a 19px
+  `scrollHeight` — so "Restaurant", "Opening hours", "Booking durations" and
+  "Preferences" each have a descender shaved. The button carries `padding: 0`
+  and its tap area comes from the parent row, so the fix is probably a
+  `line-height` or letting the button own the row's padding rather than adding
+  height. Small, but it is on the first screen of Settings.

@@ -97,6 +97,7 @@ src/
     ├── reminders.js                 reminder helpers (validate, fire-window, prune)
     ├── waitlist-match.js            v17.8.0 — `placeWaitlist(...)`, the pass that decides WHICH TABLE the app offers each waiting party. Extracted VERBATIM from App.jsx's `waitAvail` effect so it could be tested at all (tests/waitlist-match.test.js). **Matching is SEQUENTIAL and FCFS** (`createdAt` asc): each party that lands is appended to a local `holds` array as a synthetic `_locked` booking the NEXT party's scan sees as occupied. Before v17.8.0 every entry was matched independently against the same snapshot, so identical inputs gave identical answers and several parties were offered the same table at the same minute — individually true, jointly impossible, and booking the first silently falsified the rest. `_locked` is load-bearing: `applyOpt` copies a locked booking's tables through verbatim, so a hold reserves its slot instead of being optimised out from under the ghost drawn for it. Cheap-first (`findFreeSlot` before `trialFits`), a whole-pass time budget, and an anti-flap carry-forward that is ALSO held — or the queue behind it can't see it. App keeps only the React parts: the 15-min clock bucket, the ref mirror, setState
     ├── presence-state.js            v17.8.0 — `presenceState(node, now, myKey, canPrune)` → `{devices, prunable, mySince}`, extracted from usePresence. v17.8.0 turned "who is connected" from a FACT into an INFERENCE from timestamps, and an inference has edge cases the hook could not test. **The module is shaped by one asymmetry: hiding a device is free and reversible (the next 45s beat brings it back), deleting one is neither** — hence `PRUNE_MS` at 4× `STALE_MS`, hence the prune refusing to run without a real server-clock offset (on a device whose clock runs fast, an assumed 0 makes every live child look ancient and the prune empties the node), and hence a child with NO usable timestamp being hidden but never pruned. `mySince` feeds the heartbeat so it rewrites `since` verbatim instead of stamping a fresh one every beat (tests/presence-state.test.js)
+    ├── time-grid.js                 v17.9.0 — `hourLabel(h)` / `hourLabelAt(mins)` / `isHourMark(mins)`, the shared vocabulary of the app's two time strips. Extracted NARROWLY: `ROADMAP.md` proposed unifying TimelineView's grid header with `TimeAxis` on the claim that both draw the same strip and "both use `pct()`", and NEITHER held — TimelineView positions by percentage, TimeAxis by pixels against a fixed `trackW` (which is what makes its `padding-inline:50%` scroll maths work), and one draws full-height gridlines with hour PILLS while the other draws mirrored tape edges with plain labels. **No component is unified**; the roadmap entry is closed by the finding. What WAS duplicated is the `HH:00` label, across 8 files in 3 apparent variants — of which only two were the same function. Settings' `cutoffLabel` looked like a seventh copy and is a DIFFERENT one: it renders 24 as `"24:00"` because the optimizer cutoff is a full-day endpoint where 0 (off all day) and 24 (on all day) both mean something, so unifying it would have collapsed them and shipped a settings bug. **"N copies of one line" is a claim to CHECK, not to act on.** `hourLabelAt` is separate from `hourLabel` because they take different UNITS. The hour-pill STYLE was duplicated too but stayed a module const in `TimelineView.jsx` — every user is in that one file, and exporting a style nothing else reads is distance, not sharing (tests/time-grid.test.js)
     ├── drafts.js                    v17.5.0 — `sameDraft(a,b)` behind the unsaved-changes guard. NOT JSON equality: key order differs between openEdit's literal and openNew's Object.assign spread; `<input type=number>` returns a STRING; `customDur:null`/`deposit:""` are the same nothing; table arrays are sets in spirit. Values normalise to strings, arrays sort, null/undefined/""/false all collapse to "" (tests/drafts.test.js)
     ├── dbError.js                   v17.5.1 — `dbError(path)` builds the THIRD argument every `onValue()` must pass (the optional error/cancel callback), and `onDbError(fn)` lets usePersistence subscribe so any listener failure anywhere surfaces in the UI. All 16 listeners pass it. Origin: a cancelled read produced NOTHING — no log, no banner, no state change — because `setBookingsReady(true)` lives in the success path, so the app showed "⟳ Loading bookings…" forever and was structurally incapable of reporting its own failure
     ├── revGuard.js                  revision-CAS writer for whole-node collections (v16.0.0) — attachRev/writeWithRev; every write = atomic update({node, nodeRev: base+1}), Security Rules reject a non-+1 rev; recovery is free via the SDK's rollback echo
@@ -153,6 +154,42 @@ src/
   When merging sizes, **collapse DOWNWARD** — a size that shrinks cannot
   overflow its box; a size that grows can, in ways a mechanical sweep cannot be
   verified against.
+- **`SP` = the v17.9.0 spacing scale, `H` the control-height scale — and these
+  two are LINTED, not tokenised.** That difference from `R`/`T`/`FW` is
+  deliberate and worth understanding before "finishing the job" by sweeping
+  tokens through. `R` and `T` are SEMANTIC: `borderRadius: 12` genuinely did not
+  say whether it meant "control" or "card", so only a role name could
+  disambiguate it. `gap: 8` is not ambiguous; it is eight pixels. So spacing
+  stays readable literals and `npm run check:style` is the contract — it parses
+  every `padding`/`gap`/`margin` and every `height`/`minHeight` in the 24–56px
+  control range, and fails on anything off the scale. `SP` and `H` are exported
+  from `constants.js` for computed cases and shared style objects.
+  **The audit that motivated this overstated it, and the correction is the
+  lesson.** "97 distinct padding strings" sounds like chaos; the underlying
+  numbers were already an even 2px progression, and the real defect was eight
+  values nobody chose (1, 3, 5, 7, 9, 11, 17, 20, 22) sitting beside their
+  on-scale neighbours — `"5px 11px"` in three files, `"9px 14px"` next to
+  `"8px 14px"`. The other 89 strings are different paddings for different boxes.
+  Forcing them into an invented role vocabulary would have been 84 judgement
+  calls, each invisible until someone opened that one screen. **Count the
+  DISTINCT VALUES, not the distinct strings, before deciding a scale is missing.**
+  Snap DOWNWARD, as `T` does. `H` is mostly v17.8.0's sizing rule written down
+  (44 is a floor, not a target); `/* @canvas */` exempts genuine layout
+  dimensions — the Toggle track, table-picker cells, the timeline hour strip,
+  WeekView's calendar cell, alignment indents, safe-area `calc()`.
+
+- **A checker with a blind spot still prints OK, which is worse than no checker
+  (v17.9.0).** The first spacing rule required the property to be preceded by
+  `{` or `,`, to skip CSS inside string literals. That condition is FALSE for a
+  key in a multi-line style object — i.e. most of the codebase — so the rule saw
+  almost nothing and `check:style` reported clean. Exactly the v17.8.0
+  marker-placement shape: worthless precisely where it was meant to bite, while
+  carrying the authority of having passed. **Reading the script cannot catch
+  this; running it against known-bad input can.** `tests/style-check.test.js`
+  now does, and `check-style-invariants.mjs` takes an optional directory
+  argument so a fixture can be pointed at it. Any new rule gets a fixture in
+  that file, both a violating case and a legitimate one.
+
 - **An exemption marker must live INSIDE the style object (v17.8.0).**
   Appending `/* @canvas */` to the end of a line that ends in `>` or `/>` puts
   it in JSX **children** position, where React renders it as literal text —
@@ -528,6 +565,17 @@ something is dirty; browsers ignore any custom message string.
 ## UI / style rules
 
 - Translucent / glass, iOS-inspired surfaces; rounded corners; the shared accent (`#007AFF`).
+- **`--bg-app` is ONE flat tint per theme (v17.9.0), not a gradient.** It was six
+  near-identical desaturated blues spanning a MEASURED 3.86 L\* in light and 4.00
+  in dark — at the edge of visibility across a viewport, so the app paid six
+  stops for something nobody could see. The shipped value is the mean of the six
+  it replaced, which is why the change is invisible and the diff is a deletion.
+  A 2-stop candidate at ~8 L\* was built and compared side by side in the real
+  app (three live iframes, one parameter apart — the surfaces are translucent
+  glass, so the backdrop tints every card and a swatch comparison answers a
+  different question); Patryk chose flat. **If a gradient is ever wanted here
+  again, ~8 L\* is the bar.** A backdrop either commits to being seen or commits
+  to being a surface.
 - **One app font (v16.0.0):** the stack lives in `index.html` as `--font-app` (body sets it; App.jsx/LoginScreen wrappers read the token). `input, textarea, select, button { font-family: inherit }` is load-bearing — form controls do NOT inherit font per the CSS spec (the Notes textarea used to render monospace). Never re-introduce an inline font-family literal; the only deliberate exception is the `Kbd` keycap atom (monospace).
 - Every modal uses the **`Overlay` atom** (owns blur + mobile-sheet / desktop-card branching).
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
@@ -606,6 +654,21 @@ something is dirty; browsers ignore any custom message string.
 ### Theming / dark mode (mechanism shipped v14.2.0 — ported from Scheduling; see `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`)
 - Light + dark via CSS custom properties: `:root` (light) + `[data-theme="dark"]` overrides in `index.html`; `<html data-theme="…">` set via `document.documentElement.dataset.theme`. A theme flip is **one DOM attribute change — zero React re-render** of the tree.
 - **Hook:** `useThemeMode(explicitPref) → isDark` (`src/hooks/useThemeMode.js`) writes `data-theme` and follows the OS live when pref is `undefined` — the shared Scheduling contract, unchanged. A no-flash inline script in `index.html` paints the theme before React mounts (the hook alone runs too late).
+- **v17.9.0: a DEV-only `?theme=dark` / `?theme=light` override, and it is the
+  FOURTH site in the theme-key contract** (`readThemePref`, the Settings toggle,
+  the no-flash script, the override — same key, same `"dark"`/`"light"`
+  convention at every one). It exists because v17.6.0 made the theme follow the
+  signed-in ACCOUNT, which overrides both `localStorage` and OS emulation — so
+  there was no way to LOOK at dark mode without writing to a real user's saved
+  settings. **The non-write is the feature**, enforced at both write sites: the
+  prefs-seeding effect skips its theme branch entirely (both halves — the `else`
+  is the dangerous one, because `themePref` holds the FORCED value and would
+  write "I chose light" up for a user who chose dark), and `onToggleDark` skips
+  `saveUserPrefs`. It is inert in production twice over: Vite strips the
+  `import.meta.env.DEV` branch, and the no-flash script (which has no
+  `import.meta.env`) gates on hostname. The override had to be honoured in the
+  no-flash script too — painting the stored theme and correcting it a frame
+  later in React is exactly the flash that script exists to prevent.
 - **Persistence is per-device `localStorage["mgt-theme"]`** (`"dark"|"light"|`absent), NOT Firebase (theme is per-device by design; the `settings/operatingHours` node added v14.4.0 is restaurant-wide config only). `readThemePref()` (module scope in `App.jsx`) feeds the hook; the Settings General-tab `Toggle` (`onToggleDark`) writes the key. The no-flash script reads the SAME key — **keep the value convention in sync across all three.**
 - **No rgba/hex literals in JS — every colour references `var(--…)`.** Migrated token-by-token in waves. **v14.2.0:** core `S` set + app background (`--bg-app`). **v14.2.1:** `constants.js` colour sets — `STATUS_COLORS` + `TBL` as **RGB-channel triplets** composed `rgba(var(--…-rgb), a)`; `BLOCK_BG` + `BTN` direct tokens (theme-invariant saturated fills; only status-chip **text** flips). **v14.2.2:** `atoms.jsx` + the full **modal/form subsystem** (every `Overlay` modal, `Section`, inputs, steppers, `Toggle`, `Kbd`, the Settings `TabBar`, in-modal banners) — surfaces + their text flip together (coupling: the shared `Overlay` backs 7 modals, so a dark sheet needs dark-themed content). Then **v14.2.3** `TimelineView` · **v14.2.4** `ListView` · **v14.2.5** the main-screen banners in `App.jsx` (offline/reconnect/load/overlap/reshuffle) completed the migration — **every in-app surface is now themed** (timeline/list canvas included; the login screen followed in v14.4.0).
 - **Token families** (index.html): surfaces `--bg-sheet`/`-sheet-mobile`/`-soft`/`-input`/`-stepper`/`-tabbar`/`-tab-active`/`-card`; borders `--border-sheet`/`-soft`/`-input`/`-kbd`/`-glass`; `--scrim`; semantic text `--text-primary`/`-secondary`/`-muted`/`-faint`/`-required`/`-on-accent` + `--warn-text`/`--danger-text`/`--success-text`; banner trios `--warn-*`/`--danger-*`/`--suggest-*` (bg+border+text move together); shadows `--shadow-sheet`/`-soft`/`-input`/`-btn`. **Dialog sheets use the near-opaque `--bg-sheet`** (dark = 0.85), per the opaque-popover rule. `ReminderEditor` has its **own** modal (not `Overlay`) — theme its scrim/card directly.
@@ -847,7 +910,7 @@ tell what moves by reading it. Name the properties.
 
 - **Multi-tenancy** — single-restaurant app; no plans to generalise.
 - **Mobile app** — web-only; mobile is responsive layout (`useWinW` → `isMobile`).
-- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS — `booking-logic` · `customers` · `drafts` · `waitlist-match` · `presence-state` · `stylesheet` · **`contrast`**, **223 tests** as of v17.8.0 (`npm test`). CI gates build + test + **lint (0 errors, hard)** + **`npm run check:style`** on every PR via `.github/workflows/ci.yml`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
+- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS — `booking-logic` · `customers` · `drafts` · `waitlist-match` · `presence-state` · `stylesheet` · `contrast` · `time-grid` · **`style-check`**, **249 tests** as of v17.9.0 (`npm test`). CI gates build + test + **lint (0 errors, hard)** + **`npm run check:style`** on every PR via `.github/workflows/ci.yml`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
   **The rule v17.8.0 added: logic that decides something the restaurant acts on does not live in a `useEffect`.** `placeWaitlist` and `presenceState` were both extracted for that reason — a double-booking fix had shipped on "it looked right in DEV". If a behaviour is worth a REFACTOR_LOG paragraph it is worth being reachable by a test: put the pure core in `lib/`, leave the hook its subscription, refs and setState.
   **Fixture trap:** `ALL_TABLES` holds `{id, capacity}` OBJECTS, not ids. A "fill every table" fixture built straight from it silently occupies nothing, and the failures point at the code. Use `ALL_TABLES.map(t => t.id)`.
   **`tests/stylesheet.test.js` guards `index.html`'s `<style>`** — a stylesheet has no syntax errors, only rules that silently don't exist (v17.8.0 lost `.mgt-press:active` to a stray `*/` and nothing noticed). It checks comment hygiene, brace balance, a CRITICAL_SELECTORS list, and — added after the same defect recurred one scope deeper — **loose prose inside a DECLARATION block**, which eats the declaration *after* it rather than the rule after it. That version made `--tbl-out-rgb` resolve to empty, which would have rendered nine table badges transparent, while every existing test passed. Entry criterion for CRITICAL_SELECTORS: does the rule fail SILENTLY when missing?
