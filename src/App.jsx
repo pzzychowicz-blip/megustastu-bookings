@@ -42,6 +42,7 @@ import {
 
 import { normalizePhone } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
+import { hourLabel } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
 // can be unit-tested (tests/waitlist-match.test.js).
 import { placeWaitlist } from "./lib/waitlist-match";
@@ -119,8 +120,11 @@ import { ReminderEditor }          from "./components/ReminderEditor";
 import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
-import { ViewTools }    from "./components/ViewTools";
-import { WaitIcon, BellIcon, BellRingIcon, LateIcon, OverlapIcon } from "./components/Icons";
+// v17.9.0: CogIcon comes straight from Icons.jsx now, not via SettingsChrome's
+// re-export. The re-export exists to keep the LAZY-Settings boundary intact for
+// importers that predate the move; App has no reason to go the long way round,
+// and Icons.jsx has no imports of its own to drag into the startup chunk.
+import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, CogIcon, LateIcon, OverlapIcon, SearchIcon, WaitIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -261,7 +265,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.8.0",
+  version:"17.9.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -273,10 +277,6 @@ if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 // hooks/useKeyboardShortcuts.js with the handler that reads them — rebind there
 // (+ the Shortcuts rows).
 
-// ── v14.2.0: Dark-mode preference reader ──────────────────────────────────
-// Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
-// preference for useThemeMode: true (dark) | false (light) | undefined (follow
-// the OS live). MUST mirror the no-flash inline script in index.html — same
 // v17.4.0 /code-review: prev-identity memo for a save transform. The synchronous
 // guard checks and the immediate saveBookings dispatch call the transform with
 // the SAME `prev` reference, so they share ONE optimizer pass; a retry replay
@@ -287,8 +287,44 @@ function memoByPrev(fn){
   return function(prev){if(prev===mPrev) return mFin;const r=fn(prev);mPrev=prev;mFin=r;return r;};
 }
 
-// key, same value convention ("dark"/"light").
+// ── v17.9.0: DEV-only theme override ──────────────────────────────────────────
+// Since v17.6.0 the theme follows the signed-in ACCOUNT (settings/users/{uid}/
+// prefs), and that overrides both localStorage["mgt-theme"] and OS emulation. So
+// looking at dark mode meant toggling it in Settings — i.e. WRITING to the real
+// user's saved preferences to inspect a colour. v17.8.0's contrast pass avoided
+// that by computing ratios against the token values instead, which is sound, and
+// is not the same thing as looking at the screen.
+//
+// `?theme=dark` / `?theme=light` forces the theme for one page load. It is inert
+// in production twice over: Vite strips the `import.meta.env.DEV` branch from the
+// bundle, and index.html's no-flash script (which has no import.meta.env of its
+// own) gates on hostname.
+//
+// The NON-write is the whole point. While an override is live the prefs-seeding
+// effect skips its theme branch and onToggleDark skips saveUserPrefs, so a theme
+// check leaves the signed-in user's node exactly as it found it.
+function devThemeOverride(){
+  if(!import.meta.env.DEV) return undefined;
+  try{
+    const v=new URLSearchParams(window.location.search).get("theme");
+    if(v==="dark") return true;
+    if(v==="light") return false;
+  }catch{/* ignore */}
+  return undefined;
+}
+// Read once at module load: the override is a property of how the page was
+// opened, so it cannot change without a reload.
+const DEV_THEME_FORCED=devThemeOverride()!==undefined;
+
+// ── v14.2.0: Dark-mode preference reader ──────────────────────────────────────
+// Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
+// preference for useThemeMode: true (dark) | false (light) | undefined (follow
+// the OS live). MUST mirror the no-flash inline script in index.html — same key,
+// same value convention ("dark"/"light"), and since v17.9.0 the same
+// ?theme= override, which wins over the stored key at both sites.
 function readThemePref(){
+  const forced=devThemeOverride();
+  if(forced!==undefined) return forced;
   try{
     const v=localStorage.getItem("mgt-theme");
     if(v==="dark") return true;
@@ -312,6 +348,33 @@ const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400;
 // React.memo for zero visual change; these shared consts keep it stable.
 const EMPTY_OBJ=Object.freeze({});
 const EMPTY_ARR=Object.freeze([]);
+
+// ── The two chrome icon buttons (v17.9.0) ────────────────────────────────────
+// Find-a-booking and Settings. v17.0.0 round 8 put them in ONE pair in the
+// date-nav row so all three views shared them; v17.9.0 (Patryk) splits them by
+// what they act on rather than by what they look like. Settings leads the title
+// block — it configures the restaurant those two lines describe (its name, its
+// tables, its opening hours). Search joins the action cluster on the right,
+// between "+ New" and the connection dot — finding a booking is something you
+// DO, like adding one.
+//
+// The style stays 36×36 on --cog-bg per v17.8.0's "44 is a floor, not a target":
+// both are still secondary chrome, now sitting beside 40px primary pills, and
+// equal width/height is what keeps --r-pill a true circle rather than an egg.
+//
+// A module const in App.jsx rather than an atom or a surviving ViewTools.jsx:
+// both call sites are in this file, and exporting a style that nothing else
+// reads is distance, not sharing (the lib/time-grid.js lesson).
+const CHROME_BTN={
+  background:"var(--cog-bg)",
+  border:"1px solid var(--cog-border)",
+  borderRadius:R.pill, width:36, height:36,
+  cursor:"pointer",
+  display:"flex", alignItems:"center", justifyContent:"center",
+  flexShrink:0, padding:0,
+  color:S.text,
+  boxShadow:"var(--shadow-btn)"
+};
 function readAppWidth(){
   try{
     const v=parseInt(localStorage.getItem("mgt-appwidth"),10);
@@ -811,7 +874,10 @@ function BookingApp({uid}){
     // load. The per-user node is the source of truth.
     try{localStorage.setItem("mgt-theme",next?"dark":"light");}catch{/* ignore */}
     setThemePref(next);
-    saveUserPrefs({theme:next?"dark":"light"});
+    // v17.9.0: under a ?theme= override the toggle still works locally, but it
+    // must not persist — the override exists so a theme can be inspected without
+    // touching the signed-in user's saved settings.
+    if(!DEV_THEME_FORCED) saveUserPrefs({theme:next?"dark":"light"});
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
@@ -909,7 +975,13 @@ function BookingApp({uid}){
     if(!prefsLoaded||seededPrefsRef.current) return;
     seededPrefsRef.current=true;
     const seed={};
-    if(userPrefs.theme==="dark"||userPrefs.theme==="light"){
+    // v17.9.0: a ?theme= override skips BOTH branches. Applying the saved theme
+    // would defeat the override; seeding from it would write the forced value up
+    // as if the user had chosen it. `themePref` currently HOLDS the forced value,
+    // so the else-branch is the more dangerous of the two.
+    if(DEV_THEME_FORCED){
+      /* leave settings/users/{uid}/prefs.theme exactly as found */
+    }else if(userPrefs.theme==="dark"||userPrefs.theme==="light"){
       const dark=userPrefs.theme==="dark";
       try{localStorage.setItem("mgt-theme",userPrefs.theme);}catch{/* ignore */}
       setThemePref(dark);
@@ -2637,7 +2709,16 @@ function BookingApp({uid}){
            only ever belt-and-braces: html+body are already overflow:hidden in
            this mode (see the body effect above), so nothing can scroll here. */
         shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}><div><div style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold}}>{generalSettings.restaurantName}</div><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}><ViewSwitcher
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
+              beside it ARE the restaurant's configuration read back — its name,
+              its table counts, its opening hours — and the control that edits
+              all three now sits against them instead of across the row in a
+              toolbar. minWidth:0 so the title, not the cog, absorbs a squeeze. */}<div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><button
+              onClick={function(){setShowSettings(true);}}
+              title="Settings & keyboard shortcuts"
+              aria-label="Settings & keyboard shortcuts"
+              className="mgt-hover-scale"
+              style={CHROME_BTN}><CogIcon size={18} /></button><div style={{minWidth:0}}><div style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold}}>{generalSettings.restaurantName}</div><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -2653,23 +2734,41 @@ function BookingApp({uid}){
               style={{background:"var(--app-walkin)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
-              style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>+ New</button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
+              style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>+ New</button>{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
+              toolbar, between "+ New" and the dot. Searching is an ACTION, and
+              this is the row of them — it reads as the counterpart to adding a
+              booking rather than as view chrome. */}<button
+              onClick={function(){setShowSearch(true);}}
+              title="Find a booking"
+              aria-label="Find a booking"
+              className="mgt-hover-scale"
+              style={CHROME_BTN}><SearchIcon size={18} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
               It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
               wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onLogout={function(){signOut(auth);}} /></div></div><div
-          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
+          /* v17.9.0 (Patryk): the date controls are 40px and the collapsed
+             Summary card beside them is 58, so `flex-start` left them sitting
+             flush against the top of the row with 18px of dead space beneath —
+             measured, not eyeballed. Centring fixes that.
+
+             But the alignment has to FLIP when the summary expands: the summary
+             is what drives this row's height, and at ~250px open, centred date
+             controls float into the vertical middle of a tall panel, visually
+             detached from the header above them. Open ⇒ back to the top, which
+             is where a control that is not the tall thing belongs. */
+          style={{display:"flex",alignItems:summaryOpen?"flex-start":"center",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Previous day"
               title="Previous day (←)"
-              dangerouslySetInnerHTML={{__html:"&#8249;"}} /><button
+              ><ChevronLeftIcon size={16} /></button><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Next day"
               title="Next day (→)"
-              dangerouslySetInnerHTML={{__html:"&#8250;"}} /><input
+              ><ChevronRightIcon size={16} /></button><input
               type="date"
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
@@ -2685,14 +2784,11 @@ function BookingApp({uid}){
               aria-label={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               title={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={15} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.0.0 round 8: 🔍 + ⚙ live HERE (right of Summary) for every
-              view — Timeline's legend and List's card-header each used to carry
-              their own copy and Plan had none. minHeight 40 aligns them with the
-              date controls; marginLeft:auto keeps them right-aligned when the
-              mobile full-width Summary wraps them onto their own line. */}
-            <div style={{display:"flex",alignItems:"center",minHeight:40,marginLeft:"auto",flexShrink:0}}><ViewTools
-              onOpenSearch={function(){setShowSearch(true);}}
-              onOpenSettings={function(){setShowSettings(true);}} /></div></div>{/* v17.5.0: in the fixed shell everything from here down lives in ONE
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={15} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.9.0: the 🔍/⚙ pair that lived here since v17.0.0 round 8 is
+              gone — both buttons moved up into the header row above, each to the
+              thing it acts on (see CHROME_BTN). The pair was created to give all
+              three views ONE copy of these controls, and that still holds: the
+              header is no less shared than the date-nav row was. */}</div>{/* v17.5.0: in the fixed shell everything from here down lives in ONE
             scroll region, so the two rows above stay pinned. The banners scroll
             away with the content — they're the pinning scope Patryk chose, and
             several open at once (a 3+ row late banner) would eat the viewport.

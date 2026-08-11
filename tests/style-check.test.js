@@ -1,0 +1,117 @@
+// tests/style-check.test.js
+//
+// v17.9.0 — a test for the CHECKER, not for the app.
+//
+// This exists because of a near-miss while writing the spacing rule. The first
+// version required the property to be preceded by `{` or `,` (to avoid matching
+// CSS inside a string literal, like firebase.js's console badge). That
+// condition is false for a key in a MULTI-LINE style object, where the prefix is
+// whitespace only — which is most of the codebase. The rule went blind, and
+// `npm run check:style` printed OK.
+//
+// That is the exact shape of the v17.8.0 marker-placement bug: a check whose
+// verdict was worthless precisely where it was supposed to bite, while carrying
+// the authority of having passed. Reading the script does not catch it. Running
+// it against known-bad input does.
+//
+// So: these fixtures are a floor. If a rule is changed, this must still fail on
+// every violation below and stay silent on every legitimate line.
+
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+
+const SCRIPT = new URL("../scripts/check-style-invariants.mjs", import.meta.url).pathname;
+let dir;
+
+// Run the checker against a fixture directory; return its combined output.
+function run(files) {
+  const src = join(dir, "src");
+  rmSync(src, { recursive: true, force: true });
+  mkdirSync(src, { recursive: true });
+  for (const [name, body] of Object.entries(files)) writeFileSync(join(src, name), body);
+  try {
+    return { code: 0, out: execFileSync("node", [SCRIPT, src], { encoding: "utf8" }) };
+  } catch (e) {
+    return { code: e.status, out: (e.stdout || "") + (e.stderr || "") };
+  }
+}
+
+beforeAll(() => { dir = mkdtempSync(join(tmpdir(), "mgt-style-")); });
+afterAll(() => { rmSync(dir, { recursive: true, force: true }); });
+
+describe("check:style — spacing scale", () => {
+  // THE regression case. A whitespace-only prefix must still be inspected.
+  it("catches an off-scale value in a MULTI-LINE style object", () => {
+    const r = run({ "a.jsx": 'const x = (\n  <div style={{\n    padding: "3px 8px"\n  }} />\n);\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/spacing-scale/);
+  });
+
+  it("catches an off-scale value inline after a brace", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ padding: "5px 11px" }} />;\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/spacing-scale/);
+  });
+
+  it("catches a bare off-scale gap and margin", () => {
+    expect(run({ "a.jsx": "const x = <div style={{ gap: 9 }} />;\n" }).code).toBe(1);
+    expect(run({ "a.jsx": "const x = <div style={{ marginTop: 7 }} />;\n" }).code).toBe(1);
+  });
+
+  it("passes on-scale values", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ padding: "8px 14px", gap: 8, marginTop: 12 }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  it("honours the /* @canvas */ exemption", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ padding: "6px 0 2px 58px",   /* @canvas */ }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  // firebase.js's DEV/PROD console badge is a CSS string handed to console.log.
+  // Devtools formatting is not app UI, and it must not need an exemption marker.
+  it("ignores CSS inside a plain string literal", () => {
+    const r = run({ "a.js": 'const badge = "color:#fff;padding:2px 6px;border-radius:3px;";\n' });
+    expect(r.code).toBe(0);
+  });
+});
+
+describe("check:style — height scale", () => {
+  it("catches an off-scale control height", () => {
+    expect(run({ "a.jsx": "const x = <div style={{ minHeight: 34 }} />;\n" }).code).toBe(1);
+    expect(run({ "a.jsx": "const x = <div style={{ height: 30 }} />;\n" }).code).toBe(1);
+  });
+
+  it("passes the H steps", () => {
+    const r = run({ "a.jsx": "const x = <div style={{ minHeight: 40 }} />;\n" });
+    expect(r.code).toBe(0);
+  });
+
+  // Deliberately out of scope — a 7px dot and a 200px popover cap are not
+  // controls, and sweeping them in is how a check becomes noise and gets muted.
+  it("ignores sizes outside the control range", () => {
+    const r = run({ "a.jsx": "const x = <div style={{ height: 7, minHeight: 200 }} />;\n" });
+    expect(r.code).toBe(0);
+  });
+});
+
+// The pre-existing rules must keep working — this file now guards the whole script.
+describe("check:style — the v17.8.0 rules still bite", () => {
+  it("catches a bare borderRadius", () => {
+    expect(run({ "a.jsx": "const x = <div style={{ borderRadius: 12 }} />;\n" }).code).toBe(1);
+  });
+
+  it("catches a bare fontSize, including a computed one", () => {
+    expect(run({ "a.jsx": "const x = <div style={{ fontSize: 13 }} />;\n" }).code).toBe(1);
+    expect(run({ "a.jsx": "const x = <div style={{ fontSize: m ? 18 : 22 }} />;\n" }).code).toBe(1);
+  });
+
+  it("catches a marker parked in JSX children position", () => {
+    const r = run({ "a.jsx": "const x = <div style={{ borderRadius: 4 }} />   /* @canvas */;\n" });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/marker-placement/);
+  });
+});

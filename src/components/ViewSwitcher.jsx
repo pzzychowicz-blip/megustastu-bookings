@@ -25,7 +25,7 @@
 import { useRef, useEffect } from "react";
 import { S, BTN, T } from "../lib/constants";
 import { mkBtn, Presence } from "./atoms";
-import { SwapIcon, SplitSideIcon, SplitStackIcon } from "./Icons";
+import { CloseIcon, SplitSideIcon, SplitStackIcon, SwapIcon } from "./Icons";
 
 const ORD = ["timeline", "list", "plan"];
 const HOLD_MS = 450;
@@ -165,7 +165,7 @@ export function ViewSwitcher({
             style={toolBtn()}>{split && split.dir === "v" ? <SplitStackIcon size={17} /> : <SplitSideIcon size={17} />}</button>
           <button className="mgt-hover-scale" onClick={onExitSplit}
             title="Leave split view" aria-label="Leave split view"
-            style={toolBtn({ background: BTN.dismiss })}>✕</button>
+            style={toolBtn({ background: BTN.dismiss })}><CloseIcon size={15} /></button>
         </span>
       </Presence>
     </>

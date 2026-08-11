@@ -22,22 +22,12 @@ export const SETTINGS_TABS = [
   { id: "shortcuts", label: "Shortcuts" },
 ];
 
-// ── Cog (gear) icon — 20×20 SVG, used as Settings trigger ───────────────────
-// Stroke inherits from the parent button's `color` via currentColor, so the
-// trigger button controls its own colour.
-export function CogIcon() {
-  return (
-    <svg
-      width={20} height={20}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx={12} cy={12} r={3} />
-      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-    </svg>
-  );
-}
+// ── Cog (gear) icon ─────────────────────────────────────────────────────────
+// v17.9.0: moved into the shared icon set (Icons.jsx) so it takes the same Svg
+// wrapper, optical stroke compensation and `size` prop as every other icon. It
+// was the one icon already drawn properly (v17.1.0) and the house style was
+// copied FROM it — but staying outside the set meant it could not be sized, and
+// in ViewTools' pair that showed as a 17px search beside a 20px cog.
+// Re-exported here so importers and the lazy-Settings boundary are unchanged;
+// Icons.jsx has no imports of its own, so this pulls nothing extra in.
+export { CogIcon } from "./Icons";

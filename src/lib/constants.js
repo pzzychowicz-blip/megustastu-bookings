@@ -560,6 +560,77 @@ export var T={micro:10,small:11,body:12,lead:14,title:17,display:22};
 // semibold that everything used to wear again means something where it appears.
 export var FW={regular:400,medium:500,semi:600,bold:700};
 
+// ── Spacing scale (v17.9.0) ───────────────────────────────────────────────────
+// The fourth scale, after R (radii), M (motion) and T/FW (type) — and the axis
+// those three kept deferring.
+//
+// ── What was wrong, and what was NOT ─────────────────────────────────────────
+// 97 distinct `padding` strings over 320 sites, 13 `gap` values, 15 `margin`
+// values. But counting the STRINGS overstates it: the underlying numbers were
+// already close to an even 2px progression, and the real defect was eight
+// off-scale values that nobody chose — 1, 3, 5, 7, 9, 11, 17, 20, 22 — sitting
+// beside their on-scale neighbours for no reason. `"5px 11px"` in three files,
+// `"6px 9px"` in one, `"9px 14px"` next to `"8px 14px"`. That is drift, not
+// design.
+//
+// ── Why this is LINTED and not tokenised ─────────────────────────────────────
+// R, T and FW replaced every literal at every call site. This one deliberately
+// does not, and the difference is that those three are SEMANTIC. `borderRadius:
+// 12` was genuinely ambiguous — the same number meant "control" in one file and
+// "card" in another, so only a role name could say which. `gap: 8` is not
+// ambiguous; it is eight pixels. Replacing 600 readable literals with `SP.base`
+// would buy nothing but indirection, and forcing the 84 one-off padding strings
+// into an invented role vocabulary would mean 84 judgement calls that are
+// invisible until someone opens that one screen.
+//
+// So the SCALE is the contract and `npm run check:style` is the enforcement: it
+// parses every padding / gap / margin in src/ and fails on any component that
+// is not one of these steps. Drift becomes impossible without the ergonomic cost
+// of tokenising arithmetic. `SP` is exported for computed cases and for shared
+// style objects, where naming the step does earn its keep.
+//
+// Snapping is DOWNWARD, the same rule T uses and for a related reason: a box
+// that shrinks cannot overflow, one that grows can. 3→2, 5→4, 7→6, 9→8, 11→10,
+// 17→16, 20→18, 22→18. The single exception is ReminderEditor's own modal
+// shell, which went 22→24 to line up with the Overlay atom it visually copies —
+// growing a scrolling container's padding is safe, and matching the shared modal
+// mattered more than the direction of the round.
+export var SP={
+  none:0,     // an explicit zero, where the shorthand needs one side flat
+  hair:2,     // inside a micro badge
+  tight:4,    // chip insets, the tightest gap that still separates
+  snug:6,     // dense rows, icon-to-label
+  base:8,     // THE default gap
+  mid:10,     // field insets
+  wide:12,
+  roomy:14,   // mkBtn's horizontal
+  gutter:16,
+  pane:18,    // the widest button, banner and panel insets
+  section:24, // modal bodies, section separation
+  xl:32       // the login card, and nothing else so far
+};
+
+// ── Control-height scale (v17.9.0) ────────────────────────────────────────────
+// Heights were 28/30/32/34/36/40/44/54 across ~120 sites. 30 and 34 are the
+// drift (two sites each, each one step off a neighbour); the rest encode a real
+// decision, so this scale is mostly v17.8.0's sizing rule written down:
+//
+//   44 is a FLOOR, not a target. The v17.8.0 tap-target pass applied Apple's
+//   figure to every small control and overshot — a 44px circle beside a 40px
+//   date field stopped reading as chrome. Size by what a MISTAKE costs.
+//
+//   chip     28  non-interactive or tiny inline controls
+//   compact  32  dense controls inside a modal
+//   chrome   36  toolbar chrome — timeline zoom, Find/Settings, the
+//                connection dot, Summary's More
+//   control  40  mkBtn. The app-wide standard, and the right default
+//   touch    44  decision surfaces only, where a mis-tap costs something:
+//                modal footers, the quick-status popup
+//
+// Linted the same way as SP, and exempted the same way (/* @canvas */) — WeekView's
+// 54px calendar day cell is a grid dimension, not a control.
+export var H={chip:28,compact:32,chrome:36,control:40,touch:44};
+
 // ── Motion tokens (v17.8.0) ───────────────────────────────────────────────────
 // The same idea as `R`, for time and easing. The full rationale (why two curves
 // split by direction, what each duration step is FOR, and the two documented

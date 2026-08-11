@@ -27,7 +27,7 @@ function weekdayOf(dateStr) {
   return isNaN(d) ? "" : WD[d.getUTCDay()] || "";
 }
 // Inline light-only styles (no tokens — print stays light).
-const cell = { border: "1px solid #999", padding: "5px 7px", fontSize: T.body, textAlign: "left", verticalAlign: "top", color: "#000" };
+const cell = { border: "1px solid #999", padding: "4px 6px", fontSize: T.body, textAlign: "left", verticalAlign: "top", color: "#000" };
 const th = Object.assign({}, cell, { fontWeight: FW.bold, background: "#eee" });
 
 // v17.1.0 perf: React.memo — always-mounted (print-only DOM) so it used to
@@ -115,7 +115,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
         </div>
       ) : null}
 
-      <div style={{ marginTop: 20, fontSize: T.micro, color: "#666" }}>{(restaurantName || "Me Gustas Tú") + " Booking System"}</div>
+      <div style={{ marginTop: 18, fontSize: T.micro, color: "#666" }}>{(restaurantName || "Me Gustas Tú") + " Booking System"}</div>
     </div>,
     document.body
   );

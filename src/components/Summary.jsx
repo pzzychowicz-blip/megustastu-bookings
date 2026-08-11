@@ -23,8 +23,9 @@ import { useMemo, memo } from "react";
 import { daySummary } from "../lib/booking-logic";
 import { BTN, TOTAL_SEATS, hoursFor, R, T, FW } from "../lib/constants";
 import { mkBtn, Reveal } from "./atoms";
-
-function hh(n){ return String(((n % 24) + 24) % 24).padStart(2, "0") + ":00"; }
+// v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
+import { hourLabel as hh } from "../lib/time-grid";
+import { ChevronDownIcon, ChevronUpIcon, PrintIcon } from "./Icons";
 function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
 function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
 
@@ -72,9 +73,11 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
         overflow: "hidden"
       }}
     >
-      {/* Header — the headline toggles the body (click or the `s` shortcut); the
-          More button opens the at-a-glance popover (Week / Month — see WeekView).
-          Separate buttons so we never nest a <button> inside a <button>. */}
+      {/* Header — the headline toggles the body (click or the `s` shortcut), and
+          the chevron on the right does the same thing. Two separate buttons
+          rather than one wrapping the row, so we never nest a <button> inside a
+          <button>. (The More button lived here until v17.9.0 — see the note at
+          its new home in the expanded body.) */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", flexWrap: "wrap" }}>
         <button
           onClick={onToggle}
@@ -102,16 +105,16 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               {/* Occupancy metrics stay together as one no-wrap unit (short line). */}
               <span style={{ whiteSpace: "nowrap" }}>
                 <span style={{ fontWeight: FW.bold, color: "var(--status-seated-text)" }}>{s.seated.count}</span> seated
-                <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
+                <span style={{ margin: "0 4px", color: "var(--text-faint)" }}>·</span>
                 <span style={{ fontWeight: FW.bold, color: "var(--text-primary)" }}>{s.upcoming.count}</span> upcoming
-                <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
+                <span style={{ margin: "0 4px", color: "var(--text-faint)" }}>·</span>
                 <span style={{ fontWeight: FW.bold, color: "var(--text-primary)" }}>{s.seated.covers}/{TOTAL_SEATS}</span> seats filled
               </span>
               {/* freeing soon — each entry is its own no-wrap span so the list
                   wraps BETWEEN tables (never mid-token) when it gets long. */}
               {freeing && freeing.length ? (
                 <span style={{ color: "var(--success-text)", fontWeight: FW.semi }}>
-                  <span style={{ margin: "0 5px", color: "var(--text-faint)", fontWeight: FW.regular }}>·</span>
+                  <span style={{ margin: "0 4px", color: "var(--text-faint)", fontWeight: FW.regular }}>·</span>
                   <span style={{ whiteSpace: "nowrap" }}>freeing soon:</span>{" "}
                   {freeingParts(freeing).map(function(p, i){
                     return (
@@ -122,15 +125,17 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               ) : null}
             </div>
           ) : null}
-          {onOpenWeek ? (
-            <button
-              onClick={onOpenWeek}
-              className="mgt-hover-scale"
-              style={mkBtn({ minHeight: 36, padding: "4px 12px", fontSize: T.small, background: BTN.nav })}
-            >
-              More
-            </button>
-          ) : null}
+          {/* v17.9.0 (Patryk): the More button moved OUT of this header and
+              down beside Print day sheet in the expanded body. The header is
+              the day's numbers plus the control that reveals them; More opens a
+              different screen entirely (Week / Month), and sitting here it was
+              a second, unrelated destination inside the summary's own headline.
+              Beside Print it is what it actually is — one of the two things you
+              can do FROM the day's figures once you are looking at them.
+
+              It is therefore only visible while the summary is expanded, which
+              Patryk chose knowingly: the `M` shortcut still opens the popover
+              from anywhere, and that is the path staff use. */}
           <button
             onClick={onToggle}
             aria-label={open ? "Collapse summary" : "Expand summary"}
@@ -140,7 +145,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                  numbers. The glyph is unchanged; only the box around it grew. */
               padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}
           >
-            {open ? "▲" : "▼"}
+            {open ? <ChevronUpIcon size={14} /> : <ChevronDownIcon size={14} />}
           </button>
         </div>
       </div>
@@ -158,7 +163,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                   <ShiftChip label={"Evening " + hh(splitHour) + "–" + hh(dh.close)} covers={s.evening.covers} count={s.evening.count} />
                 </div>
               ) : null}
-              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {s.hours.map(function(h){
                   return (
                     <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body }}>
@@ -179,12 +184,26 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           ) : (
             <div style={{ fontSize: T.body, color: "var(--text-muted)", padding: "4px 0 2px" }}>No bookings for this day.</div>
           )}
-          {onPrint ? (
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-              <button
-                onClick={onPrint}
-                className="mgt-hover-scale mgt-press"
-                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>🖨 Print day sheet</button>
+          {/* The day's two actions, right-aligned: print it, or step back and
+              look at the week/month around it. More takes Print's exact button
+              shape rather than the 36px/T.small one it wore in the header —
+              two buttons sharing a row that disagree on height and type size
+              read as one control and one afterthought. */}
+          {onPrint || onOpenWeek ? (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              {onPrint ? (
+                <button
+                  onClick={onPrint}
+                  className="mgt-hover-scale mgt-press"
+                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={14} />Print day sheet</button>
+              ) : null}
+              {onOpenWeek ? (
+                <button
+                  onClick={onOpenWeek}
+                  title="Week & month at a glance (M)"
+                  className="mgt-hover-scale mgt-press"
+                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>More</button>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -201,7 +220,7 @@ function ShiftChip({ label, covers, count }) {
       padding: "8px 12px",
       background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset
     }}>
-      <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-muted)", marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
       <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{covers + " cover" + (covers !== 1 ? "s" : "")}</div>
       <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{count + " booking" + (count !== 1 ? "s" : "")}</div>
     </div>

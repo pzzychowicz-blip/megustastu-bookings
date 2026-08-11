@@ -20,6 +20,7 @@
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
 import { BTN, T, FW } from "../lib/constants";
+import { CloseIcon } from "./Icons";
 
 export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
   const byId = new Map(bookings.map(function (b) { return [b.id, b]; }));
@@ -31,7 +32,7 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
     const rowTxt = w.overdue ? "var(--danger-text)" : "var(--warn-text)";
     const msg = sb.name + " (overstaying) → " + w.next + " at " + w.nextTime + (w.overdue ? " — overdue" : " — in " + w.gap + " min");
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "9px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: rowTxt, fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
         <button
           onClick={function () { onReassign(w.nextId); }}
@@ -41,7 +42,7 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
           onClick={function () { onDismiss(id); }}
           aria-label="Dismiss this warning"
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}>✕</button>
+          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}><CloseIcon size={14} /></button>
       </div>
     );
   }

@@ -34,6 +34,7 @@ import { useState, useEffect } from "react";
 import { Reveal } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { R, M, T, FW } from "../lib/constants";
+import { ChevronDownIcon } from "./Icons";
 
 // ── The strip's own geometry, exported because three other files depend on it ─
 // A section BODY (the banner rows, the reminder rows, AppBanners' one-liners)
@@ -229,7 +230,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
           display: "inline-block", lineHeight: 1,
           transform: open ? "rotate(180deg)" : "rotate(0deg)",
           transition: "transform " + M.move + ", color " + M.move
-        }}>▾</span>
+        }}><ChevronDownIcon size={13} /></span>
       </button>
       <Reveal show={open}>
         {/* .mgt-notif draws the hairlines between sections (index.html). A CSS
@@ -257,7 +258,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
                         350ms before the geometry, which is the version that
                         looked broken. */}
                     <Reveal show={orderedIds.length > 1}>
-                      <div style={{ display: "flex", alignItems: "center", gap: NOTIF_GAP, padding: "9px " + NOTIF_PAD_X + "px 1px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: NOTIF_GAP, padding: "8px " + NOTIF_PAD_X + "px 2px" }}>
                         <SectionMark icon={s.icon} tone={s.tone} size={15} fallbackDot />
                         <span style={{ fontSize: T.body, fontWeight: FW.bold, color: s.tone, flex: 1, minWidth: 0 }}>{s.title}</span>
                         {s.count > 1 ? (

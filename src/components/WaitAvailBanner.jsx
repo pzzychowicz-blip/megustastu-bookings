@@ -23,6 +23,7 @@
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
 import { BTN, T, FW } from "../lib/constants";
+import { CloseIcon } from "./Icons";
 
 export function WaitAvailBanner({ entries, availability, onBook, onDismiss, }) {
   const byId = new Map(entries.map(function (e) { return [e.id, e]; }));
@@ -32,7 +33,7 @@ export function WaitAvailBanner({ entries, availability, onBook, onDismiss, }) {
     if (!w) return null;
     const avail = availability[id] || null;
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "9px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--success-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{(w.name || "(no name)") + " · " + w.size + " pax — table free" + (avail && avail.time ? " · " + avail.time : "")}</span>
         <button
           onClick={function () { onBook(w); }}
@@ -42,7 +43,7 @@ export function WaitAvailBanner({ entries, availability, onBook, onDismiss, }) {
           onClick={function () { onDismiss(id); }}
           aria-label="Dismiss this alert"
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}>✕</button>
+          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}><CloseIcon size={14} /></button>
       </div>
     );
   }

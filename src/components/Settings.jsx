@@ -30,7 +30,7 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep } from "./atoms";
-import { BTN, R, M, T, FW } from "../lib/constants";
+import { BTN, R, M, T, FW, H } from "../lib/constants";
 
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
 const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -40,6 +40,8 @@ const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // can import them WITHOUT pulling this whole (now lazy-loaded) module into the
 // startup chunk. Re-exported here for back-compat; still exactly ONE list.
 import { SETTINGS_TABS } from "./SettingsChrome";
+import { hourLabel } from "../lib/time-grid";
+import { CloseIcon, DownloadIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
@@ -116,12 +118,12 @@ export function TabBar({ tabs, current, onSelect }) {
 // cutoff (both single global hours). Fully controlled by props (the Firebase echo
 // re-renders it); disabled at the bounds so an invalid value can't be set.
 // v17.8.0: one stepper definition for the app — see mkStep in atoms.jsx.
-const HOUR_STEP_BTN = mkStep(38);
+const HOUR_STEP_BTN = mkStep(H.chrome);
 // `fmt` (v15.0.0): optional value→label formatter. Defaults to the modulo-24
 // clock label; the optimizer cutoff passes its own so it can show "24:00" (the
 // full-day endpoint) distinctly from "00:00".
 function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }) {
-  const display = fmt ? fmt(value) : String(value % 24).padStart(2, "0") + ":00";
+  const display = fmt ? fmt(value) : hourLabel(value);
   return (
     <div>
       <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
@@ -177,11 +179,11 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
 
 // v15.0.0: compact stepper for the per-weekday hours editor (no label row, so 7
 // rows stay scannable). Same disabled / hover-scale contract as HourStepper.
-const MINI_STEP_BTN = mkStep(30);
+const MINI_STEP_BTN = mkStep(H.compact);
 function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt }) {
   // v16.3.0: fmt is now optional (defaults to the HH:00 time format used by the
   // Opening-hours editor); the Standing-bookings horizon passes a plain number.
-  const fmtFn = fmt || ((n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00");
+  const fmtFn = fmt || hourLabel;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
@@ -244,11 +246,16 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
   const se = shiftsEnabled !== false;
   const oc = typeof optimizerCutoff === "number" ? optimizerCutoff : 15;
   const oas = optimizerAutoSwitch !== false;
-  const hhLabel = (n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00";
+  const hhLabel = hourLabel;
   // v15.0.0 (cutoff range): the optimizer cutoff is a single GLOBAL switch-off
   // hour, independent of opening hours — selectable across the whole day
   // (00:00–24:00). Its own formatter shows 24 as "24:00" (the full-day endpoint),
   // distinct from "00:00". Endpoints are meaningful: 0 = off all day, 24 = on all day.
+  //
+  // v17.9.0: this deliberately does NOT use hourLabel(), which wraps 24 to
+  // "00:00" and would collapse the two endpoints into one label — "on all day"
+  // and "off all day" reading identically. It looks like a fourth copy of the
+  // shared formatter and is a different function; leave it alone.
   const cutoffLabel = (n) => String(n).padStart(2, "0") + ":00";
   // v16.1.0: booking-defaults (duration tiers + running-late thresholds).
   // Defensive fallback mirrors the hook's DEFAULT_BOOKING_DEFAULTS seed.
@@ -580,14 +587,14 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
                   onClick={() => armTierRemove(i)}
                   className="mgt-hover-scale"
                   title={armedTier === i ? "Tap again to remove" : "Remove this tier"}
-                  style={{ ...HOUR_STEP_BTN, height: 32, marginBottom: 3, ...(armedTier === i
+                  style={{ ...HOUR_STEP_BTN, height: 32, marginBottom: 2, ...(armedTier === i
                     ? { width: "auto", padding: "0 10px", fontSize: T.body, fontWeight: FW.bold, background: "var(--danger-bg)", color: "var(--danger-text)", border: "1px solid var(--danger-border)" }
-                    : { width: 32, fontSize: T.lead, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : "×"}</button>
+                    : { width: 32, fontSize: T.lead, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : <CloseIcon size={13} />}</button>
               </div>
             );
           })}
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <div style={{ width: 150, height: 38, display: "flex", alignItems: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
+            <div style={{ width: 150, height: H.chrome, display: "flex", alignItems: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
               {tiers.length ? "Larger parties (" + restFrom + "+)" : "All parties"}
             </div>
             <HourStepper label="stay for" value={bd.restDur} fmt={minsLabel}
@@ -821,7 +828,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
             <button
               onClick={onBackup}
               className="mgt-hover-scale mgt-press"
-              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.nav })}>⬇ Download backup</button>
+              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={15} />Download backup</button>
           </div>
         </Section>
       ) : null}

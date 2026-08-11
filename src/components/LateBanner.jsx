@@ -23,6 +23,7 @@ import { BannerRows } from "./BannerRows";
 import { Presence, mkBtn } from "./atoms";
 import { lateMins } from "../lib/booking-logic";
 import { BTN, T, FW } from "../lib/constants";
+import { CloseIcon } from "./Icons";
 
 export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, }) {
   // v17.0.0 review fix #6: the collapsible/Reveal scaffolding moved to the
@@ -36,7 +37,7 @@ export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, })
     if (!b) return null;
     const offerNoShow = lateMap[id] === "noshow";
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "9px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--warn-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{b.name + " (" + b.time + ") — " + lateMins(b, nowMins) + " min late"}</span>
         <Presence show={offerNoShow} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span">
           <button
@@ -48,7 +49,7 @@ export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, })
           onClick={function () { onDismiss(id); }}
           aria-label="Dismiss this alert"
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}>✕</button>
+          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}><CloseIcon size={14} /></button>
       </div>
     );
   }

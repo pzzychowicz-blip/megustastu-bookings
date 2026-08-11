@@ -6646,7 +6646,7 @@ off `ROADMAP.md`. No Firebase rules change: `presence` is the only node touched
 at the persistence layer and it inherits the top-level `.write: auth != null`
 with no `.validate`.
 
-### 1/5 — Waitlist ghost blocks on the Timeline
+### 1/8 — Waitlist ghost blocks on the Timeline
 
 **Bundle:** main chunk 194.20 kB gz (was 193.74).
 
@@ -6711,7 +6711,7 @@ branches were then exercised against real data: the filled variant from a
 genuine clean match, the dashed variant by temporarily forcing `resh` on one
 entry.
 
-### 2/5 — Log out moves into the connection popover
+### 2/8 — Log out moves into the connection popover
 
 **Bundle:** main chunk 194.25 kB gz.
 
@@ -6737,7 +6737,7 @@ The sibling MGT Scheduling app has its own copy of `ConnectionStatus` (this one
 was ported from it in v16.2.0). Per the shared-pattern rule this is a port
 candidate on its next touch — not done here.
 
-### 3/5 — Presence: a connection now has to keep proving itself
+### 3/8 — Presence: a connection now has to keep proving itself
 
 **Bundle:** main chunk 194.53 kB gz.
 
@@ -6800,7 +6800,7 @@ own, but only to delete ones already proven dead, and deleting a dead key is
 idempotent — two devices racing on the same one is harmless. No rules change,
 no Firebase console step.
 
-### 4/5 — Theme the reminder banner (was `ROADMAP.md` → Deferred)
+### 4/8 — Theme the reminder banner (was `ROADMAP.md` → Deferred)
 
 **Bundle:** unchanged (styles only).
 
@@ -7724,3 +7724,686 @@ Verified live in DEV, both themes: Optimizer OFF 1.94 → 3.00, reminder
 Once/Weekly 1.70 → 3.00, reminder title 2.85 → 3.02, Week/Month 3.28 → 4.02, no
 console errors. `npm run build` · **229 tests** (contrast now 64) · lint 0
 errors · `check:style` OK.
+
+---
+
+## v17.9.0 — the last two design-system axes, plus the backdrop
+
+**Date:** 2026-08-11
+**Files:** `src/App.jsx`, `index.html`, `CLAUDE.md`, `ROADMAP.md`
+**Behavioural change:** yes — see each commit below.
+**Verification:** build clean · 229 tests · lint 0 errors · `check:style` OK.
+
+Four `ROADMAP.md` "Ideas" entries, worked in one version. They are all
+consequences of the same unfinished work: v17.7.0 scaled the radii (`R`),
+v17.8.0 scaled motion (`M`) and type (`T`/`FW`) and enforced both in
+`check:style`, and **spacing** and **control height** were the two axes left
+over. The roadmap's own note on them — that they "keep losing to work that has
+a user-visible defect behind them" — was still true, and still not a reason to
+leave them, because every version that ships without them adds sites to the
+eventual sweep.
+
+Two findings changed the plan before any code was written; both are recorded
+under their commits.
+
+### 1/8 — A DEV-only way to look at dark mode
+
+**Files:** `src/App.jsx`, `index.html`.
+
+Since v17.6.0 the theme follows the signed-in ACCOUNT
+(`settings/users/{uid}/prefs`), which overrides both `localStorage["mgt-theme"]`
+and OS-level emulation. The consequence went unnoticed until it was in the way:
+**there was no way to look at dark mode without writing to a real user's saved
+settings.** v17.8.0's contrast pass worked around it by computing ratios against
+the token values instead — sound, and reported as such, but it is not the same
+act as looking at the screen, and it cannot catch anything that isn't a
+contrast ratio.
+
+`?theme=dark` / `?theme=light` now forces the theme for one page load. It is
+inert in production twice over: Vite strips the `import.meta.env.DEV` branch
+from the bundle, and index.html's no-flash script — which has no
+`import.meta.env` of its own — gates on hostname.
+
+**The non-write is the feature, not a side condition**, so it is enforced at
+both write sites rather than left to convention:
+
+- the prefs-seeding effect skips its theme branch entirely. Both halves matter,
+  and the second is the dangerous one: `themePref` currently *holds the forced
+  value*, so the seeding `else` would have written "I chose light" up to the
+  node for a user who chose dark and merely wanted to look at it.
+- `onToggleDark` skips its `saveUserPrefs`. The Settings toggle still works
+  locally, so a theme can be flipped back and forth while inspecting; nothing
+  lands in Firebase.
+
+The override also had to be honoured in the no-flash script, not just in React.
+Reading the stored theme there and correcting it a frame later in React is
+precisely the flash that script exists to prevent — the override would have
+shipped with the bug the surrounding code was written to avoid.
+
+This is the fourth site in the theme-key sync contract (`readThemePref`, the
+Settings toggle, the no-flash script, and now the override), and the contract is
+unchanged: same key, same `"dark"`/`"light"` convention, at every one of them.
+
+Verified live in DEV against a signed-in account whose saved theme is `dark`:
+`?theme=light` renders light while `settings/users/{uid}/prefs.theme` still
+reads `"dark"`, and a plain load with no parameter goes back to honouring the
+account. No console errors.
+
+### 2/8 — The backdrop: one flat tint, was a 6-stop gradient
+
+**Files:** `index.html`.
+
+`--bg-app` was a six-stop `linear-gradient` across near-identical desaturated
+blues in both themes. Measured rather than estimated, those six stops span
+**3.86 points of L\*** in light and **4.00** in dark — across a whole viewport,
+that is at the edge of visibility. The app was paying six stops for something
+nobody could see, which is the specific thing the v17.8.0 design audit flagged
+it as: not wrong, just stock.
+
+Rather than argue about it, both answers were built behind a DEV-only `?bg=`
+switch and compared side by side **in the real app** — three live iframes, same
+data, one parameter apart. That mattered more than usual here, because the app's
+surfaces are translucent glass: the backdrop tints every card in the app, so a
+swatch comparison would have been answering a different question.
+
+A 2-stop candidate at ~8 L\* of travel (about twice the current) was the
+alternative. Patryk chose flat. The shipped value is the **mean of the six stops
+it replaces**, which is why the change is invisible in both themes and the diff
+is essentially a deletion — the gradient's own midpoint is what everyone was
+already looking at.
+
+The comparison switch and the losing candidate were removed in the same commit
+that applied the winner; nothing DEV-only survives into the backdrop. Verified
+through the live CSSOM: `background-image` is `none` in both themes and no
+`data-bg` rule remains.
+
+If a gradient is ever wanted here again, ~8 L\* is the bar it has to clear. A
+backdrop either commits to being seen or it commits to being a surface; what it
+cannot usefully be is a gradient that reads as a flat colour and costs six stops.
+
+### 3/8 — `lib/time-grid.js`: the narrow half of a roadmap idea
+
+**Files:** new `src/lib/time-grid.js`, new `tests/time-grid.test.js`,
+`src/App.jsx`, `src/components/TimelineView.jsx`, `TimeAxis.jsx`, `Summary.jsx`,
+`Settings.jsx`, `WeekView.jsx`, `BlockModal.jsx`.
+
+`ROADMAP.md` proposed unifying TimelineView's grid header with `TimeAxis`,
+describing them as the same strip drawn twice and asserting that "both use
+`pct()`". **Neither part survived inspection.** TimelineView positions by
+percentage (`pct()`); TimeAxis positions by pixels (`xOf()` against a fixed
+`trackW`), which is what makes its `padding-inline: 50%` scroll maths work.
+TimelineView draws full-height gridlines and pills on `--tl-hour-pill`; TimeAxis
+draws mirrored 13px/7px tape edges and plain `--text-secondary` labels between
+them. A shared renderer would have to straddle both positioning models and both
+label treatments, and every bit of that risk lands in TimelineView's
+scroll-follow, FLIP and drag-and-drop markup for no user-visible gain.
+
+So the extraction is deliberately narrow and **no component is unified**. The
+roadmap entry is closed by the finding, not by the work it proposed.
+
+What *was* duplicated is the `HH:00` label — across eight files, in three
+apparent variants. Checking them one at a time is what made this worth doing,
+because **only two of the three were the same function**:
+
+- `((n % 24) + 24) % 24` and a bare `n % 24` differ only in defensiveness; every
+  caller's input is non-negative, so six sites collapsed into `hourLabel()`.
+- Settings' `cutoffLabel` looked like a seventh copy and is **a different
+  function**. It renders 24 as `"24:00"` on purpose, because the optimizer
+  cutoff is a full-day endpoint where 0 ("off all day") and 24 ("on all day")
+  are both meaningful. Unifying it would have silently collapsed the two into
+  one label. It keeps its own formatter and now carries a comment saying why, so
+  the next sweep doesn't "finish the job".
+
+The lesson: **"N copies of one line" is a claim to check, not to act on.** A
+mechanical sweep here would have shipped a settings bug.
+
+`hourLabelAt(mins)` is separate from `hourLabel(hours)` rather than one function
+sniffing its argument — the two take different UNITS, and a function that guessed
+would be a bug waiting for the first caller whose hour count exceeds 60.
+
+The hour-pill STYLE was also duplicated (three sites, two byte-identical), but it
+is now a module const in TimelineView.jsx rather than a `time-grid` export: every
+user is in that one file, and exporting a style across a module boundary nothing
+else reads is not sharing, just distance. That also keeps `time-grid.js` pure,
+which is what makes it testable — 8 new tests covering the wrap cases the three
+old variants disagreed on. **229 → 237 tests.**
+
+One bug caught during verification, worth recording because the build cannot
+catch it: an undefined identifier in JSX **compiles fine** — Vite treats it as a
+global reference — so a missed import fails only at runtime. `App.jsx`'s header
+subtitle (a seventh call site, spotted in the grep and initially skipped) threw
+`hourLabel is not defined` in the browser while `npm run build` reported success.
+Reading the console was what found it.
+
+### 4/8 — `SP` and `H`: the last two unscaled axes, linted rather than tokenised
+
+**Files:** `src/lib/constants.js`, `scripts/check-style-invariants.mjs`, new
+`tests/style-check.test.js`, ~25 component files.
+
+The two axes v17.7.0 and v17.8.0 kept deferring. `ROADMAP.md` framed them as a
+wide low-risk sweep with no defect behind them, which was right about the risk
+and wrong about the shape.
+
+**The count overstated the problem.** The audit said "96 padding strings"; the
+real figure was 97 over 320 sites, plus 13 gap and 15 margin values. But the
+underlying NUMBERS were already close to an even 2px progression. The actual
+defect was eight values nobody chose — 1, 3, 5, 7, 9, 11, 17, 20, 22 — sitting
+beside their on-scale neighbours: `"5px 11px"` in three files, `"6px 9px"` next
+to `"6px 8px"`, `"9px 14px"` next to `"8px 14px"`. That is drift. The other 89
+strings are legitimately different paddings for legitimately different boxes.
+
+**So this scale is enforced by a linter, not by tokens, and that is a
+deliberate departure from how R/T/FW were done.** Those three are SEMANTIC:
+`borderRadius: 12` genuinely did not say whether it meant "control" or "card",
+so only a role name could disambiguate it. `gap: 8` is not ambiguous; it is
+eight pixels. Tokenising ~600 spacing literals buys indirection and nothing
+else, and forcing the 84 one-off padding strings into an invented role
+vocabulary would have been 84 judgement calls that are invisible until someone
+opens that one screen. `check:style` now parses every padding / gap / margin and
+fails on any component off the scale; `SP` is exported for computed cases.
+**Result: ~80 sites changed instead of ~600, and drift is still impossible.**
+
+`H` (28/32/36/40/44) is mostly v17.8.0's sizing decision written down — 44 is a
+FLOOR for surfaces where a mis-tap costs something, not a target. Only 30 and 34
+were drift. Two findings while sweeping it: the **stepper atom itself** was
+off-scale (`mkStep`'s default 30, `HOUR_STEP_BTN` at 38), so every stepper in
+Settings was, and the party-size steppers were hand-rolled 42px circles that
+predate `mkStep` — now 40, matching `mkBtn`'s standard.
+
+Genuine `/* @canvas */` exemptions, all layout dimensions rather than controls:
+the Toggle track (48×26), the table-picker cells (64×52), TimelineView's 24px
+hour strip, WeekView's 54px calendar day cell, LayoutSettings' 58px alignment
+indent, and `Overlay`'s safe-area `calc()`.
+
+**`tests/style-check.test.js` is new, and it exists because of a near-miss in
+this very commit.** The first spacing rule required the property to be preceded
+by `{` or `,` — to avoid matching CSS inside a string literal (firebase.js's
+console badge). That condition is FALSE for a key in a multi-line style object,
+which is most of the codebase. The rule went blind and `check:style` printed OK.
+Same shape as the v17.8.0 marker-placement bug: a check that is worthless
+exactly where it should bite, while carrying the authority of having passed.
+Reading the script does not catch that; running it against known-bad input does.
+The script now takes an optional directory argument so a fixture can be pointed
+at it. **229 → 249 tests.**
+
+Verified live in DEV, both themes: no control under its previous height, nothing
+overflowing or clipped, steppers still true circles at 40/36/32, the booking
+form, Settings and the List empty state all composed correctly.
+
+### 5/8 — docs
+
+`ROADMAP.md` loses four Ideas entries: the control-height/spacing scales, the
+dark-mode-verification gap, the TimeAxis unification, and the gradient. The
+TimeAxis one goes even though the work it proposed was **not** done — the
+finding in 3/N is its resolution, and a finding belongs here, not as a standing
+pending item.
+
+One new entry replaces them, found while verifying and unrelated to this
+version: Settings' `Collapsible` headers measure 17px against a 19px
+`scrollHeight`, so four section titles on the first screen of Settings have a
+descender shaved. Pre-existing — the v17.9.0 diff does not touch `Collapsible`.
+
+`CLAUDE.md` gains `time-grid.js` in the file-structure block, the `SP`/`H` entry
+(including *why* they are linted rather than tokenised, so a later pass doesn't
+"finish the job" by sweeping tokens through), the checker-blind-spot rule, the
+DEV theme override as the fourth site in the theme-key contract, and the flat
+backdrop.
+
+**Bundle:** main chunk 197.48 kB gz — unchanged. **249 tests**, lint 0 errors,
+`check:style` OK, build clean.
+
+### A DEV-data note
+
+While driving the Settings UI to verify, mis-aimed clicks changed **two** DEV
+settings nodes. Both are restored; no PROD data was touched at any point.
+
+1. `settings/operatingHours`, Tuesday: 13:00–01:00 → 17:00–00:00. Caught by
+   noticing the header subtitle had changed between two screenshots.
+2. `settings/users/{uid}/prefs.theme`: dark → light. Caught later, by a plain
+   no-parameter load rendering light when the account was saved as dark — i.e.
+   by the very check written to prove the new `?theme=` override does NOT
+   write to the node.
+
+Both were restored through the app's own `writeWithRev`, so the CAS revs
+advanced properly rather than being clobbered. The first restore over-corrected,
+also flattening Sunday (06:00) and Saturday (09:00) — pre-existing values I had
+not set — and was itself corrected.
+
+Worth keeping as a working note: **driving a settings UI by synthesising clicks
+from measured coordinates is how you edit data you did not mean to edit.** The
+`computer` tool takes screenshot-pixel coordinates and
+`getBoundingClientRect()` returns viewport pixels; on a scaled screenshot those
+are different numbers, and the clicks land somewhere plausible rather than
+nowhere. Prefer the app's own keyboard shortcuts, or read state directly, and
+treat a settings screen as read-only unless the setting IS the thing under
+test.
+
+### 6/8 — Every control mark is an icon
+
+**Files:** `src/components/Icons.jsx`, `SettingsChrome.jsx`, `ViewTools.jsx`,
+plus 15 component files and `App.jsx`.
+
+v17.8.0 built the icon set and drew its line at *"does this render as a colour
+emoji, or is its font coverage patchy"* — keeping ✕ ‹ › ▲ ▼ ▸ ▾ ✓ ★ as text
+because they inherit colour and weight for free and truncate with their label.
+That reasoning is sound and it was still the wrong line, for a reason the emoji
+argument obscures: **an icon set that covers only the glyphs with a rendering
+BUG is not a set, it is a patch.** The app drew its dismiss control as a text ✕
+two millimetres from a hand-drawn SVG cog — the same "not one medium" defect
+`Icons.jsx`'s own header opens with, just monochrome.
+
+New marks: chevrons, close, check, star, print, download, edit, and `AssignIcon`
+for the ex-ASCII `=`. Chevrons are **one shape at four rotations**, so a
+disclosure that turns and a nav arrow that points cannot drift apart.
+
+`CogIcon` moved INTO the set. It was the one icon already drawn properly
+(v17.1.0) and the house style was copied *from* it — but it stayed outside,
+hard-coded at 20×20 with its own `<svg>`, so it took none of the optical stroke
+compensation and could not be sized. In `ViewTools`' pair that rendered a 20px
+cog beside a 17px search: a smaller copy of the exact mismatch the set exists to
+prevent. `SettingsChrome` re-exports it, so the lazy-Settings boundary is
+unchanged (`Icons.jsx` has no imports of its own to drag along).
+
+**Two traps worth carrying forward.** A glyph grep cannot see an **HTML
+entity** — `App.jsx` and `WeekView` drew their nav chevrons via
+`dangerouslySetInnerHTML` with `&#8249;`/`&#8250;`, invisible to the sweep until
+the icons around them changed. And **copy that describes a glyph has to change
+with it**: `LayoutSettings`' "Reorder with ‹ ›, remove with ×" and WeekView's two
+hint lines all described marks that no longer existed — the v17.8.0 lesson about
+the footnote describing a chip that had been removed.
+
+**What stays text is a category, not an exception list:** prose arrows inside
+sentences ("Settings → Opening hours"), Shortcuts' keycap labels (they depict
+the key you press), and the bracketed `[L]`/`[!]`/`!!`. The truncation cost
+v17.8.0 warned about is real and is paid explicitly — TimelineView's ★ left the
+label string for the marker row, so it survives a narrow block instead of being
+the first thing the ellipsis eats, which is what a flag should do anyway.
+
+### 7/8 — "Tables" and "Assign" were the same button
+
+`ListView`'s `= Tables` and the booking form's `= Assign` both open
+`ManualModal`. Unified on **Assign**: it is a verb, so it reads as an action
+beside Edit and Delete; it matches the modal's own primary button; and it was
+already two of the three sites. Folded into 6/8 because converting the `=` to
+`AssignIcon` and relabelling are literally the same edit.
+
+### 8/8 — The block start-time chip: AA in all ten cases
+
+Measured rather than restated. Composited over each block fill, the chip at
+`opacity: 0.8` was **3.72–4.62:1** across five statuses × two themes — below AA
+in every one, on the one piece of *information* a block carries, and on the
+exact element the amber exemption is recorded on the grounds of. At full
+strength the same chip is **5.15–6.10:1**, with no token touched.
+
+The whole deficit was the opacity, and the diagnosis underneath is the point:
+**the chip was never too loud in absolute terms.** It out-shouted the guest name
+because the NAME sits at 1.86–2.97:1 on the amber fills. Dimming the one legible
+element to match the illegible ones is levelling down. Opacity conflates QUIET
+with FAINT; weight separates them — so the chip is `FW.medium` against the name's
+`FW.bold`, which is the v17.8.0 type-scale argument (weight carries emphasis so
+other axes don't have to) applied to one chip.
+
+**`tests/contrast.test.js` gains the case it was missing, and the miss is the
+interesting part.** Its existing entry measures `--tl-hour-pill` over the PAGE
+(4.73 light) — that is the *ruler's* pill. The block chip is the same token over
+a saturated block, and nothing measured it. The v17.8.0 comment three lines
+above says the exemption's "whole justification was resting on a fill nothing
+measured"; the fix measured the fill but not the COMPOSITE the argument actually
+depends on. **A token's number is not the screen's number wherever that token is
+reused over something else.**
+
+The opacity is read back OUT of `TimelineView.jsx` rather than assumed. The first
+version of this test claimed "if the opacity comes back, this fails" and that was
+**false** — the opacity lives in JSX and the test only read `index.html`, so
+re-adding it would have left all ten green. Verified by actually re-adding it:
+9 of 10 fail, at exactly the independently measured numbers. **249 → 259 tests.**
+
+Verified live in DEV, both themes: every icon renders at non-zero size, the
+Find/Settings pair is matched at 18px, the block chip computes `font-weight: 500`
+at `opacity: 1` against the name's 700, no console errors.
+
+### 9/9 — the block's last four markers are drawn, not appended to its label
+
+Follow-up round (Patryk, same version). `TimelineBlock` built its label as
+`name + " (size)"` plus up to four appended flags: `" [L]"` locked, `" [!]"`
+repeat no-show, `" " + currency` deposit, `" !!"` overstaying. The first pass of
+this version moved ★ **out** of that string on the grounds that a flag which
+truncates with the name is useless on exactly the crowded evening it matters —
+and in the same commit wrote a rule keeping these four **in** it, "because they
+are ASCII, not glyphs, and belong to the truncating label string."
+
+Both halves of that were wrong, and they were wrong in ways the file had already
+argued against elsewhere:
+
+- **Truncating with the name is worse here than it was for ★.** A preferred
+  table is a preference; `[L]` means the optimizer must not move this party and
+  `!!` means someone is sitting in a table the next booking needs. Those are the
+  block's exception states, and the ellipsis ate them first.
+- **"It is ASCII" is not a reason to look different** from the drawn star and
+  drawn hourglass on the same 36px surface. That is `Icons.jsx`'s own "not one
+  medium" complaint with a monochrome glyph substituted for a colour one.
+
+Two icons were drawn for three markers. `!!` fires on `warnings[id].overdue` —
+the *identical* entry the notification strip's Overlap section renders — so it
+takes the existing `OverlapIcon`. Same data, same mark, both places. `LockIcon`
+and `NoShowIcon` are new; the no-show slash runs corner to corner rather than
+around the figure, for the reason `OfflineIcon`'s does (at 11px the figure alone
+is nearly closed).
+
+**The deposit flag was the worst of the four and the reason to look at them at
+all.** It printed the currency symbol from `settings/general`, so the marker for
+"money has been taken" was a *different shape per restaurant setting* — €, £ or
+$ depending on a dropdown, competing with the name in the same type run. It is a
+coin now, and the **amount** is in the hover title, which the symbol never
+carried.
+
+All four render through one module-scope `BlockFlag` wrapper (`flexShrink: 0`,
+so the name truncates and the flags survive) whose `title` carries what a glyph
+cannot: the deposit amount, the no-show count, and which booking an overstay is
+blocking.
+
+Bundle 196.27 → 196.48 kB gz. Gates green.
+
+### 10/10 — the block reads left-to-right: who, then what about them
+
+Second half of the same follow-up (Patryk's spec). The block interleaved identity
+and status: a ★ between the time chip and the name, the party size in brackets
+*inside* the name string, and the remaining flags appended after it. So the one
+line you scan a grid of blocks for — the name — **started** at a position that
+depended on whether that party had preferred tables and **ended** wherever its
+flags happened to stop. Nothing lined up column-to-column down a busy day.
+
+Now: `time · name · size` on the left, never varying, and a fixed-width flag rail
+on the right (deposit · preferred · locked · repeat-no-show · overstaying ·
+Assign). The name is the only element that shrinks, which is the right thing to
+lose.
+
+**The size is a ring, not "(6)".** As a bracketed pair inside the name string it
+put punctuation in the middle of the block's one bold text run and made the party
+size the first thing the ellipsis took after the name itself. As an 18px ring it
+is the same fact at a glance and it is `flexShrink: 0`.
+
+**The `=` handle is `AssignIcon`.** The same action is reached from the booking
+form, the List card and this handle; it should not be a drawn icon in two of them
+and an equals sign in the third. Its divider went 1px → 2px on Patryk's call —
+at 1px against `--blk-rule` it dissolved into the saturated fills and the handle
+read as part of the flag rail rather than as a separate control.
+
+**The ring's border alpha is a measurement, not a taste.** `--blk-rule`'s 0.3
+white over the block fills is 1.43:1 on confirmed and **1.21:1 on pending** — not
+subtle, absent; the ring did not render at all on the yellow blocks. At 0.55 it
+is 1.82 / 1.38 / 2.78 seated / 2.97 cancelled.
+
+That still misses WCAG 1.4.11's 3:1 for a component boundary on the two amber
+fills, and **it cannot be met**: pure white over the pending yellow tops out at
+1.98:1. This is the amber exemption recorded in `constants.js`, hit one element
+further down, and the same two escapes fail the same way — a dark ring clears 3:1
+and reads as DISABLED beside the white-inked name it encircles (exactly what got
+tried and reverted at block level one commit after it shipped), and an opaque
+fill clears it by turning a count into a second status chip competing with the
+time. Transparent ring, best achievable white, number written down. The DIGIT
+inside is `--text-on-accent` at the name's own contrast, and that is the part
+that has to be legible.
+
+`SIZE_RING` is a module const shared by `TimelineBlock` and `WaitGhost` for the
+reason `HOUR_PILL` is: the ghost is a *dimmed copy* of the block, so anything the
+block specifies twice can drift out from under it. Writing the ring inline in
+both would have broken that rule in the same commit that depends on it.
+
+Bundle 196.48 → 196.60 kB gz. Gates green.
+
+**DEV-data note:** none of this session's edits touched DEV data. Bookings on the
+viewed day changed under the preview twice (12 → 11 covers) and the per-booking
+audit trail attributes every change to Patryk working in the DEV app live
+(15:38:40, 15:38:49, 15:40:08, 15:40:17 — time moves, a pending→confirmed, a size
+and two duration edits). Recorded because the v17.9.0 entry above documents two
+*real* accidental mutations, and "the data moved while I was working" is not by
+itself evidence of a third — **the history entries are.** Reading them is cheap
+and it is the check to run before either accusing yourself or clearing yourself.
+
+### 11 — More moves out of the summary headline, next to Print day sheet
+
+Patryk's call. The summary header was the day's figures plus a control that
+reveals more of them — and, wedged into the same right-hand cluster, a button
+that opens an entirely different screen (`WeekView`'s Week/Month popover). Beside
+Print day sheet in the expanded body it is what it actually is: one of the two
+things you can do *from* the day's figures once you are looking at them.
+
+It takes Print's exact button shape (`T.body` / 32px) rather than the
+36px/`T.small` it wore in the header. Two buttons sharing a row that disagree on
+height and type size read as one control and one afterthought.
+
+**Known and accepted consequence:** More is now only reachable while the summary
+is expanded, and collapsed is its default. Put to Patryk explicitly with that
+spelled out; he took it, because the `M` shortcut still opens the popover from
+anywhere and that is the path staff use. The footer row is gated on
+`onPrint || onOpenWeek` rather than `onPrint`, so neither button can strand the
+other.
+
+### 12 — ViewTools is dissolved: chrome sits with what it acts on
+
+Patryk's items 4 and 6, which are one change: both buttons leave, so the
+component has nothing left to be.
+
+`ViewTools.jsx` was created in v17.0.0 round 8 for a good reason — Timeline's
+legend and List's card-header each carried their own copy of Find-a-booking and
+Settings, and Plan had neither, so the pair was lifted into App's date-nav row to
+give all three views ONE copy. That goal is intact. What the component got wrong
+is that it grouped the two by **appearance** (two 36px circles) into a toolbar
+that belonged to neither of them.
+
+- **Settings leads the title block.** The two lines beside it are the
+  restaurant's configuration read back — its name, its indoor/outdoor counts,
+  its opening hours — and every one of those is edited behind that cog. It now
+  sits against them instead of across the row.
+- **Find-a-booking joins the action cluster**, between "+ New" and the
+  connection dot. Searching is something you DO, and that is the row of things
+  you do.
+
+The header is no less shared across the three views than the date-nav row was,
+so the round-8 property survives the move.
+
+`CHROME_BTN` is a module const in `App.jsx`, not a new atom and not a surviving
+one-export module: both call sites are in that file, and exporting a style
+nothing else reads is distance, not sharing (`lib/time-grid.js`'s lesson, applied
+to a style object). It keeps the 36×36 on `--cog-bg` — v17.8.0's "44 is a floor,
+not a target"; these are still secondary chrome, now beside 40px primary pills,
+and equal width/height is what keeps `--r-pill` a circle instead of an egg.
+
+`CogIcon` is imported straight from `Icons.jsx` here rather than through
+`SettingsChrome`'s re-export. That re-export exists to hold the lazy-Settings
+import boundary for callers that predate the v17.9.0 move; `Icons.jsx` has no
+imports of its own, so going direct drags nothing extra into the startup chunk.
+
+**A layout regression this caused, caught by measuring rather than by looking.**
+Splitting the block's single `flex: 1` name span into `name + ring` was written
+as `flex: 0 1 auto` on each — which gives the group a content-sized flex-basis,
+which tips a narrow block out of flexbox's **grow** phase and into its **shrink**
+phase. Shrink is distributed across every item with a non-zero basis, so the
+start-time chip shrank too: it rendered **"19:0"** on a 144px block, with the
+chip box measured at 26px against its natural 43. The fix is `flex: 1 1 0%` on
+one wrapping group, which is precisely what the old single span had — the basis
+was the load-bearing part of `flex: 1` and splitting the element dropped it. The
+group also right-aligns the flag rail on its own, so the explicit spacer written
+alongside it is gone too.
+
+Bundle 196.60 → 196.54 kB gz (a component deleted). Gates green.
+
+### 13 — the date controls are centred in their row, until the summary opens
+
+Patryk reported the ‹ › and the date field as vertically misaligned. Measured
+rather than guessed, because the first two theories were both wrong: the buttons
+and the input are all exactly 40px (a global reset makes them `border-box`, so
+the `min-height: 40` + padding content-box arithmetic that would have made the
+circles 54 does not apply), and the inner group was already `alignItems: center`.
+
+The row itself was `alignItems: flex-start`, and the Summary card beside them is
+58px collapsed (102 at narrower widths, where its status line wraps). So the date
+controls sat flush against the top of the row with up to 62px of dead space
+beneath — correctly aligned to each other, wrongly aligned to everything else.
+
+`center` fixes it, **but only while the summary is collapsed**, and that is why
+this is a conditional rather than a one-word change. The summary is what drives
+this row's height; expanded it is ~272px, and centred date controls would float
+into the vertical middle of a tall panel, detached from the header above. So the
+alignment flips with `summaryOpen`: centred when the row is one short line,
+top-aligned when something tall is in it.
+
+Verified in both states — collapsed, row 102 / controls at +31; open, row 272 /
+controls at +0.
+
+### 14 — the login screen gets the app mark and the restaurant's own name
+
+Patryk's item 5. Two things, one of which had a real reason for still being
+wrong.
+
+**The name.** `settings/general` was created in v17.0.0 specifically to remove
+the `"Me Gustas Tú"` literal from the header and the day sheet. The login screen
+kept it, and not by oversight: it renders **before sign-in**, and the node is
+behind `auth != null`, so a read there is permission-denied. The three ways out
+were put to Patryk explicitly and he took the cache: a `localStorage` mirror
+written whenever `generalSettings.restaurantName` changes, read by the login
+screen with the seed as fallback. Correct on any device that has signed in once;
+the seed, once, on one that never has. The rejected third option was making the
+node world-readable, which would open the phone prefix and currency to anyone
+with the database URL to save a string.
+
+`RESTAURANT_NAME_KEY`, its writer and `readCachedRestaurantName` all live in
+`useGeneralSettings.js`. The theme's equivalent mirror is spread across
+`readThemePref`, the Settings toggle and `index.html`'s no-flash script, and
+CLAUDE.md carries a standing "keep the value convention in sync across all
+three" warning as a result. **One owner needs no warning.** The mirror effect is
+keyed on the name rather than run inside the `onValue` handler, so a rename in
+Settings reaches the login screen without a round trip through Firebase.
+
+**The mark** is `/icon.svg` — the shipped icon file itself, not a re-drawn copy,
+so it cannot drift from the family `scripts/gen-icons.py` exists to keep in step.
+It carries its own rounded tile (no `borderRadius` needed) and gets no dark-mode
+variant: a logo has fixed brand colours, and this is the mark already on the home
+screen of every device that opens the page. `img-src 'self'` in `vercel.json`
+already covers it.
+
+**Verified without touching Patryk's live session.** A second dev server on port
+5174 did *not* work — Firebase auth persistence turned out to be shared across
+localhost ports, so that origin was signed in too. Signing out would have locked
+him out of the DEV app mid-session. Forced instead with a one-line local edit to
+the auth gate, screenshotted in both themes and in both cache states, then
+reverted and diffed byte-for-byte against a pre-edit copy of `App.jsx` before
+committing. Cached name renders (`MGT Bookings`, the real DEV value), absent
+cache falls back to `Me Gustas Tú`, logo loads at 44px in both themes. The
+`?theme=light` override added earlier in this same version is what made the
+light-mode check possible without writing to his prefs node.
+
+### 15 — two fixes the batched verification pass found, not the diff
+
+Both caught by sweeping the RENDERED page rather than by re-reading the change,
+which is the point: neither is visible in the diff of the commit that caused it.
+
+**1. The timeline legend still said "= assign".** The block's handle is
+`AssignIcon` now, so the hint line described a character that no longer exists
+anywhere. This is precisely the trap the first icon pass wrote into CLAUDE.md
+("update the COPY with the glyphs" — `LayoutSettings`' "Reorder with ‹ ›" and
+WeekView's hints) recurring in the commit series that quotes it. Nothing about
+changing `TimelineBlock`'s handle touches this string, so only a scan of what
+the page actually renders could find it. It shows the icon inline now instead of
+naming a character, so the two cannot come apart again.
+
+**2. The start-time chip rule was still costed against the old block.** Its
+threshold was a flat 140px, documented as "the name keeps ≥55px after the chip
+(~42px) and the assign handle (~41px)". The redesign added a size ring (24px
+with its margin) and one 15px marker per active flag — all `flexShrink: 0` — so
+the room left for the name became a function of how flagged the booking is, and
+140 no longer stood for anything. A 150px block carrying a deposit and a
+preferred star kept its chip and rendered the guest name **at zero width**:
+`18:30 ⑥ ⊙ ★ ▦`, no name at all.
+
+That is worse than the crowding the rule exists to prevent. The name is what you
+read a block for — the same argument used two commits earlier to reject dimming
+the chip. Dropping the chip hands 42px straight back to it.
+
+`chipRoomFor(b, noShows, warn)` replaces the literal: the fixed parts as named
+constants plus 15px per flag the booking actually carries. The rule stays
+all-or-nothing across the day (a mixed grid read messy in live QA) — only the
+per-block requirement is now honest, and the worst block decides. Verified in
+both directions: at ~150px chips drop and "Cam… ⑥ ⊙ ★" renders, at ~288px both
+the chip and the full name are back.
+
+**Sweep used:** every `<svg>` in the tree must have non-zero rendered size (the
+cheap catch-all for a renamed or broken icon import), and no leaf element may
+contain a control glyph, run across Timeline / List / Plan, the booking and
+walk-in forms, and all five Settings tabs. Zero-sized icons: none. Remaining
+glyph hits: the table-group capacity hints ("1A+1B = 6"), which are arithmetic
+inside a sentence and correctly stay text.
+
+### 16 — /code-review fix 1/3: the name cache was stomped with the seed on every load
+
+`useGeneralSettings`' new localStorage mirror ran unguarded on mount. React's
+FIRST commit has `generalSettings === DEFAULT_GENERAL_SETTINGS`, so every page
+load wrote `"Me Gustas Tú"` over whatever good name was cached, ~300ms before
+the snapshot arrived to correct it.
+
+**Measured, not argued.** A `storage` listener in a second same-origin tab, while
+the app tab reloaded with the cache primed to `"Casa Verde"`, observed exactly
+`["Me Gustas Tú", "MGT Bookings"]`. After the fix, the same experiment observes
+`["MGT Bookings"]`.
+
+Harmless while the read lands. Not harmless when it never does: the RTDB web SDK
+keeps no disk cache, so an offline load has no snapshot to replay, and a
+`dbError`-cancelled read never reaches the success path where the correction
+lives. The cache stays at the seed, and the login screen then shows
+`"Me Gustas Tú"` on a device that had the right name a minute earlier — the one
+literal this whole settings node exists to delete, reintroduced by the change
+that was supposed to finish deleting it.
+
+The gate needed a `loadedTick` STATE beside the existing `loaded` ref: a ref
+flip re-renders nothing, so an effect keyed on it would never re-run. Every other
+consumer keeps the ref, because a write guard has to be readable synchronously
+inside a callback.
+
+**The general lesson: this file's own write-guard rule applied and I did not
+apply it.** `saveGeneralSettings` right below refuses to write before the initial
+read completes. A cache is a write too.
+
+### 17 — /code-review fix 2/3: chipOpacity() was reading three chips, not one
+
+The guard added in commit 8 scanned every `...HOUR_PILL` spread in
+`TimelineView.jsx` and took the minimum opacity. There are **three** — the block
+chip, `WaitGhost`'s chip, and the ruler's `headerLabels` — and only the first is
+what those ten cases measure. Dimming the ruler's pills, a change with nothing to
+do with blocks, would have failed all ten with a message insisting the BLOCK chip
+is below AA.
+
+It failed *safe* (strictest wins) and it failed *misleadingly*, which is the
+defect the comment directly above it warns about wearing a different hat: a guard
+that names one thing and looks at another. The commit that wrote that warning
+shipped an instance of it three lines below.
+
+Now anchored on `const timeChip` — TimelineBlock's declaration, and the only one
+of the three that is a named binding — and it THROWS if that anchor disappears
+rather than silently measuring nothing.
+
+Verified by running all three cases rather than reasoning about them: baseline 74
+pass; `opacity: 0.8` restored on the block chip → 9 of 10 fail; `opacity: 0.5` on
+the ruler pill instead → 74 pass.
+
+### 18 — /code-review fix 3/3: the flags left the accessibility tree
+
+`BlockFlag` rendered `<span title="…"><LockIcon/></span>`, and every icon in
+`Icons.jsx` carries `aria-hidden="true"` — correctly, since an icon beside its
+own text label must not be announced twice. But these four flags have no text
+label, and a plain `<span title>` with no role gets no reliable accessible name.
+So the whole rail was invisible to a screen reader.
+
+Before this branch the same information was TEXT inside the label string
+(`Camila (6) [L] € !!`) and was read out as part of the block. Those are the
+block's exception states — locked against the optimizer, money taken, someone
+sitting in a table the next booking needs — i.e. precisely what commit 9 argued
+was too important to let the ellipsis eat. Losing them to a screen reader instead
+is the same loss by a different route, in the change that made the argument.
+
+`role="img"` + `aria-label` on the wrapper. The label text was already written
+for the tooltip; only the attribute was missing, so there is no visual change and
+nothing new to keep in sync. Verified in the live DOM: the two flags on a
+deposit+preferred booking expose "Deposit €10" and "Preferred tables: 2, 3, 4".
+
+The party-size ring needed nothing — its digit is real text.

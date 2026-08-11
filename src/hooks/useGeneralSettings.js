@@ -52,6 +52,28 @@ export const DEFAULT_GENERAL_SETTINGS = {
   defaultWalkinSize: 2
 };
 
+// ── The restaurant name's pre-auth cache (v17.9.0) ───────────────────────────
+// LoginScreen renders BEFORE sign-in, and `settings/general` is behind
+// `auth != null` — a read there is permission-denied, so the login title
+// physically cannot come from Firebase. It is mirrored to localStorage instead,
+// the same shape the theme uses: **localStorage is a pre-mount cache, the node
+// is the source of truth.** A device that has signed in once shows the right
+// name forever after; a device that never has shows the seed, once.
+//
+// Key, writer and reader all live in this file on purpose. The theme's
+// equivalent is split across three sites (`readThemePref`, the Settings toggle,
+// index.html's no-flash script) and CLAUDE.md has to carry a "keep the value
+// convention in sync" warning because of it. One owner needs no warning.
+export const RESTAURANT_NAME_KEY = "mgt-restaurant-name";
+
+export function readCachedRestaurantName(){
+  try{
+    const v = localStorage.getItem(RESTAURANT_NAME_KEY);
+    if(typeof v === "string" && v.trim()) return v.trim().slice(0, 60);
+  }catch{/* private mode / storage disabled */}
+  return DEFAULT_GENERAL_SETTINGS.restaurantName;
+}
+
 function clampStep(n, def, min, max, step){
   // NaN check AFTER the round (see useBookingDefaults for the why).
   let v = Math.round(Number(n) / step) * step;
@@ -89,6 +111,10 @@ function sanitizeGeneral(raw){
 export function useGeneralSettings(){
   const [generalSettings, setGS] = useState(DEFAULT_GENERAL_SETTINGS);
   const loaded = useRef(false);
+  // The same fact as `loaded`, as STATE — a ref cannot wake an effect. Only the
+  // name-mirror effect below reads it; every other consumer wants the ref,
+  // because a write guard must be readable synchronously mid-callback.
+  const [loadedTick, setLoadedTick] = useState(false);
   const revRef = useRef(0);
   useEffect(function(){ return attachRev("settings/general", revRef); }, []);
 
@@ -100,9 +126,37 @@ export function useGeneralSettings(){
       }
       // Node absent (first run): keep the defaults (= the historical literals).
       loaded.current = true;
+      setLoadedTick(true);
     },dbError("settings/general"));
     return unsub;
   }, []);
+
+  // Keep the pre-auth cache current. Keyed on the NAME rather than run inside
+  // the snapshot handler, so it also covers `saveGeneralSettings` — a rename in
+  // Settings reaches the login screen without a round trip through Firebase.
+  //
+  // /code-review fix: gated on `loaded`, which the first version was not — and
+  // that is the same write-guard rule the rest of this file already follows.
+  // `generalSettings` starts as DEFAULT_GENERAL_SETTINGS, so React's FIRST
+  // commit wrote the seed "Me Gustas Tú" over whatever good name was cached,
+  // ~300ms before the snapshot arrived to correct it. Measured, not reasoned
+  // about: a `storage` listener in a second same-origin tab saw exactly
+  // ["Me Gustas Tú", "MGT Bookings"] on every reload.
+  //
+  // Harmless while the read lands. It is not harmless when the read never does
+  // — offline (the RTDB web SDK keeps no disk cache, so there is no snapshot to
+  // replay) or a rule/transport failure that `dbError` cancels. The correction
+  // lives in the success path only, so the cache stays at the seed and the login
+  // screen shows "Me Gustas Tú" on a device that had the right name a minute
+  // ago: the one literal this whole node exists to delete.
+  //
+  // `loadedTick` exists because `loaded` is a REF — flipping it inside the
+  // snapshot handler re-renders nothing, so an effect keyed on it alone would
+  // never re-run. The state flips once, in the same handler.
+  useEffect(function(){
+    if(!loadedTick) return;
+    try{ localStorage.setItem(RESTAURANT_NAME_KEY, generalSettings.restaurantName); }catch{/* ignore */}
+  }, [loadedTick, generalSettings.restaurantName]);
 
   // Guarded write; accepts a PARTIAL update (the useBookingDefaults contract).
   function saveGeneralSettings(partial){

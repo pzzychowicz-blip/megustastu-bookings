@@ -36,8 +36,18 @@
            read this token (deliberate exception: the Kbd keycap atom stays
            monospace by design). */
         --font-app: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
-        /* App background (6-stop glass gradient) */
-        --bg-app: linear-gradient(135deg, #e8edf5 0%, #dfe6f0 20%, #e2e0ef 40%, #dce8f0 60%, #e5eaf2 80%, #e0e4ee 100%);
+        /* App background. v17.9.0: ONE flat tint, was a 6-stop gradient.
+           The six stops spanned 3.86 points of L* — measured, not estimated —
+           which is at the edge of visibility across a whole viewport, so the
+           app paid six stops for something no one could see. The value here is
+           the mean of the six it replaces, which is why the change is invisible
+           in both themes and the diff is a deletion.
+
+           A 2-stop candidate at ~8 L* of travel was built and compared side by
+           side in the real app; Patryk chose flat. If a gradient is ever wanted
+           here, that is the bar it has to clear — a backdrop either commits to
+           being seen or it commits to being a surface. */
+        --bg-app: #e2e7f1;
         /* Core surfaces */
         --bg-card: rgba(255, 255, 255, 0.45);
         --border-card: rgba(255, 255, 255, 0.35);
@@ -360,7 +370,8 @@
         --t-wipe: 760ms;
       }
       [data-theme="dark"] {
-        --bg-app: linear-gradient(135deg, #15171c 0%, #191c22 20%, #1c1a23 40%, #161c26 60%, #1b1f28 80%, #17191f 100%);
+        /* v17.9.0: flat, the mean of the 6 stops it replaces (span was 4.00 L*). */
+        --bg-app: #181b22;
         --bg-card: rgba(44, 44, 46, 0.55);
         --border-card: rgba(255, 255, 255, 0.10);
         --text-primary: #f2f2f7;
@@ -862,11 +873,23 @@
          (or dark-saved) user never sees a light flash. Reads the per-device
          preference in localStorage["mgt-theme"] ("dark"|"light"), else falls
          back to the OS. MUST stay in sync with readThemePref() in src/App.jsx
-         (same key, same value convention). -->
+         (same key, same value convention, and since v17.9.0 the same ?theme=
+         override — which has to be honoured HERE too, or the DEV override paints
+         the stored theme for one frame before React corrects it, i.e. exactly
+         the flash this script exists to prevent).
+
+         This script has no import.meta.env to gate on, so the override is gated
+         on hostname instead. That is what keeps it out of production. -->
     <script>
       (function () {
         try {
-          var saved = localStorage.getItem("mgt-theme");
+          var forced = null;
+          var h = location.hostname;
+          if (h === "localhost" || h === "127.0.0.1" || h === "[::1]") {
+            var q = /[?&]theme=(dark|light)\b/.exec(location.search);
+            if (q) forced = q[1];
+          }
+          var saved = forced || localStorage.getItem("mgt-theme");
           var dark = saved === "dark"
             || (saved !== "light"
                 && window.matchMedia

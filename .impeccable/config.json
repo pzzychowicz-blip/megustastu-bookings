@@ -1,0 +1,32 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/components/TimelineView.jsx"
+        ],
+        "createdAt": "2026-08-11T10:38:36.557Z"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "src/components/TimelineView.jsx"
+        ],
+        "createdAt": "2026-08-11T12:02:46.576Z"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "src/components/atoms.jsx"
+        ],
+        "createdAt": "2026-08-11T12:02:55.776Z"
+      }
+    ]
+  }
+}

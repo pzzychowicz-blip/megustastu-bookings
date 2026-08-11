@@ -13,11 +13,12 @@
 import { useState, useEffect } from "react";
 import { Section, Collapsible, Toggle, mkStep, mkBtn } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
-import { contiguousRuns, comboKey, R, T, FW } from "../lib/constants";
+import { contiguousRuns, comboKey, R, T, FW, H } from "../lib/constants";
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon } from "./Icons";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
-const STEP_BTN = mkStep(30);
+const STEP_BTN = mkStep(H.compact);
 // Small circular remove (×) button — used by the editable combo rows.
 // v17.8.0: SOLID, not a pale danger wash behind danger-coloured text with a
 // danger-coloured border — the banned three-encodings shape, and on a
@@ -32,7 +33,7 @@ const X_BTN = {
 };
 // Editable join-group chip + its micro reorder/remove buttons.
 const GCHIP = {
-  display: "inline-flex", alignItems: "center", gap: 1,
+  display: "inline-flex", alignItems: "center", gap: 2,
   background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
   borderRadius: R.pill, padding: "2px 4px", boxShadow: "var(--shadow-btn)"
 };
@@ -43,14 +44,14 @@ const GCHIP_BTN = {
 };
 // An "available table" chip in the add-to-group / new-group pickers.
 const PICK_CHIP = {
-  fontSize: T.body, fontWeight: FW.bold, borderRadius: R.pill, padding: "4px 9px", cursor: "pointer",
+  fontSize: T.body, fontWeight: FW.bold, borderRadius: R.pill, padding: "4px 8px", cursor: "pointer",
   border: "1px solid var(--accent)", background: "var(--accent)", color: "var(--text-on-accent)",
   boxShadow: "var(--shadow-btn)"
 };
 // Small text input — table id (rename / add).
 const TXT_INP = {
   background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.pill,
-  padding: "6px 9px", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)",
+  padding: "6px 8px", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)",
   width: 70, boxSizing: "border-box", boxShadow: "var(--shadow-input)"
 };
 // Small select — combo / table pickers in the priorities editor (v15.9.0).
@@ -58,7 +59,7 @@ const SEL_INP = {
   background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.pill,
   // v17.8.0: paddingRight ~= this control's own pill radius (~15px on its 30px
   // box), for the same reason mkSel exists — the arrow sat inside the curve.
-  padding: "6px 9px", paddingRight: 14, fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)",
+  padding: "6px 8px", paddingRight: 14, fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)",
   boxShadow: "var(--shadow-input)", cursor: "pointer"
 };
 // Segmented mini-button (zone-order / prefer-avoid toggles in the priorities editor).
@@ -338,7 +339,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
     setBand(i, { zoneOrder: mode === "indoor" ? ["indoor", "outdoor"] : mode === "outdoor" ? ["outdoor", "indoor"] : [] });
   }
   const tableIds = tables.map(function (t) { return t.id; });
-  // A labelled chip list with an add-picker; `ranked` adds ‹ › reorder buttons.
+  // A labelled chip list with an add-picker; `ranked` adds up/down reorder buttons.
   // Plain helper returning JSX (NOT a component — no hooks/remount concerns).
   function chipRow(label, list, ranked, kind, bandIdx, onChange) {
     const avail = tableIds.filter(function (id) { return list.indexOf(id) < 0; });
@@ -353,24 +354,24 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               <span key={id} style={GCHIP}>
                 {ranked ? (
                   <button onClick={function () { onChange(moveInList(list, idx, -1)); }} disabled={idx === 0}
-                    title="Move up in rank" style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}>‹</button>
+                    title="Move up in rank" style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronUpIcon size={12} /></button>
                 ) : null}
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
                 {ranked ? (
                   <button onClick={function () { onChange(moveInList(list, idx, 1)); }} disabled={idx === last}
-                    title="Move down in rank" style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}>›</button>
+                    title="Move down in rank" style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronDownIcon size={12} /></button>
                 ) : null}
                 <button onClick={function () { onChange(list.filter(function (x) { return x !== id; })); }} title="Remove"
-                  style={{ ...GCHIP_BTN, color: "var(--danger-text)", fontSize: T.lead }}>×</button>
+                  style={{ ...GCHIP_BTN, color: "var(--danger-text)" }}><CloseIcon size={12} /></button>
               </span>
             );
           }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>—</span>}
           <button onClick={function () { setPriPick(open ? null : { kind: kind, band: bandIdx }); }} className="mgt-hover-scale"
             title={"Add a table"} disabled={!avail.length}
-            style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: T.title, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: avail.length ? 1 : 0.3, cursor: avail.length ? "pointer" : "not-allowed" }}>+</button>
+            style={{ ...GCHIP_BTN, width: H.chip, height: H.chip, fontSize: T.title, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: avail.length ? 1 : 0.3, cursor: avail.length ? "pointer" : "not-allowed" }}>+</button>
         </div>
         {open ? (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "6px 0 2px 58px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "6px 0 2px 58px"   /* @canvas */ }}>
             {avail.map(function (id) {
               return (
                 <button key={id} onClick={function () { setPriPick(null); onChange(list.concat([id])); }}
@@ -426,17 +427,17 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 {editing ? (
                   <>
                     <button onClick={function () { commitEdit(t.id); }} disabled={!editValid} className={editValid ? "mgt-hover-scale" : undefined}
-                      title="Save name" style={{ ...ACT_BTN, padding: "5px 10px", opacity: editValid ? 1 : 0.4, cursor: editValid ? "pointer" : "not-allowed" }}>✓</button>
-                    <button onClick={cancelEdit} className="mgt-hover-scale" title="Cancel" style={X_BTN}>×</button>
+                      title="Save name" style={{ ...ACT_BTN, padding: "4px 10px", opacity: editValid ? 1 : 0.4, cursor: editValid ? "pointer" : "not-allowed" }}><CheckIcon size={14} /></button>
+                    <button onClick={cancelEdit} className="mgt-hover-scale" title="Cancel" style={X_BTN}><CloseIcon size={13} /></button>
                   </>
                 ) : (
                   <>
                     <button onClick={function () { startEdit(t.id); }} className="mgt-hover-scale" title="Rename table"
-                      style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: T.lead, border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)" }}>✎</button>
+                      style={{ ...GCHIP_BTN, width: H.chip, height: H.chip, fontSize: T.lead, border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)" }}><EditIcon size={13} /></button>
                     <button onClick={function () { setEditId(null); setPendingRemove(t.id); }} disabled={tables.length <= 1}
                       className={tables.length <= 1 ? undefined : "mgt-hover-scale"}
                       title={tables.length <= 1 ? "A layout needs at least one table" : "Remove table"}
-                      style={{ ...X_BTN, opacity: tables.length <= 1 ? 0.4 : 1, cursor: tables.length <= 1 ? "not-allowed" : "pointer" }}>×</button>
+                      style={{ ...X_BTN, opacity: tables.length <= 1 ? 0.4 : 1, cursor: tables.length <= 1 ? "not-allowed" : "pointer" }}><CloseIcon size={13} /></button>
                   </>
                 )}
               </div>
@@ -445,7 +446,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   {renameOrph} upcoming booking{renameOrph === 1 ? " still references" : "s still reference"} “{t.id}” — they won’t follow the rename.
                 </div>
               ) : null}
-              {/* Why the ✓ is disabled — mirrors the Add form's messages (v15.0.1). */}
+              {/* Why the save tick is disabled — mirrors the Add form's messages (v15.0.1). */}
               {editing && editTrim && editTrim.indexOf("|") >= 0 ? (
                 <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table id can’t contain “|”.</div>
               ) : editing && editTrim && editTrim !== t.id && idSet[editTrim] ? (
@@ -460,9 +461,9 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   </span>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                     <button onClick={function () { setPendingRemove(null); }} className="mgt-hover-scale"
-                      style={{ border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "5px 12px", fontSize: T.body, fontWeight: FW.bold, background: "var(--bg-stepper)", color: "var(--text-primary)", cursor: "pointer", boxShadow: "var(--shadow-btn)" }}>Cancel</button>
+                      style={{ border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 12px", fontSize: T.body, fontWeight: FW.bold, background: "var(--bg-stepper)", color: "var(--text-primary)", cursor: "pointer", boxShadow: "var(--shadow-btn)" }}>Cancel</button>
                     <button onClick={function () { removeTable(t.id); }} className="mgt-hover-scale"
-                      style={mkBtn({ padding: "5px 12px", fontSize: T.body, minHeight: 30, background: "var(--btn-del)" })}>{orph > 0 ? "Remove anyway" : "Remove"}</button>
+                      style={mkBtn({ padding: "4px 12px", fontSize: T.body, minHeight: H.compact, background: "var(--btn-del)" })}>{orph > 0 ? "Remove anyway" : "Remove"}</button>
                   </div>
                 </div>
               ) : null}
@@ -489,7 +490,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
               <button onClick={addTable} disabled={!newIdValid} className={newIdValid ? "mgt-hover-scale" : undefined}
                 style={{ ...ACT_BTN, opacity: newIdValid ? 1 : 0.4, cursor: newIdValid ? "pointer" : "not-allowed" }}>Add</button>
-              <button onClick={function () { setAdding(false); setNewId(""); }} className="mgt-hover-scale" title="Cancel" style={X_BTN}>×</button>
+              <button onClick={function () { setAdding(false); setNewId(""); }} className="mgt-hover-scale" title="Cancel" style={X_BTN}><CloseIcon size={13} /></button>
             </div>
             {newIdTrim && newIdTrim.indexOf("|") >= 0 ? (
               <div style={{ width: "100%", fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)" }}>A table id can’t contain “|”.</div>
@@ -508,7 +509,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         summary={(autoCount + mega.length) + " combos"}
       >
         <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
-          Join-groups are adjacent tables that can be pushed together. Reorder with ‹ ›, remove with ×; the seat counts below update automatically.
+          Join-groups are adjacent tables that can be pushed together. Reorder or remove a table with the buttons on each chip; the seat counts below update automatically.
         </div>
         {joinGroups.map(function (group, gi) {
           const runs = contiguousRuns(group);
@@ -520,20 +521,20 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   return (
                     <span key={id} style={GCHIP}>
                       <button onClick={function () { moveInGroup(gi, idx, -1); }} disabled={idx === 0}
-                        title="Move left" style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}>‹</button>
+                        title="Move left" style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronLeftIcon size={12} /></button>
                       <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
                       <button onClick={function () { moveInGroup(gi, idx, 1); }} disabled={idx === last}
-                        title="Move right" style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}>›</button>
+                        title="Move right" style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronRightIcon size={12} /></button>
                       <button onClick={function () { removeFromGroup(gi, id); }} title="Remove from group"
-                        style={{ ...GCHIP_BTN, color: "var(--danger-text)", fontSize: T.lead }}>×</button>
+                        style={{ ...GCHIP_BTN, color: "var(--danger-text)" }}><CloseIcon size={12} /></button>
                     </span>
                   );
                 })}
                 <button onClick={function () { setPickFor(pickFor === gi ? null : gi); }} className="mgt-hover-scale"
                   title="Add a table to this group" disabled={!ungrouped.length}
-                  style={{ ...GCHIP_BTN, width: 26, height: 26, fontSize: T.title, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: ungrouped.length ? 1 : 0.3, cursor: ungrouped.length ? "pointer" : "not-allowed" }}>+</button>
+                  style={{ ...GCHIP_BTN, width: H.chip, height: H.chip, fontSize: T.title, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: ungrouped.length ? 1 : 0.3, cursor: ungrouped.length ? "pointer" : "not-allowed" }}>+</button>
                 <button onClick={function () { removeGroup(gi); }} className="mgt-hover-scale" title="Remove whole group"
-                  style={{ ...X_BTN, marginLeft: "auto" }}>×</button>
+                  style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={13} /></button>
               </div>
               {pickFor === gi ? (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "2px 0 8px" }}>
@@ -593,7 +594,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>seats</span>
                   <Stepper value={mc.cap} disableDec={mc.cap <= 1} disableInc={mc.cap >= 60}
                     onDec={function () { setMegaCap(i, mc.cap - 1); }} onInc={function () { setMegaCap(i, mc.cap + 1); }} />
-                  <button onClick={function () { removeMega(i); }} className="mgt-hover-scale" title="Remove combo" style={X_BTN}>×</button>
+                  <button onClick={function () { removeMega(i); }} className="mgt-hover-scale" title="Remove combo" style={X_BTN}><CloseIcon size={13} /></button>
                 </div>
               </div>
             );
@@ -610,7 +611,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 return (
                   <button key={t.id} onClick={function () { toggleAdd(t.id); }} className="mgt-hover-scale"
                     style={{
-                      fontSize: T.body, fontWeight: FW.bold, borderRadius: R.pill, padding: "5px 10px", cursor: "pointer",
+                      fontSize: T.body, fontWeight: FW.bold, borderRadius: R.pill, padding: "4px 10px", cursor: "pointer",
                       border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)",
                       background: on ? "var(--accent)" : "var(--bg-stepper)",
                       color: on ? "var(--text-on-accent)" : "var(--text-primary)",
@@ -621,7 +622,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 );
               })}
             </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, flexWrap: "wrap" }}>
               <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>seats</span>
               <Stepper value={addCap} disableDec={addCap <= 1} disableInc={addCap >= 60}
                 onDec={function () { setAddCap(Math.max(1, addCap - 1)); }} onInc={function () { setAddCap(Math.min(60, addCap + 1)); }} />
@@ -669,7 +670,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 <Stepper value={b.max} disableDec={b.max <= b.min} disableInc={b.max >= 30}
                   onDec={function () { setBand(i, { max: b.max - 1 }); }} onInc={function () { setBand(i, { max: b.max + 1 }); }} />
                 <button onClick={function () { removeBand(i); }} className="mgt-hover-scale" title="Remove rule"
-                  style={{ ...X_BTN, marginLeft: "auto" }}>×</button>
+                  style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={13} /></button>
               </div>
               {chipRow("Prefer", b.prefer || [], true, "prefer", i, function (l) { setBand(i, { prefer: l }); })}
               {chipRow("Avoid", b.avoid || [], false, "avoid", i, function (l) { setBand(i, { avoid: l }); })}
@@ -728,7 +729,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   </>
                 )}
                 <button onClick={function () { removeRule(i); }} className="mgt-hover-scale" title="Remove rule"
-                  style={{ ...X_BTN, marginLeft: "auto" }}>×</button>
+                  style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={13} /></button>
               </div>
             );
           })}
@@ -755,7 +756,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               );
             })}
           </div>
-          <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 4, paddingLeft: 58 }}>
+          <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 4, paddingLeft: 58   /* @canvas */ }}>
             Cross-zone combos are only auto-assigned when they include all selected tables. None selected = any cross-zone combo.
           </div>
         </div>
@@ -781,7 +782,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 <Stepper value={r.toSize} disableDec={r.toSize <= 1} disableInc={r.toSize >= 30}
                   onDec={function () { setSwap(i, { toSize: r.toSize - 1 }); }} onInc={function () { setSwap(i, { toSize: r.toSize + 1 }); }} />
                 <button onClick={function () { removeSwap(i); }} className="mgt-hover-scale" title="Remove rule"
-                  style={{ ...X_BTN, marginLeft: "auto" }}>×</button>
+                  style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={13} /></button>
               </div>
             );
           })}
@@ -799,7 +800,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         <FloorPlanEditor layout={layout} onSaveLayout={onSaveLayout} />
       </Collapsible>
       <Section style={{ marginBottom: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Kitchen limit</div>
             <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>

@@ -2,7 +2,7 @@
 // Timeline (Gantt-style) view of the day's bookings — horizontal scrollable
 // grid with one row per table, blocks rendered as positioned divs along a
 // time axis (OPEN – GRID_CLOSE, i.e. 13:00 – 23:00). Tap a block to edit,
-// tap the "=" handle on a block to manually assign tables, long-press to
+// tap the assign handle on a block to manually assign tables, long-press to
 // change status, tap a table label on the left to block / unblock.
 //
 // Sub-components (ALL module-scope as of v17.1.0 — an inline component is a
@@ -45,8 +45,11 @@ import {
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
-import { WaitIcon } from "./Icons";
+// v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
+// and the notification strip's Overlap section render the same `warnings` entry.
+import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, AssignIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
+import { hourLabelAt, isHourMark } from "../lib/time-grid";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
@@ -56,6 +59,77 @@ import { QuickStatusPopup } from "./QuickStatusPopup";
 // (Below the imports: it worked above them only because imports hoist, which is
 // the kind of thing that stops being true the day a circular import appears.)
 const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.tap;
+
+// v17.9.0: the hour-pill look, once. Three places in this file paint a time on
+// --tl-hour-pill — the ruler's hour labels, a block's start-time chip, and a
+// waitlist ghost's — and the two chips were byte-identical copies. The v17.8.0
+// decision they encode is that a time is the same object wherever it appears, so
+// the chip deliberately matches the ruler above it; that intent only survives if
+// the fill, ink, radius and type live in ONE place.
+//
+// Deliberately NOT in lib/time-grid.js: every user is in this file, and there is
+// no reason to export a style across a module boundary that nothing else reads.
+// The two block chips drop to FW.medium — see the note at the block chip for why
+// they are quieter than the ruler's, and why that is weight and not opacity.
+const HOUR_PILL = {
+  padding: "2px 4px", borderRadius: R.pill,
+  fontSize: T.micro, fontWeight: FW.semi,
+  fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
+  background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+};
+
+// ── The party-size ring (v17.9.0) ────────────────────────────────────────────
+// Shared by TimelineBlock and WaitGhost, for the reason the ghost exists at all:
+// it is a DIMMED copy of the block, so anything the block specifies twice can
+// drift out from under it. HOUR_PILL above is here for the same reason.
+//
+// The border alpha is 0.55, not `--blk-rule`'s 0.3, and the measurement is worth
+// recording because it sets the ceiling. A white rule at 0.3 over the block
+// fills is 1.43:1 confirmed and **1.21:1 pending** — not "subtle", absent; the
+// ring simply did not render on the yellow blocks. 0.55 takes that to 1.82 /
+// 1.38 / 2.78 seated / 2.97 cancelled.
+//
+// It does NOT reach WCAG 1.4.11's 3:1 for a component boundary on the two amber
+// fills, and it cannot: pure white over the pending yellow tops out at 1.98:1.
+// This is the same wall the amber exemption in constants.js records, hit one
+// element further down — and the same answer applies, because the two ways out
+// are both worse. A dark ring clears 3:1 and reads as DISABLED next to the
+// white-inked name it encircles (tried and reverted at block level for exactly
+// this, one commit after it shipped). An opaque fill clears it and turns a count
+// into a second status chip competing with the time. So: transparent ring, best
+// achievable white, number recorded. The DIGIT inside is `--text-on-accent` at
+// the name's own contrast, which is what has to be legible.
+//
+// A literal rather than a token because BLOCK_BG is theme-invariant — the same
+// reason the block's own `1px solid rgba(255,255,255,0.2)` border is one.
+const SIZE_RING = {
+  flexShrink: 0, boxSizing: "border-box",
+  width: 18, height: 18, borderRadius: R.pill,
+  border: "1px solid rgba(255,255,255,0.55)", background: "transparent",
+  display: "flex", alignItems: "center", justifyContent: "center",
+  fontSize: T.micro, fontWeight: FW.semi, lineHeight: 1,
+  fontVariantNumeric: "tabular-nums", position: "relative"
+};
+
+// ── How wide a block must be before it may wear a start-time chip (v17.9.0) ──
+// Everything on a block except the name is flexShrink:0, so the name gets
+// whatever is left. These are the measured widths of the fixed parts; the rule
+// is "the name must still have NAME_MIN after all of them".
+const CHIP_PX = 42;      // the start-time chip + its margin
+const HANDLE_PX = 41;    // the assign handle (28 min-width + padding + rule)
+const RING_PX = 24;      // the party-size ring + its margin (v17.9.0)
+const FLAG_PX = 15;      // one 11px flag icon + its 4px margin (v17.9.0)
+const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
+
+function chipRoomFor(b, noShows, warn) {
+  const flags = ((Number(b.deposit) || 0) > 0 ? 1 : 0)
+    + ((b.preferredTables && b.preferredTables.length) ? 1 : 0)
+    + (isLocked(b) ? 1 : 0)
+    + (noShows >= 2 ? 1 : 0)
+    + (warn && warn.overdue ? 1 : 0);
+  return CHIP_PX + HANDLE_PX + RING_PX + NAME_MIN_PX + FLAG_PX * flags;
+}
 
 // v15.8.0: module-level status-change animation state (survives the inline Block
 // remount + any TimelineView remount during the save flow). Single timeline, so
@@ -70,6 +144,32 @@ const __statusAnims = {};
 // module-level component the node persists, so `transition: left/width` eases a
 // reposition (seated-shift / reshuffle) and the wipe/fill overlays + long-press
 // work reliably. Former closures are now props.
+// v17.9.0: one wrapper for every marker on the block's right-hand flag rail.
+// Module scope, per the inline-sub-component rule — a component declared inside
+// TimelineBlock's body would be a new TYPE on every render and remount all four
+// flags each time. `title` carries what the glyph cannot: the deposit's amount,
+// the no-show count, which booking an overstay is blocking.
+//
+// /code-review fix: `role="img"` + `aria-label`, not `title` alone. These four
+// flags used to be TEXT inside the label string ("[L]", the currency symbol,
+// "!!"), so a screen reader read them out as part of the block. As bare SVGs
+// they are `aria-hidden` (every icon in Icons.jsx is, correctly — an icon beside
+// its own label must not be announced twice), and a plain `<span title>` with no
+// role gets no reliable accessible name, so the information simply left the
+// accessibility tree. These are the block's EXCEPTION states — locked against
+// the optimizer, money taken, someone sitting in a table the next booking needs
+// — i.e. exactly what this whole change argued was too important to let the
+// ellipsis eat. Losing them to a screen reader instead is the same loss by
+// another route. The label text already existed; only the attribute was missing.
+function BlockFlag({ title, children }) {
+  return (
+    <span role="img" aria-label={title} title={title} style={{
+      flexShrink: 0, marginLeft: 4, display: "flex", alignItems: "center",
+      position: "relative"
+    }}>{children}</span>
+  );
+}
+
 function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
   const d = liveBarDur(b, nowMins);
   const sm = toMins(b.time) - OPEN * 60;
@@ -87,13 +187,32 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
   const hasNote = b.notes && b.notes.trim();
-  // v16.0.0: repeat no-show offender marker (2+ past no-shows on this phone).
-  const lbl = b.name + " (" + b.size + ")"
-    + (isLocked(b) ? " [L]" : "")
-    + (hasPrefT ? " ★" : "")
-    + (noShows >= 2 ? " [!]" : "")
-    + ((Number(b.deposit) || 0) > 0 ? " " + currency : "")   // v16.3.0 deposit marker (v17.0.0: currency from settings/general)
-    + (warn && warn.overdue ? " !!" : "");
+  // v17.9.0 (second pass): the label carries the NAME and nothing else.
+  //
+  // It used to accumulate four flags — " [L]" locked, " [!]" repeat no-show,
+  // " €" deposit, " !!" overstaying — and the v17.9.0 first pass defended them
+  // as "ASCII, not glyphs, and deliberately part of the truncating label
+  // string" while moving ★ out for the opposite reason. Both halves of that
+  // defence were wrong in the same way the emoji argument had been:
+  //
+  //   • Truncating with the name was never correct FOR THESE. They are the
+  //     exception state — locked means the optimizer must not move this party,
+  //     !! means someone is sitting in a table the next booking needs — and the
+  //     ellipsis ate them first, so the flags vanished on exactly the crowded
+  //     day when they matter. That is the argument that moved ★ out; it applies
+  //     here with more force, because a preferred table is a preference and an
+  //     overstay is a problem.
+  //   • "It is ASCII" is not a reason to look different from every other mark
+  //     on the same 36px surface. `[L]` in brackets beside a drawn star and a
+  //     drawn hourglass is the "not one medium" complaint in a plainer costume.
+  //
+  // The deposit marker was the worst of the four: it printed the CURRENCY
+  // SYMBOL from settings/general, so the flag for "money has been taken" was a
+  // different shape per restaurant setting. It is a coin now, and the amount —
+  // which the symbol never showed anyway — is in the hover title.
+  // …and then the label stopped being a string at all: `name + " (size)"` is
+  // now a name span and a size ring, so nothing is concatenated here.
+  const depositAmt = Number(b.deposit) || 0;
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
   // name. The show/hide decision (`showChip`) is made ONCE at the TimelineView
   // level for the WHOLE day — all blocks show chips or none do (a mixed grid
@@ -114,19 +233,31 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
           labels the same axis. This is also what lets the amber blocks keep
           white ink at 1.8:1 without the START TIME becoming unreadable — the
           chip carries its own opaque background and is not affected.
-          Held at 0.8 opacity (Patryk): at full strength an opaque slate pill on
-          every block out-shouted the guest NAME beside it, which is the thing
-          you actually read a block for. The ruler's pills can be full strength
-          because they are alone on an empty strip; this one is not. Dimming the
-          whole chip rather than lightening its fill keeps it the same object as
-          the ruler pill, just quieter — the fill and the label fade together
-          instead of the label drifting off its own background. */}
+          v17.8.0 held this at `opacity: 0.8`, because at full strength an opaque
+          slate pill on every block out-shouted the guest NAME beside it — the
+          thing you actually read a block for. The goal was right; the mechanism
+          was not, and v17.9.0 measured why.
+
+          Opacity conflates QUIET with FAINT. Composited over each block fill it
+          put the chip at 3.72–4.62:1 in every status and both themes — below AA
+          in all ten cases, on the one piece of INFORMATION a block carries and
+          the exact element the amber exemption in constants.js leans on. At full
+          strength the same chip is 5.15–6.10:1, comfortably AA, with no token
+          touched.
+
+          And the diagnosis underneath: the chip was not too loud in absolute
+          terms. It out-shouted the name because the NAME sits at 1.86–2.97:1 on
+          the amber fills (the recorded exemption). Dimming the one legible
+          element to match the illegible ones is levelling down.
+
+          So the hierarchy is set by WEIGHT instead, which is what separates the
+          two ideas: the chip drops to FW.medium against the name's FW.bold, so
+          it recedes without going faint. Type weight is the app's own answer to
+          this — it is the whole argument behind the v17.8.0 `T`/`FW` scale, that
+          weight carries emphasis so size (or here, opacity) does not have to. */}
       <span style={{
-        flexShrink: 0, marginLeft: 6, padding: "2px 5px", borderRadius: R.pill,
-        fontSize: T.micro, fontWeight: FW.semi, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
-        whiteSpace: "nowrap",
-        background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.1)", opacity: 0.8,
+        ...HOUR_PILL,
+        flexShrink: 0, marginLeft: 6, lineHeight: "12px", fontWeight: FW.medium,
         pointerEvents: "none", position: "relative"
       }}>{b.time}</span>
     </Reveal>
@@ -357,37 +488,101 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
           </svg>
         </>
       ) : null}
+      {/* ── v17.9.0 (Patryk): WHO on the left, WHAT ABOUT THEM on the right ────
+          The block used to interleave the two: a ★ between the time and the
+          name, the party size in brackets inside the name string, and the rest
+          of the flags appended after it. So the one line you scan a grid of
+          blocks for — the name — began at a position that depended on whether
+          this particular party had preferred tables, and ended wherever its
+          flags happened to stop.
+
+          Now the left is identity and never varies (time · name · size) and
+          everything else is a fixed-width rail on the right. The name is the
+          only element that shrinks, which is the correct thing to lose. */}
       {timeChip}
+      {/* Name + size as ONE `flex: 1` group, and the `1 1 0%` basis is
+          load-bearing rather than shorthand convenience. With a `0 1 auto`
+          basis the group's content counts toward the line's base size, which
+          tips a narrow block into flexbox's SHRINK phase — and shrink is
+          distributed across every item with a non-zero basis, so the start-time
+          chip gets squeezed too. It rendered "19:0" on a 144px block. A zero
+          basis keeps the line in the GROW phase: the group takes whatever is
+          left over, the name ellipsises inside it, and nothing else is touched.
+          (This is exactly what the old `flex: 1` name span did; the regression
+          came from splitting it in two without carrying the basis over.)
+
+          The group also pushes the flag rail right on its own, so there is no
+          spacer element and no marginLeft:auto that would have to be moved onto
+          whichever conditional flag happens to render first. */}
       <span style={{
-        flex: 1, padding: "0 8px 0 6px", position: "relative",
-        fontSize: T.small, fontWeight: FW.bold,
-        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+        flex: "1 1 0%", minWidth: 0, paddingLeft: 6,
+        display: "flex", alignItems: "center", position: "relative"
       }}>
-        {lbl}
+        <span style={{
+          minWidth: 0, fontSize: T.small, fontWeight: FW.bold,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+        }}>{b.name}</span>
+        {/* The party size. It was "(6)" inside the name string, which put a pair
+            of parentheses in the middle of the block's one bold text run and
+            made the size the first thing the ellipsis took after the name. A
+            ring is the same fact at a glance and it is flexShrink:0, so it
+            survives. Transparent fill: it is a count, not a status, and a
+            filled pill here would compete with the time chip. */}
+        <span
+          title={b.size + " guest" + (b.size === 1 ? "" : "s")}
+          style={{ ...SIZE_RING, marginLeft: 6 }}
+        >{b.size}</span>
       </span>
+      {/* v17.9.0: the flag rail — the four markers that used to be appended to
+          the label string, plus the ★ that was floating on the left. Order is
+          Patryk's: deposit, preferred, then the exception flags, then the
+          Assign handle. All flexShrink:0 — the name truncates, these survive. */}
+      {depositAmt > 0 ? (
+        <BlockFlag title={"Deposit " + currency + depositAmt}><DepositIcon size={11} /></BlockFlag>
+      ) : null}
+      {hasPrefT ? (
+        <BlockFlag title={"Preferred tables: " + b.preferredTables.join(", ")}><StarIcon size={11} /></BlockFlag>
+      ) : null}
+      {isLocked(b) ? (
+        <BlockFlag title="Locked to these tables — the optimizer will not move it"><LockIcon size={11} /></BlockFlag>
+      ) : null}
+      {noShows >= 2 ? (
+        <BlockFlag title={noShows + " past no-shows on this number"}><NoShowIcon size={11} /></BlockFlag>
+      ) : null}
+      {warn && warn.overdue ? (
+        <BlockFlag title={"Overstaying — " + warn.next + " needs this table at " + warn.nextTime}><OverlapIcon size={11} /></BlockFlag>
+      ) : null}
       {/* v16.3.0: table-turn countdown pill — a seated block within ~15 min of
           its scheduled end shows "~Nm" (translucent, like the start-time chip).
-          Flex item before the "=" handle (no absolute overlap of the name); the
+          Flex item before the assign handle (no absolute overlap of the name); the
           seated block is near full width this late, so there's room. */}
       {freeMin != null ? (
         <span style={{
-          flexShrink: 0, marginRight: 2, padding: "1px 5px", borderRadius: R.pill,
+          flexShrink: 0, marginRight: 2, padding: "2px 4px", borderRadius: R.pill,
           fontSize: T.micro, fontWeight: FW.bold, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
           whiteSpace: "nowrap", position: "relative",
           background: "var(--blk-wash)",
           pointerEvents: "none"
         }}>{"~" + freeMin + "m"}</span>
       ) : null}
+      {/* The manual-assign handle. v17.9.0: the ASCII "=" became the AssignIcon
+          the Assign buttons in the form and the List card already use — the same
+          action reached from three surfaces should not be a drawn icon in two of
+          them and an equals sign in the third. The divider went 1px → 2px
+          (Patryk): at 1px against `--blk-rule`'s 0.3 white it disappeared into
+          the saturated fills, so the handle read as part of the flag rail rather
+          than as a separate control. */}
       <span
         onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
+        title="Assign tables"
         style={{
-          padding: "0 6px", fontSize: T.body, cursor: "pointer", position: "relative",
-          opacity: 0.7,
-          borderLeft: "1px solid var(--blk-rule)",
-          height: "100%", display: "flex", alignItems: "center", minWidth: 28
+          padding: "0 6px", cursor: "pointer", position: "relative",
+          marginLeft: 4, flexShrink: 0,
+          borderLeft: "2px solid var(--blk-rule)",
+          height: "100%", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 28
         }}
       >
-        =
+        <AssignIcon size={13} />
       </span>
     </div>
   );
@@ -405,7 +600,7 @@ function GridLines() {
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       {QUARTER_HOURS.map((m) => {
-        const isH = m % 60 === 0;
+        const isH = isHourMark(m);
         return (
           <div
             key={m}
@@ -464,9 +659,10 @@ function BlockBar({ bl, totalMins }) {
 // of the same one. Dimming the whole block fixes both at once: nothing has to
 // choose a second set of values, so nothing can drift from the block it mirrors.
 //
-// The trailing ⏳ follows the block's own marker convention (★ preferred, ⚠
-// repeat no-show, [L] locked, !! overdue all append to the label) rather than
-// inventing a leading badge.
+// The ⏳ follows the block's own marker convention — preferred, repeat no-show,
+// locked, deposit and overstay are all drawn marks on the same block (v17.9.0
+// moved the last four off the label string) — rather than inventing a badge
+// that only the ghost uses.
 //
 // `resh` = the match only exists AFTER re-optimising (the reshuffling trialFits
 // branch in App's waitAvail effect). Those tables can be visibly occupied right
@@ -537,27 +733,31 @@ function WaitGhost({ g, totalMins, onBook }) {
           all-or-nothing `chipsOn` rule); a ghost always does, because the time
           is the entire proposal — a ghost without one says nothing useful. */}
       <span style={{
-        flexShrink: 0, marginLeft: 6, padding: "2px 5px", borderRadius: R.pill,
-        fontSize: T.micro, fontWeight: FW.semi, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
-        whiteSpace: "nowrap",
-        background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.1)", opacity: 0.8
+        ...HOUR_PILL,
+        flexShrink: 0, marginLeft: 6, lineHeight: "12px", fontWeight: FW.medium
       }}>{g.time}</span>
       {/* v17.8.0 correction: the ⏳ sits BETWEEN the time and the name, not
           trailing it. Trailing, it was the first thing the ellipsis ate — the
           marker that says "this is a proposal, not a booking" vanished on
           exactly the narrow blocks where the dimming is hardest to read. Here
           it is fixed-width and unclippable, and it lines up with the marker
-          column a real block uses for its ★ / ⚠ / [L] flags. */}
+          column a real block uses for its preferred-tables star. */}
       <span aria-hidden="true" style={{
         flexShrink: 0, marginLeft: 6, display: "flex", alignItems: "center"
       }}><WaitIcon size={11} /></span>
+      {/* v17.9.0: the name span and the size ring, TimelineBlock's verbatim —
+          when the block stopped concatenating "(size)" into its label, the
+          ghost had to stop too, or the "dims X, does not re-specify X" rule
+          this component is built on would have lasted exactly one version. */}
       <span style={{
-        flex: 1, padding: "0 8px 0 5px", position: "relative",
-        fontSize: T.small, fontWeight: FW.bold,
-        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+        flex: "1 1 0%", minWidth: 0, paddingLeft: 4, paddingRight: 8,
+        display: "flex", alignItems: "center", position: "relative"
       }}>
-        {g.name + " (" + g.size + ")"}
+        <span style={{
+          minWidth: 0, fontSize: T.small, fontWeight: FW.bold,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+        }}>{g.name}</span>
+        <span style={{ ...SIZE_RING, marginLeft: 6 }}>{g.size}</span>
       </span>
     </div>
   );
@@ -672,15 +872,30 @@ export const TimelineView = memo(function TimelineView({
   // party has arrived — the start time is no longer at-a-glance info, so those
   // blocks never carry a chip) and ALL-OR-NOTHING across the day's CONFIRMED
   // blocks — shown only when every confirmed block is wide enough that its name
-  // keeps ≥~55px after the chip (~42px) and the fixed "=" assign handle
+  // keeps ≥~55px after the chip (~42px) and the fixed assign handle
   // (~41px), i.e. ≥140px. A per-block decision left a mixed grid, which read
   // messy in live QA; and scoping the every() to confirmed blocks means a
   // status change (seated/completed durations shrink/stretch) can never kill
   // the other bookings' chips (the reported bug). Each flip animates per block
   // via Presence.
   // v17.0.0: pending joins the chip family (treated same as confirmed).
+  //
+  // v17.9.0: the "140" above is gone, because the fixed cost it stood for is no
+  // longer one number. The block's right-hand rail gained a size ring (always
+  // present) and one marker per ACTIVE flag, every one of them flexShrink:0 —
+  // so the room left for the name now depends on how flagged the booking is.
+  // With the flat threshold, a 150px block carrying a deposit and a preferred
+  // star kept its chip and rendered the guest name at literally zero width:
+  // "18:30 ⑥ ⊙ ★ ▦", no name at all. That is worse than the crowding the chip
+  // rule exists to prevent — the name is the thing you read a block FOR, and
+  // dropping the chip gives 42px straight back to it.
+  //
+  // Same all-or-nothing shape as before (one mixed grid read messy in live QA);
+  // the per-block part is only what each block needs, and the worst one decides.
   const confirmedDay = day.filter((b) => b.status === "confirmed" || b.status === "pending");
-  const chipsOn = confirmedDay.length > 0 && confirmedDay.every((b) => liveBarDur(b, nowMins) * pxPerMin >= 140);
+  const chipsOn = confirmedDay.length > 0 && confirmedDay.every(function (b) {
+    return liveBarDur(b, nowMins) * pxPerMin >= chipRoomFor(b, nsMap[normalizePhone(b.phone)] || 0, warnings[b.id]);
+  });
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
   // CSS left/width transition can't cover — the block re-parents into a new row) eases
@@ -740,7 +955,7 @@ export const TimelineView = memo(function TimelineView({
   // header line aligns with the body's (the old left:pct(100%) line sat ~2px to
   // the right of the body's right:0 line).
   const headerLines = QUARTER_HOURS.map((m) => {
-    const isH = m % 60 === 0;
+    const isH = isHourMark(m);
     return (
       <div
         key={"l" + m}
@@ -753,22 +968,19 @@ export const TimelineView = memo(function TimelineView({
   });
 
   const headerLabels = QUARTER_HOURS
-    .filter((m) => m % 60 === 0 && m < GRID_CLOSE * 60)
+    .filter((m) => isHourMark(m) && m < GRID_CLOSE * 60)
     .map((m) => {
       const center = ((m + 30 - OPEN * 60) / totalMins) * 100;
       return (
         <span
           key={"h" + m}
           style={{
+            ...HOUR_PILL,
             position: "absolute", top: 3, left: center + "%", transform: "translateX(-50%)",
-            fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
-            whiteSpace: "nowrap", pointerEvents: "none",
-            background: "var(--tl-hour-pill)",
-            padding: "2px 5px", borderRadius: R.pill, zIndex: 1,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+            pointerEvents: "none", zIndex: 1
           }}
         >
-          {String(Math.floor(m / 60) % 24).padStart(2, "0") + ":00"}
+          {hourLabelAt(m)}
         </span>
       );
     });
@@ -779,7 +991,7 @@ export const TimelineView = memo(function TimelineView({
     // 24px header + ROW_H rows line up with the grid column after the pad.
     <div style={{ width: LABEL_W + "px", flexShrink: 0, paddingTop: 8 }}>
       <div style={{
-        height: 24, background: "var(--tl-header-strip)",
+        height: 24,   /* @canvas */ background: "var(--tl-header-strip)",
         borderRadius: "6px 0 0 0",
         borderBottom: "2px solid var(--tl-header-border)",
         boxSizing: "border-box"
@@ -801,7 +1013,7 @@ export const TimelineView = memo(function TimelineView({
             }}
           >
             <span className="mgt-hover-scale" style={{
-              fontSize: T.small, fontWeight: FW.semi, padding: "3px 0", borderRadius: R.pill,
+              fontSize: T.small, fontWeight: FW.semi, padding: "2px 0", borderRadius: R.pill,
               background: hasBlock ? "var(--tl-blocked-badge)" : indoor ? TBL.ind.bg : TBL.out.bg,
               color: hasBlock ? "var(--text-on-accent)" : indoor ? TBL.ind.text : TBL.out.text,
               border: "1px solid " + (hasBlock ? "var(--tl-blocked-badge-border)" : indoor ? TBL.ind.border : TBL.out.border),
@@ -973,7 +1185,7 @@ export const TimelineView = memo(function TimelineView({
         position: "absolute", top: 3, left: "50%", transform: "translateX(-50%)",
         fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
         background: "var(--tl-now-pill)",
-        padding: "2px 5px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
+        padding: "2px 4px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
         boxShadow: "0 1px 4px rgba(0,0,0,0.15)"
       }}>
         {toTime(nowMins)}
@@ -1005,7 +1217,7 @@ export const TimelineView = memo(function TimelineView({
           borderBottom: "2px solid var(--tl-header-border)",
           background: "var(--tl-header-strip)",
           borderRadius: "0 6px 0 0",
-          height: 24, overflow: "visible", boxSizing: "border-box"
+          height: 24,   /* @canvas */ overflow: "visible", boxSizing: "border-box"
         }}>
           {headerLines}
           <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, borderLeft: "2px solid var(--tl-gridline-hour)" }} />
@@ -1128,7 +1340,7 @@ export const TimelineView = memo(function TimelineView({
       <span
         key={s}
         style={{
-          fontSize: T.small, padding: "3px 8px", borderRadius: R.pill,
+          fontSize: T.small, padding: "2px 8px", borderRadius: R.pill,
           background: BLOCK_BG[s] || "#999",
           color: BLOCK_INK[s] || "var(--text-on-accent)",
           border: "1px solid rgba(255,255,255,0.2)",
@@ -1141,17 +1353,17 @@ export const TimelineView = memo(function TimelineView({
     );
   });
   legendEls.push(
-    <span key="in" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
+    <span key="in" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       indoor
     </span>
   );
   legendEls.push(
-    <span key="out" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
+    <span key="out" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       outdoor
     </span>
   );
   legendEls.push(
-    <span key="blocked" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
+    <span key="blocked" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       blocked
     </span>
   );
@@ -1200,11 +1412,25 @@ export const TimelineView = memo(function TimelineView({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", flex: "1 1 auto", minWidth: 0 }}>
           {legendEls}
         </div>
-        {/* v17.0.0 round 8: the 🔍/⚙ pair moved OUT to App's date-nav row
-            (ViewTools.jsx) so it sits in one place for all three views. */}
+        {/* v17.0.0 round 8: the 🔍/⚙ pair moved OUT of this legend, first to
+            App's date-nav row and (v17.9.0) up into App's header, so it sits in
+            one place for all three views. */}
       </div>
-      <div style={{ marginTop: 6, fontSize: T.small, color: S.muted }}>
-        tap booking to edit  ·  = assign  ·  hold to change status  ·  tap table label to block
+      {/* v17.9.0: this line said "= assign" and described a glyph that no longer
+          exists — the block's handle is AssignIcon now. Exactly the trap
+          CLAUDE.md records from the first icon pass ("update the COPY with the
+          glyphs"), caught by a rendered-text sweep rather than by reading the
+          diff, because nothing about the handle's change touches this file's
+          hint string. It shows the icon inline instead of naming a character, so
+          the two cannot come apart again. */}
+      <div style={{ marginTop: 6, fontSize: T.small, color: S.muted, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+        <span>tap booking to edit</span>
+        <span aria-hidden="true">·</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AssignIcon size={12} />assign</span>
+        <span aria-hidden="true">·</span>
+        <span>hold to change status</span>
+        <span aria-hidden="true">·</span>
+        <span>tap table label to block</span>
       </div>
       {quickPopup}
     </div>

@@ -8,7 +8,7 @@
 //   • Month — a Mon-start calendar grid of the reference month; each in-month
 //             day cell shows its cover count with a busyness tint. (v14.9.0)
 //
-// Tap a day to jump to it (sets viewDate + closes). The footer ‹ › navigate the
+// Tap a day to jump to it (sets viewDate + closes). The footer arrows navigate the
 // period (week or month) without committing; "This week" / "This month" returns
 // to today's period. Per-day counts reuse `daySummary` (splitHour is irrelevant
 // for the totals, so 0 is passed).
@@ -27,6 +27,8 @@ import { useState, useEffect } from "react";
 import { Overlay, mkBtn, AutoHeight } from "./atoms";
 import { daySummary, rangeStats } from "../lib/booking-logic";
 import { S, BTN, R, T, FW } from "../lib/constants";
+import { hourLabel } from "../lib/time-grid";
+import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
 const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
@@ -174,9 +176,9 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   const footer = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Previous week" : "Previous month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8249;" }} />
+        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Previous week" : "Previous month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} ><ChevronLeftIcon size={16} /></button>
         <button onClick={goToday} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "6px 14px", background: BTN.today })}>{isWeek ? "This week" : "This month"}</button>
-        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Next week" : "Next month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8250;" }} />
+        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Next week" : "Next month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} ><ChevronRightIcon size={16} /></button>
       </div>
       <button onClick={onClose} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })}>Close</button>
     </div>
@@ -185,7 +187,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   return (
     <Overlay onClose={onClose} footer={footer}>
       <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <div style={{ display: "inline-flex", gap: 2, padding: 3, borderRadius: R.pill, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+        <div style={{ display: "inline-flex", gap: 2, padding: 2, borderRadius: R.pill, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
           {modeBtn("week", "Week")}
           {modeBtn("month", "Month")}
           {modeBtn("stats", "Stats")}
@@ -201,12 +203,12 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
           of the app's modal bodies were brought in line with.) */}
       <AutoHeight>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
 
-      <div style={{ marginTop: 12, fontSize: T.small, color: "var(--text-faint)", textAlign: "center" }}>
+      <div style={{ marginTop: 18, fontSize: T.small, color: "var(--text-faint)", textAlign: "center" }}>
         {isStats
-          ? "W/M/S view · ‹ › month · T this month"
+          ? "W/M/S view · ←→ month · T this month"
           : isWeek
             ? "W/M/S view · ↑↓ day · ←→ week · T today · Enter open"
-            : "W/M/S view · ↑↓←→ day · ‹ › month · T today · Enter open"}
+            : "W/M/S view · ↑↓←→ day · footer arrows month · T today · Enter open"}
       </div>
     </Overlay>
   );
@@ -300,7 +302,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
         </div>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-muted)", margin: "0 0 6px" }}>Busiest hours</div>
         <div style={{ marginBottom: 14 }}>
-          {st.hours.slice(0, 6).map(function(h){ return bar(String(h.hour).padStart(2, "0") + ":00", h.covers, maxH); })}
+          {st.hours.slice(0, 6).map(function(h){ return bar(hourLabel(h.hour), h.covers, maxH); })}
           {st.hours.length === 0 ? <div style={{ fontSize: T.body, color: "var(--text-faint)" }}>—</div> : null}
         </div>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-muted)", margin: "0 0 6px" }}>Table usage</div>
@@ -346,7 +348,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                     className="mgt-hover-scale"
                     style={{
                       position: "relative", overflow: "hidden",
-                      minHeight: 54, padding: "6px 4px 5px", borderRadius: R.inset, cursor: "pointer",
+                      minHeight: 54,   /* @canvas */ padding: "6px 4px 4px", borderRadius: R.inset, cursor: "pointer",
                       boxSizing: "border-box", textAlign: "center",
                       background: "var(--bg-input)",
                       opacity: c.inMonth ? 1 : 0.4,
@@ -357,7 +359,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                     <div style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: intensity * 0.3, pointerEvents: "none" }} />
                     <div style={{ position: "relative" }}>
                       <div style={{ fontSize: T.body, fontWeight: FW.bold, color: isToday ? "var(--accent)" : "var(--text-primary)" }}>{dnum}</div>
-                      <div style={{ fontSize: T.micro, fontWeight: FW.semi, color: cov ? "var(--text-secondary)" : "var(--text-faint)", marginTop: 1 }}>
+                      <div style={{ fontSize: T.micro, fontWeight: FW.semi, color: cov ? "var(--text-secondary)" : "var(--text-faint)", marginTop: 2 }}>
                         {c.inMonth ? cov : ""}
                       </div>
                     </div>

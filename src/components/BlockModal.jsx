@@ -18,6 +18,7 @@
 import { useState, useEffect } from "react";
 import { S, BTN, TBL, OPEN, GRID_CLOSE, R, T, FW } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
+import { hourLabel } from "../lib/time-grid";
 import { Overlay, Section, Fld, mkBtn, mkInp } from "./atoms";
 
 export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose, onDirty }) {
@@ -84,7 +85,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           </span>
         </div>
         {existing.map((bl, i) => {
-          const label = bl.allDay ? String(OPEN).padStart(2, "0") + ":00 – " + String(GRID_CLOSE % 24).padStart(2, "0") + ":00" : bl.from + " – " + bl.to;
+          const label = bl.allDay ? hourLabel(OPEN) + " – " + hourLabel(GRID_CLOSE) : bl.from + " – " + bl.to;
           return (
             <div key={i} style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -131,7 +132,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           // solid danger fill instead of a one-off literal.
           background: "var(--app-danger-solid)",
           border: "1px solid rgba(255,255,255,0.2)",
-          borderRadius: R.pill, padding: "10px 22px", cursor: "pointer",
+          borderRadius: R.pill, padding: "10px 18px", cursor: "pointer",
           fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
           boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"
         }}

@@ -12,8 +12,9 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW } from "../lib/constants";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
+import { ChevronRightIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
 // Return inline-style objects. Used wherever an `<input>` or `<button>` needs
@@ -90,7 +91,7 @@ export function mkSel() {
 // Settings never quite looked like the rest of the app despite using the same
 // palette. Inputs there keep --shadow-input, correctly.
 export function mkStep(size) {
-  const d = size || 30;
+  const d = size || H.compact;
   return {
     background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
     borderRadius: R.pill, width: d, height: d,
@@ -111,7 +112,11 @@ export function mkBtn(extra) {
     fontSize: T.body,
     color: "var(--text-on-accent)",
     fontWeight: FW.semi,
-    minHeight: 40,
+    // The app-wide standard, and the reason H.control exists as a named step:
+    // v17.8.0 deliberately left mkBtn at 40 while lifting decision surfaces to
+    // 44, because 44 is a floor for controls where a mis-tap costs something,
+    // not a target for every button.
+    minHeight: H.control,
     boxShadow: "var(--shadow-btn)",
     letterSpacing: "0.01em",
     ...(extra || {})
@@ -166,7 +171,7 @@ export function Overlay({ onClose, children, footer }) {
     return (
       <div className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
-          <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))", boxSizing: "border-box" }}>
+          <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))",   /* @canvas */ boxSizing: "border-box" }}>
             {children}
           </div>
         </div>
@@ -279,7 +284,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
             fontSize: T.title, fontWeight: FW.bold, color: "var(--text-muted)", lineHeight: 1,
             display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)",
             transition: "transform " + M.tap
-          }}>›</span>
+          }}><ChevronRightIcon size={14} /></span>
         </div>
       </button>
       {/* v15.8.0: body eases open/closed via Reveal (the Summary effect) — used
@@ -568,8 +573,10 @@ export function TBadge({ id }) {
 export function SmallTag({ label, style }) {
   return (
     <span style={{
-      fontSize: T.small, padding: "3px 8px", borderRadius: R.pill,
-      fontWeight: FW.semi, display: "inline-block",
+      fontSize: T.small, padding: "2px 8px", borderRadius: R.pill,
+      // v17.9.0: inline-FLEX, so a label can carry an icon beside its text
+      // (ListView's preferred-tables tag). A text-only label renders the same.
+      fontWeight: FW.semi, display: "inline-flex", alignItems: "center", gap: 4,
       ...(style || {})
     }}>
       {label}
@@ -584,7 +591,7 @@ export function Toggle({ on, onClick }) {
       onClick={onClick}
       className="mgt-hover-scale"
       style={{
-        width: 48, height: 26, borderRadius: R.pill,
+        width: 48, height: 26,   /* @canvas */ borderRadius: R.pill,
         border: "1px solid var(--border-glass)",
         cursor: "pointer",
         background: on ? "var(--toggle-on)" : "var(--toggle-off)",
@@ -659,7 +666,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
             className="mgt-hover-scale"
             onClick={() => onTapTime(t)}
             style={{
-              cursor: "pointer", padding: "3px 8px", borderRadius: R.pill,
+              cursor: "pointer", padding: "2px 8px", borderRadius: R.pill,
               fontWeight: FW.semi, fontSize: T.body,
               background: "var(--suggest-bg)",
               color: "var(--success-text)",
