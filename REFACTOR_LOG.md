@@ -8103,3 +8103,60 @@ cannot: the deposit amount, the no-show count, and which booking an overstay is
 blocking.
 
 Bundle 196.27 → 196.48 kB gz. Gates green.
+
+### 10/10 — the block reads left-to-right: who, then what about them
+
+Second half of the same follow-up (Patryk's spec). The block interleaved identity
+and status: a ★ between the time chip and the name, the party size in brackets
+*inside* the name string, and the remaining flags appended after it. So the one
+line you scan a grid of blocks for — the name — **started** at a position that
+depended on whether that party had preferred tables and **ended** wherever its
+flags happened to stop. Nothing lined up column-to-column down a busy day.
+
+Now: `time · name · size` on the left, never varying, and a fixed-width flag rail
+on the right (deposit · preferred · locked · repeat-no-show · overstaying ·
+Assign). The name is the only element that shrinks, which is the right thing to
+lose.
+
+**The size is a ring, not "(6)".** As a bracketed pair inside the name string it
+put punctuation in the middle of the block's one bold text run and made the party
+size the first thing the ellipsis took after the name itself. As an 18px ring it
+is the same fact at a glance and it is `flexShrink: 0`.
+
+**The `=` handle is `AssignIcon`.** The same action is reached from the booking
+form, the List card and this handle; it should not be a drawn icon in two of them
+and an equals sign in the third. Its divider went 1px → 2px on Patryk's call —
+at 1px against `--blk-rule` it dissolved into the saturated fills and the handle
+read as part of the flag rail rather than as a separate control.
+
+**The ring's border alpha is a measurement, not a taste.** `--blk-rule`'s 0.3
+white over the block fills is 1.43:1 on confirmed and **1.21:1 on pending** — not
+subtle, absent; the ring did not render at all on the yellow blocks. At 0.55 it
+is 1.82 / 1.38 / 2.78 seated / 2.97 cancelled.
+
+That still misses WCAG 1.4.11's 3:1 for a component boundary on the two amber
+fills, and **it cannot be met**: pure white over the pending yellow tops out at
+1.98:1. This is the amber exemption recorded in `constants.js`, hit one element
+further down, and the same two escapes fail the same way — a dark ring clears 3:1
+and reads as DISABLED beside the white-inked name it encircles (exactly what got
+tried and reverted at block level one commit after it shipped), and an opaque
+fill clears it by turning a count into a second status chip competing with the
+time. Transparent ring, best achievable white, number written down. The DIGIT
+inside is `--text-on-accent` at the name's own contrast, and that is the part
+that has to be legible.
+
+`SIZE_RING` is a module const shared by `TimelineBlock` and `WaitGhost` for the
+reason `HOUR_PILL` is: the ghost is a *dimmed copy* of the block, so anything the
+block specifies twice can drift out from under it. Writing the ring inline in
+both would have broken that rule in the same commit that depends on it.
+
+Bundle 196.48 → 196.60 kB gz. Gates green.
+
+**DEV-data note:** none of this session's edits touched DEV data. Bookings on the
+viewed day changed under the preview twice (12 → 11 covers) and the per-booking
+audit trail attributes every change to Patryk working in the DEV app live
+(15:38:40, 15:38:49, 15:40:08, 15:40:17 — time moves, a pending→confirmed, a size
+and two duration edits). Recorded because the v17.9.0 entry above documents two
+*real* accidental mutations, and "the data moved while I was working" is not by
+itself evidence of a third — **the history entries are.** Reading them is cheap
+and it is the check to run before either accusing yourself or clearing yourself.
