@@ -8061,3 +8061,45 @@ re-adding it would have left all ten green. Verified by actually re-adding it:
 Verified live in DEV, both themes: every icon renders at non-zero size, the
 Find/Settings pair is matched at 18px, the block chip computes `font-weight: 500`
 at `opacity: 1` against the name's 700, no console errors.
+
+### 9/9 — the block's last four markers are drawn, not appended to its label
+
+Follow-up round (Patryk, same version). `TimelineBlock` built its label as
+`name + " (size)"` plus up to four appended flags: `" [L]"` locked, `" [!]"`
+repeat no-show, `" " + currency` deposit, `" !!"` overstaying. The first pass of
+this version moved ★ **out** of that string on the grounds that a flag which
+truncates with the name is useless on exactly the crowded evening it matters —
+and in the same commit wrote a rule keeping these four **in** it, "because they
+are ASCII, not glyphs, and belong to the truncating label string."
+
+Both halves of that were wrong, and they were wrong in ways the file had already
+argued against elsewhere:
+
+- **Truncating with the name is worse here than it was for ★.** A preferred
+  table is a preference; `[L]` means the optimizer must not move this party and
+  `!!` means someone is sitting in a table the next booking needs. Those are the
+  block's exception states, and the ellipsis ate them first.
+- **"It is ASCII" is not a reason to look different** from the drawn star and
+  drawn hourglass on the same 36px surface. That is `Icons.jsx`'s own "not one
+  medium" complaint with a monochrome glyph substituted for a colour one.
+
+Two icons were drawn for three markers. `!!` fires on `warnings[id].overdue` —
+the *identical* entry the notification strip's Overlap section renders — so it
+takes the existing `OverlapIcon`. Same data, same mark, both places. `LockIcon`
+and `NoShowIcon` are new; the no-show slash runs corner to corner rather than
+around the figure, for the reason `OfflineIcon`'s does (at 11px the figure alone
+is nearly closed).
+
+**The deposit flag was the worst of the four and the reason to look at them at
+all.** It printed the currency symbol from `settings/general`, so the marker for
+"money has been taken" was a *different shape per restaurant setting* — €, £ or
+$ depending on a dropdown, competing with the name in the same type run. It is a
+coin now, and the **amount** is in the hover title, which the symbol never
+carried.
+
+All four render through one module-scope `BlockFlag` wrapper (`flexShrink: 0`,
+so the name truncates and the flags survive) whose `title` carries what a glyph
+cannot: the deposit amount, the no-show count, and which booking an overstay is
+blocking.
+
+Bundle 196.27 → 196.48 kB gz. Gates green.

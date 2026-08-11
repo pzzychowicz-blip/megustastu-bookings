@@ -27,8 +27,8 @@
 // millimetres from a hand-drawn SVG cog — the exact "not one medium" complaint
 // in point 1 above, just with a monochrome glyph instead of a colour one.
 //
-// So every CONTROL mark is now drawn here. Three things stay text, and they are
-// a category, not an exception list:
+// So every CONTROL mark is now drawn here. TWO things stay text, and they are a
+// category, not an exception list:
 //
 //   • Prose arrows inside sentences — "Settings → Opening hours", the history
 //     entries ("status → completed"), the shift labels. These are punctuation
@@ -37,8 +37,10 @@
 //   • Keycap labels in Shortcuts.jsx (← → ↑ ↓ ⇧). They depict the key you press.
 //     Replacing them with drawn arrows breaks the mapping to the physical
 //     keyboard, which is the entire content of that screen.
-//   • The timeline's bracketed `[L]` / `[!]` / `!!` markers. ASCII, not glyphs,
-//     and deliberately part of the truncating label string.
+//
+// It was THREE. The timeline's bracketed `[L]` / `[!]` / `!!` were defended as
+// "ASCII, not glyphs, and deliberately part of the truncating label string" —
+// see the second-pass note further down for why neither half of that survived.
 //
 // The truncation cost is real and is paid explicitly: TimelineView's ★ moved
 // OUT of the label string into the marker row (where the note dog-ear and the
@@ -319,6 +321,60 @@ export function ClosedIcon(props) {
     <Svg {...props}>
       <circle cx="12" cy="12" r="9" />
       <path d="M5.6 5.6l12.8 12.8" />
+    </Svg>
+  );
+}
+
+// ── v17.9.0 (second pass): the timeline block's last three ASCII markers ─────
+// `[L]` / `[!]` / `!!` were the one category this file's header still defended
+// as text, on the grounds that they are ASCII and belong to the truncating
+// label string. Both halves of that stopped being true in the same change: the
+// label no longer carries flags at all (they moved to the block's right-hand
+// rail, where they are fixed-width and survive a narrow block), and "it is
+// ASCII" was never a reason to look different from every other mark on the
+// same 36px surface — it is the emoji argument's mistake in a plainer costume.
+//
+// Note there are only TWO new icons for three markers. `!!` means a seated
+// party is overstaying INTO the next booking on that table — the identical
+// `warnings` entry the Overlap section of the notification strip renders — so
+// it takes OverlapIcon. Same data, same mark, in both places it appears.
+
+// Locked to its tables — a walk-in, or a manual assignment the optimizer must
+// not move. Body and shackle only: a keyhole is invisible at the 10px this
+// renders at on a block, and closes the body up into a filled square.
+export function LockIcon(props) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="10.5" width="16" height="10.5" rx="2.2" />
+      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+    </Svg>
+  );
+}
+
+// Repeat no-show (2+ past no-shows on this phone). A struck-through person, and
+// the slash is the load-bearing half — it runs corner to corner rather than
+// neatly around the figure, for the same reason OfflineIcon's does: at 10px the
+// figure alone is nearly closed and only a full-length diagonal still reads.
+export function NoShowIcon(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M5.2 20.5a6.8 6.8 0 0 1 13.6 0" />
+      <path d="M3 3l18 18" />
+    </Svg>
+  );
+}
+
+// The deposit marker. Until v17.9.0 this was the CURRENCY SYMBOL from
+// settings/general appended to the label — so the flag for "money has been
+// taken" was a different shape per restaurant setting, and on a narrow block it
+// truncated away with the name. A coin says "deposit" regardless of what the
+// deposit is denominated in; the amount itself is in the booking form.
+export function DepositIcon(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4" />
     </Svg>
   );
 }

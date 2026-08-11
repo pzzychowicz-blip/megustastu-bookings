@@ -45,7 +45,9 @@ import {
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
-import { StarIcon, WaitIcon } from "./Icons";
+// v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
+// and the notification strip's Overlap section render the same `warnings` entry.
+import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 
@@ -90,6 +92,20 @@ const __statusAnims = {};
 // module-level component the node persists, so `transition: left/width` eases a
 // reposition (seated-shift / reshuffle) and the wipe/fill overlays + long-press
 // work reliably. Former closures are now props.
+// v17.9.0: one wrapper for every marker on the block's right-hand flag rail.
+// Module scope, per the inline-sub-component rule — a component declared inside
+// TimelineBlock's body would be a new TYPE on every render and remount all four
+// flags each time. `title` carries what the glyph cannot: the deposit's amount,
+// the no-show count, which booking an overstay is blocking.
+function BlockFlag({ title, children }) {
+  return (
+    <span title={title} style={{
+      flexShrink: 0, marginLeft: 4, display: "flex", alignItems: "center",
+      position: "relative"
+    }}>{children}</span>
+  );
+}
+
 function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
   const d = liveBarDur(b, nowMins);
   const sm = toMins(b.time) - OPEN * 60;
@@ -107,17 +123,31 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
   const hasNote = b.notes && b.notes.trim();
-  // v16.0.0: repeat no-show offender marker (2+ past no-shows on this phone).
-  // v17.9.0: the ★ left this string. It is now a fixed-width SVG marker in the
-  // row (below), beside the ⏳ the waitlist ghost already puts there — so a
-  // narrow block ellipsises the NAME and keeps the flag, instead of eating the
-  // flag first. `[L]` / `[!]` / `!!` stay inline: they are ASCII, not glyphs,
-  // and truncating with the name is correct for them.
-  const lbl = b.name + " (" + b.size + ")"
-    + (isLocked(b) ? " [L]" : "")
-    + (noShows >= 2 ? " [!]" : "")
-    + ((Number(b.deposit) || 0) > 0 ? " " + currency : "")   // v16.3.0 deposit marker (v17.0.0: currency from settings/general)
-    + (warn && warn.overdue ? " !!" : "");
+  // v17.9.0 (second pass): the label carries the NAME and nothing else.
+  //
+  // It used to accumulate four flags — " [L]" locked, " [!]" repeat no-show,
+  // " €" deposit, " !!" overstaying — and the v17.9.0 first pass defended them
+  // as "ASCII, not glyphs, and deliberately part of the truncating label
+  // string" while moving ★ out for the opposite reason. Both halves of that
+  // defence were wrong in the same way the emoji argument had been:
+  //
+  //   • Truncating with the name was never correct FOR THESE. They are the
+  //     exception state — locked means the optimizer must not move this party,
+  //     !! means someone is sitting in a table the next booking needs — and the
+  //     ellipsis ate them first, so the flags vanished on exactly the crowded
+  //     day when they matter. That is the argument that moved ★ out; it applies
+  //     here with more force, because a preferred table is a preference and an
+  //     overstay is a problem.
+  //   • "It is ASCII" is not a reason to look different from every other mark
+  //     on the same 36px surface. `[L]` in brackets beside a drawn star and a
+  //     drawn hourglass is the "not one medium" complaint in a plainer costume.
+  //
+  // The deposit marker was the worst of the four: it printed the CURRENCY
+  // SYMBOL from settings/general, so the flag for "money has been taken" was a
+  // different shape per restaurant setting. It is a coin now, and the amount —
+  // which the symbol never showed anyway — is in the hover title.
+  const lbl = b.name + " (" + b.size + ")";
+  const depositAmt = Number(b.deposit) || 0;
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
   // name. The show/hide decision (`showChip`) is made ONCE at the TimelineView
   // level for the WHOLE day — all blocks show chips or none do (a mixed grid
@@ -406,6 +436,21 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
       }}>
         {lbl}
       </span>
+      {/* v17.9.0: the flag rail — the four markers that used to be appended to
+          the label string. Fixed-width and flexShrink:0, so the block truncates
+          the NAME and keeps the flags rather than the other way round. */}
+      {depositAmt > 0 ? (
+        <BlockFlag title={"Deposit " + currency + depositAmt}><DepositIcon size={11} /></BlockFlag>
+      ) : null}
+      {isLocked(b) ? (
+        <BlockFlag title="Locked to these tables — the optimizer will not move it"><LockIcon size={11} /></BlockFlag>
+      ) : null}
+      {noShows >= 2 ? (
+        <BlockFlag title={noShows + " past no-shows on this number"}><NoShowIcon size={11} /></BlockFlag>
+      ) : null}
+      {warn && warn.overdue ? (
+        <BlockFlag title={"Overstaying — " + warn.next + " needs this table at " + warn.nextTime}><OverlapIcon size={11} /></BlockFlag>
+      ) : null}
       {/* v16.3.0: table-turn countdown pill — a seated block within ~15 min of
           its scheduled end shows "~Nm" (translucent, like the start-time chip).
           Flex item before the "=" handle (no absolute overlap of the name); the
@@ -505,9 +550,10 @@ function BlockBar({ bl, totalMins }) {
 // of the same one. Dimming the whole block fixes both at once: nothing has to
 // choose a second set of values, so nothing can drift from the block it mirrors.
 //
-// The trailing ⏳ follows the block's own marker convention (★ preferred, ⚠
-// repeat no-show, [L] locked, !! overdue all append to the label) rather than
-// inventing a leading badge.
+// The ⏳ follows the block's own marker convention — preferred, repeat no-show,
+// locked, deposit and overstay are all drawn marks on the same block (v17.9.0
+// moved the last four off the label string) — rather than inventing a badge
+// that only the ghost uses.
 //
 // `resh` = the match only exists AFTER re-optimising (the reshuffling trialFits
 // branch in App's waitAvail effect). Those tables can be visibly occupied right
@@ -586,7 +632,7 @@ function WaitGhost({ g, totalMins, onBook }) {
           marker that says "this is a proposal, not a booking" vanished on
           exactly the narrow blocks where the dimming is hardest to read. Here
           it is fixed-width and unclippable, and it lines up with the marker
-          column a real block uses for its ★ / ⚠ / [L] flags. */}
+          column a real block uses for its preferred-tables star. */}
       <span aria-hidden="true" style={{
         flexShrink: 0, marginLeft: 6, display: "flex", alignItems: "center"
       }}><WaitIcon size={11} /></span>
