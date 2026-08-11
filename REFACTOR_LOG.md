@@ -8334,3 +8334,32 @@ contain a control glyph, run across Timeline / List / Plan, the booking and
 walk-in forms, and all five Settings tabs. Zero-sized icons: none. Remaining
 glyph hits: the table-group capacity hints ("1A+1B = 6"), which are arithmetic
 inside a sentence and correctly stay text.
+
+### 16 — /code-review fix 1/3: the name cache was stomped with the seed on every load
+
+`useGeneralSettings`' new localStorage mirror ran unguarded on mount. React's
+FIRST commit has `generalSettings === DEFAULT_GENERAL_SETTINGS`, so every page
+load wrote `"Me Gustas Tú"` over whatever good name was cached, ~300ms before
+the snapshot arrived to correct it.
+
+**Measured, not argued.** A `storage` listener in a second same-origin tab, while
+the app tab reloaded with the cache primed to `"Casa Verde"`, observed exactly
+`["Me Gustas Tú", "MGT Bookings"]`. After the fix, the same experiment observes
+`["MGT Bookings"]`.
+
+Harmless while the read lands. Not harmless when it never does: the RTDB web SDK
+keeps no disk cache, so an offline load has no snapshot to replay, and a
+`dbError`-cancelled read never reaches the success path where the correction
+lives. The cache stays at the seed, and the login screen then shows
+`"Me Gustas Tú"` on a device that had the right name a minute earlier — the one
+literal this whole settings node exists to delete, reintroduced by the change
+that was supposed to finish deleting it.
+
+The gate needed a `loadedTick` STATE beside the existing `loaded` ref: a ref
+flip re-renders nothing, so an effect keyed on it would never re-run. Every other
+consumer keeps the ref, because a write guard has to be readable synchronously
+inside a callback.
+
+**The general lesson: this file's own write-guard rule applied and I did not
+apply it.** `saveGeneralSettings` right below refuses to write before the initial
+read completes. A cache is a write too.
