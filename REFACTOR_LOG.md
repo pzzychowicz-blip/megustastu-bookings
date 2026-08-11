@@ -6646,7 +6646,7 @@ off `ROADMAP.md`. No Firebase rules change: `presence` is the only node touched
 at the persistence layer and it inherits the top-level `.write: auth != null`
 with no `.validate`.
 
-### 1/5 — Waitlist ghost blocks on the Timeline
+### 1/8 — Waitlist ghost blocks on the Timeline
 
 **Bundle:** main chunk 194.20 kB gz (was 193.74).
 
@@ -6711,7 +6711,7 @@ branches were then exercised against real data: the filled variant from a
 genuine clean match, the dashed variant by temporarily forcing `resh` on one
 entry.
 
-### 2/5 — Log out moves into the connection popover
+### 2/8 — Log out moves into the connection popover
 
 **Bundle:** main chunk 194.25 kB gz.
 
@@ -6737,7 +6737,7 @@ The sibling MGT Scheduling app has its own copy of `ConnectionStatus` (this one
 was ported from it in v16.2.0). Per the shared-pattern rule this is a port
 candidate on its next touch — not done here.
 
-### 3/5 — Presence: a connection now has to keep proving itself
+### 3/8 — Presence: a connection now has to keep proving itself
 
 **Bundle:** main chunk 194.53 kB gz.
 
@@ -6800,7 +6800,7 @@ own, but only to delete ones already proven dead, and deleting a dead key is
 idempotent — two devices racing on the same one is harmless. No rules change,
 no Firebase console step.
 
-### 4/5 — Theme the reminder banner (was `ROADMAP.md` → Deferred)
+### 4/8 — Theme the reminder banner (was `ROADMAP.md` → Deferred)
 
 **Bundle:** unchanged (styles only).
 
@@ -7746,7 +7746,7 @@ eventual sweep.
 Two findings changed the plan before any code was written; both are recorded
 under their commits.
 
-### 1/5 — A DEV-only way to look at dark mode
+### 1/8 — A DEV-only way to look at dark mode
 
 **Files:** `src/App.jsx`, `index.html`.
 
@@ -7789,7 +7789,7 @@ Verified live in DEV against a signed-in account whose saved theme is `dark`:
 reads `"dark"`, and a plain load with no parameter goes back to honouring the
 account. No console errors.
 
-### 2/5 — The backdrop: one flat tint, was a 6-stop gradient
+### 2/8 — The backdrop: one flat tint, was a 6-stop gradient
 
 **Files:** `index.html`.
 
@@ -7821,7 +7821,7 @@ If a gradient is ever wanted here again, ~8 L\* is the bar it has to clear. A
 backdrop either commits to being seen or it commits to being a surface; what it
 cannot usefully be is a gradient that reads as a flat colour and costs six stops.
 
-### 3/5 — `lib/time-grid.js`: the narrow half of a roadmap idea
+### 3/8 — `lib/time-grid.js`: the narrow half of a roadmap idea
 
 **Files:** new `src/lib/time-grid.js`, new `tests/time-grid.test.js`,
 `src/App.jsx`, `src/components/TimelineView.jsx`, `TimeAxis.jsx`, `Summary.jsx`,
@@ -7875,7 +7875,7 @@ subtitle (a seventh call site, spotted in the grep and initially skipped) threw
 `hourLabel is not defined` in the browser while `npm run build` reported success.
 Reading the console was what found it.
 
-### 4/5 — `SP` and `H`: the last two unscaled axes, linted rather than tokenised
+### 4/8 — `SP` and `H`: the last two unscaled axes, linted rather than tokenised
 
 **Files:** `src/lib/constants.js`, `scripts/check-style-invariants.mjs`, new
 `tests/style-check.test.js`, ~25 component files.
@@ -7930,7 +7930,7 @@ Verified live in DEV, both themes: no control under its previous height, nothing
 overflowing or clipped, steppers still true circles at 40/36/32, the booking
 form, Settings and the List empty state all composed correctly.
 
-### 5/5 — docs
+### 5/8 — docs
 
 `ROADMAP.md` loses four Ideas entries: the control-height/spacing scales, the
 dark-mode-verification gap, the TimeAxis unification, and the gradient. The
@@ -7977,3 +7977,87 @@ are different numbers, and the clicks land somewhere plausible rather than
 nowhere. Prefer the app's own keyboard shortcuts, or read state directly, and
 treat a settings screen as read-only unless the setting IS the thing under
 test.
+
+### 6/8 — Every control mark is an icon
+
+**Files:** `src/components/Icons.jsx`, `SettingsChrome.jsx`, `ViewTools.jsx`,
+plus 15 component files and `App.jsx`.
+
+v17.8.0 built the icon set and drew its line at *"does this render as a colour
+emoji, or is its font coverage patchy"* — keeping ✕ ‹ › ▲ ▼ ▸ ▾ ✓ ★ as text
+because they inherit colour and weight for free and truncate with their label.
+That reasoning is sound and it was still the wrong line, for a reason the emoji
+argument obscures: **an icon set that covers only the glyphs with a rendering
+BUG is not a set, it is a patch.** The app drew its dismiss control as a text ✕
+two millimetres from a hand-drawn SVG cog — the same "not one medium" defect
+`Icons.jsx`'s own header opens with, just monochrome.
+
+New marks: chevrons, close, check, star, print, download, edit, and `AssignIcon`
+for the ex-ASCII `=`. Chevrons are **one shape at four rotations**, so a
+disclosure that turns and a nav arrow that points cannot drift apart.
+
+`CogIcon` moved INTO the set. It was the one icon already drawn properly
+(v17.1.0) and the house style was copied *from* it — but it stayed outside,
+hard-coded at 20×20 with its own `<svg>`, so it took none of the optical stroke
+compensation and could not be sized. In `ViewTools`' pair that rendered a 20px
+cog beside a 17px search: a smaller copy of the exact mismatch the set exists to
+prevent. `SettingsChrome` re-exports it, so the lazy-Settings boundary is
+unchanged (`Icons.jsx` has no imports of its own to drag along).
+
+**Two traps worth carrying forward.** A glyph grep cannot see an **HTML
+entity** — `App.jsx` and `WeekView` drew their nav chevrons via
+`dangerouslySetInnerHTML` with `&#8249;`/`&#8250;`, invisible to the sweep until
+the icons around them changed. And **copy that describes a glyph has to change
+with it**: `LayoutSettings`' "Reorder with ‹ ›, remove with ×" and WeekView's two
+hint lines all described marks that no longer existed — the v17.8.0 lesson about
+the footnote describing a chip that had been removed.
+
+**What stays text is a category, not an exception list:** prose arrows inside
+sentences ("Settings → Opening hours"), Shortcuts' keycap labels (they depict
+the key you press), and the bracketed `[L]`/`[!]`/`!!`. The truncation cost
+v17.8.0 warned about is real and is paid explicitly — TimelineView's ★ left the
+label string for the marker row, so it survives a narrow block instead of being
+the first thing the ellipsis eats, which is what a flag should do anyway.
+
+### 7/8 — "Tables" and "Assign" were the same button
+
+`ListView`'s `= Tables` and the booking form's `= Assign` both open
+`ManualModal`. Unified on **Assign**: it is a verb, so it reads as an action
+beside Edit and Delete; it matches the modal's own primary button; and it was
+already two of the three sites. Folded into 6/8 because converting the `=` to
+`AssignIcon` and relabelling are literally the same edit.
+
+### 8/8 — The block start-time chip: AA in all ten cases
+
+Measured rather than restated. Composited over each block fill, the chip at
+`opacity: 0.8` was **3.72–4.62:1** across five statuses × two themes — below AA
+in every one, on the one piece of *information* a block carries, and on the
+exact element the amber exemption is recorded on the grounds of. At full
+strength the same chip is **5.15–6.10:1**, with no token touched.
+
+The whole deficit was the opacity, and the diagnosis underneath is the point:
+**the chip was never too loud in absolute terms.** It out-shouted the guest name
+because the NAME sits at 1.86–2.97:1 on the amber fills. Dimming the one legible
+element to match the illegible ones is levelling down. Opacity conflates QUIET
+with FAINT; weight separates them — so the chip is `FW.medium` against the name's
+`FW.bold`, which is the v17.8.0 type-scale argument (weight carries emphasis so
+other axes don't have to) applied to one chip.
+
+**`tests/contrast.test.js` gains the case it was missing, and the miss is the
+interesting part.** Its existing entry measures `--tl-hour-pill` over the PAGE
+(4.73 light) — that is the *ruler's* pill. The block chip is the same token over
+a saturated block, and nothing measured it. The v17.8.0 comment three lines
+above says the exemption's "whole justification was resting on a fill nothing
+measured"; the fix measured the fill but not the COMPOSITE the argument actually
+depends on. **A token's number is not the screen's number wherever that token is
+reused over something else.**
+
+The opacity is read back OUT of `TimelineView.jsx` rather than assumed. The first
+version of this test claimed "if the opacity comes back, this fails" and that was
+**false** — the opacity lives in JSX and the test only read `index.html`, so
+re-adding it would have left all ten green. Verified by actually re-adding it:
+9 of 10 fail, at exactly the independently measured numbers. **249 → 259 tests.**
+
+Verified live in DEV, both themes: every icon renders at non-zero size, the
+Find/Settings pair is matched at 18px, the block chip computes `font-weight: 500`
+at `opacity: 1` against the name's 700, no console errors.
