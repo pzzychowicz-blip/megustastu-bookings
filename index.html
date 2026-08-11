@@ -479,6 +479,34 @@
         /* v14.3.0: hover-lift card — opaque dark surface (matches Scheduling) */
         --bg-hover-card: rgb(50, 50, 53);
       }
+
+      /* ── v17.9.0 TEMPORARY: --bg-app candidates, DEV only ────────────────────
+         The shipped backdrop is a 6-stop gradient across near-identical
+         desaturated blues — roughly 3% of perceptual difference, which is
+         imperceptible AS a gradient and pays six stops for it. These two blocks
+         let both answers be looked at side by side before one is chosen; the
+         losing block and the ?bg= handling come straight back out.
+
+         Placed AFTER both theme blocks and qualified with :root so they
+         out-specify (0,2,0 / 0,3,0 vs the themes' 0,1,0) — a same-specificity
+         rule would be decided by source order alone, which is not a thing to
+         rely on when the two live 400 lines apart. */
+      :root[data-bg="flat"] {
+        /* One flat tint: the mean of the six stops it replaces. */
+        --bg-app: #e2e7f1;
+      }
+      :root[data-theme="dark"][data-bg="flat"] {
+        --bg-app: #181b22;
+      }
+      :root[data-bg="grad"] {
+        /* Two stops with travel you can actually see, near-vertical so it reads
+           as light falling from above rather than a diagonal wash. */
+        --bg-app: linear-gradient(165deg, #f0f4fb 0%, #d6ddec 100%);
+      }
+      :root[data-theme="dark"][data-bg="grad"] {
+        --bg-app: linear-gradient(165deg, #1e222c 0%, #101216 100%);
+      }
+
       html, body { margin: 0; }
       body {
         background: var(--bg-app);
@@ -877,6 +905,10 @@
           if (h === "localhost" || h === "127.0.0.1" || h === "[::1]") {
             var q = /[?&]theme=(dark|light)\b/.exec(location.search);
             if (q) forced = q[1];
+            // v17.9.0 TEMPORARY: --bg-app candidate switch. Removed with the
+            // candidate blocks once the backdrop is chosen.
+            var bg = /[?&]bg=(flat|grad)\b/.exec(location.search);
+            if (bg) document.documentElement.dataset.bg = bg[1];
           }
           var saved = forced || localStorage.getItem("mgt-theme");
           var dark = saved === "dark"
