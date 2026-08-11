@@ -149,9 +149,21 @@ const __statusAnims = {};
 // TimelineBlock's body would be a new TYPE on every render and remount all four
 // flags each time. `title` carries what the glyph cannot: the deposit's amount,
 // the no-show count, which booking an overstay is blocking.
+//
+// /code-review fix: `role="img"` + `aria-label`, not `title` alone. These four
+// flags used to be TEXT inside the label string ("[L]", the currency symbol,
+// "!!"), so a screen reader read them out as part of the block. As bare SVGs
+// they are `aria-hidden` (every icon in Icons.jsx is, correctly — an icon beside
+// its own label must not be announced twice), and a plain `<span title>` with no
+// role gets no reliable accessible name, so the information simply left the
+// accessibility tree. These are the block's EXCEPTION states — locked against
+// the optimizer, money taken, someone sitting in a table the next booking needs
+// — i.e. exactly what this whole change argued was too important to let the
+// ellipsis eat. Losing them to a screen reader instead is the same loss by
+// another route. The label text already existed; only the attribute was missing.
 function BlockFlag({ title, children }) {
   return (
-    <span title={title} style={{
+    <span role="img" aria-label={title} title={title} style={{
       flexShrink: 0, marginLeft: 4, display: "flex", alignItems: "center",
       position: "relative"
     }}>{children}</span>

@@ -8385,3 +8385,25 @@ rather than silently measuring nothing.
 Verified by running all three cases rather than reasoning about them: baseline 74
 pass; `opacity: 0.8` restored on the block chip → 9 of 10 fail; `opacity: 0.5` on
 the ruler pill instead → 74 pass.
+
+### 18 — /code-review fix 3/3: the flags left the accessibility tree
+
+`BlockFlag` rendered `<span title="…"><LockIcon/></span>`, and every icon in
+`Icons.jsx` carries `aria-hidden="true"` — correctly, since an icon beside its
+own text label must not be announced twice. But these four flags have no text
+label, and a plain `<span title>` with no role gets no reliable accessible name.
+So the whole rail was invisible to a screen reader.
+
+Before this branch the same information was TEXT inside the label string
+(`Camila (6) [L] € !!`) and was read out as part of the block. Those are the
+block's exception states — locked against the optimizer, money taken, someone
+sitting in a table the next booking needs — i.e. precisely what commit 9 argued
+was too important to let the ellipsis eat. Losing them to a screen reader instead
+is the same loss by a different route, in the change that made the argument.
+
+`role="img"` + `aria-label` on the wrapper. The label text was already written
+for the tooltip; only the attribute was missing, so there is no visual change and
+nothing new to keep in sync. Verified in the live DOM: the two flags on a
+deposit+preferred booking expose "Deposit €10" and "Preferred tables: 2, 3, 4".
+
+The party-size ring needed nothing — its digit is real text.
