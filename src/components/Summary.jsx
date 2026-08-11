@@ -25,6 +25,7 @@ import { BTN, TOTAL_SEATS, hoursFor, R, T, FW } from "../lib/constants";
 import { mkBtn, Reveal } from "./atoms";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
 import { hourLabel as hh } from "../lib/time-grid";
+import { ChevronDownIcon, ChevronUpIcon, PrintIcon } from "./Icons";
 function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
 function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
 
@@ -140,7 +141,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                  numbers. The glyph is unchanged; only the box around it grew. */
               padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}
           >
-            {open ? "▲" : "▼"}
+            {open ? <ChevronUpIcon size={14} /> : <ChevronDownIcon size={14} />}
           </button>
         </div>
       </div>
@@ -184,7 +185,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               <button
                 onClick={onPrint}
                 className="mgt-hover-scale mgt-press"
-                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>🖨 Print day sheet</button>
+                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={14} />Print day sheet</button>
             </div>
           ) : null}
         </div>

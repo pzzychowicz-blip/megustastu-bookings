@@ -43,7 +43,7 @@ export function ViewTools({ onOpenSearch = () => {}, onOpenSettings = () => {} }
         className="mgt-hover-scale"
         style={BTN_STYLE}
       >
-        <SearchIcon size={17} />
+        <SearchIcon size={18} />
       </button>
       <button
         onClick={onOpenSettings}
@@ -52,7 +52,7 @@ export function ViewTools({ onOpenSearch = () => {}, onOpenSettings = () => {} }
         className="mgt-hover-scale"
         style={BTN_STYLE}
       >
-        <CogIcon />
+        <CogIcon size={18} />
       </button>
     </div>
   );

@@ -20,6 +20,7 @@
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
 import { BTN, T, FW } from "../lib/constants";
+import { CloseIcon } from "./Icons";
 
 export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
   const byId = new Map(bookings.map(function (b) { return [b.id, b]; }));
@@ -41,7 +42,7 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
           onClick={function () { onDismiss(id); }}
           aria-label="Dismiss this warning"
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}>✕</button>
+          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}><CloseIcon size={14} /></button>
       </div>
     );
   }

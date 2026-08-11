@@ -45,7 +45,7 @@ import {
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
-import { WaitIcon } from "./Icons";
+import { StarIcon, WaitIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 
@@ -108,9 +108,13 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
   const hasNote = b.notes && b.notes.trim();
   // v16.0.0: repeat no-show offender marker (2+ past no-shows on this phone).
+  // v17.9.0: the ★ left this string. It is now a fixed-width SVG marker in the
+  // row (below), beside the ⏳ the waitlist ghost already puts there — so a
+  // narrow block ellipsises the NAME and keeps the flag, instead of eating the
+  // flag first. `[L]` / `[!]` / `!!` stay inline: they are ASCII, not glyphs,
+  // and truncating with the name is correct for them.
   const lbl = b.name + " (" + b.size + ")"
     + (isLocked(b) ? " [L]" : "")
-    + (hasPrefT ? " ★" : "")
     + (noShows >= 2 ? " [!]" : "")
     + ((Number(b.deposit) || 0) > 0 ? " " + currency : "")   // v16.3.0 deposit marker (v17.0.0: currency from settings/general)
     + (warn && warn.overdue ? " !!" : "");
@@ -375,6 +379,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         </>
       ) : null}
       {timeChip}
+      {hasPrefT ? (
+        <span aria-hidden="true" style={{
+          flexShrink: 0, marginLeft: 6, display: "flex", alignItems: "center"
+        }}><StarIcon size={10} /></span>
+      ) : null}
       <span style={{
         flex: 1, padding: "0 8px 0 6px", position: "relative",
         fontSize: T.small, fontWeight: FW.bold,

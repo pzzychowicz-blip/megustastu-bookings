@@ -2,7 +2,7 @@
 // List-view rendering of the day's bookings — sorted by status (seated first,
 // then confirmed, completed, cancelled), then by time. Each booking renders
 // as a card with name, status badge, party size, time range, table chips,
-// optional notes, and action buttons (Tables / Edit / Delete + status changers).
+// optional notes, and action buttons (Assign / Edit / Delete + status changers).
 //
 // Pure presentational, no hooks. All state lives in BookingApp.
 //
@@ -33,6 +33,7 @@ import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW } from "../lib/con
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
+import { AssignIcon, ChevronRightIcon, StarIcon } from "./Icons";
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
 // that changes status plays a colour wipe of its OLD status colour. Keyed by id,
@@ -242,7 +243,7 @@ export const ListView = memo(function ListView({
           <SmallTag label="locked" style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (
-          <SmallTag label={"★ " + b.preferredTables.join("+")} style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
+          <SmallTag label={<><StarIcon size={10} />{b.preferredTables.join("+")}</>} style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         // v16.0.0: repeat no-show offender chip (same threshold as the timeline ⚠).
         const noShowCt = nsMap[normalizePhone(b.phone)] || 0;
@@ -290,20 +291,20 @@ export const ListView = memo(function ListView({
             <button
               key={s}
               className="mgt-hover-scale"
-              style={mkBtn({ background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", textTransform: "capitalize" })}
+              style={mkBtn({ background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
               onClick={() => onStatus(b.id, s)}
             >
-              {"> " + s}
+              <ChevronRightIcon size={12} />{s}
             </button>
           ));
         const cancelBtn = b.status !== "cancelled" ? (
           <button
             key="cancelled"
             className="mgt-hover-scale"
-            style={mkBtn({ background: BLOCK_BG.cancelled, textTransform: "capitalize" })}
+            style={mkBtn({ background: BLOCK_BG.cancelled, textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
             onClick={() => onStatus(b.id, "cancelled")}
           >
-            {"> cancelled"}
+            <ChevronRightIcon size={12} />cancelled
           </button>
         ) : null;
 
@@ -364,7 +365,7 @@ export const ListView = memo(function ListView({
             </div>
             {notesEl}
             <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables })} onClick={() => onManual(b.id)}>= Tables</button>
+              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={() => onManual(b.id)}><AssignIcon size={14} />Assign</button>
               <button className="mgt-hover-scale" style={mkBtn({ background: BTN.edit })} onClick={() => onEdit(b)}>Edit</button>
               {statusBtns}
               <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center" }}>

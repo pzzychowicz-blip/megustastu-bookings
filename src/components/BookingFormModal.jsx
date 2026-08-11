@@ -43,7 +43,7 @@ import {
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone, findPhoneOverlaps } from "../lib/customers";
 import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
-import { WaitIcon } from "./Icons";
+import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
@@ -169,18 +169,20 @@ export function BookingFormModal({
   // in the semantic hue, the text in the same family. They are standalone
   // disclosures above a form field rather than tags packed into a status row,
   // so the border alone carries the colour and the fill was a third copy of it.
-  const chipBase={display:"inline-flex",alignItems:"center",borderRadius:R.pill,padding:"2px 10px",fontSize: T.small,fontWeight: FW.bold,cursor:"pointer",background:"transparent"};
+  // v17.9.0: `gap` is new — the disclosure marker is now an SVG sibling rather
+  // than a " ▾" tacked onto the label string, so the space has to be real.
+  const chipBase={display:"inline-flex",alignItems:"center",gap:4,borderRadius:R.pill,padding:"2px 10px",fontSize: T.small,fontWeight: FW.bold,cursor:"pointer",background:"transparent"};
   const regularChip=custMatch&&custMatch.regularCount>=1?<button
     key="reg" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("regular");}}
-    style={Object.assign({},chipBase,{border:"2px solid var(--suggest-border)",color:"var(--success-text)"})}>{(custMatch.regularCount>=(regularMin||2)?"Regular · "+custMatch.regularCount+" past visits":custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":""))+(histWhich==="regular"?" ▾":" ▸")}</button>:null;
+    style={Object.assign({},chipBase,{border:"2px solid var(--suggest-border)",color:"var(--success-text)"})}><span>{custMatch.regularCount>=(regularMin||2)?"Regular · "+custMatch.regularCount+" past visits":custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":"")}</span>{histWhich==="regular"?<ChevronDownIcon size={12} />:<ChevronRightIcon size={12} />}</button>:null;
   const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<button
     key="ns" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("noshow");}}
-    style={Object.assign({},chipBase,{border:"2px solid var(--warn-border)",color:"var(--warn-text)"})}>{"No-show ×"+custMatch.noShowCount+(histWhich==="noshow"?" ▾":" ▸")}</button>:<button
+    style={Object.assign({},chipBase,{border:"2px solid var(--warn-border)",color:"var(--warn-text)"})}><span>{"No-show ×"+custMatch.noShowCount}</span>{histWhich==="noshow"?<ChevronDownIcon size={12} />:<ChevronRightIcon size={12} />}</button>:<button
     key="ns" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("noshow");}}
-    style={Object.assign({},chipBase,{border:"2px solid var(--border-soft)",color:"var(--text-secondary)"})}>{"1 no-show"+(histWhich==="noshow"?" ▾":" ▸")}</button>):null;
+    style={Object.assign({},chipBase,{border:"2px solid var(--border-soft)",color:"var(--text-secondary)"})}><span>1 no-show</span>{histWhich==="noshow"?<ChevronDownIcon size={12} />:<ChevronRightIcon size={12} />}</button>):null;
   // Disclosure panel — the WA pastListBody, on app tokens (suggest family for
   // Regular, warn family for no-shows). Top 5 rows like WA; a muted "+N earlier"
   // tail when there are more. Reveal (below) eases it open/closed; its cached-
@@ -306,8 +308,8 @@ export function BookingFormModal({
     const hasPref=prefs.length>0;
     const prefBtn=<button
       className="mgt-hover-scale"
-      style={mkBtn({background:hasPref?"var(--btn-tables)":BTN.nav,fontSize: T.body,padding:"6px 10px"})}
-      onClick={function(){onOpenPrefPicker();}}>{hasPref?"★ "+prefs.join("+"):"★ Preferred"}</button>;
+      style={mkBtn({background:hasPref?"var(--btn-tables)":BTN.nav,fontSize: T.body,padding:"6px 10px",display:"inline-flex",alignItems:"center",gap:6})}
+      onClick={function(){onOpenPrefPicker();}}><StarIcon size={12} />{hasPref?prefs.join("+"):"Preferred"}</button>;
     if(editId){
       const cur=bookings.find(function(b){return b.id===editId;});
       const curPrefStr=cur&&Array.isArray(cur.preferredTables)?cur.preferredTables.slice().sort().join(","):"";
@@ -340,8 +342,8 @@ export function BookingFormModal({
             style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><div
               style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flex:1,minWidth:0}}>{leftEls}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
                 className="mgt-hover-scale"
-                style={mkBtn({background:BTN.tables})}
-                onClick={function(){onOpenManualAssign(editId);}}>= Assign</button>{prefBtn}</div></div></Section>
+                style={mkBtn({background:BTN.tables,display:"inline-flex",alignItems:"center",gap:6})}
+                onClick={function(){onOpenManualAssign(editId);}}><AssignIcon size={14} />Assign</button>{prefBtn}</div></div></Section>
       );
     }
     const leftEls=[<span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.semi}}>Tables</span>];
@@ -357,8 +359,8 @@ export function BookingFormModal({
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><div
             style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flex:1,minWidth:0}}>{leftEls}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               className="mgt-hover-scale"
-              style={mkBtn({background:BTN.tables})}
-              onClick={function(){onOpenManualAssign("__new__");}}>= Assign</button>{prefBtn}</div></div></Section>
+              style={mkBtn({background:BTN.tables,display:"inline-flex",alignItems:"center",gap:6})}
+              onClick={function(){onOpenManualAssign("__new__");}}><AssignIcon size={14} />Assign</button>{prefBtn}</div></div></Section>
     );
   })();
 
@@ -451,8 +453,8 @@ export function BookingFormModal({
         <button
           key={s}
           className="mgt-hover-scale"
-          style={mkBtn({background:BLOCK_BG[s],color:BLOCK_INK[s]||"var(--text-on-accent)",textTransform:"capitalize",minHeight:40})}
-          onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}>{"> "+s}</button>
+          style={mkBtn({background:BLOCK_BG[s],color:BLOCK_INK[s]||"var(--text-on-accent)",textTransform:"capitalize",minHeight:H.control,display:"inline-flex",alignItems:"center",gap:6})}
+          onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}><ChevronRightIcon size={12} />{s}</button>
       );})}</div></Section>:null;
 
   const historyBtn=(function(){

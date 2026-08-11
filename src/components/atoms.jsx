@@ -14,6 +14,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
+import { ChevronRightIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
 // Return inline-style objects. Used wherever an `<input>` or `<button>` needs
@@ -283,7 +284,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
             fontSize: T.title, fontWeight: FW.bold, color: "var(--text-muted)", lineHeight: 1,
             display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)",
             transition: "transform " + M.tap
-          }}>›</span>
+          }}><ChevronRightIcon size={14} /></span>
         </div>
       </button>
       {/* v15.8.0: body eases open/closed via Reveal (the Summary effect) — used
@@ -573,7 +574,9 @@ export function SmallTag({ label, style }) {
   return (
     <span style={{
       fontSize: T.small, padding: "2px 8px", borderRadius: R.pill,
-      fontWeight: FW.semi, display: "inline-block",
+      // v17.9.0: inline-FLEX, so a label can carry an icon beside its text
+      // (ListView's preferred-tables tag). A text-only label renders the same.
+      fontWeight: FW.semi, display: "inline-flex", alignItems: "center", gap: 4,
       ...(style || {})
     }}>
       {label}

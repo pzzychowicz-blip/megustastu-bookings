@@ -37,6 +37,7 @@
 import { S, BTN, TBL, TABLE_GROUPS, R, T, FW } from "../lib/constants";
 import { isIn, comboCap } from "../lib/booking-logic";
 import { Overlay, mkBtn, AutoHeight } from "./atoms";
+import { CheckIcon } from "./Icons";
 
 export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
   const prefs = selected || [];
@@ -61,9 +62,15 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
 
   const cap = getCapOf(prefs);
   const capOk = prefs.length === 0 || cap >= needed;
+  // v17.9.0: the tick is a real icon, so capText is JSX rather than a string.
   const capText = prefs.length === 0
     ? "No preference (auto)"
-    : "Capacity: " + cap + " / " + needed + " pax" + (cap >= needed ? " ✓" : " — need more");
+    : (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {"Capacity: " + cap + " / " + needed + " pax"}
+        {cap >= needed ? <CheckIcon size={13} /> : <span>— need more</span>}
+      </span>
+    );
   const capColor = prefs.length === 0 ? S.muted : (cap >= needed ? "var(--success-text)" : "var(--warn-text)");
 
   // v14.4.1: clear/done row pinned via Overlay's `footer` slot.

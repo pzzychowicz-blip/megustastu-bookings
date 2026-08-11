@@ -8,7 +8,7 @@
 //   • Month — a Mon-start calendar grid of the reference month; each in-month
 //             day cell shows its cover count with a busyness tint. (v14.9.0)
 //
-// Tap a day to jump to it (sets viewDate + closes). The footer ‹ › navigate the
+// Tap a day to jump to it (sets viewDate + closes). The footer arrows navigate the
 // period (week or month) without committing; "This week" / "This month" returns
 // to today's period. Per-day counts reuse `daySummary` (splitHour is irrelevant
 // for the totals, so 0 is passed).
@@ -28,6 +28,7 @@ import { Overlay, mkBtn, AutoHeight } from "./atoms";
 import { daySummary, rangeStats } from "../lib/booking-logic";
 import { S, BTN, R, T, FW } from "../lib/constants";
 import { hourLabel } from "../lib/time-grid";
+import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
 const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
@@ -175,9 +176,9 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   const footer = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Previous week" : "Previous month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8249;" }} />
+        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Previous week" : "Previous month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} ><ChevronLeftIcon size={16} /></button>
         <button onClick={goToday} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "6px 14px", background: BTN.today })}>{isWeek ? "This week" : "This month"}</button>
-        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Next week" : "Next month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} dangerouslySetInnerHTML={{ __html: "&#8250;" }} />
+        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Next week" : "Next month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} ><ChevronRightIcon size={16} /></button>
       </div>
       <button onClick={onClose} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })}>Close</button>
     </div>
@@ -204,10 +205,10 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
 
       <div style={{ marginTop: 18, fontSize: T.small, color: "var(--text-faint)", textAlign: "center" }}>
         {isStats
-          ? "W/M/S view · ‹ › month · T this month"
+          ? "W/M/S view · ←→ month · T this month"
           : isWeek
             ? "W/M/S view · ↑↓ day · ←→ week · T today · Enter open"
-            : "W/M/S view · ↑↓←→ day · ‹ › month · T today · Enter open"}
+            : "W/M/S view · ↑↓←→ day · footer arrows month · T today · Enter open"}
       </div>
     </Overlay>
   );

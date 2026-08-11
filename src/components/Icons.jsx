@@ -17,13 +17,34 @@
 //    colour emoji anyway — so the same warning marker is a thin outline on one
 //    device in the restaurant and a yellow sign on another.
 //
-// ── What is NOT in here, on purpose ──────────────────────────────────────────
-// Monochrome typographic marks with universal font coverage stay as text:
-// ✕ ‹ › ▲ ▼ ▸ ▾ ✓ ★, plus the timeline's bracketed `[L]` / `!!` markers. They
-// are glyphs in a text run, they inherit colour and weight for free, and they
-// truncate with the label they sit in — which an inline SVG does not. The line
-// is "does this render as a colour emoji, or is its font coverage patchy",
-// not "is this a picture".
+// ── v17.9.0: the rule above was narrowed, on purpose ─────────────────────────
+// v17.8.0 drew the line at "does this render as a colour emoji", and kept
+// ✕ ‹ › ▲ ▼ ▸ ▾ ✓ ★ as text on the grounds that they inherit colour and weight
+// for free and truncate with their label. That reasoning is sound and it was
+// still the wrong line, for a reason the emoji argument obscures: **an icon set
+// that covers only the glyphs with a rendering BUG is not an icon set, it is a
+// patch.** The app ended up drawing its dismiss control as a text ✕ two
+// millimetres from a hand-drawn SVG cog — the exact "not one medium" complaint
+// in point 1 above, just with a monochrome glyph instead of a colour one.
+//
+// So every CONTROL mark is now drawn here. Three things stay text, and they are
+// a category, not an exception list:
+//
+//   • Prose arrows inside sentences — "Settings → Opening hours", the history
+//     entries ("status → completed"), the shift labels. These are punctuation
+//     in a text run. An SVG in the middle of a sentence is a rendering bug, not
+//     an icon.
+//   • Keycap labels in Shortcuts.jsx (← → ↑ ↓ ⇧). They depict the key you press.
+//     Replacing them with drawn arrows breaks the mapping to the physical
+//     keyboard, which is the entire content of that screen.
+//   • The timeline's bracketed `[L]` / `[!]` / `!!` markers. ASCII, not glyphs,
+//     and deliberately part of the truncating label string.
+//
+// The truncation cost is real and is paid explicitly: TimelineView's ★ moved
+// OUT of the label string into the marker row (where the note dog-ear and the
+// waitlist ⏳ already live), so it no longer truncates with the name — it is now
+// a fixed-width marker that survives a narrow block, which is what a "this party
+// has preferred tables" flag should do anyway.
 //
 // House style, inherited from CogIcon (SettingsChrome.jsx, the one icon that
 // was already drawn properly): 24×24 viewBox, no fill, `currentColor` stroke,
@@ -43,6 +64,100 @@ function Svg({ size = 20, stroke, children }) {
     >
       {children}
     </svg>
+  );
+}
+
+// ── v17.9.0: the control marks (ex ✕ ✓ ★ ▲ ▼ ▸ ▾ ‹ › 🖨 ⬇ ✎ and the ASCII = / >)
+// Chevrons are ONE shape at four rotations rather than four hand-drawn paths, so
+// a disclosure that turns and a nav arrow that points can never drift apart.
+function Chevron({ deg, ...rest }) {
+  return (
+    <Svg {...rest}>
+      <g transform={"rotate(" + deg + " 12 12)"}><path d="M9 5l7 7-7 7" /></g>
+    </Svg>
+  );
+}
+export function ChevronRightIcon(props) { return <Chevron deg={0} {...props} />; }
+export function ChevronDownIcon(props) { return <Chevron deg={90} {...props} />; }
+export function ChevronLeftIcon(props) { return <Chevron deg={180} {...props} />; }
+export function ChevronUpIcon(props) { return <Chevron deg={270} {...props} />; }
+
+export function CloseIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M6 6l12 12" />
+      <path d="M18 6L6 18" />
+    </Svg>
+  );
+}
+
+export function CheckIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M4 12.5l5.5 5.5L20 6.5" />
+    </Svg>
+  );
+}
+
+// The preferred-tables marker. FILLED, unlike every other icon here, because it
+// replaces ★ (U+2605, the solid star) rather than ☆ — and because it is a flag
+// on a saturated block where an outline star at 10px closes up into a blob.
+export function StarIcon({ size = 20 }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 24 24"
+      fill="currentColor" stroke="none"
+      style={{ display: "block", flexShrink: 0 }}
+      aria-hidden="true"
+    >
+      <path d="M12 2.6l2.9 5.9 6.5.95-4.7 4.58 1.11 6.47L12 17.44l-5.81 3.06 1.11-6.47-4.7-4.58 6.5-.95z" />
+    </svg>
+  );
+}
+
+export function PrintIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M6 9V3h12v6" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+      <rect x="6" y="14" width="12" height="8" rx="1.5" />
+    </Svg>
+  );
+}
+
+export function DownloadIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3v12" />
+      <path d="M7 10.5l5 5 5-5" />
+      <path d="M3.5 20.5h17" />
+    </Svg>
+  );
+}
+
+// Rename / edit. A pencil on a baseline rather than a bare nib — at 14px a
+// lone diagonal reads as a slash, which is what the ex-✎ looked like next to
+// the ✓ it sits beside.
+export function EditIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M14.5 4.5l5 5L9 20H4v-5z" />
+      <path d="M13 6l5 5" />
+    </Svg>
+  );
+}
+
+// Manual table assignment (ex the ASCII `=`). A grid of tables with one picked,
+// which is literally what the modal it opens asks you to do. The `=` it replaces
+// was meant to evoke two pushed-together tables and read as an equals sign.
+export function AssignIcon(props) {
+  return (
+    <Svg {...props}>
+      <rect x="2.5" y="4" width="8" height="7" rx="1.6" />
+      <rect x="13.5" y="4" width="8" height="7" rx="1.6" />
+      <rect x="2.5" y="14" width="8" height="7" rx="1.6" />
+      <path d="M14 17.5l2.5 2.5 5-5" />
+    </Svg>
   );
 }
 
@@ -204,6 +319,23 @@ export function ClosedIcon(props) {
     <Svg {...props}>
       <circle cx="12" cy="12" r="9" />
       <path d="M5.6 5.6l12.8 12.8" />
+    </Svg>
+  );
+}
+
+// v17.9.0: the cog moved here from SettingsChrome.jsx. It was the ONE icon
+// already drawn properly (v17.1.0) and this file's house style was copied from
+// it — but it stayed outside the set, hard-coded at 20×20 with its own <svg>,
+// so it took none of the optical stroke compensation and could not be sized.
+// In ViewTools' pair that showed: a 17px search beside a 20px cog, which is a
+// smaller version of the very mismatch the header of this file is about.
+// SettingsChrome re-exports it, so the lazy-Settings import boundary is
+// unchanged — Icons.jsx has no imports of its own to drag along.
+export function CogIcon(props) {
+  return (
+    <Svg {...props}>
+      <circle cx={12} cy={12} r={3} />
+      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
     </Svg>
   );
 }

@@ -121,7 +121,7 @@ import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
 import { ViewTools }    from "./components/ViewTools";
-import { WaitIcon, BellIcon, BellRingIcon, LateIcon, OverlapIcon } from "./components/Icons";
+import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, LateIcon, OverlapIcon, WaitIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -2705,13 +2705,13 @@ function BookingApp({uid}){
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Previous day"
               title="Previous day (←)"
-              dangerouslySetInnerHTML={{__html:"&#8249;"}} /><button
+              ><ChevronLeftIcon size={16} /></button><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Next day"
               title="Next day (→)"
-              dangerouslySetInnerHTML={{__html:"&#8250;"}} /><input
+              ><ChevronRightIcon size={16} /></button><input
               type="date"
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}

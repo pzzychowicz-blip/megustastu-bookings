@@ -41,6 +41,7 @@ const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // startup chunk. Re-exported here for back-compat; still exactly ONE list.
 import { SETTINGS_TABS } from "./SettingsChrome";
 import { hourLabel } from "../lib/time-grid";
+import { CloseIcon, DownloadIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
@@ -588,7 +589,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
                   title={armedTier === i ? "Tap again to remove" : "Remove this tier"}
                   style={{ ...HOUR_STEP_BTN, height: 32, marginBottom: 2, ...(armedTier === i
                     ? { width: "auto", padding: "0 10px", fontSize: T.body, fontWeight: FW.bold, background: "var(--danger-bg)", color: "var(--danger-text)", border: "1px solid var(--danger-border)" }
-                    : { width: 32, fontSize: T.lead, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : "×"}</button>
+                    : { width: 32, fontSize: T.lead, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : <CloseIcon size={13} />}</button>
               </div>
             );
           })}
@@ -827,7 +828,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
             <button
               onClick={onBackup}
               className="mgt-hover-scale mgt-press"
-              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.nav })}>⬇ Download backup</button>
+              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={15} />Download backup</button>
           </div>
         </Section>
       ) : null}
