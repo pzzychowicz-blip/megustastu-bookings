@@ -112,6 +112,25 @@ const SIZE_RING = {
   fontVariantNumeric: "tabular-nums", position: "relative"
 };
 
+// ── How wide a block must be before it may wear a start-time chip (v17.9.0) ──
+// Everything on a block except the name is flexShrink:0, so the name gets
+// whatever is left. These are the measured widths of the fixed parts; the rule
+// is "the name must still have NAME_MIN after all of them".
+const CHIP_PX = 42;      // the start-time chip + its margin
+const HANDLE_PX = 41;    // the assign handle (28 min-width + padding + rule)
+const RING_PX = 24;      // the party-size ring + its margin (v17.9.0)
+const FLAG_PX = 15;      // one 11px flag icon + its 4px margin (v17.9.0)
+const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
+
+function chipRoomFor(b, noShows, warn) {
+  const flags = ((Number(b.deposit) || 0) > 0 ? 1 : 0)
+    + ((b.preferredTables && b.preferredTables.length) ? 1 : 0)
+    + (isLocked(b) ? 1 : 0)
+    + (noShows >= 2 ? 1 : 0)
+    + (warn && warn.overdue ? 1 : 0);
+  return CHIP_PX + HANDLE_PX + RING_PX + NAME_MIN_PX + FLAG_PX * flags;
+}
+
 // v15.8.0: module-level status-change animation state (survives the inline Block
 // remount + any TimelineView remount during the save flow). Single timeline, so
 // module scope is safe; entries are keyed by booking id and expire by timestamp.
@@ -848,8 +867,23 @@ export const TimelineView = memo(function TimelineView({
   // the other bookings' chips (the reported bug). Each flip animates per block
   // via Presence.
   // v17.0.0: pending joins the chip family (treated same as confirmed).
+  //
+  // v17.9.0: the "140" above is gone, because the fixed cost it stood for is no
+  // longer one number. The block's right-hand rail gained a size ring (always
+  // present) and one marker per ACTIVE flag, every one of them flexShrink:0 —
+  // so the room left for the name now depends on how flagged the booking is.
+  // With the flat threshold, a 150px block carrying a deposit and a preferred
+  // star kept its chip and rendered the guest name at literally zero width:
+  // "18:30 ⑥ ⊙ ★ ▦", no name at all. That is worse than the crowding the chip
+  // rule exists to prevent — the name is the thing you read a block FOR, and
+  // dropping the chip gives 42px straight back to it.
+  //
+  // Same all-or-nothing shape as before (one mixed grid read messy in live QA);
+  // the per-block part is only what each block needs, and the worst one decides.
   const confirmedDay = day.filter((b) => b.status === "confirmed" || b.status === "pending");
-  const chipsOn = confirmedDay.length > 0 && confirmedDay.every((b) => liveBarDur(b, nowMins) * pxPerMin >= 140);
+  const chipsOn = confirmedDay.length > 0 && confirmedDay.every(function (b) {
+    return liveBarDur(b, nowMins) * pxPerMin >= chipRoomFor(b, nsMap[normalizePhone(b.phone)] || 0, warnings[b.id]);
+  });
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
   // CSS left/width transition can't cover — the block re-parents into a new row) eases
@@ -1366,11 +1400,25 @@ export const TimelineView = memo(function TimelineView({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", flex: "1 1 auto", minWidth: 0 }}>
           {legendEls}
         </div>
-        {/* v17.0.0 round 8: the 🔍/⚙ pair moved OUT to App's date-nav row
-            (ViewTools.jsx) so it sits in one place for all three views. */}
+        {/* v17.0.0 round 8: the 🔍/⚙ pair moved OUT of this legend, first to
+            App's date-nav row and (v17.9.0) up into App's header, so it sits in
+            one place for all three views. */}
       </div>
-      <div style={{ marginTop: 6, fontSize: T.small, color: S.muted }}>
-        tap booking to edit  ·  = assign  ·  hold to change status  ·  tap table label to block
+      {/* v17.9.0: this line said "= assign" and described a glyph that no longer
+          exists — the block's handle is AssignIcon now. Exactly the trap
+          CLAUDE.md records from the first icon pass ("update the COPY with the
+          glyphs"), caught by a rendered-text sweep rather than by reading the
+          diff, because nothing about the handle's change touches this file's
+          hint string. It shows the icon inline instead of naming a character, so
+          the two cannot come apart again. */}
+      <div style={{ marginTop: 6, fontSize: T.small, color: S.muted, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+        <span>tap booking to edit</span>
+        <span aria-hidden="true">·</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AssignIcon size={12} />assign</span>
+        <span aria-hidden="true">·</span>
+        <span>hold to change status</span>
+        <span aria-hidden="true">·</span>
+        <span>tap table label to block</span>
       </div>
       {quickPopup}
     </div>

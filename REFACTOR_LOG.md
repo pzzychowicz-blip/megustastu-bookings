@@ -8293,3 +8293,44 @@ committing. Cached name renders (`MGT Bookings`, the real DEV value), absent
 cache falls back to `Me Gustas Tú`, logo loads at 44px in both themes. The
 `?theme=light` override added earlier in this same version is what made the
 light-mode check possible without writing to his prefs node.
+
+### 15 — two fixes the batched verification pass found, not the diff
+
+Both caught by sweeping the RENDERED page rather than by re-reading the change,
+which is the point: neither is visible in the diff of the commit that caused it.
+
+**1. The timeline legend still said "= assign".** The block's handle is
+`AssignIcon` now, so the hint line described a character that no longer exists
+anywhere. This is precisely the trap the first icon pass wrote into CLAUDE.md
+("update the COPY with the glyphs" — `LayoutSettings`' "Reorder with ‹ ›" and
+WeekView's hints) recurring in the commit series that quotes it. Nothing about
+changing `TimelineBlock`'s handle touches this string, so only a scan of what
+the page actually renders could find it. It shows the icon inline now instead of
+naming a character, so the two cannot come apart again.
+
+**2. The start-time chip rule was still costed against the old block.** Its
+threshold was a flat 140px, documented as "the name keeps ≥55px after the chip
+(~42px) and the assign handle (~41px)". The redesign added a size ring (24px
+with its margin) and one 15px marker per active flag — all `flexShrink: 0` — so
+the room left for the name became a function of how flagged the booking is, and
+140 no longer stood for anything. A 150px block carrying a deposit and a
+preferred star kept its chip and rendered the guest name **at zero width**:
+`18:30 ⑥ ⊙ ★ ▦`, no name at all.
+
+That is worse than the crowding the rule exists to prevent. The name is what you
+read a block for — the same argument used two commits earlier to reject dimming
+the chip. Dropping the chip hands 42px straight back to it.
+
+`chipRoomFor(b, noShows, warn)` replaces the literal: the fixed parts as named
+constants plus 15px per flag the booking actually carries. The rule stays
+all-or-nothing across the day (a mixed grid read messy in live QA) — only the
+per-block requirement is now honest, and the worst block decides. Verified in
+both directions: at ~150px chips drop and "Cam… ⑥ ⊙ ★" renders, at ~288px both
+the chip and the full name are back.
+
+**Sweep used:** every `<svg>` in the tree must have non-zero rendered size (the
+cheap catch-all for a renamed or broken icon import), and no leaf element may
+contain a control glyph, run across Timeline / List / Plan, the booking and
+walk-in forms, and all five Settings tabs. Zero-sized icons: none. Remaining
+glyph hits: the table-group capacity hints ("1A+1B = 6"), which are arithmetic
+inside a sentence and correctly stay text.
