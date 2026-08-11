@@ -7954,10 +7954,26 @@ backdrop.
 
 ### A DEV-data note
 
-While driving the Settings UI to verify, a mis-aimed click changed DEV's
-`settings/operatingHours` for Tuesday (13:00–01:00 → 17:00–00:00). Caught by
-noticing the header subtitle had changed between two screenshots, and restored
-through the app's own `writeWithRev` so the CAS rev advanced properly. The first
-restore attempt over-corrected — it also flattened Sunday (06:00) and Saturday
-(09:00), which were pre-existing values — and was itself corrected; the node is
-back to exactly its prior state. No PROD data was touched at any point.
+While driving the Settings UI to verify, mis-aimed clicks changed **two** DEV
+settings nodes. Both are restored; no PROD data was touched at any point.
+
+1. `settings/operatingHours`, Tuesday: 13:00–01:00 → 17:00–00:00. Caught by
+   noticing the header subtitle had changed between two screenshots.
+2. `settings/users/{uid}/prefs.theme`: dark → light. Caught later, by a plain
+   no-parameter load rendering light when the account was saved as dark — i.e.
+   by the very check written to prove the new `?theme=` override does NOT
+   write to the node.
+
+Both were restored through the app's own `writeWithRev`, so the CAS revs
+advanced properly rather than being clobbered. The first restore over-corrected,
+also flattening Sunday (06:00) and Saturday (09:00) — pre-existing values I had
+not set — and was itself corrected.
+
+Worth keeping as a working note: **driving a settings UI by synthesising clicks
+from measured coordinates is how you edit data you did not mean to edit.** The
+`computer` tool takes screenshot-pixel coordinates and
+`getBoundingClientRect()` returns viewport pixels; on a scaled screenshot those
+are different numbers, and the clicks land somewhere plausible rather than
+nowhere. Prefer the app's own keyboard shortcuts, or read state directly, and
+treat a settings screen as read-only unless the setting IS the thing under
+test.
