@@ -9,20 +9,28 @@
 // directly, no props.
 //
 // Phase B5 (v15-refactor): extracted from App.jsx and converted RC() → JSX.
-// Behaviour, output markup, and all inline styles are byte-identical to the
-// original.
+//
+// v17.9.0: the title is no longer a literal — it is the restaurant's configured
+// name, read from a localStorage mirror because this screen renders before auth
+// and `settings/general` is behind `auth != null`. It is also the app's actual
+// icon file rather than text alone. Everything else is still the v15 markup.
 
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
 import { S, R, T, FW } from "../lib/constants";
 import { mkInp, mkBtn } from "./atoms";
+import { readCachedRestaurantName } from "../hooks/useGeneralSettings";
 
 export function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Lazy initializer: read once per MOUNT, not per render — and per mount is
+  // the right granularity, because a sign-out remounts this screen and should
+  // pick up a rename that landed during the previous session.
+  const [restaurantName] = useState(readCachedRestaurantName);
 
   function handleLogin() {
     if (!email || !password) {
@@ -71,11 +79,34 @@ export function LoginScreen() {
         width: "100%", maxWidth: 360,
         boxShadow: "var(--shadow-sheet)"
       }}>
-        <div style={{ fontSize: T.display, fontWeight: FW.bold, color: S.text, marginBottom: 4 }}>
-          Me Gustas T&uacute;
-        </div>
-        <div style={{ fontSize: T.lead, color: S.muted, marginBottom: 24 }}>
-          Staff login
+        {/* v17.9.0 (Patryk): the app mark, and the restaurant's OWN name.
+            The name was the "Me Gustas Tú" literal this whole settings node was
+            created to remove in v17.0.0 — the one place it survived, because
+            this screen renders before sign-in and cannot read Firebase. It
+            comes from the localStorage mirror instead (see
+            readCachedRestaurantName), so it is right on any device that has
+            signed in once and falls back to the seed on one that never has.
+
+            The logo is `/icon.svg` — the SAME file the PWA and favicon use, not
+            a re-drawn copy, so it cannot drift from the icon family that
+            scripts/gen-icons.py exists to keep in step. It carries its own
+            rounded tile, hence no borderRadius here, and no dark-mode variant:
+            a logo has fixed brand colours and this is the mark already sitting
+            on the home screen of every device that opens this page. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+          <img
+            src="/icon.svg" alt="" aria-hidden="true"
+            width={44} height={44}
+            style={{ display: "block", flexShrink: 0 }}
+          />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: T.display, fontWeight: FW.bold, color: S.text }}>
+              {restaurantName}
+            </div>
+            <div style={{ fontSize: T.lead, color: S.muted }}>
+              Staff login
+            </div>
+          </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <input

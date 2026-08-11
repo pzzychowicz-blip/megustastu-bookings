@@ -52,6 +52,28 @@ export const DEFAULT_GENERAL_SETTINGS = {
   defaultWalkinSize: 2
 };
 
+// ── The restaurant name's pre-auth cache (v17.9.0) ───────────────────────────
+// LoginScreen renders BEFORE sign-in, and `settings/general` is behind
+// `auth != null` — a read there is permission-denied, so the login title
+// physically cannot come from Firebase. It is mirrored to localStorage instead,
+// the same shape the theme uses: **localStorage is a pre-mount cache, the node
+// is the source of truth.** A device that has signed in once shows the right
+// name forever after; a device that never has shows the seed, once.
+//
+// Key, writer and reader all live in this file on purpose. The theme's
+// equivalent is split across three sites (`readThemePref`, the Settings toggle,
+// index.html's no-flash script) and CLAUDE.md has to carry a "keep the value
+// convention in sync" warning because of it. One owner needs no warning.
+export const RESTAURANT_NAME_KEY = "mgt-restaurant-name";
+
+export function readCachedRestaurantName(){
+  try{
+    const v = localStorage.getItem(RESTAURANT_NAME_KEY);
+    if(typeof v === "string" && v.trim()) return v.trim().slice(0, 60);
+  }catch{/* private mode / storage disabled */}
+  return DEFAULT_GENERAL_SETTINGS.restaurantName;
+}
+
 function clampStep(n, def, min, max, step){
   // NaN check AFTER the round (see useBookingDefaults for the why).
   let v = Math.round(Number(n) / step) * step;
@@ -103,6 +125,13 @@ export function useGeneralSettings(){
     },dbError("settings/general"));
     return unsub;
   }, []);
+
+  // Keep the pre-auth cache current. Keyed on the NAME rather than run inside
+  // the snapshot handler, so it also covers `saveGeneralSettings` — a rename in
+  // Settings reaches the login screen without a round trip through Firebase.
+  useEffect(function(){
+    try{ localStorage.setItem(RESTAURANT_NAME_KEY, generalSettings.restaurantName); }catch{/* ignore */}
+  }, [generalSettings.restaurantName]);
 
   // Guarded write; accepts a PARTIAL update (the useBookingDefaults contract).
   function saveGeneralSettings(partial){

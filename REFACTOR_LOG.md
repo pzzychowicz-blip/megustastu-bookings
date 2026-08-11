@@ -8251,3 +8251,45 @@ top-aligned when something tall is in it.
 
 Verified in both states — collapsed, row 102 / controls at +31; open, row 272 /
 controls at +0.
+
+### 14 — the login screen gets the app mark and the restaurant's own name
+
+Patryk's item 5. Two things, one of which had a real reason for still being
+wrong.
+
+**The name.** `settings/general` was created in v17.0.0 specifically to remove
+the `"Me Gustas Tú"` literal from the header and the day sheet. The login screen
+kept it, and not by oversight: it renders **before sign-in**, and the node is
+behind `auth != null`, so a read there is permission-denied. The three ways out
+were put to Patryk explicitly and he took the cache: a `localStorage` mirror
+written whenever `generalSettings.restaurantName` changes, read by the login
+screen with the seed as fallback. Correct on any device that has signed in once;
+the seed, once, on one that never has. The rejected third option was making the
+node world-readable, which would open the phone prefix and currency to anyone
+with the database URL to save a string.
+
+`RESTAURANT_NAME_KEY`, its writer and `readCachedRestaurantName` all live in
+`useGeneralSettings.js`. The theme's equivalent mirror is spread across
+`readThemePref`, the Settings toggle and `index.html`'s no-flash script, and
+CLAUDE.md carries a standing "keep the value convention in sync across all
+three" warning as a result. **One owner needs no warning.** The mirror effect is
+keyed on the name rather than run inside the `onValue` handler, so a rename in
+Settings reaches the login screen without a round trip through Firebase.
+
+**The mark** is `/icon.svg` — the shipped icon file itself, not a re-drawn copy,
+so it cannot drift from the family `scripts/gen-icons.py` exists to keep in step.
+It carries its own rounded tile (no `borderRadius` needed) and gets no dark-mode
+variant: a logo has fixed brand colours, and this is the mark already on the home
+screen of every device that opens the page. `img-src 'self'` in `vercel.json`
+already covers it.
+
+**Verified without touching Patryk's live session.** A second dev server on port
+5174 did *not* work — Firebase auth persistence turned out to be shared across
+localhost ports, so that origin was signed in too. Signing out would have locked
+him out of the DEV app mid-session. Forced instead with a one-line local edit to
+the auth gate, screenshotted in both themes and in both cache states, then
+reverted and diffed byte-for-byte against a pre-edit copy of `App.jsx` before
+committing. Cached name renders (`MGT Bookings`, the real DEV value), absent
+cache falls back to `Me Gustas Tú`, logo loads at 44px in both themes. The
+`?theme=light` override added earlier in this same version is what made the
+light-mode check possible without writing to his prefs node.
