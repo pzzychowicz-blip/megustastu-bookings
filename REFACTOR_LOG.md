@@ -7820,3 +7820,57 @@ through the live CSSOM: `background-image` is `none` in both themes and no
 If a gradient is ever wanted here again, ~8 L\* is the bar it has to clear. A
 backdrop either commits to being seen or it commits to being a surface; what it
 cannot usefully be is a gradient that reads as a flat colour and costs six stops.
+
+### 3/N — `lib/time-grid.js`: the narrow half of a roadmap idea
+
+**Files:** new `src/lib/time-grid.js`, new `tests/time-grid.test.js`,
+`src/App.jsx`, `src/components/TimelineView.jsx`, `TimeAxis.jsx`, `Summary.jsx`,
+`Settings.jsx`, `WeekView.jsx`, `BlockModal.jsx`.
+
+`ROADMAP.md` proposed unifying TimelineView's grid header with `TimeAxis`,
+describing them as the same strip drawn twice and asserting that "both use
+`pct()`". **Neither part survived inspection.** TimelineView positions by
+percentage (`pct()`); TimeAxis positions by pixels (`xOf()` against a fixed
+`trackW`), which is what makes its `padding-inline: 50%` scroll maths work.
+TimelineView draws full-height gridlines and pills on `--tl-hour-pill`; TimeAxis
+draws mirrored 13px/7px tape edges and plain `--text-secondary` labels between
+them. A shared renderer would have to straddle both positioning models and both
+label treatments, and every bit of that risk lands in TimelineView's
+scroll-follow, FLIP and drag-and-drop markup for no user-visible gain.
+
+So the extraction is deliberately narrow and **no component is unified**. The
+roadmap entry is closed by the finding, not by the work it proposed.
+
+What *was* duplicated is the `HH:00` label — across eight files, in three
+apparent variants. Checking them one at a time is what made this worth doing,
+because **only two of the three were the same function**:
+
+- `((n % 24) + 24) % 24` and a bare `n % 24` differ only in defensiveness; every
+  caller's input is non-negative, so six sites collapsed into `hourLabel()`.
+- Settings' `cutoffLabel` looked like a seventh copy and is **a different
+  function**. It renders 24 as `"24:00"` on purpose, because the optimizer
+  cutoff is a full-day endpoint where 0 ("off all day") and 24 ("on all day")
+  are both meaningful. Unifying it would have silently collapsed the two into
+  one label. It keeps its own formatter and now carries a comment saying why, so
+  the next sweep doesn't "finish the job".
+
+The lesson: **"N copies of one line" is a claim to check, not to act on.** A
+mechanical sweep here would have shipped a settings bug.
+
+`hourLabelAt(mins)` is separate from `hourLabel(hours)` rather than one function
+sniffing its argument — the two take different UNITS, and a function that guessed
+would be a bug waiting for the first caller whose hour count exceeds 60.
+
+The hour-pill STYLE was also duplicated (three sites, two byte-identical), but it
+is now a module const in TimelineView.jsx rather than a `time-grid` export: every
+user is in that one file, and exporting a style across a module boundary nothing
+else reads is not sharing, just distance. That also keeps `time-grid.js` pure,
+which is what makes it testable — 8 new tests covering the wrap cases the three
+old variants disagreed on. **229 → 237 tests.**
+
+One bug caught during verification, worth recording because the build cannot
+catch it: an undefined identifier in JSX **compiles fine** — Vite treats it as a
+global reference — so a missed import fails only at runtime. `App.jsx`'s header
+subtitle (a seventh call site, spotted in the grep and initially skipped) threw
+`hourLabel is not defined` in the browser while `npm run build` reported success.
+Reading the console was what found it.

@@ -18,6 +18,7 @@
 import { useState, useEffect } from "react";
 import { S, BTN, TBL, OPEN, GRID_CLOSE, R, T, FW } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
+import { hourLabel } from "../lib/time-grid";
 import { Overlay, Section, Fld, mkBtn, mkInp } from "./atoms";
 
 export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose, onDirty }) {
@@ -84,7 +85,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           </span>
         </div>
         {existing.map((bl, i) => {
-          const label = bl.allDay ? String(OPEN).padStart(2, "0") + ":00 – " + String(GRID_CLOSE % 24).padStart(2, "0") + ":00" : bl.from + " – " + bl.to;
+          const label = bl.allDay ? hourLabel(OPEN) + " – " + hourLabel(GRID_CLOSE) : bl.from + " – " + bl.to;
           return (
             <div key={i} style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",

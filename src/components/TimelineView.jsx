@@ -47,6 +47,7 @@ import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 import { WaitIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
+import { hourLabelAt, isHourMark } from "../lib/time-grid";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
@@ -56,6 +57,25 @@ import { QuickStatusPopup } from "./QuickStatusPopup";
 // (Below the imports: it worked above them only because imports hoist, which is
 // the kind of thing that stops being true the day a circular import appears.)
 const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.tap;
+
+// v17.9.0: the hour-pill look, once. Three places in this file paint a time on
+// --tl-hour-pill — the ruler's hour labels, a block's start-time chip, and a
+// waitlist ghost's — and the two chips were byte-identical copies. The v17.8.0
+// decision they encode is that a time is the same object wherever it appears, so
+// the chip deliberately matches the ruler above it; that intent only survives if
+// the fill, ink, radius and type live in ONE place.
+//
+// Deliberately NOT in lib/time-grid.js: every user is in this file, and there is
+// no reason to export a style across a module boundary that nothing else reads.
+// The two chips add their own `opacity: 0.8` — see the note at the block chip for
+// why they are quieter than the ruler's.
+const HOUR_PILL = {
+  padding: "2px 5px", borderRadius: R.pill,
+  fontSize: T.micro, fontWeight: FW.semi,
+  fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
+  background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+};
 
 // v15.8.0: module-level status-change animation state (survives the inline Block
 // remount + any TimelineView remount during the save flow). Single timeline, so
@@ -122,11 +142,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
           the ruler pill, just quieter — the fill and the label fade together
           instead of the label drifting off its own background. */}
       <span style={{
-        flexShrink: 0, marginLeft: 6, padding: "2px 5px", borderRadius: R.pill,
-        fontSize: T.micro, fontWeight: FW.semi, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
-        whiteSpace: "nowrap",
-        background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.1)", opacity: 0.8,
+        ...HOUR_PILL,
+        flexShrink: 0, marginLeft: 6, lineHeight: "12px", opacity: 0.8,
         pointerEvents: "none", position: "relative"
       }}>{b.time}</span>
     </Reveal>
@@ -405,7 +422,7 @@ function GridLines() {
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       {QUARTER_HOURS.map((m) => {
-        const isH = m % 60 === 0;
+        const isH = isHourMark(m);
         return (
           <div
             key={m}
@@ -537,11 +554,8 @@ function WaitGhost({ g, totalMins, onBook }) {
           all-or-nothing `chipsOn` rule); a ghost always does, because the time
           is the entire proposal — a ghost without one says nothing useful. */}
       <span style={{
-        flexShrink: 0, marginLeft: 6, padding: "2px 5px", borderRadius: R.pill,
-        fontSize: T.micro, fontWeight: FW.semi, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
-        whiteSpace: "nowrap",
-        background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.1)", opacity: 0.8
+        ...HOUR_PILL,
+        flexShrink: 0, marginLeft: 6, lineHeight: "12px", opacity: 0.8
       }}>{g.time}</span>
       {/* v17.8.0 correction: the ⏳ sits BETWEEN the time and the name, not
           trailing it. Trailing, it was the first thing the ellipsis ate — the
@@ -740,7 +754,7 @@ export const TimelineView = memo(function TimelineView({
   // header line aligns with the body's (the old left:pct(100%) line sat ~2px to
   // the right of the body's right:0 line).
   const headerLines = QUARTER_HOURS.map((m) => {
-    const isH = m % 60 === 0;
+    const isH = isHourMark(m);
     return (
       <div
         key={"l" + m}
@@ -753,22 +767,19 @@ export const TimelineView = memo(function TimelineView({
   });
 
   const headerLabels = QUARTER_HOURS
-    .filter((m) => m % 60 === 0 && m < GRID_CLOSE * 60)
+    .filter((m) => isHourMark(m) && m < GRID_CLOSE * 60)
     .map((m) => {
       const center = ((m + 30 - OPEN * 60) / totalMins) * 100;
       return (
         <span
           key={"h" + m}
           style={{
+            ...HOUR_PILL,
             position: "absolute", top: 3, left: center + "%", transform: "translateX(-50%)",
-            fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
-            whiteSpace: "nowrap", pointerEvents: "none",
-            background: "var(--tl-hour-pill)",
-            padding: "2px 5px", borderRadius: R.pill, zIndex: 1,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+            pointerEvents: "none", zIndex: 1
           }}
         >
-          {String(Math.floor(m / 60) % 24).padStart(2, "0") + ":00"}
+          {hourLabelAt(m)}
         </span>
       );
     });

@@ -27,6 +27,7 @@ import { useState, useEffect } from "react";
 import { Overlay, mkBtn, AutoHeight } from "./atoms";
 import { daySummary, rangeStats } from "../lib/booking-logic";
 import { S, BTN, R, T, FW } from "../lib/constants";
+import { hourLabel } from "../lib/time-grid";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
 const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
@@ -300,7 +301,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
         </div>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-muted)", margin: "0 0 6px" }}>Busiest hours</div>
         <div style={{ marginBottom: 14 }}>
-          {st.hours.slice(0, 6).map(function(h){ return bar(String(h.hour).padStart(2, "0") + ":00", h.covers, maxH); })}
+          {st.hours.slice(0, 6).map(function(h){ return bar(hourLabel(h.hour), h.covers, maxH); })}
           {st.hours.length === 0 ? <div style={{ fontSize: T.body, color: "var(--text-faint)" }}>—</div> : null}
         </div>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-muted)", margin: "0 0 6px" }}>Table usage</div>

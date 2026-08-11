@@ -40,6 +40,7 @@ const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // can import them WITHOUT pulling this whole (now lazy-loaded) module into the
 // startup chunk. Re-exported here for back-compat; still exactly ONE list.
 import { SETTINGS_TABS } from "./SettingsChrome";
+import { hourLabel } from "../lib/time-grid";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
@@ -121,7 +122,7 @@ const HOUR_STEP_BTN = mkStep(38);
 // clock label; the optimizer cutoff passes its own so it can show "24:00" (the
 // full-day endpoint) distinctly from "00:00".
 function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }) {
-  const display = fmt ? fmt(value) : String(value % 24).padStart(2, "0") + ":00";
+  const display = fmt ? fmt(value) : hourLabel(value);
   return (
     <div>
       <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
@@ -181,7 +182,7 @@ const MINI_STEP_BTN = mkStep(30);
 function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt }) {
   // v16.3.0: fmt is now optional (defaults to the HH:00 time format used by the
   // Opening-hours editor); the Standing-bookings horizon passes a plain number.
-  const fmtFn = fmt || ((n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00");
+  const fmtFn = fmt || hourLabel;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
@@ -244,11 +245,16 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
   const se = shiftsEnabled !== false;
   const oc = typeof optimizerCutoff === "number" ? optimizerCutoff : 15;
   const oas = optimizerAutoSwitch !== false;
-  const hhLabel = (n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00";
+  const hhLabel = hourLabel;
   // v15.0.0 (cutoff range): the optimizer cutoff is a single GLOBAL switch-off
   // hour, independent of opening hours — selectable across the whole day
   // (00:00–24:00). Its own formatter shows 24 as "24:00" (the full-day endpoint),
   // distinct from "00:00". Endpoints are meaningful: 0 = off all day, 24 = on all day.
+  //
+  // v17.9.0: this deliberately does NOT use hourLabel(), which wraps 24 to
+  // "00:00" and would collapse the two endpoints into one label — "on all day"
+  // and "off all day" reading identically. It looks like a fourth copy of the
+  // shared formatter and is a different function; leave it alone.
   const cutoffLabel = (n) => String(n).padStart(2, "0") + ":00";
   // v16.1.0: booking-defaults (duration tiers + running-late thresholds).
   // Defensive fallback mirrors the hook's DEFAULT_BOOKING_DEFAULTS seed.

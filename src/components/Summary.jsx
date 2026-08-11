@@ -23,8 +23,8 @@ import { useMemo, memo } from "react";
 import { daySummary } from "../lib/booking-logic";
 import { BTN, TOTAL_SEATS, hoursFor, R, T, FW } from "../lib/constants";
 import { mkBtn, Reveal } from "./atoms";
-
-function hh(n){ return String(((n % 24) + 24) % 24).padStart(2, "0") + ":00"; }
+// v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
+import { hourLabel as hh } from "../lib/time-grid";
 function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
 function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
 
