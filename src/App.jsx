@@ -2746,7 +2746,17 @@ function BookingApp({uid}){
               It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
               wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onLogout={function(){signOut(auth);}} /></div></div><div
-          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
+          /* v17.9.0 (Patryk): the date controls are 40px and the collapsed
+             Summary card beside them is 58, so `flex-start` left them sitting
+             flush against the top of the row with 18px of dead space beneath —
+             measured, not eyeballed. Centring fixes that.
+
+             But the alignment has to FLIP when the summary expands: the summary
+             is what drives this row's height, and at ~250px open, centred date
+             controls float into the vertical middle of a tall panel, visually
+             detached from the header above them. Open ⇒ back to the top, which
+             is where a control that is not the tall thing belongs. */
+          style={{display:"flex",alignItems:summaryOpen?"flex-start":"center",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}

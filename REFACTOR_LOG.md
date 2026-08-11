@@ -8228,3 +8228,26 @@ group also right-aligns the flag rail on its own, so the explicit spacer written
 alongside it is gone too.
 
 Bundle 196.60 → 196.54 kB gz (a component deleted). Gates green.
+
+### 13 — the date controls are centred in their row, until the summary opens
+
+Patryk reported the ‹ › and the date field as vertically misaligned. Measured
+rather than guessed, because the first two theories were both wrong: the buttons
+and the input are all exactly 40px (a global reset makes them `border-box`, so
+the `min-height: 40` + padding content-box arithmetic that would have made the
+circles 54 does not apply), and the inner group was already `alignItems: center`.
+
+The row itself was `alignItems: flex-start`, and the Summary card beside them is
+58px collapsed (102 at narrower widths, where its status line wraps). So the date
+controls sat flush against the top of the row with up to 62px of dead space
+beneath — correctly aligned to each other, wrongly aligned to everything else.
+
+`center` fixes it, **but only while the summary is collapsed**, and that is why
+this is a conditional rather than a one-word change. The summary is what drives
+this row's height; expanded it is ~272px, and centred date controls would float
+into the vertical middle of a tall panel, detached from the header above. So the
+alignment flips with `summaryOpen`: centred when the row is one short line,
+top-aligned when something tall is in it.
+
+Verified in both states — collapsed, row 102 / controls at +31; open, row 272 /
+controls at +0.
