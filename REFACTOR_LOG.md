@@ -7788,3 +7788,35 @@ Verified live in DEV against a signed-in account whose saved theme is `dark`:
 `?theme=light` renders light while `settings/users/{uid}/prefs.theme` still
 reads `"dark"`, and a plain load with no parameter goes back to honouring the
 account. No console errors.
+
+### 2/N — The backdrop: one flat tint, was a 6-stop gradient
+
+**Files:** `index.html`.
+
+`--bg-app` was a six-stop `linear-gradient` across near-identical desaturated
+blues in both themes. Measured rather than estimated, those six stops span
+**3.86 points of L\*** in light and **4.00** in dark — across a whole viewport,
+that is at the edge of visibility. The app was paying six stops for something
+nobody could see, which is the specific thing the v17.8.0 design audit flagged
+it as: not wrong, just stock.
+
+Rather than argue about it, both answers were built behind a DEV-only `?bg=`
+switch and compared side by side **in the real app** — three live iframes, same
+data, one parameter apart. That mattered more than usual here, because the app's
+surfaces are translucent glass: the backdrop tints every card in the app, so a
+swatch comparison would have been answering a different question.
+
+A 2-stop candidate at ~8 L\* of travel (about twice the current) was the
+alternative. Patryk chose flat. The shipped value is the **mean of the six stops
+it replaces**, which is why the change is invisible in both themes and the diff
+is essentially a deletion — the gradient's own midpoint is what everyone was
+already looking at.
+
+The comparison switch and the losing candidate were removed in the same commit
+that applied the winner; nothing DEV-only survives into the backdrop. Verified
+through the live CSSOM: `background-image` is `none` in both themes and no
+`data-bg` rule remains.
+
+If a gradient is ever wanted here again, ~8 L\* is the bar it has to clear. A
+backdrop either commits to being seen or it commits to being a surface; what it
+cannot usefully be is a gradient that reads as a flat colour and costs six stops.
