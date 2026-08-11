@@ -120,8 +120,11 @@ import { ReminderEditor }          from "./components/ReminderEditor";
 import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
-import { ViewTools }    from "./components/ViewTools";
-import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, LateIcon, OverlapIcon, WaitIcon } from "./components/Icons";
+// v17.9.0: CogIcon comes straight from Icons.jsx now, not via SettingsChrome's
+// re-export. The re-export exists to keep the LAZY-Settings boundary intact for
+// importers that predate the move; App has no reason to go the long way round,
+// and Icons.jsx has no imports of its own to drag into the startup chunk.
+import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, CogIcon, LateIcon, OverlapIcon, SearchIcon, WaitIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -345,6 +348,33 @@ const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400;
 // React.memo for zero visual change; these shared consts keep it stable.
 const EMPTY_OBJ=Object.freeze({});
 const EMPTY_ARR=Object.freeze([]);
+
+// ── The two chrome icon buttons (v17.9.0) ────────────────────────────────────
+// Find-a-booking and Settings. v17.0.0 round 8 put them in ONE pair in the
+// date-nav row so all three views shared them; v17.9.0 (Patryk) splits them by
+// what they act on rather than by what they look like. Settings leads the title
+// block — it configures the restaurant those two lines describe (its name, its
+// tables, its opening hours). Search joins the action cluster on the right,
+// between "+ New" and the connection dot — finding a booking is something you
+// DO, like adding one.
+//
+// The style stays 36×36 on --cog-bg per v17.8.0's "44 is a floor, not a target":
+// both are still secondary chrome, now sitting beside 40px primary pills, and
+// equal width/height is what keeps --r-pill a true circle rather than an egg.
+//
+// A module const in App.jsx rather than an atom or a surviving ViewTools.jsx:
+// both call sites are in this file, and exporting a style that nothing else
+// reads is distance, not sharing (the lib/time-grid.js lesson).
+const CHROME_BTN={
+  background:"var(--cog-bg)",
+  border:"1px solid var(--cog-border)",
+  borderRadius:R.pill, width:36, height:36,
+  cursor:"pointer",
+  display:"flex", alignItems:"center", justifyContent:"center",
+  flexShrink:0, padding:0,
+  color:S.text,
+  boxShadow:"var(--shadow-btn)"
+};
 function readAppWidth(){
   try{
     const v=parseInt(localStorage.getItem("mgt-appwidth"),10);
@@ -2679,7 +2709,16 @@ function BookingApp({uid}){
            only ever belt-and-braces: html+body are already overflow:hidden in
            this mode (see the body effect above), so nothing can scroll here. */
         shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}><div><div style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold}}>{generalSettings.restaurantName}</div><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}><ViewSwitcher
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
+              beside it ARE the restaurant's configuration read back — its name,
+              its table counts, its opening hours — and the control that edits
+              all three now sits against them instead of across the row in a
+              toolbar. minWidth:0 so the title, not the cog, absorbs a squeeze. */}<div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><button
+              onClick={function(){setShowSettings(true);}}
+              title="Settings & keyboard shortcuts"
+              aria-label="Settings & keyboard shortcuts"
+              className="mgt-hover-scale"
+              style={CHROME_BTN}><CogIcon size={18} /></button><div style={{minWidth:0}}><div style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold}}>{generalSettings.restaurantName}</div><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -2695,7 +2734,15 @@ function BookingApp({uid}){
               style={{background:"var(--app-walkin)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
-              style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>+ New</button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
+              style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>+ New</button>{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
+              toolbar, between "+ New" and the dot. Searching is an ACTION, and
+              this is the row of them — it reads as the counterpart to adding a
+              booking rather than as view chrome. */}<button
+              onClick={function(){setShowSearch(true);}}
+              title="Find a booking"
+              aria-label="Find a booking"
+              className="mgt-hover-scale"
+              style={CHROME_BTN}><SearchIcon size={18} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
               It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
               wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onLogout={function(){signOut(auth);}} /></div></div><div
@@ -2727,14 +2774,11 @@ function BookingApp({uid}){
               aria-label={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               title={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={15} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.0.0 round 8: 🔍 + ⚙ live HERE (right of Summary) for every
-              view — Timeline's legend and List's card-header each used to carry
-              their own copy and Plan had none. minHeight 40 aligns them with the
-              date controls; marginLeft:auto keeps them right-aligned when the
-              mobile full-width Summary wraps them onto their own line. */}
-            <div style={{display:"flex",alignItems:"center",minHeight:40,marginLeft:"auto",flexShrink:0}}><ViewTools
-              onOpenSearch={function(){setShowSearch(true);}}
-              onOpenSettings={function(){setShowSettings(true);}} /></div></div>{/* v17.5.0: in the fixed shell everything from here down lives in ONE
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={15} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.9.0: the 🔍/⚙ pair that lived here since v17.0.0 round 8 is
+              gone — both buttons moved up into the header row above, each to the
+              thing it acts on (see CHROME_BTN). The pair was created to give all
+              three views ONE copy of these controls, and that still holds: the
+              header is no less shared than the date-nav row was. */}</div>{/* v17.5.0: in the fixed shell everything from here down lives in ONE
             scroll region, so the two rows above stay pinned. The banners scroll
             away with the content — they're the pinning scope Patryk chose, and
             several open at once (a 3+ row late banner) would eat the viewport.

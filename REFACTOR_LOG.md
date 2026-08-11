@@ -8179,3 +8179,52 @@ spelled out; he took it, because the `M` shortcut still opens the popover from
 anywhere and that is the path staff use. The footer row is gated on
 `onPrint || onOpenWeek` rather than `onPrint`, so neither button can strand the
 other.
+
+### 12 — ViewTools is dissolved: chrome sits with what it acts on
+
+Patryk's items 4 and 6, which are one change: both buttons leave, so the
+component has nothing left to be.
+
+`ViewTools.jsx` was created in v17.0.0 round 8 for a good reason — Timeline's
+legend and List's card-header each carried their own copy of Find-a-booking and
+Settings, and Plan had neither, so the pair was lifted into App's date-nav row to
+give all three views ONE copy. That goal is intact. What the component got wrong
+is that it grouped the two by **appearance** (two 36px circles) into a toolbar
+that belonged to neither of them.
+
+- **Settings leads the title block.** The two lines beside it are the
+  restaurant's configuration read back — its name, its indoor/outdoor counts,
+  its opening hours — and every one of those is edited behind that cog. It now
+  sits against them instead of across the row.
+- **Find-a-booking joins the action cluster**, between "+ New" and the
+  connection dot. Searching is something you DO, and that is the row of things
+  you do.
+
+The header is no less shared across the three views than the date-nav row was,
+so the round-8 property survives the move.
+
+`CHROME_BTN` is a module const in `App.jsx`, not a new atom and not a surviving
+one-export module: both call sites are in that file, and exporting a style
+nothing else reads is distance, not sharing (`lib/time-grid.js`'s lesson, applied
+to a style object). It keeps the 36×36 on `--cog-bg` — v17.8.0's "44 is a floor,
+not a target"; these are still secondary chrome, now beside 40px primary pills,
+and equal width/height is what keeps `--r-pill` a circle instead of an egg.
+
+`CogIcon` is imported straight from `Icons.jsx` here rather than through
+`SettingsChrome`'s re-export. That re-export exists to hold the lazy-Settings
+import boundary for callers that predate the v17.9.0 move; `Icons.jsx` has no
+imports of its own, so going direct drags nothing extra into the startup chunk.
+
+**A layout regression this caused, caught by measuring rather than by looking.**
+Splitting the block's single `flex: 1` name span into `name + ring` was written
+as `flex: 0 1 auto` on each — which gives the group a content-sized flex-basis,
+which tips a narrow block out of flexbox's **grow** phase and into its **shrink**
+phase. Shrink is distributed across every item with a non-zero basis, so the
+start-time chip shrank too: it rendered **"19:0"** on a 144px block, with the
+chip box measured at 26px against its natural 43. The fix is `flex: 1 1 0%` on
+one wrapping group, which is precisely what the old single span had — the basis
+was the load-bearing part of `flex: 1` and splitting the element dropped it. The
+group also right-aligns the flag rail on its own, so the explicit spacer written
+alongside it is gone too.
+
+Bundle 196.60 → 196.54 kB gz (a component deleted). Gates green.

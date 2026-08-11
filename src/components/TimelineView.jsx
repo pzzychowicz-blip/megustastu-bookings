@@ -469,29 +469,39 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
           everything else is a fixed-width rail on the right. The name is the
           only element that shrinks, which is the correct thing to lose. */}
       {timeChip}
+      {/* Name + size as ONE `flex: 1` group, and the `1 1 0%` basis is
+          load-bearing rather than shorthand convenience. With a `0 1 auto`
+          basis the group's content counts toward the line's base size, which
+          tips a narrow block into flexbox's SHRINK phase — and shrink is
+          distributed across every item with a non-zero basis, so the start-time
+          chip gets squeezed too. It rendered "19:0" on a 144px block. A zero
+          basis keeps the line in the GROW phase: the group takes whatever is
+          left over, the name ellipsises inside it, and nothing else is touched.
+          (This is exactly what the old `flex: 1` name span did; the regression
+          came from splitting it in two without carrying the basis over.)
+
+          The group also pushes the flag rail right on its own, so there is no
+          spacer element and no marginLeft:auto that would have to be moved onto
+          whichever conditional flag happens to render first. */}
       <span style={{
-        flex: "0 1 auto", minWidth: 0, padding: "0 0 0 6px", position: "relative",
-        fontSize: T.small, fontWeight: FW.bold,
-        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+        flex: "1 1 0%", minWidth: 0, paddingLeft: 6,
+        display: "flex", alignItems: "center", position: "relative"
       }}>
-        {b.name}
+        <span style={{
+          minWidth: 0, fontSize: T.small, fontWeight: FW.bold,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+        }}>{b.name}</span>
+        {/* The party size. It was "(6)" inside the name string, which put a pair
+            of parentheses in the middle of the block's one bold text run and
+            made the size the first thing the ellipsis took after the name. A
+            ring is the same fact at a glance and it is flexShrink:0, so it
+            survives. Transparent fill: it is a count, not a status, and a
+            filled pill here would compete with the time chip. */}
+        <span
+          title={b.size + " guest" + (b.size === 1 ? "" : "s")}
+          style={{ ...SIZE_RING, marginLeft: 6 }}
+        >{b.size}</span>
       </span>
-      {/* The party size. It was "(6)" inside the name string, which put a pair
-          of parentheses in the middle of the block's one bold text run and made
-          the size the first thing the ellipsis took after the name. A ring is
-          the same information at a glance, it is fixed-width so it survives,
-          and it borrows the divider's own rule colour rather than introducing a
-          second white alpha. Transparent fill: it is a count, not a status, and
-          a filled pill here would compete with the time chip. */}
-      <span
-        title={b.size + " guest" + (b.size === 1 ? "" : "s")}
-        style={{ ...SIZE_RING, marginLeft: 6 }}
-      >{b.size}</span>
-      {/* Everything past here is right-aligned. An explicit spacer rather than
-          marginLeft:auto on the first flag, because every flag is conditional —
-          the auto would have to be duplicated onto whichever one happens to be
-          first, and go wrong the day a new flag is added above it. */}
-      <span style={{ flex: "1 1 0", minWidth: 0 }} />
       {/* v17.9.0: the flag rail — the four markers that used to be appended to
           the label string, plus the ★ that was floating on the left. Order is
           Patryk's: deposit, preferred, then the exception flags, then the
@@ -536,7 +546,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         title="Assign tables"
         style={{
           padding: "0 6px", cursor: "pointer", position: "relative",
-          marginLeft: 4,
+          marginLeft: 4, flexShrink: 0,
           borderLeft: "2px solid var(--blk-rule)",
           height: "100%", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 28
         }}
@@ -709,13 +719,15 @@ function WaitGhost({ g, totalMins, onBook }) {
           ghost had to stop too, or the "dims X, does not re-specify X" rule
           this component is built on would have lasted exactly one version. */}
       <span style={{
-        flex: "0 1 auto", minWidth: 0, padding: "0 0 0 4px", position: "relative",
-        fontSize: T.small, fontWeight: FW.bold,
-        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+        flex: "1 1 0%", minWidth: 0, paddingLeft: 4, paddingRight: 8,
+        display: "flex", alignItems: "center", position: "relative"
       }}>
-        {g.name}
+        <span style={{
+          minWidth: 0, fontSize: T.small, fontWeight: FW.bold,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+        }}>{g.name}</span>
+        <span style={{ ...SIZE_RING, marginLeft: 6 }}>{g.size}</span>
       </span>
-      <span style={{ ...SIZE_RING, marginLeft: 6, marginRight: 8 }}>{g.size}</span>
     </div>
   );
 }
