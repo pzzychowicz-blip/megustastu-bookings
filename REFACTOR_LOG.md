@@ -8363,3 +8363,25 @@ inside a callback.
 **The general lesson: this file's own write-guard rule applied and I did not
 apply it.** `saveGeneralSettings` right below refuses to write before the initial
 read completes. A cache is a write too.
+
+### 17 — /code-review fix 2/3: chipOpacity() was reading three chips, not one
+
+The guard added in commit 8 scanned every `...HOUR_PILL` spread in
+`TimelineView.jsx` and took the minimum opacity. There are **three** — the block
+chip, `WaitGhost`'s chip, and the ruler's `headerLabels` — and only the first is
+what those ten cases measure. Dimming the ruler's pills, a change with nothing to
+do with blocks, would have failed all ten with a message insisting the BLOCK chip
+is below AA.
+
+It failed *safe* (strictest wins) and it failed *misleadingly*, which is the
+defect the comment directly above it warns about wearing a different hat: a guard
+that names one thing and looks at another. The commit that wrote that warning
+shipped an instance of it three lines below.
+
+Now anchored on `const timeChip` — TimelineBlock's declaration, and the only one
+of the three that is a named binding — and it THROWS if that anchor disappears
+rather than silently measuring nothing.
+
+Verified by running all three cases rather than reasoning about them: baseline 74
+pass; `opacity: 0.8` restored on the block chip → 9 of 10 fail; `opacity: 0.5` on
+the ruler pill instead → 74 pass.

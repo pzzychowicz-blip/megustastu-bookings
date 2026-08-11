@@ -239,19 +239,42 @@ const TIMELINE_SRC = readFileSync(
   "utf8"
 );
 
-// The chip's own opacity, as authored. Each block chip is a style object that
-// spreads HOUR_PILL; anything dimming it sits on the same or the next line.
+// The BLOCK chip's own opacity, as authored.
+//
+// /code-review fix: this used to scan every `...HOUR_PILL` spread in the file
+// and take the minimum. There are THREE — TimelineBlock's chip, WaitGhost's
+// chip, and the ruler's headerLabels — and only the first is what these ten
+// cases measure. So dimming the ruler's pills, a change with nothing to do with
+// blocks, would have failed all ten with a message insisting the BLOCK chip is
+// below AA and sending the next reader to the wrong element. It failed safe
+// (strictest wins) and it failed misleadingly, which is the defect the comment
+// above warns about wearing a different hat: a guard that names one thing and
+// looks at another.
+//
+// Anchored on `const timeChip` — TimelineBlock's declaration, and the only one
+// of the three that is a named binding — so the scan cannot wander. If that
+// declaration is ever renamed the test throws here rather than silently
+// measuring nothing, which is the failure mode to prefer.
 function chipOpacity() {
   const lines = TIMELINE_SRC.split("\n");
+  const start = lines.findIndex((l) => /const\s+timeChip\s*=/.test(l));
+  if (start < 0) {
+    throw new Error(
+      "contrast.test: could not find `const timeChip` in TimelineView.jsx. " +
+      "The block start-time chip was renamed or moved — re-anchor chipOpacity() " +
+      "on it rather than deleting this guard."
+    );
+  }
+  const pill = lines.findIndex((l, i) => i >= start && /\.\.\.HOUR_PILL/.test(l));
+  if (pill < 0 || pill > start + 60) {
+    throw new Error("contrast.test: no ...HOUR_PILL spread inside the timeChip declaration.");
+  }
   let worst = 1;
-  lines.forEach((line, i) => {
-    if (!/\.\.\.HOUR_PILL/.test(line)) return;
-    for (let k = i; k < Math.min(i + 4, lines.length); k++) {
-      const m = lines[k].match(/opacity:\s*([\d.]+)/);
-      if (m) worst = Math.min(worst, parseFloat(m[1]));
-      if (/\}\}/.test(lines[k]) && k > i) break;
-    }
-  });
+  for (let k = pill; k < Math.min(pill + 4, lines.length); k++) {
+    const m = lines[k].match(/opacity:\s*([\d.]+)/);
+    if (m) worst = Math.min(worst, parseFloat(m[1]));
+    if (/\}\}/.test(lines[k]) && k > pill) break;
+  }
   return worst;
 }
 
