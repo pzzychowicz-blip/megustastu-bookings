@@ -8160,3 +8160,22 @@ and two duration edits). Recorded because the v17.9.0 entry above documents two
 *real* accidental mutations, and "the data moved while I was working" is not by
 itself evidence of a third — **the history entries are.** Reading them is cheap
 and it is the check to run before either accusing yourself or clearing yourself.
+
+### 11 — More moves out of the summary headline, next to Print day sheet
+
+Patryk's call. The summary header was the day's figures plus a control that
+reveals more of them — and, wedged into the same right-hand cluster, a button
+that opens an entirely different screen (`WeekView`'s Week/Month popover). Beside
+Print day sheet in the expanded body it is what it actually is: one of the two
+things you can do *from* the day's figures once you are looking at them.
+
+It takes Print's exact button shape (`T.body` / 32px) rather than the
+36px/`T.small` it wore in the header. Two buttons sharing a row that disagree on
+height and type size read as one control and one afterthought.
+
+**Known and accepted consequence:** More is now only reachable while the summary
+is expanded, and collapsed is its default. Put to Patryk explicitly with that
+spelled out; he took it, because the `M` shortcut still opens the popover from
+anywhere and that is the path staff use. The footer row is gated on
+`onPrint || onOpenWeek` rather than `onPrint`, so neither button can strand the
+other.

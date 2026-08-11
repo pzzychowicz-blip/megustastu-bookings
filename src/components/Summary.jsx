@@ -73,9 +73,11 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
         overflow: "hidden"
       }}
     >
-      {/* Header — the headline toggles the body (click or the `s` shortcut); the
-          More button opens the at-a-glance popover (Week / Month — see WeekView).
-          Separate buttons so we never nest a <button> inside a <button>. */}
+      {/* Header — the headline toggles the body (click or the `s` shortcut), and
+          the chevron on the right does the same thing. Two separate buttons
+          rather than one wrapping the row, so we never nest a <button> inside a
+          <button>. (The More button lived here until v17.9.0 — see the note at
+          its new home in the expanded body.) */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", flexWrap: "wrap" }}>
         <button
           onClick={onToggle}
@@ -123,15 +125,17 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               ) : null}
             </div>
           ) : null}
-          {onOpenWeek ? (
-            <button
-              onClick={onOpenWeek}
-              className="mgt-hover-scale"
-              style={mkBtn({ minHeight: 36, padding: "4px 12px", fontSize: T.small, background: BTN.nav })}
-            >
-              More
-            </button>
-          ) : null}
+          {/* v17.9.0 (Patryk): the More button moved OUT of this header and
+              down beside Print day sheet in the expanded body. The header is
+              the day's numbers plus the control that reveals them; More opens a
+              different screen entirely (Week / Month), and sitting here it was
+              a second, unrelated destination inside the summary's own headline.
+              Beside Print it is what it actually is — one of the two things you
+              can do FROM the day's figures once you are looking at them.
+
+              It is therefore only visible while the summary is expanded, which
+              Patryk chose knowingly: the `M` shortcut still opens the popover
+              from anywhere, and that is the path staff use. */}
           <button
             onClick={onToggle}
             aria-label={open ? "Collapse summary" : "Expand summary"}
@@ -180,12 +184,26 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           ) : (
             <div style={{ fontSize: T.body, color: "var(--text-muted)", padding: "4px 0 2px" }}>No bookings for this day.</div>
           )}
-          {onPrint ? (
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-              <button
-                onClick={onPrint}
-                className="mgt-hover-scale mgt-press"
-                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={14} />Print day sheet</button>
+          {/* The day's two actions, right-aligned: print it, or step back and
+              look at the week/month around it. More takes Print's exact button
+              shape rather than the 36px/T.small one it wore in the header —
+              two buttons sharing a row that disagree on height and type size
+              read as one control and one afterthought. */}
+          {onPrint || onOpenWeek ? (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              {onPrint ? (
+                <button
+                  onClick={onPrint}
+                  className="mgt-hover-scale mgt-press"
+                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={14} />Print day sheet</button>
+              ) : null}
+              {onOpenWeek ? (
+                <button
+                  onClick={onOpenWeek}
+                  title="Week & month at a glance (M)"
+                  className="mgt-hover-scale mgt-press"
+                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>More</button>
+              ) : null}
             </div>
           ) : null}
         </div>
