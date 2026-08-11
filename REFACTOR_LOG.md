@@ -7724,3 +7724,67 @@ Verified live in DEV, both themes: Optimizer OFF 1.94 → 3.00, reminder
 Once/Weekly 1.70 → 3.00, reminder title 2.85 → 3.02, Week/Month 3.28 → 4.02, no
 console errors. `npm run build` · **229 tests** (contrast now 64) · lint 0
 errors · `check:style` OK.
+
+---
+
+## v17.9.0 — the last two design-system axes, plus the backdrop
+
+**Date:** 2026-08-11
+**Files:** `src/App.jsx`, `index.html`, `CLAUDE.md`, `ROADMAP.md`
+**Behavioural change:** yes — see each commit below.
+**Verification:** build clean · 229 tests · lint 0 errors · `check:style` OK.
+
+Four `ROADMAP.md` "Ideas" entries, worked in one version. They are all
+consequences of the same unfinished work: v17.7.0 scaled the radii (`R`),
+v17.8.0 scaled motion (`M`) and type (`T`/`FW`) and enforced both in
+`check:style`, and **spacing** and **control height** were the two axes left
+over. The roadmap's own note on them — that they "keep losing to work that has
+a user-visible defect behind them" — was still true, and still not a reason to
+leave them, because every version that ships without them adds sites to the
+eventual sweep.
+
+Two findings changed the plan before any code was written; both are recorded
+under their commits.
+
+### 1/N — A DEV-only way to look at dark mode
+
+**Files:** `src/App.jsx`, `index.html`.
+
+Since v17.6.0 the theme follows the signed-in ACCOUNT
+(`settings/users/{uid}/prefs`), which overrides both `localStorage["mgt-theme"]`
+and OS-level emulation. The consequence went unnoticed until it was in the way:
+**there was no way to look at dark mode without writing to a real user's saved
+settings.** v17.8.0's contrast pass worked around it by computing ratios against
+the token values instead — sound, and reported as such, but it is not the same
+act as looking at the screen, and it cannot catch anything that isn't a
+contrast ratio.
+
+`?theme=dark` / `?theme=light` now forces the theme for one page load. It is
+inert in production twice over: Vite strips the `import.meta.env.DEV` branch
+from the bundle, and index.html's no-flash script — which has no
+`import.meta.env` of its own — gates on hostname.
+
+**The non-write is the feature, not a side condition**, so it is enforced at
+both write sites rather than left to convention:
+
+- the prefs-seeding effect skips its theme branch entirely. Both halves matter,
+  and the second is the dangerous one: `themePref` currently *holds the forced
+  value*, so the seeding `else` would have written "I chose light" up to the
+  node for a user who chose dark and merely wanted to look at it.
+- `onToggleDark` skips its `saveUserPrefs`. The Settings toggle still works
+  locally, so a theme can be flipped back and forth while inspecting; nothing
+  lands in Firebase.
+
+The override also had to be honoured in the no-flash script, not just in React.
+Reading the stored theme there and correcting it a frame later in React is
+precisely the flash that script exists to prevent — the override would have
+shipped with the bug the surrounding code was written to avoid.
+
+This is the fourth site in the theme-key sync contract (`readThemePref`, the
+Settings toggle, the no-flash script, and now the override), and the contract is
+unchanged: same key, same `"dark"`/`"light"` convention, at every one of them.
+
+Verified live in DEV against a signed-in account whose saved theme is `dark`:
+`?theme=light` renders light while `settings/users/{uid}/prefs.theme` still
+reads `"dark"`, and a plain load with no parameter goes back to honouring the
+account. No console errors.

@@ -261,7 +261,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.8.0",
+  version:"17.9.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -273,10 +273,6 @@ if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 // hooks/useKeyboardShortcuts.js with the handler that reads them — rebind there
 // (+ the Shortcuts rows).
 
-// ── v14.2.0: Dark-mode preference reader ──────────────────────────────────
-// Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
-// preference for useThemeMode: true (dark) | false (light) | undefined (follow
-// the OS live). MUST mirror the no-flash inline script in index.html — same
 // v17.4.0 /code-review: prev-identity memo for a save transform. The synchronous
 // guard checks and the immediate saveBookings dispatch call the transform with
 // the SAME `prev` reference, so they share ONE optimizer pass; a retry replay
@@ -287,8 +283,44 @@ function memoByPrev(fn){
   return function(prev){if(prev===mPrev) return mFin;const r=fn(prev);mPrev=prev;mFin=r;return r;};
 }
 
-// key, same value convention ("dark"/"light").
+// ── v17.9.0: DEV-only theme override ──────────────────────────────────────────
+// Since v17.6.0 the theme follows the signed-in ACCOUNT (settings/users/{uid}/
+// prefs), and that overrides both localStorage["mgt-theme"] and OS emulation. So
+// looking at dark mode meant toggling it in Settings — i.e. WRITING to the real
+// user's saved preferences to inspect a colour. v17.8.0's contrast pass avoided
+// that by computing ratios against the token values instead, which is sound, and
+// is not the same thing as looking at the screen.
+//
+// `?theme=dark` / `?theme=light` forces the theme for one page load. It is inert
+// in production twice over: Vite strips the `import.meta.env.DEV` branch from the
+// bundle, and index.html's no-flash script (which has no import.meta.env of its
+// own) gates on hostname.
+//
+// The NON-write is the whole point. While an override is live the prefs-seeding
+// effect skips its theme branch and onToggleDark skips saveUserPrefs, so a theme
+// check leaves the signed-in user's node exactly as it found it.
+function devThemeOverride(){
+  if(!import.meta.env.DEV) return undefined;
+  try{
+    const v=new URLSearchParams(window.location.search).get("theme");
+    if(v==="dark") return true;
+    if(v==="light") return false;
+  }catch{/* ignore */}
+  return undefined;
+}
+// Read once at module load: the override is a property of how the page was
+// opened, so it cannot change without a reload.
+const DEV_THEME_FORCED=devThemeOverride()!==undefined;
+
+// ── v14.2.0: Dark-mode preference reader ──────────────────────────────────────
+// Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
+// preference for useThemeMode: true (dark) | false (light) | undefined (follow
+// the OS live). MUST mirror the no-flash inline script in index.html — same key,
+// same value convention ("dark"/"light"), and since v17.9.0 the same
+// ?theme= override, which wins over the stored key at both sites.
 function readThemePref(){
+  const forced=devThemeOverride();
+  if(forced!==undefined) return forced;
   try{
     const v=localStorage.getItem("mgt-theme");
     if(v==="dark") return true;
@@ -811,7 +843,10 @@ function BookingApp({uid}){
     // load. The per-user node is the source of truth.
     try{localStorage.setItem("mgt-theme",next?"dark":"light");}catch{/* ignore */}
     setThemePref(next);
-    saveUserPrefs({theme:next?"dark":"light"});
+    // v17.9.0: under a ?theme= override the toggle still works locally, but it
+    // must not persist — the override exists so a theme can be inspected without
+    // touching the signed-in user's saved settings.
+    if(!DEV_THEME_FORCED) saveUserPrefs({theme:next?"dark":"light"});
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
@@ -909,7 +944,13 @@ function BookingApp({uid}){
     if(!prefsLoaded||seededPrefsRef.current) return;
     seededPrefsRef.current=true;
     const seed={};
-    if(userPrefs.theme==="dark"||userPrefs.theme==="light"){
+    // v17.9.0: a ?theme= override skips BOTH branches. Applying the saved theme
+    // would defeat the override; seeding from it would write the forced value up
+    // as if the user had chosen it. `themePref` currently HOLDS the forced value,
+    // so the else-branch is the more dangerous of the two.
+    if(DEV_THEME_FORCED){
+      /* leave settings/users/{uid}/prefs.theme exactly as found */
+    }else if(userPrefs.theme==="dark"||userPrefs.theme==="light"){
       const dark=userPrefs.theme==="dark";
       try{localStorage.setItem("mgt-theme",userPrefs.theme);}catch{/* ignore */}
       setThemePref(dark);

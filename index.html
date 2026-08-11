@@ -862,11 +862,23 @@
          (or dark-saved) user never sees a light flash. Reads the per-device
          preference in localStorage["mgt-theme"] ("dark"|"light"), else falls
          back to the OS. MUST stay in sync with readThemePref() in src/App.jsx
-         (same key, same value convention). -->
+         (same key, same value convention, and since v17.9.0 the same ?theme=
+         override — which has to be honoured HERE too, or the DEV override paints
+         the stored theme for one frame before React corrects it, i.e. exactly
+         the flash this script exists to prevent).
+
+         This script has no import.meta.env to gate on, so the override is gated
+         on hostname instead. That is what keeps it out of production. -->
     <script>
       (function () {
         try {
-          var saved = localStorage.getItem("mgt-theme");
+          var forced = null;
+          var h = location.hostname;
+          if (h === "localhost" || h === "127.0.0.1" || h === "[::1]") {
+            var q = /[?&]theme=(dark|light)\b/.exec(location.search);
+            if (q) forced = q[1];
+          }
+          var saved = forced || localStorage.getItem("mgt-theme");
           var dark = saved === "dark"
             || (saved !== "light"
                 && window.matchMedia
