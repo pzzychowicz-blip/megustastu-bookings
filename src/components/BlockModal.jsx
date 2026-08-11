@@ -132,7 +132,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           // solid danger fill instead of a one-off literal.
           background: "var(--app-danger-solid)",
           border: "1px solid rgba(255,255,255,0.2)",
-          borderRadius: R.pill, padding: "10px 22px", cursor: "pointer",
+          borderRadius: R.pill, padding: "10px 18px", cursor: "pointer",
           fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
           boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"
         }}

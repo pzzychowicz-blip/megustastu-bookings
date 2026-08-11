@@ -32,7 +32,7 @@ export function WaitAvailBanner({ entries, availability, onBook, onDismiss, }) {
     if (!w) return null;
     const avail = availability[id] || null;
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "9px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--success-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{(w.name || "(no name)") + " · " + w.size + " pax — table free" + (avail && avail.time ? " · " + avail.time : "")}</span>
         <button
           onClick={function () { onBook(w); }}

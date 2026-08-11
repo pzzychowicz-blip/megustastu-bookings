@@ -102,16 +102,16 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               {/* Occupancy metrics stay together as one no-wrap unit (short line). */}
               <span style={{ whiteSpace: "nowrap" }}>
                 <span style={{ fontWeight: FW.bold, color: "var(--status-seated-text)" }}>{s.seated.count}</span> seated
-                <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
+                <span style={{ margin: "0 4px", color: "var(--text-faint)" }}>·</span>
                 <span style={{ fontWeight: FW.bold, color: "var(--text-primary)" }}>{s.upcoming.count}</span> upcoming
-                <span style={{ margin: "0 5px", color: "var(--text-faint)" }}>·</span>
+                <span style={{ margin: "0 4px", color: "var(--text-faint)" }}>·</span>
                 <span style={{ fontWeight: FW.bold, color: "var(--text-primary)" }}>{s.seated.covers}/{TOTAL_SEATS}</span> seats filled
               </span>
               {/* freeing soon — each entry is its own no-wrap span so the list
                   wraps BETWEEN tables (never mid-token) when it gets long. */}
               {freeing && freeing.length ? (
                 <span style={{ color: "var(--success-text)", fontWeight: FW.semi }}>
-                  <span style={{ margin: "0 5px", color: "var(--text-faint)", fontWeight: FW.regular }}>·</span>
+                  <span style={{ margin: "0 4px", color: "var(--text-faint)", fontWeight: FW.regular }}>·</span>
                   <span style={{ whiteSpace: "nowrap" }}>freeing soon:</span>{" "}
                   {freeingParts(freeing).map(function(p, i){
                     return (
@@ -158,7 +158,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                   <ShiftChip label={"Evening " + hh(splitHour) + "–" + hh(dh.close)} covers={s.evening.covers} count={s.evening.count} />
                 </div>
               ) : null}
-              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {s.hours.map(function(h){
                   return (
                     <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body }}>
@@ -201,7 +201,7 @@ function ShiftChip({ label, covers, count }) {
       padding: "8px 12px",
       background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset
     }}>
-      <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-muted)", marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
       <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{covers + " cover" + (covers !== 1 ? "s" : "")}</div>
       <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{count + " booking" + (count !== 1 ? "s" : "")}</div>
     </div>

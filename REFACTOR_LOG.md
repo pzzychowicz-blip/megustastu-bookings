@@ -7874,3 +7874,58 @@ global reference — so a missed import fails only at runtime. `App.jsx`'s heade
 subtitle (a seventh call site, spotted in the grep and initially skipped) threw
 `hourLabel is not defined` in the browser while `npm run build` reported success.
 Reading the console was what found it.
+
+### 4/N — `SP` and `H`: the last two unscaled axes, linted rather than tokenised
+
+**Files:** `src/lib/constants.js`, `scripts/check-style-invariants.mjs`, new
+`tests/style-check.test.js`, ~25 component files.
+
+The two axes v17.7.0 and v17.8.0 kept deferring. `ROADMAP.md` framed them as a
+wide low-risk sweep with no defect behind them, which was right about the risk
+and wrong about the shape.
+
+**The count overstated the problem.** The audit said "96 padding strings"; the
+real figure was 97 over 320 sites, plus 13 gap and 15 margin values. But the
+underlying NUMBERS were already close to an even 2px progression. The actual
+defect was eight values nobody chose — 1, 3, 5, 7, 9, 11, 17, 20, 22 — sitting
+beside their on-scale neighbours: `"5px 11px"` in three files, `"6px 9px"` next
+to `"6px 8px"`, `"9px 14px"` next to `"8px 14px"`. That is drift. The other 89
+strings are legitimately different paddings for legitimately different boxes.
+
+**So this scale is enforced by a linter, not by tokens, and that is a
+deliberate departure from how R/T/FW were done.** Those three are SEMANTIC:
+`borderRadius: 12` genuinely did not say whether it meant "control" or "card",
+so only a role name could disambiguate it. `gap: 8` is not ambiguous; it is
+eight pixels. Tokenising ~600 spacing literals buys indirection and nothing
+else, and forcing the 84 one-off padding strings into an invented role
+vocabulary would have been 84 judgement calls that are invisible until someone
+opens that one screen. `check:style` now parses every padding / gap / margin and
+fails on any component off the scale; `SP` is exported for computed cases.
+**Result: ~80 sites changed instead of ~600, and drift is still impossible.**
+
+`H` (28/32/36/40/44) is mostly v17.8.0's sizing decision written down — 44 is a
+FLOOR for surfaces where a mis-tap costs something, not a target. Only 30 and 34
+were drift. Two findings while sweeping it: the **stepper atom itself** was
+off-scale (`mkStep`'s default 30, `HOUR_STEP_BTN` at 38), so every stepper in
+Settings was, and the party-size steppers were hand-rolled 42px circles that
+predate `mkStep` — now 40, matching `mkBtn`'s standard.
+
+Genuine `/* @canvas */` exemptions, all layout dimensions rather than controls:
+the Toggle track (48×26), the table-picker cells (64×52), TimelineView's 24px
+hour strip, WeekView's 54px calendar day cell, LayoutSettings' 58px alignment
+indent, and `Overlay`'s safe-area `calc()`.
+
+**`tests/style-check.test.js` is new, and it exists because of a near-miss in
+this very commit.** The first spacing rule required the property to be preceded
+by `{` or `,` — to avoid matching CSS inside a string literal (firebase.js's
+console badge). That condition is FALSE for a key in a multi-line style object,
+which is most of the codebase. The rule went blind and `check:style` printed OK.
+Same shape as the v17.8.0 marker-placement bug: a check that is worthless
+exactly where it should bite, while carrying the authority of having passed.
+Reading the script does not catch that; running it against known-bad input does.
+The script now takes an optional directory argument so a fixture can be pointed
+at it. **229 → 249 tests.**
+
+Verified live in DEV, both themes: no control under its previous height, nothing
+overflowing or clipped, steppers still true circles at 40/36/32, the booking
+form, Settings and the List empty state all composed correctly.

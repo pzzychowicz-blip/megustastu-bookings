@@ -224,7 +224,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         style={{
           background: ok ? (isSwapping ? BTN.orange : S.accent) : "rgba(180,180,190,0.4)",
           border: "1px solid rgba(255,255,255,0.2)",
-          borderRadius: R.pill, padding: "10px 20px",
+          borderRadius: R.pill, padding: "10px 18px",
           cursor: ok ? "pointer" : "not-allowed",
           fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
           boxShadow: ok ? "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"

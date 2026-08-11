@@ -66,7 +66,7 @@ export function SplitMenu({ view, onConfirm, onClose }) {
           background: "var(--tl-popup-bg)", borderRadius: R.sheet,
           border: "1px solid " + S.border,
           boxShadow: "var(--shadow-popover)",
-          padding: "20px 24px",
+          padding: "18px 24px",
           minWidth: 240, maxWidth: 320, zIndex: 301,
         }}
       >

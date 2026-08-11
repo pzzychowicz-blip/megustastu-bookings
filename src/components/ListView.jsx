@@ -144,7 +144,7 @@ export const ListView = memo(function ListView({
   // actions the header carries, put where the user is already looking.
   if (!day.length) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "56px 16px" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "32px 16px" }}>
         <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: S.text }}>Nothing booked for this day yet.</div>
         <div style={{ fontSize: T.body, color: S.muted, textAlign: "center", maxWidth: 340 }}>
           Take a reservation, or seat someone who has just walked in.

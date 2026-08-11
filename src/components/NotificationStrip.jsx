@@ -257,7 +257,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
                         350ms before the geometry, which is the version that
                         looked broken. */}
                     <Reveal show={orderedIds.length > 1}>
-                      <div style={{ display: "flex", alignItems: "center", gap: NOTIF_GAP, padding: "9px " + NOTIF_PAD_X + "px 1px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: NOTIF_GAP, padding: "8px " + NOTIF_PAD_X + "px 2px" }}>
                         <SectionMark icon={s.icon} tone={s.tone} size={15} fallbackDot />
                         <span style={{ fontSize: T.body, fontWeight: FW.bold, color: s.tone, flex: 1, minWidth: 0 }}>{s.title}</span>
                         {s.count > 1 ? (

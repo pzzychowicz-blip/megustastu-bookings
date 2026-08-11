@@ -58,7 +58,7 @@ export function LoginScreen() {
       background: "var(--bg-app)",
       minHeight: "100dvh",
       display: "flex", alignItems: "center", justifyContent: "center",
-      padding: 20,
+      padding: 18,
       fontFamily: "var(--font-app)", // v16.0.0: one app font — token in index.html
       color: S.text
     }}>
@@ -67,7 +67,7 @@ export function LoginScreen() {
         backdropFilter: "blur(40px)", WebkitBackdropFilter: "blur(40px)",
         borderRadius: R.auth,
         border: "1px solid var(--border-sheet)",
-        padding: "32px 28px",
+        padding: "32px 24px",
         width: "100%", maxWidth: 360,
         boxShadow: "var(--shadow-sheet)"
       }}>

@@ -134,7 +134,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                   className="mgt-hover-scale"
                   onClick={() => togglePref(t.id)}
                   style={{
-                    width: 64, height: 52, padding: 0, borderRadius: R.pill,
+                    width: 64, height: 52,   /* @canvas */ padding: 0, borderRadius: R.pill,
                     border: "2px solid " + (isPref ? "var(--accent)" : tc.bg),
                     background: isPref ? "var(--btn-tables)" : "var(--bg-input)",
                     color: isPref ? "#fff" : S.text,

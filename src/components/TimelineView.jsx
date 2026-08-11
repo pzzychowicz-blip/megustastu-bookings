@@ -70,7 +70,7 @@ const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.ta
 // The two chips add their own `opacity: 0.8` — see the note at the block chip for
 // why they are quieter than the ruler's.
 const HOUR_PILL = {
-  padding: "2px 5px", borderRadius: R.pill,
+  padding: "2px 4px", borderRadius: R.pill,
   fontSize: T.micro, fontWeight: FW.semi,
   fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
   background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
@@ -388,7 +388,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
           seated block is near full width this late, so there's room. */}
       {freeMin != null ? (
         <span style={{
-          flexShrink: 0, marginRight: 2, padding: "1px 5px", borderRadius: R.pill,
+          flexShrink: 0, marginRight: 2, padding: "2px 4px", borderRadius: R.pill,
           fontSize: T.micro, fontWeight: FW.bold, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
           whiteSpace: "nowrap", position: "relative",
           background: "var(--blk-wash)",
@@ -567,7 +567,7 @@ function WaitGhost({ g, totalMins, onBook }) {
         flexShrink: 0, marginLeft: 6, display: "flex", alignItems: "center"
       }}><WaitIcon size={11} /></span>
       <span style={{
-        flex: 1, padding: "0 8px 0 5px", position: "relative",
+        flex: 1, padding: "0 8px 0 4px", position: "relative",
         fontSize: T.small, fontWeight: FW.bold,
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
       }}>
@@ -790,7 +790,7 @@ export const TimelineView = memo(function TimelineView({
     // 24px header + ROW_H rows line up with the grid column after the pad.
     <div style={{ width: LABEL_W + "px", flexShrink: 0, paddingTop: 8 }}>
       <div style={{
-        height: 24, background: "var(--tl-header-strip)",
+        height: 24,   /* @canvas */ background: "var(--tl-header-strip)",
         borderRadius: "6px 0 0 0",
         borderBottom: "2px solid var(--tl-header-border)",
         boxSizing: "border-box"
@@ -812,7 +812,7 @@ export const TimelineView = memo(function TimelineView({
             }}
           >
             <span className="mgt-hover-scale" style={{
-              fontSize: T.small, fontWeight: FW.semi, padding: "3px 0", borderRadius: R.pill,
+              fontSize: T.small, fontWeight: FW.semi, padding: "2px 0", borderRadius: R.pill,
               background: hasBlock ? "var(--tl-blocked-badge)" : indoor ? TBL.ind.bg : TBL.out.bg,
               color: hasBlock ? "var(--text-on-accent)" : indoor ? TBL.ind.text : TBL.out.text,
               border: "1px solid " + (hasBlock ? "var(--tl-blocked-badge-border)" : indoor ? TBL.ind.border : TBL.out.border),
@@ -984,7 +984,7 @@ export const TimelineView = memo(function TimelineView({
         position: "absolute", top: 3, left: "50%", transform: "translateX(-50%)",
         fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
         background: "var(--tl-now-pill)",
-        padding: "2px 5px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
+        padding: "2px 4px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
         boxShadow: "0 1px 4px rgba(0,0,0,0.15)"
       }}>
         {toTime(nowMins)}
@@ -1016,7 +1016,7 @@ export const TimelineView = memo(function TimelineView({
           borderBottom: "2px solid var(--tl-header-border)",
           background: "var(--tl-header-strip)",
           borderRadius: "0 6px 0 0",
-          height: 24, overflow: "visible", boxSizing: "border-box"
+          height: 24,   /* @canvas */ overflow: "visible", boxSizing: "border-box"
         }}>
           {headerLines}
           <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, borderLeft: "2px solid var(--tl-gridline-hour)" }} />
@@ -1139,7 +1139,7 @@ export const TimelineView = memo(function TimelineView({
       <span
         key={s}
         style={{
-          fontSize: T.small, padding: "3px 8px", borderRadius: R.pill,
+          fontSize: T.small, padding: "2px 8px", borderRadius: R.pill,
           background: BLOCK_BG[s] || "#999",
           color: BLOCK_INK[s] || "var(--text-on-accent)",
           border: "1px solid rgba(255,255,255,0.2)",
@@ -1152,17 +1152,17 @@ export const TimelineView = memo(function TimelineView({
     );
   });
   legendEls.push(
-    <span key="in" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
+    <span key="in" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       indoor
     </span>
   );
   legendEls.push(
-    <span key="out" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
+    <span key="out" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       outdoor
     </span>
   );
   legendEls.push(
-    <span key="blocked" style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
+    <span key="blocked" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
       blocked
     </span>
   );

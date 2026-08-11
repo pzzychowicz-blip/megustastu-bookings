@@ -88,7 +88,7 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
                   // hover lift is withheld here.
                   className={blocked && !isSel ? "mgt-nopress" : "mgt-hover-scale"}
                   style={{
-                    width: 64, height: 52, padding: 0, borderRadius: R.pill,
+                    width: 64, height: 52,   /* @canvas */ padding: 0, borderRadius: R.pill,
                     border: brd, background: bg, color: clr,
                     fontWeight: FW.semi, fontSize: T.lead,
                     cursor: blocked && !isSel ? "not-allowed" : "pointer",

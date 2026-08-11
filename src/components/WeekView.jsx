@@ -186,7 +186,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   return (
     <Overlay onClose={onClose} footer={footer}>
       <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <div style={{ display: "inline-flex", gap: 2, padding: 3, borderRadius: R.pill, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+        <div style={{ display: "inline-flex", gap: 2, padding: 2, borderRadius: R.pill, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
           {modeBtn("week", "Week")}
           {modeBtn("month", "Month")}
           {modeBtn("stats", "Stats")}
@@ -202,7 +202,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
           of the app's modal bodies were brought in line with.) */}
       <AutoHeight>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
 
-      <div style={{ marginTop: 12, fontSize: T.small, color: "var(--text-faint)", textAlign: "center" }}>
+      <div style={{ marginTop: 18, fontSize: T.small, color: "var(--text-faint)", textAlign: "center" }}>
         {isStats
           ? "W/M/S view · ‹ › month · T this month"
           : isWeek
@@ -347,7 +347,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                     className="mgt-hover-scale"
                     style={{
                       position: "relative", overflow: "hidden",
-                      minHeight: 54, padding: "6px 4px 5px", borderRadius: R.inset, cursor: "pointer",
+                      minHeight: 54,   /* @canvas */ padding: "6px 4px 4px", borderRadius: R.inset, cursor: "pointer",
                       boxSizing: "border-box", textAlign: "center",
                       background: "var(--bg-input)",
                       opacity: c.inMonth ? 1 : 0.4,
@@ -358,7 +358,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                     <div style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: intensity * 0.3, pointerEvents: "none" }} />
                     <div style={{ position: "relative" }}>
                       <div style={{ fontSize: T.body, fontWeight: FW.bold, color: isToday ? "var(--accent)" : "var(--text-primary)" }}>{dnum}</div>
-                      <div style={{ fontSize: T.micro, fontWeight: FW.semi, color: cov ? "var(--text-secondary)" : "var(--text-faint)", marginTop: 1 }}>
+                      <div style={{ fontSize: T.micro, fontWeight: FW.semi, color: cov ? "var(--text-secondary)" : "var(--text-faint)", marginTop: 2 }}>
                         {c.inMonth ? cov : ""}
                       </div>
                     </div>

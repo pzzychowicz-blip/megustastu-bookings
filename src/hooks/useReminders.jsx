@@ -28,7 +28,7 @@ import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
-import { BTN, R, T, FW } from "../lib/constants";
+import { BTN, R, T, FW, H } from "../lib/constants";
 import { mkBtn, SmallTag } from "../components/atoms";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "../components/NotificationStrip";
 import { genId } from "../lib/booking-logic";
@@ -242,8 +242,8 @@ export function useReminders({ nowMins, setWriteWarning }){
       return (
         <div
           key={ab.fireKey}
-          style={{padding:"9px "+NOTIF_PAD_X+"px 9px "+NOTIF_GUTTER+"px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",...(i>0?{borderTop:"1px solid var(--border-soft)"}:null)}}><div
-            style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0,flexWrap:"wrap"}}>{/* v17.8.0: a SOLID chip on ListView's `locked` pattern — SmallTag, the
+          style={{padding:"8px "+NOTIF_PAD_X+"px 8px "+NOTIF_GUTTER+"px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",...(i>0?{borderTop:"1px solid var(--border-soft)"}:null)}}><div
+            style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0,flexWrap:"wrap"}}>{/* v17.8.0: a SOLID chip on ListView's `locked` pattern — SmallTag, the
               fill carrying the colour, --text-on-accent text, a neutral
               --border-glass rim. As dimmed amber text it was the same colour and
               nearly the same weight as the sentence beside it, so the one thing
@@ -255,10 +255,10 @@ export function useReminders({ nowMins, setWriteWarning }){
               style={{fontSize: T.body,color:"var(--text-primary)",fontWeight: FW.semi,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               onClick={function(){snoozeReminderFire(ab.fireKey);}}
               className="mgt-hover-scale mgt-press"
-              style={mkBtn({fontSize: T.body,minHeight:34,padding:"4px 12px",background:BTN.nav})}>Snooze 15m</button><button
+              style={mkBtn({fontSize: T.body,minHeight:H.chrome,padding:"4px 12px",background:BTN.nav})}>Snooze 15m</button><button
               onClick={function(){markReminderDone(ab.fireKey);}}
               className="mgt-hover-scale mgt-press"
-              style={mkBtn({fontSize: T.body,minHeight:34,padding:"6px 14px",background:"var(--app-success-solid)"})}>Done</button></div></div>
+              style={mkBtn({fontSize: T.body,minHeight:H.chrome,padding:"6px 14px",background:"var(--app-success-solid)"})}>Done</button></div></div>
       );
     })}</div>:null;
 

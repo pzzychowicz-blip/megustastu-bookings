@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW } from "../lib/constants";
+import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
@@ -197,7 +197,7 @@ export function WalkinForm({
         className="mgt-hover-scale"
         onClick={() => setDraft({ ...wf, tables: [], time: r.timeStr, _pre: false })}
         style={{
-          cursor: "pointer", padding: "3px 8px", borderRadius: R.pill,
+          cursor: "pointer", padding: "2px 8px", borderRadius: R.pill,
           fontWeight: FW.semi, fontSize: T.body,
           background: r.hasTables ? "rgba(220,252,231,0.8)" : "rgba(254,249,195,0.8)",
           color: r.hasTables ? KTXT_OK : KTXT_TIGHT,
@@ -288,7 +288,7 @@ export function WalkinForm({
   const stepperBtnStyle = {
     background: "var(--bg-stepper)",
     border: "1px solid var(--border-soft)",
-    borderRadius: R.pill, width: 42, height: 42, fontSize: T.display,
+    borderRadius: R.pill, width: H.control, height: H.control, fontSize: T.display,
     cursor: "pointer", color: S.text, fontWeight: FW.semi,
     display: "flex", alignItems: "center", justifyContent: "center",
     flexShrink: 0,
@@ -332,7 +332,7 @@ export function WalkinForm({
           style={{
             background: wOk ? "var(--app-success-solid)" : "rgba(180,180,190,0.4)",
             border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: R.pill, padding: "10px 22px",
+            borderRadius: R.pill, padding: "10px 18px",
             cursor: wOk ? "pointer" : "not-allowed",
             fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
             boxShadow: wOk
@@ -512,7 +512,7 @@ export function WalkinForm({
           Reveal-wrapped — its ~300ms ease is the grace, so a fast scan shows
           only an imperceptible sliver instead of a flash. */}
       <Reveal show={wChecking && wSel.length === 0}>
-        <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>
+        <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>
       </Reveal>
       {wAutoCheck && wSel.length === 0 ? (
         <>

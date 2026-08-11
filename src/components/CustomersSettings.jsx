@@ -73,7 +73,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   // stack was three encodings of one signal on something that needs one. The
   // extra pixel of border is what keeps them legible once the fill is gone.
   const chip = function (label, colors) {
-    return <span style={{ fontSize: T.micro, fontWeight: FW.bold, borderRadius: R.pill, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 3, background: "transparent", border: "2px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
+    return <span style={{ fontSize: T.micro, fontWeight: FW.bold, borderRadius: R.pill, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 2, background: "transparent", border: "2px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
   };
 
   const rows = shown.map(function (c) {
@@ -82,7 +82,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     const wlCount = waitCountOf(c.phone);
     const historyRows = open ? c.bookings.map(function (b) {
       return (
-        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
+        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "4px 10px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
       );
     }) : null;
     return (
@@ -191,7 +191,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
         </div>
         <div style={{ fontSize: T.small, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number across all bookings. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymized as “Data removed” for statistics.</div>
       </Section>
-      {rows.length ? rows : <div style={{ textAlign: "center", padding: "20px 0", color: S.muted, fontSize: T.body }}>{query.trim() ? "No customers match." : "No customers yet — bookings with a phone number appear here."}</div>}
+      {rows.length ? rows : <div style={{ textAlign: "center", padding: "18px 0", color: S.muted, fontSize: T.body }}>{query.trim() ? "No customers match." : "No customers yet — bookings with a phone number appear here."}</div>}
     </div>
   );
 }

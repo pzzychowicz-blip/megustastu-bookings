@@ -31,7 +31,7 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
     const rowTxt = w.overdue ? "var(--danger-text)" : "var(--warn-text)";
     const msg = sb.name + " (overstaying) → " + w.next + " at " + w.nextTime + (w.overdue ? " — overdue" : " — in " + w.gap + " min");
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "9px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: rowTxt, fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
         <button
           onClick={function () { onReassign(w.nextId); }}

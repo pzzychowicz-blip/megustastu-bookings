@@ -30,7 +30,7 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep } from "./atoms";
-import { BTN, R, M, T, FW } from "../lib/constants";
+import { BTN, R, M, T, FW, H } from "../lib/constants";
 
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
 const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -117,7 +117,7 @@ export function TabBar({ tabs, current, onSelect }) {
 // cutoff (both single global hours). Fully controlled by props (the Firebase echo
 // re-renders it); disabled at the bounds so an invalid value can't be set.
 // v17.8.0: one stepper definition for the app — see mkStep in atoms.jsx.
-const HOUR_STEP_BTN = mkStep(38);
+const HOUR_STEP_BTN = mkStep(H.chrome);
 // `fmt` (v15.0.0): optional value→label formatter. Defaults to the modulo-24
 // clock label; the optimizer cutoff passes its own so it can show "24:00" (the
 // full-day endpoint) distinctly from "00:00".
@@ -178,7 +178,7 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
 
 // v15.0.0: compact stepper for the per-weekday hours editor (no label row, so 7
 // rows stay scannable). Same disabled / hover-scale contract as HourStepper.
-const MINI_STEP_BTN = mkStep(30);
+const MINI_STEP_BTN = mkStep(H.compact);
 function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt }) {
   // v16.3.0: fmt is now optional (defaults to the HH:00 time format used by the
   // Opening-hours editor); the Standing-bookings horizon passes a plain number.
@@ -586,14 +586,14 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
                   onClick={() => armTierRemove(i)}
                   className="mgt-hover-scale"
                   title={armedTier === i ? "Tap again to remove" : "Remove this tier"}
-                  style={{ ...HOUR_STEP_BTN, height: 32, marginBottom: 3, ...(armedTier === i
+                  style={{ ...HOUR_STEP_BTN, height: 32, marginBottom: 2, ...(armedTier === i
                     ? { width: "auto", padding: "0 10px", fontSize: T.body, fontWeight: FW.bold, background: "var(--danger-bg)", color: "var(--danger-text)", border: "1px solid var(--danger-border)" }
                     : { width: 32, fontSize: T.lead, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : "×"}</button>
               </div>
             );
           })}
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <div style={{ width: 150, height: 38, display: "flex", alignItems: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
+            <div style={{ width: 150, height: H.chrome, display: "flex", alignItems: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
               {tiers.length ? "Larger parties (" + restFrom + "+)" : "All parties"}
             </div>
             <HourStepper label="stay for" value={bd.restDur} fmt={minsLabel}

@@ -36,7 +36,7 @@ export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, })
     if (!b) return null;
     const offerNoShow = lateMap[id] === "noshow";
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "9px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--warn-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{b.name + " (" + b.time + ") — " + lateMins(b, nowMins) + " min late"}</span>
         <Presence show={offerNoShow} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span">
           <button
