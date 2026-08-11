@@ -76,3 +76,16 @@ session and keeping it in sync.
   and its tap area comes from the parent row, so the fix is probably a
   `line-height` or letting the button own the row's padding rather than adding
   height. Small, but it is on the first screen of Settings.
+
+- **The timeline block's size ring is an untested contrast exemption.** Its
+  border alpha (0.55 white, `SIZE_RING` in `TimelineView.jsx`) is documented
+  with its measured numbers — 1.82 confirmed, 1.38 pending, 2.78 seated, 2.97
+  cancelled — and with why WCAG 1.4.11's 3:1 is unreachable there at all (pure
+  white over the pending yellow tops out at 1.98). But unlike the amber
+  fill/ink exemption, which `tests/contrast.test.js` measures and floors every
+  run, this one is only a comment: drop the alpha back to `--blk-rule`'s 0.3
+  and nothing fails, even though 0.3 renders the ring invisible on two of the
+  five fills. The house rule is that an accepted contrast is not a licence to
+  keep going, so it wants a floor. Needs a small extension to the test — it is
+  built around text-bearing fill/ink pairs and this is a non-text boundary, so
+  it is a new shape rather than one more registry row.
