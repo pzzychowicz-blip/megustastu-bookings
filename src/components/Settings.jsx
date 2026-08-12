@@ -955,7 +955,11 @@ export function SettingsContent({
       />
       {/* v15.8.0: tab body eases its height (AutoHeight) + crossfades on switch
           (key+mgt-fade-in) — the modal card follows the eased height. */}
-      <AutoHeight>
+      {/* v17.9.1: `watch={tab}` — a tab switch replaces the whole body, and the
+          ResizeObserver that normally drives AutoHeight fires one frame too late
+          for that, so the new tab painted at full height and the panel then
+          snapped shut and re-grew. See AutoHeight. */}
+      <AutoHeight watch={tab}>
         <div key={tab} className="mgt-fade-in">{content}</div>
       </AutoHeight>
     </div>

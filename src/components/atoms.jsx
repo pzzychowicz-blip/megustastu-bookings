@@ -425,11 +425,12 @@ export function Reveal({ show, children, style, horizontal = false }) {
 // conforming to content that has already changed. There is no arrival to
 // decelerate into, and ease-out's front-loading turned every modal resize into
 // a lurch-then-crawl. See M.resize for the reasoning in full.
-export function AutoHeight({ children, style }) {
+export function AutoHeight({ children, watch, style }) {
   const inner = useRef(null);
   const hRef = useRef(null);
   const [h, setH] = useState(null);             // null = auto until first measure
   const [animating, setAnimating] = useState(false);
+  const measureRef = useRef(null);
   useLayoutEffect(function () {
     const el = inner.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
@@ -442,11 +443,34 @@ export function AutoHeight({ children, style }) {
       hRef.current = next;
       setH(next);
     }
+    measureRef.current = measure;
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return function () { ro.disconnect(); };
   }, []);
+  // v17.9.1: `watch` — an identity to re-measure on, SYNCHRONOUSLY, before paint.
+  //
+  // ResizeObserver is one frame late by design: it fires after layout, so on a
+  // whole-content SWAP (Settings' tab body, keyed on the tab id) the sequence was
+  //   1. React commits the new tab's DOM
+  //   2. the wrapper still has the OLD pinned height and, because `animating` is
+  //      still false, `overflow: visible` — so the new content PAINTS IN FULL,
+  //      overflowing the box
+  //   3. only then does RO fire, clip to the old height, and transition
+  // which reads as "the content appears, then the panel snaps and re-grows". The
+  // Summary panel has no such artifact because `Reveal` animates a grid track
+  // from 0 in the same commit — there is never an unclipped intermediate paint.
+  //
+  // A layout effect keyed on `watch` runs BEFORE the browser paints, so the clip
+  // and the new height are committed in the same frame as the new content. The
+  // height still transitions from the old value because that is what the element
+  // was last painted at. Opt-in: callers that only grow/shrink their own content
+  // are already served correctly by the observer.
+  useLayoutEffect(function () {
+    if (watch === undefined) return;
+    if (measureRef.current) measureRef.current();
+  }, [watch]);
   return (
     <div
       onTransitionEnd={function (e) { if (e.propertyName === "height") setAnimating(false); }}

@@ -8789,3 +8789,31 @@ fill resolves correctly through the custom property (`rgba(255,255,255,0.45)` =
 `tests/stylesheet.test.js` caught a loose line of prose in the new comment before
 any of this shipped — the exact defect that test was written for, on the commit
 that added a rule beside it.
+
+### 10/10 — Settings tab switch: content first, then a snap
+
+**Files:** `src/components/atoms.jsx`, `src/components/Settings.jsx`.
+
+`AutoHeight` is driven by a `ResizeObserver`, which fires *after* layout. That is
+fine when a panel grows its own content, and one frame too late for a whole-body
+**swap**. On a Settings tab change the sequence was:
+
+1. React commits the new tab's DOM,
+2. the wrapper still holds the OLD pinned height and — because `animating` is
+   still false — `overflow: visible`, so **the new content paints in full,
+   overflowing the box**,
+3. only then does the observer fire, clip to the old height, and transition.
+
+Which is exactly what was reported: the content appears, then the panel snaps and
+re-grows. The Summary panel has no such artifact because `Reveal` animates a grid
+track from 0 in the same commit — there is never an unclipped intermediate paint.
+
+`AutoHeight` gains an opt-in `watch` prop: a layout effect keyed on it re-measures
+**synchronously, before paint**, so the clip and the new height land in the same
+frame as the new content. The height still animates from the old value, because
+that is what the element was last painted at. Settings passes `watch={tab}`.
+Callers that only grow their own content keep the observer path unchanged.
+
+**Verified by sampling the rendered height across frames**, not the style value:
+2226 → 1978 → 824 → 321 with `overflow: hidden` from the **first** frame. Before,
+frame one was the full new content unclipped.
