@@ -174,6 +174,77 @@ export function Overlay({ onClose, children, footer }) {
     };
   }, [mob]);
 
+  // ── v17.9.1 (audit P1): dialog semantics ───────────────────────────────────
+  // Measured in the live DOM before this: no role, no aria-modal, no accessible
+  // name, and focus left sitting on <body> when a modal opened. A screen-reader
+  // or keyboard user got no announcement that anything had happened and no way
+  // into the dialog except tabbing through the entire page behind it.
+  //
+  // The accessible NAME is resolved from the DOM rather than from a prop. Seven
+  // modals render a <ModalTitle> and five (the confirm dialogs, WeekView,
+  // BlockModal, HistoryPopup) render their own heading text instead, and a prop
+  // would have to be kept correct at twelve call sites forever. Pointing
+  // `aria-labelledby` at an id that is not in the tree leaves the dialog
+  // NAMELESS — strictly worse than not trying — so this checks. Falling back to
+  // the first heading means the untitled modals get a real name too.
+  const dialogRef = useRef(null);
+  const restoreRef = useRef(null);
+  useEffect(() => {
+    restoreRef.current = document.activeElement;
+    const el = dialogRef.current;
+    if (el) {
+      const titled = el.querySelector("#" + MODAL_TITLE_ID) || el.querySelector("h1,h2,h3");
+      if (titled) {
+        if (!titled.id) titled.id = MODAL_TITLE_ID + "-auto";
+        el.setAttribute("aria-labelledby", titled.id);
+      } else {
+        el.setAttribute("aria-label", "Dialog");
+      }
+      // Focus the dialog itself, not its first control: focusing a text input
+      // pops the keyboard on a tablet before the user has decided to type, and
+      // focusing the first BUTTON puts a destructive action one Enter away.
+      // tabIndex -1 makes the container focusable without adding a tab stop.
+      el.focus({ preventScroll: true });
+    }
+    return () => {
+      const prev = restoreRef.current;
+      // Return focus to whatever opened the modal, so the keyboard lands back
+      // where the user left it instead of at the top of the document.
+      if (prev && typeof prev.focus === "function" && document.contains(prev)) {
+        prev.focus({ preventScroll: true });
+      }
+    };
+  }, []);
+
+  // Focus trap. Esc is NOT handled here on purpose — useKeyboardShortcuts owns
+  // the app-wide Escape z-order chain, and a second handler would race it.
+  function onKeyDown(e) {
+    if (e.key !== "Tab") return;
+    const el = dialogRef.current;
+    if (!el) return;
+    const items = [...el.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter((n) => n.offsetParent !== null || n === document.activeElement);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === el)) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  }
+
+  // NB: no `ref` in here. The desktop no-footer card is BOTH the dialog and the
+  // scroll port, and one node cannot take two refs — that branch assigns both
+  // through a callback ref instead.
+  const dialogProps = {
+    role: "dialog",
+    "aria-modal": "true",
+    tabIndex: -1,
+    onKeyDown,
+  };
+
   // One provider around every branch, so a child can reset the scroll port that
   // actually mounted without knowing which of the four it is.
   const wrap = (el) => (
@@ -185,7 +256,7 @@ export function Overlay({ onClose, children, footer }) {
     // (minHeight:0 lets the flex body actually scroll instead of growing the column.)
     if (footer) {
       return wrap(
-        <div className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
+        <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -196,7 +267,7 @@ export function Overlay({ onClose, children, footer }) {
       );
     }
     return wrap(
-      <div className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
+      <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
         <div ref={scrollRef} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
           <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))",   /* @canvas */ boxSizing: "border-box" }}>
             {children}
@@ -216,7 +287,7 @@ export function Overlay({ onClose, children, footer }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {footer ? (
-        <div className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -225,7 +296,7 @@ export function Overlay({ onClose, children, footer }) {
           </div>
         </div>
       ) : (
-        <div ref={scrollRef} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           {children}
         </div>
       )}
@@ -266,16 +337,30 @@ export function Overlay({ onClose, children, footer }) {
 //
 // `background` is required and has no default on purpose: a default would be a
 // silent seventh answer to the question above.
+// v17.9.1 (audit P1): this renders an <h2>, not a <div>. Before it, the app
+// contained ZERO headings — measured in the live DOM — so a screen-reader user
+// had no document structure to navigate at all, and every modal announced itself
+// as an unlabelled group. Because all seven titles come through here, one element
+// change fixes all seven. `MODAL_TITLE_ID` is the anchor Overlay points its
+// `aria-labelledby` at; only one modal is ever mounted at a time (the Esc
+// z-order chain guarantees it), so a constant id is safe and means the two sides
+// cannot drift apart through a prop.
+//
+// It stays visually identical: the pill is the h2's own box, `margin: 0` kills
+// the UA heading margin, and the size comes from T.title as before — a heading
+// element is a semantic claim, not a typographic one.
+export const MODAL_TITLE_ID = "mgt-modal-title";
+
 export function ModalTitle({ background, marginBottom = 14, children }) {
   return (
     <div style={{ textAlign: "center", marginBottom }}>
-      <div style={{
+      <h2 id={MODAL_TITLE_ID} style={{
         fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
         display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-        background,
+        background, margin: 0,
         border: "1px solid rgba(255,255,255,0.2)",
         boxShadow: "var(--shadow-btn)"
-      }}>{children}</div>
+      }}>{children}</h2>
     </div>
   );
 }

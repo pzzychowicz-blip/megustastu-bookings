@@ -8910,3 +8910,44 @@ animation load and showed a phantom discontinuity — worth knowing before trust
 one): shrink runs 2226 → 2144 → 2061 → … → 329 → 321 in even ~82px steps over
 385ms, growth is the same ramp inverted, and `scrollTop` is 0 from the first frame
 in both directions.
+
+### 13 — Dialog semantics for every modal (audit P1)
+
+**Files:** `src/components/atoms.jsx`, `src/App.jsx`, `src/components/HistoryPopup.jsx`.
+
+`$impeccable audit` measured this in the live DOM: **no `role="dialog"`, no
+`aria-modal`, no accessible name, focus left sitting on `<body>` when a modal
+opened, and ZERO headings in the entire document.** A screen-reader user got no
+announcement that a dialog had opened, no name for it, and no document structure
+to navigate; a keyboard user had to tab through the whole page behind it.
+
+Pre-existing — `Overlay` never had any of this. What made it worth doing now is
+that v17.9.1 created the chokepoint: seven modals get their title from one
+component, so the fix is two files instead of twelve.
+
+- **`ModalTitle` renders an `<h2>`**, visually identical (the pill *is* the
+  heading's box; `margin: 0` kills the UA margin). A heading element is a
+  semantic claim, not a typographic one.
+- **`Overlay` carries `role="dialog"` + `aria-modal="true"`**, focuses the dialog
+  container on open (`tabIndex -1`, so no extra tab stop) and **restores focus to
+  whatever opened it** on close — verified: closing the delete confirm returns
+  focus to the Delete button.
+- **A Tab focus trap**, cycling within the dialog. Escape is deliberately NOT
+  handled here: `useKeyboardShortcuts` owns the app-wide Escape z-order chain and
+  a second handler would race it.
+- The container is focused rather than the first control: focusing a text input
+  pops the keyboard on a tablet before the user has decided to type, and focusing
+  the first *button* puts a destructive action one Enter away.
+
+**The accessible name is resolved from the DOM, not from a prop.** Seven modals
+render a `ModalTitle`; five (the confirm dialogs, WeekView, BlockModal,
+HistoryPopup) render their own heading text. A `labelled` prop was written first
+and thrown away: it would have to be kept correct at twelve call sites forever,
+and **pointing `aria-labelledby` at an id that is not in the tree leaves the
+dialog nameless — strictly worse than not trying.** `Overlay` now looks for
+`#mgt-modal-title`, falls back to the first heading in its subtree, and only then
+to a generic label.
+
+That fallback is what made it worth converting the five confirm-dialog titles and
+HistoryPopup's to `<h2>` as well — otherwise those dialogs would announce as
+"Dialog". Verified: the delete confirm now names itself "Delete booking?".
