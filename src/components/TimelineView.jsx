@@ -120,7 +120,7 @@ const SIZE_RING = {
 const CHIP_PX = 42;      // the start-time chip + its margin
 const HANDLE_PX = 41;    // the assign handle (28 min-width + padding + rule)
 const RING_PX = 24;      // the party-size ring + its margin (v17.9.0)
-const FLAG_PX = 15;      // one 11px flag icon + its 4px margin (v17.9.0)
+const FLAG_PX = 17;      // one 13px flag icon + its 4px margin (v17.9.1; was 11px/15)
 const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
 
 function chipRoomFor(b, noShows, warn) {
@@ -237,15 +237,15 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // They are one literal on purpose: held apart, they drift.
   const allFlags = [
     depositAmt > 0
-      ? { k: "dep", keep: 5, title: "Deposit " + currency + depositAmt, icon: <DepositIcon size={11} /> } : null,
+      ? { k: "dep", keep: 5, title: "Deposit " + currency + depositAmt, icon: <DepositIcon size={13} /> } : null,
     hasPrefT
-      ? { k: "pref", keep: 4, title: "Preferred tables: " + b.preferredTables.join(", "), icon: <StarIcon size={11} /> } : null,
+      ? { k: "pref", keep: 4, title: "Preferred tables: " + b.preferredTables.join(", "), icon: <StarIcon size={13} /> } : null,
     isLocked(b)
-      ? { k: "lock", keep: 3, title: "Locked to these tables — the optimizer will not move it", icon: <LockIcon size={11} /> } : null,
+      ? { k: "lock", keep: 3, title: "Locked to these tables — the optimizer will not move it", icon: <LockIcon size={13} /> } : null,
     noShows >= 2
-      ? { k: "ns", keep: 2, title: noShows + " past no-shows on this number", icon: <NoShowIcon size={11} /> } : null,
+      ? { k: "ns", keep: 2, title: noShows + " past no-shows on this number", icon: <NoShowIcon size={13} /> } : null,
     warn && warn.overdue
-      ? { k: "over", keep: 1, title: "Overstaying — " + warn.next + " needs this table at " + warn.nextTime, icon: <OverlapIcon size={11} /> } : null
+      ? { k: "over", keep: 1, title: "Overstaying — " + warn.next + " needs this table at " + warn.nextTime, icon: <OverlapIcon size={13} /> } : null
   ].filter(Boolean);
   const { showRing, flags: railFlags } = visibleRail(
     d * pxPerMin,
@@ -784,7 +784,7 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
           column a real block uses for its preferred-tables star. */}
       <span aria-hidden="true" style={{
         flexShrink: 0, marginLeft: 6, display: "flex", alignItems: "center"
-      }}><WaitIcon size={11} /></span>
+      }}><WaitIcon size={13} /></span>
       {/* v17.9.0: the name span and the size ring, TimelineBlock's verbatim —
           when the block stopped concatenating "(size)" into its label, the
           ghost had to stop too, or the "dims X, does not re-specify X" rule

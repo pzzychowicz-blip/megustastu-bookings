@@ -8704,3 +8704,27 @@ Also drops seven wrapper `<div>`s. 280 tests · build clean · lint 0 errors ·
 `check:style` OK · main bundle 197.40 → **197.25 kB** gz.
 
 Updates the surviving `ROADMAP.md` shadow-literal entry from ~20 to ~17.
+
+### 7/10 — The deposit banknote was unreadable at the size it ships at
+
+**Files:** `src/components/Icons.jsx`, `src/components/TimelineView.jsx`.
+
+Patryk: "you cannot actually see what it is." Two causes, both invisible in the
+24×24 viewBox the icon is authored in:
+
+- It used **half** the viewBox height (y 6→18) where every other flag on the rail
+  uses 70–80% of it. At the same nominal `size` it was optically much smaller
+  than the star and the lock next to it.
+- The inner circle was `r 2.6` against a stroke of `2.2`, leaving a hole ~1.4
+  units wide. At 11px that is **0.6 of a pixel** — it fills in solid, so the note
+  read as a rectangle with a dot.
+
+Geometry first: the note is taller (15 of 24) and the circle is `r 3.6`, leaving
+a hole ~2.5× wider. The general rule, now recorded next to the icon: **stroke
+width is the constraint on interior detail** — a hole has to be roughly 3× the
+stroke or it closes up. It is the same reason `LockIcon` carries no keyhole.
+
+Then scale: all five rail flags **11px → 13px** (and `WaitGhost`'s ⏳ with them,
+since it sits in the same marker column). Not the deposit alone — one 13px icon
+beside four 11px ones is a worse defect than the one being fixed. `FLAG_PX`
+follows, 15 → 17, so the width ladder still reserves what it actually spends.

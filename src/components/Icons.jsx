@@ -381,11 +381,27 @@ export function NoShowIcon(props) {
 // TWO shapes and no more. Corner ticks, a value line, a second circle — all of
 // them turn to mush at 11px, which is the size that decides this icon, not the
 // 24 it is drawn at. Verify at 11.
+//
+// v17.9.1 correction — the first banknote was unreadable, and for two reasons
+// that only show up at the shipped size:
+//
+//   • It used HALF the viewBox height (y 6→18, 12 of 24) where every other flag
+//     on the rail uses ~70–80% of it. Drawn to the same nominal `size`, it was
+//     optically much smaller than the star and the lock beside it.
+//   • The inner circle was r 2.6 against a stroke of 2.2, leaving a hole about
+//     1.4 units across. At 11px that is **0.6 of a pixel** — it fills in solid,
+//     so the note read as a rectangle with a dot rather than as a note.
+//
+// The fix is geometry, not scale: the note is taller (15 of 24) and the circle
+// is r 3.6, which leaves a hole ~2.5× wider and survives the stroke. STROKE
+// WIDTH IS THE CONSTRAINT ON DETAIL at these sizes — an interior shape has to
+// be at least ~3× the stroke or it closes up. That is the same reason LockIcon
+// carries no keyhole.
 export function DepositIcon(props) {
   return (
     <Svg {...props}>
-      <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
-      <circle cx="12" cy="12" r="2.6" />
+      <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
+      <circle cx="12" cy="12" r="3.6" />
     </Svg>
   );
 }
