@@ -8615,3 +8615,39 @@ checker is worth anything: alpha back to 0.3 → all 10 cases fail; the
 silently passing; restored → 280 pass with a clean diff.
 
 Closes the `ROADMAP.md` "Ideas" entry.
+
+### 5/6 — The `Collapsible` header clip does not reproduce (`ROADMAP` item, closed by the finding)
+
+**Files:** `ROADMAP.md`. **No source change.**
+
+The roadmap recorded that Settings' section headers clip their own text by 2px —
+"the header `<button>` measures 17px tall against a 19px `scrollHeight`", so
+"Restaurant", "Opening hours", "Booking durations" and "Preferences" each have a
+descender shaved. Measured live before writing any fix, per the house rule about
+checking computed styles first, and **none of it holds today**:
+
+- Every collapsible header in every Settings tab measures `clientHeight` 17 and
+  `scrollHeight` **17**. There is no 2px overflow to clip.
+- The header `<button>` computes `overflow: visible`, so it cannot clip its own
+  text under any circumstances.
+- Its nearest ancestor is the `Section`, also `overflow: visible`, with 14px of
+  padding. There is no clipping box within 14px of the text in any direction.
+- Photographed at native resolution and at 4×: the descenders in "Opening hours"
+  render in full.
+
+The likely origin of the original reading is `Collapsible` itself:
+`{open && subtitle ? … : null}` means a header **grows a second line when it
+opens**, so a `scrollHeight` sampled while that subtitle was mounting is 19
+against a `clientHeight` of 17. That is a difference in CONTENT between two
+states, not a clip — and it is exactly the number reported.
+
+So this ships as a **finding, not a fix**. Adding a `line-height` here would have
+been a change with no defect behind it, on the first screen of Settings, and the
+next reader would have found a comment explaining a problem they could not
+reproduce either. Same disposition as v17.9.0's `time-grid.js` entry, which was
+also closed by discovering its premise was wrong: the roadmap entry is removed
+because it is no longer pending work, and the reason it is gone lives here.
+
+If descender shaving is ever seen for real, the thing to capture is a screenshot
+plus the computed `overflow` of the enclosing chain — `scrollHeight` alone cannot
+distinguish "clipped" from "taller than I sampled".

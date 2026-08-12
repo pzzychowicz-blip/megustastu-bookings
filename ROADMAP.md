@@ -67,12 +67,3 @@ session and keeping it in sync.
 - **Modal title pills have no colour rule.** "New booking" and "Waitlist" are
   accent; "Settings" is grey. Pick one convention (probably: accent for a
   create/act surface, neutral for a configure/read one) and apply it.
-
-- **Settings' `Collapsible` headers clip their own text by 2px.** Found while
-  verifying v17.9.0, pre-existing and unrelated to it (the v17.9.0 diff does not
-  touch `Collapsible`). The header `<button>` measures 17px tall against a 19px
-  `scrollHeight` — so "Restaurant", "Opening hours", "Booking durations" and
-  "Preferences" each have a descender shaved. The button carries `padding: 0`
-  and its tap area comes from the parent row, so the fix is probably a
-  `line-height` or letting the button own the row's padding rather than adding
-  height. Small, but it is on the first screen of Settings.
