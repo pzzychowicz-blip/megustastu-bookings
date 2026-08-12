@@ -9087,3 +9087,22 @@ Three things had to be right, and each was a bug on its own:
 transition, write, force a style recalc, restore. React cannot do this in one pass —
 two style writes inside a single task collapse to one before/after pair, so the
 intermediate value never exists to transition from.
+
+### 19 — the Summary panel answers the pointer in both states
+
+**Files:** `src/components/Summary.jsx`.
+
+Entry 13 gave the panel `.mgt-ac-row` only while collapsed, on the reasoning that
+an expanded panel is already the tall thing on the row and needs no "I am
+tappable" hint. Patryk: it should tint when expanded too, and he is right — the
+open panel is still what you point at to close it again, so it should answer the
+pointer the same way.
+
+It was also a **live bug**. The panel's resting fill arrives through `--row-bg`,
+and nothing but `.mgt-ac-row` reads that property — so dropping the class dropped
+the background with it, and an open Summary rendered fully transparent over the
+app backdrop (measured `rgba(0, 0, 0, 0)`, now `rgba(255, 255, 255, 0.05)` in both
+states). **A custom property is only a value; the rule that consumes it is what
+paints.** Routing a resting style through one is what makes the inline-beats-
+stylesheet trap solvable, and it also means the class is no longer optional
+decoration — it is load-bearing, and any element handed `--row-bg` must keep it.

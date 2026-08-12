@@ -67,10 +67,15 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
       /* v17.9.1 (Patryk): a tint, not a lift — "friendlier for the user". The
          Summary is a PANEL holding a toggle, a chevron, Print and More, so it is
          a container of controls: scaling it moved those controls out from under
-         the cursor, the same defect measured on the List card. Still only while
-         COLLAPSED — an expanded panel is the tall thing on the row and needs no
-         "I am tappable" hint. */
-      className={open ? undefined : "mgt-ac-row"}
+         the cursor, the same defect measured on the List card.
+         Applied in BOTH states (Patryk): an expanded panel is still the thing
+         you point at to collapse it again, so it should answer the pointer the
+         same way. Withholding the class while open was also a live BUG — the
+         resting fill arrives through `--row-bg`, which nothing but this class
+         consumes, so an open Summary rendered fully transparent
+         (measured `rgba(0, 0, 0, 0)`). A custom property is only a value; the
+         rule that reads it is what paints. */
+      className="mgt-ac-row"
       style={{
         "--row-bg": "var(--bg-soft)",
         "--row-bg-hover": "var(--bg-hover-card)",
