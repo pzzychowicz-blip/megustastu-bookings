@@ -121,6 +121,7 @@ const CHIP_PX = 42;      // the start-time chip + its margin
 const HANDLE_PX = 41;    // the assign handle (28 min-width + padding + rule)
 const RING_PX = 24;      // the party-size ring + its margin (v17.9.0)
 const FLAG_PX = 18;      // one IC.control (14px) flag icon + its 4px margin (v17.9.1)
+const FREE_PX = 36;      // the "~Nm" table-turn pill + its margin (v17.9.1)
 const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
 
 function chipRoomFor(b, noShows, warn) {
@@ -247,9 +248,17 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     warn && warn.overdue
       ? { k: "over", keep: 1, title: "Overstaying — " + warn.next + " needs this table at " + warn.nextTime, icon: <OverlapIcon size={IC.control} /> } : null
   ].filter(Boolean);
+  // v17.9.1 review fix: the freeing-soon pill is part of the FIXED cost when it
+  // is showing. It is `flexShrink: 0` like everything else on the rail, and the
+  // comment at its render site — "the seated block is near full width this late,
+  // so there's room" — only holds at the DEFAULT 15-minute window. `freeSoonWindow`
+  // goes to 60, and `freeingSoon` shows the pill whenever `end - now <= window`,
+  // so on a 60-minute booking with a 60-minute window it is on screen from the
+  // first minute of the visit, when a seated block is a few pixels wide. Leaving
+  // it out reproduced the exact pile-up this budget exists to prevent.
   const { showRing, flags: railFlags } = visibleRail(
     d * pxPerMin,
-    HANDLE_PX + NAME_MIN_PX + (showChip ? CHIP_PX : 0),
+    HANDLE_PX + NAME_MIN_PX + (showChip ? CHIP_PX : 0) + (freeMin != null ? FREE_PX : 0),
     RING_PX, FLAG_PX, allFlags
   );
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the

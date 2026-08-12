@@ -9247,3 +9247,21 @@ own subtree. Verified: `mgt-modal-title-_r_0_` → "New booking",
 ("only one at a time") was written down confidently and never checked against a
 rule recorded in the project's own architecture notes. An assumption stated in a
 comment is worth exactly as much as the check behind it.
+
+### 25 — /code-review fix: the table-turn pill was outside the width budget
+
+**Files:** `src/components/TimelineView.jsx`.
+
+Entry 15's budget reserves the chip, the handle and the name floor, and missed the
+freeing-soon "~Nm" pill — which is `flexShrink: 0` like everything else on the rail.
+The comment at its render site explains why it was never noticed: *"the seated block
+is near full width this late, so there's room"*. True at the DEFAULT 15-minute
+window. `freeSoonWindow` is configurable to 60, and `freeingSoon` shows the pill
+whenever `end - now <= window`, so on a 60-minute booking with a 60-minute window it
+is on screen from the first minute of the visit — when a seated block, drawn at its
+LIVE duration, is a few pixels wide. Exactly the pile-up the budget exists to prevent,
+reintroduced by the one element left out of it.
+
+`chipRoomFor` deliberately does NOT gain the same term: it feeds `chipsOn`, which is
+all-or-nothing across the day, so one seated block near its end would suppress the
+start-time chips on every other block. The two rules answer different questions.
