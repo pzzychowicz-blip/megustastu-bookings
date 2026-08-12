@@ -9192,3 +9192,58 @@ transferable part: rasterise to a canvas at the SHIPPED size and blit it magnifi
 with smoothing off. Rendering the candidates as large SVGs answers a different
 question, and a screenshot of a 14px icon is downscaled by the capture before you
 ever see it.
+
+### 23 — /code-review fixes: reduce-motion stranded the tab body
+
+**Files:** `src/components/atoms.jsx`.
+
+Entry 18's clamped-range animation is only correct if something afterwards
+restores the true height, and its only signal was `transitionend`. Entry 17, in
+the same version, rewrote `prefers-reduced-motion`'s rule to set
+`transition-property` to a list without `height` — so on those machines the box
+never transitions, the event never fires, and the pending restore never runs.
+Each change was fine on its own.
+
+Measured with the OS setting on: the Settings body pinned at **499px with 2226px
+of content**, `overflow: hidden`, and the scroll port unable to scroll — most of
+the General tab permanently unreachable. `transitionend` also does not fire for a
+**cancelled** transition, so a second tab switch mid-animation had the same shape.
+
+Two guards, because the two failures are different:
+
+- `heightAnimates(box)` asks the COMPUTED style whether `height` actually
+  transitions right now, and takes the plain path when it does not — which is
+  also the correct behaviour there: instant. It asks the computed style precisely
+  because the case being detected is an `!important` rule declared elsewhere.
+- `settle()` is armed on a timer whenever the box starts clipping, and cleared by
+  `transitionend`. Idempotent, so the two racing is harmless. This is the general
+  guard: **never let "the box is clipped" be a state that only an event can
+  leave.**
+
+Verified: with the rule active, 2226px box, `overflow: visible`, port scrollable.
+
+### 24 — /code-review fixes: two modals, one title id
+
+**Files:** `src/components/atoms.jsx`.
+
+`ModalTitle` stamped a constant `id="mgt-modal-title"`, justified in its own
+comment by "only one modal is ever mounted at a time". That is false, and
+`CLAUDE.md` says so in as many words — sub-modals stay in the parent's render
+tree, so opening **Assign tables** from the booking form mounts two `Overlay`s as
+siblings.
+
+`aria-labelledby` resolves through `getElementById`, which is document-wide and
+returns the FIRST match. Measured with both open: two elements sharing the id,
+and **both dialogs announcing "New booking"** — including the one in front,
+holding focus, that was actually the table picker. Duplicate ids are invalid
+markup besides.
+
+The title now carries a data attribute (`MODAL_TITLE_ATTR`) and `Overlay` stamps
+an id unique to its own instance from `useId()`, still resolved by querying its
+own subtree. Verified: `mgt-modal-title-_r_0_` → "New booking",
+`mgt-modal-title-_r_1_` → "Manual table assignment", zero duplicate ids.
+
+**The lesson is the comment, not the code.** A load-bearing assumption
+("only one at a time") was written down confidently and never checked against a
+rule recorded in the project's own architecture notes. An assumption stated in a
+comment is worth exactly as much as the check behind it.

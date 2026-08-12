@@ -11,7 +11,7 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 import { ChevronRightIcon } from "./Icons";
@@ -189,13 +189,18 @@ export function Overlay({ onClose, children, footer }) {
   // the first heading means the untitled modals get a real name too.
   const dialogRef = useRef(null);
   const restoreRef = useRef(null);
+  const uid = useId();
   useEffect(() => {
     restoreRef.current = document.activeElement;
     const el = dialogRef.current;
     if (el) {
-      const titled = el.querySelector("#" + MODAL_TITLE_ID) || el.querySelector("h1,h2,h3");
+      // Scoped to THIS dialog's subtree, then given an id unique to this
+      // instance — two modals can be mounted at once (a sub-modal opened from
+      // the booking form), and a shared id makes both point at the first one in
+      // document order. See MODAL_TITLE_ATTR.
+      const titled = el.querySelector("[" + MODAL_TITLE_ATTR + "]") || el.querySelector("h1,h2,h3");
       if (titled) {
-        if (!titled.id) titled.id = MODAL_TITLE_ID + "-auto";
+        if (!titled.id) titled.id = "mgt-modal-title-" + uid;
         el.setAttribute("aria-labelledby", titled.id);
       } else {
         el.setAttribute("aria-label", "Dialog");
@@ -328,12 +333,13 @@ export function Overlay({ onClose, children, footer }) {
 //   • A surface where you CONFIGURE or READ wears a neutral —
 //     `--app-btn-grey-strong` (Settings).
 //
-// v17.9.1 deliberately changed NO pill's colour. `Waitlist` and `Find a booking`
-// are the two the rule would move to neutral, and both are arguably act
-// surfaces (you book from the waitlist; you jump to a booking from search), so
-// moving them is a judgement call worth making on its own rather than smuggling
-// into an extraction commit. This atom exists so that judgement has one place to
-// land instead of seven.
+// The extraction commit deliberately changed no pill's colour; `Waitlist` and
+// `Find a booking` were the two the rule left arguable (you book from the
+// waitlist; you jump to a booking from search), and Patryk then decided both on
+// their own merits: Waitlist wears `--btn-orange`, the colour of the button that
+// opens it, and Find a booking joined Settings on the neutral, because searching
+// is a read. This atom exists so that judgement has one place to land instead of
+// seven.
 //
 // `background` is required and has no default on purpose: a default would be a
 // silent seventh answer to the question above.
@@ -341,20 +347,29 @@ export function Overlay({ onClose, children, footer }) {
 // contained ZERO headings — measured in the live DOM — so a screen-reader user
 // had no document structure to navigate at all, and every modal announced itself
 // as an unlabelled group. Because all seven titles come through here, one element
-// change fixes all seven. `MODAL_TITLE_ID` is the anchor Overlay points its
-// `aria-labelledby` at; only one modal is ever mounted at a time (the Esc
-// z-order chain guarantees it), so a constant id is safe and means the two sides
-// cannot drift apart through a prop.
+// change fixes all seven. `MODAL_TITLE_ATTR` is the anchor Overlay points its
+// `aria-labelledby` at — an attribute rather than a shared id, because more than
+// one modal CAN be mounted at once (see below); Overlay stamps a per-instance id
+// on whatever it finds, so the two sides still cannot drift apart through a prop.
 //
 // It stays visually identical: the pill is the h2's own box, `margin: 0` kills
 // the UA heading margin, and the size comes from T.title as before — a heading
 // element is a semantic claim, not a typographic one.
-export const MODAL_TITLE_ID = "mgt-modal-title";
+// v17.9.1 review fix: this is a DATA ATTRIBUTE, not a fixed `id`. The original
+// pinned a constant id on every title, on the stated grounds that "only one
+// modal is ever mounted at a time" — which is false, and CLAUDE.md says so in
+// as many words: sub-modals stay in the parent's render tree, so opening
+// "Assign tables" from the booking form mounts TWO Overlays as siblings.
+// Measured: two elements sharing `id="mgt-modal-title"`, and because
+// `aria-labelledby` resolves through `getElementById` — document-wide, first
+// match wins — BOTH dialogs announced "New booking", including the one actually
+// in front and holding focus. Overlay assigns a unique id per instance instead.
+export const MODAL_TITLE_ATTR = "data-mgt-modal-title";
 
 export function ModalTitle({ background, marginBottom = 14, children }) {
   return (
     <div style={{ textAlign: "center", marginBottom }}>
-      <h2 id={MODAL_TITLE_ID} style={{
+      <h2 {...{ [MODAL_TITLE_ATTR]: "" }} style={{
         fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
         display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
         background, margin: 0,
@@ -594,6 +609,32 @@ function setHeightNow(box, px) {
   box.style.transition = t;
 }
 
+// Does `height` ACTUALLY transition on this element right now? (v17.9.1 review fix)
+//
+// The clamped-range animation above is only correct if something later restores
+// the true height, and the only signal for that is `transitionend`. Under
+// `prefers-reduced-motion` there is no such event to wait for: that rule
+// rewrites `transition-property` to a list without `height` (`!important`), so
+// the box never transitions, the event never fires, and the box would be
+// stranded at the cap with `overflow: hidden` — measured: Settings' General tab
+// pinned at 499px with 2226px of content and the port unable to scroll, i.e.
+// most of that screen permanently unreachable. Two changes in one patch that
+// were each fine alone. So: ask, and take the plain path when the answer is no.
+//
+// Note this is asked of the COMPUTED style, not of our own inline value — an
+// `!important` rule elsewhere is exactly the case being detected.
+function heightAnimates(box) {
+  const cs = getComputedStyle(box);
+  const props = cs.transitionProperty.split(",").map(function (s) { return s.trim(); });
+  let i = props.indexOf("height");
+  if (i < 0) i = props.indexOf("all");
+  if (i < 0) return false;
+  const durs = cs.transitionDuration.split(",").map(function (s) { return parseFloat(s) || 0; });
+  if (!durs.length) return false;
+  // A shorter duration list repeats over the property list (CSS value cycling).
+  return durs[i % durs.length] > 0.02;
+}
+
 export function AutoHeight({ children, watch, style }) {
   const outer = useRef(null);
   const inner = useRef(null);
@@ -603,6 +644,31 @@ export function AutoHeight({ children, watch, style }) {
   const [h, setH] = useState(null);             // null = auto until first measure
   const [animating, setAnimating] = useState(false);
   const measureRef = useRef(null);
+  const timerRef = useRef(null);
+
+  // Settle: leave the clipped state and retake the true height. Reached by
+  // `transitionend` normally, and by a timer when that event does not come —
+  // which is not hypothetical (v17.9.1 review fix). `transitionend` does not
+  // fire for a transition that never started, and it does not fire for one that
+  // is CANCELLED — a second tab switch mid-animation cancels the first. Both
+  // would leave `animating` true forever, which means `overflow: hidden` and,
+  // with a pending height outstanding, a permanently clipped body. Idempotent,
+  // so the two paths racing is harmless.
+  function settle() {
+    clearTimeout(timerRef.current);
+    setAnimating(false);
+    const p = pendingRef.current;
+    if (p == null) return;
+    pendingRef.current = null;
+    setHeightNow(outer.current, p);
+    hRef.current = p;
+    setH(p);
+  }
+  function armSettle() {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(settle, M.dur.shift + 120);
+  }
+  useEffect(function () { return function () { clearTimeout(timerRef.current); }; }, []);
   useLayoutEffect(function () {
     const el = inner.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
@@ -617,7 +683,7 @@ export function AutoHeight({ children, watch, style }) {
       if (prev === next) return;
       // Only a CHANGE from a known prior height animates → clip while it runs.
       // The first (null→number) measure must not clip the rest state.
-      if (prev != null) setAnimating(true);
+      if (prev != null) { setAnimating(true); armSettle(); }
       cRef.current = next;
       hRef.current = next;
       setH(next);
@@ -676,7 +742,11 @@ export function AutoHeight({ children, watch, style }) {
     // The LIVE height, not hRef — an interrupted transition leaves the box
     // somewhere between the two, and that is where the next one starts.
     const live = hRef.current == null ? null : box.getBoundingClientRect().height;
-    const cap = live == null ? null : visibleCap(box);
+    // Clamping is only safe while something restores the true height afterwards,
+    // and that restore is driven by the transition. With no transition on
+    // `height` (prefers-reduced-motion rewrites `transition-property`), take the
+    // plain path — which is also the right behaviour there: instant.
+    const cap = live == null || !heightAnimates(box) ? null : visibleCap(box);
     const next = el.offsetHeight;
     const from = cap == null ? live : Math.min(live, cap);
     const to = cap == null ? next : Math.min(next, cap);
@@ -690,6 +760,7 @@ export function AutoHeight({ children, watch, style }) {
     hRef.current = from;
     pendingRef.current = to === next ? null : next;
     setAnimating(true);
+    armSettle();
     setH(to);
   }, [watch]);
   return (
@@ -702,15 +773,9 @@ export function AutoHeight({ children, watch, style }) {
         // un-clipped early; not harmless once it also retakes the real height,
         // which snapped the whole grow animation to its end value in 3 frames.
         if (e.target !== e.currentTarget || e.propertyName !== "height") return;
-        setAnimating(false);
-        const p = pendingRef.current;
-        if (p == null) return;
-        // The visible part has run; take the real height back so the port can
-        // scroll again. The box already fills it, so this changes no pixels.
-        pendingRef.current = null;
-        setHeightNow(outer.current, p);
-        hRef.current = p;
-        setH(p);
+        // The visible part has run; `settle` takes the real height back so the
+        // port can scroll again. The box already fills it, so no pixels change.
+        settle();
       }}
       style={{ height: h == null ? "auto" : h, overflow: animating ? "hidden" : "visible", transition: "height " + M.resize, ...(style || {}) }}
     >
