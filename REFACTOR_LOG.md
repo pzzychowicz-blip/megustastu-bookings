@@ -9162,3 +9162,33 @@ Summary panel, the strip's lid and the autocomplete rows. If the rule went missi
 four surfaces would render transparent with no error anywhere. That is exactly the
 list's entry criterion, and the class only became eligible for it when the fill
 moved into a custom property.
+
+### 22 — the deposit note stops being square
+
+**Files:** `src/components/Icons.jsx`, `CLAUDE.md`.
+
+Patryk: the icon is too square to read as a banknote. He is right, and it is the
+third pass on this one glyph — worth recording as a pair of constraints that pull
+against each other rather than as three separate mistakes.
+
+- v17.9.0 drew a coin (two concentric circles), which at flag size read as a target.
+- The first note was 12 of 24 units tall with an r-2.6 hole: half the optical mass
+  of the star beside it, and the hole closed to solid, because an interior shape has
+  to be ≥ ~3× the stroke or it fills in.
+- The correction over-shot to **19×15 — 1.27:1, a rounded square**, which gives back
+  the silhouette argument the note was chosen for in the first place.
+
+It ships at **20×13 (1.54:1)**, and deliberately no flatter. Rasterised at the 14px
+it actually renders at and magnified 10×, 20×12 (1.67:1) and 21×11 (1.9:1) are
+better note SHAPES — but at this scale the rectangle can only flatten by squeezing
+the circle, and 20×12 puts the hole back at ~2.3px, which is the number that failed
+the first time. 20×13 keeps ~2.7px of hole and ~0.5px of clear gap above and below
+it, and sits at the same optical mass as the star and lock it shares the rail with
+(checked side by side, rasterised).
+
+**Aspect ratio and interior detail are in direct competition at icon sizes, and the
+interior wins — a note-shaped blob is not a banknote either.** The method is the
+transferable part: rasterise to a canvas at the SHIPPED size and blit it magnified
+with smoothing off. Rendering the candidates as large SVGs answers a different
+question, and a screenshot of a 14px icon is downscaled by the capture before you
+ever see it.

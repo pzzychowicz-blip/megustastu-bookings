@@ -392,16 +392,29 @@ export function NoShowIcon(props) {
 //     1.4 units across. At 11px that is **0.6 of a pixel** — it fills in solid,
 //     so the note read as a rectangle with a dot rather than as a note.
 //
-// The fix is geometry, not scale: the note is taller (15 of 24) and the circle
-// is r 3.6, which leaves a hole ~2.5× wider and survives the stroke. STROKE
-// WIDTH IS THE CONSTRAINT ON DETAIL at these sizes — an interior shape has to
-// be at least ~3× the stroke or it closes up. That is the same reason LockIcon
-// carries no keyhole.
+// The fix was geometry, not scale: a taller note and a bigger circle, which left
+// a hole ~2.5× wider that survives the stroke. STROKE WIDTH IS THE CONSTRAINT ON
+// DETAIL at these sizes — an interior shape has to be at least ~3× the stroke or
+// it closes up. That is the same reason LockIcon carries no keyhole.
+//
+// v17.9.1 round 2 — that correction over-shot into 19×15, a ratio of 1.27:1,
+// which is a rounded SQUARE. The whole argument for a banknote is a silhouette
+// nothing else in the set shares, and a square gives that back. So 20×13
+// (1.54:1), which is unmistakably wider than tall.
+//
+// It does NOT go flatter, and the reason is the same constraint as above.
+// Rasterised at the 14px this actually ships at and magnified, 20×12 and 21×11
+// are better note SHAPES — but the rectangle can only get flatter by squeezing
+// the circle, and at 20×12 the hole is back to ~2.3px, which is what the first
+// correction was about. 20×13 keeps a ~2.7px hole and ~0.5px of clear gap above
+// and below the circle. **Aspect ratio and interior detail are in direct
+// competition here; the interior wins, because a note-shaped blob is not a
+// banknote either.** Judge it rasterised at the shipped size, not drawn at 24.
 export function DepositIcon(props) {
   return (
     <Svg {...props}>
-      <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
-      <circle cx="12" cy="12" r="3.6" />
+      <rect x="2" y="5.5" width="20" height="13" rx="2.5" />
+      <circle cx="12" cy="12" r="3.4" />
     </Svg>
   );
 }
