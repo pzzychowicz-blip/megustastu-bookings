@@ -8577,3 +8577,41 @@ table currently fits. Its change is two lines through the same tested function.
 
 **Verification:** 270 tests (259 + 11) · build clean · lint 0 errors ·
 `check:style` OK · main bundle 197.15 → 197.40 kB gz.
+
+### 4/6 — The size ring's contrast has a floor now (`ROADMAP` item)
+
+**Files:** `tests/contrast.test.js`, `ROADMAP.md`.
+
+`SIZE_RING`'s border alpha was documented and unmeasured. The comment on it
+records why 0.55 rather than `--blk-rule`'s 0.3 (at 0.3 the ring does not render
+at all on the amber fills) and records that WCAG 1.4.11's 3:1 is unreachable
+there — pure white over the pending yellow tops out below 2:1. All true, and none
+of it stopped anyone from putting the alpha back to 0.3: every test passed.
+
+This is the amber fill/ink exemption's own treatment applied one element down.
+Not asserted against a bar it cannot meet — asserted **against itself**, so it
+cannot quietly rot. A separate `describe` rather than one more `FILLS` row,
+because the registry pairs a fill with the INK on it and this is a **non-text
+boundary** with no ink involved.
+
+The alpha is read back **out of `TimelineView.jsx`**, anchored on the
+`const SIZE_RING` declaration, exactly as `chipOpacity()` anchors on
+`const timeChip` — and it throws if that declaration is gone rather than
+measuring a default. A guard that names the thing it guards and then uses a
+number typed into the test is not guarding it.
+
+**The floors are measured, and measuring them mattered.** A first pass computed
+them in a scratch harness that resolved the dark-theme block slightly
+differently, and it put dark seated at 3.37 and dark cancelled at 3.73 where the
+real harness says **2.46** and **2.86** — floors ~0.9 too high, which would have
+failed the build on unchanged code. The shipped numbers come from the same code
+path the assertion uses. (The figures in `TimelineView.jsx`'s own comment —
+1.82 / 1.38 / 2.78 / 2.97 — are from yet another basis again and are left as
+written; the test is now the authority.)
+
+**Verified against known-bad input**, which is the only thing that establishes a
+checker is worth anything: alpha back to 0.3 → all 10 cases fail; the
+`SIZE_RING` declaration renamed → throws with the re-anchor message rather than
+silently passing; restored → 280 pass with a clean diff.
+
+Closes the `ROADMAP.md` "Ideas" entry.
