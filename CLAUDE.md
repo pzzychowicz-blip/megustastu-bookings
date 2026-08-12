@@ -177,6 +177,16 @@ src/
   dimensions — the Toggle track, table-picker cells, the timeline hour strip,
   WeekView's calendar cell, alignment indents, safe-area `calc()`.
 
+- **`IC` = the v17.9.1 icon-size scale** (`inline` 12 · `control` 14 · `chrome` 18,
+  in `constants.js`). The last unscaled axis, and the tell was not the COUNT of
+  sizes (eight, between 10 and 18) but that **one control wore four of them** —
+  `CloseIcon` rendered at 12, 13, 14 and 15 in different corners. Assign by role:
+  a mark inside a text run or dense row · the standard mark ON a control · header
+  and nav furniture where the icon IS the button. The 2px/4px gaps are the point;
+  13→14 was never perceptible. No new numeric `size={n}` on an icon. (The
+  timeline note dog-ear stays a hard-coded 8px inline SVG — a decorative marker
+  drawn in place, not a member of the set.)
+
 - **A checker with a blind spot still prints OK, which is worse than no checker
   (v17.9.0).** The first spacing rule required the property to be preceded by
   `{` or `,`, to skip CSS inside string literals. That condition is FALSE for a
@@ -689,6 +699,34 @@ something is dirty; browsers ignore any custom message string.
   above it, inverting the hierarchy. A suggestion must never be louder than a
   warning.
 
+- **Every modal is a real dialog (v17.9.1).** `Overlay` carries `role="dialog"` +
+  `aria-modal="true"`, focuses its own container on open (`tabIndex -1`, not the
+  first control — focusing an input pops the tablet keyboard, focusing the first
+  button puts a destructive action one Enter away), restores focus to the opener
+  on close, and traps Tab. **Escape is deliberately NOT handled there** —
+  `useKeyboardShortcuts` owns the app-wide Escape z-order chain. The accessible
+  NAME is resolved **from the DOM**, not a prop: `#mgt-modal-title` (rendered by
+  `ModalTitle`, which is an `<h2>`), else the first heading in the subtree, else
+  a generic label. A prop was written and thrown away — it would need to stay
+  correct at twelve call sites, and **`aria-labelledby` pointing at an id that is
+  not in the tree leaves the dialog NAMELESS, strictly worse than not trying.**
+
+- **`prefers-reduced-motion` and the manual toggle are different intents
+  (v17.9.1).** The OS query gets transforms and keyframes killed but keeps a
+  120ms colour/opacity cross-fade — WCAG 2.3.3 is about vestibular triggers and
+  asks for LESS motion, not none, and this app says a lot with motion. The
+  per-device "Reduce animations" toggle keeps the TOTAL kill: its job is weak
+  tablet hardware, where the cheapest frame is no frame.
+
+- **A modal that REPLACES its body must reset its scroll port, in the click
+  handler (v17.9.1).** `Overlay` exposes one via `useOverlayScroll()` (a context,
+  because it owns four scroll ports and only it knows which is mounted). Settings
+  calls it when switching tabs. Doing it in a **layout effect instead removes the
+  jump but kills the height animation** — writing `scrollTop` forces a
+  synchronous layout, and there it lands after `AutoHeight` has already set the
+  new height, so the transition has nothing to animate from. Reset while the OLD
+  content is still mounted.
+
 ### Theming / dark mode (mechanism shipped v14.2.0 — ported from Scheduling; see `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`)
 - Light + dark via CSS custom properties: `:root` (light) + `[data-theme="dark"]` overrides in `index.html`; `<html data-theme="…">` set via `document.documentElement.dataset.theme`. A theme flip is **one DOM attribute change — zero React re-render** of the tree.
 - **Hook:** `useThemeMode(explicitPref) → isDark` (`src/hooks/useThemeMode.js`) writes `data-theme` and follows the OS live when pref is `undefined` — the shared Scheduling contract, unchanged. A no-flash inline script in `index.html` paints the theme before React mounts (the hook alone runs too late).
@@ -733,6 +771,18 @@ something is dirty; browsers ignore any custom message string.
 - **One stepper: `mkStep(size)` in atoms.** Settings and LayoutSettings each held
   a private, byte-identical copy before v17.8.0.
 - **v17.8.0: shadow literals are allowed ONLY over theme-invariant fills — and `npm run check:style` enforces it.** The script resolves the nearest governing `background` above a white-inset shadow and fails when it is a theme token; `/* @fixed-fill */` marks the one site whose fill is beyond a line-scanner's reach. All 22 surviving white-inset literals were audited and are correct (each sits on `BLOCK_BG` / `--app-*-solid` / `BTN.*` / a raw rgba), so the rule guards the NEXT one, not a backlog. Plain dark drop-shadow literals are deliberately unchecked — a black shadow cannot invert out from under itself, and a noisy check gets muted. The `--shadow-*` tokens are not cosmetic — light carries `inset 0 1px 1px rgba(255,255,255,0.6)`, dark drops it to `0.05` — so a hard-coded white inset ships a light-mode highlight into dark, 3–8× too bright. That was 24 call sites. The exception is real: TimelineView's blocks sit on `BLOCK_BG` fills, which are deliberately theme-invariant, so a fixed white inset is correct there in both themes (same reasoning as their `borderRadius` exemption). Triage by asking whether the SURFACE UNDER the shadow flips with the theme.
+- **THE HOVER LIFT IS FOR CONTROLS, NOT FOR CONTAINERS OF CONTROLS (v17.9.1).**
+  `scale(1.08)` is a PROPORTION — 3px on a 40px button, but ~30px on an 820px
+  List card, which slid that card's own Edit and Delete buttons out from under
+  the cursor between aiming and clicking (measured: Edit −24px, Delete +31px) so
+  clicks landed on the card instead. Any surface that HOLDS click targets gets
+  **`.mgt-ac-row`** instead: a background tint, no transform. One class covers
+  autocomplete rows, the List card, the Summary panel and the notification
+  strip's lid; both colours arrive as custom properties (`--row-bg`,
+  `--row-bg-hover`) **because every one of those surfaces sets its resting fill
+  INLINE and an inline `background` beats a stylesheet `background-color`** — a
+  plain rule silently never applies. Symptom to recognise: "I have to move the
+  pointer off and back on before the buttons work."
 - **v17.7.0: the hover rule no longer sets `border-radius`.** It used to hard-set `12px`, which squared off every pill the moment the pointer touched it. The declaration was **deleted**, not set to `inherit` — `inherit` resolves against the PARENT's radius, so a bare element inside a square parent would go square, which is the opposite of the intent. Each element now keeps its own resting radius on hover. Do not re-add a radius here. **Consequence: any `.mgt-hover-scale` element MUST set its own `borderRadius`** — the rule still applies an OPAQUE `--bg-hover-card`, so a radius-less element renders that background as a hard-edged rectangle on hover. `ConnectionStatus`'s dot button (transparent, no radius) was the FIRST case and got `borderRadius: R.pill`; **`CustomersSettings`' customer row was the second**, squaring off inside its own rounded card on hover until it got `R.card`. It has been called a one-off twice now. Treat a missing radius on a `.mgt-hover-scale` element as a bug by default, and grep the class when auditing.
 - **v17.8.0: `.mgt-hover-scale` and `.mgt-press` share ONE `transition` declaration.** They are designed to compose (~30 elements carry both), they had equal specificity (0,1,0), and `transition` is a **shorthand** — so `.mgt-press`, declared later, REPLACED the hover rule's list instead of adding to it. Every element with both classes had no transform transition at all and snapped to `scale(1.08)` instead of easing: the reminder banner's Snooze/Done, the whole timeline zoom cluster, every banner ✕, the form's customer chips. Broken since v15.8.0 and invisible because the `filter` dim `.mgt-press` added still worked; v17.8.0's universal press-scale doubled it by adding a press dip that also snapped. **Two shorthand declarations of one property cannot merge — so don't have two.** One selector list, one declaration, covering every property either class animates; source order then cannot matter. Same trap applies to any future composable pair.
   **And to INLINE styles, the third copy of it** (v17.8.0 review fix): an inline `transition` beats both the class rule and `button {}`, so **any `.mgt-hover-scale` element with an inline `transition` must list `transform`** or its hover lift and its press dip both snap. Settings' TabBar named three properties and dropped the fourth — in the same commit that documented the class-level version. Grep `transition:` under `src/` when auditing.
