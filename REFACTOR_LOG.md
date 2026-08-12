@@ -8997,3 +8997,21 @@ and More, so scaling it moved four controls out from under the cursor. It still
 tints only while COLLAPSED — an expanded panel is the tall thing on the row and
 needs no "this is tappable" hint. The strip's lid leaves `--row-bg` unset so its
 own severity tint shows through and keeps cross-fading.
+
+### 16 — Banner action targets (audit P2)
+
+**Files:** `LateBanner.jsx`, `OverlapBanner.jsx`, `WaitAvailBanner.jsx`.
+
+All three banner rows shared `minHeight: 32` — below `H.chrome`, and these are
+decisions: Book creates a booking, No show marks one, Reassign moves tables, all
+taken on a tablet mid-service. Actions go to `H.chrome` (36) rather than `H.touch`
+(44), because `NotificationStrip` exists so a bad evening does not scale the chrome
+off the screen; 36 is the honest compromise between that and the tap floor.
+
+The ✕ dismiss was also the documented **egg** — a single-glyph button sized by
+`minHeight` + horizontal padding measured ~34×32, and `--r-pill` clamps to half the
+shorter side, so it was never a circle. It is an explicit square now.
+**`height` alone did not do it**: `mkBtn` sets `minHeight: H.control` (40) and
+**min-height beats height**, so the first attempt measured 36×40 and still looked
+wrong. `minHeight` has to be overridden too. Verified live: Book 56×36, dismiss a
+true 36×36.

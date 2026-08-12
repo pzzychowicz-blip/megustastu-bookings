@@ -19,7 +19,7 @@
 
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
-import { BTN, T, FW, IC } from "../lib/constants";
+import { BTN, T, FW, IC, H } from "../lib/constants";
 import { CloseIcon } from "./Icons";
 
 export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
@@ -37,12 +37,12 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
         <button
           onClick={function () { onReassign(w.nextId); }}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.orange })}>{"Reassign " + w.next}</button>
+          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>{"Reassign " + w.next}</button>
         <button
           onClick={function () { onDismiss(id); }}
           aria-label="Dismiss this warning"
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
+          style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
       </div>
     );
   }
