@@ -9032,3 +9032,58 @@ Transforms and keyframes still go — they are the vestibular part — but colou
 opacity keep a 120ms cross-fade, so a change is still legible AS a change. The
 manual toggle keeps the total kill: its job is weak tablet hardware, where the
 cheapest frame is no frame.
+
+### 18 — the Settings tab swap eases the part you can actually see
+
+**Files:** `src/components/atoms.jsx`.
+
+Round 1 fixed the unclipped first frame (`watch`) and round 2 fixed the scroll
+clamp (`useOverlayScroll`). Both were real defects and neither was the jump. The
+per-rAF trace of General (2226px) → Layout (321px), inside a 611px port:
+
+```
+frame  0–21   card 774 (its 90dvh max)   box 2226 → 572
+frame  22–24  card 774 → 720 → 638 → 556
+```
+
+The box eased perfectly for the whole 385ms. But the card is `height: auto` under
+a `maxHeight`, so it **cannot move** until the box drops below the port — 22
+frames of nothing, then all 222px of visible travel crammed into three. No curve
+and no duration reaches that, because 85% of the budget was being spent below the
+fold. **When motion reads as a jump, check what fraction of the animated range is
+on screen before touching the easing.**
+
+So a `watch` swap now runs over the CLAMPED range: jump invisibly to
+`min(prev, cap)`, ease to `min(next, cap)`, then retake the true height. `cap` is
+the enclosing scroll port's height, and the invariant that makes both jumps free
+is that **every height at or above the port looks identical** — same pixels, only
+the scroll range differs. Measured after: 774 → 552 and 552 → 774, ~9.6px/frame
+across 24 frames, both directions. The Week/Month/Stats body — Patryk's reference
+for how this should feel — never overflows its port, so `from`/`to` are just
+`prev`/`next` and it takes the plain path unchanged (verified: 625 ↔ 686, identical
+to before).
+
+Three things had to be right, and each was a bug on its own:
+
+- **The port is elastic.** Reading `p.clientHeight` gives what it is, not what it
+  could be: in the short tab the card has shrunk to fit and the port with it, so
+  the cap came back equal to the current content and clamped the GROW direction to
+  zero visible travel. It is probed instead — ask for an absurd height, read what
+  the port became. The siblings' share is measured *inside* the probe too, because
+  at the old height the new content is already in the DOM and spilling out of a
+  still-`visible` box, so `scrollHeight - boxHeight` reports the content rather
+  than the siblings and the cap comes out negative on exactly the swap it exists for.
+- **`transitionend` bubbles, and `AutoHeight` nests.** General holds five of them
+  inside the tab-body one, and every child's height transition was ending the
+  parent's. Harmless while the handler only un-clipped early; not harmless once it
+  also retakes the real height. Guarded on `e.target === e.currentTarget`.
+- **The observer compares the wrong number.** `hRef` was doing two jobs — last
+  content height and last height committed to the box — which were the same thing
+  until a clamped commit made them differ. The RO fired a frame after the swap, saw
+  box 543 against content 2226, called it a change and overwrote the clamped target.
+  Split into `cRef` (content) and `hRef` (box).
+
+`setHeightNow` is the shared primitive for both invisible jumps: suppress the
+transition, write, force a style recalc, restore. React cannot do this in one pass —
+two style writes inside a single task collapse to one before/after pair, so the
+intermediate value never exists to transition from.

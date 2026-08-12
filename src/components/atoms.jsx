@@ -537,9 +537,69 @@ export function Reveal({ show, children, style, horizontal = false }) {
 // conforming to content that has already changed. There is no arrival to
 // decelerate into, and ease-out's front-loading turned every modal resize into
 // a lurch-then-crawl. See M.resize for the reasoning in full.
+// ── The visible cap (v17.9.1) ────────────────────────────────────────────────
+// Every height at or above the enclosing scroll port's own height LOOKS THE
+// SAME: the port paints the same pixels either way and only the scroll range
+// differs. So the visible half of a height change is the range [0, cap], and
+// any part of an animation outside it is spent on something nobody can see.
+// Returns null when the box has no scroll port to be clamped against.
+function visibleCap(box) {
+  let p = box.parentElement;
+  while (p && p !== document.body) {
+    const oy = getComputedStyle(p).overflowY;
+    if (oy === "auto" || oy === "scroll") break;
+    p = p.parentElement;
+  }
+  if (!p || p === document.body) return null;
+  // The port is ELASTIC — `flex: 1` inside a card that is `height: auto` under a
+  // `maxHeight` — so its height RIGHT NOW understates what it could show: in a
+  // short tab the card has shrunk to fit and the port with it, and reading it
+  // there returns a cap equal to the current content, which clamps a GROW to
+  // zero visible travel. So probe the real ceiling: ask for an absurd height and
+  // read back what the port actually became. Transitions are suppressed across
+  // the probe and the original height re-established before they are restored,
+  // so nothing can start a transition from the probe value.
+  //
+  // Whatever ELSE lives in the port — siblings, its own padding — eats part of
+  // the ceiling, and that is measured inside the probe too, not before it. This
+  // runs from a layout effect, where the new content is already in the DOM and
+  // the box is still `overflow: visible` at its old height: taller content
+  // spills and lands in `scrollHeight`, so subtracting the box's height outside
+  // the probe reports the CONTENT, not the siblings, and the cap comes out
+  // negative on exactly the swap it exists for. At the probe height nothing
+  // spills, so the remainder is the siblings and only the siblings.
+  const PROBE = 100000;
+  const t = box.style.transition, h0 = box.style.height;
+  box.style.transition = "none";
+  box.style.height = PROBE + "px";
+  const max = p.clientHeight;
+  const others = p.scrollHeight - PROBE;
+  box.style.height = h0;
+  void p.clientHeight;
+  box.style.transition = t;
+  const cap = max - others;
+  return cap > 0 ? cap : null;
+}
+
+// Write a height with the transition suppressed, flushing a style recalc so the
+// browser adopts it as the NEXT transition's start value. A React re-render
+// cannot do this on its own: two style writes inside one task collapse into a
+// single before/after pair, so the intermediate value never exists to start from.
+function setHeightNow(box, px) {
+  if (!box) return;
+  const t = box.style.transition;
+  box.style.transition = "none";
+  box.style.height = px + "px";
+  void box.offsetHeight;
+  box.style.transition = t;
+}
+
 export function AutoHeight({ children, watch, style }) {
+  const outer = useRef(null);
   const inner = useRef(null);
-  const hRef = useRef(null);
+  const hRef = useRef(null);                    // last height COMMITTED to the box
+  const cRef = useRef(null);                    // last CONTENT height seen
+  const pendingRef = useRef(null);              // a real height to retake, invisibly
   const [h, setH] = useState(null);             // null = auto until first measure
   const [animating, setAnimating] = useState(false);
   const measureRef = useRef(null);
@@ -548,10 +608,17 @@ export function AutoHeight({ children, watch, style }) {
     if (!el || typeof ResizeObserver === "undefined") return undefined;
     function measure() {
       const next = el.offsetHeight;
-      const prev = hRef.current;
+      const prev = cRef.current;
+      // v17.9.1: compare against the last CONTENT height, not the last height
+      // committed to the box — those stopped being the same thing once a `watch`
+      // swap could commit a CLAMPED height. The observer fires a frame after the
+      // swap, saw box 543 vs content 2226, called that a change and overwrote
+      // the clamped target with the true one, undoing the whole animation.
+      if (prev === next) return;
       // Only a CHANGE from a known prior height animates → clip while it runs.
       // The first (null→number) measure must not clip the rest state.
-      if (prev != null && next !== prev) setAnimating(true);
+      if (prev != null) setAnimating(true);
+      cRef.current = next;
       hRef.current = next;
       setH(next);
     }
@@ -579,13 +646,72 @@ export function AutoHeight({ children, watch, style }) {
   // height still transitions from the old value because that is what the element
   // was last painted at. Opt-in: callers that only grow/shrink their own content
   // are already served correctly by the observer.
+  //
+  // v17.9.1 — and it must animate only the range that is VISIBLE.
+  //
+  // The above fixed the first frame and the panel still read as "content
+  // changes, long pause, window jumps". Sampled per rAF, Settings' General
+  // (2226px) → Layout (321px) inside a 611px port:
+  //     frame  0–21   card 774 (its 90dvh max), box 2226 → 572
+  //     frame  22–24  card 774 → 720 → 638 → 556
+  // The box eased perfectly the whole time. But the card is `height: auto`
+  // clamped by `maxHeight`, so it cannot move until the box drops under the
+  // port — 22 frames of nothing, then the entire 222px of visible travel
+  // crammed into three. That IS the jump, and no curve or duration fixes it,
+  // because 85% of the budget was being spent below the fold.
+  //
+  // So on a `watch` swap the animation is run over the CLAMPED range: jump
+  // (invisibly) to `min(prev, cap)`, ease to `min(next, cap)`, then retake the
+  // true height. Both jumps are unobservable by the definition of `cap` above —
+  // they only restore scroll range. The card now eases across the full duration.
+  //
+  // A caller whose content never overflows its port is untouched: `prev` and
+  // `next` are both ≤ cap, so `from`/`to` are `prev`/`next` and this is the
+  // plain measure it always was (the Week/Month/Stats body, which is the
+  // reference for how this is supposed to feel, takes that path).
   useLayoutEffect(function () {
     if (watch === undefined) return;
-    if (measureRef.current) measureRef.current();
+    const box = outer.current, el = inner.current;
+    if (!box || !el || !measureRef.current) return;
+    // The LIVE height, not hRef — an interrupted transition leaves the box
+    // somewhere between the two, and that is where the next one starts.
+    const live = hRef.current == null ? null : box.getBoundingClientRect().height;
+    const cap = live == null ? null : visibleCap(box);
+    const next = el.offsetHeight;
+    const from = cap == null ? live : Math.min(live, cap);
+    const to = cap == null ? next : Math.min(next, cap);
+    if (cap == null || to === from) {
+      pendingRef.current = null;
+      measureRef.current();
+      return;
+    }
+    if (from !== live) setHeightNow(box, from);
+    cRef.current = next;                        // the observer must not re-fire
+    hRef.current = from;
+    pendingRef.current = to === next ? null : next;
+    setAnimating(true);
+    setH(to);
   }, [watch]);
   return (
     <div
-      onTransitionEnd={function (e) { if (e.propertyName === "height") setAnimating(false); }}
+      ref={outer}
+      onTransitionEnd={function (e) {
+        // `transitionend` BUBBLES, and AutoHeight nests — Settings' General tab
+        // holds five of these inside the tab-body one, and every child's height
+        // transition was ending the parent's. Harmless while the handler only
+        // un-clipped early; not harmless once it also retakes the real height,
+        // which snapped the whole grow animation to its end value in 3 frames.
+        if (e.target !== e.currentTarget || e.propertyName !== "height") return;
+        setAnimating(false);
+        const p = pendingRef.current;
+        if (p == null) return;
+        // The visible part has run; take the real height back so the port can
+        // scroll again. The box already fills it, so this changes no pixels.
+        pendingRef.current = null;
+        setHeightNow(outer.current, p);
+        hRef.current = p;
+        setH(p);
+      }}
       style={{ height: h == null ? "auto" : h, overflow: animating ? "hidden" : "visible", transition: "height " + M.resize, ...(style || {}) }}
     >
       <div ref={inner}>{children}</div>
