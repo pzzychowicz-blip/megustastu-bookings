@@ -8407,3 +8407,60 @@ nothing new to keep in sync. Verified in the live DOM: the two flags on a
 deposit+preferred booking expose "Deposit €10" and "Preferred tables: 2, 3, 4".
 
 The party-size ring needed nothing — its digit is real text.
+
+---
+
+## v17.9.1 — the patch round on v17.9.0's icons and block layout
+
+**Date:** 2026-08-12
+**Files:** `src/components/Icons.jsx`, `src/components/TimelineView.jsx`,
+`src/App.jsx`, `src/components/atoms.jsx`, `tests/contrast.test.js`,
+`CLAUDE.md`, `ROADMAP.md`
+**Behavioural change:** no data or logic change — this is entirely what the eye
+catches after a version that shipped three large surfaces at once.
+**Verification:** see each commit.
+
+v17.9.0 landed the `Icons.jsx` set, the rebuilt timeline block, and the date-nav
+centring in one release. Living with it for a day surfaced three defects that a
+build, a lint and 229 tests all pass over, plus four small `ROADMAP.md` entries
+worth folding in while the same files are open.
+
+### 1/6 — The deposit flag is a banknote, not a coin
+
+**Files:** `src/components/Icons.jsx`, `src/components/TimelineView.jsx`,
+`CLAUDE.md`.
+
+v17.9.0 replaced the deposit marker for a good reason: it had been printing the
+**currency symbol from `settings/general`**, so the flag meaning "money has been
+taken" was a different shape per restaurant setting. The replacement was two
+concentric circles — a coin.
+
+At 24px that is a coin. At **11px, which is the size it actually ships at on a
+timeline block**, it is a target, or a small button. The mistake is a specific
+one and worth naming: *the size that decides an icon is the size it ships at,
+not the size it is drawn at.* Every icon in the file is authored in a 24×24
+viewBox, which makes it easy to judge them all at a size none of them appear at.
+
+It is a banknote now — a rounded rect and one centre circle. Two reasons that
+shape and not another:
+
+- Its **silhouette is unique in the set**. Everything else here is round,
+  diagonal, or a chevron. A wide horizontal rectangle is identifiable before any
+  interior detail resolves, which is the only thing that happens at 11px. The
+  one collision risk was `LockIcon`, which is also a rounded rect and also sits
+  on the flag rail — checked live, side by side at 6×: the lock's shackle arc
+  and its low placement in the viewbox separate them cleanly.
+- It stays **currency-neutral**. The attachment that prompted this was a dollar
+  sign, and a drawn `$` would have handed back the exact defect v17.9.0 removed
+  — a mark that names one currency for a restaurant that takes another — in a
+  shape that merely looks deliberate because it is an SVG now. Neutrality was
+  the whole property that change bought.
+
+Two shapes and no more. Corner ticks or a value line were tried mentally and
+rejected: below about 12px they close up into a smudge, which is also why
+`LockIcon` carries no keyhole.
+
+The copy that describes the glyph moved with it — `TimelineView`'s block comment
+and `CLAUDE.md`'s `Icons.jsx` entry both said "a coin". That is the house rule
+from v17.9.0's own `LayoutSettings` "Reorder with ‹ ›" finding, applied to the
+version that wrote it.

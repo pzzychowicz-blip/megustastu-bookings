@@ -208,8 +208,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   //
   // The deposit marker was the worst of the four: it printed the CURRENCY
   // SYMBOL from settings/general, so the flag for "money has been taken" was a
-  // different shape per restaurant setting. It is a coin now, and the amount —
-  // which the symbol never showed anyway — is in the hover title.
+  // different shape per restaurant setting. It is a banknote now (v17.9.1 —
+  // v17.9.0's coin read as a target at 11px), and the amount — which the symbol
+  // never showed anyway — is in the hover title.
   // …and then the label stopped being a string at all: `name + " (size)"` is
   // now a name span and a size ring, so nothing is concatenated here.
   const depositAmt = Number(b.deposit) || 0;

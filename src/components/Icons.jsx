@@ -368,13 +368,24 @@ export function NoShowIcon(props) {
 // The deposit marker. Until v17.9.0 this was the CURRENCY SYMBOL from
 // settings/general appended to the label — so the flag for "money has been
 // taken" was a different shape per restaurant setting, and on a narrow block it
-// truncated away with the name. A coin says "deposit" regardless of what the
-// deposit is denominated in; the amount itself is in the booking form.
+// truncated away with the name. Whatever replaces it has to stay
+// currency-NEUTRAL, which is the whole property that change bought; a drawn "$"
+// would hand the defect straight back in a shape that merely looks deliberate.
+//
+// v17.9.1: a banknote, not the coin v17.9.0 drew. Two concentric circles at the
+// 11px this renders at on a timeline block are not read as money — they are a
+// target, or a button. A note has an outline nothing else in the set shares
+// (every other icon here is round, diagonal, or a chevron), so it is
+// identifiable by silhouette before any detail resolves.
+//
+// TWO shapes and no more. Corner ticks, a value line, a second circle — all of
+// them turn to mush at 11px, which is the size that decides this icon, not the
+// 24 it is drawn at. Verify at 11.
 export function DepositIcon(props) {
   return (
     <Svg {...props}>
-      <circle cx="12" cy="12" r="8.5" />
-      <circle cx="12" cy="12" r="4" />
+      <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
+      <circle cx="12" cy="12" r="2.6" />
     </Svg>
   );
 }
