@@ -870,11 +870,25 @@
          tablets. The !important beats every inline `transition:`/`animation:`
          style, incl. the timeline grid-width zoom ease and the status wipes.
          useFlip (WAAPI, atoms.jsx) checks the same attribute in JS. */
+      /* v17.9.1 (audit P3): the OS-level request and the manual toggle below are
+         DIFFERENT INTENTS and no longer share one rule.
+
+         `prefers-reduced-motion` asks for LESS motion, not none — WCAG 2.3.3 is
+         about vestibular triggers: travel, parallax, spin, scale. A state change
+         still has to be perceivable, and this app says a lot with motion (the
+         status wipe, the strip opening, a block moving table). Killing all of it
+         at 0.001ms left those changes as instant cuts, a comprehension cost paid
+         by the users least able to absorb it.
+         So: transforms and keyframes go (they are the vestibular part), and
+         colour/opacity keep a short cross-fade so the change is still legible.
+         The manual "Reduce animations" toggle keeps the TOTAL kill — its job is
+         weak tablet hardware, where the cheapest frame is no frame. */
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after {
           animation-duration: 0.001ms !important;
           animation-delay: 0ms !important;
-          transition-duration: 0.001ms !important;
+          transition-property: background-color, color, border-color, opacity, fill, stroke !important;
+          transition-duration: 120ms !important;
         }
       }
       :root[data-motion="reduce"] *,

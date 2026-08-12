@@ -9015,3 +9015,20 @@ shorter side, so it was never a circle. It is an explicit square now.
 **min-height beats height**, so the first attempt measured 36×40 and still looked
 wrong. `minHeight` has to be overridden too. Verified live: Book 56×36, dismiss a
 true 36×36.
+
+### 17 — `prefers-reduced-motion` reduces instead of eliminating (audit P3)
+
+**Files:** `index.html`.
+
+The OS-level request and the manual "Reduce animations" toggle shared one rule that
+killed everything at `0.001ms`. They are different intents. WCAG 2.3.3 is about
+vestibular triggers — travel, parallax, spin, scale — and asks for LESS motion, not
+none; a state change still has to be perceivable. This app says a lot with motion
+(the status wipe, a block changing table, the strip opening), and flattening all of
+it to an instant cut is a comprehension cost paid by the users least able to absorb
+it.
+
+Transforms and keyframes still go — they are the vestibular part — but colour and
+opacity keep a 120ms cross-fade, so a change is still legible AS a change. The
+manual toggle keeps the total kill: its job is weak tablet hardware, where the
+cheapest frame is no frame.
