@@ -8817,3 +8817,50 @@ Callers that only grow their own content keep the observer path unchanged.
 **Verified by sampling the rendered height across frames**, not the style value:
 2226 → 1978 → 824 → 321 with `overflow: hidden` from the **first** frame. Before,
 frame one was the full new content unclipped.
+
+### 11/12 — The dark banner palette was drifting off its own hues
+
+**Files:** `index.html`.
+
+Patryk: the notification strip's dark mode "still looks like AI-generic colors",
+and the two palettes should be consistent. Measured rather than eyeballed — every
+banner token composited over its theme's real base and converted to HSL:
+
+| token | old dark | light | hue drift |
+|---|---|---|---|
+| `--suggest-bg-soft` | H162 S15% | H138 | **24°** |
+| `--warn-bg` | H27 S27% | H34 | 7° |
+| `--danger-bg` | H353 S29% | H0 | 7° |
+| `--danger-border` | H355 **S16%** | H0 | 5° |
+
+Two real defects, not a matter of taste:
+
+- **`--suggest-bg-soft` was a hue-shifted near-grey.** S15% at H162 — drifted a
+  quarter-turn toward teal and almost fully desaturated. That token is the pane
+  behind the waitlist banner, i.e. the app's only "here is an opportunity"
+  surface, and in dark mode it rendered as a neutral dark box while its light
+  counterpart was a clear green. **That is precisely the "generic" look** — not a
+  wrong colour so much as the absence of one.
+- **`--danger-border` sat at S16% between siblings at S26% and S21%**, so the
+  three borders that are supposed to read as one family didn't.
+
+All four dark fills re-solved to land on their light counterpart's hue, with the
+border saturations levelled to 30/30/21. Every hue now matches within 0–3°
+(`--suggest-border` unchanged at 6°, inside tolerance). The saturation gap
+between themes stays wide by design — a tint at L19% cannot carry L94%'s
+saturation and still look like a tint — but it is now *consistent* across the
+family instead of varying per token.
+
+**Text contrast on these fills was checked before and after** and does not
+regress: warn 7.64 → 7.37, danger 7.49 → 7.55, suggest 8.43 → 8.30, suggest-soft
+10.06 → 9.69. All far above AA. (These tokens are outside
+`tests/contrast.test.js`'s registry prefix, so nothing would have caught a
+regression here automatically — worth knowing.)
+
+**Method note worth carrying:** the first pass at this used a regex to read
+`index.html` and silently returned the LIGHT values for the dark block, which
+would have "proved" the two themes were already identical. The numbers above
+come from `getComputedStyle` on the live document with the theme flipped. This is
+the second time in one version that a scratch CSS parser produced a confident
+wrong answer — the same class of error `tests/contrast.test.js` already warns
+about. **Read colours from the browser, not from the file.**
