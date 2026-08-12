@@ -313,10 +313,36 @@ export const ListView = memo(function ListView({
           <div
             key={b.id}
             data-flip-id={b.id}
-            className="mgt-hover-scale"
+            /* v17.9.1: `.mgt-hover-scale` is GONE from the card, and this is a
+               CLICK bug, not a taste change. The lift is `scale(1.08)`, which is
+               a PROPORTION — on a 40px button it moves things 3px, but this card
+               is ~820px wide, so hovering it slid its own buttons sideways by a
+               measured 24–31px (Edit left, Delete right), i.e. roughly half a
+               button. You aim at Edit, the card lifts as the cursor crosses it,
+               Edit moves out from under you, and the click lands on the card.
+               Moving the pointer out and back in "fixes" it only because the
+               second time the card is already lifted, so what you see is where
+               it is.
+
+               Rule this establishes: THE HOVER LIFT IS FOR CONTROLS, NOT FOR
+               CONTAINERS OF CONTROLS. A scaling parent moves every target inside
+               it, and the bigger the parent the further they move.
+
+               `.mgt-ac-row` already had the answer for a row-shaped surface —
+               background swap, no transform — so the card takes that treatment
+               (a `--bg-hover-card` tint via the class below) and the BUTTONS
+               keep their own 1.08, which is what the effect was designed for. */
+            className="mgt-card-hover"
             onClick={() => onSelect(b.id)}
             style={{
-              background: cardBg,
+              /* The resting fill goes through a CUSTOM PROPERTY rather than
+                 `background`, because an inline `background` beats a stylesheet
+                 `background-color` (the same Fix-2 specificity rule that makes
+                 mkBtn's inline shadow un-overridable). Declared inline, consumed
+                 by `.mgt-card-hover` in index.html, so the hover tint is a plain
+                 CSS state change with nothing to fight — and no React hover state
+                 re-rendering a memoized list on every pointer move. */
+              "--card-bg": cardBg,
               border: cardBrdW + " solid " + cardBrd,
               borderRadius: R.card, padding: "14px 16px",
               position: "relative",

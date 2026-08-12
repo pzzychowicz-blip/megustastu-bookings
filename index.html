@@ -564,6 +564,30 @@
       @media (hover: hover) and (pointer: fine) {
         .mgt-ac-row:hover { background-color: var(--bg-ac-hover); }
       }
+      /* v17.9.1: the List booking card. Same shape as .mgt-ac-row above and for
+         a sharper reason than "rows shouldn't scale" — the card CARRIES BUTTONS.
+         It used to be .mgt-hover-scale, and scale(1.08) is a proportion: on a
+         40px control it moves things 3px, but this card is ~820px wide, so
+         hovering it slid its own Edit/Delete buttons sideways by a measured
+         24–31px and clicks aimed at them landed on the card instead.
+
+         THE HOVER LIFT IS FOR CONTROLS, NOT FOR CONTAINERS OF CONTROLS. Anything
+         that holds click targets gets a tint, not a transform. Nothing moves, so
+         nothing under the cursor changes identity between aiming and clicking.
+
+         The resting fill arrives as `--card-bg`, set inline by ListView. It has
+         to come through a custom property: an inline `background` would beat a
+         stylesheet `background-color` outright (the Fix-2 specificity rule that
+         makes mkBtn's inline shadow un-overridable), so the hover state would
+         silently never apply. The card's `box-shadow` stays inline because it
+         carries the keyboard-selection ring, which must win. */
+      .mgt-card-hover {
+        background-color: var(--card-bg);
+        transition: background-color var(--t-tap) var(--ease-out);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .mgt-card-hover:hover { background-color: var(--bg-hover-card); }
+      }
       /* v17.5.0 correction: TimeAxis is now a ruler/tape picker whose centre
          marker is fixed while the ruler scrolls under it. This is the "detent"
          — a brief squash as each 15-minute mark passes the centre, so scrubbing

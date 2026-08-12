@@ -8746,3 +8746,46 @@ decision, now decided:
   action": **"+ New" is now the only accent title pill in the app.**
 
 Closes the `ROADMAP.md` colour-rule item outright.
+
+### 9/10 — The List card ate clicks aimed at its own buttons
+
+**Files:** `src/components/ListView.jsx`, `index.html`.
+
+Patryk: hovering a booking then clicking a button does nothing; moving the
+pointer out and back in makes it work. Reproduced and measured rather than
+guessed — with the card hovered, **Edit moves 24px left and Delete 31px right**,
+about half a button each.
+
+The cause is that `.mgt-hover-scale` was on the **card**. The lift is
+`scale(1.08)`, a *proportion*: on a 40px control that is 3px, but this card is
+~820px wide, so every control inside it slides outward from the card's centre as
+the cursor crosses the boundary. You aim at Edit, the card lifts, Edit leaves,
+the click lands on the card's own `onSelect`. Moving out and back "fixes" it only
+because the second time the card is already lifted, so what you see is where it
+is.
+
+**The rule this establishes: the hover lift is for CONTROLS, not for CONTAINERS
+of controls.** A scaling parent moves every target inside it, and the bigger the
+parent the further they move. `.mgt-ac-row` already had the right treatment for a
+row-shaped surface — background swap, no transform — so the card takes that, and
+its buttons keep their own 1.08, which is what the effect was designed for.
+
+**One trap on the way:** the card sets `background` and `boxShadow` INLINE, and
+an inline style beats a stylesheet rule (the Fix-2 specificity rule that makes
+`mkBtn`'s inline shadow un-overridable). A naive `.mgt-card-hover:hover
+{ background-color: … }` would have silently never applied. The resting fill now
+travels as a **custom property** (`--card-bg`, set inline, consumed by the class),
+so the hover state is a plain CSS state change with nothing to fight — and no
+React hover state re-rendering a memoized list on every pointer move. The
+`box-shadow` stays inline because it carries the keyboard-selection ring.
+
+**Verified via the live CSSOM**, per the house rule that reading the file cannot
+catch a stylesheet bug: both rules exist, the card no longer matches
+`.mgt-hover-scale`, and **no rule applies a transform to it on hover** — the
+shift is now structurally impossible rather than merely unobserved. The resting
+fill resolves correctly through the custom property (`rgba(255,255,255,0.45)` =
+`--bg-card-strong`).
+
+`tests/stylesheet.test.js` caught a loose line of prose in the new comment before
+any of this shipped — the exact defect that test was written for, on the commit
+that added a rule beside it.
