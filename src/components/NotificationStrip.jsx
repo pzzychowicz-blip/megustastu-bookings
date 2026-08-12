@@ -169,9 +169,16 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
            viewport and holds the tally, so it is a container of controls, not a
            control — a tint says "tappable" without moving anything under the
            finger. `--row-bg` stays unset (transparent) so the strip's own
-           severity tint shows through and keeps cross-fading. */
+           severity tint shows through and keeps cross-fading.
+           v17.9.1 review fix: `--row-bg-hover` must be set for the same reason.
+           Left unset it falls back to the class default `--bg-ac-hover`, the
+           accent wash — so hovering an amber "running late" or a red strip
+           replaced the severity colour with blue, overriding the one signal the
+           collapsed lid exists to carry. A neutral white/black veil lightens
+           whatever tint is underneath instead of recolouring it. */
         className="mgt-ac-row mgt-nopress"
         style={{
+          "--row-bg-hover": "var(--bg-veil)",
           display: "flex", alignItems: "center", gap: NOTIF_GAP, width: "100%",
           border: "none", cursor: "pointer",
           padding: "10px " + NOTIF_PAD_X + "px", textAlign: "left"

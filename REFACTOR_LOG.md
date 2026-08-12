@@ -9265,3 +9265,24 @@ reintroduced by the one element left out of it.
 `chipRoomFor` deliberately does NOT gain the same term: it feeds `chipsOn`, which is
 all-or-nothing across the day, so one seated block near its end would suppress the
 start-time chips on every other block. The two rules answer different questions.
+
+### 26 — /code-review fix: the strip's hover replaced its severity colour
+
+**Files:** `index.html`, `src/components/NotificationStrip.jsx`.
+
+Entry 12 gave the strip's lid `.mgt-ac-row` and set `--row-bg` to transparent so the
+strip's own severity tint would show through. It did not set `--row-bg-hover`, which
+falls back to the class default — `--bg-ac-hover`, an ACCENT wash. So hovering an
+amber "running late" or a red strip painted it blue, overriding the one signal the
+collapsed lid exists to carry, and breaking the v17.8.0 rule that accent means
+primary action or current selection and nothing else.
+
+New `--bg-veil`: a neutral white/black hover for a surface that already carries a
+meaningful colour — it lightens what is underneath rather than recolouring it, and
+is theme-split (darken over a light page, lighten over a dark one) for the same
+reason `--shadow-*` is.
+
+**The general point: a class with a DEFAULT is only half-configured until you check
+what the default means on your surface.** `--bg-ac-hover` is right for an
+autocomplete row, which has no colour of its own; it is wrong for anything whose
+resting colour is the message.
