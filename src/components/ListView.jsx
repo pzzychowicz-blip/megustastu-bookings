@@ -332,17 +332,21 @@ export const ListView = memo(function ListView({
                background swap, no transform — so the card takes that treatment
                (a `--bg-hover-card` tint via the class below) and the BUTTONS
                keep their own 1.08, which is what the effect was designed for. */
-            className="mgt-card-hover"
+            className="mgt-ac-row"
             onClick={() => onSelect(b.id)}
             style={{
               /* The resting fill goes through a CUSTOM PROPERTY rather than
                  `background`, because an inline `background` beats a stylesheet
                  `background-color` (the same Fix-2 specificity rule that makes
                  mkBtn's inline shadow un-overridable). Declared inline, consumed
-                 by `.mgt-card-hover` in index.html, so the hover tint is a plain
-                 CSS state change with nothing to fight — and no React hover state
-                 re-rendering a memoized list on every pointer move. */
-              "--card-bg": cardBg,
+                 by `.mgt-ac-row` in index.html, so the hover tint is a plain CSS
+                 state change with nothing to fight — and no React hover state
+                 re-rendering a memoized list on every pointer move.
+                 `--bg-hover-card` rather than the class's default `--bg-ac-hover`:
+                 a card is a surface, so it lifts to the opaque card tint the
+                 hover-scale rule uses, not the accent wash a dropdown row takes. */
+              "--row-bg": cardBg,
+              "--row-bg-hover": "var(--bg-hover-card)",
               border: cardBrdW + " solid " + cardBrd,
               borderRadius: R.card, padding: "14px 16px",
               position: "relative",

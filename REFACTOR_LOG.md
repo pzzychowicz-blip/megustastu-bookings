@@ -8972,3 +8972,28 @@ gaps are deliberate — 12→14→18 is perceptible at a glance; 13→14 never w
 nothing. `FLAG_PX` follows the rail flags from 17 to 18. The timeline note dog-ear
 stays a hard-coded 8px inline SVG — a decorative marker drawn in place, not a
 member of the icon set.
+
+### 15 — One hover-tint class for every container of controls
+
+**Files:** `index.html`, `ListView.jsx`, `Summary.jsx`, `NotificationStrip.jsx`.
+
+Entry 9 fixed the List card by adding `.mgt-card-hover`; Patryk then asked for the
+same treatment on the notification strip and the Summary panel. Three call sites
+is the point at which two nearly-identical classes is itself the defect, so
+`.mgt-card-hover` is **retired** and `.mgt-ac-row` — the autocomplete-row tint
+since v16.4.0 — becomes the single mechanism, with the rule stated on it:
+
+> **The hover lift (`.mgt-hover-scale`) is for CONTROLS. This is for CONTAINERS
+> of controls.**
+
+Both colours arrive as custom properties (`--row-bg`, `--row-bg-hover`) with
+defaults that preserve the original autocomplete behaviour, because **every one of
+these surfaces sets its resting fill inline** and an inline `background` beats a
+stylesheet `background-color` outright. A plain rule would have silently never
+applied — the trap entry 9 already hit once.
+
+The Summary is the clearest case for the rule: it holds a toggle, a chevron, Print
+and More, so scaling it moved four controls out from under the cursor. It still
+tints only while COLLAPSED — an expanded panel is the tall thing on the row and
+needs no "this is tappable" hint. The strip's lid leaves `--row-bg` unset so its
+own severity tint shows through and keeps cross-fading.

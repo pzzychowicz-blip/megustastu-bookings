@@ -64,9 +64,16 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
 
   return (
     <div
-      className={open ? undefined : "mgt-hover-scale"}
+      /* v17.9.1 (Patryk): a tint, not a lift — "friendlier for the user". The
+         Summary is a PANEL holding a toggle, a chevron, Print and More, so it is
+         a container of controls: scaling it moved those controls out from under
+         the cursor, the same defect measured on the List card. Still only while
+         COLLAPSED — an expanded panel is the tall thing on the row and needs no
+         "I am tappable" hint. */
+      className={open ? undefined : "mgt-ac-row"}
       style={{
-        background: "var(--bg-soft)",
+        "--row-bg": "var(--bg-soft)",
+        "--row-bg-hover": "var(--bg-hover-card)",
         border: "1px solid var(--border-soft)",
         borderRadius: R.card,
         boxShadow: "var(--shadow-soft)",

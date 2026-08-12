@@ -165,10 +165,15 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
         aria-label={open ? "Collapse notifications" : "Expand notifications"}
         // No press-scale: this is a full-width strip header, and a 0.96 dip on
         // something that spans the viewport reads as the page flinching.
-        className="mgt-nopress"
+        /* v17.9.1 (Patryk): the lid takes the shared row tint. It spans the
+           viewport and holds the tally, so it is a container of controls, not a
+           control — a tint says "tappable" without moving anything under the
+           finger. `--row-bg` stays unset (transparent) so the strip's own
+           severity tint shows through and keeps cross-fading. */
+        className="mgt-ac-row mgt-nopress"
         style={{
           display: "flex", alignItems: "center", gap: NOTIF_GAP, width: "100%",
-          background: "transparent", border: "none", cursor: "pointer",
+          border: "none", cursor: "pointer",
           padding: "10px " + NOTIF_PAD_X + "px", textAlign: "left"
         }}>
         {/* v17.8.0: an ICON, not the 8px dot. The dot said "something is

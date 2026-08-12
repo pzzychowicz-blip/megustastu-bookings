@@ -564,37 +564,34 @@
                     box-shadow var(--t-tap) var(--ease-out),
                     filter var(--t-tap) var(--ease-out);
       }
-      /* v16.4.0: autocomplete dropdown rows (phone + name pickers in the booking
-         form) — a hover tint so the cursor's target row is visible. Not a
-         .mgt-hover-scale (rows shouldn't scale); plain background swap, and no
-         touch sticky-hover concern (the rows are tapped, not lifted). */
-      .mgt-ac-row { transition: background-color var(--t-tap) var(--ease-out); }
-      @media (hover: hover) and (pointer: fine) {
-        .mgt-ac-row:hover { background-color: var(--bg-ac-hover); }
-      }
-      /* v17.9.1: the List booking card. Same shape as .mgt-ac-row above and for
-         a sharper reason than "rows shouldn't scale" — the card CARRIES BUTTONS.
-         It used to be .mgt-hover-scale, and scale(1.08) is a proportion: on a
-         40px control it moves things 3px, but this card is ~820px wide, so
-         hovering it slid its own Edit/Delete buttons sideways by a measured
-         24–31px and clicks aimed at them landed on the card instead.
+      /* ── The row/surface hover tint (v16.4.0, generalised v17.9.1) ─────────
+         ONE class for every surface that highlights on hover WITHOUT moving:
+         autocomplete rows, the List booking card, the Summary panel, and the
+         notification strip's lid. It began as the autocomplete-only .mgt-ac-row
+         ("rows shouldn't scale"), and v17.9.1 found the sharper version of that
+         rule while fixing a click bug:
 
-         THE HOVER LIFT IS FOR CONTROLS, NOT FOR CONTAINERS OF CONTROLS. Anything
-         that holds click targets gets a tint, not a transform. Nothing moves, so
-         nothing under the cursor changes identity between aiming and clicking.
+           THE HOVER LIFT (.mgt-hover-scale) IS FOR CONTROLS. THIS IS FOR
+           CONTAINERS OF CONTROLS.
 
-         The resting fill arrives as `--card-bg`, set inline by ListView. It has
-         to come through a custom property: an inline `background` would beat a
+         scale(1.08) is a PROPORTION: 3px on a 40px button, but ~30px on an
+         820px List card — which slid that card's own Edit and Delete buttons
+         out from under the cursor between aiming and clicking (measured: Edit
+         -24px, Delete +31px). Anything holding click targets gets a tint; only
+         the targets themselves move.
+
+         Both colours arrive as CUSTOM PROPERTIES, because every one of these
+         surfaces sets its resting fill INLINE and an inline `background` beats a
          stylesheet `background-color` outright (the Fix-2 specificity rule that
-         makes mkBtn's inline shadow un-overridable), so the hover state would
-         silently never apply. The card's `box-shadow` stays inline because it
-         carries the keyboard-selection ring, which must win. */
-      .mgt-card-hover {
-        background-color: var(--card-bg);
+         makes mkBtn's inline shadow un-overridable). A plain rule here would
+         silently never apply. Defaults keep the original autocomplete behaviour
+         for callers that set neither. */
+      .mgt-ac-row {
+        background-color: var(--row-bg, transparent);
         transition: background-color var(--t-tap) var(--ease-out);
       }
       @media (hover: hover) and (pointer: fine) {
-        .mgt-card-hover:hover { background-color: var(--bg-hover-card); }
+        .mgt-ac-row:hover { background-color: var(--row-bg-hover, var(--bg-ac-hover)); }
       }
       /* v17.5.0 correction: TimeAxis is now a ruler/tape picker whose centre
          marker is fixed while the ruler scrolls under it. This is the "detent"
