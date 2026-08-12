@@ -9150,3 +9150,15 @@ Two details:
   **inline `transition` beats the stylesheet's outright**. Left alone, the halo would
   have eased in the editor (no `shapeStyle`) and snapped in Plan — the documented
   trap, hit again. `filter` is now named in that list.
+
+### 21 — `.mgt-ac-row` joins the silently-failing rules
+
+**Files:** `tests/stylesheet.test.js`.
+
+Entry 19's transparent Summary panel is the proof this rule needed guarding: since
+the surfaces route their resting fill through `--row-bg`, `.mgt-ac-row` no longer
+only supplies a hover tint — it supplies the **background**, for the List card, the
+Summary panel, the strip's lid and the autocomplete rows. If the rule went missing,
+four surfaces would render transparent with no error anywhere. That is exactly the
+list's entry criterion, and the class only became eligible for it when the fill
+moved into a custom property.
