@@ -8728,3 +8728,21 @@ Then scale: all five rail flags **11px → 13px** (and `WaitGhost`'s ⏳ with th
 since it sits in the same marker column). Not the deposit alone — one 13px icon
 beside four 11px ones is a worse defect than the one being fixed. `FLAG_PX`
 follows, 15 → 17, so the width ladder still reserves what it actually spends.
+
+### 8/10 — Waitlist and Find-a-booking title pills
+
+**Files:** `WaitlistPanel.jsx`, `SearchPanel.jsx`, `ROADMAP.md`.
+
+The two pills v17.9.1's extraction commit deliberately left for a separate
+decision, now decided:
+
+- **Waitlist → `--btn-orange`**, the colour of the button that opens it (Patryk).
+  This is the atom's own rule working as intended — a modal reads as the control
+  that opened it, expanded — and the waitlist badge is the one orange control in
+  the date row, so the pill now matches it exactly.
+- **Find a booking → `--app-btn-grey-strong`**, joining Settings. Search is where
+  you go to FIND something, not to make something. The useful consequence is that
+  `--accent` stops meaning "important modal" and goes back to meaning "primary
+  action": **"+ New" is now the only accent title pill in the app.**
+
+Closes the `ROADMAP.md` colour-rule item outright.

@@ -59,7 +59,7 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
 
   return (
     <Overlay onClose={onClose} footer={footerEl}>
-      <ModalTitle background="var(--accent)">Find a booking</ModalTitle>
+      <ModalTitle background="var(--app-btn-grey-strong)">Find a booking</ModalTitle>
       <input
         ref={inputRef}
         value={query}

@@ -65,11 +65,3 @@ session and keeping it in sync.
   rule guards, and a noisy check gets muted. Fold them into `--shadow-soft` /
   `--shadow-btn` opportunistically while touching those files; don't sweep.
 
-- **Two modal title pills still need a colour decision.** v17.9.1 wrote the
-  convention down and gave it one home (`ModalTitle` in `atoms.jsx`): a
-  create/act surface wears its action's own colour, a configure/read surface
-  wears a neutral. Five of the seven pills already conformed and none were
-  changed. The two that the rule would move to neutral are **Waitlist** and
-  **Find a booking**, and both are arguable — you book from the waitlist and you
-  jump to a booking from search, so they are act surfaces too. Decide those two
-  on their own; the extraction deliberately did not smuggle a recolour in.

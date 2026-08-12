@@ -63,7 +63,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
   );
 
   return (
-    <Overlay onClose={onClose} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background="var(--accent)">{"Waitlist — "+date}</ModalTitle>{rows.length?rows:<div
+    <Overlay onClose={onClose} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background="var(--btn-orange)">{"Waitlist — "+date}</ModalTitle>{rows.length?rows:<div
         style={{textAlign:"center",padding:"24px 0",color:S.muted,fontSize: T.lead}}>No one on the waitlist for this day.</div>}<div style={{fontSize: T.small,color:S.muted,textAlign:"center",marginTop:10}}>First come, first served — "Table free" means a table currently fits this party.</div></AutoHeight></Overlay>
   );
 }
