@@ -8513,3 +8513,67 @@ intermediate frames and the resting states were never wrong:
 opening 9 → 6.8 → 4.3 → 2.5 → 1.3 → 0.6 → 0.1 → 0, closing 0 → 2.2 → 4.7 → 6.5 →
 7.7 → 8.4 → 8.9 → 9. Monotonic in both directions, no frame past the collapsed
 resting position. Build clean · 259 tests · lint 0 errors · `check:style` OK.
+
+### 3/6 — A block reveals its markers as it has room for them
+
+**Files:** `src/lib/block-layout.js` (new), `tests/block-layout.test.js` (new),
+`src/components/TimelineView.jsx`.
+
+Everything on a block except the guest name is `flexShrink: 0`. On a narrow block
+they therefore do not compete for space — they **overflow** it, and the block's
+`overflow: hidden` clips them on top of one another. Patryk's screenshot is a
+green block a few pixels wide with a lock icon and a party-size ring printed over
+each other.
+
+The case is neither rare nor an edge: a **seated** block is drawn at its LIVE
+duration, so every party that sits down starts a few pixels wide and grows. The
+markers pile up for the first stretch of every visit, on the view the floor is
+actually watching.
+
+A block now spends a width budget. Never dropped: the guest **name** (it
+truncates — that is what an ellipsis is for) and the **Assign handle** (a
+control; losing a control because a party sat down early is a different class of
+defect from losing a marker). Then the party-size **ring**. Dropped first, one at
+a time, the **flags** — and within them, **informational before exceptional**:
+deposit → preferred ★ → locked → repeat no-show → overstaying. So the last marker
+standing is the one that says someone is sitting in a table the next booking
+needs. That ordering is v17.9.0's own argument for moving those flags out of the
+truncating label string, applied to width instead of to text.
+
+**Two orders, one list.** The array literal in `TimelineBlock` is the RAIL order
+(unchanged from v17.9.0, so a wide block looks exactly as it did); each entry
+also carries a `keep` rank, which is the DROP order. They are one literal because
+held apart they drift. `visibleRail` selects by `keep` and then **filters the
+original array** rather than returning its own sorted slice — otherwise the
+rendered sequence would silently become priority order the first time a block
+dropped a flag, and the star would sit left of the lock on a wide block and right
+of it on a narrow one.
+
+**This produces a mixed grid by design**, which is the opposite of the
+all-or-nothing rule `chipsOn` follows in the same file. Both are right: the chip
+rule exists so the DAY reads consistently, this one so an individual block stays
+legible, and where they disagree the block wins — an unreadable block is not
+consistent with anything.
+
+`WaitGhost` takes the ring half of the same budget, because "a quieter version of
+X dims X, it does not re-specify it" and a ghost still piling its ring where the
+block it mirrors had stopped would be re-specifying by omission. Its `fixedPx` is
+its OWN (chip + unconditional ⏳ + name floor): it has no Assign handle, so
+reusing the block's figure would over-reserve 26px on it — reuse dressed up as
+correctness. That is why `visibleRail` takes `fixedPx` from the caller instead of
+computing it.
+
+**Why this is a `lib/` module and not four lines in the component.** The live app
+cannot exercise the interesting cases: the timeline's zoom steps move a block
+108 → 162 → 216px, so every rung where exactly one, two, three or four flags
+survive falls BETWEEN two zoom levels and is unreachable by clicking. Both
+reachable endpoints were verified in DEV and both match the rule exactly (108px:
+name only; 162px: ring + both flags, no overlap). Everything between them is
+covered by 11 tests — including the one that matters most, that with room for a
+single flag the survivor is the overstay marker and not the deposit.
+
+**Not exercised live:** the `WaitGhost` path, which needs a waiting party that a
+table currently fits. Its change is two lines through the same tested function.
+
+**Verification:** 270 tests (259 + 11) · build clean · lint 0 errors ·
+`check:style` OK · main bundle 197.15 → 197.40 kB gz.
