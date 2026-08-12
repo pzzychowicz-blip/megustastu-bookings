@@ -29,7 +29,7 @@ import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep, useOverlayScroll } from "./atoms";
 import { BTN, R, M, T, FW, H } from "../lib/constants";
 
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
@@ -925,6 +925,33 @@ export function SettingsContent({
     return function () { set.clear(); if (onDirty) onDirty(false); };
   }, [onDirty]);
 
+  // v17.9.1: the modal's scroll port is reset in `selectTab` below, BEFORE the
+  // tab state changes. See that handler for why the ordering is load-bearing.
+  const overlayScroll = useOverlayScroll();
+
+  // v17.9.1: reset the scroll port BEFORE swapping the tab, and do it here in the
+  // handler rather than in a layout effect. Both halves matter.
+  //
+  // WHY reset at all: with the body scrolled 400px in a 2226px tab, switching to
+  // a 321px tab left `scrollTop` pinned at 400 for ~270ms while the height
+  // animated, and then — the instant `scrollHeight` fell below `scrollTop +
+  // clientHeight` — the browser FORCE-CLAMPED it 400 -> 281 -> 34 -> 0. That
+  // involuntary late clamp is the reported "jump". It is the SCROLL moving, not
+  // the height, which is why fixing the height animation alone did not resolve it.
+  //
+  // WHY in the handler and not a layout effect: writing `scrollTop` forces a
+  // synchronous layout. In a layout effect that write lands AFTER AutoHeight has
+  // already set the new height (child effects run first), so the forced recalc
+  // settles the new height before the browser has painted the old one — and the
+  // height transition then has nothing to animate FROM. Measured: it snapped
+  // 2226 -> 321 in a single frame. Resetting here happens while the OLD, tall
+  // content is still mounted, where scrollTop 0 is valid and cheap, and React's
+  // re-render then follows with nothing forcing a flush mid-transition.
+  function selectTab(t) {
+    if (overlayScroll) overlayScroll.scrollToTop();
+    setTab(t);
+  }
+
   let content;
   if (tab === "general") {
     content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
@@ -951,7 +978,7 @@ export function SettingsContent({
       <TabBar
         tabs={SETTINGS_TABS}
         current={tab}
-        onSelect={setTab}
+        onSelect={selectTab}
       />
       {/* v15.8.0: tab body eases its height (AutoHeight) + crossfades on switch
           (key+mgt-fade-in) — the modal card follows the eased height. */}

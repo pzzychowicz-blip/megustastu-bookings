@@ -131,9 +131,30 @@ export function mkBtn(extra) {
 // read-only popups (e.g. HistoryPopup) that have no action row.
 // Blur budget unchanged: exactly one card renders (ternary), so a footer modal
 // is still scrim blur(8px) + card blur(20px) = 2 instances (≤4 rule holds).
+// ── Overlay's scroll port, exposed to its children (v17.9.1) ─────────────────
+// A modal that REPLACES its whole body — Settings switching tabs — has to put the
+// scroll back to the top in the same commit, or the browser does it later and
+// worse. Measured: with the body scrolled 400px in a 2226px-tall tab, switching
+// to a 321px tab left `scrollTop` pinned at 400 for ~270ms while the height
+// animated, and then, the moment `scrollHeight` fell below `scrollTop +
+// clientHeight`, the browser FORCE-CLAMPED it 400 → 281 → 34 → 0. That late,
+// involuntary clamp is the "jump", and it is why it reads as arriving after the
+// content rather than with it.
+//
+// It is a context rather than a prop because the tab lives in `SettingsContent`,
+// which Overlay receives as opaque `children` — App could not pass it down
+// without lifting that state. And it lives on Overlay rather than in the caller
+// because Overlay has FOUR scroll ports (mobile/desktop × footer/no-footer) and
+// is the only thing that knows which one is mounted. Same shape as
+// PresenceContext above.
+const OverlayScrollContext = createContext(null);
+export function useOverlayScroll() { return useContext(OverlayScrollContext); }
+
 export function Overlay({ onClose, children, footer }) {
   const mob = typeof window !== "undefined" && window.innerWidth < 600;
   const lockRef = useRef(false);
+  const scrollRef = useRef(null);
+  const scrollApi = useRef({ scrollToTop: function () { if (scrollRef.current) scrollRef.current.scrollTop = 0; } });
   // v15.8.0: symmetric open/close animation. `leaving` comes from the wrapping
   // <ModalPresence> (default false when there's no provider → enter-only). Mobile
   // = slide-up/down sheet; desktop = scrim fade + card fade/scale. See index.html.
@@ -153,13 +174,19 @@ export function Overlay({ onClose, children, footer }) {
     };
   }, [mob]);
 
+  // One provider around every branch, so a child can reset the scroll port that
+  // actually mounted without knowing which of the four it is.
+  const wrap = (el) => (
+    <OverlayScrollContext.Provider value={scrollApi.current}>{el}</OverlayScrollContext.Provider>
+  );
+
   if (mob) {
     // Footer pinned to the viewport bottom; body scrolls between top and footer.
     // (minHeight:0 lets the flex body actually scroll instead of growing the column.)
     if (footer) {
-      return (
+      return wrap(
         <div className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
-          <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", boxSizing: "border-box" }}>
+          <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", boxSizing: "border-box" }}>
             {children}
           </div>
           <div style={{ flexShrink: 0, padding: "12px 18px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: "1px solid var(--border-sheet)", background: "var(--bg-sheet-mobile)", boxSizing: "border-box" }}>
@@ -168,9 +195,9 @@ export function Overlay({ onClose, children, footer }) {
         </div>
       );
     }
-    return (
+    return wrap(
       <div className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
+        <div ref={scrollRef} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
           <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))",   /* @canvas */ boxSizing: "border-box" }}>
             {children}
           </div>
@@ -182,7 +209,7 @@ export function Overlay({ onClose, children, footer }) {
   // Desktop centered card. With a footer, the card is a flex column: body
   // scrolls (minHeight:0), footer stays pinned. Without, the whole card scrolls
   // (exactly as before).
-  return (
+  return wrap(
     <div
       className={scrimCls}
       style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}
@@ -190,7 +217,7 @@ export function Overlay({ onClose, children, footer }) {
     >
       {footer ? (
         <div className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
-          <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
+          <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
           <div style={{ flexShrink: 0, padding: "16px 24px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
@@ -198,7 +225,7 @@ export function Overlay({ onClose, children, footer }) {
           </div>
         </div>
       ) : (
-        <div className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={scrollRef} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           {children}
         </div>
       )}

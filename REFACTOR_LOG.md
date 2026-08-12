@@ -8864,3 +8864,49 @@ come from `getComputedStyle` on the live document with the theme flipped. This i
 the second time in one version that a scratch CSS parser produced a confident
 wrong answer — the same class of error `tests/contrast.test.js` already warns
 about. **Read colours from the browser, not from the file.**
+
+### 12 — The Settings tab "jump" was the SCROLL, not the height
+
+**Files:** `src/components/atoms.jsx`, `src/components/Settings.jsx`.
+
+Entry 10 fixed a real defect (the new tab painting unclipped at full height for a
+frame) and Patryk reported the jump was still there. It was — because the jump was
+never the height.
+
+Measured with the body scrolled 400px in the 2226px General tab, switching to the
+321px Layout tab:
+
+```
+scrollTop: 400 400 400 400 400 400 281 34 0 0
+```
+
+`scrollTop` stays pinned at 400 for ~270ms while the height animates, and then —
+the instant `scrollHeight` falls below `scrollTop + clientHeight` — **the browser
+force-clamps it 400 → 281 → 34 → 0.** That involuntary late clamp is the jump.
+It is the content sliding under a scroll position the browser is dragging back,
+which is also why it reads as arriving *after* the tab has already changed.
+
+The fix resets the modal's scroll port to the top when the tab changes.
+`Overlay` exposes it through a context (`useOverlayScroll`) rather than a prop,
+for two reasons: the tab lives inside `SettingsContent`, which `Overlay` receives
+as opaque `children`, and `Overlay` has **four** scroll ports (mobile/desktop ×
+footer/no-footer) so it is the only thing that knows which one is mounted.
+
+**The ordering is load-bearing, and the first attempt got it wrong.** Resetting in
+a layout effect *removed the clamp but killed the height transition* — measured
+snapping 2226 → 321 in a single frame. Writing `scrollTop` forces a synchronous
+layout, and in a layout effect that write lands **after** `AutoHeight` has already
+set the new height (child effects run first), so the forced recalc settles the new
+height before the browser has painted the old one and the transition has nothing
+to animate from. Doing it in the tab **click handler** instead resets the scroll
+while the old, tall content is still mounted — where `scrollTop = 0` is valid and
+cheap — and React's re-render then follows with nothing forcing a flush mid-flight.
+
+Entry 10's `watch` prop stays: the two defects are independent, and without it the
+new tab still paints unclipped for a frame.
+
+**Verified with rAF sampling** (a `setTimeout` sampler drifts badly under
+animation load and showed a phantom discontinuity — worth knowing before trusting
+one): shrink runs 2226 → 2144 → 2061 → … → 329 → 321 in even ~82px steps over
+385ms, growth is the same ramp inverted, and `scrollTop` is 0 from the first frame
+in both directions.
