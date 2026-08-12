@@ -8464,3 +8464,52 @@ The copy that describes the glyph moved with it — `TimelineView`'s block comme
 and `CLAUDE.md`'s `Icons.jsx` entry both said "a coin". That is the house rule
 from v17.9.0's own `LayoutSettings` "Reorder with ‹ ›" finding, applied to the
 version that wrote it.
+
+### 2/6 — The date controls transition instead of snapping
+
+**Files:** `src/App.jsx`.
+
+v17.9.0's follow-up centred the date arrows and date field in their row while the
+Summary is collapsed, and flipped them back to the top when it opens. The intent
+was right and is unchanged. The mechanism was `alignItems: summaryOpen ?
+"flex-start" : "center"`, and it has two problems that are really one problem:
+**`align-items` is not an animatable property, and it re-resolves against
+whatever height the row has in the frame the flip happens.**
+
+The row's height is set by the Summary card — 58px collapsed, 210 open — and the
+Summary's body is inside a `Reveal`, so that height eases over `M.shift`. The
+alignment, having no transition of its own, changed instantly. On collapse the
+controls were re-centred against a row that was **still 210px tall**: (210−40)/2
+= **+85px**, an 85px jump downward, and only then did they ride back up to +9 as
+the row shut. That is the reported "they jump to the bottom and come back to the
+centre". Opening had the identical defect scaled down — a 9px snap up before the
+row grew — which read as a snap rather than as a bug, which is why only one
+direction got reported.
+
+The fix pins the row to `flex-start` permanently and gives the two control groups
+the offset themselves, as `transform: translateY(9px)` with
+`transition: transform var(--t-shift) var(--ease-out)`. A constant works because
+it is measured against the **collapsed** row, which does not move; the open row's
+height never enters into it. `transform` is compositor-only, so a row whose
+sibling is the timeline does not reflow each frame, and reduce-motion needs no
+work — `index.html`'s `data-motion="reduce"` block zeroes `transition-duration`
+with `!important`, which beats an inline `transition`.
+
+**The number is 9, and it was worth measuring.** The v17.9.0 commit message
+records "collapsed row 102 / controls at +31", which would have made this 31.
+Measured live today it is row 58 / controls at +9 — the header has changed shape
+since. Reusing the recorded figure would have shipped a 22px error in the
+resting position of the app's most-used control.
+
+Guarded on `!isMobile`: below 600px the Summary's `flexBasis` is `100%`, so it
+wraps onto its own flex line and the controls' line is exactly control height.
+There is nothing to centre in there, and an unguarded offset would push them into
+the row gap. Verified at 375px: `transform: none`, controls at +0, summary on its
+own line.
+
+**Verification** — sampled `getBoundingClientRect().top` every 50ms through both
+transitions rather than eyeballing them, because "it jumps" is a claim about
+intermediate frames and the resting states were never wrong:
+opening 9 → 6.8 → 4.3 → 2.5 → 1.3 → 0.6 → 0.1 → 0, closing 0 → 2.2 → 4.7 → 6.5 →
+7.7 → 8.4 → 8.9 → 9. Monotonic in both directions, no frame past the collapsed
+resting position. Build clean · 259 tests · lint 0 errors · `check:style` OK.

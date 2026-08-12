@@ -375,6 +375,27 @@ const CHROME_BTN={
   color:S.text,
   boxShadow:"var(--shadow-btn)"
 };
+
+// ── How far the date controls sit below the top of their row (v17.9.1) ────────
+// The date-nav row's height is set by the Summary card beside the controls: 58px
+// collapsed, ~210 open. The controls are 40. So "centred while collapsed" is
+// exactly (58 - 40) / 2 = 9px below the top, and "aligned to the header" when
+// open is 0 — both measured live, not derived from the card's padding.
+//
+// It is a translateY rather than the `alignItems` flip v17.9.0 shipped, because
+// `align-items` is not an animatable property and the flip resolves against the
+// row's height IN THE FRAME IT HAPPENS. On collapse that height is still 210, so
+// `center` put the controls at (210-40)/2 = +85 — an 85px jump DOWN — and they
+// then rode back up to +9 as the summary's Reveal eased the row shut. That is
+// the reported "they jump to the bottom and come back". Opening had the same
+// defect at 9px, small enough to read as a snap rather than a bug.
+//
+// A constant works because it is measured against the COLLAPSED row, which does
+// not move; the open row's height is irrelevant to it. Transform is also
+// compositor-only, so this eases without reflowing a row whose sibling is the
+// timeline. Reduce-motion needs nothing: index.html's data-motion="reduce" block
+// zeroes transition-duration with !important, which beats an inline transition.
+const DATE_CTRL_DROP=9;
 function readAppWidth(){
   try{
     const v=parseInt(localStorage.getItem("mgt-appwidth"),10);
@@ -2623,6 +2644,17 @@ function BookingApp({uid}){
     onToggle={VA.onSummaryToggle}
     onOpenWeek={VA.onOpenWeek}
     onPrint={VA.onPrint} />;
+  // v17.9.1: the vertical position of the two date-nav control groups — see
+  // DATE_CTRL_DROP. Applied to BOTH groups so the arrows/date field and the
+  // Today/waitlist pills stay on one line as they move.
+  //
+  // Guarded on !isMobile: below 600px the Summary's flexBasis is "100%", so it
+  // wraps onto its own flex line and the controls' line is exactly control
+  // height. There is nothing to centre in there, and an unguarded offset would
+  // push them down into the row gap instead. At >=600 the Summary is
+  // flexShrink:1 with minWidth:0, so it shrinks rather than wrapping and the
+  // single-line assumption this offset depends on holds.
+  const dateCtrlShift=(isMobile||summaryOpen)?"none":"translateY("+DATE_CTRL_DROP+"px)";
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
   const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} />;
@@ -2752,11 +2784,18 @@ function BookingApp({uid}){
              measured, not eyeballed. Centring fixes that.
 
              But the alignment has to FLIP when the summary expands: the summary
-             is what drives this row's height, and at ~250px open, centred date
+             is what drives this row's height, and at ~210px open, centred date
              controls float into the vertical middle of a tall panel, visually
              detached from the header above them. Open ⇒ back to the top, which
-             is where a control that is not the tall thing belongs. */
-          style={{display:"flex",alignItems:summaryOpen?"flex-start":"center",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
+             is where a control that is not the tall thing belongs.
+
+             v17.9.1: the intent above is unchanged; the MECHANISM is. The row is
+             pinned to flex-start and the controls carry the offset themselves as
+             a transitioned transform (DATE_CTRL_DROP), because flipping
+             `alignItems` re-resolved the position against whatever height the
+             row happened to have in that one frame — which, on collapse, was
+             still the open height. See DATE_CTRL_DROP for the numbers. */
+          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
@@ -2773,7 +2812,7 @@ function BookingApp({uid}){
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
               className="mgt-hover-scale"
-              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center"}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
+              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){goToDate(new Date().toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
