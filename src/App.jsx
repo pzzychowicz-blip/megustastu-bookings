@@ -52,7 +52,7 @@ import { placeWaitlist } from "./lib/waitlist-match";
 // First component file in the codebase using JSX syntax. App.jsx now also
 // uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
 // compatibility no longer applies — both files share a single style.
-import { Overlay, mkBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
+import { Overlay, ModalTitle, mkBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
 import { appBannerSections } from "./components/AppBanners";
@@ -2933,8 +2933,7 @@ function BookingApp({uid}){
         showSettings?<Overlay onClose={requestCloseSettings} footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"8px 18px",background:"var(--app-btn-slate)"})}
-              onClick={requestCloseSettings}>Close</button></div>}><div style={{textAlign:"center",marginBottom:14}}><div
-              style={{fontSize: T.title,fontWeight: FW.bold,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:"var(--app-btn-grey-strong)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Settings</div></div><Suspense fallback={null}><SettingsContent
+              onClick={requestCloseSettings}>Close</button></div>}><ModalTitle background="var(--app-btn-grey-strong)">Settings</ModalTitle><Suspense fallback={null}><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
             onDirty={setSettingsDirty}
             isDark={isDark}

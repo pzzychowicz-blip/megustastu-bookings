@@ -57,13 +57,19 @@ session and keeping it in sync.
 
 ## Ideas
 
-- **Plain drop-shadow literals.** ~20 inline `boxShadow: "0 1px 4px
-  rgba(0,0,0,0.04)"`-style values remain, and `scripts/check-style-invariants.mjs`
+- **Plain drop-shadow literals.** ~17 inline `boxShadow: "0 1px 4px
+  rgba(0,0,0,0.04)"`-style values remain (v17.9.1's `ModalTitle` absorbed three
+  of them), and `scripts/check-style-invariants.mjs`
   deliberately does NOT flag them: a black shadow cannot invert out from under
   itself, so this is a consistency nit rather than the bug class the white-inset
   rule guards, and a noisy check gets muted. Fold them into `--shadow-soft` /
   `--shadow-btn` opportunistically while touching those files; don't sweep.
 
-- **Modal title pills have no colour rule.** "New booking" and "Waitlist" are
-  accent; "Settings" is grey. Pick one convention (probably: accent for a
-  create/act surface, neutral for a configure/read one) and apply it.
+- **Two modal title pills still need a colour decision.** v17.9.1 wrote the
+  convention down and gave it one home (`ModalTitle` in `atoms.jsx`): a
+  create/act surface wears its action's own colour, a configure/read surface
+  wears a neutral. Five of the seven pills already conformed and none were
+  changed. The two that the rule would move to neutral are **Waitlist** and
+  **Find a booking**, and both are arguable — you book from the waitlist and you
+  jump to a booking from search, so they are act surfaces too. Decide those two
+  on their own; the extraction deliberately did not smuggle a recolour in.

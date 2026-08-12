@@ -42,7 +42,7 @@ import {
   optimizerActiveFor
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone, findPhoneOverlaps } from "../lib/customers";
-import { Overlay, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { Overlay, ModalTitle, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
@@ -591,8 +591,7 @@ export function BookingFormModal({
 
   // ── The form modal itself ──
   return (
-    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><div style={{textAlign:"center",marginBottom:16}}><div
-        style={{fontSize: T.title,fontWeight: FW.bold,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:form.returnOf?"var(--app-success-solid)":"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</div></div>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><div style={{position:"relative"}}><input
+    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><div style={{position:"relative"}}><input
             value={form.name}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
             onFocus={function(){setNameFocus(true);}}

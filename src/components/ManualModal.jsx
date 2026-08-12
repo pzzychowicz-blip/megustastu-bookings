@@ -33,7 +33,7 @@ import { S, BTN, R, M, T, FW } from "../lib/constants";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
 } from "../lib/booking-logic";
-import { Overlay, Toggle, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, ModalTitle, Toggle, mkBtn, AutoHeight, Reveal } from "./atoms";
 import { TableGrid } from "./TableGrid";
 import { sameDraft } from "../lib/drafts";
 
@@ -240,17 +240,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
       {/* v15.8.0: body eases its height (AutoHeight) so the Selected/Capacity box,
           Clear button and swap-warning grow/shrink smoothly instead of jumping. */}
       <AutoHeight>
-      <div style={{ textAlign: "center", marginBottom: 4 }}>
-        <div style={{
-          fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
-          display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-          background: "var(--accent)",
-          border: "1px solid rgba(255,255,255,0.2)",
-          boxShadow: "var(--shadow-btn)"
-        }}>
-          {titleText || "Manual table assignment"}
-        </div>
-      </div>
+      <ModalTitle marginBottom={4} background="var(--accent)">{titleText || "Manual table assignment"}</ModalTitle>
       <div style={{ fontSize: T.body, color: S.text, marginBottom: 4, marginTop: 6, textAlign: "center" }}>
         {booking.name + " · " + booking.size + " pax · " + booking.time + "–" + toTime(e)}
       </div>

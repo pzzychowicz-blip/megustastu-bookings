@@ -19,7 +19,7 @@
 import { useState } from "react";
 import { S, BTN, R, T, FW } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
-import { Overlay, mkBtn, AutoHeight } from "./atoms";
+import { Overlay, ModalTitle, mkBtn, AutoHeight } from "./atoms";
 
 function addedLabel(ts){
   if(!ts) return "";
@@ -63,8 +63,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
   );
 
   return (
-    <Overlay onClose={onClose} footer={footerEl}><AutoHeight><div style={{textAlign:"center",marginBottom:16}}><div
-          style={{fontSize: T.title,fontWeight: FW.bold,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:"var(--accent)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>{"Waitlist — "+date}</div></div>{rows.length?rows:<div
+    <Overlay onClose={onClose} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background="var(--accent)">{"Waitlist — "+date}</ModalTitle>{rows.length?rows:<div
         style={{textAlign:"center",padding:"24px 0",color:S.muted,fontSize: T.lead}}>No one on the waitlist for this day.</div>}<div style={{fontSize: T.small,color:S.muted,textAlign:"center",marginTop:10}}>First come, first served — "Table free" means a table currently fits this party.</div></AutoHeight></Overlay>
   );
 }

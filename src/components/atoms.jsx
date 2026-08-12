@@ -206,6 +206,53 @@ export function Overlay({ onClose, children, footer }) {
   );
 }
 
+// ── ModalTitle — the pill at the top of a modal (v17.9.1) ────────────────────
+// Seven hand-written copies before this: BookingFormModal, WalkinForm,
+// WaitlistPanel, SearchPanel, PrefPickerModal, ManualModal, and the Settings
+// title in App.jsx. Identical in every respect except the fill — and except the
+// SHADOW, where four had drifted onto `var(--shadow-btn)` and three still
+// carried a hand-written `0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px
+// rgba(255,255,255,0.15)`. Those three are exactly the v17.8.0 white-inset trap:
+// a literal light-mode highlight shipped into dark, 3–8× too bright. They pass
+// `check:style` because the fills under them (`--app-new`, `--accent`,
+// `--app-btn-grey-strong`) are theme-invariant solids, so this was a
+// consistency defect rather than a live bug — but it was three copies of a value
+// nobody could retune, which is the condition that produces the live bug next
+// time. One definition, one token.
+//
+// ── The colour rule (ROADMAP: "Modal title pills have no colour rule") ───────
+// The convention, written down here because it had never been stated anywhere:
+//
+//   • A surface where you CREATE or ACT wears that action's own colour —
+//     `--app-new` (new booking), `--app-walkin` (walk-in), `--accent` (assign
+//     tables), `--btn-tables` (preferred tables). It is the same colour as the
+//     button that opened it, so the modal reads as that button expanded.
+//   • A surface where you CONFIGURE or READ wears a neutral —
+//     `--app-btn-grey-strong` (Settings).
+//
+// v17.9.1 deliberately changed NO pill's colour. `Waitlist` and `Find a booking`
+// are the two the rule would move to neutral, and both are arguably act
+// surfaces (you book from the waitlist; you jump to a booking from search), so
+// moving them is a judgement call worth making on its own rather than smuggling
+// into an extraction commit. This atom exists so that judgement has one place to
+// land instead of seven.
+//
+// `background` is required and has no default on purpose: a default would be a
+// silent seventh answer to the question above.
+export function ModalTitle({ background, marginBottom = 14, children }) {
+  return (
+    <div style={{ textAlign: "center", marginBottom }}>
+      <div style={{
+        fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
+        display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
+        background,
+        border: "1px solid rgba(255,255,255,0.2)",
+        boxShadow: "var(--shadow-btn)"
+      }}>{children}</div>
+    </div>
+  );
+}
+
 // ── Form field (label + child input) ─────────────────────────────────────────
 export function Fld({ label, req, style, children }) {
   return (

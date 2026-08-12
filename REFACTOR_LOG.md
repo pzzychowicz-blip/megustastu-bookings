@@ -8651,3 +8651,56 @@ because it is no longer pending work, and the reason it is gone lives here.
 If descender shaving is ever seen for real, the thing to capture is a screenshot
 plus the computed `overflow` of the enclosing chain — `scrollHeight` alone cannot
 distinguish "clipped" from "taller than I sampled".
+
+### 6/6 — One `ModalTitle` atom for seven hand-written pills (`ROADMAP` item)
+
+**Files:** `src/components/atoms.jsx`, `BookingFormModal.jsx`, `WalkinForm.jsx`,
+`WaitlistPanel.jsx`, `SearchPanel.jsx`, `PrefPickerModal.jsx`, `ManualModal.jsx`,
+`src/App.jsx`, `CLAUDE.md`, `ROADMAP.md`.
+
+Seven copies of the same pill, identical in every respect except the fill — and
+except the **shadow**, where four had drifted onto `var(--shadow-btn)` and three
+still carried a hand-written
+`0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)`.
+
+Those three are the v17.8.0 white-inset trap: a light-mode highlight shipped into
+dark, 3–8× too bright. They pass `check:style` legitimately, because the fills
+under them (`--app-new`, `--accent`, `--app-btn-grey-strong`) are theme-invariant
+solids — so this was a consistency defect rather than a live bug. It is still
+worth fixing on the rule this repo has now written down twice: **a literal
+duplicate of a token is a token that cannot be fixed.** Three copies nobody can
+retune is the condition that produces the live bug next time.
+
+**The colour rule now exists and has one home.** It had never been stated
+anywhere, which is what the roadmap entry was about:
+
+> A surface where you CREATE or ACT wears that action's own colour — so the
+> modal reads as the button that opened it, expanded. A surface where you
+> CONFIGURE or READ wears a neutral.
+
+`background` is a required prop with **no default**, because a default would be a
+silent eighth answer to exactly that question.
+
+**No pill changed colour.** Five already conform. The two the rule would move to
+neutral — Waitlist and Find a booking — are genuinely arguable (you book from the
+waitlist; you jump to a booking from search), so that decision stays in
+`ROADMAP.md` as its own item rather than being smuggled into an extraction
+commit. The atom exists so it has one place to land instead of seven.
+
+The three drifted shadows **did** change, to `var(--shadow-btn)`. That is the
+point of the commit, not a regression: in dark mode those pills were carrying a
+light-mode inset highlight and now carry the theme's own.
+
+**Verified live:** six of the seven pills opened and their computed
+`background` / `boxShadow` / `padding` / `borderRadius` / `border` / wrapper
+`marginBottom` read back — New booking (`--app-new`, mb 16), Settings
+(`--app-btn-grey-strong`, mb 14), Find a booking (accent, mb 14), Manual table
+assignment (accent, mb 4), Walk-in (`--app-walkin`, mb 4), Preferred table
+(`--btn-tables`, mb 4). Every one matches its previous values except the three
+shadows above. **Not exercised live:** the Waitlist pill, which needs a waiting
+party on the viewed day.
+
+Also drops seven wrapper `<div>`s. 280 tests · build clean · lint 0 errors ·
+`check:style` OK · main bundle 197.40 → **197.25 kB** gz.
+
+Updates the surviving `ROADMAP.md` shadow-literal entry from ~20 to ~17.

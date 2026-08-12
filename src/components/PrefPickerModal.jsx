@@ -36,7 +36,7 @@
 
 import { S, BTN, TBL, TABLE_GROUPS, R, T, FW } from "../lib/constants";
 import { isIn, comboCap } from "../lib/booking-logic";
-import { Overlay, mkBtn, AutoHeight } from "./atoms";
+import { Overlay, ModalTitle, mkBtn, AutoHeight } from "./atoms";
 import { CheckIcon } from "./Icons";
 
 export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
@@ -98,17 +98,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
   return (
     <Overlay onClose={onClose} footer={footerEl}>
       <AutoHeight>
-      <div style={{ textAlign: "center", marginBottom: 4 }}>
-        <div style={{
-          fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
-          display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-          background: "var(--btn-tables)",
-          border: "1px solid rgba(255,255,255,0.2)",
-          boxShadow: "var(--shadow-btn)"
-        }}>
-          Preferred table
-        </div>
-      </div>
+      <ModalTitle marginBottom={4} background="var(--btn-tables)">Preferred table</ModalTitle>
       <div style={{ fontSize: T.body, color: S.text, marginBottom: 14, textAlign: "center" }}>
         Soft hint — optimizer tries this first, falls back if unavailable.
       </div>
