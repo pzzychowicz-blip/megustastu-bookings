@@ -8407,3 +8407,882 @@ nothing new to keep in sync. Verified in the live DOM: the two flags on a
 deposit+preferred booking expose "Deposit €10" and "Preferred tables: 2, 3, 4".
 
 The party-size ring needed nothing — its digit is real text.
+
+---
+
+## v17.9.1 — the patch round on v17.9.0's icons and block layout
+
+**Date:** 2026-08-12
+**Files:** `src/components/Icons.jsx`, `src/components/TimelineView.jsx`,
+`src/App.jsx`, `src/components/atoms.jsx`, `tests/contrast.test.js`,
+`CLAUDE.md`, `ROADMAP.md`
+**Behavioural change:** no data or logic change — this is entirely what the eye
+catches after a version that shipped three large surfaces at once.
+**Verification:** see each commit.
+
+v17.9.0 landed the `Icons.jsx` set, the rebuilt timeline block, and the date-nav
+centring in one release. Living with it for a day surfaced three defects that a
+build, a lint and 229 tests all pass over, plus four small `ROADMAP.md` entries
+worth folding in while the same files are open.
+
+### 1/6 — The deposit flag is a banknote, not a coin
+
+**Files:** `src/components/Icons.jsx`, `src/components/TimelineView.jsx`,
+`CLAUDE.md`.
+
+v17.9.0 replaced the deposit marker for a good reason: it had been printing the
+**currency symbol from `settings/general`**, so the flag meaning "money has been
+taken" was a different shape per restaurant setting. The replacement was two
+concentric circles — a coin.
+
+At 24px that is a coin. At **11px, which is the size it actually ships at on a
+timeline block**, it is a target, or a small button. The mistake is a specific
+one and worth naming: *the size that decides an icon is the size it ships at,
+not the size it is drawn at.* Every icon in the file is authored in a 24×24
+viewBox, which makes it easy to judge them all at a size none of them appear at.
+
+It is a banknote now — a rounded rect and one centre circle. Two reasons that
+shape and not another:
+
+- Its **silhouette is unique in the set**. Everything else here is round,
+  diagonal, or a chevron. A wide horizontal rectangle is identifiable before any
+  interior detail resolves, which is the only thing that happens at 11px. The
+  one collision risk was `LockIcon`, which is also a rounded rect and also sits
+  on the flag rail — checked live, side by side at 6×: the lock's shackle arc
+  and its low placement in the viewbox separate them cleanly.
+- It stays **currency-neutral**. The attachment that prompted this was a dollar
+  sign, and a drawn `$` would have handed back the exact defect v17.9.0 removed
+  — a mark that names one currency for a restaurant that takes another — in a
+  shape that merely looks deliberate because it is an SVG now. Neutrality was
+  the whole property that change bought.
+
+Two shapes and no more. Corner ticks or a value line were tried mentally and
+rejected: below about 12px they close up into a smudge, which is also why
+`LockIcon` carries no keyhole.
+
+The copy that describes the glyph moved with it — `TimelineView`'s block comment
+and `CLAUDE.md`'s `Icons.jsx` entry both said "a coin". That is the house rule
+from v17.9.0's own `LayoutSettings` "Reorder with ‹ ›" finding, applied to the
+version that wrote it.
+
+### 2/6 — The date controls transition instead of snapping
+
+**Files:** `src/App.jsx`.
+
+v17.9.0's follow-up centred the date arrows and date field in their row while the
+Summary is collapsed, and flipped them back to the top when it opens. The intent
+was right and is unchanged. The mechanism was `alignItems: summaryOpen ?
+"flex-start" : "center"`, and it has two problems that are really one problem:
+**`align-items` is not an animatable property, and it re-resolves against
+whatever height the row has in the frame the flip happens.**
+
+The row's height is set by the Summary card — 58px collapsed, 210 open — and the
+Summary's body is inside a `Reveal`, so that height eases over `M.shift`. The
+alignment, having no transition of its own, changed instantly. On collapse the
+controls were re-centred against a row that was **still 210px tall**: (210−40)/2
+= **+85px**, an 85px jump downward, and only then did they ride back up to +9 as
+the row shut. That is the reported "they jump to the bottom and come back to the
+centre". Opening had the identical defect scaled down — a 9px snap up before the
+row grew — which read as a snap rather than as a bug, which is why only one
+direction got reported.
+
+The fix pins the row to `flex-start` permanently and gives the two control groups
+the offset themselves, as `transform: translateY(9px)` with
+`transition: transform var(--t-shift) var(--ease-out)`. A constant works because
+it is measured against the **collapsed** row, which does not move; the open row's
+height never enters into it. `transform` is compositor-only, so a row whose
+sibling is the timeline does not reflow each frame, and reduce-motion needs no
+work — `index.html`'s `data-motion="reduce"` block zeroes `transition-duration`
+with `!important`, which beats an inline `transition`.
+
+**The number is 9, and it was worth measuring.** The v17.9.0 commit message
+records "collapsed row 102 / controls at +31", which would have made this 31.
+Measured live today it is row 58 / controls at +9 — the header has changed shape
+since. Reusing the recorded figure would have shipped a 22px error in the
+resting position of the app's most-used control.
+
+Guarded on `!isMobile`: below 600px the Summary's `flexBasis` is `100%`, so it
+wraps onto its own flex line and the controls' line is exactly control height.
+There is nothing to centre in there, and an unguarded offset would push them into
+the row gap. Verified at 375px: `transform: none`, controls at +0, summary on its
+own line.
+
+**Verification** — sampled `getBoundingClientRect().top` every 50ms through both
+transitions rather than eyeballing them, because "it jumps" is a claim about
+intermediate frames and the resting states were never wrong:
+opening 9 → 6.8 → 4.3 → 2.5 → 1.3 → 0.6 → 0.1 → 0, closing 0 → 2.2 → 4.7 → 6.5 →
+7.7 → 8.4 → 8.9 → 9. Monotonic in both directions, no frame past the collapsed
+resting position. Build clean · 259 tests · lint 0 errors · `check:style` OK.
+
+### 3/6 — A block reveals its markers as it has room for them
+
+**Files:** `src/lib/block-layout.js` (new), `tests/block-layout.test.js` (new),
+`src/components/TimelineView.jsx`.
+
+Everything on a block except the guest name is `flexShrink: 0`. On a narrow block
+they therefore do not compete for space — they **overflow** it, and the block's
+`overflow: hidden` clips them on top of one another. Patryk's screenshot is a
+green block a few pixels wide with a lock icon and a party-size ring printed over
+each other.
+
+The case is neither rare nor an edge: a **seated** block is drawn at its LIVE
+duration, so every party that sits down starts a few pixels wide and grows. The
+markers pile up for the first stretch of every visit, on the view the floor is
+actually watching.
+
+A block now spends a width budget. Never dropped: the guest **name** (it
+truncates — that is what an ellipsis is for) and the **Assign handle** (a
+control; losing a control because a party sat down early is a different class of
+defect from losing a marker). Then the party-size **ring**. Dropped first, one at
+a time, the **flags** — and within them, **informational before exceptional**:
+deposit → preferred ★ → locked → repeat no-show → overstaying. So the last marker
+standing is the one that says someone is sitting in a table the next booking
+needs. That ordering is v17.9.0's own argument for moving those flags out of the
+truncating label string, applied to width instead of to text.
+
+**Two orders, one list.** The array literal in `TimelineBlock` is the RAIL order
+(unchanged from v17.9.0, so a wide block looks exactly as it did); each entry
+also carries a `keep` rank, which is the DROP order. They are one literal because
+held apart they drift. `visibleRail` selects by `keep` and then **filters the
+original array** rather than returning its own sorted slice — otherwise the
+rendered sequence would silently become priority order the first time a block
+dropped a flag, and the star would sit left of the lock on a wide block and right
+of it on a narrow one.
+
+**This produces a mixed grid by design**, which is the opposite of the
+all-or-nothing rule `chipsOn` follows in the same file. Both are right: the chip
+rule exists so the DAY reads consistently, this one so an individual block stays
+legible, and where they disagree the block wins — an unreadable block is not
+consistent with anything.
+
+`WaitGhost` takes the ring half of the same budget, because "a quieter version of
+X dims X, it does not re-specify it" and a ghost still piling its ring where the
+block it mirrors had stopped would be re-specifying by omission. Its `fixedPx` is
+its OWN (chip + unconditional ⏳ + name floor): it has no Assign handle, so
+reusing the block's figure would over-reserve 26px on it — reuse dressed up as
+correctness. That is why `visibleRail` takes `fixedPx` from the caller instead of
+computing it.
+
+**Why this is a `lib/` module and not four lines in the component.** The live app
+cannot exercise the interesting cases: the timeline's zoom steps move a block
+108 → 162 → 216px, so every rung where exactly one, two, three or four flags
+survive falls BETWEEN two zoom levels and is unreachable by clicking. Both
+reachable endpoints were verified in DEV and both match the rule exactly (108px:
+name only; 162px: ring + both flags, no overlap). Everything between them is
+covered by 11 tests — including the one that matters most, that with room for a
+single flag the survivor is the overstay marker and not the deposit.
+
+**Not exercised live:** the `WaitGhost` path, which needs a waiting party that a
+table currently fits. Its change is two lines through the same tested function.
+
+**Verification:** 270 tests (259 + 11) · build clean · lint 0 errors ·
+`check:style` OK · main bundle 197.15 → 197.40 kB gz.
+
+### 4/6 — The size ring's contrast has a floor now (`ROADMAP` item)
+
+**Files:** `tests/contrast.test.js`, `ROADMAP.md`.
+
+`SIZE_RING`'s border alpha was documented and unmeasured. The comment on it
+records why 0.55 rather than `--blk-rule`'s 0.3 (at 0.3 the ring does not render
+at all on the amber fills) and records that WCAG 1.4.11's 3:1 is unreachable
+there — pure white over the pending yellow tops out below 2:1. All true, and none
+of it stopped anyone from putting the alpha back to 0.3: every test passed.
+
+This is the amber fill/ink exemption's own treatment applied one element down.
+Not asserted against a bar it cannot meet — asserted **against itself**, so it
+cannot quietly rot. A separate `describe` rather than one more `FILLS` row,
+because the registry pairs a fill with the INK on it and this is a **non-text
+boundary** with no ink involved.
+
+The alpha is read back **out of `TimelineView.jsx`**, anchored on the
+`const SIZE_RING` declaration, exactly as `chipOpacity()` anchors on
+`const timeChip` — and it throws if that declaration is gone rather than
+measuring a default. A guard that names the thing it guards and then uses a
+number typed into the test is not guarding it.
+
+**The floors are measured, and measuring them mattered.** A first pass computed
+them in a scratch harness that resolved the dark-theme block slightly
+differently, and it put dark seated at 3.37 and dark cancelled at 3.73 where the
+real harness says **2.46** and **2.86** — floors ~0.9 too high, which would have
+failed the build on unchanged code. The shipped numbers come from the same code
+path the assertion uses. (The figures in `TimelineView.jsx`'s own comment —
+1.82 / 1.38 / 2.78 / 2.97 — are from yet another basis again and are left as
+written; the test is now the authority.)
+
+**Verified against known-bad input**, which is the only thing that establishes a
+checker is worth anything: alpha back to 0.3 → all 10 cases fail; the
+`SIZE_RING` declaration renamed → throws with the re-anchor message rather than
+silently passing; restored → 280 pass with a clean diff.
+
+Closes the `ROADMAP.md` "Ideas" entry.
+
+### 5/6 — The `Collapsible` header clip does not reproduce (`ROADMAP` item, closed by the finding)
+
+**Files:** `ROADMAP.md`. **No source change.**
+
+The roadmap recorded that Settings' section headers clip their own text by 2px —
+"the header `<button>` measures 17px tall against a 19px `scrollHeight`", so
+"Restaurant", "Opening hours", "Booking durations" and "Preferences" each have a
+descender shaved. Measured live before writing any fix, per the house rule about
+checking computed styles first, and **none of it holds today**:
+
+- Every collapsible header in every Settings tab measures `clientHeight` 17 and
+  `scrollHeight` **17**. There is no 2px overflow to clip.
+- The header `<button>` computes `overflow: visible`, so it cannot clip its own
+  text under any circumstances.
+- Its nearest ancestor is the `Section`, also `overflow: visible`, with 14px of
+  padding. There is no clipping box within 14px of the text in any direction.
+- Photographed at native resolution and at 4×: the descenders in "Opening hours"
+  render in full.
+
+The likely origin of the original reading is `Collapsible` itself:
+`{open && subtitle ? … : null}` means a header **grows a second line when it
+opens**, so a `scrollHeight` sampled while that subtitle was mounting is 19
+against a `clientHeight` of 17. That is a difference in CONTENT between two
+states, not a clip — and it is exactly the number reported.
+
+So this ships as a **finding, not a fix**. Adding a `line-height` here would have
+been a change with no defect behind it, on the first screen of Settings, and the
+next reader would have found a comment explaining a problem they could not
+reproduce either. Same disposition as v17.9.0's `time-grid.js` entry, which was
+also closed by discovering its premise was wrong: the roadmap entry is removed
+because it is no longer pending work, and the reason it is gone lives here.
+
+If descender shaving is ever seen for real, the thing to capture is a screenshot
+plus the computed `overflow` of the enclosing chain — `scrollHeight` alone cannot
+distinguish "clipped" from "taller than I sampled".
+
+### 6/6 — One `ModalTitle` atom for seven hand-written pills (`ROADMAP` item)
+
+**Files:** `src/components/atoms.jsx`, `BookingFormModal.jsx`, `WalkinForm.jsx`,
+`WaitlistPanel.jsx`, `SearchPanel.jsx`, `PrefPickerModal.jsx`, `ManualModal.jsx`,
+`src/App.jsx`, `CLAUDE.md`, `ROADMAP.md`.
+
+Seven copies of the same pill, identical in every respect except the fill — and
+except the **shadow**, where four had drifted onto `var(--shadow-btn)` and three
+still carried a hand-written
+`0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)`.
+
+Those three are the v17.8.0 white-inset trap: a light-mode highlight shipped into
+dark, 3–8× too bright. They pass `check:style` legitimately, because the fills
+under them (`--app-new`, `--accent`, `--app-btn-grey-strong`) are theme-invariant
+solids — so this was a consistency defect rather than a live bug. It is still
+worth fixing on the rule this repo has now written down twice: **a literal
+duplicate of a token is a token that cannot be fixed.** Three copies nobody can
+retune is the condition that produces the live bug next time.
+
+**The colour rule now exists and has one home.** It had never been stated
+anywhere, which is what the roadmap entry was about:
+
+> A surface where you CREATE or ACT wears that action's own colour — so the
+> modal reads as the button that opened it, expanded. A surface where you
+> CONFIGURE or READ wears a neutral.
+
+`background` is a required prop with **no default**, because a default would be a
+silent eighth answer to exactly that question.
+
+**No pill changed colour.** Five already conform. The two the rule would move to
+neutral — Waitlist and Find a booking — are genuinely arguable (you book from the
+waitlist; you jump to a booking from search), so that decision stays in
+`ROADMAP.md` as its own item rather than being smuggled into an extraction
+commit. The atom exists so it has one place to land instead of seven.
+
+The three drifted shadows **did** change, to `var(--shadow-btn)`. That is the
+point of the commit, not a regression: in dark mode those pills were carrying a
+light-mode inset highlight and now carry the theme's own.
+
+**Verified live:** six of the seven pills opened and their computed
+`background` / `boxShadow` / `padding` / `borderRadius` / `border` / wrapper
+`marginBottom` read back — New booking (`--app-new`, mb 16), Settings
+(`--app-btn-grey-strong`, mb 14), Find a booking (accent, mb 14), Manual table
+assignment (accent, mb 4), Walk-in (`--app-walkin`, mb 4), Preferred table
+(`--btn-tables`, mb 4). Every one matches its previous values except the three
+shadows above. **Not exercised live:** the Waitlist pill, which needs a waiting
+party on the viewed day.
+
+Also drops seven wrapper `<div>`s. 280 tests · build clean · lint 0 errors ·
+`check:style` OK · main bundle 197.40 → **197.25 kB** gz.
+
+Updates the surviving `ROADMAP.md` shadow-literal entry from ~20 to ~17.
+
+### 7/10 — The deposit banknote was unreadable at the size it ships at
+
+**Files:** `src/components/Icons.jsx`, `src/components/TimelineView.jsx`.
+
+Patryk: "you cannot actually see what it is." Two causes, both invisible in the
+24×24 viewBox the icon is authored in:
+
+- It used **half** the viewBox height (y 6→18) where every other flag on the rail
+  uses 70–80% of it. At the same nominal `size` it was optically much smaller
+  than the star and the lock next to it.
+- The inner circle was `r 2.6` against a stroke of `2.2`, leaving a hole ~1.4
+  units wide. At 11px that is **0.6 of a pixel** — it fills in solid, so the note
+  read as a rectangle with a dot.
+
+Geometry first: the note is taller (15 of 24) and the circle is `r 3.6`, leaving
+a hole ~2.5× wider. The general rule, now recorded next to the icon: **stroke
+width is the constraint on interior detail** — a hole has to be roughly 3× the
+stroke or it closes up. It is the same reason `LockIcon` carries no keyhole.
+
+Then scale: all five rail flags **11px → 13px** (and `WaitGhost`'s ⏳ with them,
+since it sits in the same marker column). Not the deposit alone — one 13px icon
+beside four 11px ones is a worse defect than the one being fixed. `FLAG_PX`
+follows, 15 → 17, so the width ladder still reserves what it actually spends.
+
+### 8/10 — Waitlist and Find-a-booking title pills
+
+**Files:** `WaitlistPanel.jsx`, `SearchPanel.jsx`, `ROADMAP.md`.
+
+The two pills v17.9.1's extraction commit deliberately left for a separate
+decision, now decided:
+
+- **Waitlist → `--btn-orange`**, the colour of the button that opens it (Patryk).
+  This is the atom's own rule working as intended — a modal reads as the control
+  that opened it, expanded — and the waitlist badge is the one orange control in
+  the date row, so the pill now matches it exactly.
+- **Find a booking → `--app-btn-grey-strong`**, joining Settings. Search is where
+  you go to FIND something, not to make something. The useful consequence is that
+  `--accent` stops meaning "important modal" and goes back to meaning "primary
+  action": **"+ New" is now the only accent title pill in the app.**
+
+Closes the `ROADMAP.md` colour-rule item outright.
+
+### 9/10 — The List card ate clicks aimed at its own buttons
+
+**Files:** `src/components/ListView.jsx`, `index.html`.
+
+Patryk: hovering a booking then clicking a button does nothing; moving the
+pointer out and back in makes it work. Reproduced and measured rather than
+guessed — with the card hovered, **Edit moves 24px left and Delete 31px right**,
+about half a button each.
+
+The cause is that `.mgt-hover-scale` was on the **card**. The lift is
+`scale(1.08)`, a *proportion*: on a 40px control that is 3px, but this card is
+~820px wide, so every control inside it slides outward from the card's centre as
+the cursor crosses the boundary. You aim at Edit, the card lifts, Edit leaves,
+the click lands on the card's own `onSelect`. Moving out and back "fixes" it only
+because the second time the card is already lifted, so what you see is where it
+is.
+
+**The rule this establishes: the hover lift is for CONTROLS, not for CONTAINERS
+of controls.** A scaling parent moves every target inside it, and the bigger the
+parent the further they move. `.mgt-ac-row` already had the right treatment for a
+row-shaped surface — background swap, no transform — so the card takes that, and
+its buttons keep their own 1.08, which is what the effect was designed for.
+
+**One trap on the way:** the card sets `background` and `boxShadow` INLINE, and
+an inline style beats a stylesheet rule (the Fix-2 specificity rule that makes
+`mkBtn`'s inline shadow un-overridable). A naive `.mgt-card-hover:hover
+{ background-color: … }` would have silently never applied. The resting fill now
+travels as a **custom property** (`--card-bg`, set inline, consumed by the class),
+so the hover state is a plain CSS state change with nothing to fight — and no
+React hover state re-rendering a memoized list on every pointer move. The
+`box-shadow` stays inline because it carries the keyboard-selection ring.
+
+**Verified via the live CSSOM**, per the house rule that reading the file cannot
+catch a stylesheet bug: both rules exist, the card no longer matches
+`.mgt-hover-scale`, and **no rule applies a transform to it on hover** — the
+shift is now structurally impossible rather than merely unobserved. The resting
+fill resolves correctly through the custom property (`rgba(255,255,255,0.45)` =
+`--bg-card-strong`).
+
+`tests/stylesheet.test.js` caught a loose line of prose in the new comment before
+any of this shipped — the exact defect that test was written for, on the commit
+that added a rule beside it.
+
+### 10/10 — Settings tab switch: content first, then a snap
+
+**Files:** `src/components/atoms.jsx`, `src/components/Settings.jsx`.
+
+`AutoHeight` is driven by a `ResizeObserver`, which fires *after* layout. That is
+fine when a panel grows its own content, and one frame too late for a whole-body
+**swap**. On a Settings tab change the sequence was:
+
+1. React commits the new tab's DOM,
+2. the wrapper still holds the OLD pinned height and — because `animating` is
+   still false — `overflow: visible`, so **the new content paints in full,
+   overflowing the box**,
+3. only then does the observer fire, clip to the old height, and transition.
+
+Which is exactly what was reported: the content appears, then the panel snaps and
+re-grows. The Summary panel has no such artifact because `Reveal` animates a grid
+track from 0 in the same commit — there is never an unclipped intermediate paint.
+
+`AutoHeight` gains an opt-in `watch` prop: a layout effect keyed on it re-measures
+**synchronously, before paint**, so the clip and the new height land in the same
+frame as the new content. The height still animates from the old value, because
+that is what the element was last painted at. Settings passes `watch={tab}`.
+Callers that only grow their own content keep the observer path unchanged.
+
+**Verified by sampling the rendered height across frames**, not the style value:
+2226 → 1978 → 824 → 321 with `overflow: hidden` from the **first** frame. Before,
+frame one was the full new content unclipped.
+
+### 11/12 — The dark banner palette was drifting off its own hues
+
+**Files:** `index.html`.
+
+Patryk: the notification strip's dark mode "still looks like AI-generic colors",
+and the two palettes should be consistent. Measured rather than eyeballed — every
+banner token composited over its theme's real base and converted to HSL:
+
+| token | old dark | light | hue drift |
+|---|---|---|---|
+| `--suggest-bg-soft` | H162 S15% | H138 | **24°** |
+| `--warn-bg` | H27 S27% | H34 | 7° |
+| `--danger-bg` | H353 S29% | H0 | 7° |
+| `--danger-border` | H355 **S16%** | H0 | 5° |
+
+Two real defects, not a matter of taste:
+
+- **`--suggest-bg-soft` was a hue-shifted near-grey.** S15% at H162 — drifted a
+  quarter-turn toward teal and almost fully desaturated. That token is the pane
+  behind the waitlist banner, i.e. the app's only "here is an opportunity"
+  surface, and in dark mode it rendered as a neutral dark box while its light
+  counterpart was a clear green. **That is precisely the "generic" look** — not a
+  wrong colour so much as the absence of one.
+- **`--danger-border` sat at S16% between siblings at S26% and S21%**, so the
+  three borders that are supposed to read as one family didn't.
+
+All four dark fills re-solved to land on their light counterpart's hue, with the
+border saturations levelled to 30/30/21. Every hue now matches within 0–3°
+(`--suggest-border` unchanged at 6°, inside tolerance). The saturation gap
+between themes stays wide by design — a tint at L19% cannot carry L94%'s
+saturation and still look like a tint — but it is now *consistent* across the
+family instead of varying per token.
+
+**Text contrast on these fills was checked before and after** and does not
+regress: warn 7.64 → 7.37, danger 7.49 → 7.55, suggest 8.43 → 8.30, suggest-soft
+10.06 → 9.69. All far above AA. (These tokens are outside
+`tests/contrast.test.js`'s registry prefix, so nothing would have caught a
+regression here automatically — worth knowing.)
+
+**Method note worth carrying:** the first pass at this used a regex to read
+`index.html` and silently returned the LIGHT values for the dark block, which
+would have "proved" the two themes were already identical. The numbers above
+come from `getComputedStyle` on the live document with the theme flipped. This is
+the second time in one version that a scratch CSS parser produced a confident
+wrong answer — the same class of error `tests/contrast.test.js` already warns
+about. **Read colours from the browser, not from the file.**
+
+### 12 — The Settings tab "jump" was the SCROLL, not the height
+
+**Files:** `src/components/atoms.jsx`, `src/components/Settings.jsx`.
+
+Entry 10 fixed a real defect (the new tab painting unclipped at full height for a
+frame) and Patryk reported the jump was still there. It was — because the jump was
+never the height.
+
+Measured with the body scrolled 400px in the 2226px General tab, switching to the
+321px Layout tab:
+
+```
+scrollTop: 400 400 400 400 400 400 281 34 0 0
+```
+
+`scrollTop` stays pinned at 400 for ~270ms while the height animates, and then —
+the instant `scrollHeight` falls below `scrollTop + clientHeight` — **the browser
+force-clamps it 400 → 281 → 34 → 0.** That involuntary late clamp is the jump.
+It is the content sliding under a scroll position the browser is dragging back,
+which is also why it reads as arriving *after* the tab has already changed.
+
+The fix resets the modal's scroll port to the top when the tab changes.
+`Overlay` exposes it through a context (`useOverlayScroll`) rather than a prop,
+for two reasons: the tab lives inside `SettingsContent`, which `Overlay` receives
+as opaque `children`, and `Overlay` has **four** scroll ports (mobile/desktop ×
+footer/no-footer) so it is the only thing that knows which one is mounted.
+
+**The ordering is load-bearing, and the first attempt got it wrong.** Resetting in
+a layout effect *removed the clamp but killed the height transition* — measured
+snapping 2226 → 321 in a single frame. Writing `scrollTop` forces a synchronous
+layout, and in a layout effect that write lands **after** `AutoHeight` has already
+set the new height (child effects run first), so the forced recalc settles the new
+height before the browser has painted the old one and the transition has nothing
+to animate from. Doing it in the tab **click handler** instead resets the scroll
+while the old, tall content is still mounted — where `scrollTop = 0` is valid and
+cheap — and React's re-render then follows with nothing forcing a flush mid-flight.
+
+Entry 10's `watch` prop stays: the two defects are independent, and without it the
+new tab still paints unclipped for a frame.
+
+**Verified with rAF sampling** (a `setTimeout` sampler drifts badly under
+animation load and showed a phantom discontinuity — worth knowing before trusting
+one): shrink runs 2226 → 2144 → 2061 → … → 329 → 321 in even ~82px steps over
+385ms, growth is the same ramp inverted, and `scrollTop` is 0 from the first frame
+in both directions.
+
+### 13 — Dialog semantics for every modal (audit P1)
+
+**Files:** `src/components/atoms.jsx`, `src/App.jsx`, `src/components/HistoryPopup.jsx`.
+
+`$impeccable audit` measured this in the live DOM: **no `role="dialog"`, no
+`aria-modal`, no accessible name, focus left sitting on `<body>` when a modal
+opened, and ZERO headings in the entire document.** A screen-reader user got no
+announcement that a dialog had opened, no name for it, and no document structure
+to navigate; a keyboard user had to tab through the whole page behind it.
+
+Pre-existing — `Overlay` never had any of this. What made it worth doing now is
+that v17.9.1 created the chokepoint: seven modals get their title from one
+component, so the fix is two files instead of twelve.
+
+- **`ModalTitle` renders an `<h2>`**, visually identical (the pill *is* the
+  heading's box; `margin: 0` kills the UA margin). A heading element is a
+  semantic claim, not a typographic one.
+- **`Overlay` carries `role="dialog"` + `aria-modal="true"`**, focuses the dialog
+  container on open (`tabIndex -1`, so no extra tab stop) and **restores focus to
+  whatever opened it** on close — verified: closing the delete confirm returns
+  focus to the Delete button.
+- **A Tab focus trap**, cycling within the dialog. Escape is deliberately NOT
+  handled here: `useKeyboardShortcuts` owns the app-wide Escape z-order chain and
+  a second handler would race it.
+- The container is focused rather than the first control: focusing a text input
+  pops the keyboard on a tablet before the user has decided to type, and focusing
+  the first *button* puts a destructive action one Enter away.
+
+**The accessible name is resolved from the DOM, not from a prop.** Seven modals
+render a `ModalTitle`; five (the confirm dialogs, WeekView, BlockModal,
+HistoryPopup) render their own heading text. A `labelled` prop was written first
+and thrown away: it would have to be kept correct at twelve call sites forever,
+and **pointing `aria-labelledby` at an id that is not in the tree leaves the
+dialog nameless — strictly worse than not trying.** `Overlay` now looks for
+`#mgt-modal-title`, falls back to the first heading in its subtree, and only then
+to a generic label.
+
+That fallback is what made it worth converting the five confirm-dialog titles and
+HistoryPopup's to `<h2>` as well — otherwise those dialogs would announce as
+"Dialog". Verified: the delete confirm now names itself "Delete booking?".
+
+### 14 — An icon-size scale, `IC` (audit P2)
+
+**Files:** `src/lib/constants.js`, 19 components.
+
+The last unscaled axis. `R`, `T`/`FW`, `M` and `SP`/`H` were each formalised after
+the same finding; icons had **eight sizes between 10 and 18**. The tell was not the
+count — it was that **one control wore four of them**: `CloseIcon` rendered at 12,
+13, 14 and 15 in different corners of the app. `WaitIcon` had three, `StarIcon`
+three. That is drift, not hierarchy, and it reads flat for the same reason thirteen
+font sizes did.
+
+Three steps, assigned by **role**: `IC.inline` 12 (a mark inside a text run or a
+dense row), `IC.control` 14 (the standard mark ON a control), `IC.chrome` 18
+(header and navigation furniture, where the icon IS the button). The 2px and 4px
+gaps are deliberate — 12→14→18 is perceptible at a glance; 13→14 never was.
+
+71 call sites swept; a grep for a numeric `size={n}` on an icon now returns
+nothing. `FLAG_PX` follows the rail flags from 17 to 18. The timeline note dog-ear
+stays a hard-coded 8px inline SVG — a decorative marker drawn in place, not a
+member of the icon set.
+
+### 15 — One hover-tint class for every container of controls
+
+**Files:** `index.html`, `ListView.jsx`, `Summary.jsx`, `NotificationStrip.jsx`.
+
+Entry 9 fixed the List card by adding `.mgt-card-hover`; Patryk then asked for the
+same treatment on the notification strip and the Summary panel. Three call sites
+is the point at which two nearly-identical classes is itself the defect, so
+`.mgt-card-hover` is **retired** and `.mgt-ac-row` — the autocomplete-row tint
+since v16.4.0 — becomes the single mechanism, with the rule stated on it:
+
+> **The hover lift (`.mgt-hover-scale`) is for CONTROLS. This is for CONTAINERS
+> of controls.**
+
+Both colours arrive as custom properties (`--row-bg`, `--row-bg-hover`) with
+defaults that preserve the original autocomplete behaviour, because **every one of
+these surfaces sets its resting fill inline** and an inline `background` beats a
+stylesheet `background-color` outright. A plain rule would have silently never
+applied — the trap entry 9 already hit once.
+
+The Summary is the clearest case for the rule: it holds a toggle, a chevron, Print
+and More, so scaling it moved four controls out from under the cursor. It still
+tints only while COLLAPSED — an expanded panel is the tall thing on the row and
+needs no "this is tappable" hint. The strip's lid leaves `--row-bg` unset so its
+own severity tint shows through and keeps cross-fading.
+
+### 16 — Banner action targets (audit P2)
+
+**Files:** `LateBanner.jsx`, `OverlapBanner.jsx`, `WaitAvailBanner.jsx`.
+
+All three banner rows shared `minHeight: 32` — below `H.chrome`, and these are
+decisions: Book creates a booking, No show marks one, Reassign moves tables, all
+taken on a tablet mid-service. Actions go to `H.chrome` (36) rather than `H.touch`
+(44), because `NotificationStrip` exists so a bad evening does not scale the chrome
+off the screen; 36 is the honest compromise between that and the tap floor.
+
+The ✕ dismiss was also the documented **egg** — a single-glyph button sized by
+`minHeight` + horizontal padding measured ~34×32, and `--r-pill` clamps to half the
+shorter side, so it was never a circle. It is an explicit square now.
+**`height` alone did not do it**: `mkBtn` sets `minHeight: H.control` (40) and
+**min-height beats height**, so the first attempt measured 36×40 and still looked
+wrong. `minHeight` has to be overridden too. Verified live: Book 56×36, dismiss a
+true 36×36.
+
+### 17 — `prefers-reduced-motion` reduces instead of eliminating (audit P3)
+
+**Files:** `index.html`.
+
+The OS-level request and the manual "Reduce animations" toggle shared one rule that
+killed everything at `0.001ms`. They are different intents. WCAG 2.3.3 is about
+vestibular triggers — travel, parallax, spin, scale — and asks for LESS motion, not
+none; a state change still has to be perceivable. This app says a lot with motion
+(the status wipe, a block changing table, the strip opening), and flattening all of
+it to an instant cut is a comprehension cost paid by the users least able to absorb
+it.
+
+Transforms and keyframes still go — they are the vestibular part — but colour and
+opacity keep a 120ms cross-fade, so a change is still legible AS a change. The
+manual toggle keeps the total kill: its job is weak tablet hardware, where the
+cheapest frame is no frame.
+
+### 18 — the Settings tab swap eases the part you can actually see
+
+**Files:** `src/components/atoms.jsx`.
+
+Round 1 fixed the unclipped first frame (`watch`) and round 2 fixed the scroll
+clamp (`useOverlayScroll`). Both were real defects and neither was the jump. The
+per-rAF trace of General (2226px) → Layout (321px), inside a 611px port:
+
+```
+frame  0–21   card 774 (its 90dvh max)   box 2226 → 572
+frame  22–24  card 774 → 720 → 638 → 556
+```
+
+The box eased perfectly for the whole 385ms. But the card is `height: auto` under
+a `maxHeight`, so it **cannot move** until the box drops below the port — 22
+frames of nothing, then all 222px of visible travel crammed into three. No curve
+and no duration reaches that, because 85% of the budget was being spent below the
+fold. **When motion reads as a jump, check what fraction of the animated range is
+on screen before touching the easing.**
+
+So a `watch` swap now runs over the CLAMPED range: jump invisibly to
+`min(prev, cap)`, ease to `min(next, cap)`, then retake the true height. `cap` is
+the enclosing scroll port's height, and the invariant that makes both jumps free
+is that **every height at or above the port looks identical** — same pixels, only
+the scroll range differs. Measured after: 774 → 552 and 552 → 774, ~9.6px/frame
+across 24 frames, both directions. The Week/Month/Stats body — Patryk's reference
+for how this should feel — never overflows its port, so `from`/`to` are just
+`prev`/`next` and it takes the plain path unchanged (verified: 625 ↔ 686, identical
+to before).
+
+Three things had to be right, and each was a bug on its own:
+
+- **The port is elastic.** Reading `p.clientHeight` gives what it is, not what it
+  could be: in the short tab the card has shrunk to fit and the port with it, so
+  the cap came back equal to the current content and clamped the GROW direction to
+  zero visible travel. It is probed instead — ask for an absurd height, read what
+  the port became. The siblings' share is measured *inside* the probe too, because
+  at the old height the new content is already in the DOM and spilling out of a
+  still-`visible` box, so `scrollHeight - boxHeight` reports the content rather
+  than the siblings and the cap comes out negative on exactly the swap it exists for.
+- **`transitionend` bubbles, and `AutoHeight` nests.** General holds five of them
+  inside the tab-body one, and every child's height transition was ending the
+  parent's. Harmless while the handler only un-clipped early; not harmless once it
+  also retakes the real height. Guarded on `e.target === e.currentTarget`.
+- **The observer compares the wrong number.** `hRef` was doing two jobs — last
+  content height and last height committed to the box — which were the same thing
+  until a clamped commit made them differ. The RO fired a frame after the swap, saw
+  box 543 against content 2226, called it a change and overwrote the clamped target.
+  Split into `cRef` (content) and `hRef` (box).
+
+`setHeightNow` is the shared primitive for both invisible jumps: suppress the
+transition, write, force a style recalc, restore. React cannot do this in one pass —
+two style writes inside a single task collapse to one before/after pair, so the
+intermediate value never exists to transition from.
+
+### 19 — the Summary panel answers the pointer in both states
+
+**Files:** `src/components/Summary.jsx`.
+
+Entry 13 gave the panel `.mgt-ac-row` only while collapsed, on the reasoning that
+an expanded panel is already the tall thing on the row and needs no "I am
+tappable" hint. Patryk: it should tint when expanded too, and he is right — the
+open panel is still what you point at to close it again, so it should answer the
+pointer the same way.
+
+It was also a **live bug**. The panel's resting fill arrives through `--row-bg`,
+and nothing but `.mgt-ac-row` reads that property — so dropping the class dropped
+the background with it, and an open Summary rendered fully transparent over the
+app backdrop (measured `rgba(0, 0, 0, 0)`, now `rgba(255, 255, 255, 0.05)` in both
+states). **A custom property is only a value; the rule that consumes it is what
+paints.** Routing a resting style through one is what makes the inline-beats-
+stylesheet trap solvable, and it also means the class is no longer optional
+decoration — it is load-bearing, and any element handed `--row-bg` must keep it.
+
+### 20 — the floor-plan tables answer the pointer
+
+**Files:** `index.html`, `src/components/FloorGlyphs.jsx`, `src/components/PlanView.jsx`,
+`tests/stylesheet.test.js`.
+
+Patryk: the Plan view's tables have neither hover nor press, and whatever they get
+must apply in the plan EDITOR too. Both of the app's existing answers turned out to
+be unusable here, and why is worth keeping:
+
+- **`.mgt-hover-scale` cannot be applied at all.** It sets a CSS `transform`, and a
+  CSS transform REPLACES an element's `transform` presentation attribute — which on
+  `TableGlyph` is its `translate(x,y) rotate(r)`. The table would teleport to the
+  plan's origin. Independently of that, Plan is a spatial map at true relative
+  positions: an 8% lift pushes a table's chairs outward and changes apparent
+  spacing between tables, and in the editor a table that grows under the cursor
+  fights the drag you opened it to do. Patryk chose tint-and-dim over the lift.
+- **`.mgt-ac-row` cannot either** — `background-color` paints nothing on an SVG shape.
+
+So `.mgt-glyph`: a **halo** on hover (the app's raised-control language, `--shadow-btn`,
+applied to a shape instead of a box) and the `.mgt-press` dim on active. The halo is
+on the SHAPE, not the group, so the chairs and the id pill stay flat and only the
+table lifts. `--glyph-halo` is theme-split for the same reason `--shadow-*` is.
+
+**Why not `brightness()` for the hover, when the press uses exactly that:** these
+fills carry STATUS. `brightness` multiplies the channels, which is hue-safe only
+until one CLIPS — and a saturated fill clips almost at once. Measured on the
+blocked-table orange: 1.35 still orange, **1.6 plainly YELLOW**, i.e. hovering a
+table made it look like a different status. Darkening cannot clip, so the press dim
+is safe in a direction the hover brighten is not. **A filter that is fine one way is
+not automatically fine the other.** Verified against all three fill families
+(blocked orange, free outline, indoor purple) in both themes: halo legible on every
+one, fill colour unchanged on every one.
+
+Two details:
+
+- The class is applied **inside `TableGlyph`**, not by its callers, gated on the
+  same "is this interactive" condition `cursor` already keys off. That is what makes
+  it universal — PlanView, the editor and anything drawn later get it from the one
+  glyph, and a table you cannot act on does not claim you can.
+- `PlanView` passes `shapeStyle={{ transition: "fill …, stroke …" }}`, and an
+  **inline `transition` beats the stylesheet's outright**. Left alone, the halo would
+  have eased in the editor (no `shapeStyle`) and snapped in Plan — the documented
+  trap, hit again. `filter` is now named in that list.
+
+### 21 — `.mgt-ac-row` joins the silently-failing rules
+
+**Files:** `tests/stylesheet.test.js`.
+
+Entry 19's transparent Summary panel is the proof this rule needed guarding: since
+the surfaces route their resting fill through `--row-bg`, `.mgt-ac-row` no longer
+only supplies a hover tint — it supplies the **background**, for the List card, the
+Summary panel, the strip's lid and the autocomplete rows. If the rule went missing,
+four surfaces would render transparent with no error anywhere. That is exactly the
+list's entry criterion, and the class only became eligible for it when the fill
+moved into a custom property.
+
+### 22 — the deposit note stops being square
+
+**Files:** `src/components/Icons.jsx`, `CLAUDE.md`.
+
+Patryk: the icon is too square to read as a banknote. He is right, and it is the
+third pass on this one glyph — worth recording as a pair of constraints that pull
+against each other rather than as three separate mistakes.
+
+- v17.9.0 drew a coin (two concentric circles), which at flag size read as a target.
+- The first note was 12 of 24 units tall with an r-2.6 hole: half the optical mass
+  of the star beside it, and the hole closed to solid, because an interior shape has
+  to be ≥ ~3× the stroke or it fills in.
+- The correction over-shot to **19×15 — 1.27:1, a rounded square**, which gives back
+  the silhouette argument the note was chosen for in the first place.
+
+It ships at **20×13 (1.54:1)**, and deliberately no flatter. Rasterised at the 14px
+it actually renders at and magnified 10×, 20×12 (1.67:1) and 21×11 (1.9:1) are
+better note SHAPES — but at this scale the rectangle can only flatten by squeezing
+the circle, and 20×12 puts the hole back at ~2.3px, which is the number that failed
+the first time. 20×13 keeps ~2.7px of hole and ~0.5px of clear gap above and below
+it, and sits at the same optical mass as the star and lock it shares the rail with
+(checked side by side, rasterised).
+
+**Aspect ratio and interior detail are in direct competition at icon sizes, and the
+interior wins — a note-shaped blob is not a banknote either.** The method is the
+transferable part: rasterise to a canvas at the SHIPPED size and blit it magnified
+with smoothing off. Rendering the candidates as large SVGs answers a different
+question, and a screenshot of a 14px icon is downscaled by the capture before you
+ever see it.
+
+### 23 — /code-review fixes: reduce-motion stranded the tab body
+
+**Files:** `src/components/atoms.jsx`.
+
+Entry 18's clamped-range animation is only correct if something afterwards
+restores the true height, and its only signal was `transitionend`. Entry 17, in
+the same version, rewrote `prefers-reduced-motion`'s rule to set
+`transition-property` to a list without `height` — so on those machines the box
+never transitions, the event never fires, and the pending restore never runs.
+Each change was fine on its own.
+
+Measured with the OS setting on: the Settings body pinned at **499px with 2226px
+of content**, `overflow: hidden`, and the scroll port unable to scroll — most of
+the General tab permanently unreachable. `transitionend` also does not fire for a
+**cancelled** transition, so a second tab switch mid-animation had the same shape.
+
+Two guards, because the two failures are different:
+
+- `heightAnimates(box)` asks the COMPUTED style whether `height` actually
+  transitions right now, and takes the plain path when it does not — which is
+  also the correct behaviour there: instant. It asks the computed style precisely
+  because the case being detected is an `!important` rule declared elsewhere.
+- `settle()` is armed on a timer whenever the box starts clipping, and cleared by
+  `transitionend`. Idempotent, so the two racing is harmless. This is the general
+  guard: **never let "the box is clipped" be a state that only an event can
+  leave.**
+
+Verified: with the rule active, 2226px box, `overflow: visible`, port scrollable.
+
+### 24 — /code-review fixes: two modals, one title id
+
+**Files:** `src/components/atoms.jsx`.
+
+`ModalTitle` stamped a constant `id="mgt-modal-title"`, justified in its own
+comment by "only one modal is ever mounted at a time". That is false, and
+`CLAUDE.md` says so in as many words — sub-modals stay in the parent's render
+tree, so opening **Assign tables** from the booking form mounts two `Overlay`s as
+siblings.
+
+`aria-labelledby` resolves through `getElementById`, which is document-wide and
+returns the FIRST match. Measured with both open: two elements sharing the id,
+and **both dialogs announcing "New booking"** — including the one in front,
+holding focus, that was actually the table picker. Duplicate ids are invalid
+markup besides.
+
+The title now carries a data attribute (`MODAL_TITLE_ATTR`) and `Overlay` stamps
+an id unique to its own instance from `useId()`, still resolved by querying its
+own subtree. Verified: `mgt-modal-title-_r_0_` → "New booking",
+`mgt-modal-title-_r_1_` → "Manual table assignment", zero duplicate ids.
+
+**The lesson is the comment, not the code.** A load-bearing assumption
+("only one at a time") was written down confidently and never checked against a
+rule recorded in the project's own architecture notes. An assumption stated in a
+comment is worth exactly as much as the check behind it.
+
+### 25 — /code-review fix: the table-turn pill was outside the width budget
+
+**Files:** `src/components/TimelineView.jsx`.
+
+Entry 15's budget reserves the chip, the handle and the name floor, and missed the
+freeing-soon "~Nm" pill — which is `flexShrink: 0` like everything else on the rail.
+The comment at its render site explains why it was never noticed: *"the seated block
+is near full width this late, so there's room"*. True at the DEFAULT 15-minute
+window. `freeSoonWindow` is configurable to 60, and `freeingSoon` shows the pill
+whenever `end - now <= window`, so on a 60-minute booking with a 60-minute window it
+is on screen from the first minute of the visit — when a seated block, drawn at its
+LIVE duration, is a few pixels wide. Exactly the pile-up the budget exists to prevent,
+reintroduced by the one element left out of it.
+
+`chipRoomFor` deliberately does NOT gain the same term: it feeds `chipsOn`, which is
+all-or-nothing across the day, so one seated block near its end would suppress the
+start-time chips on every other block. The two rules answer different questions.
+
+### 26 — /code-review fix: the strip's hover replaced its severity colour
+
+**Files:** `index.html`, `src/components/NotificationStrip.jsx`.
+
+Entry 12 gave the strip's lid `.mgt-ac-row` and set `--row-bg` to transparent so the
+strip's own severity tint would show through. It did not set `--row-bg-hover`, which
+falls back to the class default — `--bg-ac-hover`, an ACCENT wash. So hovering an
+amber "running late" or a red strip painted it blue, overriding the one signal the
+collapsed lid exists to carry, and breaking the v17.8.0 rule that accent means
+primary action or current selection and nothing else.
+
+New `--bg-veil`: a neutral white/black hover for a surface that already carries a
+meaningful colour — it lightens what is underneath rather than recolouring it, and
+is theme-split (darken over a light page, lighten over a dark one) for the same
+reason `--shadow-*` is.
+
+**The general point: a class with a DEFAULT is only half-configured until you check
+what the default means on your surface.** `--bg-ac-hover` is right for an
+autocomplete row, which has no colour of its own; it is wrong for anything whose
+resting colour is the message.

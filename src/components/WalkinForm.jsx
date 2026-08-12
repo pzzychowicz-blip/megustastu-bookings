@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H } from "../lib/constants";
+import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
@@ -44,7 +44,7 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   comboCapBest, nowTime
 } from "../lib/booking-logic";
-import { Overlay, Section, Fld, AvailBanner, mkInp, mkArea, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, ModalTitle, Section, Fld, AvailBanner, mkInp, mkArea, mkBtn, AutoHeight, Reveal } from "./atoms";
 import { WaitIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
@@ -349,17 +349,7 @@ export function WalkinForm({
   return (
     <Overlay onClose={onClose} footer={footerEl}>
       <AutoHeight>
-      <div style={{ textAlign: "center", marginBottom: 4 }}>
-        <div style={{
-          fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
-          display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-          background: "var(--app-walkin)",
-          border: "1px solid rgba(255,255,255,0.2)",
-          boxShadow: "var(--shadow-btn)"
-        }}>
-          Walk-in
-        </div>
-      </div>
+      <ModalTitle marginBottom={4} background="var(--app-walkin)">Walk-in</ModalTitle>
       <div style={{ fontSize: T.body, color: S.text, marginBottom: 16, textAlign: "center" }}>
         {"Walk-in " + walkinNum + " · Seated"}
       </div>
@@ -531,7 +521,7 @@ export function WalkinForm({
                 style={mkBtn({ fontSize: T.body, background: BTN.orange, minHeight: 40, padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6 })}
                 onClick={() => onAddToWaitlist()}
               >
-                <WaitIcon size={15} />Add to waitlist
+                <WaitIcon size={IC.control} />Add to waitlist
               </button>
             </div>
           ) : null}

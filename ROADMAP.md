@@ -57,35 +57,11 @@ session and keeping it in sync.
 
 ## Ideas
 
-- **Plain drop-shadow literals.** ~20 inline `boxShadow: "0 1px 4px
-  rgba(0,0,0,0.04)"`-style values remain, and `scripts/check-style-invariants.mjs`
+- **Plain drop-shadow literals.** ~17 inline `boxShadow: "0 1px 4px
+  rgba(0,0,0,0.04)"`-style values remain (v17.9.1's `ModalTitle` absorbed three
+  of them), and `scripts/check-style-invariants.mjs`
   deliberately does NOT flag them: a black shadow cannot invert out from under
   itself, so this is a consistency nit rather than the bug class the white-inset
   rule guards, and a noisy check gets muted. Fold them into `--shadow-soft` /
   `--shadow-btn` opportunistically while touching those files; don't sweep.
 
-- **Modal title pills have no colour rule.** "New booking" and "Waitlist" are
-  accent; "Settings" is grey. Pick one convention (probably: accent for a
-  create/act surface, neutral for a configure/read one) and apply it.
-
-- **Settings' `Collapsible` headers clip their own text by 2px.** Found while
-  verifying v17.9.0, pre-existing and unrelated to it (the v17.9.0 diff does not
-  touch `Collapsible`). The header `<button>` measures 17px tall against a 19px
-  `scrollHeight` — so "Restaurant", "Opening hours", "Booking durations" and
-  "Preferences" each have a descender shaved. The button carries `padding: 0`
-  and its tap area comes from the parent row, so the fix is probably a
-  `line-height` or letting the button own the row's padding rather than adding
-  height. Small, but it is on the first screen of Settings.
-
-- **The timeline block's size ring is an untested contrast exemption.** Its
-  border alpha (0.55 white, `SIZE_RING` in `TimelineView.jsx`) is documented
-  with its measured numbers — 1.82 confirmed, 1.38 pending, 2.78 seated, 2.97
-  cancelled — and with why WCAG 1.4.11's 3:1 is unreachable there at all (pure
-  white over the pending yellow tops out at 1.98). But unlike the amber
-  fill/ink exemption, which `tests/contrast.test.js` measures and floors every
-  run, this one is only a comment: drop the alpha back to `--blk-rule`'s 0.3
-  and nothing fails, even though 0.3 renders the ring invisible on two of the
-  five fills. The house rule is that an accepted contrast is not a licence to
-  keep going, so it wants a floor. Needs a small extension to the test — it is
-  built around text-bearing fill/ink pairs and this is a non-text boundary, so
-  it is a new shape rather than one more registry row.

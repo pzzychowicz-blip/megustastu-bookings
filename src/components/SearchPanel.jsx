@@ -15,7 +15,7 @@
 import { useState, useRef, useEffect } from "react";
 import { S, BLOCK_BG, BLOCK_INK, R, T, FW } from "../lib/constants";
 import { searchBookings, formatPhone } from "../lib/customers";
-import { Overlay, mkInp, mkBtn, AutoHeight } from "./atoms";
+import { Overlay, ModalTitle, mkInp, mkBtn, AutoHeight } from "./atoms";
 
 export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
   const [query, setQuery] = useState("");
@@ -59,8 +59,7 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
 
   return (
     <Overlay onClose={onClose} footer={footerEl}>
-      <div style={{ textAlign: "center", marginBottom: 14 }}><div
-        style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)", display: "inline-block", padding: "8px 16px", borderRadius: R.pill, background: "var(--accent)", border: "1px solid rgba(255,255,255,0.2)", boxShadow: "var(--shadow-btn)" }}>Find a booking</div></div>
+      <ModalTitle background="var(--app-btn-grey-strong)">Find a booking</ModalTitle>
       <input
         ref={inputRef}
         value={query}

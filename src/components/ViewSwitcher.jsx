@@ -23,7 +23,7 @@
 // left-click behaviour below is then exactly what App.jsx did before.
 
 import { useRef, useEffect } from "react";
-import { S, BTN, T } from "../lib/constants";
+import { S, BTN, T, IC } from "../lib/constants";
 import { mkBtn, Presence } from "./atoms";
 import { CloseIcon, SplitSideIcon, SplitStackIcon, SwapIcon } from "./Icons";
 
@@ -158,14 +158,14 @@ export function ViewSwitcher({
         <span style={{ display: "inline-flex", gap: 6 }}>
           <button className="mgt-hover-scale" onClick={onSwapSides}
             title="Swap the two views" aria-label="Swap the two views"
-            style={toolBtn()}><SwapIcon size={17} /></button>
+            style={toolBtn()}><SwapIcon size={IC.chrome} /></button>
           <button className="mgt-hover-scale" onClick={onToggleDir}
             title={split && split.dir === "v" ? "Switch to top and bottom" : "Switch to side by side"}
             aria-label="Change split direction"
-            style={toolBtn()}>{split && split.dir === "v" ? <SplitStackIcon size={17} /> : <SplitSideIcon size={17} />}</button>
+            style={toolBtn()}>{split && split.dir === "v" ? <SplitStackIcon size={IC.chrome} /> : <SplitSideIcon size={IC.chrome} />}</button>
           <button className="mgt-hover-scale" onClick={onExitSplit}
             title="Leave split view" aria-label="Leave split view"
-            style={toolBtn({ background: BTN.dismiss })}><CloseIcon size={15} /></button>
+            style={toolBtn({ background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
         </span>
       </Presence>
     </>

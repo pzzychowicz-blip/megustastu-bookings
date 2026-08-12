@@ -22,7 +22,7 @@
 import { BannerRows } from "./BannerRows";
 import { Presence, mkBtn } from "./atoms";
 import { lateMins } from "../lib/booking-logic";
-import { BTN, T, FW } from "../lib/constants";
+import { BTN, T, FW, IC, H } from "../lib/constants";
 import { CloseIcon } from "./Icons";
 
 export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, }) {
@@ -43,13 +43,13 @@ export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, })
           <button
             onClick={function () { onNoShow(id); }}
             className="mgt-hover-scale"
-            style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.orange })}>No show</button>
+            style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>No show</button>
         </Presence>
         <button
           onClick={function () { onDismiss(id); }}
           aria-label="Dismiss this alert"
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}><CloseIcon size={14} /></button>
+          style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
       </div>
     );
   }

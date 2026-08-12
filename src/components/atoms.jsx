@@ -11,8 +11,8 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H } from "../lib/constants";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 import { ChevronRightIcon } from "./Icons";
 
@@ -131,9 +131,30 @@ export function mkBtn(extra) {
 // read-only popups (e.g. HistoryPopup) that have no action row.
 // Blur budget unchanged: exactly one card renders (ternary), so a footer modal
 // is still scrim blur(8px) + card blur(20px) = 2 instances (≤4 rule holds).
+// ── Overlay's scroll port, exposed to its children (v17.9.1) ─────────────────
+// A modal that REPLACES its whole body — Settings switching tabs — has to put the
+// scroll back to the top in the same commit, or the browser does it later and
+// worse. Measured: with the body scrolled 400px in a 2226px-tall tab, switching
+// to a 321px tab left `scrollTop` pinned at 400 for ~270ms while the height
+// animated, and then, the moment `scrollHeight` fell below `scrollTop +
+// clientHeight`, the browser FORCE-CLAMPED it 400 → 281 → 34 → 0. That late,
+// involuntary clamp is the "jump", and it is why it reads as arriving after the
+// content rather than with it.
+//
+// It is a context rather than a prop because the tab lives in `SettingsContent`,
+// which Overlay receives as opaque `children` — App could not pass it down
+// without lifting that state. And it lives on Overlay rather than in the caller
+// because Overlay has FOUR scroll ports (mobile/desktop × footer/no-footer) and
+// is the only thing that knows which one is mounted. Same shape as
+// PresenceContext above.
+const OverlayScrollContext = createContext(null);
+export function useOverlayScroll() { return useContext(OverlayScrollContext); }
+
 export function Overlay({ onClose, children, footer }) {
   const mob = typeof window !== "undefined" && window.innerWidth < 600;
   const lockRef = useRef(false);
+  const scrollRef = useRef(null);
+  const scrollApi = useRef({ scrollToTop: function () { if (scrollRef.current) scrollRef.current.scrollTop = 0; } });
   // v15.8.0: symmetric open/close animation. `leaving` comes from the wrapping
   // <ModalPresence> (default false when there's no provider → enter-only). Mobile
   // = slide-up/down sheet; desktop = scrim fade + card fade/scale. See index.html.
@@ -153,13 +174,95 @@ export function Overlay({ onClose, children, footer }) {
     };
   }, [mob]);
 
+  // ── v17.9.1 (audit P1): dialog semantics ───────────────────────────────────
+  // Measured in the live DOM before this: no role, no aria-modal, no accessible
+  // name, and focus left sitting on <body> when a modal opened. A screen-reader
+  // or keyboard user got no announcement that anything had happened and no way
+  // into the dialog except tabbing through the entire page behind it.
+  //
+  // The accessible NAME is resolved from the DOM rather than from a prop. Seven
+  // modals render a <ModalTitle> and five (the confirm dialogs, WeekView,
+  // BlockModal, HistoryPopup) render their own heading text instead, and a prop
+  // would have to be kept correct at twelve call sites forever. Pointing
+  // `aria-labelledby` at an id that is not in the tree leaves the dialog
+  // NAMELESS — strictly worse than not trying — so this checks. Falling back to
+  // the first heading means the untitled modals get a real name too.
+  const dialogRef = useRef(null);
+  const restoreRef = useRef(null);
+  const uid = useId();
+  useEffect(() => {
+    restoreRef.current = document.activeElement;
+    const el = dialogRef.current;
+    if (el) {
+      // Scoped to THIS dialog's subtree, then given an id unique to this
+      // instance — two modals can be mounted at once (a sub-modal opened from
+      // the booking form), and a shared id makes both point at the first one in
+      // document order. See MODAL_TITLE_ATTR.
+      const titled = el.querySelector("[" + MODAL_TITLE_ATTR + "]") || el.querySelector("h1,h2,h3");
+      if (titled) {
+        if (!titled.id) titled.id = "mgt-modal-title-" + uid;
+        el.setAttribute("aria-labelledby", titled.id);
+      } else {
+        el.setAttribute("aria-label", "Dialog");
+      }
+      // Focus the dialog itself, not its first control: focusing a text input
+      // pops the keyboard on a tablet before the user has decided to type, and
+      // focusing the first BUTTON puts a destructive action one Enter away.
+      // tabIndex -1 makes the container focusable without adding a tab stop.
+      el.focus({ preventScroll: true });
+    }
+    return () => {
+      const prev = restoreRef.current;
+      // Return focus to whatever opened the modal, so the keyboard lands back
+      // where the user left it instead of at the top of the document.
+      if (prev && typeof prev.focus === "function" && document.contains(prev)) {
+        prev.focus({ preventScroll: true });
+      }
+    };
+  }, []);
+
+  // Focus trap. Esc is NOT handled here on purpose — useKeyboardShortcuts owns
+  // the app-wide Escape z-order chain, and a second handler would race it.
+  function onKeyDown(e) {
+    if (e.key !== "Tab") return;
+    const el = dialogRef.current;
+    if (!el) return;
+    const items = [...el.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter((n) => n.offsetParent !== null || n === document.activeElement);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === el)) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  }
+
+  // NB: no `ref` in here. The desktop no-footer card is BOTH the dialog and the
+  // scroll port, and one node cannot take two refs — that branch assigns both
+  // through a callback ref instead.
+  const dialogProps = {
+    role: "dialog",
+    "aria-modal": "true",
+    tabIndex: -1,
+    onKeyDown,
+  };
+
+  // One provider around every branch, so a child can reset the scroll port that
+  // actually mounted without knowing which of the four it is.
+  const wrap = (el) => (
+    <OverlayScrollContext.Provider value={scrollApi.current}>{el}</OverlayScrollContext.Provider>
+  );
+
   if (mob) {
     // Footer pinned to the viewport bottom; body scrolls between top and footer.
     // (minHeight:0 lets the flex body actually scroll instead of growing the column.)
     if (footer) {
-      return (
-        <div className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
-          <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", boxSizing: "border-box" }}>
+      return wrap(
+        <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
+          <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", boxSizing: "border-box" }}>
             {children}
           </div>
           <div style={{ flexShrink: 0, padding: "12px 18px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: "1px solid var(--border-sheet)", background: "var(--bg-sheet-mobile)", boxSizing: "border-box" }}>
@@ -168,9 +271,9 @@ export function Overlay({ onClose, children, footer }) {
         </div>
       );
     }
-    return (
-      <div className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
+    return wrap(
+      <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
+        <div ref={scrollRef} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
           <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))",   /* @canvas */ boxSizing: "border-box" }}>
             {children}
           </div>
@@ -182,15 +285,15 @@ export function Overlay({ onClose, children, footer }) {
   // Desktop centered card. With a footer, the card is a flex column: body
   // scrolls (minHeight:0), footer stays pinned. Without, the whole card scrolls
   // (exactly as before).
-  return (
+  return wrap(
     <div
       className={scrimCls}
       style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {footer ? (
-        <div className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
-          <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
+        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+          <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
           <div style={{ flexShrink: 0, padding: "16px 24px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
@@ -198,10 +301,81 @@ export function Overlay({ onClose, children, footer }) {
           </div>
         </div>
       ) : (
-        <div className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           {children}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── ModalTitle — the pill at the top of a modal (v17.9.1) ────────────────────
+// Seven hand-written copies before this: BookingFormModal, WalkinForm,
+// WaitlistPanel, SearchPanel, PrefPickerModal, ManualModal, and the Settings
+// title in App.jsx. Identical in every respect except the fill — and except the
+// SHADOW, where four had drifted onto `var(--shadow-btn)` and three still
+// carried a hand-written `0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px
+// rgba(255,255,255,0.15)`. Those three are exactly the v17.8.0 white-inset trap:
+// a literal light-mode highlight shipped into dark, 3–8× too bright. They pass
+// `check:style` because the fills under them (`--app-new`, `--accent`,
+// `--app-btn-grey-strong`) are theme-invariant solids, so this was a
+// consistency defect rather than a live bug — but it was three copies of a value
+// nobody could retune, which is the condition that produces the live bug next
+// time. One definition, one token.
+//
+// ── The colour rule (ROADMAP: "Modal title pills have no colour rule") ───────
+// The convention, written down here because it had never been stated anywhere:
+//
+//   • A surface where you CREATE or ACT wears that action's own colour —
+//     `--app-new` (new booking), `--app-walkin` (walk-in), `--accent` (assign
+//     tables), `--btn-tables` (preferred tables). It is the same colour as the
+//     button that opened it, so the modal reads as that button expanded.
+//   • A surface where you CONFIGURE or READ wears a neutral —
+//     `--app-btn-grey-strong` (Settings).
+//
+// The extraction commit deliberately changed no pill's colour; `Waitlist` and
+// `Find a booking` were the two the rule left arguable (you book from the
+// waitlist; you jump to a booking from search), and Patryk then decided both on
+// their own merits: Waitlist wears `--btn-orange`, the colour of the button that
+// opens it, and Find a booking joined Settings on the neutral, because searching
+// is a read. This atom exists so that judgement has one place to land instead of
+// seven.
+//
+// `background` is required and has no default on purpose: a default would be a
+// silent seventh answer to the question above.
+// v17.9.1 (audit P1): this renders an <h2>, not a <div>. Before it, the app
+// contained ZERO headings — measured in the live DOM — so a screen-reader user
+// had no document structure to navigate at all, and every modal announced itself
+// as an unlabelled group. Because all seven titles come through here, one element
+// change fixes all seven. `MODAL_TITLE_ATTR` is the anchor Overlay points its
+// `aria-labelledby` at — an attribute rather than a shared id, because more than
+// one modal CAN be mounted at once (see below); Overlay stamps a per-instance id
+// on whatever it finds, so the two sides still cannot drift apart through a prop.
+//
+// It stays visually identical: the pill is the h2's own box, `margin: 0` kills
+// the UA heading margin, and the size comes from T.title as before — a heading
+// element is a semantic claim, not a typographic one.
+// v17.9.1 review fix: this is a DATA ATTRIBUTE, not a fixed `id`. The original
+// pinned a constant id on every title, on the stated grounds that "only one
+// modal is ever mounted at a time" — which is false, and CLAUDE.md says so in
+// as many words: sub-modals stay in the parent's render tree, so opening
+// "Assign tables" from the booking form mounts TWO Overlays as siblings.
+// Measured: two elements sharing `id="mgt-modal-title"`, and because
+// `aria-labelledby` resolves through `getElementById` — document-wide, first
+// match wins — BOTH dialogs announced "New booking", including the one actually
+// in front and holding focus. Overlay assigns a unique id per instance instead.
+export const MODAL_TITLE_ATTR = "data-mgt-modal-title";
+
+export function ModalTitle({ background, marginBottom = 14, children }) {
+  return (
+    <div style={{ textAlign: "center", marginBottom }}>
+      <h2 {...{ [MODAL_TITLE_ATTR]: "" }} style={{
+        fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
+        display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
+        background, margin: 0,
+        border: "1px solid rgba(255,255,255,0.2)",
+        boxShadow: "var(--shadow-btn)"
+      }}>{children}</h2>
     </div>
   );
 }
@@ -284,7 +458,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
             fontSize: T.title, fontWeight: FW.bold, color: "var(--text-muted)", lineHeight: 1,
             display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)",
             transition: "transform " + M.tap
-          }}><ChevronRightIcon size={14} /></span>
+          }}><ChevronRightIcon size={IC.control} /></span>
         </div>
       </button>
       {/* v15.8.0: body eases open/closed via Reveal (the Summary effect) — used
@@ -378,31 +552,231 @@ export function Reveal({ show, children, style, horizontal = false }) {
 // conforming to content that has already changed. There is no arrival to
 // decelerate into, and ease-out's front-loading turned every modal resize into
 // a lurch-then-crawl. See M.resize for the reasoning in full.
-export function AutoHeight({ children, style }) {
+// ── The visible cap (v17.9.1) ────────────────────────────────────────────────
+// Every height at or above the enclosing scroll port's own height LOOKS THE
+// SAME: the port paints the same pixels either way and only the scroll range
+// differs. So the visible half of a height change is the range [0, cap], and
+// any part of an animation outside it is spent on something nobody can see.
+// Returns null when the box has no scroll port to be clamped against.
+function visibleCap(box) {
+  let p = box.parentElement;
+  while (p && p !== document.body) {
+    const oy = getComputedStyle(p).overflowY;
+    if (oy === "auto" || oy === "scroll") break;
+    p = p.parentElement;
+  }
+  if (!p || p === document.body) return null;
+  // The port is ELASTIC — `flex: 1` inside a card that is `height: auto` under a
+  // `maxHeight` — so its height RIGHT NOW understates what it could show: in a
+  // short tab the card has shrunk to fit and the port with it, and reading it
+  // there returns a cap equal to the current content, which clamps a GROW to
+  // zero visible travel. So probe the real ceiling: ask for an absurd height and
+  // read back what the port actually became. Transitions are suppressed across
+  // the probe and the original height re-established before they are restored,
+  // so nothing can start a transition from the probe value.
+  //
+  // Whatever ELSE lives in the port — siblings, its own padding — eats part of
+  // the ceiling, and that is measured inside the probe too, not before it. This
+  // runs from a layout effect, where the new content is already in the DOM and
+  // the box is still `overflow: visible` at its old height: taller content
+  // spills and lands in `scrollHeight`, so subtracting the box's height outside
+  // the probe reports the CONTENT, not the siblings, and the cap comes out
+  // negative on exactly the swap it exists for. At the probe height nothing
+  // spills, so the remainder is the siblings and only the siblings.
+  const PROBE = 100000;
+  const t = box.style.transition, h0 = box.style.height;
+  box.style.transition = "none";
+  box.style.height = PROBE + "px";
+  const max = p.clientHeight;
+  const others = p.scrollHeight - PROBE;
+  box.style.height = h0;
+  void p.clientHeight;
+  box.style.transition = t;
+  const cap = max - others;
+  return cap > 0 ? cap : null;
+}
+
+// Write a height with the transition suppressed, flushing a style recalc so the
+// browser adopts it as the NEXT transition's start value. A React re-render
+// cannot do this on its own: two style writes inside one task collapse into a
+// single before/after pair, so the intermediate value never exists to start from.
+function setHeightNow(box, px) {
+  if (!box) return;
+  const t = box.style.transition;
+  box.style.transition = "none";
+  box.style.height = px + "px";
+  void box.offsetHeight;
+  box.style.transition = t;
+}
+
+// Does `height` ACTUALLY transition on this element right now? (v17.9.1 review fix)
+//
+// The clamped-range animation above is only correct if something later restores
+// the true height, and the only signal for that is `transitionend`. Under
+// `prefers-reduced-motion` there is no such event to wait for: that rule
+// rewrites `transition-property` to a list without `height` (`!important`), so
+// the box never transitions, the event never fires, and the box would be
+// stranded at the cap with `overflow: hidden` — measured: Settings' General tab
+// pinned at 499px with 2226px of content and the port unable to scroll, i.e.
+// most of that screen permanently unreachable. Two changes in one patch that
+// were each fine alone. So: ask, and take the plain path when the answer is no.
+//
+// Note this is asked of the COMPUTED style, not of our own inline value — an
+// `!important` rule elsewhere is exactly the case being detected.
+function heightAnimates(box) {
+  const cs = getComputedStyle(box);
+  const props = cs.transitionProperty.split(",").map(function (s) { return s.trim(); });
+  let i = props.indexOf("height");
+  if (i < 0) i = props.indexOf("all");
+  if (i < 0) return false;
+  const durs = cs.transitionDuration.split(",").map(function (s) { return parseFloat(s) || 0; });
+  if (!durs.length) return false;
+  // A shorter duration list repeats over the property list (CSS value cycling).
+  return durs[i % durs.length] > 0.02;
+}
+
+export function AutoHeight({ children, watch, style }) {
+  const outer = useRef(null);
   const inner = useRef(null);
-  const hRef = useRef(null);
+  const hRef = useRef(null);                    // last height COMMITTED to the box
+  const cRef = useRef(null);                    // last CONTENT height seen
+  const pendingRef = useRef(null);              // a real height to retake, invisibly
   const [h, setH] = useState(null);             // null = auto until first measure
   const [animating, setAnimating] = useState(false);
+  const measureRef = useRef(null);
+  const timerRef = useRef(null);
+
+  // Settle: leave the clipped state and retake the true height. Reached by
+  // `transitionend` normally, and by a timer when that event does not come —
+  // which is not hypothetical (v17.9.1 review fix). `transitionend` does not
+  // fire for a transition that never started, and it does not fire for one that
+  // is CANCELLED — a second tab switch mid-animation cancels the first. Both
+  // would leave `animating` true forever, which means `overflow: hidden` and,
+  // with a pending height outstanding, a permanently clipped body. Idempotent,
+  // so the two paths racing is harmless.
+  function settle() {
+    clearTimeout(timerRef.current);
+    setAnimating(false);
+    const p = pendingRef.current;
+    if (p == null) return;
+    pendingRef.current = null;
+    setHeightNow(outer.current, p);
+    hRef.current = p;
+    setH(p);
+  }
+  function armSettle() {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(settle, M.dur.shift + 120);
+  }
+  useEffect(function () { return function () { clearTimeout(timerRef.current); }; }, []);
   useLayoutEffect(function () {
     const el = inner.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
     function measure() {
       const next = el.offsetHeight;
-      const prev = hRef.current;
+      const prev = cRef.current;
+      // v17.9.1: compare against the last CONTENT height, not the last height
+      // committed to the box — those stopped being the same thing once a `watch`
+      // swap could commit a CLAMPED height. The observer fires a frame after the
+      // swap, saw box 543 vs content 2226, called that a change and overwrote
+      // the clamped target with the true one, undoing the whole animation.
+      if (prev === next) return;
       // Only a CHANGE from a known prior height animates → clip while it runs.
       // The first (null→number) measure must not clip the rest state.
-      if (prev != null && next !== prev) setAnimating(true);
+      if (prev != null) { setAnimating(true); armSettle(); }
+      cRef.current = next;
       hRef.current = next;
       setH(next);
     }
+    measureRef.current = measure;
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return function () { ro.disconnect(); };
   }, []);
+  // v17.9.1: `watch` — an identity to re-measure on, SYNCHRONOUSLY, before paint.
+  //
+  // ResizeObserver is one frame late by design: it fires after layout, so on a
+  // whole-content SWAP (Settings' tab body, keyed on the tab id) the sequence was
+  //   1. React commits the new tab's DOM
+  //   2. the wrapper still has the OLD pinned height and, because `animating` is
+  //      still false, `overflow: visible` — so the new content PAINTS IN FULL,
+  //      overflowing the box
+  //   3. only then does RO fire, clip to the old height, and transition
+  // which reads as "the content appears, then the panel snaps and re-grows". The
+  // Summary panel has no such artifact because `Reveal` animates a grid track
+  // from 0 in the same commit — there is never an unclipped intermediate paint.
+  //
+  // A layout effect keyed on `watch` runs BEFORE the browser paints, so the clip
+  // and the new height are committed in the same frame as the new content. The
+  // height still transitions from the old value because that is what the element
+  // was last painted at. Opt-in: callers that only grow/shrink their own content
+  // are already served correctly by the observer.
+  //
+  // v17.9.1 — and it must animate only the range that is VISIBLE.
+  //
+  // The above fixed the first frame and the panel still read as "content
+  // changes, long pause, window jumps". Sampled per rAF, Settings' General
+  // (2226px) → Layout (321px) inside a 611px port:
+  //     frame  0–21   card 774 (its 90dvh max), box 2226 → 572
+  //     frame  22–24  card 774 → 720 → 638 → 556
+  // The box eased perfectly the whole time. But the card is `height: auto`
+  // clamped by `maxHeight`, so it cannot move until the box drops under the
+  // port — 22 frames of nothing, then the entire 222px of visible travel
+  // crammed into three. That IS the jump, and no curve or duration fixes it,
+  // because 85% of the budget was being spent below the fold.
+  //
+  // So on a `watch` swap the animation is run over the CLAMPED range: jump
+  // (invisibly) to `min(prev, cap)`, ease to `min(next, cap)`, then retake the
+  // true height. Both jumps are unobservable by the definition of `cap` above —
+  // they only restore scroll range. The card now eases across the full duration.
+  //
+  // A caller whose content never overflows its port is untouched: `prev` and
+  // `next` are both ≤ cap, so `from`/`to` are `prev`/`next` and this is the
+  // plain measure it always was (the Week/Month/Stats body, which is the
+  // reference for how this is supposed to feel, takes that path).
+  useLayoutEffect(function () {
+    if (watch === undefined) return;
+    const box = outer.current, el = inner.current;
+    if (!box || !el || !measureRef.current) return;
+    // The LIVE height, not hRef — an interrupted transition leaves the box
+    // somewhere between the two, and that is where the next one starts.
+    const live = hRef.current == null ? null : box.getBoundingClientRect().height;
+    // Clamping is only safe while something restores the true height afterwards,
+    // and that restore is driven by the transition. With no transition on
+    // `height` (prefers-reduced-motion rewrites `transition-property`), take the
+    // plain path — which is also the right behaviour there: instant.
+    const cap = live == null || !heightAnimates(box) ? null : visibleCap(box);
+    const next = el.offsetHeight;
+    const from = cap == null ? live : Math.min(live, cap);
+    const to = cap == null ? next : Math.min(next, cap);
+    if (cap == null || to === from) {
+      pendingRef.current = null;
+      measureRef.current();
+      return;
+    }
+    if (from !== live) setHeightNow(box, from);
+    cRef.current = next;                        // the observer must not re-fire
+    hRef.current = from;
+    pendingRef.current = to === next ? null : next;
+    setAnimating(true);
+    armSettle();
+    setH(to);
+  }, [watch]);
   return (
     <div
-      onTransitionEnd={function (e) { if (e.propertyName === "height") setAnimating(false); }}
+      ref={outer}
+      onTransitionEnd={function (e) {
+        // `transitionend` BUBBLES, and AutoHeight nests — Settings' General tab
+        // holds five of these inside the tab-body one, and every child's height
+        // transition was ending the parent's. Harmless while the handler only
+        // un-clipped early; not harmless once it also retakes the real height,
+        // which snapped the whole grow animation to its end value in 3 frames.
+        if (e.target !== e.currentTarget || e.propertyName !== "height") return;
+        // The visible part has run; `settle` takes the real height back so the
+        // port can scroll again. The box already fills it, so no pixels change.
+        settle();
+      }}
       style={{ height: h == null ? "auto" : h, overflow: animating ? "hidden" : "visible", transition: "height " + M.resize, ...(style || {}) }}
     >
       <div ref={inner}>{children}</div>

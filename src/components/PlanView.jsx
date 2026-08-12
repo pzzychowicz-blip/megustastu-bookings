@@ -475,7 +475,13 @@ export const PlanView = memo(function PlanView({
                   // Seated→Completed timing (.mgt-fade-overlay). CSS can't
                   // interpolate the blocked url(#pv-blocked) pattern fill, so
                   // entering/leaving a table block snaps — accepted.
-                  shapeStyle={{ transition: "fill " + M.status + ", stroke " + M.status }}
+                  // v17.9.1: `filter` is in the list because the hover halo
+                  // (.mgt-glyph-shape) is a filter, and an INLINE `transition`
+                  // beats the stylesheet's outright — omitting it would leave
+                  // the halo snapping here while easing in the editor, which
+                  // passes no shapeStyle. Any inline transition on an element
+                  // that also has a class-driven one must name both properties.
+                  shapeStyle={{ transition: "fill " + M.status + ", stroke " + M.status + ", filter " + M.tap }}
                   onClick={() => { if (!movedRef.current) setTablePop(t.id); }}
                   onPointerDown={(ev) => { if (ev.pointerType === "touch") startPress(t.id); }}
                   onContextMenu={(ev) => {

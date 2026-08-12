@@ -21,7 +21,7 @@
 
 import { useMemo, memo } from "react";
 import { daySummary } from "../lib/booking-logic";
-import { BTN, TOTAL_SEATS, hoursFor, R, T, FW } from "../lib/constants";
+import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC } from "../lib/constants";
 import { mkBtn, Reveal } from "./atoms";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
 import { hourLabel as hh } from "../lib/time-grid";
@@ -64,9 +64,21 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
 
   return (
     <div
-      className={open ? undefined : "mgt-hover-scale"}
+      /* v17.9.1 (Patryk): a tint, not a lift — "friendlier for the user". The
+         Summary is a PANEL holding a toggle, a chevron, Print and More, so it is
+         a container of controls: scaling it moved those controls out from under
+         the cursor, the same defect measured on the List card.
+         Applied in BOTH states (Patryk): an expanded panel is still the thing
+         you point at to collapse it again, so it should answer the pointer the
+         same way. Withholding the class while open was also a live BUG — the
+         resting fill arrives through `--row-bg`, which nothing but this class
+         consumes, so an open Summary rendered fully transparent
+         (measured `rgba(0, 0, 0, 0)`). A custom property is only a value; the
+         rule that reads it is what paints. */
+      className="mgt-ac-row"
       style={{
-        background: "var(--bg-soft)",
+        "--row-bg": "var(--bg-soft)",
+        "--row-bg-hover": "var(--bg-hover-card)",
         border: "1px solid var(--border-soft)",
         borderRadius: R.card,
         boxShadow: "var(--shadow-soft)",
@@ -145,7 +157,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                  numbers. The glyph is unchanged; only the box around it grew. */
               padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}
           >
-            {open ? <ChevronUpIcon size={14} /> : <ChevronDownIcon size={14} />}
+            {open ? <ChevronUpIcon size={IC.control} /> : <ChevronDownIcon size={IC.control} />}
           </button>
         </div>
       </div>
@@ -195,7 +207,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                 <button
                   onClick={onPrint}
                   className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={14} />Print day sheet</button>
+                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={IC.control} />Print day sheet</button>
               ) : null}
               {onOpenWeek ? (
                 <button

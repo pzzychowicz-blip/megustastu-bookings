@@ -18,7 +18,7 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { S, BTN, R, T, FW } from "../lib/constants";
+import { S, BTN, R, T, FW, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
 import { Fld, Toggle, mkBtn, mkInp, mkArea, usePresence, AutoHeight } from "./atoms";
 import { CloseIcon } from "./Icons";
@@ -153,7 +153,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                     className="mgt-hover-scale"
                     style={mkBtn({ minHeight: 40, minWidth: 40, padding: "0", fontSize: T.title, background: BTN.del, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
                   >
-                    <CloseIcon size={15} />
+                    <CloseIcon size={IC.control} />
                   </button>
                 ) : null}
               </div>

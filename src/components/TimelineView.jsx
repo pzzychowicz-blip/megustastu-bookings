@@ -41,7 +41,7 @@ import { useState, useRef, useEffect, useMemo, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
-  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW } from "../lib/constants";
+  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
@@ -50,6 +50,7 @@ import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, AssignIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
+import { visibleRail } from "../lib/block-layout";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
@@ -119,7 +120,8 @@ const SIZE_RING = {
 const CHIP_PX = 42;      // the start-time chip + its margin
 const HANDLE_PX = 41;    // the assign handle (28 min-width + padding + rule)
 const RING_PX = 24;      // the party-size ring + its margin (v17.9.0)
-const FLAG_PX = 15;      // one 11px flag icon + its 4px margin (v17.9.0)
+const FLAG_PX = 18;      // one IC.control (14px) flag icon + its 4px margin (v17.9.1)
+const FREE_PX = 36;      // the "~Nm" table-turn pill + its margin (v17.9.1)
 const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
 
 function chipRoomFor(b, noShows, warn) {
@@ -130,6 +132,19 @@ function chipRoomFor(b, noShows, warn) {
     + (warn && warn.overdue ? 1 : 0);
   return CHIP_PX + HANDLE_PX + RING_PX + NAME_MIN_PX + FLAG_PX * flags;
 }
+
+// v17.9.1: what a block can afford to show at its current width is decided by
+// `visibleRail` (src/lib/block-layout.js) — a priority ladder, extracted so it
+// is reachable by a test. The five measured widths above are what this file
+// feeds it; the ladder itself, and the reasoning for its order, live there.
+//
+// One consequence worth stating where the render is: this produces a MIXED grid
+// by design — two blocks side by side can carry different numbers of markers —
+// which is the opposite of the all-or-nothing rule `chipsOn` follows two hundred
+// lines down. Both are right. The chip rule exists so the DAY reads
+// consistently; this one exists so an individual block stays legible; and where
+// they disagree, the block wins, because an unreadable block is not consistent
+// with anything.
 
 // v15.8.0: module-level status-change animation state (survives the inline Block
 // remount + any TimelineView remount during the save flow). Single timeline, so
@@ -170,7 +185,7 @@ function BlockFlag({ title, children }) {
   );
 }
 
-function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
+function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
   const d = liveBarDur(b, nowMins);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -208,11 +223,44 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   //
   // The deposit marker was the worst of the four: it printed the CURRENCY
   // SYMBOL from settings/general, so the flag for "money has been taken" was a
-  // different shape per restaurant setting. It is a coin now, and the amount —
-  // which the symbol never showed anyway — is in the hover title.
+  // different shape per restaurant setting. It is a banknote now (v17.9.1 —
+  // v17.9.0's coin read as a target at 11px), and the amount — which the symbol
+  // never showed anyway — is in the hover title.
   // …and then the label stopped being a string at all: `name + " (size)"` is
   // now a name span and a size ring, so nothing is concatenated here.
   const depositAmt = Number(b.deposit) || 0;
+  // v17.9.1: the rail's flags as DATA, so "how many fit" and "which ones
+  // survive" are two questions with two separate answers.
+  //
+  // TWO ORDERS, ONE LIST. The ARRAY order is the RAIL order — unchanged from
+  // v17.9.0, so a block wide enough for everything looks exactly as it did.
+  // `keep` is the DROP priority (lowest survives longest); see block-layout.js.
+  // They are one literal on purpose: held apart, they drift.
+  const allFlags = [
+    depositAmt > 0
+      ? { k: "dep", keep: 5, title: "Deposit " + currency + depositAmt, icon: <DepositIcon size={IC.control} /> } : null,
+    hasPrefT
+      ? { k: "pref", keep: 4, title: "Preferred tables: " + b.preferredTables.join(", "), icon: <StarIcon size={IC.control} /> } : null,
+    isLocked(b)
+      ? { k: "lock", keep: 3, title: "Locked to these tables — the optimizer will not move it", icon: <LockIcon size={IC.control} /> } : null,
+    noShows >= 2
+      ? { k: "ns", keep: 2, title: noShows + " past no-shows on this number", icon: <NoShowIcon size={IC.control} /> } : null,
+    warn && warn.overdue
+      ? { k: "over", keep: 1, title: "Overstaying — " + warn.next + " needs this table at " + warn.nextTime, icon: <OverlapIcon size={IC.control} /> } : null
+  ].filter(Boolean);
+  // v17.9.1 review fix: the freeing-soon pill is part of the FIXED cost when it
+  // is showing. It is `flexShrink: 0` like everything else on the rail, and the
+  // comment at its render site — "the seated block is near full width this late,
+  // so there's room" — only holds at the DEFAULT 15-minute window. `freeSoonWindow`
+  // goes to 60, and `freeingSoon` shows the pill whenever `end - now <= window`,
+  // so on a 60-minute booking with a 60-minute window it is on screen from the
+  // first minute of the visit, when a seated block is a few pixels wide. Leaving
+  // it out reproduced the exact pile-up this budget exists to prevent.
+  const { showRing, flags: railFlags } = visibleRail(
+    d * pxPerMin,
+    HANDLE_PX + NAME_MIN_PX + (showChip ? CHIP_PX : 0) + (freeMin != null ? FREE_PX : 0),
+    RING_PX, FLAG_PX, allFlags
+  );
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
   // name. The show/hide decision (`showChip`) is made ONCE at the TimelineView
   // level for the WHOLE day — all blocks show chips or none do (a mixed grid
@@ -528,30 +576,22 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
             ring is the same fact at a glance and it is flexShrink:0, so it
             survives. Transparent fill: it is a count, not a status, and a
             filled pill here would compete with the time chip. */}
-        <span
-          title={b.size + " guest" + (b.size === 1 ? "" : "s")}
-          style={{ ...SIZE_RING, marginLeft: 6 }}
-        >{b.size}</span>
+        {showRing ? (
+          <span
+            title={b.size + " guest" + (b.size === 1 ? "" : "s")}
+            style={{ ...SIZE_RING, marginLeft: 6 }}
+          >{b.size}</span>
+        ) : null}
       </span>
       {/* v17.9.0: the flag rail — the four markers that used to be appended to
           the label string, plus the ★ that was floating on the left. Order is
           Patryk's: deposit, preferred, then the exception flags, then the
-          Assign handle. All flexShrink:0 — the name truncates, these survive. */}
-      {depositAmt > 0 ? (
-        <BlockFlag title={"Deposit " + currency + depositAmt}><DepositIcon size={11} /></BlockFlag>
-      ) : null}
-      {hasPrefT ? (
-        <BlockFlag title={"Preferred tables: " + b.preferredTables.join(", ")}><StarIcon size={11} /></BlockFlag>
-      ) : null}
-      {isLocked(b) ? (
-        <BlockFlag title="Locked to these tables — the optimizer will not move it"><LockIcon size={11} /></BlockFlag>
-      ) : null}
-      {noShows >= 2 ? (
-        <BlockFlag title={noShows + " past no-shows on this number"}><NoShowIcon size={11} /></BlockFlag>
-      ) : null}
-      {warn && warn.overdue ? (
-        <BlockFlag title={"Overstaying — " + warn.next + " needs this table at " + warn.nextTime}><OverlapIcon size={11} /></BlockFlag>
-      ) : null}
+          Assign handle. All flexShrink:0 — the name truncates, these survive.
+          v17.9.1: …up to the point where they stop fitting, at which they are
+          dropped rather than clipped on top of each other. See blockBudget. */}
+      {railFlags.map((f) => (
+        <BlockFlag key={f.k} title={f.title}>{f.icon}</BlockFlag>
+      ))}
       {/* v16.3.0: table-turn countdown pill — a seated block within ~15 min of
           its scheduled end shows "~Nm" (translucent, like the start-time chip).
           Flex item before the assign handle (no absolute overlap of the name); the
@@ -582,7 +622,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
           height: "100%", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 28
         }}
       >
-        <AssignIcon size={13} />
+        <AssignIcon size={IC.control} />
       </span>
     </div>
   );
@@ -671,7 +711,7 @@ function BlockBar({ bl, totalMins }) {
 //
 // Hoisted to module scope per CLAUDE.md's inline-sub-component rule (a component
 // defined inside another's body is a new TYPE every render → full remount).
-function WaitGhost({ g, totalMins, onBook }) {
+function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
   const gS = toMins(g.time);
   // Clamp to the grid's right edge, exactly as the turnaround tail does — an
   // absolutely-positioned child past GRID_CLOSE still counts toward the
@@ -679,6 +719,15 @@ function WaitGhost({ g, totalMins, onBook }) {
   const gE = Math.min(gS + g.dur, GRID_CLOSE * 60);
   const mins = gE - gS;
   if (mins <= 0) return null;
+  // v17.9.1: the ring follows the block's width budget, for the reason this whole
+  // component exists — a quieter version of X dims X, it does not re-specify it.
+  // A ghost that kept piling its ring where the block it mirrors had stopped
+  // would be re-specifying by omission. Only the ring half applies: a ghost has
+  // no flags and no handle, and its time chip is unconditional because the time
+  // IS the proposal (a ghost without one says nothing).
+  const { showRing } = visibleRail(
+    mins * pxPerMin, CHIP_PX + FLAG_PX + NAME_MIN_PX, RING_PX, FLAG_PX, []
+  );
   // v17.8.0 correction: group hover-lift, TimelineBlock's mechanism verbatim.
   // A ghost for a party that needs two tables renders one cell per row exactly
   // as a real multi-table booking does, so hovering one cell has to lift both —
@@ -744,7 +793,7 @@ function WaitGhost({ g, totalMins, onBook }) {
           column a real block uses for its preferred-tables star. */}
       <span aria-hidden="true" style={{
         flexShrink: 0, marginLeft: 6, display: "flex", alignItems: "center"
-      }}><WaitIcon size={11} /></span>
+      }}><WaitIcon size={IC.control} /></span>
       {/* v17.9.0: the name span and the size ring, TimelineBlock's verbatim —
           when the block stopped concatenating "(size)" into its label, the
           ghost had to stop too, or the "dims X, does not re-specify X" rule
@@ -757,7 +806,7 @@ function WaitGhost({ g, totalMins, onBook }) {
           minWidth: 0, fontSize: T.small, fontWeight: FW.bold,
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
         }}>{g.name}</span>
-        <span style={{ ...SIZE_RING, marginLeft: 6 }}>{g.size}</span>
+        {showRing ? <span style={{ ...SIZE_RING, marginLeft: 6 }}>{g.size}</span> : null}
       </span>
     </div>
   );
@@ -1080,7 +1129,7 @@ export const TimelineView = memo(function TimelineView({
             booking always paints on top of a preview. */}
         {waitGhosts.map((g) =>
           (g.tables || []).includes(id)
-            ? <WaitGhost key={"wg" + g.id + id} g={g} totalMins={totalMins} onBook={onBookWait} />
+            ? <WaitGhost key={"wg" + g.id + id} g={g} pxPerMin={pxPerMin} totalMins={totalMins} onBook={onBookWait} />
             : null
         )}
         {/* v15.8.1: render each seated booking's dashed "ghost" (original-duration
@@ -1151,7 +1200,7 @@ export const TimelineView = memo(function TimelineView({
             <Fragment key={b.id}>
               {tail}
               {ghost}
-              <TimelineBlock b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
+              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
             </Fragment>
           );
         })}
@@ -1167,7 +1216,7 @@ export const TimelineView = memo(function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
     </div>
   ) : null;
 
@@ -1426,7 +1475,7 @@ export const TimelineView = memo(function TimelineView({
       <div style={{ marginTop: 6, fontSize: T.small, color: S.muted, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
         <span>tap booking to edit</span>
         <span aria-hidden="true">·</span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AssignIcon size={12} />assign</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AssignIcon size={IC.inline} />assign</span>
         <span aria-hidden="true">·</span>
         <span>hold to change status</span>
         <span aria-hidden="true">·</span>

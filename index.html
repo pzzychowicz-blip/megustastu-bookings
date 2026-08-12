@@ -166,6 +166,12 @@
         --bg-sheet-mobile: rgba(240, 243, 248, 0.98);  /* Overlay mobile full-screen sheet */
         --bg-ac-menu: rgba(255, 255, 255, 0.98);       /* v16.4.0: autocomplete dropdown menu — near-opaque so form fields don't bleed through */
         --bg-ac-hover: rgba(0, 122, 255, 0.12);        /* v16.4.0: autocomplete row hover tint */
+        /* v17.9.1: the NEUTRAL .mgt-ac-row hover, for a surface that already
+           carries a meaningful colour. `--bg-ac-hover` is an accent wash, which
+           on the notification strip replaced the section's severity tint with
+           blue — a veil lightens what is underneath instead of recolouring it.
+           Theme-split: darken over a light page, lighten over a dark one. */
+        --bg-veil: rgba(0, 0, 0, 0.05);
         --bg-soft: rgba(248, 250, 253, 0.95);          /* Section panel */
         --bg-input: rgba(255, 255, 255, 0.5);          /* text inputs / selects */
         --bg-kbd: rgba(255, 255, 255, 0.75);           /* keycap */
@@ -293,6 +299,10 @@
            (a translucent fill reads washy on the glass cards). Shared contract
            with Scheduling — keep this value identical across both apps. */
         --bg-hover-card: #ffffff;
+        /* v17.9.1: the floor-plan table's hover halo (.mgt-glyph). Theme-SPLIT
+           for the same reason --shadow-* is: a halo has to be readable against
+           the surface behind it, and that surface flips. */
+        --glyph-halo: drop-shadow(0 0 5px rgba(0, 0, 0, 0.38));
         /* ── v17.7.0: corner-radius scale. Radii are theme-agnostic, so these
            live ONLY here and are deliberately NOT duplicated into the
            [data-theme="dark"] block below.
@@ -404,6 +414,7 @@
         --bg-sheet-mobile: rgba(28, 28, 30, 0.98);
         --bg-ac-menu: rgba(44, 44, 46, 0.98);          /* v16.4.0: autocomplete dropdown menu — near-opaque */
         --bg-ac-hover: rgba(10, 132, 255, 0.24);       /* v16.4.0: autocomplete row hover tint */
+        --bg-veil: rgba(255, 255, 255, 0.07);          /* v17.9.1: see :root */
         --bg-soft: rgba(255, 255, 255, 0.05);
         --bg-input: rgba(118, 118, 128, 0.24);
         --bg-kbd: rgba(255, 255, 255, 0.1);
@@ -467,11 +478,14 @@
         --shadow-popover: 0 8px 32px rgba(0, 0, 0, 0.55);
         --tbl-out-text: #7fd3e0;
         --tbl-ind-text: #cba6f7;
-        --warn-bg: rgba(120, 70, 20, 0.3);    --warn-border: rgba(253, 186, 116, 0.4);
+        /* v17.9.1: dark hues realigned to their LIGHT counterparts and the
+           three border saturations levelled. Measured before/after in the live
+           CSSOM, not read off the file — see the REFACTOR_LOG entry. */
+        --warn-bg: rgba(123, 81, 18, 0.3);    --warn-border: rgba(244, 176, 98, 0.4);
         /* Inverted for dark: a LIGHT tint on the dark amber shell (the light
            theme's dark-brown tint would disappear into it). */
-        --danger-bg: rgba(120, 30, 30, 0.32); --danger-border: rgba(252, 165, 165, 0.4);
-        --suggest-bg: rgba(34, 90, 50, 0.45); --suggest-border: rgba(134, 239, 172, 0.35);
+        --danger-bg: rgba(117, 30, 20, 0.32); --danger-border: rgba(244, 105, 98, 0.4);
+        --suggest-bg: rgba(34, 93, 47, 0.45); --suggest-border: rgba(134, 239, 172, 0.35);
         --shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.07);
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
         --shadow-input: inset 0 1px 2px rgba(255, 255, 255, 0.05), 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -481,7 +495,12 @@
         --app-offline-bg: rgba(90, 70, 15, 0.4);   --app-offline-border: rgba(252, 211, 77, 0.45); --app-offline-text: #fcd34d;
         --app-reconnect-bg: rgba(20, 45, 95, 0.45); --app-reconnect-border: rgba(147, 197, 253, 0.4); --app-reconnect-text: #93c5fd;
         --app-overlap-bg: rgba(80, 55, 15, 0.3);   --app-overlap-border: rgba(253, 186, 116, 0.35);
-        --suggest-bg-soft: rgba(28, 66, 42, 0.3);
+        /* v17.9.1: was rgba(28, 66, 42, 0.3) — which composited to H162 S15%,
+           i.e. a hue-shifted near-GREY. The waitlist pane, the app's only
+           "here is an opportunity" surface, read as a neutral dark box in dark
+           mode while its light counterpart was a clear green. 24 degrees of hue
+           drift between themes was the largest in the palette. */
+        --suggest-bg-soft: rgba(22, 80, 29, 0.3);
         --app-date-bg: rgba(118, 118, 128, 0.24);  --app-date-border: rgba(255, 255, 255, 0.12);
         --app-btn-grey: rgba(110, 118, 135, 0.5);  --app-btn-grey-strong: rgba(110, 118, 135, 0.6);
         --app-btn-slate: rgba(100, 116, 139, 0.7);
@@ -489,6 +508,8 @@
         /* walkin / new / danger / warn solids are saturated — read on both; kept from :root */
         /* v14.3.0: hover-lift card — opaque dark surface (matches Scheduling) */
         --bg-hover-card: rgb(50, 50, 53);
+        /* v17.9.1: light halo on the dark plan (see :root for the reasoning) */
+        --glyph-halo: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
       }
       html, body { margin: 0; }
       body {
@@ -556,13 +577,34 @@
                     box-shadow var(--t-tap) var(--ease-out),
                     filter var(--t-tap) var(--ease-out);
       }
-      /* v16.4.0: autocomplete dropdown rows (phone + name pickers in the booking
-         form) — a hover tint so the cursor's target row is visible. Not a
-         .mgt-hover-scale (rows shouldn't scale); plain background swap, and no
-         touch sticky-hover concern (the rows are tapped, not lifted). */
-      .mgt-ac-row { transition: background-color var(--t-tap) var(--ease-out); }
+      /* ── The row/surface hover tint (v16.4.0, generalised v17.9.1) ─────────
+         ONE class for every surface that highlights on hover WITHOUT moving:
+         autocomplete rows, the List booking card, the Summary panel, and the
+         notification strip's lid. It began as the autocomplete-only .mgt-ac-row
+         ("rows shouldn't scale"), and v17.9.1 found the sharper version of that
+         rule while fixing a click bug:
+
+           THE HOVER LIFT (.mgt-hover-scale) IS FOR CONTROLS. THIS IS FOR
+           CONTAINERS OF CONTROLS.
+
+         scale(1.08) is a PROPORTION: 3px on a 40px button, but ~30px on an
+         820px List card — which slid that card's own Edit and Delete buttons
+         out from under the cursor between aiming and clicking (measured: Edit
+         -24px, Delete +31px). Anything holding click targets gets a tint; only
+         the targets themselves move.
+
+         Both colours arrive as CUSTOM PROPERTIES, because every one of these
+         surfaces sets its resting fill INLINE and an inline `background` beats a
+         stylesheet `background-color` outright (the Fix-2 specificity rule that
+         makes mkBtn's inline shadow un-overridable). A plain rule here would
+         silently never apply. Defaults keep the original autocomplete behaviour
+         for callers that set neither. */
+      .mgt-ac-row {
+        background-color: var(--row-bg, transparent);
+        transition: background-color var(--t-tap) var(--ease-out);
+      }
       @media (hover: hover) and (pointer: fine) {
-        .mgt-ac-row:hover { background-color: var(--bg-ac-hover); }
+        .mgt-ac-row:hover { background-color: var(--row-bg-hover, var(--bg-ac-hover)); }
       }
       /* v17.5.0 correction: TimeAxis is now a ruler/tape picker whose centre
          marker is fixed while the ruler scrolls under it. This is the "detent"
@@ -682,6 +724,40 @@
          Its `transition` moved up next to .mgt-hover-scale's — see the note
          there for why the two had to become one declaration. */
       .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
+
+      /* ── v17.9.1: the floor-plan table (.mgt-glyph) ──────────────────────────
+         Plan and the plan EDITOR draw tables through one TableGlyph, and neither
+         answered the pointer at all. Neither of the app's two existing answers
+         fits an SVG table, for reasons worth keeping:
+
+         • .mgt-hover-scale cannot be used AT ALL. It sets a CSS `transform`, and
+           a CSS transform on an element REPLACES its `transform` presentation
+           attribute — the glyph's own `translate(x,y) rotate(r)` — so the table
+           would teleport to the plan's origin. Beyond that, Plan is a spatial
+           map at true relative positions: growing a table 8% pushes its chairs
+           outward and changes apparent spacing, and in the editor a table that
+           grows under the cursor fights the drag you came to do.
+         • .mgt-ac-row's tint cannot be used either — `background-color` paints
+           nothing on an SVG shape.
+
+         So: a HALO on hover, the press dim on active. The halo is the app's
+         raised-control language (--shadow-btn) applied to a shape instead of a
+         box, and it is on the SHAPE, not the group, so the chairs and the id
+         pill stay flat and only the table lifts.
+
+         WHY NOT `brightness()` FOR THE HOVER, which is what the press uses:
+         the fills here carry STATUS. brightness multiplies the channels, which
+         is hue-safe only until one CLIPS — and a saturated fill clips almost
+         immediately. Measured on the blocked-table orange: 1.35 was still
+         orange, 1.6 was YELLOW, i.e. hovering a table made it look like a
+         different status. Darkening cannot clip, so the press dim is safe in a
+         way the hover brighten is not. A filter that is fine in one direction is
+         not automatically fine in the other. */
+      .mgt-glyph-shape { transition: filter var(--t-tap) var(--ease-out); }
+      @media (hover: hover) and (pointer: fine) {
+        .mgt-glyph:hover .mgt-glyph-shape { filter: var(--glyph-halo); }
+      }
+      .mgt-glyph:active { filter: brightness(0.86); }
 
       /* ── v17.8.0: a timeline block's ink scheme ──────────────────────────────
          A block sets `color` inline from BLOCK_INK[status] and its text
@@ -841,11 +917,25 @@
          tablets. The !important beats every inline `transition:`/`animation:`
          style, incl. the timeline grid-width zoom ease and the status wipes.
          useFlip (WAAPI, atoms.jsx) checks the same attribute in JS. */
+      /* v17.9.1 (audit P3): the OS-level request and the manual toggle below are
+         DIFFERENT INTENTS and no longer share one rule.
+
+         `prefers-reduced-motion` asks for LESS motion, not none — WCAG 2.3.3 is
+         about vestibular triggers: travel, parallax, spin, scale. A state change
+         still has to be perceivable, and this app says a lot with motion (the
+         status wipe, the strip opening, a block moving table). Killing all of it
+         at 0.001ms left those changes as instant cuts, a comprehension cost paid
+         by the users least able to absorb it.
+         So: transforms and keyframes go (they are the vestibular part), and
+         colour/opacity keep a short cross-fade so the change is still legible.
+         The manual "Reduce animations" toggle keeps the TOTAL kill — its job is
+         weak tablet hardware, where the cheapest frame is no frame. */
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after {
           animation-duration: 0.001ms !important;
           animation-delay: 0ms !important;
-          transition-duration: 0.001ms !important;
+          transition-property: background-color, color, border-color, opacity, fill, stroke !important;
+          transition-duration: 120ms !important;
         }
       }
       :root[data-motion="reduce"] *,

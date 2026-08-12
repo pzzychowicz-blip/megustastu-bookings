@@ -29,8 +29,8 @@ import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep } from "./atoms";
-import { BTN, R, M, T, FW, H } from "../lib/constants";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep, useOverlayScroll } from "./atoms";
+import { BTN, R, M, T, FW, H, IC } from "../lib/constants";
 
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
 const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -589,7 +589,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
                   title={armedTier === i ? "Tap again to remove" : "Remove this tier"}
                   style={{ ...HOUR_STEP_BTN, height: 32, marginBottom: 2, ...(armedTier === i
                     ? { width: "auto", padding: "0 10px", fontSize: T.body, fontWeight: FW.bold, background: "var(--danger-bg)", color: "var(--danger-text)", border: "1px solid var(--danger-border)" }
-                    : { width: 32, fontSize: T.lead, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : <CloseIcon size={13} />}</button>
+                    : { width: 32, fontSize: T.lead, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : <CloseIcon size={IC.control} />}</button>
               </div>
             );
           })}
@@ -828,7 +828,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
             <button
               onClick={onBackup}
               className="mgt-hover-scale mgt-press"
-              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={15} />Download backup</button>
+              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={IC.control} />Download backup</button>
           </div>
         </Section>
       ) : null}
@@ -925,6 +925,33 @@ export function SettingsContent({
     return function () { set.clear(); if (onDirty) onDirty(false); };
   }, [onDirty]);
 
+  // v17.9.1: the modal's scroll port is reset in `selectTab` below, BEFORE the
+  // tab state changes. See that handler for why the ordering is load-bearing.
+  const overlayScroll = useOverlayScroll();
+
+  // v17.9.1: reset the scroll port BEFORE swapping the tab, and do it here in the
+  // handler rather than in a layout effect. Both halves matter.
+  //
+  // WHY reset at all: with the body scrolled 400px in a 2226px tab, switching to
+  // a 321px tab left `scrollTop` pinned at 400 for ~270ms while the height
+  // animated, and then — the instant `scrollHeight` fell below `scrollTop +
+  // clientHeight` — the browser FORCE-CLAMPED it 400 -> 281 -> 34 -> 0. That
+  // involuntary late clamp is the reported "jump". It is the SCROLL moving, not
+  // the height, which is why fixing the height animation alone did not resolve it.
+  //
+  // WHY in the handler and not a layout effect: writing `scrollTop` forces a
+  // synchronous layout. In a layout effect that write lands AFTER AutoHeight has
+  // already set the new height (child effects run first), so the forced recalc
+  // settles the new height before the browser has painted the old one — and the
+  // height transition then has nothing to animate FROM. Measured: it snapped
+  // 2226 -> 321 in a single frame. Resetting here happens while the OLD, tall
+  // content is still mounted, where scrollTop 0 is valid and cheap, and React's
+  // re-render then follows with nothing forcing a flush mid-transition.
+  function selectTab(t) {
+    if (overlayScroll) overlayScroll.scrollToTop();
+    setTab(t);
+  }
+
   let content;
   if (tab === "general") {
     content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
@@ -951,11 +978,15 @@ export function SettingsContent({
       <TabBar
         tabs={SETTINGS_TABS}
         current={tab}
-        onSelect={setTab}
+        onSelect={selectTab}
       />
       {/* v15.8.0: tab body eases its height (AutoHeight) + crossfades on switch
           (key+mgt-fade-in) — the modal card follows the eased height. */}
-      <AutoHeight>
+      {/* v17.9.1: `watch={tab}` — a tab switch replaces the whole body, and the
+          ResizeObserver that normally drives AutoHeight fires one frame too late
+          for that, so the new tab painted at full height and the panel then
+          snapped shut and re-grew. See AutoHeight. */}
+      <AutoHeight watch={tab}>
         <div key={tab} className="mgt-fade-in">{content}</div>
       </AutoHeight>
     </div>
