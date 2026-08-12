@@ -50,16 +50,24 @@ export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDas
   const t = TBL[isIn(id) ? "ind" : "out"];
   const label = id + labelSuffix;
   const lw = Math.max(26, label.length * 7.5 + 12);
+  // v17.9.1: pointer feedback (.mgt-glyph — halo on hover, dim on press). Applied
+  // HERE rather than by the callers, which is what makes it universal: PlanView,
+  // the editor and anything drawn later get it from the one glyph. Gated on the
+  // table actually being interactive, the same condition `cursor` already keys
+  // off — a table you cannot act on must not claim you can. See index.html for
+  // why this is neither .mgt-hover-scale nor .mgt-ac-row.
+  const live = !!(onPointerDown || onClick);
   return (
     <g transform={"translate(" + entry.x + "," + entry.y + ") rotate(" + (entry.rot || 0) + ")"}
+      className={live ? "mgt-glyph" : undefined}
       onPointerDown={onPointerDown} onClick={onClick} onContextMenu={onContextMenu}
       style={{ cursor: onPointerDown ? "grab" : (onClick ? "pointer" : "default"), ...style }}>
       {chairPositions(entry).map(function(c, i){
         return <circle key={i} cx={c.cx} cy={c.cy} r={6} fill={chairFill} stroke="var(--fp-chair-outline)" strokeWidth={1.5} />;
       })}
       {entry.shape === "round"
-        ? <circle cx={0} cy={0} r={w / 2} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} style={shapeStyle} />
-        : <rect x={-w / 2} y={-h / 2} width={w} height={h} rx={entry.shape === "square" ? 10 : 12} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} style={shapeStyle} />}
+        ? <circle className="mgt-glyph-shape" cx={0} cy={0} r={w / 2} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} style={shapeStyle} />
+        : <rect className="mgt-glyph-shape" x={-w / 2} y={-h / 2} width={w} height={h} rx={entry.shape === "square" ? 10 : 12} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} style={shapeStyle} />}
       <g transform={"rotate(" + (-(entry.rot || 0)) + ")"}>
         <rect x={-lw / 2} y={-9} width={lw} height={18} rx={9} fill={t.bg} stroke={t.border} strokeWidth={1} />
         <text x={0} y={4} textAnchor="middle" fontSize={11} fontWeight={700} fill="var(--text-on-accent)" style={{ pointerEvents: "none", userSelect: "none" }}>{label}</text>

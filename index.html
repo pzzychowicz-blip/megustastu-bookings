@@ -293,6 +293,10 @@
            (a translucent fill reads washy on the glass cards). Shared contract
            with Scheduling — keep this value identical across both apps. */
         --bg-hover-card: #ffffff;
+        /* v17.9.1: the floor-plan table's hover halo (.mgt-glyph). Theme-SPLIT
+           for the same reason --shadow-* is: a halo has to be readable against
+           the surface behind it, and that surface flips. */
+        --glyph-halo: drop-shadow(0 0 5px rgba(0, 0, 0, 0.38));
         /* ── v17.7.0: corner-radius scale. Radii are theme-agnostic, so these
            live ONLY here and are deliberately NOT duplicated into the
            [data-theme="dark"] block below.
@@ -497,6 +501,8 @@
         /* walkin / new / danger / warn solids are saturated — read on both; kept from :root */
         /* v14.3.0: hover-lift card — opaque dark surface (matches Scheduling) */
         --bg-hover-card: rgb(50, 50, 53);
+        /* v17.9.1: light halo on the dark plan (see :root for the reasoning) */
+        --glyph-halo: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
       }
       html, body { margin: 0; }
       body {
@@ -711,6 +717,40 @@
          Its `transition` moved up next to .mgt-hover-scale's — see the note
          there for why the two had to become one declaration. */
       .mgt-press:active:not(:disabled) { filter: brightness(0.86); }
+
+      /* ── v17.9.1: the floor-plan table (.mgt-glyph) ──────────────────────────
+         Plan and the plan EDITOR draw tables through one TableGlyph, and neither
+         answered the pointer at all. Neither of the app's two existing answers
+         fits an SVG table, for reasons worth keeping:
+
+         • .mgt-hover-scale cannot be used AT ALL. It sets a CSS `transform`, and
+           a CSS transform on an element REPLACES its `transform` presentation
+           attribute — the glyph's own `translate(x,y) rotate(r)` — so the table
+           would teleport to the plan's origin. Beyond that, Plan is a spatial
+           map at true relative positions: growing a table 8% pushes its chairs
+           outward and changes apparent spacing, and in the editor a table that
+           grows under the cursor fights the drag you came to do.
+         • .mgt-ac-row's tint cannot be used either — `background-color` paints
+           nothing on an SVG shape.
+
+         So: a HALO on hover, the press dim on active. The halo is the app's
+         raised-control language (--shadow-btn) applied to a shape instead of a
+         box, and it is on the SHAPE, not the group, so the chairs and the id
+         pill stay flat and only the table lifts.
+
+         WHY NOT `brightness()` FOR THE HOVER, which is what the press uses:
+         the fills here carry STATUS. brightness multiplies the channels, which
+         is hue-safe only until one CLIPS — and a saturated fill clips almost
+         immediately. Measured on the blocked-table orange: 1.35 was still
+         orange, 1.6 was YELLOW, i.e. hovering a table made it look like a
+         different status. Darkening cannot clip, so the press dim is safe in a
+         way the hover brighten is not. A filter that is fine in one direction is
+         not automatically fine in the other. */
+      .mgt-glyph-shape { transition: filter var(--t-tap) var(--ease-out); }
+      @media (hover: hover) and (pointer: fine) {
+        .mgt-glyph:hover .mgt-glyph-shape { filter: var(--glyph-halo); }
+      }
+      .mgt-glyph:active { filter: brightness(0.86); }
 
       /* ── v17.8.0: a timeline block's ink scheme ──────────────────────────────
          A block sets `color` inline from BLOCK_INK[status] and its text

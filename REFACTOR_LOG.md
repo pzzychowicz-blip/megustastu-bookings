@@ -9106,3 +9106,47 @@ states). **A custom property is only a value; the rule that consumes it is what
 paints.** Routing a resting style through one is what makes the inline-beats-
 stylesheet trap solvable, and it also means the class is no longer optional
 decoration — it is load-bearing, and any element handed `--row-bg` must keep it.
+
+### 20 — the floor-plan tables answer the pointer
+
+**Files:** `index.html`, `src/components/FloorGlyphs.jsx`, `src/components/PlanView.jsx`,
+`tests/stylesheet.test.js`.
+
+Patryk: the Plan view's tables have neither hover nor press, and whatever they get
+must apply in the plan EDITOR too. Both of the app's existing answers turned out to
+be unusable here, and why is worth keeping:
+
+- **`.mgt-hover-scale` cannot be applied at all.** It sets a CSS `transform`, and a
+  CSS transform REPLACES an element's `transform` presentation attribute — which on
+  `TableGlyph` is its `translate(x,y) rotate(r)`. The table would teleport to the
+  plan's origin. Independently of that, Plan is a spatial map at true relative
+  positions: an 8% lift pushes a table's chairs outward and changes apparent
+  spacing between tables, and in the editor a table that grows under the cursor
+  fights the drag you opened it to do. Patryk chose tint-and-dim over the lift.
+- **`.mgt-ac-row` cannot either** — `background-color` paints nothing on an SVG shape.
+
+So `.mgt-glyph`: a **halo** on hover (the app's raised-control language, `--shadow-btn`,
+applied to a shape instead of a box) and the `.mgt-press` dim on active. The halo is
+on the SHAPE, not the group, so the chairs and the id pill stay flat and only the
+table lifts. `--glyph-halo` is theme-split for the same reason `--shadow-*` is.
+
+**Why not `brightness()` for the hover, when the press uses exactly that:** these
+fills carry STATUS. `brightness` multiplies the channels, which is hue-safe only
+until one CLIPS — and a saturated fill clips almost at once. Measured on the
+blocked-table orange: 1.35 still orange, **1.6 plainly YELLOW**, i.e. hovering a
+table made it look like a different status. Darkening cannot clip, so the press dim
+is safe in a direction the hover brighten is not. **A filter that is fine one way is
+not automatically fine the other.** Verified against all three fill families
+(blocked orange, free outline, indoor purple) in both themes: halo legible on every
+one, fill colour unchanged on every one.
+
+Two details:
+
+- The class is applied **inside `TableGlyph`**, not by its callers, gated on the
+  same "is this interactive" condition `cursor` already keys off. That is what makes
+  it universal — PlanView, the editor and anything drawn later get it from the one
+  glyph, and a table you cannot act on does not claim you can.
+- `PlanView` passes `shapeStyle={{ transition: "fill …, stroke …" }}`, and an
+  **inline `transition` beats the stylesheet's outright**. Left alone, the halo would
+  have eased in the editor (no `shapeStyle`) and snapped in Plan — the documented
+  trap, hit again. `filter` is now named in that list.
