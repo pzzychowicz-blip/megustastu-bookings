@@ -29,7 +29,7 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
@@ -243,7 +243,7 @@ export const ListView = memo(function ListView({
           <SmallTag label="locked" style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (
-          <SmallTag label={<><StarIcon size={10} />{b.preferredTables.join("+")}</>} style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
+          <SmallTag label={<><StarIcon size={IC.inline} />{b.preferredTables.join("+")}</>} style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         // v16.0.0: repeat no-show offender chip (same threshold as the timeline ⚠).
         const noShowCt = nsMap[normalizePhone(b.phone)] || 0;
@@ -294,7 +294,7 @@ export const ListView = memo(function ListView({
               style={mkBtn({ background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
               onClick={() => onStatus(b.id, s)}
             >
-              <ChevronRightIcon size={12} />{s}
+              <ChevronRightIcon size={IC.inline} />{s}
             </button>
           ));
         const cancelBtn = b.status !== "cancelled" ? (
@@ -304,7 +304,7 @@ export const ListView = memo(function ListView({
             style={mkBtn({ background: BLOCK_BG.cancelled, textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
             onClick={() => onStatus(b.id, "cancelled")}
           >
-            <ChevronRightIcon size={12} />cancelled
+            <ChevronRightIcon size={IC.inline} />cancelled
           </button>
         ) : null;
 
@@ -391,7 +391,7 @@ export const ListView = memo(function ListView({
             </div>
             {notesEl}
             <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={() => onManual(b.id)}><AssignIcon size={14} />Assign</button>
+              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={() => onManual(b.id)}><AssignIcon size={IC.control} />Assign</button>
               <button className="mgt-hover-scale" style={mkBtn({ background: BTN.edit })} onClick={() => onEdit(b)}>Edit</button>
               {statusBtns}
               <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center" }}>

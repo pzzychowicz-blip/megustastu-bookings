@@ -33,7 +33,7 @@
 import { useState, useEffect } from "react";
 import { Reveal } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
-import { R, M, T, FW } from "../lib/constants";
+import { R, M, T, FW, IC } from "../lib/constants";
 import { ChevronDownIcon } from "./Icons";
 
 // ── The strip's own geometry, exported because three other files depend on it ─
@@ -179,7 +179,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
             section's own mark. */}
         <SectionMark
           icon={multi ? lidIcon : top.icon}
-          tone={top.tone} size={15} fallbackDot />
+          tone={top.tone} size={IC.control} fallbackDot />
         {/* With ONE section live the strip IS that banner, so the lid takes its
             title and mark — a generic lid plus a redundant sub-header would be
             two rows saying one thing. With several it says "Notifications",
@@ -207,7 +207,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
               return (
                 <span key={s.id} title={s.title}
                   style={{ display: "inline-flex", alignItems: "center", gap: 4, color: s.tone }}>
-                  <SectionMark icon={s.icon} tone={s.tone} size={13} fallbackDot />
+                  <SectionMark icon={s.icon} tone={s.tone} size={IC.control} fallbackDot />
                   <span style={{ fontSize: T.small, fontWeight: FW.bold, fontVariantNumeric: "tabular-nums" }}>{s.count || 1}</span>
                 </span>
               );
@@ -230,7 +230,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
           display: "inline-block", lineHeight: 1,
           transform: open ? "rotate(180deg)" : "rotate(0deg)",
           transition: "transform " + M.move + ", color " + M.move
-        }}><ChevronDownIcon size={13} /></span>
+        }}><ChevronDownIcon size={IC.control} /></span>
       </button>
       <Reveal show={open}>
         {/* .mgt-notif draws the hairlines between sections (index.html). A CSS
@@ -259,7 +259,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
                         looked broken. */}
                     <Reveal show={orderedIds.length > 1}>
                       <div style={{ display: "flex", alignItems: "center", gap: NOTIF_GAP, padding: "8px " + NOTIF_PAD_X + "px 2px" }}>
-                        <SectionMark icon={s.icon} tone={s.tone} size={15} fallbackDot />
+                        <SectionMark icon={s.icon} tone={s.tone} size={IC.control} fallbackDot />
                         <span style={{ fontSize: T.body, fontWeight: FW.bold, color: s.tone, flex: 1, minWidth: 0 }}>{s.title}</span>
                         {s.count > 1 ? (
                           <span style={{

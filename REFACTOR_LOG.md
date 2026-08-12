@@ -8951,3 +8951,24 @@ to a generic label.
 That fallback is what made it worth converting the five confirm-dialog titles and
 HistoryPopup's to `<h2>` as well — otherwise those dialogs would announce as
 "Dialog". Verified: the delete confirm now names itself "Delete booking?".
+
+### 14 — An icon-size scale, `IC` (audit P2)
+
+**Files:** `src/lib/constants.js`, 19 components.
+
+The last unscaled axis. `R`, `T`/`FW`, `M` and `SP`/`H` were each formalised after
+the same finding; icons had **eight sizes between 10 and 18**. The tell was not the
+count — it was that **one control wore four of them**: `CloseIcon` rendered at 12,
+13, 14 and 15 in different corners of the app. `WaitIcon` had three, `StarIcon`
+three. That is drift, not hierarchy, and it reads flat for the same reason thirteen
+font sizes did.
+
+Three steps, assigned by **role**: `IC.inline` 12 (a mark inside a text run or a
+dense row), `IC.control` 14 (the standard mark ON a control), `IC.chrome` 18
+(header and navigation furniture, where the icon IS the button). The 2px and 4px
+gaps are deliberate — 12→14→18 is perceptible at a glance; 13→14 never was.
+
+71 call sites swept; a grep for a numeric `size={n}` on an icon now returns
+nothing. `FLAG_PX` follows the rail flags from 17 to 18. The timeline note dog-ear
+stays a hard-coded 8px inline SVG — a decorative marker drawn in place, not a
+member of the icon set.

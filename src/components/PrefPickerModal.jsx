@@ -34,7 +34,7 @@
 // different export (`comboCapBest`) which adds a greedy best-subset branch;
 // for soft-hint preferences here, the simpler version is correct.
 
-import { S, BTN, TBL, TABLE_GROUPS, R, T, FW } from "../lib/constants";
+import { S, BTN, TBL, TABLE_GROUPS, R, T, FW, IC } from "../lib/constants";
 import { isIn, comboCap } from "../lib/booking-logic";
 import { Overlay, ModalTitle, mkBtn, AutoHeight } from "./atoms";
 import { CheckIcon } from "./Icons";
@@ -68,7 +68,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
     : (
       <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
         {"Capacity: " + cap + " / " + needed + " pax"}
-        {cap >= needed ? <CheckIcon size={13} /> : <span>— need more</span>}
+        {cap >= needed ? <CheckIcon size={IC.control} /> : <span>— need more</span>}
       </span>
     );
   const capColor = prefs.length === 0 ? S.muted : (cap >= needed ? "var(--success-text)" : "var(--warn-text)");

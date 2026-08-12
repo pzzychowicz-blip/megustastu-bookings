@@ -22,7 +22,7 @@
 import { BannerRows } from "./BannerRows";
 import { Presence, mkBtn } from "./atoms";
 import { lateMins } from "../lib/booking-logic";
-import { BTN, T, FW } from "../lib/constants";
+import { BTN, T, FW, IC } from "../lib/constants";
 import { CloseIcon } from "./Icons";
 
 export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, }) {
@@ -49,7 +49,7 @@ export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, })
           onClick={function () { onDismiss(id); }}
           aria-label="Dismiss this alert"
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}><CloseIcon size={14} /></button>
+          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
       </div>
     );
   }

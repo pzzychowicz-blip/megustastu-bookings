@@ -28,7 +28,7 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { S, R, T, FW } from "../lib/constants";
+import { S, R, T, FW, IC } from "../lib/constants";
 import { mkBtn } from "./atoms";
 import { SplitSideIcon, SplitStackIcon } from "./Icons";
 
@@ -76,9 +76,9 @@ export function SplitMenu({ view, onConfirm, onClose }) {
         {step === 1 ? (
           <div style={row}>
             <button className="mgt-hover-scale" style={dirBtn({ background: "var(--app-btn-grey)" })}
-              onClick={() => { setDir("v"); setStep(2); }}><SplitSideIcon size={18} />Side by side</button>
+              onClick={() => { setDir("v"); setStep(2); }}><SplitSideIcon size={IC.chrome} />Side by side</button>
             <button className="mgt-hover-scale" style={dirBtn({ background: "var(--app-btn-grey)" })}
-              onClick={() => { setDir("h"); setStep(2); }}><SplitStackIcon size={18} />Top and bottom</button>
+              onClick={() => { setDir("h"); setStep(2); }}><SplitStackIcon size={IC.chrome} />Top and bottom</button>
           </div>
         ) : (
           <div style={row}>

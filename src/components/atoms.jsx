@@ -12,7 +12,7 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H } from "../lib/constants";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 import { ChevronRightIcon } from "./Icons";
 
@@ -443,7 +443,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
             fontSize: T.title, fontWeight: FW.bold, color: "var(--text-muted)", lineHeight: 1,
             display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)",
             transition: "transform " + M.tap
-          }}><ChevronRightIcon size={14} /></span>
+          }}><ChevronRightIcon size={IC.control} /></span>
         </div>
       </button>
       {/* v15.8.0: body eases open/closed via Reveal (the Summary effect) — used

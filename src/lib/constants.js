@@ -555,6 +555,26 @@ export var R={pill:"var(--r-pill)",auth:"var(--r-auth)",sheet:"var(--r-sheet)",c
 // scale's own ends.
 export var T={micro:10,small:11,body:12,lead:14,title:17,display:22};
 
+// ── IC — the icon-size scale (v17.9.1) ───────────────────────────────────────
+// The last unscaled axis. R (radius), T/FW (type), M (motion) and SP/H (spacing,
+// control height) were each formalised after the same finding: values chosen one
+// call site at a time multiply past the point where anyone can perceive a step.
+// Icons had EIGHT sizes between 10 and 18 — and the tell was not the count, it
+// was that ONE CONTROL wore FOUR of them: `CloseIcon` rendered at 12, 13, 14 and
+// 15 in different corners of the app. `WaitIcon` had three, `StarIcon` three.
+// That is not a hierarchy, it is drift, and it reads as flat for the same reason
+// thirteen font sizes did.
+//
+// Three steps, by ROLE — assign by what the mark sits in, never by the old
+// number:
+//   inline  a mark inside a text run or a dense row (chips, tags, inline chevrons)
+//   control the standard mark ON a control — dismiss, assign, print, status
+//   chrome  header and navigation furniture, where the icon IS the button
+//
+// The gaps are 2px and 4px on purpose: 12->14->18 is perceptible at a glance,
+// where 13->14 never was.
+export var IC={inline:12,control:14,chrome:18};
+
 // Weights, named. `regular` is the one that did not exist before v17.8.0 and is
 // the point of the exercise: descriptive and secondary text takes it, so the
 // semibold that everything used to wear again means something where it appears.
