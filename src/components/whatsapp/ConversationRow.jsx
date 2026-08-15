@@ -3,7 +3,7 @@
 // from bookings by phone, else the number), an intent/draft/accepted tag, the
 // relative time, and the last-message snippet. Archived rows render dimmed.
 
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { matchCustomerByPhone, formatPhone, formatRelativeTime, isParsing } from "../../lib/whatsapp";
 import { R, T, FW, M, IC } from "../../lib/constants";
 import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon } from "./WaIcons";
@@ -37,7 +37,6 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
   const bg = selHi ? "var(--wa-row-active-bg)" : (active && !selectMode ? "var(--wa-row-active-bg)" : "var(--wa-row-bg)");
   const bgHover = bg === "var(--wa-row-active-bg)" ? "var(--wa-row-active-bg)" : "var(--wa-row-bg-hover)";
   const border = selHi ? "2px solid var(--wa-row-active-border)" : (active && !selectMode ? "2px solid var(--wa-row-active-border)" : "1px solid var(--wa-bubble-in-border)");
-  const [hover, setHover] = useState(false);
   const rowRef = useRef(null);
   // InboxPanel's ↑/↓ keyboard nav can move the selection to an off-screen row —
   // bring it into view. `block:"nearest"` is a no-op when the row is already
@@ -51,9 +50,15 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
       ref={rowRef}
       data-flip-id={flipId}
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{ cursor: "pointer", padding: "12px 14px", borderRadius: R.card, background: hover ? bgHover : bg, border, marginBottom: 6, transition: "background " + M.tap, boxShadow: (selHi || (active && !selectMode)) ? "var(--wa-row-active-glow)" : "var(--shadow-soft)", opacity: archivedDimming, display: "flex", alignItems: "center", gap: 10 }}
+      // v17.9.1: .mgt-ac-row, the app's one tint-on-hover class for a CONTAINER
+      // of controls (the hover LIFT is for the controls themselves). This row
+      // hand-rolled the same effect with useState + onMouseEnter/onMouseLeave,
+      // which re-rendered every row the pointer crossed. Both colours go in as
+      // custom properties because the resting fill is set INLINE here and an
+      // inline background beats a stylesheet rule — which is why the class reads
+      // --row-bg / --row-bg-hover instead of declaring a background of its own.
+      className="mgt-ac-row"
+      style={{ "--row-bg": bg, "--row-bg-hover": bgHover, cursor: "pointer", padding: "12px 14px", borderRadius: R.card, border, marginBottom: 6, boxShadow: (selHi || (active && !selectMode)) ? "var(--wa-row-active-glow)" : "var(--shadow-soft)", opacity: archivedDimming, display: "flex", alignItems: "center", gap: 10 }}
     >
       {selectMode ? (
         <input

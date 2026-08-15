@@ -5,7 +5,7 @@
 // stay reachable on tall lists.
 
 import { useState } from "react";
-import { Overlay, Fld, mkInp, mkArea, mkBtn, AutoHeight } from "../atoms";
+import { Overlay, ModalTitle, Fld, mkInp, mkArea, mkBtn, AutoHeight } from "../atoms";
 import { S, BTN, R, T, FW } from "../../lib/constants";
 
 export function TemplatesEditor({ templates, onSave, onClose }) {
@@ -60,9 +60,17 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
 
   return (
     <Overlay onClose={onClose} footer={editing ? editFooter : listFooter}>
-      <div style={{ fontSize: T.title, fontWeight: FW.bold, marginBottom: 4, color: "var(--text-primary)" }}>Quick-reply templates</div>
+      {/* Neutral fill: ModalTitle's colour rule is that a create/act surface wears
+          its action's colour and a CONFIGURE surface wears a neutral. Editing the
+          canned replies is configuration. */}
+      <ModalTitle marginBottom={4} background="var(--app-btn-grey-strong)">Quick-reply templates</ModalTitle>
       <div style={{ fontSize: T.body, color: "var(--text-muted)", marginBottom: 14 }}>Used as one-tap chips in the reply composer.</div>
-      <AutoHeight>
+      {/* `watch` (v17.9.1): this body is REPLACED, not grown — the list swaps
+          for the edit form and back. AutoHeight's ResizeObserver is one frame
+          late by design, so on a whole-content swap the new content paints
+          unclipped for that frame. Keying on the editing identity re-measures
+          synchronously, pre-paint. Exactly Settings' `watch={tab}` case. */}
+      <AutoHeight watch={editing === null ? "list" : "edit"}>
       {editing ? (
         <div style={{ padding: "14px", borderRadius: R.card, background: "var(--wa-row-active-bg)", border: "1px solid var(--wa-row-active-border)" }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)", marginBottom: 10 }}>{editing === "__new__" ? "New template" : "Edit template"}</div>

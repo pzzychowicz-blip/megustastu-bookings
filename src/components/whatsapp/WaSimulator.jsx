@@ -13,7 +13,7 @@
 // the conversations/messages nodes.
 
 import { useState, useEffect } from "react";
-import { Overlay, Fld, Section, Toggle, mkInp, mkSel, mkArea, mkBtn } from "../atoms";
+import { Overlay, ModalTitle, Fld, Section, Toggle, mkInp, mkSel, mkArea, mkBtn } from "../atoms";
 import { S, BTN, R, T, FW, IC } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
@@ -145,10 +145,14 @@ export function WaSimulator({ ctx, onClose }) {
 
   return (
     <Overlay onClose={onClose} footer={footer}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><FlaskIcon size={IC.chrome} />WhatsApp Simulator</span>
-        <span style={{ fontSize: T.micro, fontWeight: FW.bold, padding: "2px 6px", borderRadius: R.pill, background: "var(--wa-sim-accent)", color: "var(--text-on-accent)", letterSpacing: "0.04em" }}>DEV</span>
-      </div>
+      {/* ModalTitle's colour rule: an ACT surface wears its action's own colour,
+          and this one's is --wa-sim-accent. That fill also does what the separate
+          "DEV" pill beside the old title did — purple is the dev-only colour
+          throughout the module — so the pill folds into the title rather than
+          saying the same thing twice, and the line below still spells it out. */}
+      <ModalTitle marginBottom={4} background="var(--wa-sim-accent)">
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><FlaskIcon size={IC.chrome} />WhatsApp Simulator · DEV</span>
+      </ModalTitle>
       <div style={{ fontSize: T.body, color: "var(--text-muted)", marginBottom: 14 }}>Injects mock inbound messages into the DEV Firebase inbox. Never shown in production.</div>
 
       {/* Backend mode = route through the REAL pipeline (server-side Gemini).

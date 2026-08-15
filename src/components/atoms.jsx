@@ -150,49 +150,26 @@ export function mkBtn(extra) {
 const OverlayScrollContext = createContext(null);
 export function useOverlayScroll() { return useContext(OverlayScrollContext); }
 
-export function Overlay({ onClose, children, footer }) {
-  const mob = typeof window !== "undefined" && window.innerWidth < 600;
-  const lockRef = useRef(false);
-  const scrollRef = useRef(null);
-  const scrollApi = useRef({ scrollToTop: function () { if (scrollRef.current) scrollRef.current.scrollTop = 0; } });
-  // v15.8.0: symmetric open/close animation. `leaving` comes from the wrapping
-  // <ModalPresence> (default false when there's no provider → enter-only). Mobile
-  // = slide-up/down sheet; desktop = scrim fade + card fade/scale. See index.html.
-  const { leaving } = usePresence();
-  const sheetCls = leaving ? "mgt-sheet-out" : "mgt-sheet-in";
-  const scrimCls = leaving ? "mgt-scrim-out" : "mgt-scrim-in";
-  const cardCls = leaving ? "mgt-card-out" : "mgt-card-in";
-
-  useEffect(() => {
-    if (!mob) return;
-    const orig = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    lockRef.current = true;
-    return () => {
-      document.body.style.overflow = orig;
-      lockRef.current = false;
-    };
-  }, [mob]);
-
-  // ── v17.9.1 (audit P1): dialog semantics ───────────────────────────────────
-  // Measured in the live DOM before this: no role, no aria-modal, no accessible
-  // name, and focus left sitting on <body> when a modal opened. A screen-reader
-  // or keyboard user got no announcement that anything had happened and no way
-  // into the dialog except tabbing through the entire page behind it.
-  //
-  // The accessible NAME is resolved from the DOM rather than from a prop. Seven
-  // modals render a <ModalTitle> and five (the confirm dialogs, WeekView,
-  // BlockModal, HistoryPopup) render their own heading text instead, and a prop
-  // would have to be kept correct at twelve call sites forever. Pointing
-  // `aria-labelledby` at an id that is not in the tree leaves the dialog
-  // NAMELESS — strictly worse than not trying — so this checks. Falling back to
-  // the first heading means the untitled modals get a real name too.
-  const dialogRef = useRef(null);
+// ── useDialog (v17.9.1 prod; extracted here in 17.9.1-wa-sandbox) ────────────
+// Everything below was written inside Overlay, which is right for the twelve
+// modals that ARE Overlays — and unreachable for the one surface that is not.
+// The WA inbox is a bespoke full-screen panel with its own scrim (it predates
+// Overlay's footer slot and needs a two-pane body), so it inherited none of the
+// audit's work: no role, no name, no focus trap, on the module's main surface.
+//
+// Duplicating a focus trap is exactly the "one implementation of a subtle
+// pattern" rule's target, so the behaviour is a hook and Overlay is its first
+// caller — byte-for-byte the same logic, same comments, one owner.
+//
+// NOTE FOR THE NEXT PROD SYNC: this refactor touches a PROD file. It is the
+// right shape and should be ported upstream rather than re-resolved as a
+// conflict; if prod grows its own version, take prod's and delete this.
+export function useDialog(ref) {
   const restoreRef = useRef(null);
   const uid = useId();
   useEffect(() => {
     restoreRef.current = document.activeElement;
-    const el = dialogRef.current;
+    const el = ref.current;
     if (el) {
       // Scoped to THIS dialog's subtree, then given an id unique to this
       // instance — two modals can be mounted at once (a sub-modal opened from
@@ -219,13 +196,14 @@ export function Overlay({ onClose, children, footer }) {
         prev.focus({ preventScroll: true });
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount/unmount only
   }, []);
 
   // Focus trap. Esc is NOT handled here on purpose — useKeyboardShortcuts owns
   // the app-wide Escape z-order chain, and a second handler would race it.
   function onKeyDown(e) {
     if (e.key !== "Tab") return;
-    const el = dialogRef.current;
+    const el = ref.current;
     if (!el) return;
     const items = [...el.querySelectorAll(
       'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -240,15 +218,38 @@ export function Overlay({ onClose, children, footer }) {
     }
   }
 
-  // NB: no `ref` in here. The desktop no-footer card is BOTH the dialog and the
-  // scroll port, and one node cannot take two refs — that branch assigns both
-  // through a callback ref instead.
-  const dialogProps = {
-    role: "dialog",
-    "aria-modal": "true",
-    tabIndex: -1,
-    onKeyDown,
-  };
+  return { role: "dialog", "aria-modal": "true", tabIndex: -1, onKeyDown };
+}
+
+export function Overlay({ onClose, children, footer }) {
+  const mob = typeof window !== "undefined" && window.innerWidth < 600;
+  const lockRef = useRef(false);
+  const scrollRef = useRef(null);
+  const scrollApi = useRef({ scrollToTop: function () { if (scrollRef.current) scrollRef.current.scrollTop = 0; } });
+  // v15.8.0: symmetric open/close animation. `leaving` comes from the wrapping
+  // <ModalPresence> (default false when there's no provider → enter-only). Mobile
+  // = slide-up/down sheet; desktop = scrim fade + card fade/scale. See index.html.
+  const { leaving } = usePresence();
+  const sheetCls = leaving ? "mgt-sheet-out" : "mgt-sheet-in";
+  const scrimCls = leaving ? "mgt-scrim-out" : "mgt-scrim-in";
+  const cardCls = leaving ? "mgt-card-out" : "mgt-card-in";
+
+  useEffect(() => {
+    if (!mob) return;
+    const orig = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    lockRef.current = true;
+    return () => {
+      document.body.style.overflow = orig;
+      lockRef.current = false;
+    };
+  }, [mob]);
+
+  // ── v17.9.1 (audit P1): dialog semantics ───────────────────────────────────
+  // The behaviour lives in useDialog (above), so the WA inbox panel — which is
+  // not an Overlay — can take the identical contract.
+  const dialogRef = useRef(null);
+  const dialogProps = useDialog(dialogRef);
 
   // One provider around every branch, so a child can reset the scroll port that
   // actually mounted without knowing which of the four it is.

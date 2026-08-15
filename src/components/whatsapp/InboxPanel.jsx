@@ -15,7 +15,7 @@ import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { TemplatesIcon, SelectIcon, FlaskIcon, TrashIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
 import { CloseIcon } from "../Icons";
-import { mkBtn, mkInp, usePresence, ModalPresence, Overlay, Reveal } from "../atoms";
+import { mkBtn, mkInp, usePresence, ModalPresence, Overlay, Reveal, useDialog } from "../atoms";
 import { R, T, FW, M, IC } from "../../lib/constants";
 
 // A conversation is "actionable" when it needs a staff response. For a
@@ -92,6 +92,12 @@ export function InboxPanel({
   // v15.8.0 open/close animation: ModalPresence (in App.jsx) provides `leaving`;
   // the panel swaps its scrim/card to the *-out keyframes before unmounting.
   const { leaving } = usePresence();
+  // v17.9.1 (audit P1), reaching the one modal surface that is not an Overlay.
+  // This panel is bespoke — its own scrim, its own two-pane body — so it
+  // inherited none of the dialog work: no role, no accessible name, and focus
+  // left on <body>, on the module's main screen. Same hook Overlay uses.
+  const panelRef = useRef(null);
+  const dialogProps = useDialog(panelRef);
   const mob = winW < 600;
   const scrimCls = leaving ? "mgt-scrim-out" : "mgt-scrim-in";
   const cardCls = leaving ? (mob ? "mgt-sheet-out" : "mgt-card-out") : (mob ? "mgt-sheet-in" : "mgt-card-in");
@@ -340,10 +346,13 @@ export function InboxPanel({
 
   return (
     <div className={scrimCls} style={{ position: "fixed", inset: 0, zIndex: 200, background: "var(--wa-panel-scrim)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: winW < 600 ? 0 : 16, boxSizing: "border-box" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={cardCls} style={{ background: "var(--wa-panel-bg)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: winW < 600 ? 0 : R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 1200, height: winW < 600 ? "100dvh" : "min(900px, 90dvh)", display: "flex", flexDirection: "column", boxShadow: "var(--shadow-sheet)", overflow: "hidden", boxSizing: "border-box" }}>
+      <div ref={panelRef} {...dialogProps} className={cardCls} style={{ background: "var(--wa-panel-bg)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: winW < 600 ? 0 : R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 1200, height: winW < 600 ? "100dvh" : "min(900px, 90dvh)", display: "flex", flexDirection: "column", boxShadow: "var(--shadow-sheet)", overflow: "hidden", boxSizing: "border-box" }}>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ fontSize: T.small, fontWeight: FW.bold, padding: "2px 8px", borderRadius: R.pill, background: "var(--wa-green)", color: "var(--text-on-accent)", letterSpacing: "0.02em" }}>WHATSAPP</span>
+            {/* An <h2>, not a <span>: useDialog resolves the dialog's accessible name
+                from the first heading in its subtree, and this badge IS the panel's
+                title. Styling unchanged; `margin: 0` because an h2 brings its own. */}
+            <h2 style={{ fontSize: T.small, fontWeight: FW.bold, padding: "2px 8px", borderRadius: R.pill, background: "var(--wa-green)", color: "var(--text-on-accent)", letterSpacing: "0.02em", margin: 0 }}>WhatsApp</h2>
             <div style={{ display: "flex", gap: 2, background: "var(--bg-tabbar)", borderRadius: R.pill, padding: 2, border: "1px solid var(--border-soft)" }}>
               {tabBtn("inbox", "Inbox", unreadCount)}
               {tabBtn("archived", "Archived", archivedCount)}
