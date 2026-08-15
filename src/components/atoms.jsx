@@ -218,6 +218,10 @@ export function useDialog(ref) {
     }
   }
 
+  // NB: no `ref` in here, and do not add one. Overlay's desktop no-footer card
+  // is BOTH the dialog and the scroll port, and one node cannot take two refs —
+  // that branch assigns both through a callback ref instead. Returning a `ref`
+  // from this hook would read as the obvious convenience and silently break it.
   return { role: "dialog", "aria-modal": "true", tabIndex: -1, onKeyDown };
 }
 

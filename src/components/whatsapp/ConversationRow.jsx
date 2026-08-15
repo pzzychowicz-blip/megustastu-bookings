@@ -5,7 +5,7 @@
 
 import { useRef, useEffect } from "react";
 import { matchCustomerByPhone, formatPhone, formatRelativeTime, isParsing } from "../../lib/whatsapp";
-import { R, T, FW, M, IC } from "../../lib/constants";
+import { R, T, FW, IC } from "../../lib/constants";
 import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon } from "./WaIcons";
 import { CheckIcon } from "../Icons";
 

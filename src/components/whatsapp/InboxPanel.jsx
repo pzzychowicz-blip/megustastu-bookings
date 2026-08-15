@@ -349,10 +349,12 @@ export function InboxPanel({
       <div ref={panelRef} {...dialogProps} className={cardCls} style={{ background: "var(--wa-panel-bg)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: winW < 600 ? 0 : R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 1200, height: winW < 600 ? "100dvh" : "min(900px, 90dvh)", display: "flex", flexDirection: "column", boxShadow: "var(--shadow-sheet)", overflow: "hidden", boxSizing: "border-box" }}>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            {/* An <h2>, not a <span>: useDialog resolves the dialog's accessible name
-                from the first heading in its subtree, and this badge IS the panel's
-                title. Styling unchanged; `margin: 0` because an h2 brings its own. */}
-            <h2 style={{ fontSize: T.small, fontWeight: FW.bold, padding: "2px 8px", borderRadius: R.pill, background: "var(--wa-green)", color: "var(--text-on-accent)", letterSpacing: "0.02em", margin: 0 }}>WhatsApp</h2>
+            {/* An <h2>, not a <span>: useDialog resolves the dialog's accessible
+                name from the first heading in its subtree, and this badge IS the
+                panel's title. `margin: 0` because an h2 brings its own; the text
+                stays the all-caps wordmark it has always been (the 0.02em
+                letter-spacing is caps tracking and exists for it). */}
+            <h2 style={{ fontSize: T.small, fontWeight: FW.bold, padding: "2px 8px", borderRadius: R.pill, background: "var(--wa-green)", color: "var(--text-on-accent)", letterSpacing: "0.02em", margin: 0 }}>WHATSAPP</h2>
             <div style={{ display: "flex", gap: 2, background: "var(--bg-tabbar)", borderRadius: R.pill, padding: 2, border: "1px solid var(--border-soft)" }}>
               {tabBtn("inbox", "Inbox", unreadCount)}
               {tabBtn("archived", "Archived", archivedCount)}
