@@ -13,9 +13,10 @@ import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, mat
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
-import { TemplatesIcon, SelectIcon, FlaskIcon, TrashIcon, ArchiveIcon } from "./WaIcons";
+import { TemplatesIcon, SelectIcon, FlaskIcon, TrashIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
+import { CloseIcon } from "../Icons";
 import { mkBtn, mkInp, usePresence, ModalPresence, Overlay, Reveal } from "../atoms";
-import { R, T, FW, M } from "../../lib/constants";
+import { R, T, FW, M, IC } from "../../lib/constants";
 
 // A conversation is "actionable" when it needs a staff response. For a
 // cancel/modify request that's the intent banner being VISIBLE (i.e. not yet
@@ -356,7 +357,7 @@ export function InboxPanel({
               <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><FlaskIcon size={17} /></button>
             ) : null}
             <button onClick={() => setShowTpl(true)} title="Templates" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 })}><TemplatesIcon size={17} /></button>
-            <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}>✕</button>
+            <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><CloseIcon size={IC.chrome} /></button>
           </div>
         </div>
         {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav.
@@ -373,8 +374,12 @@ export function InboxPanel({
             onClick={() => setNeedsAction((v) => !v)}
             title="Show only conversations that need a response"
             className="mgt-hover-scale mgt-press"
-            style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap" }}
-          >● Needs action</button>
+            style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}
+          >{/* A real 8px dot, not a text ● — the same device NotificationStrip
+               uses for a section with no icon. It stays a dot rather than
+               becoming an icon because it reports a STATE (this filter is on),
+               which is what the strip's dots report too. */}
+            <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "currentColor", flexShrink: 0 }} />Needs action</button>
           <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
             <input
               ref={searchRef}
@@ -383,7 +388,7 @@ export function InboxPanel({
               placeholder="Search name, number or message…"
               style={Object.assign({}, mkInp(), { fontSize: T.body, padding: "8px 12px", paddingRight: query ? 30 : 12 })}
             />
-            {query ? <button onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}>✕</button> : null}
+            {query ? <button onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}><CloseIcon size={IC.inline} /></button> : null}
           </div>
         </div>
         {/* Bulk action bar — only in select mode. Actions depend on the tab:
@@ -402,7 +407,7 @@ export function InboxPanel({
             <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexShrink: 0 }}>
               {tab === "archived" ? (
                 <>
-                  <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }}>↺ Restore</button>
+                  <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}><RestoreIcon size={IC.inline} />Restore</button>
                   <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: selected.size ? "var(--wa-btn-cancel)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }} ><TrashIcon size={13} />Delete</button>
                 </>
               ) : (

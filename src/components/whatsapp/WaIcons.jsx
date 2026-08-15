@@ -152,6 +152,41 @@ export function PencilIcon({ size = 16, color = "currentColor" }) {
   );
 }
 
+// ── Restore / Retry (v17.9.1 glyph sweep) ─────────────────────────────────────
+// The only two marks the sweep had to DRAW. Everything else it needed already
+// existed: ✕ → CloseIcon, ‹ → ChevronLeftIcon, ▸/▾ → the Chevron rotations,
+// ✓ → CheckIcon, all from the app's own set.
+//
+// One shape, two mirrorings — the Chevron precedent. `↺ Restore` (unarchive a
+// conversation) and `↻ Retry` (resend a failed message) are the same idea
+// pointing opposite ways, and drawing them separately is how two marks for one
+// concept drift. `flip` mirrors about the vertical centre-line.
+//
+// NOT RecheckIcon, which was the obvious reuse and is wrong: it carries a TICK
+// inside the ring, because it means "re-check this conversation and tell me the
+// answer". Retry means "send it again" and has no answer to report. The v17.9.0
+// rule says watch for the reuse before drawing — it does not say take one that
+// says something else.
+function Rotate({ flip, size, color }) {
+  return (
+    <Svg size={size} color={color}>
+      <g transform={flip ? "scale(-1 1) translate(-24 0)" : undefined}>
+        {/* Ring, open at the top-right, with the arrowhead closing the gap. */}
+        <path d="M20.5 10.2A8.5 8.5 0 1 1 15 4.2" />
+        <path d="M14.6 8.6l5.9-1.1 1.1 5.9" />
+      </g>
+    </Svg>
+  );
+}
+// ↺ — counter-clockwise: bring it back.
+export function RestoreIcon({ size = 16, color = "currentColor" }) {
+  return <Rotate flip size={size} color={color} />;
+}
+// ↻ — clockwise: do it again.
+export function RetryIcon({ size = 16, color = "currentColor" }) {
+  return <Rotate size={size} color={color} />;
+}
+
 // ── Dev-simulator chrome (sandbox only) ───────────────────────────────────────
 // FlaskIcon (was 🧪) heads the panel button and the modal title; DiceIcon
 // (was 🎲) heads the Generate-scenario section.

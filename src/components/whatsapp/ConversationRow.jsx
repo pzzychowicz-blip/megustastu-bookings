@@ -7,6 +7,7 @@ import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, formatPhone, formatRelativeTime, isParsing } from "../../lib/whatsapp";
 import { R, T, FW, M } from "../../lib/constants";
 import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon } from "./WaIcons";
+import { CheckIcon } from "../Icons";
 
 export function ConversationRow({ conv, active, onClick, bookings, flipId, selectMode, checked }) {
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
@@ -27,7 +28,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
   else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--danger-text)", fontWeight: FW.semi, display: "inline-flex", alignItems: "center" }}><WarnIcon size={13} /></span>;
   else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--warn-text)", fontWeight: FW.semi, display: "inline-flex", alignItems: "center" }}><PencilIcon size={13} /></span>;
   else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ marginLeft: 6, color: "var(--text-secondary)", display: "inline-flex", alignItems: "center" }}><DraftIcon size={13} /></span>;
-  else if (hasAccepted) tagEl = <span title="Booking confirmed" style={{ fontSize: T.body, marginLeft: 6, color: "var(--success-text)", fontWeight: FW.semi }}>✓</span>;
+  else if (hasAccepted) tagEl = <span title="Booking confirmed" style={{ marginLeft: 6, color: "var(--success-text)", display: "inline-flex", alignItems: "center" }}><CheckIcon size={13} /></span>;
 
   const archivedDimming = conv.archived ? 0.65 : 1;
   // In select mode the "active" highlight gives way to the checked highlight so

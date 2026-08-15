@@ -8,8 +8,9 @@
 import { useState } from "react";
 import { Reveal } from "../atoms";
 import { clampConfidence } from "../../lib/whatsapp";
-import { R, T, FW } from "../../lib/constants";
+import { R, T, FW, IC, M } from "../../lib/constants";
 import { DraftIcon, WarnIcon } from "./WaIcons";
+import { CloseIcon, CheckIcon, ChevronRightIcon } from "../Icons";
 
 export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, compact }) {
   // Compact-mode disclosure for the new_booking bar (notes / warning / confidence).
@@ -28,17 +29,19 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
     // late amber above it. Now: a whisper of tint, a 1px NEUTRAL --border-card,
     // and the green carried by the ✓ mark and the text.
     //
-    // The ✓ stays a text glyph rather than becoming a WaIcon — it is on
-    // Icons.jsx's explicit keep-as-text list (monochrome, universal font
-    // coverage), and at the mark's 15px in `tone` it is visually the same object
-    // as a SectionMark icon. It sized T.title before, which made it decoration.
+    // The mark was a text ✓ for one version, on the v17.8.0 grounds that ✓ is
+    // monochrome with universal font coverage and therefore exempt. v17.9.0
+    // retired that whole list: an icon set covering only the glyphs with a
+    // RENDERING BUG is a patch, not a set, and this ✓ sat two lines from a
+    // hand-drawn DraftIcon on the same surface. CheckIcon now — the same mark
+    // the notification strip's sections wear, which is what this pane is.
     //
     // The ✕ moved out of `position:absolute` into the flex row: every other
     // dismiss in the notification system is the last item of its row, and the
     // absolute version needed a paddingRight fudge on the sibling to avoid it.
     return (
       <div style={{ padding: "10px 14px", borderRadius: R.card, background: "var(--suggest-bg-soft)", border: "1px solid var(--border-card)", marginBottom: 12, boxShadow: "var(--shadow-soft)", display: "flex", alignItems: "flex-start", gap: 8 }}>
-        <span aria-hidden="true" style={{ fontSize: T.body, lineHeight: "18px", width: 15, flexShrink: 0, color: "var(--success-text)", textAlign: "center" }}>✓</span>
+        <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", height: 18, flexShrink: 0, color: "var(--success-text)" }}><CheckIcon size={IC.control} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--success-text)" }}>Booking confirmed</div>
           <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--success-text)", opacity: 0.85, marginTop: 2 }}>This request has been added to the bookings list.</div>
@@ -56,7 +59,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           aria-label="Dismiss this notice"
           className="mgt-hover-scale mgt-press"
           style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--success-text)", width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, opacity: 0.6, borderRadius: R.pill, flexShrink: 0 }}
-        >✕</button>
+        ><CloseIcon size={IC.control} /></button>
       </div>
     );
   }
@@ -114,7 +117,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           >
             <span style={{ color: "var(--wa-draft-text)", display: "inline-flex", flexShrink: 0 }}><DraftIcon size={15} /></span>
             <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span>
-            {hasDetail ? <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)", flexShrink: 0 }}>{expanded ? "▾" : "▸"}</span> : null}
+            {hasDetail ? <span style={{ color: "var(--wa-draft-text)", flexShrink: 0, display: "inline-flex", transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.inline} /></span> : null}
           </div>
           {/* Confidence level — always shown, immediately left of Accept. */}
           <span title={confLbl + " confidence"} style={{ fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", border: "2px solid " + confBorder, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em", flexShrink: 0 }}>{confLbl}</span>

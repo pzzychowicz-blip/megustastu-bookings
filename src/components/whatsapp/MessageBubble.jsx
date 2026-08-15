@@ -5,7 +5,8 @@
 // saturated blue bubble are theme-invariant (same convention as the atoms).
 
 import { formatClockTime } from "../../lib/whatsapp";
-import { R, T, FW } from "../../lib/constants";
+import { R, T, FW, IC } from "../../lib/constants";
+import { RetryIcon } from "./WaIcons";
 
 // `isLast` (set by ConversationView for the newest message only) opts the bubble
 // into the `mgt-bubble-in` ease — so a freshly-arrived/sent message rises in, but
@@ -43,8 +44,8 @@ export function MessageBubble({ msg, isLast, onRetry }) {
       onClick={() => onRetry(msg.id)}
       className="mgt-hover-scale mgt-press"
       title="Resend this message"
-      style={{ marginLeft: 6, background: "transparent", border: "2px solid var(--danger-border)", borderRadius: R.pill, padding: "0 6px", cursor: "pointer", fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}
-    >↻ Retry</button>
+      style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 6, background: "transparent", border: "2px solid var(--danger-border)", borderRadius: R.pill, padding: "0 6px", cursor: "pointer", fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}
+    ><RetryIcon size={IC.inline} />Retry</button>
   ) : null;
 
   return (

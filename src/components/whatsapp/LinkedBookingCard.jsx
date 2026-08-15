@@ -6,8 +6,9 @@
 
 import { Reveal } from "../atoms";
 import { useCollapseState } from "../../hooks/useCollapseState";
-import { BLOCK_BG, R, T, FW, M } from "../../lib/constants";
+import { BLOCK_BG, R, T, FW, M, IC } from "../../lib/constants";
 import { LinkIcon } from "./WaIcons";
+import { ChevronRightIcon } from "../Icons";
 
 export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, defaultCollapsed }) {
   const [collapsed, toggle] = useCollapseState(phoneKey, "linked", !!defaultCollapsed);
@@ -59,7 +60,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
         <span style={{ fontSize: T.micro, padding: "2px 8px", borderRadius: R.pill, background: statusColor, color: "var(--text-on-accent)", fontWeight: FW.bold, textTransform: "capitalize", flexShrink: 0 }}>{booking.status}</span>
         {collapsed ? <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span> : <span style={{ flex: 1 }} />}
         {actionBtns}
-        <span style={{ fontSize: T.lead, color: "var(--success-text)", fontWeight: FW.semi, flexShrink: 0, display: "inline-block", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}>▸</span>
+        <span style={{ color: "var(--success-text)", flexShrink: 0, display: "inline-flex", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.control} /></span>
       </div>
       <Reveal show={!collapsed}>
         <div style={{ marginTop: 8 }}>

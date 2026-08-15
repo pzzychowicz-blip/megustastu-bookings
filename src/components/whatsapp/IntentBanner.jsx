@@ -11,8 +11,9 @@
 import { useState } from "react";
 import { Reveal } from "../atoms";
 import { useCollapseState } from "../../hooks/useCollapseState";
-import { R, T, FW, M } from "../../lib/constants";
+import { R, T, FW, M, IC } from "../../lib/constants";
 import { WarnIcon, PencilIcon } from "./WaIcons";
+import { CheckIcon, ChevronRightIcon } from "../Icons";
 
 export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMarkHandled, onApplyChanges }) {
   const [collapsed, toggle] = useCollapseState(phoneKey, "intent", false);
@@ -66,8 +67,8 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
         }}
         title="Mark this request as handled"
         className="mgt-hover-scale mgt-press"
-        style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: leaving ? "default" : "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
-      >✓ Mark as handled</button>
+        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: leaving ? "default" : "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
+      ><CheckIcon size={IC.inline} />Mark as handled</button>
     </div>
   );
 
@@ -80,7 +81,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
         <span style={{ flexShrink: 0, color, display: "inline-flex", alignItems: "center" }}><Icon size={15} /></span>
         <span style={{ fontSize: T.body, fontWeight: FW.semi, color, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
         {actionBtns}
-        <span style={{ fontSize: T.lead, color, fontWeight: FW.semi, flexShrink: 0, display: "inline-block", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}>▸</span>
+        <span style={{ color, flexShrink: 0, display: "inline-flex", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.control} /></span>
       </div>
       <Reveal show={!collapsed}>
         <div style={{ marginTop: 8 }}>

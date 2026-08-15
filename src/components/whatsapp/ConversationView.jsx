@@ -7,13 +7,14 @@
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, regularChipLabel, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal } from "../atoms";
-import { RecheckIcon, TrashIcon, ArchiveIcon, DraftIcon } from "./WaIcons";
+import { RecheckIcon, TrashIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
+import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon } from "../Icons";
 import { MessageBubble } from "./MessageBubble";
 import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
 import { IntentBanner } from "./IntentBanner";
-import { R, T, FW } from "../../lib/constants";
+import { R, T, FW, IC } from "../../lib/constants";
 
 export function ConversationView({
   conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack,
@@ -124,7 +125,7 @@ export function ConversationView({
   // "Booking confirmed" header chip — non-dismissable (the big DraftCard banner
   // is the dismissable element instead).
   const acceptedBadge = conv.draftStatus === "accepted"
-    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", color: "var(--success-text)", border: "2px solid var(--suggest-border)" }}>✓ Booking confirmed</span>
+    ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", color: "var(--success-text)", border: "2px solid var(--suggest-border)" }}><CheckIcon size={IC.inline} />Booking confirmed</span>
     : null;
   // The disclosure lists the customer's OTHER visits. The linked booking is
   // already rendered in full by LinkedBookingCard a few lines below, and now the
@@ -141,10 +142,13 @@ export function ConversationView({
   // It is only a BUTTON when there is something to disclose: a customer whose
   // single completed visit is the linked one still earns the chip, but tapping
   // it would open an empty "Past bookings" box.
-  const chipStyle = { background: "transparent", border: "2px solid var(--suggest-border)", borderRadius: R.pill, padding: "2px 10px", fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)" };
+  // display/gap are load-bearing since v17.9.1: the disclosure marker is an SVG
+  // SIBLING now, not a " ▾" tacked onto the label string, so the space between
+  // them has to be real — without it the chevron wraps to its own line.
+  const chipStyle = { display: "inline-flex", alignItems: "center", gap: 4, background: "transparent", border: "2px solid var(--suggest-border)", borderRadius: R.pill, padding: "2px 10px", fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)" };
   const regularChip = match && match.regularCount >= 1
     ? (pastList.length
-      ? <button className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)} style={Object.assign({}, chipStyle, { cursor: "pointer" })}>{regularChipLabel(match.regularCount, regularMin) + (histOpen ? " ▾" : " ▸")}</button>
+      ? <button className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)} style={Object.assign({}, chipStyle, { cursor: "pointer" })}><span>{regularChipLabel(match.regularCount, regularMin)}</span>{histOpen ? <ChevronDownIcon size={IC.inline} /> : <ChevronRightIcon size={IC.inline} />}</button>
       : <span style={chipStyle}>{regularChipLabel(match.regularCount, regularMin)}</span>)
     : null;
   // Body rendered whenever there are other visits to show; Reveal (below) eases
@@ -191,7 +195,7 @@ export function ConversationView({
     headerActionBtns = (
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
-        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }}>↺ Restore</button>
+        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}><RestoreIcon size={IC.inline} />Restore</button>
         <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }} ><TrashIcon size={13} />Delete</button>
       </div>
     );
@@ -225,7 +229,7 @@ export function ConversationView({
           cluster wraps under the name on narrow widths; the action buttons stay
           pinned right via marginLeft:auto. The old "WA" badge was removed. */}
       <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, width: 36, height: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, lineHeight: 1 }} title="Back">‹</button> : null}
+        {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, width: 36, height: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, lineHeight: 1 }} title="Back" aria-label="Back to the conversation list"><ChevronLeftIcon size={IC.chrome} /></button> : null}
         <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
         <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
         {regularChip}

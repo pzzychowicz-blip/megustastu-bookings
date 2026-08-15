@@ -126,7 +126,7 @@ export function WaSimulator({ ctx, onClose }) {
   }
   function onFailNext() {
     if (ctx.simFailNextSend) ctx.simFailNextSend();
-    setStatus("Next staff reply (client mode) will fail — then use ↻ Retry on the bubble.");
+    setStatus("Next staff reply (client mode) will fail — then use Retry on the bubble.");
   }
   function onSeed() { const n = seedSampleBookings(ctx); setStatus(n > 0 ? "Seeded " + n + " WA-SIM booking(s)." : "Sample bookings already present."); }
   function onClearBookings() { clearWaSimBookings(ctx); setStatus("Cleared WA-SIM bookings."); }
@@ -227,7 +227,7 @@ export function WaSimulator({ ctx, onClose }) {
       <Section>
         <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Send failure (test Retry)</div>
         <button className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.del, width: "100%" })} onClick={onFailNext}>Make next staff reply fail</button>
-        <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Client mode only. Then send a reply in the inbox — the bubble shows “failed” with a ↻ Retry button. (Backend mode handles failures server-side.)</div>
+        <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Client mode only. Then send a reply in the inbox — the bubble shows “failed” with a Retry button. (Backend mode handles failures server-side.)</div>
       </Section>
 
       <Section>
