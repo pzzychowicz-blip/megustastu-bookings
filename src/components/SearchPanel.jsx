@@ -15,7 +15,7 @@
 import { useState, useRef, useEffect } from "react";
 import { S, BLOCK_BG, BLOCK_INK, R, T, FW } from "../lib/constants";
 import { searchBookings, formatPhone } from "../lib/customers";
-import { Overlay, mkInp, mkBtn, AutoHeight } from "./atoms";
+import { Overlay, ModalTitle, mkInp, mkBtn, AutoHeight } from "./atoms";
 
 export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
   const [query, setQuery] = useState("");
@@ -45,7 +45,7 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
             text and metrics as SBadge — so one label doesn't read at two
             different weights depending on which screen you're looking at.
             Was the tinted STATUS_COLORS treatment (sc.bg/sc.text/sc.border). */}
-        <span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "5px 11px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>
+        <span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "4px 10px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>
       </button>
     );
   });
@@ -59,8 +59,7 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
 
   return (
     <Overlay onClose={onClose} footer={footerEl}>
-      <div style={{ textAlign: "center", marginBottom: 14 }}><div
-        style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)", display: "inline-block", padding: "8px 16px", borderRadius: R.pill, background: "var(--accent)", border: "1px solid rgba(255,255,255,0.2)", boxShadow: "var(--shadow-btn)" }}>Find a booking</div></div>
+      <ModalTitle background="var(--app-btn-grey-strong)">Find a booking</ModalTitle>
       <input
         ref={inputRef}
         value={query}
@@ -71,7 +70,7 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
       <AutoHeight>
         <div style={{ marginTop: 12 }}>
           {query.trim()
-            ? (rows.length ? rows : <div style={{ textAlign: "center", padding: "20px 0", color: S.muted, fontSize: T.body }}>No bookings match.</div>)
+            ? (rows.length ? rows : <div style={{ textAlign: "center", padding: "18px 0", color: S.muted, fontSize: T.body }}>No bookings match.</div>)
             : <div style={{ textAlign: "center", padding: "16px 0", color: S.muted, fontSize: T.body }}>Type a name or phone number to search every date.</div>}
         </div>
       </AutoHeight>

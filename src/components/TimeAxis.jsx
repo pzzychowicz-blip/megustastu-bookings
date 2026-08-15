@@ -39,6 +39,7 @@
 
 import { useRef, useLayoutEffect, useEffect } from "react";
 import { OPEN, GRID_CLOSE, QUARTER_HOURS, S, R, T, FW } from "../lib/constants";
+import { hourLabelAt, isHourMark } from "../lib/time-grid";
 // v17.5.0 correction: no toTime here any more — the selected-time badge moved
 // up into PlanView's Now/legend row, so the tape renders no text of its own
 // beyond the hour labels.
@@ -187,7 +188,7 @@ export function TimeAxis({
               of edges is what makes it read as a tape measure rather than a
               chart axis. */}
           {QUARTER_HOURS.map((m) => {
-            const isHour = m % 60 === 0;
+            const isHour = isHourMark(m);
             const x = xOf(m);
             const col = isHour ? "var(--tl-gridline-hour)" : "var(--tl-gridline-quarter)";
             const len = isHour ? 13 : 7;
@@ -201,13 +202,13 @@ export function TimeAxis({
           })}
 
           {/* Hour labels, centred between the two tick rows. */}
-          {QUARTER_HOURS.filter((m) => m % 60 === 0).map((m) => (
+          {QUARTER_HOURS.filter(isHourMark).map((m) => (
             <div key={"h" + m} style={{
               position: "absolute", left: xOf(m), top: "50%",
               transform: "translate(-50%,-50%)",
               fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)",
               fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", pointerEvents: "none",
-            }}>{String(Math.floor(m / 60) % 24).padStart(2, "0") + ":00"}</div>
+            }}>{hourLabelAt(m)}</div>
           ))}
 
           {/* Now marker — a full-height accent tick so you can always see where

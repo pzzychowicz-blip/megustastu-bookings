@@ -33,7 +33,8 @@
 import { useState, useEffect } from "react";
 import { Reveal } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
-import { R, M, T, FW } from "../lib/constants";
+import { R, M, T, FW, IC } from "../lib/constants";
+import { ChevronDownIcon } from "./Icons";
 
 // ── The strip's own geometry, exported because three other files depend on it ─
 // A section BODY (the banner rows, the reminder rows, AppBanners' one-liners)
@@ -164,10 +165,22 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
         aria-label={open ? "Collapse notifications" : "Expand notifications"}
         // No press-scale: this is a full-width strip header, and a 0.96 dip on
         // something that spans the viewport reads as the page flinching.
-        className="mgt-nopress"
+        /* v17.9.1 (Patryk): the lid takes the shared row tint. It spans the
+           viewport and holds the tally, so it is a container of controls, not a
+           control — a tint says "tappable" without moving anything under the
+           finger. `--row-bg` stays unset (transparent) so the strip's own
+           severity tint shows through and keeps cross-fading.
+           v17.9.1 review fix: `--row-bg-hover` must be set for the same reason.
+           Left unset it falls back to the class default `--bg-ac-hover`, the
+           accent wash — so hovering an amber "running late" or a red strip
+           replaced the severity colour with blue, overriding the one signal the
+           collapsed lid exists to carry. A neutral white/black veil lightens
+           whatever tint is underneath instead of recolouring it. */
+        className="mgt-ac-row mgt-nopress"
         style={{
+          "--row-bg-hover": "var(--bg-veil)",
           display: "flex", alignItems: "center", gap: NOTIF_GAP, width: "100%",
-          background: "transparent", border: "none", cursor: "pointer",
+          border: "none", cursor: "pointer",
           padding: "10px " + NOTIF_PAD_X + "px", textAlign: "left"
         }}>
         {/* v17.8.0: an ICON, not the 8px dot. The dot said "something is
@@ -178,7 +191,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
             section's own mark. */}
         <SectionMark
           icon={multi ? lidIcon : top.icon}
-          tone={top.tone} size={15} fallbackDot />
+          tone={top.tone} size={IC.control} fallbackDot />
         {/* With ONE section live the strip IS that banner, so the lid takes its
             title and mark — a generic lid plus a redundant sub-header would be
             two rows saying one thing. With several it says "Notifications",
@@ -206,7 +219,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
               return (
                 <span key={s.id} title={s.title}
                   style={{ display: "inline-flex", alignItems: "center", gap: 4, color: s.tone }}>
-                  <SectionMark icon={s.icon} tone={s.tone} size={13} fallbackDot />
+                  <SectionMark icon={s.icon} tone={s.tone} size={IC.control} fallbackDot />
                   <span style={{ fontSize: T.small, fontWeight: FW.bold, fontVariantNumeric: "tabular-nums" }}>{s.count || 1}</span>
                 </span>
               );
@@ -229,7 +242,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
           display: "inline-block", lineHeight: 1,
           transform: open ? "rotate(180deg)" : "rotate(0deg)",
           transition: "transform " + M.move + ", color " + M.move
-        }}>▾</span>
+        }}><ChevronDownIcon size={IC.control} /></span>
       </button>
       <Reveal show={open}>
         {/* .mgt-notif draws the hairlines between sections (index.html). A CSS
@@ -257,8 +270,8 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
                         350ms before the geometry, which is the version that
                         looked broken. */}
                     <Reveal show={orderedIds.length > 1}>
-                      <div style={{ display: "flex", alignItems: "center", gap: NOTIF_GAP, padding: "9px " + NOTIF_PAD_X + "px 1px" }}>
-                        <SectionMark icon={s.icon} tone={s.tone} size={15} fallbackDot />
+                      <div style={{ display: "flex", alignItems: "center", gap: NOTIF_GAP, padding: "8px " + NOTIF_PAD_X + "px 2px" }}>
+                        <SectionMark icon={s.icon} tone={s.tone} size={IC.control} fallbackDot />
                         <span style={{ fontSize: T.body, fontWeight: FW.bold, color: s.tone, flex: 1, minWidth: 0 }}>{s.title}</span>
                         {s.count > 1 ? (
                           <span style={{

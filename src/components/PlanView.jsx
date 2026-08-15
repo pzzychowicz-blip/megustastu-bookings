@@ -360,7 +360,7 @@ export const PlanView = memo(function PlanView({
       <div onClick={() => setTablePop(null)} className="mgt-scrim-in"
         style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--tl-popup-scrim)" }}>
         <div onClick={(e) => e.stopPropagation()} className="mgt-card-in"
-          style={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "var(--shadow-popover)", padding: "18px 20px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}>
+          style={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "var(--shadow-popover)", padding: "18px 18px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}>
           <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 12 }}>{"Table " + id}</div>
           {queue.length === 0 ? (
             <div style={{ fontSize: T.body, color: S.muted, marginBottom: 4 }}>No bookings on this table today.</div>
@@ -368,11 +368,11 @@ export const PlanView = memo(function PlanView({
             return (
               <div key={b.id} className="mgt-hover-scale"
                 onClick={() => { setTablePop(null); onEdit(b); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
                 <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name + " (" + b.size + ")"}</span>
                 {/* v17.7.0: solid, like every other status label (see SBadge). */}
-                <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "5px 11px", borderRadius: R.pill, textTransform: "capitalize", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, border: "1px solid var(--border-glass)" }}>{b.status}</span>
+                <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "4px 10px", borderRadius: R.pill, textTransform: "capitalize", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, border: "1px solid var(--border-glass)" }}>{b.status}</span>
               </div>
             );
           })}
@@ -380,7 +380,7 @@ export const PlanView = memo(function PlanView({
             <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
               <button className="mgt-hover-scale"
                 onClick={() => { setTablePop(null); onWalkin(id); }}
-                style={mkBtn({ minHeight: 40, padding: "8px 20px", background: "var(--app-walkin)" })}>Walk-in here</button>
+                style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-walkin)" })}>Walk-in here</button>
             </div>
           ) : null}
         </div>
@@ -391,7 +391,7 @@ export const PlanView = memo(function PlanView({
 
   // ── Legend + slider row ─────────────────────────────────────────────────────
   const legend = ["seated", "confirmed", "pending"].map((s) => (
-    <span key={s} style={{ fontSize: T.small, padding: "3px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi, textTransform: "capitalize" }}>{s}</span>
+    <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi, textTransform: "capitalize" }}>{s}</span>
   ));
 
   return (
@@ -421,13 +421,13 @@ export const PlanView = memo(function PlanView({
           {isToday ? (
             <button className="mgt-hover-scale"
               onClick={() => { setSliderTouched(false); setSlider(clampExact(nowMins)); reCentre(true); }}
-              style={mkBtn({ fontSize: T.small, minHeight: 28, padding: "3px 10px", background: atNow ? S.accent : "var(--app-btn-grey)" })}>Now</button>
+              style={mkBtn({ fontSize: T.small, minHeight: 28, padding: "2px 10px", background: atNow ? S.accent : "var(--app-btn-grey)" })}>Now</button>
           ) : null}
         </span>
         <span style={{
           background: S.accent, color: "var(--text-on-accent)",
           fontSize: T.body, fontWeight: FW.bold, fontVariantNumeric: "tabular-nums",
-          padding: "3px 10px", borderRadius: R.pill, whiteSpace: "nowrap",
+          padding: "2px 10px", borderRadius: R.pill, whiteSpace: "nowrap",
           boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
         }}>{toTime(slider)}</span>
         <span style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>{legend}</span>
@@ -475,7 +475,13 @@ export const PlanView = memo(function PlanView({
                   // Seated→Completed timing (.mgt-fade-overlay). CSS can't
                   // interpolate the blocked url(#pv-blocked) pattern fill, so
                   // entering/leaving a table block snaps — accepted.
-                  shapeStyle={{ transition: "fill " + M.status + ", stroke " + M.status }}
+                  // v17.9.1: `filter` is in the list because the hover halo
+                  // (.mgt-glyph-shape) is a filter, and an INLINE `transition`
+                  // beats the stylesheet's outright — omitting it would leave
+                  // the halo snapping here while easing in the editor, which
+                  // passes no shapeStyle. Any inline transition on an element
+                  // that also has a class-driven one must name both properties.
+                  shapeStyle={{ transition: "fill " + M.status + ", stroke " + M.status + ", filter " + M.tap }}
                   onClick={() => { if (!movedRef.current) setTablePop(t.id); }}
                   onPointerDown={(ev) => { if (ev.pointerType === "touch") startPress(t.id); }}
                   onContextMenu={(ev) => {

@@ -29,8 +29,8 @@ import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep } from "./atoms";
-import { BTN, R, M, T, FW } from "../lib/constants";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep, useOverlayScroll } from "./atoms";
+import { BTN, R, M, T, FW, H, IC } from "../lib/constants";
 
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
 const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -41,6 +41,8 @@ const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // startup chunk. Re-exported here for back-compat; still exactly ONE list.
 import { SETTINGS_TABS } from "./SettingsChrome";
 import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
+import { hourLabel } from "../lib/time-grid";
+import { CloseIcon, DownloadIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
@@ -117,12 +119,12 @@ export function TabBar({ tabs, current, onSelect }) {
 // cutoff (both single global hours). Fully controlled by props (the Firebase echo
 // re-renders it); disabled at the bounds so an invalid value can't be set.
 // v17.8.0: one stepper definition for the app — see mkStep in atoms.jsx.
-const HOUR_STEP_BTN = mkStep(38);
+const HOUR_STEP_BTN = mkStep(H.chrome);
 // `fmt` (v15.0.0): optional value→label formatter. Defaults to the modulo-24
 // clock label; the optimizer cutoff passes its own so it can show "24:00" (the
 // full-day endpoint) distinctly from "00:00".
 function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }) {
-  const display = fmt ? fmt(value) : String(value % 24).padStart(2, "0") + ":00";
+  const display = fmt ? fmt(value) : hourLabel(value);
   return (
     <div>
       <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
@@ -178,11 +180,11 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
 
 // v15.0.0: compact stepper for the per-weekday hours editor (no label row, so 7
 // rows stay scannable). Same disabled / hover-scale contract as HourStepper.
-const MINI_STEP_BTN = mkStep(30);
+const MINI_STEP_BTN = mkStep(H.compact);
 function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt }) {
   // v16.3.0: fmt is now optional (defaults to the HH:00 time format used by the
   // Opening-hours editor); the Standing-bookings horizon passes a plain number.
-  const fmtFn = fmt || ((n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00");
+  const fmtFn = fmt || hourLabel;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
@@ -245,11 +247,16 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
   const se = shiftsEnabled !== false;
   const oc = typeof optimizerCutoff === "number" ? optimizerCutoff : 15;
   const oas = optimizerAutoSwitch !== false;
-  const hhLabel = (n) => String(((n % 24) + 24) % 24).padStart(2, "0") + ":00";
+  const hhLabel = hourLabel;
   // v15.0.0 (cutoff range): the optimizer cutoff is a single GLOBAL switch-off
   // hour, independent of opening hours — selectable across the whole day
   // (00:00–24:00). Its own formatter shows 24 as "24:00" (the full-day endpoint),
   // distinct from "00:00". Endpoints are meaningful: 0 = off all day, 24 = on all day.
+  //
+  // v17.9.0: this deliberately does NOT use hourLabel(), which wraps 24 to
+  // "00:00" and would collapse the two endpoints into one label — "on all day"
+  // and "off all day" reading identically. It looks like a fourth copy of the
+  // shared formatter and is a different function; leave it alone.
   const cutoffLabel = (n) => String(n).padStart(2, "0") + ":00";
   // v16.1.0: booking-defaults (duration tiers + running-late thresholds).
   // Defensive fallback mirrors the hook's DEFAULT_BOOKING_DEFAULTS seed.
@@ -583,14 +590,14 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
                   onClick={() => armTierRemove(i)}
                   className="mgt-hover-scale"
                   title={armedTier === i ? "Tap again to remove" : "Remove this tier"}
-                  style={{ ...HOUR_STEP_BTN, height: 32, marginBottom: 3, ...(armedTier === i
+                  style={{ ...HOUR_STEP_BTN, height: 32, marginBottom: 2, ...(armedTier === i
                     ? { width: "auto", padding: "0 10px", fontSize: T.body, fontWeight: FW.bold, background: "var(--danger-bg)", color: "var(--danger-text)", border: "1px solid var(--danger-border)" }
-                    : { width: 32, fontSize: T.lead, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : "×"}</button>
+                    : { width: 32, fontSize: T.lead, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : <CloseIcon size={IC.control} />}</button>
               </div>
             );
           })}
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <div style={{ width: 150, height: 38, display: "flex", alignItems: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
+            <div style={{ width: 150, height: H.chrome, display: "flex", alignItems: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
               {tiers.length ? "Larger parties (" + restFrom + "+)" : "All parties"}
             </div>
             <HourStepper label="stay for" value={bd.restDur} fmt={minsLabel}
@@ -824,7 +831,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
             <button
               onClick={onBackup}
               className="mgt-hover-scale mgt-press"
-              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.nav })}>⬇ Download backup</button>
+              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={IC.control} />Download backup</button>
           </div>
         </Section>
       ) : null}
@@ -956,6 +963,33 @@ export function SettingsContent({
     return function () { set.clear(); if (onDirty) onDirty(false); };
   }, [onDirty]);
 
+  // v17.9.1: the modal's scroll port is reset in `selectTab` below, BEFORE the
+  // tab state changes. See that handler for why the ordering is load-bearing.
+  const overlayScroll = useOverlayScroll();
+
+  // v17.9.1: reset the scroll port BEFORE swapping the tab, and do it here in the
+  // handler rather than in a layout effect. Both halves matter.
+  //
+  // WHY reset at all: with the body scrolled 400px in a 2226px tab, switching to
+  // a 321px tab left `scrollTop` pinned at 400 for ~270ms while the height
+  // animated, and then — the instant `scrollHeight` fell below `scrollTop +
+  // clientHeight` — the browser FORCE-CLAMPED it 400 -> 281 -> 34 -> 0. That
+  // involuntary late clamp is the reported "jump". It is the SCROLL moving, not
+  // the height, which is why fixing the height animation alone did not resolve it.
+  //
+  // WHY in the handler and not a layout effect: writing `scrollTop` forces a
+  // synchronous layout. In a layout effect that write lands AFTER AutoHeight has
+  // already set the new height (child effects run first), so the forced recalc
+  // settles the new height before the browser has painted the old one — and the
+  // height transition then has nothing to animate FROM. Measured: it snapped
+  // 2226 -> 321 in a single frame. Resetting here happens while the OLD, tall
+  // content is still mounted, where scrollTop 0 is valid and cheap, and React's
+  // re-render then follows with nothing forcing a flush mid-transition.
+  function selectTab(t) {
+    if (overlayScroll) overlayScroll.scrollToTop();
+    setTab(t);
+  }
+
   let content;
   if (tab === "general") {
     content = <GeneralTabContent appVersion={appVersion} isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
@@ -986,11 +1020,15 @@ export function SettingsContent({
       <TabBar
         tabs={SETTINGS_TABS}
         current={tab}
-        onSelect={setTab}
+        onSelect={selectTab}
       />
       {/* v15.8.0: tab body eases its height (AutoHeight) + crossfades on switch
           (key+mgt-fade-in) — the modal card follows the eased height. */}
-      <AutoHeight>
+      {/* v17.9.1: `watch={tab}` — a tab switch replaces the whole body, and the
+          ResizeObserver that normally drives AutoHeight fires one frame too late
+          for that, so the new tab painted at full height and the panel then
+          snapped shut and re-grew. See AutoHeight. */}
+      <AutoHeight watch={tab}>
         <div key={tab} className="mgt-fade-in">{content}</div>
       </AutoHeight>
     </div>

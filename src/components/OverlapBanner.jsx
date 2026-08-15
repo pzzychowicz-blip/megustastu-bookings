@@ -19,7 +19,8 @@
 
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
-import { BTN, T, FW } from "../lib/constants";
+import { BTN, T, FW, IC, H } from "../lib/constants";
+import { CloseIcon } from "./Icons";
 
 export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
   const byId = new Map(bookings.map(function (b) { return [b.id, b]; }));
@@ -31,17 +32,17 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
     const rowTxt = w.overdue ? "var(--danger-text)" : "var(--warn-text)";
     const msg = sb.name + " (overstaying) → " + w.next + " at " + w.nextTime + (w.overdue ? " — overdue" : " — in " + w.gap + " min");
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "9px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: rowTxt, fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
         <button
           onClick={function () { onReassign(w.nextId); }}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.orange })}>{"Reassign " + w.next}</button>
+          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>{"Reassign " + w.next}</button>
         <button
           onClick={function () { onDismiss(id); }}
           aria-label="Dismiss this warning"
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.dismiss })}>✕</button>
+          style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
       </div>
     );
   }

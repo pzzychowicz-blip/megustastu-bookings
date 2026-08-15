@@ -2,7 +2,7 @@
 // List-view rendering of the day's bookings — sorted by status (seated first,
 // then confirmed, completed, cancelled), then by time. Each booking renders
 // as a card with name, status badge, party size, time range, table chips,
-// optional notes, and action buttons (Tables / Edit / Delete + status changers).
+// optional notes, and action buttons (Assign / Edit / Delete + status changers).
 //
 // Pure presentational, no hooks. All state lives in BookingApp.
 //
@@ -29,10 +29,11 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
 import { noShowMap, normalizePhone } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
+import { AssignIcon, ChevronRightIcon, StarIcon } from "./Icons";
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
 // that changes status plays a colour wipe of its OLD status colour. Keyed by id,
@@ -144,7 +145,7 @@ export const ListView = memo(function ListView({
   // actions the header carries, put where the user is already looking.
   if (!day.length) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "56px 16px" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "32px 16px" }}>
         <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: S.text }}>Nothing booked for this day yet.</div>
         <div style={{ fontSize: T.body, color: S.muted, textAlign: "center", maxWidth: 340 }}>
           Take a reservation, or seat someone who has just walked in.
@@ -242,7 +243,7 @@ export const ListView = memo(function ListView({
           <SmallTag label="locked" style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (
-          <SmallTag label={"★ " + b.preferredTables.join("+")} style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
+          <SmallTag label={<><StarIcon size={IC.inline} />{b.preferredTables.join("+")}</>} style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         // v16.0.0: repeat no-show offender chip (same threshold as the timeline ⚠).
         const noShowCt = nsMap[normalizePhone(b.phone)] || 0;
@@ -290,20 +291,20 @@ export const ListView = memo(function ListView({
             <button
               key={s}
               className="mgt-hover-scale"
-              style={mkBtn({ background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", textTransform: "capitalize" })}
+              style={mkBtn({ background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
               onClick={() => onStatus(b.id, s)}
             >
-              {"> " + s}
+              <ChevronRightIcon size={IC.inline} />{s}
             </button>
           ));
         const cancelBtn = b.status !== "cancelled" ? (
           <button
             key="cancelled"
             className="mgt-hover-scale"
-            style={mkBtn({ background: BLOCK_BG.cancelled, textTransform: "capitalize" })}
+            style={mkBtn({ background: BLOCK_BG.cancelled, textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
             onClick={() => onStatus(b.id, "cancelled")}
           >
-            {"> cancelled"}
+            <ChevronRightIcon size={IC.inline} />cancelled
           </button>
         ) : null;
 
@@ -312,10 +313,40 @@ export const ListView = memo(function ListView({
           <div
             key={b.id}
             data-flip-id={b.id}
-            className="mgt-hover-scale"
+            /* v17.9.1: `.mgt-hover-scale` is GONE from the card, and this is a
+               CLICK bug, not a taste change. The lift is `scale(1.08)`, which is
+               a PROPORTION — on a 40px button it moves things 3px, but this card
+               is ~820px wide, so hovering it slid its own buttons sideways by a
+               measured 24–31px (Edit left, Delete right), i.e. roughly half a
+               button. You aim at Edit, the card lifts as the cursor crosses it,
+               Edit moves out from under you, and the click lands on the card.
+               Moving the pointer out and back in "fixes" it only because the
+               second time the card is already lifted, so what you see is where
+               it is.
+
+               Rule this establishes: THE HOVER LIFT IS FOR CONTROLS, NOT FOR
+               CONTAINERS OF CONTROLS. A scaling parent moves every target inside
+               it, and the bigger the parent the further they move.
+
+               `.mgt-ac-row` already had the answer for a row-shaped surface —
+               background swap, no transform — so the card takes that treatment
+               (a `--bg-hover-card` tint via the class below) and the BUTTONS
+               keep their own 1.08, which is what the effect was designed for. */
+            className="mgt-ac-row"
             onClick={() => onSelect(b.id)}
             style={{
-              background: cardBg,
+              /* The resting fill goes through a CUSTOM PROPERTY rather than
+                 `background`, because an inline `background` beats a stylesheet
+                 `background-color` (the same Fix-2 specificity rule that makes
+                 mkBtn's inline shadow un-overridable). Declared inline, consumed
+                 by `.mgt-ac-row` in index.html, so the hover tint is a plain CSS
+                 state change with nothing to fight — and no React hover state
+                 re-rendering a memoized list on every pointer move.
+                 `--bg-hover-card` rather than the class's default `--bg-ac-hover`:
+                 a card is a surface, so it lifts to the opaque card tint the
+                 hover-scale rule uses, not the accent wash a dropdown row takes. */
+              "--row-bg": cardBg,
+              "--row-bg-hover": "var(--bg-hover-card)",
               border: cardBrdW + " solid " + cardBrd,
               borderRadius: R.card, padding: "14px 16px",
               position: "relative",
@@ -364,7 +395,7 @@ export const ListView = memo(function ListView({
             </div>
             {notesEl}
             <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables })} onClick={() => onManual(b.id)}>= Tables</button>
+              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={() => onManual(b.id)}><AssignIcon size={IC.control} />Assign</button>
               <button className="mgt-hover-scale" style={mkBtn({ background: BTN.edit })} onClick={() => onEdit(b)}>Edit</button>
               {statusBtns}
               <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center" }}>

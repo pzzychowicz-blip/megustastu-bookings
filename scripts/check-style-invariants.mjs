@@ -41,13 +41,26 @@
 // them would make this script noisy, and a noisy check gets muted.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SRC = join(ROOT, "src");
+// An explicit directory argument exists so the checker can be pointed at a
+// fixture (tests/style-check.test.js). That test is not ceremony: the first
+// version of the spacing rule required the property to be preceded by `{` or
+// `,`, which silently skipped every key in a MULTI-LINE style object — i.e.
+// most of the codebase — while still printing "OK". A checker that has gone
+// blind is worse than no checker, because it also carries the authority of
+// having passed. Same lesson as the v17.8.0 marker-placement bug.
+const SRC = process.argv[2] ? resolve(process.argv[2]) : join(ROOT, "src");
 const LOOKBACK = 10;   // lines to search upward for the governing fill
+
+// v17.9.0 — must match SP and H in src/lib/constants.js. Hand-synced: this
+// script runs standalone (no bundler, no JSX transform), so it cannot import
+// from src/. Same class of hand-kept pair as M.dur vs the CSS motion tokens.
+const SPACING_STEPS = new Set([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 24, 32]);
+const HEIGHT_STEPS = new Set([28, 32, 36, 40, 44]);
 
 // The WA module's saturated, TEXT-BEARING fills. Declared in `:root` ONLY, with
 // no dark override, deliberately: the 17.8.0-wa-sandbox contrast pass made them
@@ -193,6 +206,91 @@ for (const file of walk(SRC)) {
       });
     }
 
+    // ── Rules 4 & 5: the spacing and control-height scales ──────────────────
+    // v17.9.0. These two are enforced DIFFERENTLY from rules 1 and 3, and the
+    // difference is deliberate.
+    //
+    // R and T replaced every literal at every call site, because they are
+    // SEMANTIC: `borderRadius: 12` genuinely did not say whether it meant
+    // "control" or "card", so only a role name could. `gap: 8` says exactly what
+    // it is. Tokenising ~600 spacing literals would buy indirection and nothing
+    // else, and forcing the 84 one-off padding strings into an invented role
+    // vocabulary would be 84 judgement calls that are invisible until someone
+    // opens that one screen.
+    //
+    // So the source keeps readable literals and the CHECK is the contract: parse
+    // the value, pull out every px component, and fail on anything that is not a
+    // step. That kills the drift the audit actually found — eight values (1, 3,
+    // 5, 7, 9, 11, 17, 20, 22) nobody chose, sitting beside their on-scale
+    // neighbours: "5px 11px" in three files, "6px 9px" next to "6px 8px",
+    // "9px 14px" next to "8px 14px".
+    //
+    // Keep both lists in step with SP and H in src/lib/constants.js by hand —
+    // this script cannot import from src/ (it runs before any bundling), which
+    // makes these the same kind of hand-synced pair as M.dur.
+    const SPACING_PROPS = /^(padding|margin)(Top|Bottom|Left|Right|Inline|Block)?$|^gap$/;
+    for (const key of ["padding", "paddingTop", "paddingBottom", "paddingLeft",
+                       "paddingRight", "paddingInline", "paddingBlock", "gap",
+                       "margin", "marginTop", "marginBottom", "marginLeft",
+                       "marginRight"]) {
+      if (!SPACING_PROPS.test(key)) continue;
+      // The key must be an object KEY, not CSS inside a string literal. Without
+      // this, firebase.js's DEV/PROD console badge — a plain
+      // `"…;padding:2px 6px;border-radius:3px;…"` handed to console.log — reports
+      // as an off-scale padding. It is devtools formatting, not app UI, and
+      // exempting the site with /* @canvas */ would have been the wrong fix: the
+      // rule would keep mis-firing on the next piece of console styling anyone
+      // writes. So require the preceding non-space character to be `{` or `,` —
+      // which a CSS declaration inside a string never has (it has `;`) — or
+      // nothing at all, which is the multi-line style-object case:
+      //     style={{
+      //       padding: "3px 8px",       <- prefix is whitespace only
+      // Getting that second branch wrong makes the rule silently blind to most
+      // of the codebase while still reporting OK, which is worse than not having
+      // it. tests/style-check.test.js exists to prove it still bites.
+      const at = line.search(new RegExp("\\b" + key + "\\s*:"));
+      if (at > 0 && !/(^|[{,])\s*$/.test(line.slice(0, at))) continue;
+      const v = styleValue(line, key);
+      if (v == null || /@canvas/.test(line)) continue;
+      // Only judge literals. A token (SP.base), a variable, a ternary of
+      // tokens, or a calc()/env() expression is out of scope — the same
+      // reasoning as Rule 3's "strip the legitimate references first".
+      const comps = /"/.test(v)
+        ? [...v.matchAll(/(-?\d+)px/g)].map((m) => Math.abs(+m[1]))
+        : (/^-?\d+$/.test(v.trim()) ? [Math.abs(+v.trim())] : []);
+      const off = comps.filter((n) => !SPACING_STEPS.has(n));
+      if (off.length) {
+        problems.push({
+          file: rel, line: i + 1, rule: "spacing-scale",
+          text: line.trim().slice(0, 90),
+          hint: "off-scale spacing " + off.join("/") + " — snap to the nearest SP step ("
+                + [...SPACING_STEPS].join(", ") + "), or mark a layout dimension /* @canvas */",
+        });
+        break;   // one report per line is enough to act on
+      }
+    }
+
+    for (const key of ["height", "minHeight"]) {
+      const v = styleValue(line, key);
+      if (v == null || /@canvas/.test(line)) continue;
+      if (!/^-?\d+$/.test(String(v).trim())) continue;   // %, vh, tokens, calc()
+      const n = +String(v).trim();
+      // Only CONTROL-sized numbers are in scope. A 7px dot, a 200px popover
+      // max-height and a 1px rule are not controls, and sweeping them in would
+      // make this noisy — and a noisy check gets muted (the v17.8.0 lesson that
+      // kept plain drop-shadows out of Rule 2).
+      if (n < 24 || n > 56) continue;
+      if (!HEIGHT_STEPS.has(n)) {
+        problems.push({
+          file: rel, line: i + 1, rule: "height-scale",
+          text: line.trim().slice(0, 90),
+          hint: "off-scale control height " + n + " — use the H scale ("
+                + [...HEIGHT_STEPS].join(", ") + "; 44 is a FLOOR for decision "
+                + "surfaces, not a target), or mark a layout dimension /* @canvas */",
+        });
+      }
+    }
+
     // ── Rule 2 ──────────────────────────────────────────────────────────────
     const whiteInset = /inset[^"']*rgba\(\s*255,\s*255,\s*255/.test(line);
     if (whiteInset && !/@fixed-fill/.test(line)) {
@@ -217,7 +315,8 @@ for (const file of walk(SRC)) {
 }
 
 if (problems.length === 0) {
-  console.log("style invariants: OK (radius scale + type scale + white-inset-over-fixed-fill)");
+  console.log("style invariants: OK (radius + type + spacing + height scales, "
+            + "white-inset-over-fixed-fill, marker placement)");
   process.exit(0);
 }
 

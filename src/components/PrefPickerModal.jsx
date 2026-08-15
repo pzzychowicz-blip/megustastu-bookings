@@ -34,9 +34,10 @@
 // different export (`comboCapBest`) which adds a greedy best-subset branch;
 // for soft-hint preferences here, the simpler version is correct.
 
-import { S, BTN, TBL, TABLE_GROUPS, R, T, FW } from "../lib/constants";
+import { S, BTN, TBL, TABLE_GROUPS, R, T, FW, IC } from "../lib/constants";
 import { isIn, comboCap } from "../lib/booking-logic";
-import { Overlay, mkBtn, AutoHeight } from "./atoms";
+import { Overlay, ModalTitle, mkBtn, AutoHeight } from "./atoms";
+import { CheckIcon } from "./Icons";
 
 export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
   const prefs = selected || [];
@@ -61,9 +62,15 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
 
   const cap = getCapOf(prefs);
   const capOk = prefs.length === 0 || cap >= needed;
+  // v17.9.0: the tick is a real icon, so capText is JSX rather than a string.
   const capText = prefs.length === 0
     ? "No preference (auto)"
-    : "Capacity: " + cap + " / " + needed + " pax" + (cap >= needed ? " ✓" : " — need more");
+    : (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {"Capacity: " + cap + " / " + needed + " pax"}
+        {cap >= needed ? <CheckIcon size={IC.control} /> : <span>— need more</span>}
+      </span>
+    );
   const capColor = prefs.length === 0 ? S.muted : (cap >= needed ? "var(--success-text)" : "var(--warn-text)");
 
   // v14.4.1: clear/done row pinned via Overlay's `footer` slot.
@@ -91,17 +98,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
   return (
     <Overlay onClose={onClose} footer={footerEl}>
       <AutoHeight>
-      <div style={{ textAlign: "center", marginBottom: 4 }}>
-        <div style={{
-          fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
-          display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-          background: "var(--btn-tables)",
-          border: "1px solid rgba(255,255,255,0.2)",
-          boxShadow: "var(--shadow-btn)"
-        }}>
-          Preferred table
-        </div>
-      </div>
+      <ModalTitle marginBottom={4} background="var(--btn-tables)">Preferred table</ModalTitle>
       <div style={{ fontSize: T.body, color: S.text, marginBottom: 14, textAlign: "center" }}>
         Soft hint — optimizer tries this first, falls back if unavailable.
       </div>
@@ -134,7 +131,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                   className="mgt-hover-scale"
                   onClick={() => togglePref(t.id)}
                   style={{
-                    width: 64, height: 52, padding: 0, borderRadius: R.pill,
+                    width: 64, height: 52,   /* @canvas */ padding: 0, borderRadius: R.pill,
                     border: "2px solid " + (isPref ? "var(--accent)" : tc.bg),
                     background: isPref ? "var(--btn-tables)" : "var(--bg-input)",
                     color: isPref ? "#fff" : S.text,

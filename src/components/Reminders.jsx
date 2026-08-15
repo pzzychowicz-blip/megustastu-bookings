@@ -87,7 +87,7 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
   const listEls = list.length === 0 ? (
     <div style={{
       textAlign: "center",
-      padding: "28px 14px",
+      padding: "24px 14px",
       color: "var(--text-muted)",
       fontSize: T.body,
       background: "var(--bg-soft)",

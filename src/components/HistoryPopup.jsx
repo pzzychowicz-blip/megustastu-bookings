@@ -34,9 +34,9 @@ export function HistoryPopup({ booking, onClose }) {
 
   return (
     <Overlay onClose={onClose}>
-      <div style={{ fontSize: T.title, fontWeight: FW.bold, marginBottom: 12, color: S.text }}>
+      <h2 style={{ fontSize: T.title, fontWeight: FW.bold, margin: 0, marginBottom: 12, color: S.text }}>
         Booking history
-      </div>
+      </h2>
       <div style={{ fontSize: T.body, color: S.muted, marginBottom: 12 }}>
         {booking.name + " — " + booking.date + " " + booking.time}
       </div>

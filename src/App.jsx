@@ -24,7 +24,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, M, T, FW } from "./lib/constants";
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, M, T, FW, IC } from "./lib/constants";
 
 import {
   getDur, toMins, genId,
@@ -42,6 +42,7 @@ import {
 
 import { normalizePhone } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
+import { hourLabel } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
 // can be unit-tested (tests/waitlist-match.test.js).
 import { placeWaitlist } from "./lib/waitlist-match";
@@ -51,7 +52,7 @@ import { placeWaitlist } from "./lib/waitlist-match";
 // First component file in the codebase using JSX syntax. App.jsx now also
 // uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
 // compatibility no longer applies — both files share a single style.
-import { Overlay, mkBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
+import { Overlay, ModalTitle, mkBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
 import { appBannerSections } from "./components/AppBanners";
@@ -119,8 +120,11 @@ import { ReminderEditor }          from "./components/ReminderEditor";
 import { TimelineView } from "./components/TimelineView";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
-import { ViewTools }    from "./components/ViewTools";
-import { WaitIcon, BellIcon, BellRingIcon, LateIcon, OverlapIcon } from "./components/Icons";
+// v17.9.0: CogIcon comes straight from Icons.jsx now, not via SettingsChrome's
+// re-export. The re-export exists to keep the LAZY-Settings boundary intact for
+// importers that predate the move; App has no reason to go the long way round,
+// and Icons.jsx has no imports of its own to drag into the startup chunk.
+import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, CogIcon, LateIcon, OverlapIcon, SearchIcon, WaitIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -278,7 +282,7 @@ const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
   // Sandbox build marker — WhatsApp module under local test, NOT a release.
   // The formal version bump happens on "give me the deployment version".
-  version:"17.8.0-wa-sandbox",
+  version:"17.9.1-wa-sandbox",
   sandbox:"WhatsApp inbox + simulator (localhost only)",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
@@ -291,10 +295,6 @@ if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 // hooks/useKeyboardShortcuts.js with the handler that reads them — rebind there
 // (+ the Shortcuts rows).
 
-// ── v14.2.0: Dark-mode preference reader ──────────────────────────────────
-// Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
-// preference for useThemeMode: true (dark) | false (light) | undefined (follow
-// the OS live). MUST mirror the no-flash inline script in index.html — same
 // v17.4.0 /code-review: prev-identity memo for a save transform. The synchronous
 // guard checks and the immediate saveBookings dispatch call the transform with
 // the SAME `prev` reference, so they share ONE optimizer pass; a retry replay
@@ -305,8 +305,44 @@ function memoByPrev(fn){
   return function(prev){if(prev===mPrev) return mFin;const r=fn(prev);mPrev=prev;mFin=r;return r;};
 }
 
-// key, same value convention ("dark"/"light").
+// ── v17.9.0: DEV-only theme override ──────────────────────────────────────────
+// Since v17.6.0 the theme follows the signed-in ACCOUNT (settings/users/{uid}/
+// prefs), and that overrides both localStorage["mgt-theme"] and OS emulation. So
+// looking at dark mode meant toggling it in Settings — i.e. WRITING to the real
+// user's saved preferences to inspect a colour. v17.8.0's contrast pass avoided
+// that by computing ratios against the token values instead, which is sound, and
+// is not the same thing as looking at the screen.
+//
+// `?theme=dark` / `?theme=light` forces the theme for one page load. It is inert
+// in production twice over: Vite strips the `import.meta.env.DEV` branch from the
+// bundle, and index.html's no-flash script (which has no import.meta.env of its
+// own) gates on hostname.
+//
+// The NON-write is the whole point. While an override is live the prefs-seeding
+// effect skips its theme branch and onToggleDark skips saveUserPrefs, so a theme
+// check leaves the signed-in user's node exactly as it found it.
+function devThemeOverride(){
+  if(!import.meta.env.DEV) return undefined;
+  try{
+    const v=new URLSearchParams(window.location.search).get("theme");
+    if(v==="dark") return true;
+    if(v==="light") return false;
+  }catch{/* ignore */}
+  return undefined;
+}
+// Read once at module load: the override is a property of how the page was
+// opened, so it cannot change without a reload.
+const DEV_THEME_FORCED=devThemeOverride()!==undefined;
+
+// ── v14.2.0: Dark-mode preference reader ──────────────────────────────────────
+// Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
+// preference for useThemeMode: true (dark) | false (light) | undefined (follow
+// the OS live). MUST mirror the no-flash inline script in index.html — same key,
+// same value convention ("dark"/"light"), and since v17.9.0 the same
+// ?theme= override, which wins over the stored key at both sites.
 function readThemePref(){
+  const forced=devThemeOverride();
+  if(forced!==undefined) return forced;
   try{
     const v=localStorage.getItem("mgt-theme");
     if(v==="dark") return true;
@@ -330,6 +366,54 @@ const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400;
 // React.memo for zero visual change; these shared consts keep it stable.
 const EMPTY_OBJ=Object.freeze({});
 const EMPTY_ARR=Object.freeze([]);
+
+// ── The two chrome icon buttons (v17.9.0) ────────────────────────────────────
+// Find-a-booking and Settings. v17.0.0 round 8 put them in ONE pair in the
+// date-nav row so all three views shared them; v17.9.0 (Patryk) splits them by
+// what they act on rather than by what they look like. Settings leads the title
+// block — it configures the restaurant those two lines describe (its name, its
+// tables, its opening hours). Search joins the action cluster on the right,
+// between "+ New" and the connection dot — finding a booking is something you
+// DO, like adding one.
+//
+// The style stays 36×36 on --cog-bg per v17.8.0's "44 is a floor, not a target":
+// both are still secondary chrome, now sitting beside 40px primary pills, and
+// equal width/height is what keeps --r-pill a true circle rather than an egg.
+//
+// A module const in App.jsx rather than an atom or a surviving ViewTools.jsx:
+// both call sites are in this file, and exporting a style that nothing else
+// reads is distance, not sharing (the lib/time-grid.js lesson).
+const CHROME_BTN={
+  background:"var(--cog-bg)",
+  border:"1px solid var(--cog-border)",
+  borderRadius:R.pill, width:36, height:36,
+  cursor:"pointer",
+  display:"flex", alignItems:"center", justifyContent:"center",
+  flexShrink:0, padding:0,
+  color:S.text,
+  boxShadow:"var(--shadow-btn)"
+};
+
+// ── How far the date controls sit below the top of their row (v17.9.1) ────────
+// The date-nav row's height is set by the Summary card beside the controls: 58px
+// collapsed, ~210 open. The controls are 40. So "centred while collapsed" is
+// exactly (58 - 40) / 2 = 9px below the top, and "aligned to the header" when
+// open is 0 — both measured live, not derived from the card's padding.
+//
+// It is a translateY rather than the `alignItems` flip v17.9.0 shipped, because
+// `align-items` is not an animatable property and the flip resolves against the
+// row's height IN THE FRAME IT HAPPENS. On collapse that height is still 210, so
+// `center` put the controls at (210-40)/2 = +85 — an 85px jump DOWN — and they
+// then rode back up to +9 as the summary's Reveal eased the row shut. That is
+// the reported "they jump to the bottom and come back". Opening had the same
+// defect at 9px, small enough to read as a snap rather than a bug.
+//
+// A constant works because it is measured against the COLLAPSED row, which does
+// not move; the open row's height is irrelevant to it. Transform is also
+// compositor-only, so this eases without reflowing a row whose sibling is the
+// timeline. Reduce-motion needs nothing: index.html's data-motion="reduce" block
+// zeroes transition-duration with !important, which beats an inline transition.
+const DATE_CTRL_DROP=9;
 function readAppWidth(){
   try{
     const v=parseInt(localStorage.getItem("mgt-appwidth"),10);
@@ -896,7 +980,10 @@ function BookingApp({uid}){
     // load. The per-user node is the source of truth.
     try{localStorage.setItem("mgt-theme",next?"dark":"light");}catch{/* ignore */}
     setThemePref(next);
-    saveUserPrefs({theme:next?"dark":"light"});
+    // v17.9.0: under a ?theme= override the toggle still works locally, but it
+    // must not persist — the override exists so a theme can be inspected without
+    // touching the signed-in user's saved settings.
+    if(!DEV_THEME_FORCED) saveUserPrefs({theme:next?"dark":"light"});
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
@@ -994,7 +1081,13 @@ function BookingApp({uid}){
     if(!prefsLoaded||seededPrefsRef.current) return;
     seededPrefsRef.current=true;
     const seed={};
-    if(userPrefs.theme==="dark"||userPrefs.theme==="light"){
+    // v17.9.0: a ?theme= override skips BOTH branches. Applying the saved theme
+    // would defeat the override; seeding from it would write the forced value up
+    // as if the user had chosen it. `themePref` currently HOLDS the forced value,
+    // so the else-branch is the more dangerous of the two.
+    if(DEV_THEME_FORCED){
+      /* leave settings/users/{uid}/prefs.theme exactly as found */
+    }else if(userPrefs.theme==="dark"||userPrefs.theme==="light"){
       const dark=userPrefs.theme==="dark";
       try{localStorage.setItem("mgt-theme",userPrefs.theme);}catch{/* ignore */}
       setThemePref(dark);
@@ -2652,6 +2745,17 @@ function BookingApp({uid}){
     onToggle={VA.onSummaryToggle}
     onOpenWeek={VA.onOpenWeek}
     onPrint={VA.onPrint} />;
+  // v17.9.1: the vertical position of the two date-nav control groups — see
+  // DATE_CTRL_DROP. Applied to BOTH groups so the arrows/date field and the
+  // Today/waitlist pills stay on one line as they move.
+  //
+  // Guarded on !isMobile: below 600px the Summary's flexBasis is "100%", so it
+  // wraps onto its own flex line and the controls' line is exactly control
+  // height. There is nothing to centre in there, and an unguarded offset would
+  // push them down into the row gap instead. At >=600 the Summary is
+  // flexShrink:1 with minWidth:0, so it shrinks rather than wrapping and the
+  // single-line assumption this offset depends on holds.
+  const dateCtrlShift=(isMobile||summaryOpen)?"none":"translateY("+DATE_CTRL_DROP+"px)";
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
   const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} />;
@@ -2662,7 +2766,7 @@ function BookingApp({uid}){
         onClick={function(){setConfirmDel(null);}}>Cancel</button><button
         onClick={function(){delBooking(confirmDel);}}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete booking?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
 
   // v17.5.0: the ONE discard confirm, shared by the booking form, the walk-in
   // form and ManualModal (requestClose* raise it; doDiscard commits).
@@ -2692,7 +2796,7 @@ function BookingApp({uid}){
         onClick={function(){setConfirmDiscard(null);}}>Keep editing</button><button
         onClick={doDiscard}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Discard</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Discard unsaved changes?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Discard</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Discard unsaved changes?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
 
   const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
     booking={manualBooking}
@@ -2738,7 +2842,16 @@ function BookingApp({uid}){
            only ever belt-and-braces: html+body are already overflow:hidden in
            this mode (see the body effect above), so nothing can scroll here. */
         shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}><div><div style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold}}>{generalSettings.restaurantName}</div><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":String(OPEN).padStart(2,"0")+":00 - "+String(CLOSE%24).padStart(2,"0")+":00")}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}><ViewSwitcher
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
+              beside it ARE the restaurant's configuration read back — its name,
+              its table counts, its opening hours — and the control that edits
+              all three now sits against them instead of across the row in a
+              toolbar. minWidth:0 so the title, not the cog, absorbs a squeeze. */}<div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><button
+              onClick={function(){setShowSettings(true);}}
+              title="Settings & keyboard shortcuts"
+              aria-label="Settings & keyboard shortcuts"
+              className="mgt-hover-scale"
+              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><div style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold}}>{generalSettings.restaurantName}</div><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -2761,28 +2874,53 @@ function BookingApp({uid}){
               onClick={function(){setShowInbox(true);}}
               className="mgt-hover-scale"
               title="WhatsApp inbox (I)"
-              style={{position:"relative",background:"var(--wa-green)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"var(--shadow-btn)"}}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:R.pill,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize: T.small,fontWeight: FW.bold,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button>:null}{/* v17.8.0: the Log-out button used to sit here, right of the WA
-              button. It now lives INSIDE this popover, on the status row — see
+              style={{position:"relative",background:"var(--wa-green)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"var(--shadow-btn)"}}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:R.pill,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize: T.small,fontWeight: FW.bold,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button>:null}{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
+              toolbar, between "+ New" and the dot. Searching is an ACTION, and
+              this is the row of them — it reads as the counterpart to adding a
+              booking rather than as view chrome. */}<button
+              onClick={function(){setShowSearch(true);}}
+              title="Find a booking"
+              aria-label="Find a booking"
+              className="mgt-hover-scale"
+              style={CHROME_BTN}><SearchIcon size={IC.chrome} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
+              It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
               wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onLogout={function(){signOut(auth);}} /></div></div><div
-          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center"}}><button
+          /* v17.9.0 (Patryk): the date controls are 40px and the collapsed
+             Summary card beside them is 58, so `flex-start` left them sitting
+             flush against the top of the row with 18px of dead space beneath —
+             measured, not eyeballed. Centring fixes that.
+
+             But the alignment has to FLIP when the summary expands: the summary
+             is what drives this row's height, and at ~210px open, centred date
+             controls float into the vertical middle of a tall panel, visually
+             detached from the header above them. Open ⇒ back to the top, which
+             is where a control that is not the tall thing belongs.
+
+             v17.9.1: the intent above is unchanged; the MECHANISM is. The row is
+             pinned to flex-start and the controls carry the offset themselves as
+             a transitioned transform (DATE_CTRL_DROP), because flipping
+             `alignItems` re-resolved the position against whatever height the
+             row happened to have in that one frame — which, on collapse, was
+             still the open height. See DATE_CTRL_DROP for the numbers. */
+          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Previous day"
               title="Previous day (←)"
-              dangerouslySetInnerHTML={{__html:"&#8249;"}} /><button
+              ><ChevronLeftIcon size={IC.chrome} /></button><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Next day"
               title="Next day (→)"
-              dangerouslySetInnerHTML={{__html:"&#8250;"}} /><input
+              ><ChevronRightIcon size={IC.chrome} /></button><input
               type="date"
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
               className="mgt-hover-scale"
-              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center"}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
+              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){goToDate(new Date().toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
@@ -2793,14 +2931,11 @@ function BookingApp({uid}){
               aria-label={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               title={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={15} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.0.0 round 8: 🔍 + ⚙ live HERE (right of Summary) for every
-              view — Timeline's legend and List's card-header each used to carry
-              their own copy and Plan had none. minHeight 40 aligns them with the
-              date controls; marginLeft:auto keeps them right-aligned when the
-              mobile full-width Summary wraps them onto their own line. */}
-            <div style={{display:"flex",alignItems:"center",minHeight:40,marginLeft:"auto",flexShrink:0}}><ViewTools
-              onOpenSearch={function(){setShowSearch(true);}}
-              onOpenSettings={function(){setShowSettings(true);}} /></div></div>{/* v17.5.0: in the fixed shell everything from here down lives in ONE
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={IC.control} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.9.0: the 🔍/⚙ pair that lived here since v17.0.0 round 8 is
+              gone — both buttons moved up into the header row above, each to the
+              thing it acts on (see CHROME_BTN). The pair was created to give all
+              three views ONE copy of these controls, and that still holds: the
+              header is no less shared than the date-nav row was. */}</div>{/* v17.5.0: in the fixed shell everything from here down lives in ONE
             scroll region, so the two rows above stay pinned. The banners scroll
             away with the content — they're the pinning scope Patryk chose, and
             several open at once (a 3+ row late banner) would eat the viewport.
@@ -2887,27 +3022,26 @@ function BookingApp({uid}){
               style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>No show</button><button
               onClick={function(){doCancelBooking(confirmCancel,false);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Cancel booking</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Cancel booking?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Confirm</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</div><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
               onClick={function(){setConfirmReshuffle(false);forceReshuffle();}}
               className="mgt-hover-scale"
-              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
+              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
         showSettings?<Overlay onClose={requestCloseSettings} footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"8px 18px",background:"var(--app-btn-slate)"})}
-              onClick={requestCloseSettings}>Close</button></div>}><div style={{textAlign:"center",marginBottom:14}}><div
-              style={{fontSize: T.title,fontWeight: FW.bold,color:"var(--text-on-accent)",display:"inline-block",padding:"8px 16px",borderRadius:R.pill,background:"var(--app-btn-grey-strong)",border:"1px solid rgba(255,255,255,0.2)",boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Settings</div></div><Suspense fallback={null}><SettingsContent
+              onClick={requestCloseSettings}>Close</button></div>}><ModalTitle background="var(--app-btn-grey-strong)">Settings</ModalTitle><Suspense fallback={null}><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
             onDirty={setSettingsDirty}
             isDark={isDark}
@@ -2966,7 +3100,7 @@ function BookingApp({uid}){
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
               onClick={function(){doDeleteReminder(confirmReminderDel);}}
               className="mgt-hover-scale"
-              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete reminder?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
+              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
         reminderEditor?<ReminderEditor
           draft={reminderEditor.draft}
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}

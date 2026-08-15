@@ -203,7 +203,7 @@ export function useKeyboardShortcuts(ctx){
       }
       // ── Edit & New Booking form shortcuts ──
       //   A / P work in BOTH new and edit (request 1). In new mode, A opens
-      //   Manual with target "__new__" to match the "= Assign" button.
+      //   Manual with target "__new__" to match the Assign button.
       //   B / H remain edit-only (new bookings have no history or source).
       //   C clears the tables assignment — logic mirrors the form's 3 Clear
       //   buttons: if the user has set manualTables, clear those; else in

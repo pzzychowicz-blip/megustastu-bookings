@@ -44,7 +44,7 @@ function body(children, extra) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10,
-      padding: "9px " + NOTIF_PAD_X + "px 11px " + NOTIF_GUTTER + "px",
+      padding: "8px " + NOTIF_PAD_X + "px 10px " + NOTIF_GUTTER + "px",
       fontSize: T.body, fontWeight: FW.semi,
       ...(extra || null)
     }}>
@@ -78,7 +78,7 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, in
         <button
           onClick={function () { window.location.reload(); }}
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ background: BTN.today, fontSize: T.body, padding: "5px 12px", minHeight: 32 })}>Reload</button>
+          style={mkBtn({ background: BTN.today, fontSize: T.body, padding: "4px 12px", minHeight: 32 })}>Reload</button>
       </>
     , { flexWrap: "wrap" })
   });

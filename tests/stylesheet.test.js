@@ -52,6 +52,8 @@ const CRITICAL_SELECTORS = [
   ".mgt-appear",                      // fade-in-to-own-opacity (timeline ghosts)
   ".mgt-fade-in",                     // Settings tab crossfade
   ".mgt-dot-pulse",                   // the "busy" toast dot
+  ".mgt-ac-row",                      // row/card/panel tint — AND their resting fill
+  ".mgt-glyph",                       // floor-plan table hover halo + press dim
   ".mgt-tlghost",                     // the seated ghost's lockstep hover
   ".mgt-group-hover",                 // multi-table group lift
   ".mgt-plan-headrow",                // Plan header grid (has a media fallback)

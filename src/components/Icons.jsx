@@ -17,13 +17,36 @@
 //    colour emoji anyway — so the same warning marker is a thin outline on one
 //    device in the restaurant and a yellow sign on another.
 //
-// ── What is NOT in here, on purpose ──────────────────────────────────────────
-// Monochrome typographic marks with universal font coverage stay as text:
-// ✕ ‹ › ▲ ▼ ▸ ▾ ✓ ★, plus the timeline's bracketed `[L]` / `!!` markers. They
-// are glyphs in a text run, they inherit colour and weight for free, and they
-// truncate with the label they sit in — which an inline SVG does not. The line
-// is "does this render as a colour emoji, or is its font coverage patchy",
-// not "is this a picture".
+// ── v17.9.0: the rule above was narrowed, on purpose ─────────────────────────
+// v17.8.0 drew the line at "does this render as a colour emoji", and kept
+// ✕ ‹ › ▲ ▼ ▸ ▾ ✓ ★ as text on the grounds that they inherit colour and weight
+// for free and truncate with their label. That reasoning is sound and it was
+// still the wrong line, for a reason the emoji argument obscures: **an icon set
+// that covers only the glyphs with a rendering BUG is not an icon set, it is a
+// patch.** The app ended up drawing its dismiss control as a text ✕ two
+// millimetres from a hand-drawn SVG cog — the exact "not one medium" complaint
+// in point 1 above, just with a monochrome glyph instead of a colour one.
+//
+// So every CONTROL mark is now drawn here. TWO things stay text, and they are a
+// category, not an exception list:
+//
+//   • Prose arrows inside sentences — "Settings → Opening hours", the history
+//     entries ("status → completed"), the shift labels. These are punctuation
+//     in a text run. An SVG in the middle of a sentence is a rendering bug, not
+//     an icon.
+//   • Keycap labels in Shortcuts.jsx (← → ↑ ↓ ⇧). They depict the key you press.
+//     Replacing them with drawn arrows breaks the mapping to the physical
+//     keyboard, which is the entire content of that screen.
+//
+// It was THREE. The timeline's bracketed `[L]` / `[!]` / `!!` were defended as
+// "ASCII, not glyphs, and deliberately part of the truncating label string" —
+// see the second-pass note further down for why neither half of that survived.
+//
+// The truncation cost is real and is paid explicitly: TimelineView's ★ moved
+// OUT of the label string into the marker row (where the note dog-ear and the
+// waitlist ⏳ already live), so it no longer truncates with the name — it is now
+// a fixed-width marker that survives a narrow block, which is what a "this party
+// has preferred tables" flag should do anyway.
 //
 // House style, inherited from CogIcon (SettingsChrome.jsx, the one icon that
 // was already drawn properly): 24×24 viewBox, no fill, `currentColor` stroke,
@@ -43,6 +66,100 @@ function Svg({ size = 20, stroke, children }) {
     >
       {children}
     </svg>
+  );
+}
+
+// ── v17.9.0: the control marks (ex ✕ ✓ ★ ▲ ▼ ▸ ▾ ‹ › 🖨 ⬇ ✎ and the ASCII = / >)
+// Chevrons are ONE shape at four rotations rather than four hand-drawn paths, so
+// a disclosure that turns and a nav arrow that points can never drift apart.
+function Chevron({ deg, ...rest }) {
+  return (
+    <Svg {...rest}>
+      <g transform={"rotate(" + deg + " 12 12)"}><path d="M9 5l7 7-7 7" /></g>
+    </Svg>
+  );
+}
+export function ChevronRightIcon(props) { return <Chevron deg={0} {...props} />; }
+export function ChevronDownIcon(props) { return <Chevron deg={90} {...props} />; }
+export function ChevronLeftIcon(props) { return <Chevron deg={180} {...props} />; }
+export function ChevronUpIcon(props) { return <Chevron deg={270} {...props} />; }
+
+export function CloseIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M6 6l12 12" />
+      <path d="M18 6L6 18" />
+    </Svg>
+  );
+}
+
+export function CheckIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M4 12.5l5.5 5.5L20 6.5" />
+    </Svg>
+  );
+}
+
+// The preferred-tables marker. FILLED, unlike every other icon here, because it
+// replaces ★ (U+2605, the solid star) rather than ☆ — and because it is a flag
+// on a saturated block where an outline star at 10px closes up into a blob.
+export function StarIcon({ size = 20 }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 24 24"
+      fill="currentColor" stroke="none"
+      style={{ display: "block", flexShrink: 0 }}
+      aria-hidden="true"
+    >
+      <path d="M12 2.6l2.9 5.9 6.5.95-4.7 4.58 1.11 6.47L12 17.44l-5.81 3.06 1.11-6.47-4.7-4.58 6.5-.95z" />
+    </svg>
+  );
+}
+
+export function PrintIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M6 9V3h12v6" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+      <rect x="6" y="14" width="12" height="8" rx="1.5" />
+    </Svg>
+  );
+}
+
+export function DownloadIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3v12" />
+      <path d="M7 10.5l5 5 5-5" />
+      <path d="M3.5 20.5h17" />
+    </Svg>
+  );
+}
+
+// Rename / edit. A pencil on a baseline rather than a bare nib — at 14px a
+// lone diagonal reads as a slash, which is what the ex-✎ looked like next to
+// the ✓ it sits beside.
+export function EditIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M14.5 4.5l5 5L9 20H4v-5z" />
+      <path d="M13 6l5 5" />
+    </Svg>
+  );
+}
+
+// Manual table assignment (ex the ASCII `=`). A grid of tables with one picked,
+// which is literally what the modal it opens asks you to do. The `=` it replaces
+// was meant to evoke two pushed-together tables and read as an equals sign.
+export function AssignIcon(props) {
+  return (
+    <Svg {...props}>
+      <rect x="2.5" y="4" width="8" height="7" rx="1.6" />
+      <rect x="13.5" y="4" width="8" height="7" rx="1.6" />
+      <rect x="2.5" y="14" width="8" height="7" rx="1.6" />
+      <path d="M14 17.5l2.5 2.5 5-5" />
+    </Svg>
   );
 }
 
@@ -204,6 +321,117 @@ export function ClosedIcon(props) {
     <Svg {...props}>
       <circle cx="12" cy="12" r="9" />
       <path d="M5.6 5.6l12.8 12.8" />
+    </Svg>
+  );
+}
+
+// ── v17.9.0 (second pass): the timeline block's last three ASCII markers ─────
+// `[L]` / `[!]` / `!!` were the one category this file's header still defended
+// as text, on the grounds that they are ASCII and belong to the truncating
+// label string. Both halves of that stopped being true in the same change: the
+// label no longer carries flags at all (they moved to the block's right-hand
+// rail, where they are fixed-width and survive a narrow block), and "it is
+// ASCII" was never a reason to look different from every other mark on the
+// same 36px surface — it is the emoji argument's mistake in a plainer costume.
+//
+// Note there are only TWO new icons for three markers. `!!` means a seated
+// party is overstaying INTO the next booking on that table — the identical
+// `warnings` entry the Overlap section of the notification strip renders — so
+// it takes OverlapIcon. Same data, same mark, in both places it appears.
+
+// Locked to its tables — a walk-in, or a manual assignment the optimizer must
+// not move. Body and shackle only: a keyhole is invisible at the 10px this
+// renders at on a block, and closes the body up into a filled square.
+export function LockIcon(props) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="10.5" width="16" height="10.5" rx="2.2" />
+      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+    </Svg>
+  );
+}
+
+// Repeat no-show (2+ past no-shows on this phone). A struck-through person, and
+// the slash is the load-bearing half — it runs corner to corner rather than
+// neatly around the figure, for the same reason OfflineIcon's does: at 10px the
+// figure alone is nearly closed and only a full-length diagonal still reads.
+export function NoShowIcon(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M5.2 20.5a6.8 6.8 0 0 1 13.6 0" />
+      <path d="M3 3l18 18" />
+    </Svg>
+  );
+}
+
+// The deposit marker. Until v17.9.0 this was the CURRENCY SYMBOL from
+// settings/general appended to the label — so the flag for "money has been
+// taken" was a different shape per restaurant setting, and on a narrow block it
+// truncated away with the name. Whatever replaces it has to stay
+// currency-NEUTRAL, which is the whole property that change bought; a drawn "$"
+// would hand the defect straight back in a shape that merely looks deliberate.
+//
+// v17.9.1: a banknote, not the coin v17.9.0 drew. Two concentric circles at the
+// 11px this renders at on a timeline block are not read as money — they are a
+// target, or a button. A note has an outline nothing else in the set shares
+// (every other icon here is round, diagonal, or a chevron), so it is
+// identifiable by silhouette before any detail resolves.
+//
+// TWO shapes and no more. Corner ticks, a value line, a second circle — all of
+// them turn to mush at 11px, which is the size that decides this icon, not the
+// 24 it is drawn at. Verify at 11.
+//
+// v17.9.1 correction — the first banknote was unreadable, and for two reasons
+// that only show up at the shipped size:
+//
+//   • It used HALF the viewBox height (y 6→18, 12 of 24) where every other flag
+//     on the rail uses ~70–80% of it. Drawn to the same nominal `size`, it was
+//     optically much smaller than the star and the lock beside it.
+//   • The inner circle was r 2.6 against a stroke of 2.2, leaving a hole about
+//     1.4 units across. At 11px that is **0.6 of a pixel** — it fills in solid,
+//     so the note read as a rectangle with a dot rather than as a note.
+//
+// The fix was geometry, not scale: a taller note and a bigger circle, which left
+// a hole ~2.5× wider that survives the stroke. STROKE WIDTH IS THE CONSTRAINT ON
+// DETAIL at these sizes — an interior shape has to be at least ~3× the stroke or
+// it closes up. That is the same reason LockIcon carries no keyhole.
+//
+// v17.9.1 round 2 — that correction over-shot into 19×15, a ratio of 1.27:1,
+// which is a rounded SQUARE. The whole argument for a banknote is a silhouette
+// nothing else in the set shares, and a square gives that back. So 20×13
+// (1.54:1), which is unmistakably wider than tall.
+//
+// It does NOT go flatter, and the reason is the same constraint as above.
+// Rasterised at the 14px this actually ships at and magnified, 20×12 and 21×11
+// are better note SHAPES — but the rectangle can only get flatter by squeezing
+// the circle, and at 20×12 the hole is back to ~2.3px, which is what the first
+// correction was about. 20×13 keeps a ~2.7px hole and ~0.5px of clear gap above
+// and below the circle. **Aspect ratio and interior detail are in direct
+// competition here; the interior wins, because a note-shaped blob is not a
+// banknote either.** Judge it rasterised at the shipped size, not drawn at 24.
+export function DepositIcon(props) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="5.5" width="20" height="13" rx="2.5" />
+      <circle cx="12" cy="12" r="3.4" />
+    </Svg>
+  );
+}
+
+// v17.9.0: the cog moved here from SettingsChrome.jsx. It was the ONE icon
+// already drawn properly (v17.1.0) and this file's house style was copied from
+// it — but it stayed outside the set, hard-coded at 20×20 with its own <svg>,
+// so it took none of the optical stroke compensation and could not be sized.
+// In ViewTools' pair that showed: a 17px search beside a 20px cog, which is a
+// smaller version of the very mismatch the header of this file is about.
+// SettingsChrome re-exports it, so the lazy-Settings import boundary is
+// unchanged — Icons.jsx has no imports of its own to drag along.
+export function CogIcon(props) {
+  return (
+    <Svg {...props}>
+      <circle cx={12} cy={12} r={3} />
+      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
     </Svg>
   );
 }

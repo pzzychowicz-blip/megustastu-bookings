@@ -18,9 +18,10 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { S, BTN, R, T, FW } from "../lib/constants";
+import { S, BTN, R, T, FW, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
 import { Fld, Toggle, mkBtn, mkInp, mkArea, usePresence, AutoHeight } from "./atoms";
+import { CloseIcon } from "./Icons";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
 // recurrence.days. Sun is at the end (index 0).
@@ -107,7 +108,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
       }}>
         {/* v14.4.1: body scrolls, action footer (err + buttons) pinned to the
             bottom — mirrors Overlay's `footer` slot (this modal predates it). */}
-        <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "22px", boxSizing: "border-box" }}>
+        <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
         {/* v15.8.0: AutoHeight eases the body when Recurrence flips once↔weekly. */}
         <AutoHeight>
         {/* v14 p7: header matches New booking / Edit booking pattern —
@@ -150,9 +151,9 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                   <button
                     onClick={() => removeTime(i)}
                     className="mgt-hover-scale"
-                    style={mkBtn({ minHeight: 40, minWidth: 40, padding: "0", fontSize: T.title, background: BTN.del, lineHeight: 1 })}
+                    style={mkBtn({ minHeight: 40, minWidth: 40, padding: "0", fontSize: T.title, background: BTN.del, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
                   >
-                    ×
+                    <CloseIcon size={IC.control} />
                   </button>
                 ) : null}
               </div>
@@ -233,7 +234,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         </div>
         </AutoHeight>
         </div>
-        <div style={{ flexShrink: 0, padding: "16px 22px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
+        <div style={{ flexShrink: 0, padding: "16px 24px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
         {err ? (
           <div style={{
             color: "var(--danger-text)", fontSize: T.body,
@@ -263,7 +264,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               background: err ? "rgba(180,180,190,0.4)" : "var(--app-success-solid)",
               border: "1px solid rgba(255,255,255,0.2)",
               borderRadius: R.pill,
-              padding: "10px 22px",
+              padding: "10px 18px",
               cursor: err ? "not-allowed" : "pointer",
               fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 40,
               boxShadow: err ? "none" : "0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)"
