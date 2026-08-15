@@ -57,7 +57,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
           title="Open the booking pre-filled with the requested changes"
           className="mgt-hover-scale mgt-press"
           style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
-         ><PencilIcon size={13} />Apply changes</button>
+         ><PencilIcon size={IC.inline} />Apply changes</button>
       ) : null}
       <button
         onClick={() => {
@@ -78,7 +78,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
   return (
     <div style={{ padding: "10px 14px", borderRadius: R.card, background: bg, border, marginBottom: 10, boxShadow: "var(--shadow-soft)", opacity: leaving ? 0 : 1, transition: "opacity " + M.exit }}>
       <div onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
-        <span style={{ flexShrink: 0, color, display: "inline-flex", alignItems: "center" }}><Icon size={15} /></span>
+        <span style={{ flexShrink: 0, color, display: "inline-flex", alignItems: "center" }}><Icon size={IC.control} /></span>
         <span style={{ fontSize: T.body, fontWeight: FW.semi, color, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
         {actionBtns}
         <span style={{ color, flexShrink: 0, display: "inline-flex", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.control} /></span>

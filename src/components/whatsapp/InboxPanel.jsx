@@ -354,9 +354,9 @@ export function InboxPanel({
                 quick-reply Templates button per Patryk (2026-07-16); the sim
                 opens on top of this window. */}
             {onOpenSim ? (
-              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><FlaskIcon size={17} /></button>
+              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><FlaskIcon size={IC.chrome} /></button>
             ) : null}
-            <button onClick={() => setShowTpl(true)} title="Templates" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 })}><TemplatesIcon size={17} /></button>
+            <button onClick={() => setShowTpl(true)} title="Templates" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 })}><TemplatesIcon size={IC.chrome} /></button>
             <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><CloseIcon size={IC.chrome} /></button>
           </div>
         </div>
@@ -369,7 +369,7 @@ export function InboxPanel({
             title={selectMode ? "Exit selection" : "Select conversations"}
             className="mgt-hover-scale mgt-press"
             style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
-          ><SelectIcon size={17} /></button>
+          ><SelectIcon size={IC.chrome} /></button>
           <button
             onClick={() => setNeedsAction((v) => !v)}
             title="Show only conversations that need a response"
@@ -408,10 +408,10 @@ export function InboxPanel({
               {tab === "archived" ? (
                 <>
                   <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}><RestoreIcon size={IC.inline} />Restore</button>
-                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: selected.size ? "var(--wa-btn-cancel)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }} ><TrashIcon size={13} />Delete</button>
+                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: selected.size ? "var(--wa-btn-cancel)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }} ><TrashIcon size={IC.inline} />Delete</button>
                 </>
               ) : (
-                <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: selected.size ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }} ><ArchiveIcon size={13} />Archive</button>
+                <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: selected.size ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }} ><ArchiveIcon size={IC.inline} />Archive</button>
               )}
               <button onClick={exitSelectMode} className="mgt-hover-scale mgt-press" style={{ background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "6px 12px", fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap" }}>Cancel</button>
             </div>

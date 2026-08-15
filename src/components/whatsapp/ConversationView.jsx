@@ -186,7 +186,7 @@ export function ConversationView({
       {/* The spin is a LOOP — nothing arrives and nothing leaves, so neither
           direction curve describes it and it keeps `linear`. Documented
           exception, alongside .mgt-shimmer and .mgt-dot-pulse. */}
-      <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" } : { display: "block" }}><RecheckIcon size={15} /></span>
+      <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" } : { display: "block" }}><RecheckIcon size={IC.control} /></span>
     </button>
   ) : null;
 
@@ -196,14 +196,14 @@ export function ConversationView({
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
         <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}><RestoreIcon size={IC.inline} />Restore</button>
-        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }} ><TrashIcon size={13} />Delete</button>
+        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }} ><TrashIcon size={IC.inline} />Delete</button>
       </div>
     );
   } else {
     headerActionBtns = (
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
-        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "var(--shadow-btn)" }} ><ArchiveIcon size={13} />Archive</button>
+        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "var(--shadow-btn)" }} ><ArchiveIcon size={IC.inline} />Archive</button>
       </div>
     );
   }
@@ -273,7 +273,7 @@ export function ConversationView({
             of CONTENT, not of surface. --wa-draft-border stays below as the
             shimmer bar's fill, where it is decoration rather than a rim. */}
         <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "1px solid var(--border-card)", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ color: "var(--wa-draft-text)", display: "inline-flex" }}><DraftIcon size={15} /></span>
+          <span style={{ color: "var(--wa-draft-text)", display: "inline-flex" }}><DraftIcon size={IC.control} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)", marginBottom: 6 }}>Reading the message…</div>
             <div className="mgt-shimmer" style={{ height: 8, borderRadius: R.pill, background: "var(--wa-draft-border)" }} />

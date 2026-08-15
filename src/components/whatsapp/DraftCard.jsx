@@ -115,7 +115,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
             title={hasDetail ? (expanded ? "Hide details" : "Show details") : undefined}
             style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0, cursor: hasDetail ? "pointer" : "default" }}
           >
-            <span style={{ color: "var(--wa-draft-text)", display: "inline-flex", flexShrink: 0 }}><DraftIcon size={15} /></span>
+            <span style={{ color: "var(--wa-draft-text)", display: "inline-flex", flexShrink: 0 }}><DraftIcon size={IC.control} /></span>
             <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span>
             {hasDetail ? <span style={{ color: "var(--wa-draft-text)", flexShrink: 0, display: "inline-flex", transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.inline} /></span> : null}
           </div>
@@ -130,7 +130,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           <Reveal show={expanded} style={{ padding: "0 10px" }}>
             <div style={{ paddingBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>
               {d.notes ? <div style={{ fontSize: T.body, color: "var(--wa-draft-text-dim)" }}>{"Notes: " + d.notes}</div> : null}
-              {d.ambiguity ? <div style={{ padding: "8px 10px", borderRadius: R.inset, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: T.body, color: "var(--danger-text)", display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 0, display: "inline-flex" }}><WarnIcon size={13} /></span>{d.ambiguity}</div> : null}
+              {d.ambiguity ? <div style={{ padding: "8px 10px", borderRadius: R.inset, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: T.body, color: "var(--danger-text)", display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 0, display: "inline-flex" }}><WarnIcon size={IC.inline} /></span>{d.ambiguity}</div> : null}
             </div>
           </Reveal>
         ) : null}
@@ -147,7 +147,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
     <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "1px solid var(--border-card)", marginBottom: 12, boxShadow: "var(--shadow-soft)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ color: "var(--wa-draft-text)", display: "inline-flex", flexShrink: 0 }}><DraftIcon size={15} /></span>
+          <span style={{ color: "var(--wa-draft-text)", display: "inline-flex", flexShrink: 0 }}><DraftIcon size={IC.control} /></span>
           <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)" }}>Draft booking — parsed from message</span>
         </div>
         <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", border: "2px solid " + confBorder, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl + " confidence"}</span>
@@ -157,7 +157,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
         {d.notes ? <div style={{ fontSize: T.body, marginTop: 4 }}>{"Notes: " + d.notes}</div> : null}
       </div>
       {d.ambiguity ? (
-        <div style={{ padding: "8px 10px", borderRadius: R.inset, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: T.body, color: "var(--danger-text)", marginBottom: 10, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 0, display: "inline-flex" }}><WarnIcon size={13} /></span>{d.ambiguity}</div>
+        <div style={{ padding: "8px 10px", borderRadius: R.inset, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: T.body, color: "var(--danger-text)", marginBottom: 10, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 0, display: "inline-flex" }}><WarnIcon size={IC.inline} /></span>{d.ambiguity}</div>
       ) : null}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
