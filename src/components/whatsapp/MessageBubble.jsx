@@ -43,7 +43,7 @@ export function MessageBubble({ msg, isLast, onRetry }) {
       onClick={() => onRetry(msg.id)}
       className="mgt-hover-scale mgt-press"
       title="Resend this message"
-      style={{ marginLeft: 6, background: "transparent", border: "2px solid var(--danger-border)", borderRadius: R.pill, padding: "1px 7px", cursor: "pointer", fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}
+      style={{ marginLeft: 6, background: "transparent", border: "2px solid var(--danger-border)", borderRadius: R.pill, padding: "0 6px", cursor: "pointer", fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}
     >↻ Retry</button>
   ) : null;
 
@@ -57,7 +57,7 @@ export function MessageBubble({ msg, isLast, onRetry }) {
             height, and on --r-pill a multi-line bubble's corner curve eats the
             first and last characters (the same trap that produced mkArea). */}
         <div style={{ background: bg, color, border, borderRadius: 14 /* @canvas */, padding: "8px 12px", fontSize: T.lead, lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word", boxShadow: "var(--shadow-soft)", opacity: msg.status === "sending" ? 0.7 : 1 }}>{msg.text}</div>
-        <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: 3, padding: "0 4px", display: "flex", alignItems: "center" }}>
+        <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: 2, padding: "0 4px", display: "flex", alignItems: "center" }}>
           {formatClockTime(msg.ts)}{ackTag}{statusEl}{retryEl}
         </div>
       </div>

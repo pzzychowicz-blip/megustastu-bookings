@@ -37,7 +37,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
     // dismiss in the notification system is the last item of its row, and the
     // absolute version needed a paddingRight fudge on the sibling to avoid it.
     return (
-      <div style={{ padding: "10px 14px", borderRadius: R.card, background: "var(--suggest-bg-soft)", border: "1px solid var(--border-card)", marginBottom: 12, boxShadow: "var(--shadow-soft)", display: "flex", alignItems: "flex-start", gap: 9 }}>
+      <div style={{ padding: "10px 14px", borderRadius: R.card, background: "var(--suggest-bg-soft)", border: "1px solid var(--border-card)", marginBottom: 12, boxShadow: "var(--shadow-soft)", display: "flex", alignItems: "flex-start", gap: 8 }}>
         <span aria-hidden="true" style={{ fontSize: T.body, lineHeight: "18px", width: 15, flexShrink: 0, color: "var(--success-text)", textAlign: "center" }}>✓</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--success-text)" }}>Booking confirmed</div>
@@ -117,7 +117,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
             {hasDetail ? <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)", flexShrink: 0 }}>{expanded ? "▾" : "▸"}</span> : null}
           </div>
           {/* Confidence level — always shown, immediately left of Accept. */}
-          <span title={confLbl + " confidence"} style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", border: "2px solid " + confBorder, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em", flexShrink: 0 }}>{confLbl}</span>
+          <span title={confLbl + " confidence"} style={{ fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", border: "2px solid " + confBorder, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em", flexShrink: 0 }}>{confLbl}</span>
           <button onClick={onAccept} className="mgt-hover-scale mgt-press" style={smallBtn("var(--wa-btn-open)", 700, "1px solid rgba(255,255,255,0.2)")}>Accept</button>
           {/* Secondary = OUTLINE (see the full card's note): one saturated pill
               per pane, so the eye can find the primary without reading. */}
@@ -127,7 +127,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           <Reveal show={expanded} style={{ padding: "0 10px" }}>
             <div style={{ paddingBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>
               {d.notes ? <div style={{ fontSize: T.body, color: "var(--wa-draft-text-dim)" }}>{"Notes: " + d.notes}</div> : null}
-              {d.ambiguity ? <div style={{ padding: "8px 10px", borderRadius: R.inset, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: T.body, color: "var(--danger-text)", display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 1, display: "inline-flex" }}><WarnIcon size={13} /></span>{d.ambiguity}</div> : null}
+              {d.ambiguity ? <div style={{ padding: "8px 10px", borderRadius: R.inset, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: T.body, color: "var(--danger-text)", display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 0, display: "inline-flex" }}><WarnIcon size={13} /></span>{d.ambiguity}</div> : null}
             </div>
           </Reveal>
         ) : null}
@@ -147,14 +147,14 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           <span style={{ color: "var(--wa-draft-text)", display: "inline-flex", flexShrink: 0 }}><DraftIcon size={15} /></span>
           <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)" }}>Draft booking — parsed from message</span>
         </div>
-        <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", border: "2px solid " + confBorder, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl + " confidence"}</span>
+        <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", border: "2px solid " + confBorder, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl + " confidence"}</span>
       </div>
       <div style={{ fontSize: T.lead, color: "var(--wa-draft-text-dim)", lineHeight: 1.6, marginBottom: d.ambiguity ? 8 : 12 }}>
         <span style={{ fontWeight: FW.semi }}>{(d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time") + prefSuffix}</span>
         {d.notes ? <div style={{ fontSize: T.body, marginTop: 4 }}>{"Notes: " + d.notes}</div> : null}
       </div>
       {d.ambiguity ? (
-        <div style={{ padding: "8px 10px", borderRadius: R.inset, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: T.body, color: "var(--danger-text)", marginBottom: 10, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 1, display: "inline-flex" }}><WarnIcon size={13} /></span>{d.ambiguity}</div>
+        <div style={{ padding: "8px 10px", borderRadius: R.inset, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: T.body, color: "var(--danger-text)", marginBottom: 10, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 0, display: "inline-flex" }}><WarnIcon size={13} /></span>{d.ambiguity}</div>
       ) : null}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button

@@ -23,7 +23,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
   // measures 4.02:1 light / 3.62 dark, under the 4.5 a small label needs.
   // Nothing is lost — the SHIMMER is what says "in progress", and the
   // accent was decorating a state the animation already announces.
-  if (isParsing(conv)) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: T.micro, fontWeight: FW.semi, marginLeft: 6, padding: "1px 7px", borderRadius: R.pill, color: "var(--text-secondary)", border: "2px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
+  if (isParsing(conv)) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: T.micro, fontWeight: FW.semi, marginLeft: 6, padding: "0 6px", borderRadius: R.pill, color: "var(--text-secondary)", border: "2px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
   else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--danger-text)", fontWeight: FW.semi, display: "inline-flex", alignItems: "center" }}><WarnIcon size={13} /></span>;
   else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--warn-text)", fontWeight: FW.semi, display: "inline-flex", alignItems: "center" }}><PencilIcon size={13} /></span>;
   else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ marginLeft: 6, color: "var(--text-secondary)", display: "inline-flex", alignItems: "center" }}><DraftIcon size={13} /></span>;
@@ -75,7 +75,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
         </div>
         <span style={{ fontSize: T.small, color: "var(--text-muted)", flexShrink: 0, fontWeight: FW.regular }}>{formatRelativeTime(conv.lastMessageAt)}</span>
       </div>
-      {phoneLine ? <div style={{ fontSize: T.small, color: "var(--text-muted)", marginBottom: 3, marginLeft: 14 }}>{phoneLine}</div> : null}
+      {phoneLine ? <div style={{ fontSize: T.small, color: "var(--text-muted)", marginBottom: 2, marginLeft: 14 }}>{phoneLine}</div> : null}
       <div style={{ fontSize: T.body, color: conv.unread ? "var(--text-primary)" : "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginLeft: 14, fontWeight: conv.unread ? FW.medium : FW.regular }}>{conv.lastMessageSnippet || ""}</div>
       </div>
     </div>

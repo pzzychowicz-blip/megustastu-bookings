@@ -55,7 +55,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
           onClick={() => { if (onApplyChanges) onApplyChanges(); }}
           title="Open the booking pre-filled with the requested changes"
           className="mgt-hover-scale mgt-press"
-          style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
+          style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
          ><PencilIcon size={13} />Apply changes</button>
       ) : null}
       <button

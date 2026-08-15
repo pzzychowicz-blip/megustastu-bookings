@@ -55,7 +55,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
   return (
     <div style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--suggest-bg-soft)", border: "1px solid var(--border-card)", marginBottom: 8, boxShadow: "var(--shadow-soft)" }}>
       <div onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
-        <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)", textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5 }}><LinkIcon size={13} />Linked booking</span>
+        <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)", textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><LinkIcon size={13} />Linked booking</span>
         <span style={{ fontSize: T.micro, padding: "2px 8px", borderRadius: R.pill, background: statusColor, color: "var(--text-on-accent)", fontWeight: FW.bold, textTransform: "capitalize", flexShrink: 0 }}>{booking.status}</span>
         {collapsed ? <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span> : <span style={{ flex: 1 }} />}
         {actionBtns}

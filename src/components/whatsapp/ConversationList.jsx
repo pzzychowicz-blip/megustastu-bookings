@@ -92,13 +92,13 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
   const flipRef = useFlip([orderSig], () => collapsing || wasCollapsing.current);
   if (!rows.length) {
     return (
-      <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--text-muted)", fontSize: T.lead }}>
+      <div style={{ padding: "32px 18px", textAlign: "center", color: "var(--text-muted)", fontSize: T.lead }}>
         {emptyLabel || (archivedView ? "No archived conversations." : "No conversations yet.")}
       </div>
     );
   }
   return (
-    <div ref={flipRef} style={{ padding: "10px 10px 20px", height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
+    <div ref={flipRef} style={{ padding: "10px 10px 18px", height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
       {/* A collapsing row stays mounted for the whole prune window, so it is
           made inert: without this you can click a row on its way out and select
           a conversation no longer in this tab, which the leaves-the-tab effect

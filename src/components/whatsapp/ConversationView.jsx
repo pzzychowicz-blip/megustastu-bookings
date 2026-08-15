@@ -124,7 +124,7 @@ export function ConversationView({
   // "Booking confirmed" header chip — non-dismissable (the big DraftCard banner
   // is the dismissable element instead).
   const acceptedBadge = conv.draftStatus === "accepted"
-    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", color: "var(--success-text)", border: "2px solid var(--suggest-border)" }}>✓ Booking confirmed</span>
+    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", color: "var(--success-text)", border: "2px solid var(--suggest-border)" }}>✓ Booking confirmed</span>
     : null;
   // The disclosure lists the customer's OTHER visits. The linked booking is
   // already rendered in full by LinkedBookingCard a few lines below, and now the
@@ -141,7 +141,7 @@ export function ConversationView({
   // It is only a BUTTON when there is something to disclose: a customer whose
   // single completed visit is the linked one still earns the chip, but tapping
   // it would open an empty "Past bookings" box.
-  const chipStyle = { background: "transparent", border: "2px solid var(--suggest-border)", borderRadius: R.pill, padding: "3px 10px", fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)" };
+  const chipStyle = { background: "transparent", border: "2px solid var(--suggest-border)", borderRadius: R.pill, padding: "2px 10px", fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)" };
   const regularChip = match && match.regularCount >= 1
     ? (pastList.length
       ? <button className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)} style={Object.assign({}, chipStyle, { cursor: "pointer" })}>{regularChipLabel(match.regularCount, regularMin) + (histOpen ? " ▾" : " ▸")}</button>
@@ -158,12 +158,12 @@ export function ConversationView({
     <div style={{ padding: "8px 12px", background: "var(--suggest-bg-soft)", border: "1px solid var(--border-card)", borderRadius: R.card, marginBottom: 10, fontSize: T.body, color: "var(--text-primary)" }}>
       <div style={{ fontWeight: FW.semi, marginBottom: 4, color: "var(--success-text)" }}>Past bookings</div>
       {pastList.slice(0, 5).map((b) => (
-        <div key={b.id} style={{ padding: "3px 0", borderTop: "1px solid var(--border-soft)" }}>{(b.date || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</div>
+        <div key={b.id} style={{ padding: "2px 0", borderTop: "1px solid var(--border-soft)" }}>{(b.date || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</div>
       ))}
     </div>
   ) : null;
   const windowEl = win
-    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", color: win.expired ? "var(--danger-text)" : "var(--success-text)", border: "2px solid " + (win.expired ? "var(--danger-border)" : "var(--suggest-border)") }}>{win.label}</span>
+    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", color: win.expired ? "var(--danger-text)" : "var(--success-text)", border: "2px solid " + (win.expired ? "var(--danger-border)" : "var(--suggest-border)") }}>{win.label}</span>
     : null;
 
   // Manual LLM re-check — leftmost of the header actions in BOTH states (an
@@ -192,14 +192,14 @@ export function ConversationView({
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
         <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }}>↺ Restore</button>
-        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }} ><TrashIcon size={13} />Delete</button>
+        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }} ><TrashIcon size={13} />Delete</button>
       </div>
     );
   } else {
     headerActionBtns = (
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
-        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "var(--shadow-btn)" }} ><ArchiveIcon size={13} />Archive</button>
+        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "var(--shadow-btn)" }} ><ArchiveIcon size={13} />Archive</button>
       </div>
     );
   }
@@ -230,7 +230,7 @@ export function ConversationView({
         <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
         {regularChip}
         {acceptedBadge}
-        {conv.archived ? <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: T.small, fontWeight: FW.semi, padding: "3px 10px", borderRadius: R.pill, background: "transparent", color: "var(--text-muted)", border: "2px solid var(--border-soft)" }} ><ArchiveIcon size={12} />Archived</span> : null}
+        {conv.archived ? <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", color: "var(--text-muted)", border: "2px solid var(--border-soft)" }} ><ArchiveIcon size={12} />Archived</span> : null}
         {windowEl}
         <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
       </div>

@@ -147,7 +147,7 @@ export function WaSimulator({ ctx, onClose }) {
     <Overlay onClose={onClose} footer={footer}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", display: "inline-flex", alignItems: "center", gap: 8 }}><FlaskIcon size={17} />WhatsApp Simulator</span>
-        <span style={{ fontSize: T.micro, fontWeight: FW.bold, padding: "2px 7px", borderRadius: R.pill, background: "var(--wa-sim-accent)", color: "var(--text-on-accent)", letterSpacing: "0.04em" }}>DEV</span>
+        <span style={{ fontSize: T.micro, fontWeight: FW.bold, padding: "2px 6px", borderRadius: R.pill, background: "var(--wa-sim-accent)", color: "var(--text-on-accent)", letterSpacing: "0.04em" }}>DEV</span>
       </div>
       <div style={{ fontSize: T.body, color: "var(--text-muted)", marginBottom: 14 }}>Injects mock inbound messages into the DEV Firebase inbox. Never shown in production.</div>
 
@@ -232,7 +232,7 @@ export function WaSimulator({ ctx, onClose }) {
 
       <Section>
         <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Busy moment</div>
-        <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "9px 14px", background: "var(--wa-sim-accent)", width: "100%" })} onClick={onBurst}>Simulate a burst (ongoing + new)</button>
+        <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 14px", background: "var(--wa-sim-accent)", width: "100%" })} onClick={onBurst}>Simulate a burst (ongoing + new)</button>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Moves the open conversations forward (a draft adds a detail, a confirmed booking asks to change, an unhandled request gets a nudge) and adds a couple of new ones.</div>
       </Section>
 
@@ -243,7 +243,7 @@ export function WaSimulator({ ctx, onClose }) {
             {groups[g].map((s) => (
               <div key={s.id}>
                 <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)", width: "100%", textAlign: "left" })} onClick={() => runScenario(s)}>{s.label}</button>
-                {s.note ? <div style={{ fontSize: T.small, color: "var(--text-muted)", margin: "3px 2px 0" }}>{s.note}</div> : null}
+                {s.note ? <div style={{ fontSize: T.small, color: "var(--text-muted)", margin: "2px 2px 0" }}>{s.note}</div> : null}
               </div>
             ))}
           </div>
@@ -278,7 +278,7 @@ export function WaSimulator({ ctx, onClose }) {
           <Fld label="Time"><input className="mgt-hover-scale" type="time" value={form.time} onChange={upd("time")} style={mkInp()} /></Fld>
           <Fld label="Message" style={{ gridColumn: "1 / -1" }}><textarea className="mgt-hover-scale" value={form.text} onChange={upd("text")} rows={2} style={mkArea()} placeholder="What the customer typed…" /></Fld>
         </div>
-        <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "9px 16px", background: S.accent, marginTop: 10 })} onClick={sendCustom}>Send custom message</button>
+        <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 16px", background: S.accent, marginTop: 10 })} onClick={sendCustom}>Send custom message</button>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Intent question/other → message only (no draft). Size/date/time apply to new_booking.</div>
       </Section>
     </Overlay>

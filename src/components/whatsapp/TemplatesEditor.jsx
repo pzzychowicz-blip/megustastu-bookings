@@ -54,7 +54,7 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
   const listFooter = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
       <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })} onClick={onClose}>Close</button>
-      <button onClick={() => onSave(list)} className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 22px", background: S.accent })}>Save all</button>
+      <button onClick={() => onSave(list)} className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: S.accent })}>Save all</button>
     </div>
   );
 
