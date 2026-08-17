@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizePhone, formatPhone, hasRealPhone, isNoShow,
-  matchCustomerByPhone, customerIndex, noShowMap,
+  matchCustomerByPhone, matchCustomerFor, identityKey, customerIndex, noShowMap,
   searchBookings, searchCustomers, searchGuestsByName, findPhoneOverlaps,
 } from "../src/lib/customers.js";
 
@@ -138,6 +138,87 @@ describe("searchGuestsByName (no-merge rule)", () => {
   });
   it("requires a query of at least 2 chars", () => {
     expect(searchGuestsByName(bks, idx, "a")).toEqual([]);
+  });
+
+  // v17.10.0: the ONE way phone-less guests merge — a shared guestId, which is
+  // only ever written when a human picks one of them from this dropdown. The
+  // test above still passes unchanged, which is the point: nothing merges by
+  // accident.
+  it("phone-less bookings sharing a guestId collapse into ONE row", () => {
+    const j1 = bk({ id: "j1", phone: "", name: "Anna", date: "2099-01-01", guestId: "gj1" });
+    const j2 = bk({ id: "j2", phone: "", name: "Anna", date: "2099-05-01", guestId: "gj1" });
+    const stranger = bk({ id: "j3", phone: "", name: "Anna", date: "2099-06-01" }); // same NAME, no join
+    const list = [j1, j2, stranger];
+    const rows = searchGuestsByName(list, customerIndex(list), "ann");
+    expect(rows).toHaveLength(2);                       // the joined pair + the stranger
+    const joined = rows.find((r) => r.guestId === "gj1");
+    expect(joined.count).toBe(2);
+    expect(joined.latestDate).toBe("2099-05-01");       // newest first
+    expect(joined.latest.id).toBe("j2");                // prefill from the newest
+    // the un-joined same-name guest stays a row of its own — the never-merge rule
+    expect(rows.find((r) => r.guestId === null).latest.id).toBe("j3");
+  });
+});
+
+// ── v17.10.0: the second identity key ─────────────────────────────────────────
+describe("identityKey / matchCustomerFor (guestId)", () => {
+  it("identityKey prefers a real phone and falls back to guestId", () => {
+    expect(identityKey({ phone: "+34600111222", guestId: "gx" })).toBe("+34600111222");
+    expect(identityKey({ phone: "", guestId: "gx" })).toBe("gx");
+    expect(identityKey({ phone: "+", guestId: "gx" })).toBe("gx");   // the lone "+" is not a phone
+    expect(identityKey({ phone: "", guestId: null })).toBe(null);
+    expect(identityKey(null)).toBe(null);
+  });
+
+  it("matches on guestId alone", () => {
+    const a = bk({ id: "a", phone: "", name: "Ana", date: "2099-01-01", status: "completed", guestId: "gA" });
+    const b = bk({ id: "b", phone: "", name: "Ana", date: "2099-02-01", status: "completed", guestId: "gA" });
+    const other = bk({ id: "c", phone: "", name: "Ana", date: "2099-03-01", status: "completed" });
+    const m = matchCustomerFor({ guestId: "gA" }, [a, b, other]);
+    expect(m.count).toBe(2);
+    expect(m.regularCount).toBe(2);
+    expect(m.all.map((x) => x.id)).toEqual(["b", "a"]);   // date desc
+  });
+
+  // The union, not a fallback: a guest who books three times with no phone and
+  // then gives one must stay ONE person, not split at the moment they became
+  // easiest to identify.
+  it("unions the phone and guestId matches", () => {
+    const early = bk({ id: "e", phone: "", date: "2099-01-01", status: "completed", guestId: "gU" });
+    const later = bk({ id: "l", phone: "+34600999888", date: "2099-02-01", status: "completed", guestId: "gU" });
+    const m = matchCustomerFor({ phone: "+34600999888", guestId: "gU" }, [early, later]);
+    expect(m.count).toBe(2);
+    expect(m.regularCount).toBe(2);
+  });
+
+  it("excludeBookingId still drops the linked booking from the counts", () => {
+    const a = bk({ id: "a", phone: "", date: "2099-01-01", status: "completed", guestId: "gA" });
+    const b = bk({ id: "b", phone: "", date: "2099-02-01", status: "completed", guestId: "gA" });
+    expect(matchCustomerFor({ guestId: "gA" }, [a, b], "b").regularCount).toBe(1);
+  });
+
+  it("returns null when neither key is supplied", () => {
+    expect(matchCustomerFor({}, [bk({ guestId: "gA" })])).toBe(null);
+    expect(matchCustomerFor(null, [])).toBe(null);
+  });
+
+  // matchCustomerByPhone is a thin alias now — the WA complementarity contract
+  // depends on this exact symbol, so its behaviour is pinned here.
+  it("matchCustomerByPhone still ignores guestId-only bookings", () => {
+    const withPhone = bk({ id: "p", phone: "+34600111222", status: "completed" });
+    const guestOnly = bk({ id: "g", phone: "", status: "completed", guestId: "gZ" });
+    const m = matchCustomerByPhone("+34600111222", [withPhone, guestOnly]);
+    expect(m.count).toBe(1);
+    expect(matchCustomerByPhone("", [withPhone])).toBe(null);
+  });
+
+  it("noShowMap counts a joined phone-less offender, and skips an unjoined one", () => {
+    const n1 = bk({ id: "n1", phone: "", noShow: true, guestId: "gN" });
+    const n2 = bk({ id: "n2", phone: "", noShow: true, guestId: "gN" });
+    const loose = bk({ id: "n3", phone: "", noShow: true });
+    const map = noShowMap([n1, n2, loose]);
+    expect(map.gN).toBe(2);
+    expect(Object.keys(map)).toEqual(["gN"]);   // the unjoined booking has no identity
   });
 });
 

@@ -41,7 +41,7 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   optimizerActiveFor
 } from "../lib/booking-logic";
-import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone, findPhoneOverlaps } from "../lib/customers";
+import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
@@ -142,6 +142,22 @@ export function BookingFormModal({
     setForm(function(f){
       const next={name:r.name};
       if(!r.isPhoneless) next.phone=r.rawPhone;
+      // v17.10.0: picking a PHONE-LESS guest is the join. This click is the only
+      // place a `guestId` is ever minted, because it is the only moment someone
+      // who can see both bookings asserts they are the same person — see the
+      // never-merge discussion in customers.js → searchGuestsByName.
+      //
+      // A row that already carries a guestId is an existing group, so the draft
+      // just adopts it and there is nothing to write back. An UNJOINED row mints
+      // `"g"+<that booking's id>` and records the booking in `guestSeed`, which
+      // doSave consumes to stamp the source in the SAME write as the new
+      // booking. Deriving the id from data both devices already hold is what
+      // makes two clients joining concurrently converge instead of forking the
+      // guest in two (the recurring-occurrence-id reasoning).
+      if(r.isPhoneless&&latest){
+        next.guestId=r.guestId||("g"+latest.id);
+        next.guestSeed=r.guestId?null:latest.id;
+      }
       if(!editId&&latest){ // Book-Again-style prefill (new bookings only)
         next.size=latest.size||f.size;
         next.preference=latest.preference||f.preference;
@@ -158,9 +174,19 @@ export function BookingFormModal({
   // disclosure, ported: Regular → regularBookings, no-show → noShowBookings.
   // `chipHist` is keyed by the normalized phone at click time, so editing the
   // phone (a different customer) closes the panel by itself — no effect needed.
-  const custMatch=hasRealPhone(form.phone)?matchCustomerByPhone(form.phone,bookings,editId):null;
+  // v17.10.0: resolved on phone OR guestId, so a JOINED phone-less guest earns
+  // the same Regular / no-show chips a phone customer does — which is the whole
+  // point of the guest identity. matchCustomerFor unions the two keys; see
+  // customers.js.
+  const custMatch=(hasRealPhone(form.phone)||form.guestId)
+    ?matchCustomerFor({phone:form.phone,guestId:form.guestId},bookings,editId)
+    :null;
   const [chipHist,setChipHist]=useState(null); // {key,which:"regular"|"noshow"} | null
-  const phoneKeyNow=normalizePhone(form.phone);
+  // The disclosure panel is keyed by the identity it was opened for, so changing
+  // the phone (or picking a different guest) closes it by itself — no effect
+  // needed. v17.10.0: that key is now the resolved identity, not the phone
+  // alone, or the panel would never self-close for a phone-less guest.
+  const phoneKeyNow=identityKey({phone:form.phone,guestId:form.guestId})||"";
   const histWhich=chipHist&&chipHist.key===phoneKeyNow?chipHist.which:null;
   function toggleChipHist(which){
     setChipHist(histWhich===which?null:{key:phoneKeyNow,which:which});
@@ -255,7 +281,7 @@ export function BookingFormModal({
       key={r.key}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickGuest(r);})}
-      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
+      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")+(r.count>1?"  ·  "+r.count+" bookings":"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
   );})}</div>:null;
 
   const formCols=isMobile?"1fr":"1fr 1fr";

@@ -40,7 +40,7 @@ import {
   undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
-import { normalizePhone } from "./lib/customers";
+import { normalizePhone, hasRealPhone } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { hourLabel } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
@@ -1509,7 +1509,7 @@ function BookingApp({uid}){
   }
 
   function openNew(){pendingWaitlistRef.current=null;openForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openEdit(b){pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -1534,7 +1534,15 @@ function BookingApp({uid}){
       customDur:null,
       manualTables:[],
       status:"confirmed",
-      returnOf:sourceBooking.id
+      returnOf:sourceBooking.id,
+      // v17.10.0: Book Again on a PHONE-LESS guest is the same assertion as
+      // picking them from the name dropdown — you are looking at their booking
+      // and saying "them again" — so it joins them too. An existing guestId is
+      // adopted; otherwise one is minted from the source and `guestSeed` asks
+      // doSave to write it back. A source WITH a phone needs neither: the phone
+      // copied above already is the identity.
+      guestId:hasRealPhone(sourceBooking.phone)?null:(sourceBooking.guestId||("g"+sourceBooking.id)),
+      guestSeed:(hasRealPhone(sourceBooking.phone)||sourceBooking.guestId)?null:sourceBooking.id
     }));
     setEditId(null);
     setError("");
@@ -1623,6 +1631,27 @@ function BookingApp({uid}){
   // before (doSave has nothing after the dispatch); helper throws are caught
   // by doSave's try/catch. The v15.7.0 capture-intent-then-replay contract and
   // the prev-identity buildNextMemo are untouched.
+
+  // v17.10.0: the guest-identity BACK-STAMP. Picking an unjoined phone-less
+  // guest from the name dropdown mints `guestId` into the draft and records the
+  // source booking in `guestSeed`; this writes the same id onto that source, so
+  // the two bookings become one customer.
+  //
+  // It runs INSIDE buildNext/applyBase, i.e. as part of the same pure transform
+  // the new/edited booking goes through, so both children ride ONE saveBookings
+  // call: the v15.5.0 per-booking diff-write patches them together and the
+  // per-$id CAS covers both. A separate write would be a second thing to fail.
+  //
+  // `!b.guestId` is the guard that makes a replay safe — a retry on fresh data
+  // finds the stamp already there and leaves it alone, and it also means a
+  // booking already belonging to another group is never silently re-homed.
+  function stampGuestSeed(list,f){
+    if(!f||!f.guestSeed||!f.guestId) return list;
+    return list.map(function(b){
+      if(b.id!==f.guestSeed||b.guestId) return b;
+      return Object.assign({},b,{guestId:f.guestId});
+    });
+  }
   function doSaveEdit(f,v){
     const size=v.size,cleanPhone=v.cleanPhone,mt=v.mt;
         const orig=bookings.find(function(b){return b.id===editId;});
@@ -1706,12 +1735,12 @@ function BookingApp({uid}){
         // are applied to whichever version of the booking is in fresh `prev`, so a
         // concurrent edit to OTHER bookings (which live in `prev`) is preserved.
         function buildNext(prev){
-          const upd=prev.map(function(b){
+          const upd=stampGuestSeed(prev,f).map(function(b){
             if(b.id===editId){
               let h=(b.history||[]).concat([editHist]);
               if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
               const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
-              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
             }
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
@@ -1775,14 +1804,14 @@ function BookingApp({uid}){
         }
         // v14 p1: scheduledTime=f.time on creation. v17.0.0: new bookings start
         // confirmed, OR pending via the "Save pending" button (status override).
-        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,history:[createHist]};
+        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,guestId:f.guestId||null,history:[createHist]};
         // v15.7.0: build the next state as a PURE transform of `prev` (see the edit
         // path above) so the new-booking save joins the optimistic-show + auto-retry
         // path. `newId`/`nb` are computed once (stable id) → a held/rejected write
         // replayed on fresh data can never duplicate the booking (the defensive
         // filter below also drops any stray match before re-adding it).
         function applyBase(prev){
-          let base=prev.filter(function(b){return b.id!==newId;});
+          let base=stampGuestSeed(prev,f).filter(function(b){return b.id!==newId;});
           if(swapAffected){base=base.map(function(b){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}return b;});}
           // If this is a Book Again creation, append a back-reference entry to the
           // source booking's history (purely informational — no status/table change).

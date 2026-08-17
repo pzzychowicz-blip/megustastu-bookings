@@ -43,7 +43,7 @@ import {
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
-import { noShowMap, normalizePhone } from "../lib/customers";
+import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
@@ -943,7 +943,7 @@ export const TimelineView = memo(function TimelineView({
   // the per-block part is only what each block needs, and the worst one decides.
   const confirmedDay = day.filter((b) => b.status === "confirmed" || b.status === "pending");
   const chipsOn = confirmedDay.length > 0 && confirmedDay.every(function (b) {
-    return liveBarDur(b, nowMins) * pxPerMin >= chipRoomFor(b, nsMap[normalizePhone(b.phone)] || 0, warnings[b.id]);
+    return liveBarDur(b, nowMins) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id]);
   });
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
@@ -1200,7 +1200,7 @@ export const TimelineView = memo(function TimelineView({
             <Fragment key={b.id}>
               {tail}
               {ghost}
-              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
+              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
             </Fragment>
           );
         })}
@@ -1216,7 +1216,7 @@ export const TimelineView = memo(function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
     </div>
   ) : null;
 

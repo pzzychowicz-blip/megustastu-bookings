@@ -31,7 +31,7 @@
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
-import { noShowMap, normalizePhone } from "../lib/customers";
+import { noShowMap, identityKey } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
 import { AssignIcon, ChevronRightIcon, StarIcon } from "./Icons";
 
@@ -246,7 +246,7 @@ export const ListView = memo(function ListView({
           <SmallTag label={<><StarIcon size={IC.inline} />{b.preferredTables.join("+")}</>} style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
         ) : null;
         // v16.0.0: repeat no-show offender chip (same threshold as the timeline ⚠).
-        const noShowCt = nsMap[normalizePhone(b.phone)] || 0;
+        const noShowCt = nsMap[identityKey(b)] || 0;
         // v17.8.0: solid, like every other tag in this row. The pale-fill +
         // colour-matched-border + bold-coloured-text combination these three
         // carried is the generic badge shape, and it sat inches from `manual`

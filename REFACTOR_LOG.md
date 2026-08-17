@@ -9333,3 +9333,67 @@ and `manualAssign`'s `affected` branch — have always unlocked them, and are
 untouched. They strip the tables and let the optimizer re-place the booking from
 scratch, so the walk-in argument does not transfer: there is no "new tables" for
 a lock to protect.
+
+### 2 — `guestId`: guests with no phone number can become regulars
+
+**Files:** `src/lib/customers.js`, `src/lib/booking-logic.js`,
+`src/lib/constants.js`, `src/App.jsx`, `src/components/BookingFormModal.jsx`,
+`src/components/ListView.jsx`, `src/components/TimelineView.jsx`,
+`tests/customers.test.js`, `CLAUDE.md`.
+
+Since v16.0.0 a customer has been derived from bookings by normalized phone, and
+that has been right: a phone number is verified, self-normalising, and shared
+across the WhatsApp module. But plenty of parties never give one, and those guests
+could never become regulars however often they came back. Every phone-less booking
+was its own island.
+
+**That was deliberate, and the reason still stands.** `searchGuestsByName`'s
+never-merge rule exists because nothing in the data separates two people called
+Maria with no phone numbers, and fusing them produces one customer with one merged
+visit count and one merged no-show record — a wrong answer presented with
+confidence. Matching on names would have been the easy version of this feature and
+the wrong one.
+
+So the fix is not a better guess. **`guestId` is an explicit assertion by a human
+who can see both bookings**: picking an existing phone-less guest out of the name
+dropdown, or Book Again on a phone-less booking. Absent that click nothing merges,
+and the v16.4.0 test that pins the never-merge rule passes unchanged.
+
+Three decisions worth keeping:
+
+**The id is `"g" + <seed booking id>`, not random.** It is derived from data both
+devices already hold, so two clients joining the same guest concurrently mint the
+SAME id and converge. A random id would fork the guest in two, silently. This is
+the recurring-occurrence-id argument, and it applies for the same reason.
+
+**Identity is a UNION of the two keys, not a fallback.** `matchCustomerFor` matches
+phone OR guestId. A guest who books three times with no phone and then gives one
+has bookings carrying only a guestId and bookings carrying both; "phone if present,
+else guestId" would split them at exactly the moment they became easiest to
+identify. `identityKey(b)` — phone if real, else guestId — answers the narrower
+question "which key does this ONE booking answer to", and is what `noShowMap` is
+now built on.
+
+**The back-stamp rides the same write.** Joining needs the id on both bookings, so
+`stampGuestSeed` runs inside `buildNext`/`applyBase` rather than as a second
+`saveBookings` call: the v15.5.0 per-booking diff-write patches both children
+together and the per-`$id` CAS covers both. Its `!b.guestId` guard is what makes a
+held-and-retried write idempotent, and it also refuses to re-home a booking that
+already belongs to another group.
+
+`matchCustomerByPhone` survives as a thin alias with its exact name and signature
+— the complementarity contract at the top of `customers.js` requires the WA module
+to import that symbol on merge, and a generalisation that renames it would break a
+promise made to a file that does not exist yet.
+
+**Flagged non-goal:** `customerIndex` stays phone-only, so joined phone-less guests
+do NOT appear in Settings → Customers. That index feeds `searchCustomers` and the
+Customers tab, both of which assume every entry has a real phone; adding guest
+entries would hand `pickCustomer` a customer with `rawPhone: ""`. The form chips,
+the name dropdown and the no-show markers all see them, which is where the
+recognition actually matters.
+
+**Verification:** 8 new tests in `tests/customers.test.js` (290 total) — the union
+match, `identityKey`'s precedence, the `searchGuestsByName` collapse *and* the
+un-joined same-name guest staying separate beside it, `noShowMap` on a guestId,
+and `matchCustomerByPhone`'s unchanged behaviour. Build clean.

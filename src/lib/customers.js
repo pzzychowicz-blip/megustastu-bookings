@@ -47,6 +47,34 @@ export function hasRealPhone(p) {
   return normalizePhone(p).replace(/\D/g, "").length >= 3;
 }
 
+// ── v17.10.0: the SECOND identity key — `guestId` ────────────────────────────
+// A phone number is a verified, self-normalising identity, which is why it has
+// been the only one since v16.0.0. But plenty of parties never give one, and
+// those guests could never become regulars however often they came back: every
+// phone-less booking was its own island, by design (see searchGuestsByName's
+// never-merge rule, which exists so two different people called "Maria" are not
+// silently fused into one customer with one merged no-show count).
+//
+// `guestId` is the explicit opt-in that rule was missing. It is minted ONLY when
+// a human picks an existing phone-less guest from the name dropdown — i.e. when
+// someone who can see both bookings says "this is the same person". Absent that,
+// nothing merges and the old behaviour is byte-for-byte intact.
+//
+// Format is `"g" + <seed booking id>`: derived from data both devices already
+// have, so two clients minting concurrently produce the SAME id and converge
+// (the same reasoning as the recurring-occurrence ids). It is path-safe for the
+// same reason `genId()` is.
+//
+// identityKey — which key does THIS booking answer to? Phone wins when there is
+// one, because it is the stronger claim; a `guestId` is the fallback. Note the
+// two are not exclusive: a guest who later supplies a number keeps both, which
+// is exactly what makes matchCustomerFor's UNION below the right shape.
+export function identityKey(b) {
+  if (!b) return null;
+  if (hasRealPhone(b.phone)) return normalizePhone(b.phone);
+  return b.guestId || null;
+}
+
 // isNoShow — did this booking end as a no-show?
 // Primary signal: the v16.0.0 `noShow` boolean set by doCancelBooking.
 // Fallback: the pre-v16 record was only a history entry {action:"no show"} (+
@@ -59,6 +87,9 @@ export function isNoShow(b) {
 }
 
 // matchCustomerByPhone — look up a customer by phone across the bookings list.
+// v17.10.0: a thin alias over matchCustomerFor below. The NAME and SIGNATURE are
+// preserved deliberately — the complementarity contract at the top of this file
+// requires the WA module to be able to import this exact symbol on merge.
 // Returns null if there's no match. Otherwise:
 //   name            — most recent booking's name (for display)
 //   count           — total bookings matched (all statuses, incl. the linked one)
@@ -75,10 +106,32 @@ export function isNoShow(b) {
 // a WA conversation's acceptedBookingId), excluded so a customer's own current
 // booking never counts toward its chips.
 export function matchCustomerByPhone(phoneKey, bookings, excludeBookingId) {
-  if (!phoneKey || !Array.isArray(bookings)) return null;
-  const key = normalizePhone(phoneKey);
-  if (!key) return null;
-  const matches = bookings.filter(function (b) { return b && b.phone && normalizePhone(b.phone) === key; });
+  return matchCustomerFor({ phone: phoneKey }, bookings, excludeBookingId);
+}
+
+// matchCustomerFor — v17.10.0. The generalised matcher: same return shape as
+// matchCustomerByPhone (which now delegates here, keeping its exact name and
+// signature for the WA complementarity contract at the top of this file), but it
+// matches on the phone key OR the guestId.
+//
+// The OR is a UNION, not a fallback, and that is the load-bearing part. A guest
+// who books three times without a phone and then gives one on the fourth has
+// bookings carrying only a guestId and bookings carrying both; matching either
+// key keeps them one person. A "phone if present, else guestId" rule would split
+// them at exactly the moment they became easiest to identify.
+export function matchCustomerFor(ident, bookings, excludeBookingId) {
+  const o = ident || {};
+  // normalizePhone, NOT hasRealPhone — matchCustomerByPhone's original semantics
+  // were "any non-empty normalized key", and every caller already gates on
+  // hasRealPhone before asking.
+  const key = normalizePhone(o.phone);
+  const gid = o.guestId || "";
+  if ((!key && !gid) || !Array.isArray(bookings)) return null;
+  const matches = bookings.filter(function (b) {
+    if (!b) return false;
+    if (key && b.phone && normalizePhone(b.phone) === key) return true;
+    return !!(gid && b.guestId === gid);
+  });
   if (!matches.length) return null;
   const sorted = matches.slice().sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
   const regular = sorted.filter(function (b) { return b.status === "completed" && (!excludeBookingId || b.id !== excludeBookingId); });
@@ -127,15 +180,20 @@ export function customerIndex(bookings) {
   return map;
 }
 
-// noShowMap — lightweight {normalizedPhone: noShowCount} map for the timeline/
+// noShowMap — lightweight {identityKey: noShowCount} map for the timeline/
 // list repeat-offender markers (one pass, no per-customer sorting — cheaper
 // than customerIndex when only the counts are needed).
+// v17.10.0: keyed on identityKey rather than the phone alone, so a JOINED
+// phone-less repeat offender is flagged too. An unjoined phone-less booking has
+// no identity, so it is skipped exactly as before — read this map through
+// `noShowMap(bookings)[identityKey(b)] || 0` at every call site.
 export function noShowMap(bookings) {
   const map = {};
   if (!Array.isArray(bookings)) return map;
   bookings.forEach(function (b) {
-    if (!b || !hasRealPhone(b.phone) || !isNoShow(b)) return;
-    const key = normalizePhone(b.phone);
+    if (!b || !isNoShow(b)) return;
+    const key = identityKey(b);
+    if (!key) return;
     map[key] = (map[key] || 0) + 1;
   });
   return map;
@@ -196,12 +254,26 @@ export function searchCustomers(index, query, limit) {
 // list of dropdown rows spanning BOTH identity tiers:
 //   • phone customers  → ONE row per phone (a verified single identity, from the
 //                        prebuilt phone index) — `isPhoneless:false`.
-//   • phone-LESS guests → ONE row PER BOOKING (NO merging) — two different people
-//                        sharing a name never collapse into one; each row carries
-//                        its own date so duplicates are distinguishable.
+//   • phone-LESS guests → ONE row per GUEST, where "guest" means a shared
+//                        `guestId` (v17.10.0) and otherwise still means ONE ROW
+//                        PER BOOKING.
+//
+// v17.10.0 — the never-merge rule is unchanged in substance, and it is worth
+// being precise about why. Two different people called "Maria" with no phone
+// numbers must never collapse into one customer with one merged visit count and
+// one merged no-show record; nothing in the data can tell them apart, so the
+// only safe default is to keep them separate. What changed is that a HUMAN can
+// now say otherwise: picking an existing phone-less guest from this very
+// dropdown stamps both bookings with a shared `guestId`, and rows sharing one
+// are the only phone-less rows that merge. Merging is opt-in, per guest, by
+// someone who could see both bookings.
+//
 // Row shape (uniform so the dropdown renders both): { key, name, rawPhone, phone,
-// latestDate, isPhoneless, latest } where `latest` is the booking to Book-Again
-// prefill from. Sorted most-recent-first, capped at `limit` (default 6).
+// latestDate, isPhoneless, guestId, count, latest } where `latest` is the booking
+// to Book-Again prefill from and `count` is how many bookings the row represents
+// (1 for an unjoined booking — the dropdown shows it only when >1, so a merge is
+// visible rather than silent). Sorted most-recent-first, capped at `limit`
+// (default 6).
 export function searchGuestsByName(bookings, index, query, limit) {
   const max = limit || 6;
   const q = String(query || "").trim().toLowerCase();
@@ -211,15 +283,27 @@ export function searchGuestsByName(bookings, index, query, limit) {
   Object.keys(index || {}).forEach(function (key) {
     const c = index[key];
     if (c.name && c.name.toLowerCase().indexOf(q) !== -1) {
-      rows.push({ key: "p:" + c.phone, name: c.name, rawPhone: c.rawPhone, phone: c.phone, latestDate: c.latestDate, isPhoneless: false, latest: c.bookings[0] });
+      rows.push({ key: "p:" + c.phone, name: c.name, rawPhone: c.rawPhone, phone: c.phone, latestDate: c.latestDate, isPhoneless: false, guestId: null, count: c.bookings.length, latest: c.bookings[0] });
     }
   });
-  // Phone-LESS bookings whose name matches — one row each, never merged.
+  // Phone-LESS bookings whose name matches. Ones carrying a guestId are grouped
+  // into a single row; the rest stay one row each, exactly as before.
+  const groups = {};
   bookings.forEach(function (b) {
     if (!b || b.anonymized || hasRealPhone(b.phone)) return; // v17.0.0: skip anonymized
-    if (b.name && b.name.toLowerCase().indexOf(q) !== -1) {
-      rows.push({ key: "b:" + b.id, name: b.name, rawPhone: "", phone: null, latestDate: b.date || "", isPhoneless: true, latest: b });
+    if (!b.name || b.name.toLowerCase().indexOf(q) === -1) return;
+    if (b.guestId) {
+      const g = groups[b.guestId] || (groups[b.guestId] = []);
+      g.push(b);
+      return;
     }
+    rows.push({ key: "b:" + b.id, name: b.name, rawPhone: "", phone: null, latestDate: b.date || "", isPhoneless: true, guestId: null, count: 1, latest: b });
+  });
+  Object.keys(groups).forEach(function (gid) {
+    // Most recent first, so `latest` is the booking to prefill from and the row
+    // carries the newest name the guest was written under.
+    const g = groups[gid].slice().sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
+    rows.push({ key: "g:" + gid, name: g[0].name, rawPhone: "", phone: null, latestDate: g[0].date || "", isPhoneless: true, guestId: gid, count: g.length, latest: g[0] });
   });
   rows.sort(function (a, b) { return (b.latestDate || "").localeCompare(a.latestDate || ""); });
   return rows.slice(0, max);
