@@ -46,7 +46,7 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
       padding: "12px 14px",
       marginBottom: 8,
       opacity: r.active ? 1 : 0.55,
-      boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+      boxShadow: "var(--shadow-card)"
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}>

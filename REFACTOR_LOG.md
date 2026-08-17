@@ -9658,3 +9658,59 @@ before and after.
 **Verification:** live in DEV, hovering a Settings section — the hovered header
 computes `rgba(0, 0, 0, 0.05)` while its neighbour computes `rgba(0, 0, 0, 0)`,
 and the tint bleeds 10px into `Section`'s padding with `R.inset` corners.
+
+### 9 — the plain drop-shadow literals become tokens
+
+**Files:** `index.html`, plus nine components; `ROADMAP.md`, `CLAUDE.md`.
+
+Closes the `ROADMAP.md` "Plain drop-shadow literals" entry. 18 inline
+`0 1px Npx rgba(0,0,0,0.0x)` values across nine files, in seven distinct depths
+nobody had chosen — they accumulated, one per feature, the same way the radii and
+type sizes did before `R` and `T`.
+
+**A new token was needed, and the reason is the interesting part.** Every
+existing `--shadow-*` leads with a white inset highlight; that is what makes a
+control read as raised. But a highlight tuned for light mode and dimmed for dark
+is *wrong* on a fill that is identical in both themes — the v17.8.0
+white-inset-over-fixed-fill rule, in reverse. Mapping the whole set onto
+`--shadow-btn` would have re-introduced exactly the bug class that rule guards.
+So `--shadow-flat` carries **no inset at all**, and is still theme-split, because
+the shadow falls on the PAGE and the page does flip.
+
+**Triage is one question: does the ELEMENT's own fill flip with the theme?** It
+was answered by parsing `index.html`'s `:root` and `[data-theme="dark"]` blocks
+rather than by assumption, and that turned up two things worth knowing:
+`--block-confirmed` / `--block-pending` / `--block-completed` / `--tl-blocked-badge`
+are invariant while `--block-seated` / `--block-cancelled` / `--tl-hour-pill` /
+`--tl-now-pill` / `--accent` are **not** — so "BLOCK_BG is theme-invariant" is
+true of three of the five, not all. A MIX therefore counts as "does not flip":
+`SBadge` and the timeline's status swatch both take `--shadow-flat`, because a
+single style object cannot branch on which status it is about to paint.
+
+The rest went to `--shadow-btn` (raised pills whose fill flips: the now-pill,
+`TBadge`, the Plan badge, the suggestion chip), `--shadow-card` (cards on
+`--bg-card` / `--bg-soft`) and `--shadow-popover` (`StatusToasts` — a floating
+surface, the same role as the quick-status popup, and it gains a depth that
+actually deepens over a dark page).
+
+**One literal was hidden behind a `const`.** `StatusToasts`' `toastShadow`
+survived the first pass because the sweep grepped `boxShadow: "0 …` and the
+property was assigned a variable. Same shape as the v17.9.0 finding that an HTML
+entity is invisible to a glyph scan: **grep the VALUE's shape, not the property
+it ends up on.** A second grep on `"[0-9]+ [0-9]+px [0-9]+px rgba` found it.
+
+Genuine exceptions kept: the connection dot's `0 0 0 3px` glow and WeekView's
+`0 0 0 2px` focus rings are **rings, not drop shadows**, and `WalkinForm`'s Seat
+button keeps its white-inset literal, which sits on a theme-invariant fill and is
+correct there.
+
+**Verification:** grepped all seven old values afterwards across `src/` **and**
+`index.html` — zero hits. Build, 290 tests, lint 0 errors, `check:style` clean.
+Loaded the app in dark mode and confirmed no element gained a bright white top
+highlight; read `--shadow-flat` / `--shadow-btn` / `--shadow-popover` back out of
+the live CSSOM in both themes.
+
+**ROADMAP.md:** the entry is replaced by its successor — a `check:style` rule for
+bare shadow literals, now that the backlog which would have made it noisy is
+zero. It records the two traps such a rule must handle (rings are not drop
+shadows; literals hide behind consts).

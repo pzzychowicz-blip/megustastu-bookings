@@ -452,7 +452,7 @@ export function BookingFormModal({
         key={r.timeStr}
         className="mgt-hover-scale"
         onClick={function(){setForm(function(f){return Object.assign({},f,{time:r.timeStr});});}}
-        style={{cursor:"pointer",padding:"2px 8px",borderRadius:R.pill,fontWeight: FW.semi,fontSize: T.body,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?KTXT_OK:KTXT_TIGHT,border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>{r.timeStr}</span>
+        style={{cursor:"pointer",padding:"2px 8px",borderRadius:R.pill,fontWeight: FW.semi,fontSize: T.body,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?KTXT_OK:KTXT_TIGHT,border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"var(--shadow-flat)"}}>{r.timeStr}</span>
     );});
   }
   // v15.8.0 cont.4: the kitchen suggestion sub-panel (the part that appears when the

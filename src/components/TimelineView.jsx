@@ -77,7 +77,7 @@ const HOUR_PILL = {
   fontSize: T.micro, fontWeight: FW.semi,
   fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
   background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+  boxShadow: "var(--shadow-flat)"
 };
 
 // ── The party-size ring (v17.9.0) ────────────────────────────────────────────
@@ -1068,7 +1068,7 @@ export const TimelineView = memo(function TimelineView({
               border: "1px solid " + (hasBlock ? "var(--tl-blocked-badge-border)" : indoor ? TBL.ind.border : TBL.out.border),
               width: 32, textAlign: "center", display: "inline-block",
               boxSizing: "border-box",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+              boxShadow: "var(--shadow-flat)"
             }}>
               {id}
             </span>
@@ -1235,7 +1235,7 @@ export const TimelineView = memo(function TimelineView({
         fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
         background: "var(--tl-now-pill)",
         padding: "2px 4px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
-        boxShadow: "0 1px 4px rgba(0,0,0,0.15)"
+        boxShadow: "var(--shadow-btn)"
       }}>
         {toTime(nowMins)}
       </div>
@@ -1394,7 +1394,7 @@ export const TimelineView = memo(function TimelineView({
           color: BLOCK_INK[s] || "var(--text-on-accent)",
           border: "1px solid rgba(255,255,255,0.2)",
           fontWeight: FW.semi, textTransform: "capitalize",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
+          boxShadow: "var(--shadow-flat)"
         }}
       >
         {s}

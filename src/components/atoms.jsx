@@ -966,7 +966,7 @@ export function SBadge({ status }) {
       color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: "1px solid rgba(255,255,255,0.2)",
       fontWeight: FW.semi, textTransform: "capitalize",
       display: "inline-block",
-      boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+      boxShadow: "var(--shadow-flat)"
     }}>
       {status}
     </span>
@@ -983,7 +983,7 @@ export function TBadge({ id }) {
       background: t.bg, color: t.text,
       border: "1px solid " + t.border,
       fontWeight: FW.semi, display: "inline-block",
-      boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
+      boxShadow: "var(--shadow-btn)"
     }}>
       {id}
     </span>
@@ -1031,7 +1031,10 @@ export function Toggle({ on, onClick }) {
         left: on ? 24 : 3,
         width: 20, height: 20, borderRadius: R.pill,
         background: "var(--text-on-accent)",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
+        // v17.10.0: --shadow-flat, not --shadow-btn. The knob is white in BOTH
+        // themes (--text-on-accent is declared once), so a white inset
+        // highlight tuned for light and dimmed for dark would be wrong on it.
+        boxShadow: "var(--shadow-flat)",
         // The knob crosses 21px. That is TRAVEL, not a control acknowledging a
         // tap, so it takes M.move — under M.tap it arrived before the eye could
         // follow it and the switch read as teleporting rather than sliding.
@@ -1092,7 +1095,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
               background: "var(--suggest-bg)",
               color: "var(--success-text)",
               border: "1px solid var(--suggest-border)",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
+              boxShadow: "var(--shadow-btn)"
             }}
           >
             {t}
@@ -1111,7 +1114,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
       marginBottom: 14,
       fontSize: T.body,
       color: txtClr,
-      boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+      boxShadow: "var(--shadow-card)",
       ...(style || {})
     }}>
       <div style={{ fontWeight: FW.bold, marginBottom: hasSugg ? 6 : 0 }}>{message}</div>

@@ -53,7 +53,17 @@
 import { mkBtn, Toast } from "./atoms";
 import { BTN, R, T, FW, H } from "../lib/constants";
 
-const toastShadow="0 6px 20px rgba(0,0,0,0.18)";
+// v17.10.0: `--shadow-popover`, the token for a FLOATING surface — the same one
+// QuickStatusPopup uses, which is what a toast is. It carries no white inset (a
+// floating card is not a raised control) and it IS theme-split, so the depth
+// deepens over a dark page the way the hand-written 0.18 never did.
+//
+// Worth noting how this one was found: the sweep that tokenised the other 17
+// drop-shadow literals grepped for `boxShadow: "0 …`, and this literal sits
+// behind a const, so the property-name pattern walked straight past it. Same
+// shape as the v17.9.0 lesson about an HTML entity being invisible to a glyph
+// scan — grep for the VALUE's shape, not for the property it ends up on.
+const toastShadow="var(--shadow-popover)";
 
 // ── v17.8.0: ONE toast surface ───────────────────────────────────────────────
 // These nine toasts used to be nine hand-written style objects, each a

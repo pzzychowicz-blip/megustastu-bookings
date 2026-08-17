@@ -57,11 +57,15 @@ session and keeping it in sync.
 
 ## Ideas
 
-- **Plain drop-shadow literals.** ~17 inline `boxShadow: "0 1px 4px
-  rgba(0,0,0,0.04)"`-style values remain (v17.9.1's `ModalTitle` absorbed three
-  of them), and `scripts/check-style-invariants.mjs`
-  deliberately does NOT flag them: a black shadow cannot invert out from under
-  itself, so this is a consistency nit rather than the bug class the white-inset
-  rule guards, and a noisy check gets muted. Fold them into `--shadow-soft` /
-  `--shadow-btn` opportunistically while touching those files; don't sweep.
+- **A `check:style` rule for bare `boxShadow` literals.** v17.10.0 tokenised the
+  last of them (18 sites → `--shadow-flat` / `--shadow-btn` / `--shadow-card` /
+  `--shadow-popover`), so the backlog that made such a rule noisy is now zero and
+  it would guard the *next* one rather than nag about existing ones. Two things
+  it must handle: the genuine exceptions are **rings and glows**, not drop
+  shadows (`0 0 0 3px …` — the connection dot, the focus/selection rings), so
+  match on a non-zero blur rather than on `boxShadow`; and a literal can hide
+  behind a `const` (that is how `StatusToasts`' `toastShadow` survived the
+  v17.10.0 sweep), so match the VALUE's shape, not the property name. Per the
+  v17.9.0 rule, any new rule needs a fixture in `tests/style-check.test.js` —
+  both a violating case and a legitimate one.
 

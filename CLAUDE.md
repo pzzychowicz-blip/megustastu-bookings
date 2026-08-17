@@ -821,6 +821,26 @@ something is dirty; browsers ignore any custom message string.
   (`KTXT_OK`/`KTXT_TIGHT`), and that is the correct answer, not debt. **Triage a
   colour exactly like a shadow: ask whether the SURFACE UNDER it flips.** If it
   doesn't, the thing on top must not either.
+- **`--shadow-flat` is elevation over a fill that does NOT flip (v17.10.0).**
+  Every other `--shadow-*` token leads with a white inset highlight — that is
+  what makes a control look raised — and a highlight tuned for light and dimmed
+  for dark is *wrong* on a fill that is identical in both themes (the v17.8.0
+  white-inset-over-fixed-fill rule). So this one carries no inset. It is still
+  theme-split, because the shadow falls on the PAGE and the page does flip.
+  It absorbed the last of the ROADMAP's ~18 accumulated `0 1px Npx
+  rgba(0,0,0,0.0x)` literals; the rest went to `--shadow-btn` (raised pills whose
+  fill flips), `--shadow-card` (cards on `--bg-card` / `--bg-soft`) and
+  `--shadow-popover` (floating surfaces — `StatusToasts`, matching the
+  quick-status popup). **Triage each site by one question: does the ELEMENT's own
+  fill flip with the theme?** A MIX counts as "no" — `BLOCK_BG[status]` spans
+  three invariant fills and two that flip, so `SBadge` and the timeline's status
+  swatch take `--shadow-flat`. Genuine remaining exceptions are **rings and
+  glows** (`0 0 0 3px …`: the connection dot, the focus and selection rings),
+  which are not drop shadows at all.
+  **And a literal can hide behind a `const`** — `StatusToasts`' `toastShadow`
+  survived the first pass because the sweep grepped `boxShadow: "0 …`. Grep the
+  VALUE's shape, not the property it ends up on; same lesson as an HTML entity
+  being invisible to a glyph scan.
 - **`--shadow-input` is for RECESSED fields, `--shadow-btn` for RAISED controls.**
   The input token leads with an inset white highlight, which is what makes a
   field look sunken. Settings had ~20 BUTTONS wearing `--shadow-input` (fixed

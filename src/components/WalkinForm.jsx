@@ -202,7 +202,7 @@ export function WalkinForm({
           background: r.hasTables ? "rgba(220,252,231,0.8)" : "rgba(254,249,195,0.8)",
           color: r.hasTables ? KTXT_OK : KTXT_TIGHT,
           border: "1px solid " + (r.hasTables ? "rgba(134,239,172,0.5)" : "rgba(253,230,138,0.5)"),
-          boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
+          boxShadow: "var(--shadow-flat)"
         }}
       >
         {r.timeStr}
@@ -477,7 +477,7 @@ export function WalkinForm({
         border: "1px solid " + (wOk ? "var(--suggest-border)" : "var(--border-sheet)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: 8, flexWrap: "wrap",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
+        boxShadow: "var(--shadow-card)"
       }}>
         <div>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
