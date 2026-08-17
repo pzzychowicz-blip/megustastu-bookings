@@ -9489,3 +9489,40 @@ in the very same List row — a mismatch that pre-dated this change.
 Assign · Edit · [chair] Seated · [double-check] Completed · [✕] Cancelled ·
 Delete; the edit form's Status row adds [hourglass] Pending. Build clean, lint 0
 errors, 290 tests.
+
+### 5 — the List card is the Edit affordance
+
+**Files:** `src/components/ListView.jsx`, `CLAUDE.md`.
+
+The card already had a pointer cursor, and since v17.9.1 a hover tint. Both
+promise that clicking does something. What it did was set an invisible keyboard
+selection — while a button labelled **Edit** sat inside it doing the thing the
+card already looked like it would do.
+
+The card now opens the edit form, and the Edit button is gone.
+
+**It selects first, then opens**, and the order is the point: the keyboard model
+(↑/↓ over the day, the per-card shortcuts) resumes from the card you just opened,
+so closing the form leaves you where you were rather than wherever the arrows had
+last been. `listFocusReq` is deliberately NOT bumped — that counter exists for
+PROGRAMMATIC selection (a search jump, arrow nav), and scrolling the page under a
+finger that has just tapped is the exact bug it was introduced to avoid.
+
+**The regression risk is the whole of the work.** A click target inside a click
+target means every control in the card has to stop the event or it does its own
+job *and* opens the form. That is five controls (Assign, each status changer,
+No show, Cancelled, Delete), and a forgotten one fails in a way that reads as
+"the form opens at random". They go through a local `stopped()` wrapper rather
+than five hand-written `stopPropagation` lines, so the requirement is one visible
+word per handler and an audit is a single grep.
+
+The action row is now three groups, per Patryk: **Assign** left, the **status
+changers** pushed right by `marginLeft:auto`, and the two ways a booking **ends**
+hard right after a wider gap — space between "advance this booking" and "end this
+booking".
+
+**Verification:** live in DEV. Clicking a card opens its edit form and leaves the
+selection ring on that card; clicking Assign opens the manual-assignment modal
+and the edit form does **not** appear behind it. Grepped every `onClick` in the
+file: the five in-card controls all carry `stopped()`, and the two that do not
+(New booking / Walk-in) are in the empty-day state, where there is no card.

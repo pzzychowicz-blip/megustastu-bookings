@@ -2,7 +2,8 @@
 // List-view rendering of the day's bookings — sorted by status (seated first,
 // then confirmed, completed, cancelled), then by time. Each booking renders
 // as a card with name, status badge, party size, time range, table chips,
-// optional notes, and action buttons (Assign / Edit / Delete + status changers).
+// optional notes, and action buttons (Assign + the status changers + Delete).
+// v17.10.0: the CARD ITSELF opens the edit form — there is no Edit button.
 //
 // Pure presentational, no hooks. All state lives in BookingApp.
 //
@@ -40,6 +41,15 @@ import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon } from "./Icons
 // expires by timestamp; single list on screen so module scope is safe.
 let __listPrev = null;
 const __listAnims = {};
+
+// v17.10.0: the card is now a click target (it opens the edit form), so EVERY
+// control inside it has to stop the event on its way out or it does its own job
+// AND opens the form. This wrapper exists so that is one visible word per
+// handler rather than a stopPropagation line each — a control that forgets it
+// fails in a way that looks like the form opening at random.
+function stopped(fn) {
+  return function (e) { e.stopPropagation(); fn(e); };
+}
 
 // v17.1.0 perf: React.memo — all function props are App's stable VA wrappers,
 // data props change identity only on real change (memoized in BookingApp).
@@ -297,7 +307,7 @@ export const ListView = memo(function ListView({
               key={s}
               className="mgt-hover-scale"
               style={mkBtn({ background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
-              onClick={() => onStatus(b.id, s)}
+              onClick={stopped(() => onStatus(b.id, s))}
             >
               <StatusIcon status={s} size={IC.control} />{s}
             </button>
@@ -307,7 +317,7 @@ export const ListView = memo(function ListView({
             key="cancelled"
             className="mgt-hover-scale"
             style={mkBtn({ background: BLOCK_BG.cancelled, textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
-            onClick={() => onStatus(b.id, "cancelled")}
+            onClick={stopped(() => onStatus(b.id, "cancelled"))}
           >
             <CloseIcon size={IC.control} />cancelled
           </button>
@@ -338,7 +348,19 @@ export const ListView = memo(function ListView({
                (a `--bg-hover-card` tint via the class below) and the BUTTONS
                keep their own 1.08, which is what the effect was designed for. */
             className="mgt-ac-row"
-            onClick={() => onSelect(b.id)}
+            /* v17.10.0: the card OPENS THE EDIT FORM. It had a pointer cursor and
+               (since v17.9.1) a hover tint, both of which promise a click does
+               something, and what it did was set an invisible keyboard selection
+               — while a button labelled Edit sat inside it repeating what the
+               card already looked like it would do. That button is gone.
+               It still selects, and the order matters: selecting first means the
+               keyboard model (↑/↓, the per-card shortcuts) resumes from the card
+               you just opened, so closing the form leaves you where you were.
+               `listFocusReq` is deliberately NOT bumped — that counter is for
+               PROGRAMMATIC selection (search-jump, arrow nav) and scrolling the
+               page under a finger that just tapped is the bug it was added to
+               avoid. */
+            onClick={() => { onSelect(b.id); onEdit(b); }}
             style={{
               /* The resting fill goes through a CUSTOM PROPERTY rather than
                  `background`, because an inline `background` beats a stylesheet
@@ -399,17 +421,25 @@ export const ListView = memo(function ListView({
               {phonEl}
             </div>
             {notesEl}
+            {/* v17.10.0: THREE groups. Assign stays left; the status changers are
+                pushed right by `marginLeft:auto`; the ways a booking ENDS sit
+                hard right after a wider gap. The Edit button is gone — the card
+                itself opens the form now (see the card's onClick above), which is
+                what the pointer cursor and the hover tint have implied since
+                v17.9.1. Every control in here stops propagation, or it would open
+                the edit form on its way to doing its own job. */}
             <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={() => onManual(b.id)}><AssignIcon size={IC.control} />Assign</button>
-              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.edit })} onClick={() => onEdit(b)}>Edit</button>
-              {statusBtns}
+              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onManual(b.id))}><AssignIcon size={IC.control} />Assign</button>
               <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center" }}>
+                {statusBtns}
+              </div>
+              <div style={{ display: "flex", gap: 6, marginLeft: 18, flexWrap: "wrap", alignItems: "center" }}>
                 {/* v16.1.0: one-tap No show once past the no-show threshold. */}
                 {lateSt === "noshow" ? (
-                  <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={() => onNoShow(b.id)}><NoShowIcon size={IC.control} />No show</button>
+                  <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onNoShow(b.id))}><NoShowIcon size={IC.control} />No show</button>
                 ) : null}
                 {cancelBtn}
-                <button className="mgt-hover-scale" style={mkBtn({ background: BTN.del })} onClick={() => onDelete(b.id)}>Delete</button>
+                <button className="mgt-hover-scale" style={mkBtn({ background: BTN.del })} onClick={stopped(() => onDelete(b.id))}>Delete</button>
               </div>
             </div>
             </div>
