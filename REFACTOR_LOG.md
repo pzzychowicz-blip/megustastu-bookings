@@ -9286,3 +9286,50 @@ reason `--shadow-*` is.
 what the default means on your surface.** `--bg-ac-hover` is right for an
 autocomplete row, which has no colour of its own; it is wrong for anything whose
 resting colour is the message.
+
+---
+
+## v17.10.0 — nine items from a shift on the floor
+
+**Date:** 2026-08-17
+**Files:** see each entry.
+**Behavioural change:** yes — one persisted field is added (`guestId`, per
+booking, covered by the existing per-`$id` CAS: **no new node, no Firebase
+console step**), and five surfaces change how they respond to a tap.
+**Verification:** see each entry.
+
+Nine independent items, collected from using the app rather than from reading it:
+a swap that locked one booking too many, guests with no phone number who could
+never become regulars, an autocomplete that only fired once, status buttons that
+all wore the same chevron, a List card whose Edit button was redundant with the
+card itself, a Delete that existed in only one of the two places you would look
+for it, the waitlist wearing a colour that meant something else, a collapsible
+header that did not answer the pointer, and the last of the `ROADMAP.md` shadow
+literals.
+
+They share no code, so they ship as nine commits under one version.
+
+### 1 — a swap locks only the booking you dragged
+
+**Files:** `src/App.jsx`.
+
+Dragging a block onto an occupied row can resolve as a straight swap: the two
+parties exchange table sets. That branch wrote `_manual:true, _locked:true` to
+**both** bookings — so a swap pinned a party nobody asked to pin, the optimizer
+could never tidy it again, and every swap quietly grew the set of hand-placed
+bookings until the day had to be reshuffled by hand.
+
+Only the booking the user actually dragged is a deliberate placement. The
+displaced one keeps its new tables and its history entry, and comes out unlocked.
+
+**The exception is why the two flags are read off the captured `other` rather
+than written `false` outright.** A walk-in is `_manual + _locked` *by definition*
+and immune to the optimizer; force-unlocking one here would let a reshuffle move
+a party that is physically sitting down. So an already-locked booking keeps its
+lock on its NEW tables, and an ordinary confirmed booking comes out unlocked.
+
+The two other paths that move an occupant out of the way — step 4's displacement
+and `manualAssign`'s `affected` branch — have always unlocked them, and are
+untouched. They strip the tables and let the optimizer re-place the booking from
+scratch, so the walk-in argument does not transfer: there is no "new tables" for
+a lock to protect.

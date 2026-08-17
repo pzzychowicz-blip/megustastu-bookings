@@ -265,7 +265,7 @@ import { DaySheet } from "./components/DaySheet";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.9.1",
+  version:"17.10.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -2005,9 +2005,26 @@ function BookingApp({uid}){
         const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins),os+1);
         const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins)};}).concat(blockSlots);
         if(canAssign(newSrc,slots,s,e)&&canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){
+          // v17.10.0: ONLY THE BOOKING YOU DRAGGED GETS LOCKED. This branch used
+          // to write `_manual:true,_locked:true` to BOTH sides, which pinned a
+          // party nobody asked to pin — the optimizer could then never tidy the
+          // displaced booking again, and every swap quietly grew the set of
+          // hand-placed bookings. The other two paths that move an occupant out
+          // of the way (step 4's displacement below, and manualAssign's
+          // `affected` branch) have always unlocked them; this one was the odd
+          // one out.
+          //
+          // The exception is real and is the reason these two flags are read off
+          // the CAPTURED `other` rather than being written false outright: a
+          // walk-in is `_manual+_locked` BY DEFINITION and immune to the
+          // optimizer (CLAUDE.md's Gotchas table), so force-unlocking one here
+          // would let a reshuffle move a party that is physically sitting down.
+          // An already-locked booking therefore keeps its lock on its NEW tables;
+          // an ordinary confirmed booking comes out unlocked, which is the ask.
+          const otherLocked=!!other._locked,otherManual=!!other._manual;
           const ok=saveBookings(function(prev){return prev.map(function(b){
             if(b.id===id) return Object.assign({},b,{tables:newSrc,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+other.name+" ("+(cur.join("+")||"none")+" → "+newSrc.join("+")+")",user)])});
-            if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
+            if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:otherManual,_locked:otherLocked,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
             return b;
           });});
           if(ok) flashDragMsg(src.name+" and "+other.name+" — tables swapped.",true);
