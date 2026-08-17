@@ -33,7 +33,7 @@ import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC } from "../lib
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
-import { AssignIcon, ChevronRightIcon, StarIcon } from "./Icons";
+import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon } from "./Icons";
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
 // that changes status plays a colour wipe of its OLD status colour. Keyed by id,
@@ -285,6 +285,11 @@ export const ListView = memo(function ListView({
         // then Delete); the remaining status changers stay in the left group.
         // v17.0.0: a pending card's only forward status is Confirmed (the
         // right-group Cancel button stays — the decline flow).
+        // v17.10.0: each status carries its OWN mark (STATUS_ICON, Icons.jsx)
+        // instead of all of them sharing a ChevronRightIcon — which said "there
+        // is more this way", not what the button does. IC.control, not
+        // IC.inline: these are marks ON a control, and the Assign button beside
+        // them in this same row has always been IC.control.
         const statusBtns = (b.status === "pending" ? ["confirmed"] : ["confirmed", "seated", "completed"])
           .filter((s) => s !== b.status)
           .map((s) => (
@@ -294,7 +299,7 @@ export const ListView = memo(function ListView({
               style={mkBtn({ background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
               onClick={() => onStatus(b.id, s)}
             >
-              <ChevronRightIcon size={IC.inline} />{s}
+              <StatusIcon status={s} size={IC.control} />{s}
             </button>
           ));
         const cancelBtn = b.status !== "cancelled" ? (
@@ -304,7 +309,7 @@ export const ListView = memo(function ListView({
             style={mkBtn({ background: BLOCK_BG.cancelled, textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
             onClick={() => onStatus(b.id, "cancelled")}
           >
-            <ChevronRightIcon size={IC.inline} />cancelled
+            <CloseIcon size={IC.control} />cancelled
           </button>
         ) : null;
 
@@ -401,7 +406,7 @@ export const ListView = memo(function ListView({
               <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center" }}>
                 {/* v16.1.0: one-tap No show once past the no-show threshold. */}
                 {lateSt === "noshow" ? (
-                  <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange })} onClick={() => onNoShow(b.id)}>No show</button>
+                  <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={() => onNoShow(b.id)}><NoShowIcon size={IC.control} />No show</button>
                 ) : null}
                 {cancelBtn}
                 <button className="mgt-hover-scale" style={mkBtn({ background: BTN.del })} onClick={() => onDelete(b.id)}>Delete</button>

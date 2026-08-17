@@ -9431,3 +9431,61 @@ visits and is a real target.
 party size and the Regular chip all filled) → retyped "Marta Fe" and the dropdown
 reopened, which it could not do before. Opened an existing booking and typed in
 the name field: suggestions appear, including a phone-less "Marko · no phone".
+
+### 4 — every status button carries its own mark
+
+**Files:** `src/components/Icons.jsx`, `ListView.jsx`, `BookingFormModal.jsx`,
+`QuickStatusPopup.jsx`, `LateBanner.jsx`, `CLAUDE.md`.
+
+Every button that moves a booking to another status was prefixed with the SAME
+`ChevronRightIcon` — ">Confirmed", ">Seated", ">Completed", ">Cancelled". A
+chevron marks "there is more this way". Four buttons in a row wearing it is one
+glyph repeated and no information, and it is a leftover from when these were
+plain `">"+status` strings.
+
+And the surface that matters most had nothing. The quick-status popup — the
+long-press on a timeline block or a floor-plan table, i.e. the one used **during
+service** — carried no marks at all, so the same five decisions looked different
+in three places.
+
+**Four of the six marks already existed.** A status button is not a reason to
+invent a shape when the app has one meaning the same thing: `CheckIcon`,
+`CloseIcon`, `NoShowIcon`, and `WaitIcon` for pending — the hourglass already
+means a party is waiting, which is exactly what awaiting-confirmation is.
+
+`StatusIcon` is the single source, and it is a **component, not the map**. The
+mechanical reason is that `Icons.jsx` exports only components, so a plain const
+export breaks Fast Refresh — `react-refresh/only-export-components` is a lint
+ERROR and CI gates on zero. The better reason is that a call site should ask for
+"the mark for this status" instead of holding a table it can index wrongly; an
+unrecognised status renders nothing rather than throwing.
+
+**`ChairIcon` took five variants, judged rasterised at the size it ships at** —
+the `DepositIcon` rule, applied by drawing each candidate to a canvas at 12 and
+14px and magnifying it 10×. Four failed, and all four failed as *silhouettes*
+rather than as details:
+
+* a profile chair (back post · seat · front leg) is a vertical, a horizontal and
+  a short vertical — at 12px, a lowercase "h";
+* the same with the seat overhanging behind reads as a plus sign;
+* two back posts instead of a solid backrest reads as a capital "H";
+* a solid backrest with the seat WIDER than the back reads as a table with
+  something standing on it. **The overhang is what makes it a tabletop.**
+
+What ships has backrest and seat at the same width, so the two read as one
+object, with the legs as two ticks below. The backrest interior is 8 units
+against a 2.2 stroke — the ~3× an enclosed shape needs before it fills in solid,
+the same constraint that leaves `LockIcon` without a keyhole.
+
+`DoubleCheckIcon` offsets its two strokes along their own diagonal rather than
+stacking them: stacked, the gap has to survive the stroke (~1.1px at the shipped
+size) and the pair closes into one fat tick.
+
+**Sizing correction:** these render at `IC.control` (14), not `IC.inline` (12).
+They are marks ON a control, and the `Assign` button already sat at `IC.control`
+in the very same List row — a mismatch that pre-dated this change.
+
+**Verification:** live in DEV at 3× zoom. The List card's row reads
+Assign · Edit · [chair] Seated · [double-check] Completed · [✕] Cancelled ·
+Delete; the edit form's Status row adds [hourglass] Pending. Build clean, lint 0
+errors, 290 tests.
