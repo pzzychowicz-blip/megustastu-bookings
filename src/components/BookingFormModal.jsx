@@ -125,9 +125,19 @@ export function BookingFormModal({
   // (phone customers + phone-less bookings, per-booking, NEVER merged — see
   // searchGuestsByName). Mirrors the phone dropdown; only shown for NEW bookings
   // (an edit already has its customer). A phone-less pick fills only the name.
+  // v17.10.0: the `!editId` gate is GONE. It made the name dropdown a
+  // new-bookings-only feature, and an edit form arrives PRE-FILLED — which is
+  // exactly the case the reopen fix below is about. A pick while editing fills
+  // the name (and the phone, for a phone row) and nothing else: `size` /
+  // `preference` / `preferredTables` belong to the booking you are editing, and
+  // the `!editId&&latest` guard inside pickGuest already draws that line.
   const [nameFocus,setNameFocus]=useState(false);
-  const nameMatches=(nameFocus&&!editId&&String(form.name||"").trim().length>=2)
+  const nameMatches=(nameFocus&&String(form.name||"").trim().length>=2)
     ?searchGuestsByName(bookings,custIdx,form.name,20).filter(function(r){
+      // Don't offer the booking you are editing as somebody to link yourself to.
+      // Only when it is the row's ONLY booking — a GROUP row that happens to be
+      // led by this booking still represents other visits and is a real target.
+      if(editId&&r.isPhoneless&&r.count===1&&r.latest&&r.latest.id===editId) return false;
       // Hide an exact already-applied PHONE-customer selection (name+phone both
       // match = this row is what's in the form) so a refocused dropdown isn't
       // noise. Phone-LESS rows are deliberately NOT self-hidden (/code-review):
@@ -619,16 +629,26 @@ export function BookingFormModal({
   return (
     <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><div style={{position:"relative"}}><input
             value={form.name}
-            onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
+            /* v17.10.0: the dropdown reopens on TYPING and on CLICK, not only on
+               focus. Picking a row calls preventDefault on mousedown so the input
+               keeps DOM focus, and the pick handler then clears this flag — so the
+               field ends up focused with the list closed and NO further `focus`
+               event can ever fire. Typing more did nothing; you had to tab away
+               and come back. That is the whole of "the suggestions only work the
+               first time you type something in". */
+            onChange={function(e){setNameFocus(true);setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
             onFocus={function(){setNameFocus(true);}}
+            onClick={function(){setNameFocus(true);}}
             onBlur={function(){setNameFocus(false);}}
             placeholder="Full name"
             className="mgt-hover-scale"
             style={inp()} />{nameDropdown}</div></Fld><Fld label="Phone number"><div style={{position:"relative"}}><input
             type="tel"
             value={form.phone}
-            onChange={function(e){setForm(function(f){return Object.assign({},f,{phone:e.target.value});});}}
+            /* Same reopen fix as the name field above. */
+            onChange={function(e){setPhoneFocus(true);setForm(function(f){return Object.assign({},f,{phone:e.target.value});});}}
             onFocus={function(e){setPhoneFocus(true);const el=e.target;if(!el.value) setForm(function(f){return Object.assign({},f,{phone:"+"});});setTimeout(function(){el.selectionStart=el.selectionEnd=el.value.length;},0);}}
+            onClick={function(){setPhoneFocus(true);}}
             onBlur={function(){setPhoneFocus(false);}}
             placeholder="+34 600 000 000"
             className="mgt-hover-scale"

@@ -9397,3 +9397,37 @@ recognition actually matters.
 match, `identityKey`'s precedence, the `searchGuestsByName` collapse *and* the
 un-joined same-name guest staying separate beside it, `noShowMap` on a guestId,
 and `matchCustomerByPhone`'s unchanged behaviour. Build clean.
+
+### 3 — the suggestions reopen after you pick one
+
+**Files:** `src/components/BookingFormModal.jsx`.
+
+Reported as "the name/phone suggestions only work the first time you type
+something in". The cause is exact, and it is a two-line bug hiding behind a
+correct-looking design.
+
+The dropdown rows call `preventDefault()` on mousedown, deliberately: that beats
+the input's blur, which would unmount the list before the click landed. So after
+a pick the input **still has DOM focus**. The pick handler then sets
+`nameFocus` / `phoneFocus` to `false` — and because the field never lost focus,
+**no further `focus` event can ever fire**. Typing more did nothing; you had to
+tab away to another control and come back.
+
+Both fields now raise the flag on `change` and on `click` as well as on `focus`.
+`focus` is the wrong single event to hang a dropdown on whenever something else
+can close it while the field stays focused.
+
+The `!editId` gate on the NAME dropdown is also gone. It made name autocomplete a
+new-bookings-only feature — and an edit form arrives **pre-filled**, which is
+precisely the already-has-text case this fix is about. A pick while editing fills
+the name (and the phone, for a phone row) and nothing else: `size` / `preference`
+/ `preferredTables` belong to the booking you are editing, and the `!editId`
+guard inside `pickGuest` already drew that line. One new filter: the booking you
+are editing is not offered as somebody to link yourself to — but only when it is
+the row's *only* booking, since a group row led by it still represents other
+visits and is a real target.
+
+**Verification:** live in DEV. Typed "ma" → picked Marta Ferrer (name, phone,
+party size and the Regular chip all filled) → retyped "Marta Fe" and the dropdown
+reopened, which it could not do before. Opened an existing booking and typed in
+the name field: suggestions appear, including a phone-less "Marko · no phone".
