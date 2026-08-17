@@ -438,13 +438,56 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
   const open = controlled ? openProp : openState;
   return (
     <Section style={{ marginBottom: 18, ...(style || {}) }}>
+      {/* v17.10.0: the header answers the pointer. It is a full-width row that
+          holds a click target, which is exactly what `.mgt-ac-row` is for — the
+          v17.9.1 rule that the 1.08 hover LIFT is for controls and a tint is for
+          containers of controls (a lift here would also clip against the
+          Settings card's overflow, which is what the note above already said).
+          Every collapsible header gets it, List's "Completed & cancelled" fold
+          and all ~15 Settings sections alike, so there is one kind of header.
+
+          `--row-bg-hover` is `--bg-veil`, NOT the class default `--bg-ac-hover`:
+          the header sits on Section's own `--bg-soft` fill, and an accent wash
+          would recolour that rather than lighten it (the v17.9.1
+          NotificationStrip finding — a class with a default is only
+          half-configured until you check what the default means on your
+          surface).
+
+          The padding is what makes a tint read as a row rather than a hairline
+          band; the matching negative margin is what keeps the RESTING layout
+          identical, verified by measuring rather than by arithmetic — the gap
+          between consecutive headers is 64.5px before and after.
+
+          The width needs `calc(100% + 20px)` and it is worth knowing why, since
+          the obvious two spellings both fail. `width:100%` with negative
+          horizontal margins is OVER-CONSTRAINED, so the browser silently drops
+          one side. Dropping `width` altogether looks safe — `display:flex` makes
+          a block-level flex container, which normally fills its parent — but a
+          <button> keeps its shrink-to-fit intrinsic sizing, so the header
+          collapsed to its text and the chevron left the right edge (measured:
+          213px instead of 337px). Explicit width + `border-box` means the CONTENT
+          box is exactly the container width and the 10px bleed lands inside
+          Section's 14px padding.
+
+          And note there is NO inline `background` here any more. The header used
+          to carry `background:"transparent"`, and an inline background beats a
+          stylesheet `background-color` outright — so the hover rule matched, the
+          element reported `:hover`, and the computed fill stayed
+          `rgba(0,0,0,0)`. That is the exact trap this class's own comment in
+          index.html warns about, walked into anyway; only measuring the computed
+          style caught it. The resting fill comes through `--row-bg`, which is
+          why the class takes it as a custom property in the first place. */}
       <button
         type="button"
         aria-expanded={open}
+        className="mgt-ac-row"
         onClick={() => { if (controlled) { if (onToggle) onToggle(!open); } else { setOpen((o) => !o); } }}
         style={{
-          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          gap: 12, background: "transparent", border: "none", padding: 0, margin: 0,
+          "--row-bg": "transparent", "--row-bg-hover": "var(--bg-veil)",
+          width: "calc(100% + 20px)", boxSizing: "border-box",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: 12, border: "none",
+          padding: "6px 10px", margin: "-6px -10px", borderRadius: R.inset,
           cursor: "pointer", textAlign: "left", color: "inherit"
         }}
       >

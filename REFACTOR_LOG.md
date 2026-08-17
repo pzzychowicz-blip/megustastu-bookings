@@ -9612,3 +9612,49 @@ renders directly above the amber `Save pending` in the same footer, so the two
 amber things read as one family. Same computed check on the walk-in form's copy.
 Grepped `BTN.orange` afterwards: every remaining use is No show / Reassign /
 Reshuffle / the manual-swap panel, which is the intended family.
+
+### 8 — collapsible headers answer the pointer
+
+**Files:** `src/components/atoms.jsx`, `CLAUDE.md`.
+
+The "Completed & cancelled" fold had no hover feedback, and neither did any of
+the ~15 Settings sections — they are the same atom. A full-width row that is a
+click target is exactly what `.mgt-ac-row` exists for (v17.9.1: the 1.08 lift is
+for controls, a tint is for containers of controls), so it went in the atom
+rather than at one call site, and there is now one kind of collapsible header.
+
+`--row-bg-hover` is `--bg-veil`, not the class default `--bg-ac-hover`: the
+header sits on `Section`'s own `--bg-soft` fill, and an accent wash would
+recolour that instead of lightening it — the v17.9.1 NotificationStrip finding
+that a class with a default is only half-configured until you check what the
+default means on your surface.
+
+**Three things went wrong on the way, and all three were caught by measuring
+rather than by reading.**
+
+**The inline background.** The header carried `background:"transparent"` inline.
+An inline background beats a stylesheet `background-color` outright, so the rule
+matched, the element reported `:hover`, and the computed fill stayed
+`rgba(0,0,0,0)`. This is the *exact* trap `.mgt-ac-row`'s own comment in
+`index.html` was written about, and reading the source shows nothing wrong: the
+class is there, the custom property is set, the rule exists. Only reading the
+computed background *while hovering* revealed it. **Adding `.mgt-ac-row` to an
+existing element means DELETING its inline `background`, not just adding
+`--row-bg`.**
+
+**The width.** `width:100%` plus negative horizontal margins is over-constrained,
+so the browser silently drops one side. Dropping `width` looked safe —
+`display:flex` makes a block-level flex container, which normally fills its
+parent — but a `<button>` keeps its shrink-to-fit intrinsic sizing, so the header
+collapsed to its own text and the chevron left the right edge: **213px instead of
+337px**. `calc(100% + 20px)` with `border-box` is the spelling that holds.
+
+**The layout.** The tint needs a padding box to read as a row rather than a
+hairline band, and the negative margin is what keeps the resting layout put.
+Verified by measurement, not arithmetic: content still starts at x=131.5 and the
+chevron still ends at x=631.5, and the gap between consecutive headers is 64.5px
+before and after.
+
+**Verification:** live in DEV, hovering a Settings section — the hovered header
+computes `rgba(0, 0, 0, 0.05)` while its neighbour computes `rgba(0, 0, 0, 0)`,
+and the tint bleeds 10px into `Section`'s padding with `R.inset` corners.

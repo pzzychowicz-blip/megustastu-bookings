@@ -848,6 +848,22 @@ something is dirty; browsers ignore any custom message string.
   open) and rendered fully transparent, measured `rgba(0, 0, 0, 0)`. A custom
   property is only a value; the rule that reads it is what paints. `.mgt-ac-row`
   is in `tests/stylesheet.test.js`'s CRITICAL_SELECTORS for that reason.
+  **v17.10.0 walked into the inline-background trap this rule is written about,
+  in the `Collapsible` header.** The header carried `background:"transparent"`
+  inline; the hover rule matched, the element reported `:hover`, and the computed
+  fill stayed `rgba(0,0,0,0)`. Reading the source shows nothing wrong — the class
+  is there, the property is set, the rule exists. **Only reading the computed
+  background while actually hovering catches it.** When you add `.mgt-ac-row` to
+  an existing element, DELETE its inline `background`, don't just add `--row-bg`.
+  Two more geometry notes from that header, since it is the first `.mgt-ac-row`
+  surface that had to grow a padding box: a tint needs padding to read as a row
+  rather than a hairline band, and the matching negative margin is what keeps the
+  resting layout put — **verify that by measuring, not by arithmetic**. And
+  `width:100%` plus negative horizontal margins is over-constrained (the browser
+  silently drops one side), while dropping `width` entirely does NOT work on a
+  `<button>` even with `display:flex`, because it keeps its shrink-to-fit
+  intrinsic sizing — the header collapsed to its text, 213px instead of 337.
+  `calc(100% + 20px)` + `border-box` is the spelling that holds.
 - **The third affordance: `.mgt-glyph`, for SVG (v17.9.1).** Floor-plan tables can
   take neither of the other two — `.mgt-hover-scale` sets a CSS `transform`, which
   **REPLACES an element's `transform` presentation attribute**, so `TableGlyph`'s
