@@ -17,6 +17,8 @@
 //   onOpenManualAssign(targetIdOrNew)      show ManualModal; "__new__" or editId
 //   onOpenHistory                          show HistoryPopup
 //   onRequestCancel(bookingId)             show confirm-cancel overlay
+//   onRequestDelete(bookingId)             show the SAME confirm-delete overlay
+//                                          the List's Delete uses (v17.10.0)
 //
 // The component reads no React hooks — it's a pure render function whose
 // outputs depend only on its props. Derivations (formAvail, tablesBtn,
@@ -54,7 +56,7 @@ export function BookingFormModal({
   bookings, liveBookings, tableBlocks,
   autoOptimizer, isMobile,
   onSave, onSavePending, onSaveConfirm, onClose, onClearSwap, onBookAgain,
-  onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel,
+  onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
   currency = "€", regularMin = 2, // v17.0.0: settings/general
 }){
@@ -510,6 +512,22 @@ export function BookingFormModal({
   // seated or completed. One tap closes the edit modal and opens a new-booking
   // form pre-filled with this customer's details (name, phone, size, preference,
   // preferred tables, original time). Staff must still pick a date.
+  // v17.10.0: Delete, in the form. It existed only on the List card, so deleting
+  // a booking you had open meant closing the form, finding the card again and
+  // deleting from there — and in Timeline or Plan there was no route to it at
+  // all without switching view. Edit mode only: there is nothing to delete on a
+  // new booking.
+  //
+  // It raises the SAME confirm overlay the List's Delete raises (App's
+  // confirmDel) rather than a second dialog of its own — one armed confirm for
+  // one irreversible action, and Firebase's free plan has no backups. App closes
+  // the form on the delete path.
+  const deleteBtn=editId?(
+    <button
+      onClick={function(){onRequestDelete(editId);}}
+      className="mgt-hover-scale mgt-press"
+      style={mkBtn({fontSize: T.body,background:BTN.del,padding:"8px 16px",minHeight:36})}>Delete</button>
+  ):null;
   const bookAgainBtn=(function(){
     if(!editId) return null;
     const cur=bookings.find(function(b){return b.id===editId;});
@@ -575,7 +593,7 @@ export function BookingFormModal({
   const footerEl=(
     <>
       {errorEl}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{(function(){
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{deleteBtn}{(function(){
         if(editId) return null;
         const canSave=!!form.date;
         return (

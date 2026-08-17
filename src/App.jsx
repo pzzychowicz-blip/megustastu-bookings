@@ -2131,6 +2131,15 @@ function BookingApp({uid}){
     const delMemo=memoByPrev(delTransform);
     const postDel=delMemo(bookings);
     const ok=saveBookings(delMemo);setConfirmDel(null);
+    // v17.10.0: Delete is now reachable from INSIDE the edit form, so the form
+    // has to go with the booking — otherwise you are left editing a record that
+    // no longer exists. Deliberately the raw setter, not requestCloseForm: the
+    // unsaved-changes guard exists to stop you losing edits by accident, and
+    // confirming a delete is not an accident. It also covers the pre-existing
+    // edge where the LIST's Delete removes the booking the form happens to be
+    // open on. Gated on the id so deleting a different booking leaves the form
+    // alone. formDirty is `showForm && …`, so this disarms beforeunload too.
+    if(editId===id) setShowForm(false);
     // v17.4.0: deletes are undoable too (general undo). The recurring skipDate
     // added above deliberately STAYS on undo — the restored occurrence keeps
     // its deterministic id, so the generator never duplicates it, and the
@@ -2943,6 +2952,7 @@ function BookingApp({uid}){
               onOpenManualAssign={function(target){setManualTarget(target);}}
               onOpenHistory={function(){setShowHistory(true);}}
               onRequestCancel={function(id){setConfirmCancel(id);}}
+              onRequestDelete={function(id){setConfirmDel(id);}}
               onAddToWaitlist={addFormToWaitlist}
               standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}

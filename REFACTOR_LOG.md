@@ -9526,3 +9526,40 @@ selection ring on that card; clicking Assign opens the manual-assignment modal
 and the edit form does **not** appear behind it. Grepped every `onClick` in the
 file: the five in-card controls all carry `stopped()`, and the two that do not
 (New booking / Walk-in) are in the empty-day state, where there is no card.
+
+### 6 — Delete reaches the Edit booking form
+
+**Files:** `src/App.jsx`, `src/components/BookingFormModal.jsx`.
+
+Delete existed only on the List card. Deleting a booking you had open meant
+closing the form, finding the card again and deleting from there — and from
+Timeline or Plan there was no route to it at all without changing view.
+
+It sits in the footer's left group beside History and Book again, in the red
+`BTN.del`, and only in edit mode: there is nothing to delete on a new booking.
+
+**It raises the SAME confirm overlay the List's Delete raises** rather than a
+dialog of its own. One armed confirm for one irreversible action — Firebase's
+free plan has no backups, so a second confirm shape here would be a second thing
+to get subtly wrong.
+
+Two consequences handled in `delBooking` rather than at the call site:
+
+* **The form closes with the booking.** Otherwise you are left editing a record
+  that no longer exists. It is the RAW setter, deliberately, not
+  `requestCloseForm` — the unsaved-changes guard exists to stop you losing edits
+  by accident, and confirming a delete is not an accident. `formDirty` is
+  `showForm && …`, so this disarms `beforeunload` on the way out.
+* It is gated on `editId === id`, which also fixes a pre-existing edge: the
+  LIST's Delete removing the booking the form happens to be open on.
+
+No Escape-chain change was needed — `confirmDel` was already above `showForm` in
+`useKeyboardShortcuts`' z-order, so Esc dismisses the confirm and returns you to
+the form. The confirm overlay is mounted after the form in App's tree, so it
+already renders on top.
+
+**Verification:** live in DEV, end to end on a throwaway booking. Created "ZZ
+Delete Test", opened it from the List by clicking the card, tapped Delete → the
+confirm rendered above the form; Cancel returned to the form intact; Delete
+removed the booking and closed **both** dialogs (measured: 2 dialogs → 0, and the
+name gone from the list). DEV left as it was found.
