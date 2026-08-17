@@ -336,10 +336,14 @@ export function Overlay({ onClose, children, footer }) {
 // The extraction commit deliberately changed no pill's colour; `Waitlist` and
 // `Find a booking` were the two the rule left arguable (you book from the
 // waitlist; you jump to a booking from search), and Patryk then decided both on
-// their own merits: Waitlist wears `--btn-orange`, the colour of the button that
-// opens it, and Find a booking joined Settings on the neutral, because searching
-// is a read. This atom exists so that judgement has one place to land instead of
-// seven.
+// their own merits: Waitlist wears the colour of the button that opens it, and
+// Find a booking joined Settings on the neutral, because searching is a read.
+// This atom exists so that judgement has one place to land instead of seven.
+//
+// v17.10.0: Waitlist's pill is now `BLOCK_BG.pending`, because the badge that
+// opens it moved to the pending amber — the rule did the work, the pill just
+// followed. Note what that means for anyone retuning this: the pill's colour is
+// NOT an independent choice, so change the opener first.
 //
 // `background` is required and has no default on purpose: a default would be a
 // silent seventh answer to the question above.

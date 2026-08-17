@@ -685,6 +685,24 @@ something is dirty; browsers ignore any custom message string.
   reason — both call sites are in that one file, and exporting a style nothing
   else reads is distance, not sharing.
 
+- **The waitlist is a PENDING thing, so it wears the pending amber (v17.10.0).**
+  Its chrome — the ⏳ count badge in the date-nav row, both "Add to waitlist"
+  buttons, and the Waitlist panel's title pill — used to share `--btn-orange`
+  with No show / Reassign / Reshuffle / the swap family, i.e. the burnt orange
+  that means *something has gone wrong or needs undoing*. A party waiting for a
+  table has not gone wrong. The green "table free" signals stay green: those say
+  an opportunity opened, which is the opposite of "still waiting".
+  **The contrast cost is real and was chosen with the numbers on screen.** This
+  fill under white ink is `tests/contrast.test.js`'s recorded amber exemption,
+  and that exemption's stated justification — a block's meaning is carried by
+  colour, position and width, and the one part that is information moved onto an
+  opaque chip — **does not stretch to a button whose label is its only content**
+  (1.82:1 light / 2.20:1 dark). All three candidates were built into the running
+  app and compared side by side in both themes: an outline (amber border + amber
+  text, the `Save pending` shape, no exemption needed), a solid fill with dark
+  amber ink (3.76 / 3.12, clears the 3:1 button bar), and this. Patryk chose this,
+  informed. The note now lives beside `EXEMPT_FLOOR` so the record says what it
+  actually blesses; the floors still gate a regression.
 - **Accent = primary action or current selection. Nothing else (v17.8.0).** It is
   not for identity and not for decoration. `--tbl-out-rgb` used to be byte-identical
   to `--accent`, so nine outdoor table pills painted the accent on every screen at

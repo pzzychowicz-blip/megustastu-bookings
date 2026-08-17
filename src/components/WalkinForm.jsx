@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC } from "../lib/constants";
+import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
@@ -518,7 +518,8 @@ export function WalkinForm({
             <div style={{ display: "flex", justifyContent: "center", marginTop: -4, marginBottom: 12 }}>
               <button
                 className="mgt-hover-scale"
-                style={mkBtn({ fontSize: T.body, background: BTN.orange, minHeight: 40, padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6 })}
+                /* v17.10.0: pending amber — the waitlist's colour, see App's badge. */
+                style={mkBtn({ fontSize: T.body, background: BLOCK_BG.pending, minHeight: 40, padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6 })}
                 onClick={() => onAddToWaitlist()}
               >
                 <WaitIcon size={IC.control} />Add to waitlist

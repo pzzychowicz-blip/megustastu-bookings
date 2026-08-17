@@ -9563,3 +9563,52 @@ Delete Test", opened it from the List by clicking the card, tapped Delete → th
 confirm rendered above the form; Cancel returned to the form intact; Delete
 removed the booking and closed **both** dialogs (measured: 2 dialogs → 0, and the
 name gone from the list). DEV left as it was found.
+
+### 7 — the waitlist wears the pending amber
+
+**Files:** `src/App.jsx`, `src/components/BookingFormModal.jsx`,
+`src/components/WalkinForm.jsx`, `src/components/WaitlistPanel.jsx`,
+`src/components/atoms.jsx`, `tests/contrast.test.js`, `CLAUDE.md`.
+
+The waitlist's chrome wore `--btn-orange` — the burnt orange it shares with No
+show, Reassign, Reshuffle and the swap family, i.e. the colour that means
+*something has gone wrong or needs undoing*. A party waiting for a table has not
+gone wrong; it is **pending**, and the app already has a colour for pending
+things. Four surfaces moved: the ⏳ count badge in the date-nav row, both "Add to
+waitlist" buttons, and the Waitlist panel's title pill (which followed
+automatically — `ModalTitle`'s rule is that the pill wears the colour of the
+button that opens it, so the pill was not an independent decision).
+
+The token itself is untouched; the green "table free" signals stay green, because
+those say an opportunity opened, which is the opposite of "still waiting" and
+would have collided with the amber Running-late section directly above them.
+
+**The interesting part is the contrast, and how the decision was made.** This
+fill under white ink is the app's recorded amber exemption — and that exemption's
+stated justification does **not** stretch to cover a button. A block's meaning is
+carried by its colour, its position on the time axis and its width, and the one
+part that is information was deliberately moved onto an opaque chip; on "Add to
+waitlist", the label *is* the content. Measured: **1.82:1 light, 2.20:1 dark**,
+against a 3:1 bar for buttons. The orange it replaces passed at 3.01 / 5.25.
+
+So rather than either shipping it quietly or refusing it, all three candidates
+were **built into the running app and compared side by side in both themes** —
+an outline (amber border + amber text: the `Save pending` shape, legible in both,
+no exemption needed), a solid fill with dark amber ink (3.76 / 3.12, over the
+bar, but CLAUDE.md records that pairing reading as *disabled*), and a solid fill
+with white ink. Patryk chose the third, with the numbers and the pixels in front
+of him.
+
+**What that obliges is a truthful record, not a silent one.** The note beside
+`EXEMPT_FLOOR` in `tests/contrast.test.js` now says what the exemption actually
+blesses, why the block argument does not transfer, what the three options were,
+and that this was an informed choice. The floors still gate a regression: an
+accepted contrast is not a licence to keep going.
+
+**Verification:** live in DEV. Triggered the no-tables banner with a 25-guest
+booking and read the computed style off the real button —
+`rgba(234, 179, 8, 0.92)` on `rgb(255,255,255)`, i.e. the pending fill — and it
+renders directly above the amber `Save pending` in the same footer, so the two
+amber things read as one family. Same computed check on the walk-in form's copy.
+Grepped `BTN.orange` afterwards: every remaining use is No show / Reassign /
+Reshuffle / the manual-swap panel, which is the intended family.
