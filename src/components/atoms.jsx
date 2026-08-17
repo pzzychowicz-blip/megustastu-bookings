@@ -605,14 +605,54 @@ export function Reveal({ show, children, style, horizontal = false }) {
 // differs. So the visible half of a height change is the range [0, cap], and
 // any part of an animation outside it is spent on something nobody can see.
 // Returns null when the box has no scroll port to be clamped against.
-function visibleCap(box) {
+// clampRange — the whole decision, as arithmetic (v17.10.0).
+//
+// Both paths into an AutoHeight animation ask the same four questions, and both
+// have now been got wrong once: v17.9.1 shipped the `watch` swap clamped and the
+// observer unclamped, on the stated belief that the observer was already
+// correct. Pulling the arithmetic out of the two effects is what lets it be
+// pinned by a test (tests/auto-height.test.js) instead of by reading it.
+//
+//   from    where the box starts easing — its live height, pulled down to the
+//           ceiling when it is already above it (that jump only removes scroll
+//           range, which is why it is invisible)
+//   to      where it eases to, likewise clamped
+//   pending the TRUE height to retake once the visible part has run, or null
+//           when nothing was clamped away
+//   moves   is there anything to animate at all? false means the change is
+//           entirely above the ceiling, i.e. off screen, and the box should
+//           simply take the new height rather than clip the port to ease to it
+//
+// `cap == null` (no scroll port, or no height transition to drive the restore)
+// disables all of it and gives back the plain measure this always was.
+export function clampRange(live, next, cap) {
+  const from = cap == null ? live : Math.min(live, cap);
+  const to = cap == null ? next : Math.min(next, cap);
+  return { from: from, to: to, pending: to === next ? null : next, moves: to !== from };
+}
+
+function scrollPort(box) {
   let p = box.parentElement;
   while (p && p !== document.body) {
     const oy = getComputedStyle(p).overflowY;
-    if (oy === "auto" || oy === "scroll") break;
+    if (oy === "auto" || oy === "scroll") return p;
     p = p.parentElement;
   }
-  if (!p || p === document.body) return null;
+  return null;
+}
+
+function visibleCap(box) {
+  const p = scrollPort(box);
+  if (!p) return null;
+  // v17.10.0: read the scroll offset BEFORE the probe. The cap is really "the
+  // box height at which the box's bottom edge reaches the bottom of what is on
+  // screen RIGHT NOW", and the port being scrolled by `st` pushes that down by
+  // exactly `st`. v17.9.1 could assume zero because its only caller was a tab
+  // swap, which resets the port's scroll in the click handler before the layout
+  // effect runs; the observer path has no such guarantee, and without the term a
+  // section collapsed after scrolling down would clamp BELOW the visible window
+  // — shrinking the scroll range under the reader and yanking the page up.
+  const st = p.scrollTop;
   // The port is ELASTIC — `flex: 1` inside a card that is `height: auto` under a
   // `maxHeight` — so its height RIGHT NOW understates what it could show: in a
   // short tab the card has shrunk to fit and the port with it, and reading it
@@ -639,7 +679,7 @@ function visibleCap(box) {
   box.style.height = h0;
   void p.clientHeight;
   box.style.transition = t;
-  const cap = max - others;
+  const cap = max - others + st;
   return cap > 0 ? cap : null;
 }
 
@@ -692,6 +732,9 @@ export function AutoHeight({ children, watch, style }) {
   const [animating, setAnimating] = useState(false);
   const measureRef = useRef(null);
   const timerRef = useRef(null);
+  const animRef = useRef(false);                // `animating`, readable mid-measure
+  const capRef = useRef(null);                  // the visible ceiling for THIS run
+  const toRef = useRef(null);                   // the height the box is easing TO
 
   // Settle: leave the clipped state and retake the true height. Reached by
   // `transitionend` normally, and by a timer when that event does not come —
@@ -704,11 +747,14 @@ export function AutoHeight({ children, watch, style }) {
   function settle() {
     clearTimeout(timerRef.current);
     setAnimating(false);
+    animRef.current = false;
+    capRef.current = null;
     const p = pendingRef.current;
     if (p == null) return;
     pendingRef.current = null;
     setHeightNow(outer.current, p);
     hRef.current = p;
+    toRef.current = p;
     setH(p);
   }
   function armSettle() {
@@ -720,6 +766,8 @@ export function AutoHeight({ children, watch, style }) {
     const el = inner.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
     function measure() {
+      const box = outer.current;
+      if (!box) return;
       const next = el.offsetHeight;
       const prev = cRef.current;
       // v17.9.1: compare against the last CONTENT height, not the last height
@@ -728,12 +776,75 @@ export function AutoHeight({ children, watch, style }) {
       // swap, saw box 543 vs content 2226, called that a change and overwrote
       // the clamped target with the true one, undoing the whole animation.
       if (prev === next) return;
-      // Only a CHANGE from a known prior height animates → clip while it runs.
-      // The first (null→number) measure must not clip the rest state.
-      if (prev != null) { setAnimating(true); armSettle(); }
       cRef.current = next;
-      hRef.current = next;
-      setH(next);
+      // The first (null→number) measure adopts the height; it must not clip or
+      // animate the rest state.
+      if (prev == null) { hRef.current = next; toRef.current = next; setH(next); return; }
+
+      // ── v17.10.0: the clamped range, on the OBSERVER path too ──────────────
+      //
+      // v17.9.1 added this to the `watch` swap and asserted that "callers that
+      // only grow/shrink their own content are already served correctly by the
+      // observer". That was wrong, and Settings → Layout is where it shows.
+      // Opening `Combos` there, sampled per rAF (port 477px, card 552px under a
+      // 739px max):
+      //     0–166ms    card 552 → 739     the entire visible change
+      //     166–866ms  card 739, box 535 → 2602, port CLIPPED
+      // 165ms of travel inside an 864ms animation, and 700ms of it locking the
+      // scroll port to animate pixels below the fold. That is the same defect
+      // v17.9.1 diagnosed one level up, in the same component, for the same
+      // reason — the range being animated is not the range anyone can see.
+      //
+      // The observer path is harder than the swap in one way: it fires EVERY
+      // FRAME while the content is itself animating (a `Collapsible` opening is
+      // a `Reveal` easing a grid track for 385ms), so a run has to survive being
+      // re-measured ~23 times. It does, because the clamped target stops moving
+      // as soon as the content passes the ceiling: the first fire starts the
+      // transition, the rest only update the true height to restore afterwards.
+      //
+      // The 864ms also explains why the General tab "looks fine" and Layout does
+      // not. General's content already overflows its port at rest, so the card
+      // is pinned at its max and the whole height change is invisible — the
+      // animation was equally wrong there, it just had nothing to spoil. Under
+      // the clamp that case now takes the instant branch below and stops
+      // clipping the port for 843ms after every toggle.
+      const running = animRef.current;
+      if (!running) capRef.current = heightAnimates(box) ? visibleCap(box) : null;
+      const cap = capRef.current;
+      const live = running ? null : box.getBoundingClientRect().height;
+      const r = clampRange(live == null ? next : live, next, cap);
+      const to = r.to;
+      pendingRef.current = r.pending;
+
+      if (running) {
+        // Mid-flight. `pendingRef` above already carries the new true height, so
+        // the only thing left is whether the VISIBLE target moved — it does not
+        // while the content is still growing past the ceiling, and re-setting
+        // the same value would leave the transition alone anyway. Re-arm the
+        // fallback timer, since this run may now outlast its original window.
+        if (to !== toRef.current) { toRef.current = to; hRef.current = to; setH(to); armSettle(); }
+        return;
+      }
+
+      const from = r.from;
+      if (!r.moves) {
+        // Nothing on screen would move. Take the true height outright rather
+        // than clipping the port for a third of a second to animate a change
+        // that is entirely below the fold.
+        pendingRef.current = null;
+        setHeightNow(box, next);
+        hRef.current = next;
+        toRef.current = next;
+        setH(next);
+        return;
+      }
+      if (from !== live) setHeightNow(box, from);
+      hRef.current = from;
+      toRef.current = to;
+      animRef.current = true;
+      setAnimating(true);
+      armSettle();
+      setH(to);
     }
     measureRef.current = measure;
     measure();
@@ -795,9 +906,9 @@ export function AutoHeight({ children, watch, style }) {
     // plain path — which is also the right behaviour there: instant.
     const cap = live == null || !heightAnimates(box) ? null : visibleCap(box);
     const next = el.offsetHeight;
-    const from = cap == null ? live : Math.min(live, cap);
-    const to = cap == null ? next : Math.min(next, cap);
-    if (cap == null || to === from) {
+    const r = clampRange(live, next, cap);
+    const from = r.from, to = r.to;
+    if (cap == null || !r.moves) {
       pendingRef.current = null;
       measureRef.current();
       return;
@@ -805,7 +916,13 @@ export function AutoHeight({ children, watch, style }) {
     if (from !== live) setHeightNow(box, from);
     cRef.current = next;                        // the observer must not re-fire
     hRef.current = from;
-    pendingRef.current = to === next ? null : next;
+    pendingRef.current = r.pending;
+    // v17.10.0: the run bookkeeping the observer path reads. A late resize
+    // inside the new tab (a font landing, an image sizing) must join THIS run
+    // rather than start a second one on top of it.
+    capRef.current = cap;
+    toRef.current = to;
+    animRef.current = true;
     setAnimating(true);
     armSettle();
     setH(to);

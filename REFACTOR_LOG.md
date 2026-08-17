@@ -9714,3 +9714,58 @@ the live CSSOM in both themes.
 bare shadow literals, now that the backlog which would have made it noisy is
 zero. It records the two traps such a rule must handle (rings are not drop
 shadows; literals hide behind consts).
+
+### Commit 10/11 — the collapsible expand eases the part you can see
+
+**Files:** `src/components/atoms.jsx`, `tests/auto-height.test.js` (new).
+**Behavioural change:** yes — `AutoHeight` no longer animates a height change
+that is entirely off screen, and clamps one that is partly off screen to the
+visible part.
+
+Patryk sent a screen recording of Settings → Layout: opening `Combos` did not
+feel like the tab switch beside it. Sampled per rAF (port 477px, card 552px
+under a 739px max):
+
+```
+0–166ms    card 552 → 739      the whole visible change
+166–866ms  card 739, box 535 → 2602, port CLIPPED
+```
+
+165ms of travel inside an 864ms animation, and 700ms of that spent locking the
+scroll port to animate 2000px nobody can see. **This is the exact defect v17.9.1
+diagnosed, in the same component, one path over.** That round added the clamped
+range to the `watch` swap and wrote that "callers that only grow/shrink their own
+content are already served correctly by the observer." They are not, and the
+belief is why nobody looked.
+
+So `clampRange(live, next, cap)` now drives BOTH paths. `visibleCap` gained the
+port's `scrollTop`: the ceiling is "where the box's bottom edge reaches the
+bottom of what is on screen **now**", and v17.9.1 could read that as zero only
+because its one caller was a tab swap, which resets the port's scroll in the
+click handler first. Without the term, collapsing a section after scrolling down
+clamps *below* the visible window and yanks the page up.
+
+The observer path is harder than the swap in one way: it fires every frame while
+the content animates itself (a `Collapsible` is a `Reveal` easing a grid track
+for 385ms), so a run must survive ~23 re-measures. It does, because the clamped
+target stops moving once the content passes the ceiling — the first fire starts
+the transition and the rest only update the true height to retake afterwards.
+
+**The General tab is why this hid for a version.** Its content already overflows
+the port at rest, so the card is pinned at its max and the height change cannot
+move a pixel — the animation was equally wrong there, it just had nothing to
+spoil. "It only happens in one tab" was a clue about *visibility*, not about
+scope. Under the clamp that case takes the new no-movement branch and stops
+clipping the port for 843ms after every toggle.
+
+**Measured after (same day, same port):** expand — card 552 → 739 evenly across
+0–460ms, port free at 500ms. Collapse — content shrinks untouched while it is
+above the ceiling, then card 739 → 552 across 325–726ms. Tab swap unchanged
+(739 → 552 over 450ms, the v17.9.1 numbers). Week↔Month unchanged: it fits its
+port, so `cap` never bites and it takes the plain path it always did.
+
+**Why a new test file.** The arithmetic has now been got wrong twice, so it is
+extracted as a pure `clampRange` export and pinned by seven cases — including
+the two that are easy to reason away, "both ends above the ceiling" and "only
+set `pending` when something was actually clamped". The component around it
+stays DOM-bound and untested, which is the repo's standing split.
