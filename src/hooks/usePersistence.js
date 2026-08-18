@@ -59,8 +59,19 @@ const MAX_RETRIES = 3;
 //
 // 20s is well past the SDK's own early retries (1–3s) and short enough that
 // staff never see it. The heartbeat below is 10s, so the first kick lands at
-// 20–30s and repeats on the same spacing while the connection is still down.
+// 20–30s.
+//
+// /code-review: the spacing then WIDENS, ×2 per kick to a 2-minute ceiling,
+// instead of staying flat. A flat 20s poll would replace the SDK's bounded
+// backoff with an UNBOUNDED one — on a multi-hour outage with the tab left
+// visible that is ~120 connection attempts per device per hour, forever, which
+// is the exact load exponential backoff exists to prevent. Widening keeps the
+// part that matters (a short outage recovers in ~20s, which is the reported
+// bug) while bounding the long tail; even the ceiling is less than half the
+// SDK's own 5-minute maximum, so a stuck client still recovers faster than it
+// would unaided. Reset on every successful connect.
 const RECONNECT_KICK_MS = 20000;
+const RECONNECT_KICK_MAX_MS = 120000;
 
 // v17.5.1: how long the first bookings snapshot may take before the app stops
 // showing "loading" and reports that the read is not completing. Generous —
@@ -146,6 +157,10 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // heartbeat effect (see RECONNECT_KICK_MS).
   const offlineSinceRef=useRef(null);
   const lastKickRef=useRef(0);
+  // Current spacing between kicks, doubling per kick to RECONNECT_KICK_MAX_MS.
+  const kickSpacingRef=useRef(RECONNECT_KICK_MS);
+  // Has this outage already been logged? One line per outage, not one per kick.
+  const kickLoggedRef=useRef(false);
   const resyncInFlightRef=useRef(false);
   const [resyncing, setResyncing] = useState(false);
   // ── v15.5.0: per-booking-node write model ───────────────────────────────────
@@ -501,7 +516,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // v17.10.1: the watchdog's clock. Stamped on the way DOWN only — a second
       // false snapshot must not push the deadline out, or a connection that
       // flaps between "no" and "no" would never qualify as stuck.
-      if(connected) offlineSinceRef.current=null;
+      if(connected){
+        offlineSinceRef.current=null;
+        kickSpacingRef.current=RECONNECT_KICK_MS; // next outage starts fast again
+        kickLoggedRef.current=false;
+      }
       else if(offlineSinceRef.current===null) offlineSinceRef.current=Date.now();
       if(connected){
         // v15.2.0: if we went stale while offline (a resume/heartbeat fired
@@ -564,6 +583,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // of up to five minutes.
   function forceReconnect(){
     lastKickRef.current=Date.now();
+    // A person tapping "Reconnect now" is a fresh signal, so the automatic
+    // ladder restarts from the bottom rather than inheriting a widened spacing.
+    kickSpacingRef.current=RECONNECT_KICK_MS;
     try{ goOnline(db); }catch{ /* a deleted app instance — nothing to resume */ }
   }
   // Called from the 10s heartbeat. Four conditions, and each excludes a case
@@ -581,13 +603,28 @@ export function usePersistence({ autoOptimizer, nowMins }){
   function kickIfStuck(){
     if(isConnectedRef.current) return;
     if(!hasConnectedRef.current) return;
-    if(typeof document!=="undefined"&&document.visibilityState!=="visible") return;
+    // /code-review: the `typeof document` guard this used to carry was dead —
+    // this hook already calls document.addEventListener unguarded a few lines
+    // below, and the app is browser-only. It implied a portability contract
+    // that does not exist.
+    if(document.visibilityState!=="visible") return;
     const since=offlineSinceRef.current;
     if(since===null) return;
-    if(Date.now()-Math.max(since,lastKickRef.current)<RECONNECT_KICK_MS) return;
-    console.warn("[conn] still offline after "+Math.round((Date.now()-since)/1000)
-      +"s — resetting the Firebase reconnect backoff.");
+    if(Date.now()-Math.max(since,lastKickRef.current)<kickSpacingRef.current) return;
+    // /code-review: ONE line per outage, not one per kick. Every other warning
+    // in this file is tied to a discrete write that happened or was refused, so
+    // it is one line per event; a timer-driven warning at this cadence would
+    // leave ~1,000 identical lines after an overnight outage and crowd out the
+    // [SAFE] refusals and listener-cancel errors that an investigation actually
+    // reads the console for (the v17.5.1 diagnosis surface).
+    if(!kickLoggedRef.current){
+      kickLoggedRef.current=true;
+      console.warn("[conn] still offline after "+Math.round((Date.now()-since)/1000)
+        +"s — resetting the Firebase reconnect backoff (retrying, widening to "
+        +(RECONNECT_KICK_MAX_MS/1000)+"s).");
+    }
     forceReconnect();
+    kickSpacingRef.current=Math.min(RECONNECT_KICK_MAX_MS,kickSpacingRef.current*2);
   }
   // v15.2.0: heartbeat + resume detection driving the freshness gate.
   // The heartbeat bumps lastBeatRef every 10s; a gap >STALE_GAP_MS means the
