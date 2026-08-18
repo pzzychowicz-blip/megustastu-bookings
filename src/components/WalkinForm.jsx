@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC } from "../lib/constants";
+import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
@@ -202,7 +202,7 @@ export function WalkinForm({
           background: r.hasTables ? "rgba(220,252,231,0.8)" : "rgba(254,249,195,0.8)",
           color: r.hasTables ? KTXT_OK : KTXT_TIGHT,
           border: "1px solid " + (r.hasTables ? "rgba(134,239,172,0.5)" : "rgba(253,230,138,0.5)"),
-          boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
+          boxShadow: "var(--shadow-flat)"
         }}
       >
         {r.timeStr}
@@ -477,7 +477,7 @@ export function WalkinForm({
         border: "1px solid " + (wOk ? "var(--suggest-border)" : "var(--border-sheet)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: 8, flexWrap: "wrap",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
+        boxShadow: "var(--shadow-card)"
       }}>
         <div>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
@@ -518,7 +518,8 @@ export function WalkinForm({
             <div style={{ display: "flex", justifyContent: "center", marginTop: -4, marginBottom: 12 }}>
               <button
                 className="mgt-hover-scale"
-                style={mkBtn({ fontSize: T.body, background: BTN.orange, minHeight: 40, padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6 })}
+                /* v17.10.0: pending amber — the waitlist's colour, see App's badge. */
+                style={mkBtn({ fontSize: T.body, background: BLOCK_BG.pending, minHeight: 40, padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6 })}
                 onClick={() => onAddToWaitlist()}
               >
                 <WaitIcon size={IC.control} />Add to waitlist

@@ -193,6 +193,28 @@ const NEED = { label: 4.5, button: 3 };
 // It lives in the registry so it is visible at the site, the number is printed
 // on every run, and a REGRESSION still fails: an exempt fill that gets worse
 // than its recorded floor breaks the build.
+//
+// ── v17.10.0: --block-pending's exemption now covers MORE than a block ───────
+// The waitlist chrome moved onto this fill with white ink — the ⏳ count badge in
+// the date-nav row, both "Add to waitlist" buttons, and the Waitlist panel's
+// title pill — because a party on the waitlist is a pending thing and this is
+// the app's colour for pending things (it previously shared the burnt orange
+// with No show / Reassign / Reshuffle / the swap family, which said the wrong
+// thing).
+//
+// **The justification above does NOT stretch to cover these**, and saying so is
+// the point of this note. A block's meaning is carried by its colour, position
+// and width, and the one part that is information moved onto an opaque chip. On
+// a button, the label IS the content: "Add to waitlist" at 1.82:1 in light /
+// 2.20:1 in dark has nothing else carrying it.
+//
+// All three candidates were built into the running app and compared side by side
+// in both themes — an outline treatment (amber border + amber text, the
+// "Save pending" shape, no exemption needed), a solid fill with dark amber ink
+// (3.76 light / 3.12 dark, clears the 3:1 button bar), and this one. Patryk
+// chose this one, informed, after seeing the numbers and the pixels. It is
+// recorded here rather than argued away: the floors below still gate a
+// regression, and an accepted contrast is not a licence to keep going.
 const EXEMPT_FLOOR = { "--block-confirmed": 2.8, "--block-pending": 1.75, "--block-completed": 2.1 };
 
 function measure(entry, theme) {

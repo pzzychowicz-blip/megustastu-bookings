@@ -9286,3 +9286,675 @@ reason `--shadow-*` is.
 what the default means on your surface.** `--bg-ac-hover` is right for an
 autocomplete row, which has no colour of its own; it is wrong for anything whose
 resting colour is the message.
+
+---
+
+## v17.10.0 — nine items from a shift on the floor
+
+**Date:** 2026-08-17
+**Files:** see each entry.
+**Behavioural change:** yes — one persisted field is added (`guestId`, per
+booking, covered by the existing per-`$id` CAS: **no new node, no Firebase
+console step**), and five surfaces change how they respond to a tap.
+**Verification:** see each entry.
+
+Nine independent items, collected from using the app rather than from reading it:
+a swap that locked one booking too many, guests with no phone number who could
+never become regulars, an autocomplete that only fired once, status buttons that
+all wore the same chevron, a List card whose Edit button was redundant with the
+card itself, a Delete that existed in only one of the two places you would look
+for it, the waitlist wearing a colour that meant something else, a collapsible
+header that did not answer the pointer, and the last of the `ROADMAP.md` shadow
+literals.
+
+They share no code, so they ship as nine commits under one version.
+
+### 1 — a swap locks only the booking you dragged
+
+**Files:** `src/App.jsx`.
+
+Dragging a block onto an occupied row can resolve as a straight swap: the two
+parties exchange table sets. That branch wrote `_manual:true, _locked:true` to
+**both** bookings — so a swap pinned a party nobody asked to pin, the optimizer
+could never tidy it again, and every swap quietly grew the set of hand-placed
+bookings until the day had to be reshuffled by hand.
+
+Only the booking the user actually dragged is a deliberate placement. The
+displaced one keeps its new tables and its history entry, and comes out unlocked.
+
+**The exception is why the two flags are read off the captured `other` rather
+than written `false` outright.** A walk-in is `_manual + _locked` *by definition*
+and immune to the optimizer; force-unlocking one here would let a reshuffle move
+a party that is physically sitting down. So an already-locked booking keeps its
+lock on its NEW tables, and an ordinary confirmed booking comes out unlocked.
+
+The two other paths that move an occupant out of the way — step 4's displacement
+and `manualAssign`'s `affected` branch — have always unlocked them, and are
+untouched. They strip the tables and let the optimizer re-place the booking from
+scratch, so the walk-in argument does not transfer: there is no "new tables" for
+a lock to protect.
+
+### 2 — `guestId`: guests with no phone number can become regulars
+
+**Files:** `src/lib/customers.js`, `src/lib/booking-logic.js`,
+`src/lib/constants.js`, `src/App.jsx`, `src/components/BookingFormModal.jsx`,
+`src/components/ListView.jsx`, `src/components/TimelineView.jsx`,
+`tests/customers.test.js`, `CLAUDE.md`.
+
+Since v16.0.0 a customer has been derived from bookings by normalized phone, and
+that has been right: a phone number is verified, self-normalising, and shared
+across the WhatsApp module. But plenty of parties never give one, and those guests
+could never become regulars however often they came back. Every phone-less booking
+was its own island.
+
+**That was deliberate, and the reason still stands.** `searchGuestsByName`'s
+never-merge rule exists because nothing in the data separates two people called
+Maria with no phone numbers, and fusing them produces one customer with one merged
+visit count and one merged no-show record — a wrong answer presented with
+confidence. Matching on names would have been the easy version of this feature and
+the wrong one.
+
+So the fix is not a better guess. **`guestId` is an explicit assertion by a human
+who can see both bookings**: picking an existing phone-less guest out of the name
+dropdown, or Book Again on a phone-less booking. Absent that click nothing merges,
+and the v16.4.0 test that pins the never-merge rule passes unchanged.
+
+Three decisions worth keeping:
+
+**The id is `"g" + <seed booking id>`, not random.** It is derived from data both
+devices already hold, so two clients joining the same guest concurrently mint the
+SAME id and converge. A random id would fork the guest in two, silently. This is
+the recurring-occurrence-id argument, and it applies for the same reason.
+
+**Identity is a UNION of the two keys, not a fallback.** `matchCustomerFor` matches
+phone OR guestId. A guest who books three times with no phone and then gives one
+has bookings carrying only a guestId and bookings carrying both; "phone if present,
+else guestId" would split them at exactly the moment they became easiest to
+identify. `identityKey(b)` — phone if real, else guestId — answers the narrower
+question "which key does this ONE booking answer to", and is what `noShowMap` is
+now built on.
+
+**The back-stamp rides the same write.** Joining needs the id on both bookings, so
+`stampGuestSeed` runs inside `buildNext`/`applyBase` rather than as a second
+`saveBookings` call: the v15.5.0 per-booking diff-write patches both children
+together and the per-`$id` CAS covers both. Its `!b.guestId` guard is what makes a
+held-and-retried write idempotent, and it also refuses to re-home a booking that
+already belongs to another group.
+
+`matchCustomerByPhone` survives as a thin alias with its exact name and signature
+— the complementarity contract at the top of `customers.js` requires the WA module
+to import that symbol on merge, and a generalisation that renames it would break a
+promise made to a file that does not exist yet.
+
+**Flagged non-goal:** `customerIndex` stays phone-only, so joined phone-less guests
+do NOT appear in Settings → Customers. That index feeds `searchCustomers` and the
+Customers tab, both of which assume every entry has a real phone; adding guest
+entries would hand `pickCustomer` a customer with `rawPhone: ""`. The form chips,
+the name dropdown and the no-show markers all see them, which is where the
+recognition actually matters.
+
+**Verification:** 8 new tests in `tests/customers.test.js` (290 total) — the union
+match, `identityKey`'s precedence, the `searchGuestsByName` collapse *and* the
+un-joined same-name guest staying separate beside it, `noShowMap` on a guestId,
+and `matchCustomerByPhone`'s unchanged behaviour. Build clean.
+
+### 3 — the suggestions reopen after you pick one
+
+**Files:** `src/components/BookingFormModal.jsx`.
+
+Reported as "the name/phone suggestions only work the first time you type
+something in". The cause is exact, and it is a two-line bug hiding behind a
+correct-looking design.
+
+The dropdown rows call `preventDefault()` on mousedown, deliberately: that beats
+the input's blur, which would unmount the list before the click landed. So after
+a pick the input **still has DOM focus**. The pick handler then sets
+`nameFocus` / `phoneFocus` to `false` — and because the field never lost focus,
+**no further `focus` event can ever fire**. Typing more did nothing; you had to
+tab away to another control and come back.
+
+Both fields now raise the flag on `change` and on `click` as well as on `focus`.
+`focus` is the wrong single event to hang a dropdown on whenever something else
+can close it while the field stays focused.
+
+The `!editId` gate on the NAME dropdown is also gone. It made name autocomplete a
+new-bookings-only feature — and an edit form arrives **pre-filled**, which is
+precisely the already-has-text case this fix is about. A pick while editing fills
+the name (and the phone, for a phone row) and nothing else: `size` / `preference`
+/ `preferredTables` belong to the booking you are editing, and the `!editId`
+guard inside `pickGuest` already drew that line. One new filter: the booking you
+are editing is not offered as somebody to link yourself to — but only when it is
+the row's *only* booking, since a group row led by it still represents other
+visits and is a real target.
+
+**Verification:** live in DEV. Typed "ma" → picked Marta Ferrer (name, phone,
+party size and the Regular chip all filled) → retyped "Marta Fe" and the dropdown
+reopened, which it could not do before. Opened an existing booking and typed in
+the name field: suggestions appear, including a phone-less "Marko · no phone".
+
+### 4 — every status button carries its own mark
+
+**Files:** `src/components/Icons.jsx`, `ListView.jsx`, `BookingFormModal.jsx`,
+`QuickStatusPopup.jsx`, `LateBanner.jsx`, `CLAUDE.md`.
+
+Every button that moves a booking to another status was prefixed with the SAME
+`ChevronRightIcon` — ">Confirmed", ">Seated", ">Completed", ">Cancelled". A
+chevron marks "there is more this way". Four buttons in a row wearing it is one
+glyph repeated and no information, and it is a leftover from when these were
+plain `">"+status` strings.
+
+And the surface that matters most had nothing. The quick-status popup — the
+long-press on a timeline block or a floor-plan table, i.e. the one used **during
+service** — carried no marks at all, so the same five decisions looked different
+in three places.
+
+**Four of the six marks already existed.** A status button is not a reason to
+invent a shape when the app has one meaning the same thing: `CheckIcon`,
+`CloseIcon`, `NoShowIcon`, and `WaitIcon` for pending — the hourglass already
+means a party is waiting, which is exactly what awaiting-confirmation is.
+
+`StatusIcon` is the single source, and it is a **component, not the map**. The
+mechanical reason is that `Icons.jsx` exports only components, so a plain const
+export breaks Fast Refresh — `react-refresh/only-export-components` is a lint
+ERROR and CI gates on zero. The better reason is that a call site should ask for
+"the mark for this status" instead of holding a table it can index wrongly; an
+unrecognised status renders nothing rather than throwing.
+
+**`ChairIcon` took five variants, judged rasterised at the size it ships at** —
+the `DepositIcon` rule, applied by drawing each candidate to a canvas at 12 and
+14px and magnifying it 10×. Four failed, and all four failed as *silhouettes*
+rather than as details:
+
+* a profile chair (back post · seat · front leg) is a vertical, a horizontal and
+  a short vertical — at 12px, a lowercase "h";
+* the same with the seat overhanging behind reads as a plus sign;
+* two back posts instead of a solid backrest reads as a capital "H";
+* a solid backrest with the seat WIDER than the back reads as a table with
+  something standing on it. **The overhang is what makes it a tabletop.**
+
+What ships has backrest and seat at the same width, so the two read as one
+object, with the legs as two ticks below. The backrest interior is 8 units
+against a 2.2 stroke — the ~3× an enclosed shape needs before it fills in solid,
+the same constraint that leaves `LockIcon` without a keyhole.
+
+`DoubleCheckIcon` offsets its two strokes along their own diagonal rather than
+stacking them: stacked, the gap has to survive the stroke (~1.1px at the shipped
+size) and the pair closes into one fat tick.
+
+**Sizing correction:** these render at `IC.control` (14), not `IC.inline` (12).
+They are marks ON a control, and the `Assign` button already sat at `IC.control`
+in the very same List row — a mismatch that pre-dated this change.
+
+**Verification:** live in DEV at 3× zoom. The List card's row reads
+Assign · Edit · [chair] Seated · [double-check] Completed · [✕] Cancelled ·
+Delete; the edit form's Status row adds [hourglass] Pending. Build clean, lint 0
+errors, 290 tests.
+
+### 5 — the List card is the Edit affordance
+
+**Files:** `src/components/ListView.jsx`, `CLAUDE.md`.
+
+The card already had a pointer cursor, and since v17.9.1 a hover tint. Both
+promise that clicking does something. What it did was set an invisible keyboard
+selection — while a button labelled **Edit** sat inside it doing the thing the
+card already looked like it would do.
+
+The card now opens the edit form, and the Edit button is gone.
+
+**It selects first, then opens**, and the order is the point: the keyboard model
+(↑/↓ over the day, the per-card shortcuts) resumes from the card you just opened,
+so closing the form leaves you where you were rather than wherever the arrows had
+last been. `listFocusReq` is deliberately NOT bumped — that counter exists for
+PROGRAMMATIC selection (a search jump, arrow nav), and scrolling the page under a
+finger that has just tapped is the exact bug it was introduced to avoid.
+
+**The regression risk is the whole of the work.** A click target inside a click
+target means every control in the card has to stop the event or it does its own
+job *and* opens the form. That is five controls (Assign, each status changer,
+No show, Cancelled, Delete), and a forgotten one fails in a way that reads as
+"the form opens at random". They go through a local `stopped()` wrapper rather
+than five hand-written `stopPropagation` lines, so the requirement is one visible
+word per handler and an audit is a single grep.
+
+The action row is now three groups, per Patryk: **Assign** left, the **status
+changers** pushed right by `marginLeft:auto`, and the two ways a booking **ends**
+hard right after a wider gap — space between "advance this booking" and "end this
+booking".
+
+**Verification:** live in DEV. Clicking a card opens its edit form and leaves the
+selection ring on that card; clicking Assign opens the manual-assignment modal
+and the edit form does **not** appear behind it. Grepped every `onClick` in the
+file: the five in-card controls all carry `stopped()`, and the two that do not
+(New booking / Walk-in) are in the empty-day state, where there is no card.
+
+### 6 — Delete reaches the Edit booking form
+
+**Files:** `src/App.jsx`, `src/components/BookingFormModal.jsx`.
+
+Delete existed only on the List card. Deleting a booking you had open meant
+closing the form, finding the card again and deleting from there — and from
+Timeline or Plan there was no route to it at all without changing view.
+
+It sits in the footer's left group beside History and Book again, in the red
+`BTN.del`, and only in edit mode: there is nothing to delete on a new booking.
+
+**It raises the SAME confirm overlay the List's Delete raises** rather than a
+dialog of its own. One armed confirm for one irreversible action — Firebase's
+free plan has no backups, so a second confirm shape here would be a second thing
+to get subtly wrong.
+
+Two consequences handled in `delBooking` rather than at the call site:
+
+* **The form closes with the booking.** Otherwise you are left editing a record
+  that no longer exists. It is the RAW setter, deliberately, not
+  `requestCloseForm` — the unsaved-changes guard exists to stop you losing edits
+  by accident, and confirming a delete is not an accident. `formDirty` is
+  `showForm && …`, so this disarms `beforeunload` on the way out.
+* It is gated on `editId === id`, which also fixes a pre-existing edge: the
+  LIST's Delete removing the booking the form happens to be open on.
+
+No Escape-chain change was needed — `confirmDel` was already above `showForm` in
+`useKeyboardShortcuts`' z-order, so Esc dismisses the confirm and returns you to
+the form. The confirm overlay is mounted after the form in App's tree, so it
+already renders on top.
+
+**Verification:** live in DEV, end to end on a throwaway booking. Created "ZZ
+Delete Test", opened it from the List by clicking the card, tapped Delete → the
+confirm rendered above the form; Cancel returned to the form intact; Delete
+removed the booking and closed **both** dialogs (measured: 2 dialogs → 0, and the
+name gone from the list). DEV left as it was found.
+
+### 7 — the waitlist wears the pending amber
+
+**Files:** `src/App.jsx`, `src/components/BookingFormModal.jsx`,
+`src/components/WalkinForm.jsx`, `src/components/WaitlistPanel.jsx`,
+`src/components/atoms.jsx`, `tests/contrast.test.js`, `CLAUDE.md`.
+
+The waitlist's chrome wore `--btn-orange` — the burnt orange it shares with No
+show, Reassign, Reshuffle and the swap family, i.e. the colour that means
+*something has gone wrong or needs undoing*. A party waiting for a table has not
+gone wrong; it is **pending**, and the app already has a colour for pending
+things. Four surfaces moved: the ⏳ count badge in the date-nav row, both "Add to
+waitlist" buttons, and the Waitlist panel's title pill (which followed
+automatically — `ModalTitle`'s rule is that the pill wears the colour of the
+button that opens it, so the pill was not an independent decision).
+
+The token itself is untouched; the green "table free" signals stay green, because
+those say an opportunity opened, which is the opposite of "still waiting" and
+would have collided with the amber Running-late section directly above them.
+
+**The interesting part is the contrast, and how the decision was made.** This
+fill under white ink is the app's recorded amber exemption — and that exemption's
+stated justification does **not** stretch to cover a button. A block's meaning is
+carried by its colour, its position on the time axis and its width, and the one
+part that is information was deliberately moved onto an opaque chip; on "Add to
+waitlist", the label *is* the content. Measured: **1.82:1 light, 2.20:1 dark**,
+against a 3:1 bar for buttons. The orange it replaces passed at 3.01 / 5.25.
+
+So rather than either shipping it quietly or refusing it, all three candidates
+were **built into the running app and compared side by side in both themes** —
+an outline (amber border + amber text: the `Save pending` shape, legible in both,
+no exemption needed), a solid fill with dark amber ink (3.76 / 3.12, over the
+bar, but CLAUDE.md records that pairing reading as *disabled*), and a solid fill
+with white ink. Patryk chose the third, with the numbers and the pixels in front
+of him.
+
+**What that obliges is a truthful record, not a silent one.** The note beside
+`EXEMPT_FLOOR` in `tests/contrast.test.js` now says what the exemption actually
+blesses, why the block argument does not transfer, what the three options were,
+and that this was an informed choice. The floors still gate a regression: an
+accepted contrast is not a licence to keep going.
+
+**Verification:** live in DEV. Triggered the no-tables banner with a 25-guest
+booking and read the computed style off the real button —
+`rgba(234, 179, 8, 0.92)` on `rgb(255,255,255)`, i.e. the pending fill — and it
+renders directly above the amber `Save pending` in the same footer, so the two
+amber things read as one family. Same computed check on the walk-in form's copy.
+Grepped `BTN.orange` afterwards: every remaining use is No show / Reassign /
+Reshuffle / the manual-swap panel, which is the intended family.
+
+### 8 — collapsible headers answer the pointer
+
+**Files:** `src/components/atoms.jsx`, `CLAUDE.md`.
+
+The "Completed & cancelled" fold had no hover feedback, and neither did any of
+the ~15 Settings sections — they are the same atom. A full-width row that is a
+click target is exactly what `.mgt-ac-row` exists for (v17.9.1: the 1.08 lift is
+for controls, a tint is for containers of controls), so it went in the atom
+rather than at one call site, and there is now one kind of collapsible header.
+
+`--row-bg-hover` is `--bg-veil`, not the class default `--bg-ac-hover`: the
+header sits on `Section`'s own `--bg-soft` fill, and an accent wash would
+recolour that instead of lightening it — the v17.9.1 NotificationStrip finding
+that a class with a default is only half-configured until you check what the
+default means on your surface.
+
+**Three things went wrong on the way, and all three were caught by measuring
+rather than by reading.**
+
+**The inline background.** The header carried `background:"transparent"` inline.
+An inline background beats a stylesheet `background-color` outright, so the rule
+matched, the element reported `:hover`, and the computed fill stayed
+`rgba(0,0,0,0)`. This is the *exact* trap `.mgt-ac-row`'s own comment in
+`index.html` was written about, and reading the source shows nothing wrong: the
+class is there, the custom property is set, the rule exists. Only reading the
+computed background *while hovering* revealed it. **Adding `.mgt-ac-row` to an
+existing element means DELETING its inline `background`, not just adding
+`--row-bg`.**
+
+**The width.** `width:100%` plus negative horizontal margins is over-constrained,
+so the browser silently drops one side. Dropping `width` looked safe —
+`display:flex` makes a block-level flex container, which normally fills its
+parent — but a `<button>` keeps its shrink-to-fit intrinsic sizing, so the header
+collapsed to its own text and the chevron left the right edge: **213px instead of
+337px**. `calc(100% + 20px)` with `border-box` is the spelling that holds.
+
+**The layout.** The tint needs a padding box to read as a row rather than a
+hairline band, and the negative margin is what keeps the resting layout put.
+Verified by measurement, not arithmetic: content still starts at x=131.5 and the
+chevron still ends at x=631.5, and the gap between consecutive headers is 64.5px
+before and after.
+
+**Verification:** live in DEV, hovering a Settings section — the hovered header
+computes `rgba(0, 0, 0, 0.05)` while its neighbour computes `rgba(0, 0, 0, 0)`,
+and the tint bleeds 10px into `Section`'s padding with `R.inset` corners.
+
+### 9 — the plain drop-shadow literals become tokens
+
+**Files:** `index.html`, plus nine components; `ROADMAP.md`, `CLAUDE.md`.
+
+Closes the `ROADMAP.md` "Plain drop-shadow literals" entry. 18 inline
+`0 1px Npx rgba(0,0,0,0.0x)` values across nine files, in seven distinct depths
+nobody had chosen — they accumulated, one per feature, the same way the radii and
+type sizes did before `R` and `T`.
+
+**A new token was needed, and the reason is the interesting part.** Every
+existing `--shadow-*` leads with a white inset highlight; that is what makes a
+control read as raised. But a highlight tuned for light mode and dimmed for dark
+is *wrong* on a fill that is identical in both themes — the v17.8.0
+white-inset-over-fixed-fill rule, in reverse. Mapping the whole set onto
+`--shadow-btn` would have re-introduced exactly the bug class that rule guards.
+So `--shadow-flat` carries **no inset at all**, and is still theme-split, because
+the shadow falls on the PAGE and the page does flip.
+
+**Triage is one question: does the ELEMENT's own fill flip with the theme?** It
+was answered by parsing `index.html`'s `:root` and `[data-theme="dark"]` blocks
+rather than by assumption, and that turned up two things worth knowing:
+`--block-confirmed` / `--block-pending` / `--block-completed` / `--tl-blocked-badge`
+are invariant while `--block-seated` / `--block-cancelled` / `--tl-hour-pill` /
+`--tl-now-pill` / `--accent` are **not** — so "BLOCK_BG is theme-invariant" is
+true of three of the five, not all. A MIX therefore counts as "does not flip":
+`SBadge` and the timeline's status swatch both take `--shadow-flat`, because a
+single style object cannot branch on which status it is about to paint.
+
+The rest went to `--shadow-btn` (raised pills whose fill flips: the now-pill,
+`TBadge`, the Plan badge, the suggestion chip), `--shadow-card` (cards on
+`--bg-card` / `--bg-soft`) and `--shadow-popover` (`StatusToasts` — a floating
+surface, the same role as the quick-status popup, and it gains a depth that
+actually deepens over a dark page).
+
+**One literal was hidden behind a `const`.** `StatusToasts`' `toastShadow`
+survived the first pass because the sweep grepped `boxShadow: "0 …` and the
+property was assigned a variable. Same shape as the v17.9.0 finding that an HTML
+entity is invisible to a glyph scan: **grep the VALUE's shape, not the property
+it ends up on.** A second grep on `"[0-9]+ [0-9]+px [0-9]+px rgba` found it.
+
+Genuine exceptions kept: the connection dot's `0 0 0 3px` glow and WeekView's
+`0 0 0 2px` focus rings are **rings, not drop shadows**, and `WalkinForm`'s Seat
+button keeps its white-inset literal, which sits on a theme-invariant fill and is
+correct there.
+
+**Verification:** grepped all seven old values afterwards across `src/` **and**
+`index.html` — zero hits. Build, 290 tests, lint 0 errors, `check:style` clean.
+Loaded the app in dark mode and confirmed no element gained a bright white top
+highlight; read `--shadow-flat` / `--shadow-btn` / `--shadow-popover` back out of
+the live CSSOM in both themes.
+
+**ROADMAP.md:** the entry is replaced by its successor — a `check:style` rule for
+bare shadow literals, now that the backlog which would have made it noisy is
+zero. It records the two traps such a rule must handle (rings are not drop
+shadows; literals hide behind consts).
+
+### Commit 10/11 — the collapsible expand eases the part you can see
+
+**Files:** `src/components/atoms.jsx`, `tests/auto-height.test.js` (new).
+**Behavioural change:** yes — `AutoHeight` no longer animates a height change
+that is entirely off screen, and clamps one that is partly off screen to the
+visible part.
+
+Patryk sent a screen recording of Settings → Layout: opening `Combos` did not
+feel like the tab switch beside it. Sampled per rAF (port 477px, card 552px
+under a 739px max):
+
+```
+0–166ms    card 552 → 739      the whole visible change
+166–866ms  card 739, box 535 → 2602, port CLIPPED
+```
+
+165ms of travel inside an 864ms animation, and 700ms of that spent locking the
+scroll port to animate 2000px nobody can see. **This is the exact defect v17.9.1
+diagnosed, in the same component, one path over.** That round added the clamped
+range to the `watch` swap and wrote that "callers that only grow/shrink their own
+content are already served correctly by the observer." They are not, and the
+belief is why nobody looked.
+
+So `clampRange(live, next, cap)` now drives BOTH paths. `visibleCap` gained the
+port's `scrollTop`: the ceiling is "where the box's bottom edge reaches the
+bottom of what is on screen **now**", and v17.9.1 could read that as zero only
+because its one caller was a tab swap, which resets the port's scroll in the
+click handler first. Without the term, collapsing a section after scrolling down
+clamps *below* the visible window and yanks the page up.
+
+The observer path is harder than the swap in one way: it fires every frame while
+the content animates itself (a `Collapsible` is a `Reveal` easing a grid track
+for 385ms), so a run must survive ~23 re-measures. It does, because the clamped
+target stops moving once the content passes the ceiling — the first fire starts
+the transition and the rest only update the true height to retake afterwards.
+
+**The General tab is why this hid for a version.** Its content already overflows
+the port at rest, so the card is pinned at its max and the height change cannot
+move a pixel — the animation was equally wrong there, it just had nothing to
+spoil. "It only happens in one tab" was a clue about *visibility*, not about
+scope. Under the clamp that case takes the new no-movement branch and stops
+clipping the port for 843ms after every toggle.
+
+**Measured after (same day, same port):** expand — card 552 → 739 evenly across
+0–460ms, port free at 500ms. Collapse — content shrinks untouched while it is
+above the ceiling, then card 739 → 552 across 325–726ms. Tab swap unchanged
+(739 → 552 over 450ms, the v17.9.1 numbers). Week↔Month unchanged: it fits its
+port, so `cap` never bites and it takes the plain path it always did.
+
+**Why a new test file.** The arithmetic has now been got wrong twice, so it is
+extracted as a pure `clampRange` export and pinned by seven cases — including
+the two that are easy to reason away, "both ends above the ceiling" and "only
+set `pending` when something was actually clamped". The component around it
+stays DOM-bound and untested, which is the repo's standing split.
+
+### Commit 11/11 — the customer index learns the second identity key
+
+**Files:** `src/lib/customers.js`, `src/components/CustomersSettings.jsx`,
+`src/App.jsx`, `tests/customers.test.js`.
+**Behavioural change:** yes — a joined phone-less guest is now a customer in
+Settings → Customers, and can be deleted like any other.
+
+Commit 2 of this version gave phone-less guests an identity (`guestId`) and
+threaded it through the form chips, `matchCustomerFor`, `noShowMap` and
+`searchGuestsByName` — and left `customerIndex` phone-only, which was flagged as
+a deliberate non-goal. It was the wrong call: `guestId` reached every screen
+**except the one that lists customers**, so a guest could be a regular with a
+visit count everywhere and not exist on the Customers tab. Patryk asked for it.
+
+`customerIndex` now keys on `identityKey` — phone if there is one, else the
+`guestId`. A phone-less booking with no `guestId` still has no identity and is
+still skipped, which is the never-merge rule holding exactly where it should:
+nothing merges by accident, only by a human picking a guest from the dropdown.
+Entries gained `key` (the map key) and `guestId`, and `phone` is `""` rather
+than absent on a guest entry so a caller can do string work on it either way.
+
+**Three consumers had to be told, and each was a real bug if not.**
+`searchGuestsByName` rebuilds the guest tier from the bookings (it needs the
+UNJOINED ones too), so its index pass had to be narrowed to `if (!c.phone)
+return;` or every joined guest would appear in that dropdown twice. The existing
+v17.10.0 test for that dropdown covers it and needed no edit — it already asserts
+exactly two rows. `searchCustomers` guards `c.phone` before a digits match, so a
+guest is findable by name and never by number. And `CustomersSettings` keyed its
+React key, its open row, its armed-delete and its delete call on `c.phone`:
+every guest row would have collapsed onto the same `""` key — one shared open
+state and one delete hitting all of them.
+
+**`deleteCustomer` takes an identity, not a phone**, and matches through
+customers.js's own `matchesIdentity` (extracted from `matchCustomerFor`, so the
+union rule has one home rather than a copy in App.jsx). It clears `guestId`
+alongside the personal fields: that id is the only thing still binding the
+anonymized bookings into a customer, and leaving it would leave the deleted guest
+sitting in the list under "Data removed" — which looks exactly like a delete that
+did nothing.
+
+**Two things that are easy to miss and were not.** The fourth totals tile counted
+`!hasRealPhone(b.phone) && isNoShow(b)`; a joined guest satisfies that and now
+also has a row above, so it would have been counted twice while the tile called
+them untraceable. It is `!identityKey(b)` now, and reads "no-show,
+unidentified". And the tab's own footnote said customers "are recognised by phone
+number across all bookings" — the same trap as v17.9.0's copy describing glyphs
+that no longer existed. Rewritten.
+
+**Verification:** built, 303 tests (up from 297), lint 0 errors, `check:style`
+clean. Live in DEV: created two phone-less bookings, joined the second to the
+first from the name dropdown, confirmed ONE Customers row reading "No phone ·
+linked guest" holding both bookings, deleted the customer, confirmed the row is
+gone and that the anonymized pair does NOT come back as a customer called "Data
+removed". Both throwaway bookings then deleted; DEV is clean.
+
+### Commit 12/12 — the two /code-review fixes (both landed together)
+
+Both are guest-identity defects the review found, and both shipped in ONE commit
+(`8527f62`) whose subject names only the first. That is a §7 slip — one change
+per commit — recorded here rather than rewritten away, since the fix for a
+commit already made is a new commit, never an amend. What follows describes what
+is actually in it.
+
+#### (a) a pick REPLACES the identity, so both keys are written
+
+**File:** `src/components/BookingFormModal.jsx`. **Behavioural change:** yes.
+
+`pickGuest` wrote `guestId`/`guestSeed` only inside its `r.isPhoneless` branch,
+so a pick that was NOT phone-less left the previous pick's keys on the draft.
+Type "Ana", tap the phone-less guest by mistake, tap "Ana García" to correct
+yourself, save: the booking is written under García's phone AND joined to the
+stranger, and `stampGuestSeed` stamps the stranger's booking to match. Two
+unrelated customers fused — and **irreversibly**, because nothing in the UI can
+remove a `guestId` (`doSaveEdit`'s `f.guestId||b.guestId||null` can only add
+one).
+
+Both keys are now assigned on every pick. The rule is the general one: **a pick
+replaces who this booking is for, so no field it owns may survive it.** A
+conditional assignment inside `Object.assign` is a carry-forward, not a no-op.
+
+Verified in DEV: made a phone-less guest and a similarly-named phone customer,
+performed exactly that mis-tap, saved — the phone customer holds its own two
+bookings and the guest was not stamped.
+
+#### (b) a guest who later gives a number stays ONE customer
+
+**Files:** `src/lib/customers.js`, `src/components/CustomersSettings.jsx`,
+`src/App.jsx`, `tests/customers.test.js`. **Behavioural change:** yes.
+
+Commit 11 keyed `customerIndex`/`noShowMap` on `identityKey` — "phone if real,
+else guestId". That is precisely the fallback rule `matchCustomerFor`'s own
+comment calls out as splitting a guest "at exactly the moment they became
+easiest to identify", and the review caught the contradiction sitting two
+functions apart in one file.
+
+A guest joined by `guestId` who later gives a number has bookings carrying one
+key and bookings carrying both, so they came out as TWO customers: one with the
+number, one still labelled "No phone · linked guest", each holding half the
+visits. Worse, **"Delete customer & all data" only cleaned the half you clicked**
+— the other half kept its name and notes.
+
+`guestPhoneAlias(bookings)` now learns which guest groups have acquired a phone
+(any booking carrying both is the evidence) before anything is keyed, and those
+fold into the phone entry. A `guestId` seen with two different phones — a wrong
+join, later disambiguated — takes the lexicographically smallest: arbitrary, but
+**deterministic**, so every device derives the same map and no two clients
+disagree about who a customer is.
+
+Three consequences carried through. `matchesIdentity` accepts `guestIds`
+(plural), because a row can have absorbed more than one group and delete has to
+reach every id it is showing. `noShowMap` mirrors each total onto the aliased
+id, so the call sites' `nsMap[identityKey(b)]` resolves for a phone-less and a
+phone-bearing booking alike without any of them learning about aliasing — the
+repeat-offender flag trips at 2 and was seeing 1 and 1. And
+`searchGuestsByName` skips an aliased group, which the phone tier already
+emits, or the dropdown offers one person twice and lets staff pick the weaker
+half.
+
+Verified in DEV: joined two phone-less bookings, gave the guest a number on a
+third, saw ONE customer row under that number holding all three (was two rows,
+1 + 2), deleted it and confirmed all three were anonymized in one action.
+307 tests, lint 0 errors, `check:style` clean. Throwaway bookings removed.
+
+### Commit 13 — /code-review fix: the ceiling is probed once per animation
+
+**File:** `src/components/atoms.jsx`. **Behavioural change:** none visible; a
+per-frame cost removed.
+
+Commit 10's no-movement branch returns without marking a run, so `animRef`
+stayed false and every observer fire re-probed. `visibleCap` writes
+`height: 100000px` and reads `clientHeight` + `scrollHeight` back — two forced
+synchronous layouts — and a `Reveal` fires the observer ~23 times over its
+385ms. That is ~46 forced layouts of a 2700px modal subtree per Settings
+toggle, added by the commit whose entire subject was making that toggle
+smoother. Settings → General takes that branch on every fire, so the tab with
+the most content had the worst case.
+
+A **timestamp**, not a flag: the instant branch has no natural end to reset on.
+The reuse window is `M.dur.shift + 120` — the same window `armSettle` uses — so
+a cap can only be shared by fires belonging to the same content change, and
+`settle` zeroes it so the next real change always measures fresh.
+
+**Measured in DEV** by counting `getComputedStyle` calls (one per
+`heightAnimates` plus one per ancestor `scrollPort` walks): **3 per toggle**,
+i.e. exactly one probe, expand and collapse alike, with the animation itself
+unchanged (card 552 → 739 evenly across 0–460ms, port free at 500ms).
+
+### Commit 16 — /code-review fix: a drag that ends a selection is not a click
+
+**File:** `src/components/ListView.jsx`. **Behavioural change:** yes.
+
+The card opens the edit form now, and it prints the guest's phone as plain text
+— which staff select and copy to ring a party. A press-drag-release over that
+text fires `click` on the card, so copying a number opened a modal over the
+selection, and a form left mid-edit would raise the unsaved-changes guard on the
+way back out. (List cards are selectable: `user-select: none` is a *timeline
+block* thing, and confusing the two is how this nearly got dismissed as
+unreproducible — both wear `data-flip-id`.)
+
+The check requires the selection to be **inside this card**. A bare
+`getSelection().toString()` would let a stale selection anywhere on the page —
+the day header, a banner — make every card unclickable.
+
+Verified in DEV: with a live selection in the card, a click opens nothing; with
+none, it opens Edit booking. The first attempt appeared to fail and was HMR
+serving the old handler — reload before concluding a guard does not work.
+
+### Commit 17 — /code-review fix: the back-stamp moves to lib/ and gets tested
+
+**Files:** `src/lib/customers.js`, `src/App.jsx`, `tests/customers.test.js`.
+**Behavioural change:** none — the function moved verbatim.
+
+`stampGuestSeed` was a closure inside `BookingApp`, so nothing could reach it,
+and it writes a **permanent** link between two bookings that no UI can unpick.
+CLAUDE.md: "logic that decides something the restaurant acts on does not live in
+a `useEffect`… put the pure core in `lib/`." It is already a pure
+`(list, draft) → list`; only its address was wrong. It sits in `customers.js`
+with the rest of the identity layer.
+
+Five cases pin it, and each is a property the save path leans on: it stamps only
+the seed; it is a no-op unless the draft carries BOTH keys; it never re-homes a
+booking already in a group; it is idempotent (which is what makes the v15.4.0
+write-retry safe); and it does not mutate its input (it runs inside doSave's
+pure transform of `prev`, and mutating Firebase's snapshot there would corrupt
+the base the CAS compares against).
+
+Verified in DEV after the move: joined two phone-less bookings from the name
+dropdown and confirmed one Customers row holding both. 312 tests.

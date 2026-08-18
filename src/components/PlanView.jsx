@@ -428,7 +428,7 @@ export const PlanView = memo(function PlanView({
           background: S.accent, color: "var(--text-on-accent)",
           fontSize: T.body, fontWeight: FW.bold, fontVariantNumeric: "tabular-nums",
           padding: "2px 10px", borderRadius: R.pill, whiteSpace: "nowrap",
-          boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
+          boxShadow: "var(--shadow-btn)",
         }}>{toTime(slider)}</span>
         <span style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>{legend}</span>
       </div>

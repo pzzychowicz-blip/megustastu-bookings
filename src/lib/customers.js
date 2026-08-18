@@ -47,6 +47,62 @@ export function hasRealPhone(p) {
   return normalizePhone(p).replace(/\D/g, "").length >= 3;
 }
 
+// ── v17.10.0: the SECOND identity key — `guestId` ────────────────────────────
+// A phone number is a verified, self-normalising identity, which is why it has
+// been the only one since v16.0.0. But plenty of parties never give one, and
+// those guests could never become regulars however often they came back: every
+// phone-less booking was its own island, by design (see searchGuestsByName's
+// never-merge rule, which exists so two different people called "Maria" are not
+// silently fused into one customer with one merged no-show count).
+//
+// `guestId` is the explicit opt-in that rule was missing. It is minted ONLY when
+// a human picks an existing phone-less guest from the name dropdown — i.e. when
+// someone who can see both bookings says "this is the same person". Absent that,
+// nothing merges and the old behaviour is byte-for-byte intact.
+//
+// Format is `"g" + <seed booking id>`: derived from data both devices already
+// have, so two clients minting concurrently produce the SAME id and converge
+// (the same reasoning as the recurring-occurrence ids). It is path-safe for the
+// same reason `genId()` is.
+//
+// identityKey — which key does THIS booking answer to? Phone wins when there is
+// one, because it is the stronger claim; a `guestId` is the fallback. Note the
+// two are not exclusive: a guest who later supplies a number keeps both, which
+// is exactly what makes matchCustomerFor's UNION below the right shape.
+export function identityKey(b) {
+  if (!b) return null;
+  if (hasRealPhone(b.phone)) return normalizePhone(b.phone);
+  return b.guestId || null;
+}
+
+// stampGuestSeed — write the newly-minted `guestId` BACK onto the booking it was
+// derived from (v17.10.0; moved out of App.jsx by the /code-review pass).
+//
+// Picking an unjoined phone-less guest from the name dropdown mints a `guestId`
+// into the draft and records that guest's booking in `guestSeed`. This is the
+// other half: the source booking gets the same id, and the two become one
+// customer. It lives here rather than in App because it decides a PERMANENT,
+// un-undoable identity link and nothing in the UI can unpick one — CLAUDE.md's
+// rule is that logic the restaurant acts on belongs in `lib/` where a test can
+// reach it, and the stale-guestId defect this same review found lived in exactly
+// this seam.
+//
+// It is a pure `(list, draft) → list`, called INSIDE doSave's buildNext /
+// applyBase, so the source and the new booking ride ONE saveBookings call: the
+// v15.5.0 per-booking diff-write patches them together and the per-$id CAS
+// covers both. A separate write would be a second thing to fail.
+//
+// `!b.guestId` is what makes a replay safe — a retry on fresh data finds the
+// stamp already there and leaves it alone — and it also means a booking already
+// belonging to another group is never silently re-homed.
+export function stampGuestSeed(list, f) {
+  if (!Array.isArray(list) || !f || !f.guestSeed || !f.guestId) return list;
+  return list.map(function (b) {
+    if (!b || b.id !== f.guestSeed || b.guestId) return b;
+    return Object.assign({}, b, { guestId: f.guestId });
+  });
+}
+
 // isNoShow — did this booking end as a no-show?
 // Primary signal: the v16.0.0 `noShow` boolean set by doCancelBooking.
 // Fallback: the pre-v16 record was only a history entry {action:"no show"} (+
@@ -59,6 +115,9 @@ export function isNoShow(b) {
 }
 
 // matchCustomerByPhone — look up a customer by phone across the bookings list.
+// v17.10.0: a thin alias over matchCustomerFor below. The NAME and SIGNATURE are
+// preserved deliberately — the complementarity contract at the top of this file
+// requires the WA module to be able to import this exact symbol on merge.
 // Returns null if there's no match. Otherwise:
 //   name            — most recent booking's name (for display)
 //   count           — total bookings matched (all statuses, incl. the linked one)
@@ -75,10 +134,44 @@ export function isNoShow(b) {
 // a WA conversation's acceptedBookingId), excluded so a customer's own current
 // booking never counts toward its chips.
 export function matchCustomerByPhone(phoneKey, bookings, excludeBookingId) {
-  if (!phoneKey || !Array.isArray(bookings)) return null;
-  const key = normalizePhone(phoneKey);
-  if (!key) return null;
-  const matches = bookings.filter(function (b) { return b && b.phone && normalizePhone(b.phone) === key; });
+  return matchCustomerFor({ phone: phoneKey }, bookings, excludeBookingId);
+}
+
+// matchesIdentity — does THIS booking belong to that identity? The union rule
+// above, as one predicate, so the matcher and every caller that has to reproduce
+// it (App's deleteCustomer) cannot drift apart. `ident` is {phone, guestId};
+// either key hitting is a match.
+export function matchesIdentity(b, ident) {
+  if (!b) return false;
+  const o = ident || {};
+  // normalizePhone, NOT hasRealPhone — matchCustomerByPhone's original semantics
+  // were "any non-empty normalized key", and every caller already gates on
+  // hasRealPhone before asking.
+  const key = normalizePhone(o.phone);
+  // `guestIds` (plural) as well as `guestId`, because a customer can have
+  // ABSORBED more than one guest group — see customerIndex's alias pass. Delete
+  // must reach every id the row is showing, or "delete all data" leaves some.
+  const gids = Array.isArray(o.guestIds) ? o.guestIds : (o.guestId ? [o.guestId] : []);
+  if (key && b.phone && normalizePhone(b.phone) === key) return true;
+  return !!(b.guestId && gids.indexOf(b.guestId) !== -1);
+}
+
+// matchCustomerFor — v17.10.0. The generalised matcher: same return shape as
+// matchCustomerByPhone (which now delegates here, keeping its exact name and
+// signature for the WA complementarity contract at the top of this file), but it
+// matches on the phone key OR the guestId.
+//
+// The OR is a UNION, not a fallback, and that is the load-bearing part. A guest
+// who books three times without a phone and then gives one on the fourth has
+// bookings carrying only a guestId and bookings carrying both; matching either
+// key keeps them one person. A "phone if present, else guestId" rule would split
+// them at exactly the moment they became easiest to identify.
+export function matchCustomerFor(ident, bookings, excludeBookingId) {
+  const o = ident || {};
+  const key = normalizePhone(o.phone);
+  const gid = o.guestId || "";
+  if ((!key && !gid) || !Array.isArray(bookings)) return null;
+  const matches = bookings.filter(function (b) { return matchesIdentity(b, o); });
   if (!matches.length) return null;
   const sorted = matches.slice().sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
   const regular = sorted.filter(function (b) { return b.status === "completed" && (!excludeBookingId || b.id !== excludeBookingId); });
@@ -95,31 +188,85 @@ export function matchCustomerByPhone(phoneKey, bookings, excludeBookingId) {
   };
 }
 
-// customerIndex — build the full phone→customer map from the bookings list.
-// One pass; feeds the phone autocomplete, the timeline/list no-show markers,
-// and the Settings → Customers tab. Bookings without a real phone are skipped
-// (they simply have no customer identity). Each entry:
-//   phone      — the normalized key (also the map key)
-//   rawPhone   — the most recent booking's phone as typed (display)
+// customerIndex — build the full identity→customer map from the bookings list.
+// One pass; feeds the phone autocomplete and the Settings → Customers tab.
+//
+// v17.10.0: keyed on `identityKey`, not on the phone alone. A guest who was
+// JOINED through the name dropdown has a `guestId` and is therefore a customer
+// with a visit count and a no-show record like any other — leaving them out was
+// the one place `guestId` did not reach, so the feature could group a guest's
+// bookings everywhere EXCEPT the screen that lists customers. A phone-less
+// booking with no `guestId` still has no identity and is still skipped, which is
+// the never-merge rule (searchGuestsByName) holding exactly where it should.
+//
+// Each entry:
+//   key        — the map key: the normalized phone, else the guestId
+//   phone      — the normalized phone, or "" for a guest-id entry
+//   guestId    — the guestId, or null for a phone entry
+//   rawPhone   — the most recent booking's phone as typed (display; "" for a guest)
 //   name       — most recent booking's name
 //   visits     — completed bookings (the "regular" measure)
 //   noShowCount— bookings flagged no-show (isNoShow)
 //   latestDate — most recent booking date
 //   bookings   — all of them, sorted by date desc
+//
+// A consumer that needs a phone must check for one: `phone` is "" on a guest
+// entry rather than absent, so string operations on it are safe either way.
+// guestPhoneAlias — guestId → the phone it has since been attached to.
+//
+// v17.10.0 /code-review fix. `identityKey` is "phone if real, else guestId",
+// which is exactly the fallback rule matchCustomerFor's comment above calls out
+// as splitting a guest "at the moment they became easiest to identify" — and
+// customerIndex/noShowMap were keying on it. A guest joined by guestId who later
+// gives a number has bookings carrying only the guestId and bookings carrying
+// both, so they came out as TWO customers: one with the number, one still
+// labelled "No phone · linked guest", each with half the visits, and deleting
+// either left the other half's name and notes on the record.
+//
+// So before keying anything, learn which guest groups have acquired a phone.
+// Any booking carrying BOTH keys is the evidence, and the two are then one
+// customer under the phone — the stronger claim, as identityKey already says.
+//
+// The tie-break matters: a guestId seen with two different phones means the join
+// was wrong (two people merged, then both gave numbers). Nothing here can tell
+// which is right, so it takes the lexicographically smallest — an arbitrary rule,
+// but a DETERMINISTIC one, so every device derives the same map from the same
+// bookings and no two clients disagree about who a customer is.
+function guestPhoneAlias(bookings) {
+  const alias = {};
+  bookings.forEach(function (b) {
+    if (!b || !b.guestId || !hasRealPhone(b.phone)) return;
+    const phone = normalizePhone(b.phone);
+    if (!alias[b.guestId] || phone < alias[b.guestId]) alias[b.guestId] = phone;
+  });
+  return alias;
+}
+
 export function customerIndex(bookings) {
   const map = {};
   if (!Array.isArray(bookings)) return map;
+  const alias = guestPhoneAlias(bookings);
   bookings.forEach(function (b) {
-    if (!b || !hasRealPhone(b.phone)) return;
-    const key = normalizePhone(b.phone);
-    if (!map[key]) map[key] = { phone: key, rawPhone: b.phone, name: b.name || "", visits: 0, noShowCount: 0, latestDate: "", bookings: [] };
+    if (!b) return;
+    const phone = hasRealPhone(b.phone) ? normalizePhone(b.phone) : "";
+    // An anonymized booking keeps its dates and status for the stats and loses
+    // everything else; deleteCustomer clears its guestId, so this only guards
+    // against a stray one. A phone it cannot have — anonymizing empties it.
+    if (!phone && b.anonymized) return;
+    const key = phone || alias[b.guestId] || b.guestId || "";
+    if (!key) return;
+    if (!map[key]) map[key] = { key: key, phone: key === phone ? phone : (alias[b.guestId] ? key : ""), guestId: null, guestIds: [], rawPhone: "", name: b.name || "", visits: 0, noShowCount: 0, latestDate: "", bookings: [] };
+    if (b.guestId && map[key].guestIds.indexOf(b.guestId) === -1) map[key].guestIds.push(b.guestId);
     map[key].bookings.push(b);
   });
   Object.keys(map).forEach(function (key) {
     const c = map[key];
+    // `guestId` stays a scalar for the callers that only ever see one; `guestIds`
+    // is the truth, and is what delete reaches through.
+    c.guestId = c.phone ? null : (c.guestIds[0] || null);
     c.bookings.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
     c.name = c.bookings[0].name || "";
-    c.rawPhone = c.bookings[0].phone;
+    if (c.phone) c.rawPhone = (c.bookings.find(function (b) { return hasRealPhone(b.phone); }) || c.bookings[0]).phone || "";
     c.latestDate = c.bookings[0].date || "";
     c.visits = c.bookings.filter(function (b) { return b.status === "completed"; }).length;
     c.noShowCount = c.bookings.filter(isNoShow).length;
@@ -127,16 +274,33 @@ export function customerIndex(bookings) {
   return map;
 }
 
-// noShowMap — lightweight {normalizedPhone: noShowCount} map for the timeline/
+// noShowMap — lightweight {identityKey: noShowCount} map for the timeline/
 // list repeat-offender markers (one pass, no per-customer sorting — cheaper
 // than customerIndex when only the counts are needed).
+// v17.10.0: keyed on identityKey rather than the phone alone, so a JOINED
+// phone-less repeat offender is flagged too. An unjoined phone-less booking has
+// no identity, so it is skipped exactly as before — read this map through
+// `noShowMap(bookings)[identityKey(b)] || 0` at every call site.
 export function noShowMap(bookings) {
   const map = {};
   if (!Array.isArray(bookings)) return map;
+  // Same alias pass as customerIndex (/code-review fix): a guest who later gave
+  // a number had their no-shows split across two keys, so the repeat-offender
+  // flag — which trips at 2 — never fired even though the booking form's chip,
+  // which unions the keys, said 2.
+  const alias = guestPhoneAlias(bookings);
   bookings.forEach(function (b) {
-    if (!b || !hasRealPhone(b.phone) || !isNoShow(b)) return;
-    const key = normalizePhone(b.phone);
+    if (!b || !isNoShow(b)) return;
+    const key = hasRealPhone(b.phone) ? normalizePhone(b.phone) : (alias[b.guestId] || b.guestId || "");
+    if (!key) return;
     map[key] = (map[key] || 0) + 1;
+  });
+  // Every call site reads this as `nsMap[identityKey(b)]`, and identityKey on a
+  // phone-LESS booking returns its raw guestId — which is not the key its count
+  // now lives under. Mirror the total onto the alias so both spellings resolve
+  // without every caller having to learn about aliasing.
+  Object.keys(alias).forEach(function (gid) {
+    if (map[alias[gid]] != null) map[gid] = map[alias[gid]];
   });
   return map;
 }
@@ -183,7 +347,9 @@ export function searchCustomers(index, query, limit) {
   const out = [];
   Object.keys(index).forEach(function (key) {
     const c = index[key];
-    const phoneHit = qDigits.length >= 3 && c.phone.replace(/[^\d]/g, "").indexOf(qDigits) !== -1;
+    // v17.10.0: `c.phone` is "" on a guest-id entry, so a digits query simply
+    // never matches one — which is right: they have no number to search by.
+    const phoneHit = qDigits.length >= 3 && !!c.phone && c.phone.replace(/[^\d]/g, "").indexOf(qDigits) !== -1;
     const nameHit = qDigits.length < 3 && c.name && c.name.toLowerCase().indexOf(qName) !== -1;
     if (phoneHit || nameHit) out.push(c);
   });
@@ -196,12 +362,26 @@ export function searchCustomers(index, query, limit) {
 // list of dropdown rows spanning BOTH identity tiers:
 //   • phone customers  → ONE row per phone (a verified single identity, from the
 //                        prebuilt phone index) — `isPhoneless:false`.
-//   • phone-LESS guests → ONE row PER BOOKING (NO merging) — two different people
-//                        sharing a name never collapse into one; each row carries
-//                        its own date so duplicates are distinguishable.
+//   • phone-LESS guests → ONE row per GUEST, where "guest" means a shared
+//                        `guestId` (v17.10.0) and otherwise still means ONE ROW
+//                        PER BOOKING.
+//
+// v17.10.0 — the never-merge rule is unchanged in substance, and it is worth
+// being precise about why. Two different people called "Maria" with no phone
+// numbers must never collapse into one customer with one merged visit count and
+// one merged no-show record; nothing in the data can tell them apart, so the
+// only safe default is to keep them separate. What changed is that a HUMAN can
+// now say otherwise: picking an existing phone-less guest from this very
+// dropdown stamps both bookings with a shared `guestId`, and rows sharing one
+// are the only phone-less rows that merge. Merging is opt-in, per guest, by
+// someone who could see both bookings.
+//
 // Row shape (uniform so the dropdown renders both): { key, name, rawPhone, phone,
-// latestDate, isPhoneless, latest } where `latest` is the booking to Book-Again
-// prefill from. Sorted most-recent-first, capped at `limit` (default 6).
+// latestDate, isPhoneless, guestId, count, latest } where `latest` is the booking
+// to Book-Again prefill from and `count` is how many bookings the row represents
+// (1 for an unjoined booking — the dropdown shows it only when >1, so a merge is
+// visible rather than silent). Sorted most-recent-first, capped at `limit`
+// (default 6).
 export function searchGuestsByName(bookings, index, query, limit) {
   const max = limit || 6;
   const q = String(query || "").trim().toLowerCase();
@@ -210,16 +390,38 @@ export function searchGuestsByName(bookings, index, query, limit) {
   // Phone customers (from the phone-keyed index) whose name matches.
   Object.keys(index || {}).forEach(function (key) {
     const c = index[key];
+    // v17.10.0: the index now also holds JOINED phone-less guests. This pass is
+    // the phone tier; the guest tier is rebuilt from the bookings below (it
+    // needs the ungrouped ones too), so taking them here would emit both.
+    if (!c.phone) return;
     if (c.name && c.name.toLowerCase().indexOf(q) !== -1) {
-      rows.push({ key: "p:" + c.phone, name: c.name, rawPhone: c.rawPhone, phone: c.phone, latestDate: c.latestDate, isPhoneless: false, latest: c.bookings[0] });
+      rows.push({ key: "p:" + c.phone, name: c.name, rawPhone: c.rawPhone, phone: c.phone, latestDate: c.latestDate, isPhoneless: false, guestId: null, count: c.bookings.length, latest: c.bookings[0] });
     }
   });
-  // Phone-LESS bookings whose name matches — one row each, never merged.
+  // Phone-LESS bookings whose name matches. Ones carrying a guestId are grouped
+  // into a single row; the rest stay one row each, exactly as before.
+  const groups = {};
+  const alias = guestPhoneAlias(bookings);
   bookings.forEach(function (b) {
     if (!b || b.anonymized || hasRealPhone(b.phone)) return; // v17.0.0: skip anonymized
-    if (b.name && b.name.toLowerCase().indexOf(q) !== -1) {
-      rows.push({ key: "b:" + b.id, name: b.name, rawPhone: "", phone: null, latestDate: b.date || "", isPhoneless: true, latest: b });
+    if (!b.name || b.name.toLowerCase().indexOf(q) === -1) return;
+    // A guest group that has since acquired a phone IS the phone customer the
+    // pass above already emitted (/code-review fix) — offering it again as a
+    // separate "no phone" row would show one person twice and let staff pick the
+    // weaker half.
+    if (b.guestId && alias[b.guestId]) return;
+    if (b.guestId) {
+      const g = groups[b.guestId] || (groups[b.guestId] = []);
+      g.push(b);
+      return;
     }
+    rows.push({ key: "b:" + b.id, name: b.name, rawPhone: "", phone: null, latestDate: b.date || "", isPhoneless: true, guestId: null, count: 1, latest: b });
+  });
+  Object.keys(groups).forEach(function (gid) {
+    // Most recent first, so `latest` is the booking to prefill from and the row
+    // carries the newest name the guest was written under.
+    const g = groups[gid].slice().sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
+    rows.push({ key: "g:" + gid, name: g[0].name, rawPhone: "", phone: null, latestDate: g[0].date || "", isPhoneless: true, guestId: gid, count: g.length, latest: g[0] });
   });
   rows.sort(function (a, b) { return (b.latestDate || "").localeCompare(a.latestDate || ""); });
   return rows.slice(0, max);

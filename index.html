@@ -214,6 +214,24 @@
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.6);
         --shadow-input: inset 0 1px 2px rgba(255, 255, 255, 0.6), 0 1px 3px rgba(0, 0, 0, 0.06);
         --shadow-btn: 0 1px 4px rgba(0, 0, 0, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+        /* v17.10.0: elevation WITHOUT a raised highlight. Every other --shadow-*
+           token leads with a white inset, which is what makes a control look
+           lifted off the page; this one carries none, and there are two reasons
+           to want that. The first is the v17.8.0 white-inset-over-fixed-fill
+           rule — a highlight tuned for light and dimmed for dark is wrong on a
+           fill that stays the same in both (a timeline block, an --app-*-solid,
+           a hard-coded pale chip). The second is that the element is simply not
+           a raised thing: a ruler label, a legend swatch, the Toggle knob.
+           /code-review: state BOTH, because the first alone reads as a rule that
+           several correct call sites break — HOUR_PILL and the timeline's status
+           swatch sit on fills that do flip, and are flat on purpose. Anything
+           that should read as raised takes --shadow-btn, and a badge that is the
+           same badge in two views takes the same one in both.
+           It is still theme-split, because the shadow falls on the PAGE and the
+           page does flip.
+           It replaced ~17 accumulated `0 1px Npx rgba(0,0,0,0.0x)` literals; the
+           value is the most common of them (0.1), not an average of all. */
+        --shadow-flat: 0 1px 3px rgba(0, 0, 0, 0.1);
         /* ── v14.2.3: TimelineView (Gantt canvas) ── */
         --tl-card-bg: rgba(255, 255, 255, 0.4);        /* the timeline container glass card */
         --tl-card-border: rgba(255, 255, 255, 0.45);
@@ -490,6 +508,7 @@
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
         --shadow-input: inset 0 1px 2px rgba(255, 255, 255, 0.05), 0 1px 3px rgba(0, 0, 0, 0.3);
         --shadow-btn: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        --shadow-flat: 0 1px 3px rgba(0, 0, 0, 0.35);
         /* ── v14.2.5: App.jsx main-screen chrome (dark) ── */
         --app-saved-bg: rgba(90, 75, 20, 0.35);    --app-saved-border: rgba(253, 230, 138, 0.35); --app-saved-text: #fde68a;
         --app-offline-bg: rgba(90, 70, 15, 0.4);   --app-offline-border: rgba(252, 211, 77, 0.45); --app-offline-text: #fcd34d;

@@ -419,6 +419,91 @@ export function DepositIcon(props) {
   );
 }
 
+// ── v17.10.0: the STATUS marks ───────────────────────────────────────────────
+// Every button that moves a booking to another status used to be prefixed with
+// the SAME ChevronRightIcon — ">Confirmed", ">Seated", ">Completed" — which is
+// a mark for "there is more this way", not for what you are about to do. Four
+// buttons in a row, one glyph, no information. And the quick-status popup (the
+// one you reach on the timeline and the floor plan, i.e. during service) had no
+// marks at all, so the same five decisions looked different in three places.
+//
+// Four of the six were already drawn: a status button is not a reason to invent
+// a shape when the app already has one meaning the same thing.
+//
+//   confirmed → CheckIcon      seated    → ChairIcon      (new)
+//   completed → DoubleCheckIcon (new)    cancelled → CloseIcon
+//   pending   → WaitIcon       — the hourglass already means "waiting", which is
+//                                exactly what awaiting-confirmation is
+//   no show   → NoShowIcon     — already the timeline's repeat-offender flag
+
+// Seated. A chair, front-on rather than in profile, and every dimension here was
+// picked by rasterising candidates at the size this ships at and magnifying —
+// the DepositIcon rule. Five variants were compared; four failed:
+//
+//   • A profile chair (back post · seat · front leg) is a vertical, a horizontal
+//     and a short vertical. At 12px that is a lowercase "h", not a chair.
+//   • The same with the seat overhanging behind reads as a plus sign.
+//   • Two back posts instead of a solid backrest reads as a capital "H".
+//   • A solid backrest WIDER at the seat than at the back reads as a table with
+//     something standing on it — the overhang is what makes it a tabletop.
+//
+// What survives is the backrest and the seat at the SAME width, so the two read
+// as one object rather than as a thing on a surface, with the legs below as two
+// ticks. That silhouette — a broad open rect standing on legs — is not shared by
+// anything else in the set. The backrest's interior is 8 units against a 2.2
+// stroke, which is the ~3× minimum an enclosed shape needs before it fills in
+// solid (LockIcon's missing keyhole, DepositIcon's circle).
+export function ChairIcon(props) {
+  return (
+    <Svg {...props}>
+      <rect x="5.5" y="3" width="13" height="8" rx="1.6" />
+      <path d="M5.5 12.5h13" />
+      <path d="M6.5 12.5v8" />
+      <path d="M17.5 12.5v8" />
+    </Svg>
+  );
+}
+
+// Completed. Two checks — the read-receipt idiom — so it reads as a SUPERSET of
+// the single check that means confirmed, which is what the status machine
+// actually does: completed is confirmed, plus the visit happened.
+//
+// The two strokes are offset along their own diagonal rather than stacked
+// vertically. Stacked, the gap has to survive the stroke (2.2 units, ~1.1px at
+// the size this ships) and the pair closes into one fat tick; offset, the second
+// check's tail is clear of the first's head and the shape stays legible as two.
+export function DoubleCheckIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M1.5 12.5l4.5 4.5L14 7.5" />
+      <path d="M10.5 16l1.5 1.5L22 7" />
+    </Svg>
+  );
+}
+
+// The one place the status→mark mapping lives. Three surfaces render status
+// buttons (the List card, the edit form's Status row, the quick-status popup)
+// and they must not drift — the SETTINGS_TABS discipline.
+//
+// It is exposed as a COMPONENT rather than as the bare map, for two reasons.
+// The mechanical one: this file exports only components, and adding a plain
+// const export breaks Fast Refresh — `react-refresh/only-export-components` is
+// a lint ERROR, and CI gates on zero. The better one: a call site should ask for
+// "the mark for this status" and not hold a table it could index wrongly. An
+// unrecognised status renders nothing rather than throwing.
+const STATUS_ICON = {
+  pending: WaitIcon,
+  confirmed: CheckIcon,
+  seated: ChairIcon,
+  completed: DoubleCheckIcon,
+  cancelled: CloseIcon,
+};
+
+export function StatusIcon({ status, ...rest }) {
+  const Ico = STATUS_ICON[status];
+  return Ico ? <Ico {...rest} /> : null;
+}
+
 // v17.9.0: the cog moved here from SettingsChrome.jsx. It was the ONE icon
 // already drawn properly (v17.1.0) and this file's house style was copied from
 // it — but it stayed outside the set, hard-coded at 20×20 with its own <svg>,

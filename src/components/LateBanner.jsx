@@ -23,7 +23,7 @@ import { BannerRows } from "./BannerRows";
 import { Presence, mkBtn } from "./atoms";
 import { lateMins } from "../lib/booking-logic";
 import { BTN, T, FW, IC, H } from "../lib/constants";
-import { CloseIcon } from "./Icons";
+import { CloseIcon, NoShowIcon } from "./Icons";
 
 export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, }) {
   // v17.0.0 review fix #6: the collapsible/Reveal scaffolding moved to the
@@ -43,7 +43,7 @@ export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, })
           <button
             onClick={function () { onNoShow(id); }}
             className="mgt-hover-scale"
-            style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>No show</button>
+            style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })}><NoShowIcon size={IC.control} />No show</button>
         </Presence>
         <button
           onClick={function () { onDismiss(id); }}
