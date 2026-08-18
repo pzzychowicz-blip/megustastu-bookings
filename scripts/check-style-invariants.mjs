@@ -86,7 +86,16 @@ const LOOKBACK = 10;   // lines to search upward for the governing fill
 // exists to exclude — matched by starting at the second `0` and reading
 // `0 0 2px rgba(`. A shadow value must begin at a quote, after `inset`, or
 // after the comma separating it from the previous shadow in a list.
-const SHADOW_VALUE = /(?:["'`]|inset\s+|,\s*)(?:0|-?\d+px)\s+(?:0|-?\d+px)\s+[1-9]\d*px\s+(?:rgba?\(|#[0-9a-fA-F])/;
+//
+// /code-review: the COLOUR alternation and the decimal handling were both too
+// narrow in the first version — `0 2px 6px var(--x)`, `0 2px 6px black` and
+// `0 1.5px 3px rgba(…)` are all exactly the literal this rule exists to catch,
+// and all three made it print OK. That is the "a checker with a blind spot
+// still prints OK" failure this repo has now hit three times, so the colour is
+// rgb/hsl/var/hex/bare-identifier and the lengths accept decimals. The blur is
+// still required to be non-zero, now via a negative lookahead so `0px` is
+// excluded as well as `0` — a ring is not a drop shadow.
+const SHADOW_VALUE = /(?:["'`]|inset\s+|,\s*)(?:0|-?[\d.]+px)\s+(?:0|-?[\d.]+px)\s+(?!0(?:px)?[\s,)])[\d.]+px\s+(?:rgba?\(|hsla?\(|var\(|#[0-9a-fA-F]|[a-z]{3,})/;
 
 // v17.9.0 — must match SP and H in src/lib/constants.js. Hand-synced: this
 // script runs standalone (no bundler, no JSX transform), so it cannot import

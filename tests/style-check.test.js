@@ -57,6 +57,33 @@ describe("check:style — shadow literals (v17.10.1)", () => {
     expect(r.out).toMatch(/shadow-literal/);
   });
 
+  // /code-review: the first version of this rule only recognised rgba()/hex
+  // colours and integer px, so all three of these printed OK — the exact
+  // literal the rule exists to catch, invisible to it.
+  it.each([
+    ['var()',       '"0 2px 6px var(--some-color)"'],
+    ['named',       '"0 2px 6px black"'],
+    ['hsl()',       '"0 2px 6px hsl(0 0% 0% / 0.2)"'],
+    ['decimal px',  '"0 1.5px 3px rgba(0,0,0,0.2)"'],
+  ])("catches a %s shadow literal", (_label, value) => {
+    const r = run({ "a.jsx": `const x = <div style={{ boxShadow: ${value} }} />;\n` });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/shadow-literal/);
+  });
+
+  // A zero blur is a ring however it is spelled, including `0px`.
+  it("leaves a 0px-blur ring alone", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ boxShadow: "0 0 0px 2px rgba(0,122,255,0.4)" }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  // The colour alternation now accepts a bare identifier, so prove it does not
+  // reach into ordinary multi-length properties.
+  it("leaves padding and transition values alone", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ padding: "0 2px 6px 8px", transition: "transform 240ms ease" }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
   it("catches an inset groove", () => {
     const r = run({ "a.jsx": 'const x = <div style={{ boxShadow: "inset 0 1px 2px rgba(0,0,0,0.08)" }} />;\n' });
     expect(r.code).toBe(1);
