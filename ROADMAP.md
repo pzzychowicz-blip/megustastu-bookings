@@ -14,26 +14,33 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **PWA / offline shell — withdrawn in v17.4.1. The worker may have been
-  innocent (v17.5.1 finding).** v17.5.1 root-caused the *Android* tablet's
-  identical "⟳ Loading bookings…" freeze to something else entirely: the CSP's
-  `script-src` blocking Firebase's JSONP long-poll fallback, on any device
-  carrying a cached `firebase:previous_websocket_failure` flag. The CSP went
-  blocking on 2026-07-24, one day before v17.4.0 shipped. The iOS devices were
-  "fixed" by clearing site data — which also clears **localStorage**, i.e. that
-  same flag — so the evidence that convicted the worker fits this cause just as
-  well, as `public/sw.js`'s own comment hedged at the time. **Before any PWA
-  work: re-test on iOS now that v17.5.1's `forceWebSockets()` is deployed.** The
-  original outage may simply not recur. Keep the conditions below regardless.
-  v17.4.0 shipped an offline-shell service worker; in production it froze the
-  app at "⟳ Loading bookings…" on iPhone and iPad (desktop unaffected). It
-  didn't reproduce locally under a PROD-mode build against DEV data. v17.4.1
-  replaced it with a kill switch (see
-  `CLAUDE.md`'s Gotchas table: "A shipped service worker CANNOT be withdrawn
-  by deleting it" / "A SW must be testable on the target device before it
-  ships" — read both before touching this). The manifest and icon family were
-  kept (inert without a worker, still used by iOS add-to-home-screen).
-  **Conditions before this returns:**
+- **PWA / offline shell — withdrawn in v17.4.1. The iOS re-test was RUN on
+  2026-08-18 and it does not settle the question.** Result on the iPhone against
+  PROD (v17.10.0): bookings loaded normally, `getRegistrations()` → **0**,
+  `controller: false`, `firebase:previous_websocket_failure` → **null**.
+
+  That confirms three preconditions and answers nothing else:
+  1. **The v17.4.1 kill switch demonstrably worked.** No worker is registered or
+     controlling on iOS, so a future candidate starts from a clean slate. This
+     was condition-zero for ever re-adding one and it is now evidenced, not
+     assumed.
+  2. PROD is healthy on iOS today.
+  3. That device carries no cached websocket-failure flag.
+
+  **Why it cannot discriminate, so nobody repeats it expecting an answer.** The
+  two candidate causes of the v17.4.0 freeze were the service worker and the
+  CSP blocking Firebase's JSONP long-poll fallback on a device holding that
+  flag. With the flag absent *and* v17.5.1's `forceWebSockets()` making the
+  JSONP path unreachable anyway, the CSP theory predicts a healthy load — and so
+  does "the worker was at fault, and it is gone". **A healthy load is predicted
+  by both, so observing one distinguishes nothing.** What v17.5.1 did change is
+  that the CSP mechanism can no longer recur at all; the worker's innocence is
+  still unproven.
+
+  **The bar is therefore unchanged.** A real test needs a candidate worker on an
+  HTTPS deploy exercised on a physical iPhone/iPad — a service worker cannot
+  register over a LAN IP, so it can never be tested against the local dev
+  server. Conditions 1–3 below stand in full:
   1. A way to run the candidate worker on a real iPhone/iPad against
      production-scale data — remote-debug via Safari Web Inspector, or a
      separate Vercel project pointed at a production-sized copy.
@@ -41,9 +48,11 @@ session and keeping it in sync.
   3. A staged rollout — one device, in service, for a full shift — before the
      tablets get it.
 
-  The offline win is small (Firebase already queues offline data writes; the
-  worker only cached the HTML/JS shell the normal HTTP cache handles), so the
-  bar for re-adding it is genuinely high.
+  Read `CLAUDE.md`'s two Gotchas rows first: "A shipped service worker CANNOT be
+  withdrawn by deleting it" and "A SW must be testable on the target device
+  before it ships". The offline win remains small — Firebase already queues
+  offline writes, and the worker only cached the HTML/JS shell the normal HTTP
+  cache handles — so the bar is high on purpose.
 
 ## Designed, not implemented
 

@@ -10404,3 +10404,40 @@ mid-transition under `CSS.forcePseudoState` — and the tap highlight is still
 transparent; on the desktop the coarse media query does not match, the
 `.mgt-blk:active` rule exists only inside it and has no top-level copy, so the
 mouse path is provably gone.
+
+### Commit 11 — the iOS re-test the ROADMAP asked for, and why it decides nothing
+
+**File:** `ROADMAP.md`. **Behavioural change:** none.
+
+The Deferred PWA entry had carried a precondition since v17.5.1: *"Before any
+PWA work: re-test on iOS now that `forceWebSockets()` is deployed. The original
+outage may simply not recur."* Patryk ran it on his iPhone against PROD
+(v17.10.0) on 2026-08-18: bookings loaded normally, `getRegistrations()` → **0**,
+`controller: false`, `firebase:previous_websocket_failure` → **null**.
+
+**Three preconditions confirmed.** The v17.4.1 kill switch demonstrably worked —
+no worker registered or controlling — which was condition-zero for ever shipping
+another one and is now evidenced rather than assumed. PROD is healthy on iOS.
+That device holds no cached websocket-failure flag.
+
+**And the test cannot answer the question it was written to answer, which is the
+part worth recording.** The two candidate causes of the v17.4.0 freeze were the
+service worker and the CSP blocking Firebase's JSONP long-poll fallback on a
+device carrying that flag. With the flag absent *and* v17.5.1's
+`forceWebSockets()` making the JSONP transport unreachable regardless, the CSP
+theory predicts a healthy load — and so does "the worker was at fault and it is
+gone". **A healthy load is predicted by both hypotheses, so observing one
+discriminates nothing.** The entry now says so explicitly, so the next person
+does not run the same check and read a green result as an exoneration.
+
+What v17.5.1 genuinely changed is narrower than the entry implied: the CSP
+mechanism can no longer recur *at all*. The worker's innocence is still
+unproven, so conditions 1–3 stand in full, and the reason they cannot be shortcut
+is structural — **a service worker cannot register over a LAN IP** (insecure
+context), so it can never be exercised against the local dev server. A real test
+needs an HTTPS deploy and a physical device.
+
+This is the same shape as v17.9.0's `time-grid` finding and v17.10.1's own
+ROADMAP correction: **an entry closed by discovering its premise does not hold
+is a result, not a failure to deliver.** Here the entry is not closed — it is
+corrected, with the bar left where it was and the reason written down.
