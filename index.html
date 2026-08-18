@@ -1131,6 +1131,34 @@
         try {
           document.addEventListener("touchstart", function () {}, { passive: true });
         } catch (e) { /* pre-2015 Safari: no options object — press stays hover-only */ }
+        // v17.10.1: ?sw=off — the IN-BAND service-worker escape hatch.
+        //
+        // v17.4.0's worker could only be withdrawn by shipping a replacement,
+        // which meant a frozen device stayed frozen until a deploy reached it.
+        // This is the recovery that was missing: opening the app with `?sw=off`
+        // unregisters every worker, drops every cache, and remembers the choice
+        // on this device. It lives HERE, in the boot script, because it has to
+        // work when React never mounts — which is exactly the state you would
+        // be in when you need it.
+        //
+        // The querystring is deliberately not cleaned up afterwards: the page
+        // is about to be reloaded by hand anyway, and rewriting history from
+        // the boot script is one more thing that could itself fail.
+        try {
+          if (/[?&]sw=off\b/.test(location.search)) {
+            try { localStorage.setItem("mgt-sw", "0"); } catch (e) {}
+            if (navigator.serviceWorker) {
+              navigator.serviceWorker.getRegistrations().then(function (rs) {
+                rs.forEach(function (r) { r.unregister(); });
+              }).catch(function () {});
+            }
+            if (window.caches) {
+              caches.keys().then(function (ks) {
+                ks.forEach(function (k) { caches.delete(k); });
+              }).catch(function () {});
+            }
+          }
+        } catch (e) { /* the Settings toggle is the other way out */ }
         // v17.10.1: BOOT WATCHDOG — the app said nothing when it failed to start.
         //
         // Found by testing the offline shell on the tablet with the server

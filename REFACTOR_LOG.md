@@ -10515,3 +10515,72 @@ point of the hash, so an inline handler would be blocked exactly like commit
 **Verified on the tablet**, both directions: with the server up the app mounts
 and the notice never appears; with the server stopped the notice renders and
 screenshots correctly, with working Try again / Reset offline copy buttons.
+
+### Commit 14 — the offline shell returns, on terms it can be trusted on
+
+**Files:** `public/sw.js` (rewritten), `src/lib/serviceWorker.js` (new),
+`src/App.jsx`, `src/components/Settings.jsx`, `index.html`, `vercel.json`.
+**Behavioural change:** yes — the app caches itself and opens without a network.
+
+v17.4.0 shipped an offline shell; it froze the app at "⟳ Loading bookings…" on
+iOS and was withdrawn in v17.4.1 with root cause **unestablished**. v17.10.1
+establishes it, and the deciding fact came from Patryk, not from the code: the
+freeze happened **in iOS Chrome as well as in a home-screen shortcut**. A
+service worker *cannot run in iOS Chrome at all* — third-party iOS browsers are
+WKWebView-based and only expose `navigator.serviceWorker` under App-Bound
+Domains, which a general-purpose browser cannot use. So the identical symptom
+appeared in a context where the worker could not exist. One cause explaining
+both contexts beats two, and the CSP/JSONP theory explains both — which
+v17.5.1's `forceWebSockets()` has already fixed. **The worker was very probably
+innocent.**
+
+That is why it comes back. What follows is why it comes back *safely*.
+
+**It is not near the data path.** `respondWith` is called for exactly two kinds
+of request, both same-origin GET: navigations (**network-first**, cache only as
+a fallback) and built assets under `/assets/` plus the icons (**cache-first**,
+because Vite content-hashes those filenames, so a hashed URL's bytes can never
+be stale). Everything else falls through with no `respondWith` at all — which
+explicitly includes every Firebase request, dropped by the first line of the
+handler as cross-origin. Network-first on navigation is the load-bearing half:
+an online device always gets fresh HTML, so this worker **cannot pin the app to
+a stale build**.
+
+**It only installs where the app demonstrably works.** Registration is gated on
+`bookingsReady` — the first Firebase snapshot having landed. A build that cannot
+load its data therefore can never persist itself into a cache and serve itself
+back, which is the precise shape of the v17.4.0 failure. Disabling is
+deliberately *not* gated the same way: turning it off must work immediately, in
+any state.
+
+**It has two independent ways out, both proven on the device.** `?sw=off` runs
+in the boot script, before React, so it works on a frozen app — the recovery
+v17.4.0 did not have. And the kill switch: shipping the v17.4.1 worker at the
+same URL again. Both were exercised on the restaurant's own tablet.
+
+**No `skipWaiting`** on the caching worker: a new version waits and takes over
+on the next navigation, so nothing swaps under a shift in progress. The kill
+switch keeps its `skipWaiting`, because there immediacy is the entire point.
+
+The toggle is **per-device localStorage, default ON**, and deliberately not
+synced to `settings/users/{uid}`: clearing site data is the last-resort escape
+from a bad worker, and a synced flag would come straight back down and re-enable
+the thing the user just escaped.
+
+**Verified end to end on the restaurant's Android tablet** (`adb reverse` makes
+`http://localhost:5174` a *secure context*, so a worker installs there exactly
+as it would in production — that is the test rig the ROADMAP said did not
+exist): registers only after boot; caches `/`, the icons and `/assets/*`;
+serves a second `/assets/` fetch from cache; **caches zero Firebase or
+googleapis URLs**; `?sw=off` takes 1 registration + 1 cache to 0 and 0 and stays
+off across reloads; the kill switch replaces a live worker and clears its cache
+within one update cycle; the app keeps its 15 bookings throughout.
+
+**What is NOT verified, stated plainly.** The production offline boot — cached
+HTML *plus* cached hashed bundle — cannot be exercised here: in dev the modules
+are not under `/assets/`, and a production build would point at PROD Firebase,
+which this environment must never load. The reasoning that it works is sound
+(HTML and its assets are cached in the same load, so the pair is consistent),
+and commit 13's boot watchdog exists precisely because that reasoning is not a
+test. **ROADMAP condition 3 — one device, in service, for a full shift — is
+still outstanding and is Patryk's to run.**
