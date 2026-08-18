@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizePhone, formatPhone, hasRealPhone, isNoShow,
-  matchCustomerByPhone, matchCustomerFor, identityKey, customerIndex, noShowMap,
+  matchCustomerByPhone, matchCustomerFor, matchesIdentity, identityKey, customerIndex, noShowMap,
   searchBookings, searchCustomers, searchGuestsByName, findPhoneOverlaps,
 } from "../src/lib/customers.js";
 
@@ -86,6 +86,78 @@ describe("customerIndex / noShowMap", () => {
   });
   it("noShowMap counts no-shows per phone", () => {
     expect(noShowMap(bks)).toEqual({ "+34600111222": 1 });
+  });
+
+  // ── v17.10.0: the index is keyed on identityKey, not on the phone ──────────
+  // Everything above still passes unchanged, which is the shape of the change:
+  // a phone customer is exactly what it was, and a JOINED phone-less guest is
+  // now a customer too. Without this, `guestId` reached every screen except the
+  // one that lists customers.
+  it("gives a JOINED phone-less guest an entry of their own", () => {
+    const list = [
+      bk({ id: "g1", phone: "", name: "Anna", date: "2099-01-01", status: "completed", guestId: "gg1" }),
+      bk({ id: "g2", phone: "", name: "Anna", date: "2099-05-01", status: "cancelled", noShow: true, guestId: "gg1" }),
+      bk({ id: "s1", phone: "", name: "Anna", date: "2099-06-01" }),   // same NAME, never joined
+    ];
+    const idx = customerIndex(list);
+    expect(Object.keys(idx)).toEqual(["gg1"]);          // the stranger has no identity
+    const c = idx.gg1;
+    expect(c.key).toBe("gg1");
+    expect(c.guestId).toBe("gg1");
+    expect(c.phone).toBe("");                            // "" not undefined — callers do string work on it
+    expect(c.bookings).toHaveLength(2);
+    expect(c.visits).toBe(1);
+    expect(c.noShowCount).toBe(1);
+    expect(c.latestDate).toBe("2099-05-01");
+  });
+
+  it("keeps phone and guest entries apart, and prefers the phone as the key", () => {
+    // A guest who was joined and LATER gave a number: the phone is the stronger
+    // claim, so that booking keys on it (matchCustomerFor's union is what still
+    // reads them as one person).
+    const list = [
+      bk({ id: "a", phone: "", name: "Ann", date: "2099-01-01", guestId: "gA" }),
+      bk({ id: "b", phone: "+34600111222", name: "Ann", date: "2099-02-01", guestId: "gA" }),
+    ];
+    const idx = customerIndex(list);
+    expect(Object.keys(idx).sort()).toEqual(["+34600111222", "gA"]);
+    expect(idx["+34600111222"].guestId).toBe(null);
+    expect(idx["+34600111222"].rawPhone).toBe("+34600111222");
+    expect(idx.gA.rawPhone).toBe("");
+  });
+
+  it("never indexes an anonymized booking, even with a stray guestId", () => {
+    // deleteCustomer clears guestId, so this is a guard rather than a case — but
+    // an anonymized booking reappearing as a customer called "Data removed" is
+    // exactly the failure that would make the delete look like it did nothing.
+    const list = [bk({ id: "x", phone: "", name: "Data removed", date: "2099-01-01", guestId: "gX", anonymized: true })];
+    expect(Object.keys(customerIndex(list))).toEqual([]);
+  });
+
+  it("searchCustomers finds a guest by NAME and never by digits", () => {
+    const list = [
+      bk({ id: "g1", phone: "", name: "Anna", date: "2099-01-01", guestId: "gg1" }),
+      bk({ id: "p1", phone: "+34600111222", name: "Bob", date: "2099-01-01" }),
+    ];
+    const idx = customerIndex(list);
+    expect(searchCustomers(idx, "anna").map((c) => c.key)).toEqual(["gg1"]);
+    expect(searchCustomers(idx, "600").map((c) => c.key)).toEqual(["+34600111222"]);
+  });
+});
+
+describe("matchesIdentity", () => {
+  it("is a union — either key hitting is a match", () => {
+    const ident = { phone: "+34600111222", guestId: "gA" };
+    expect(matchesIdentity(bk({ phone: "+34 600 111 222" }), ident)).toBe(true);   // phone, any formatting
+    expect(matchesIdentity(bk({ phone: "", guestId: "gA" }), ident)).toBe(true);   // guestId only
+    expect(matchesIdentity(bk({ phone: "+34600999888" }), ident)).toBe(false);
+    expect(matchesIdentity(null, ident)).toBe(false);
+    expect(matchesIdentity(bk({ phone: "+34600111222" }), null)).toBe(false);
+  });
+  it("does not treat an absent guestId as a wildcard", () => {
+    // Both sides missing the key must not match — the trap that would fuse every
+    // phone-less booking into one customer.
+    expect(matchesIdentity(bk({ phone: "", guestId: null }), { phone: "", guestId: null })).toBe(false);
   });
 });
 

@@ -40,7 +40,7 @@ import {
   undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
-import { normalizePhone, hasRealPhone } from "./lib/customers";
+import { normalizePhone, hasRealPhone, matchesIdentity } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { hourLabel } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
@@ -1498,14 +1498,22 @@ function BookingApp({uid}){
   // Waitlist entries are still fully deleted (personal data, not statistics).
   // Side benefit: the old whole-DB edge (filter → empty array refused by the
   // write-guard) is gone — a map never changes the booking count.
-  function deleteCustomer(phoneKey){
-    const key=normalizePhone(phoneKey);
-    if(!key) return;
+  // v17.10.0: takes an IDENTITY ({phone, guestId}), not a phone string — the
+  // Customers tab now lists joined phone-less guests too, and "delete this
+  // customer" has to reach their bookings as well. The membership test is
+  // customers.js's own `matchesIdentity`, never a second copy of the union rule.
+  // `guestId` is cleared alongside the personal fields: it is the only thing
+  // still binding the anonymized bookings into a customer, so leaving it would
+  // leave the deleted guest sitting in the list under "Data removed".
+  function deleteCustomer(ident){
+    const o=(ident&&typeof ident==="object")?ident:{phone:ident};
+    const key=normalizePhone(o.phone);
+    if(!key&&!o.guestId) return;
     saveBookings(function(prev){return prev.map(function(b){
-      if(normalizePhone(b.phone)!==key) return b;
-      return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],anonymized:true});
+      if(!matchesIdentity(b,o)) return b;
+      return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],guestId:null,anonymized:true});
     });});
-    saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
+    if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
   }
 
   function openNew(){pendingWaitlistRef.current=null;openForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}

@@ -9769,3 +9769,58 @@ extracted as a pure `clampRange` export and pinned by seven cases — including
 the two that are easy to reason away, "both ends above the ceiling" and "only
 set `pending` when something was actually clamped". The component around it
 stays DOM-bound and untested, which is the repo's standing split.
+
+### Commit 11/11 — the customer index learns the second identity key
+
+**Files:** `src/lib/customers.js`, `src/components/CustomersSettings.jsx`,
+`src/App.jsx`, `tests/customers.test.js`.
+**Behavioural change:** yes — a joined phone-less guest is now a customer in
+Settings → Customers, and can be deleted like any other.
+
+Commit 2 of this version gave phone-less guests an identity (`guestId`) and
+threaded it through the form chips, `matchCustomerFor`, `noShowMap` and
+`searchGuestsByName` — and left `customerIndex` phone-only, which was flagged as
+a deliberate non-goal. It was the wrong call: `guestId` reached every screen
+**except the one that lists customers**, so a guest could be a regular with a
+visit count everywhere and not exist on the Customers tab. Patryk asked for it.
+
+`customerIndex` now keys on `identityKey` — phone if there is one, else the
+`guestId`. A phone-less booking with no `guestId` still has no identity and is
+still skipped, which is the never-merge rule holding exactly where it should:
+nothing merges by accident, only by a human picking a guest from the dropdown.
+Entries gained `key` (the map key) and `guestId`, and `phone` is `""` rather
+than absent on a guest entry so a caller can do string work on it either way.
+
+**Three consumers had to be told, and each was a real bug if not.**
+`searchGuestsByName` rebuilds the guest tier from the bookings (it needs the
+UNJOINED ones too), so its index pass had to be narrowed to `if (!c.phone)
+return;` or every joined guest would appear in that dropdown twice. The existing
+v17.10.0 test for that dropdown covers it and needed no edit — it already asserts
+exactly two rows. `searchCustomers` guards `c.phone` before a digits match, so a
+guest is findable by name and never by number. And `CustomersSettings` keyed its
+React key, its open row, its armed-delete and its delete call on `c.phone`:
+every guest row would have collapsed onto the same `""` key — one shared open
+state and one delete hitting all of them.
+
+**`deleteCustomer` takes an identity, not a phone**, and matches through
+customers.js's own `matchesIdentity` (extracted from `matchCustomerFor`, so the
+union rule has one home rather than a copy in App.jsx). It clears `guestId`
+alongside the personal fields: that id is the only thing still binding the
+anonymized bookings into a customer, and leaving it would leave the deleted guest
+sitting in the list under "Data removed" — which looks exactly like a delete that
+did nothing.
+
+**Two things that are easy to miss and were not.** The fourth totals tile counted
+`!hasRealPhone(b.phone) && isNoShow(b)`; a joined guest satisfies that and now
+also has a row above, so it would have been counted twice while the tile called
+them untraceable. It is `!identityKey(b)` now, and reads "no-show,
+unidentified". And the tab's own footnote said customers "are recognised by phone
+number across all bookings" — the same trap as v17.9.0's copy describing glyphs
+that no longer existed. Rewritten.
+
+**Verification:** built, 303 tests (up from 297), lint 0 errors, `check:style`
+clean. Live in DEV: created two phone-less bookings, joined the second to the
+first from the name dropdown, confirmed ONE Customers row reading "No phone ·
+linked guest" holding both bookings, deleted the customer, confirmed the row is
+gone and that the anonymized pair does NOT come back as a customer called "Data
+removed". Both throwaway bookings then deleted; DEV is clean.

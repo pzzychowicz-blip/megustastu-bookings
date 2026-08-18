@@ -20,7 +20,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { S, BTN, BLOCK_BG, BLOCK_INK, R, T, FW, IC } from "../lib/constants";
-import { customerIndex, searchCustomers, normalizePhone, formatPhone, hasRealPhone, isNoShow } from "../lib/customers";
+import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKey, isNoShow } from "../lib/customers";
 import { Section, Reveal, mkInp, mkBtn } from "./atoms";
 import { ChevronDownIcon, ChevronRightIcon, WaitIcon } from "./Icons";
 
@@ -45,10 +45,14 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   const totalCustomers = all.length;
   const totalVisits = all.reduce(function (a, c) { return a + c.visits; }, 0);
   const noShowCustomers = all.filter(function (c) { return c.noShowCount > 0; }).length;
-  // v16.4.0: phone-less no-shows aren't in the phone-keyed index at all — count
-  // them (count only, never aggregated into an identity: two same-name phone-less
+  // v16.4.0: no-shows with no identity aren't in the index at all — count them
+  // (count only, never aggregated into an identity: two same-name phone-less
   // people are different people) so they're not fully invisible.
-  const phonelessNoShowCount = (bookings || []).filter(function (b) { return b && !hasRealPhone(b.phone) && isNoShow(b); }).length;
+  // v17.10.0: the test is `!identityKey(b)`, not "no phone". A JOINED phone-less
+  // guest now HAS an identity and a row of their own above, so counting them
+  // here as well would double-count them and leave the tile claiming they are
+  // untraceable when they are two lines up.
+  const phonelessNoShowCount = (bookings || []).filter(function (b) { return b && !identityKey(b) && isNoShow(b); }).length;
   // v16.3.0: quick filters (applied only when NOT searching — a query overrides).
   const base = filter === "regulars"
     ? all.filter(function (c) { return c.visits >= regularMin; }).sort(function (a, b) { return b.visits - a.visits || (b.latestDate || "").localeCompare(a.latestDate || ""); })
@@ -77,9 +81,13 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   };
 
   const rows = shown.map(function (c) {
-    const open = openKey === c.phone;
-    const armed = armedKey === c.phone;
-    const wlCount = waitCountOf(c.phone);
+    // v17.10.0: `c.key` — the identity, which is the phone for a phone customer
+    // and the guestId for a joined phone-less one. Keying any of this on
+    // `c.phone` would collapse every guest row onto the same "" key: one shared
+    // React key, one shared open/armed state, one delete hitting all of them.
+    const open = openKey === c.key;
+    const armed = armedKey === c.key;
+    const wlCount = c.phone ? waitCountOf(c.phone) : 0;
     const historyRows = open ? c.bookings.map(function (b) {
       return (
         <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "4px 10px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
@@ -91,10 +99,10 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
       // applies to ANY container of a hover-lift, not just height animators).
       // No child paints edge-to-edge, so the rounded corners don't need
       // clipping; Reveal does its own clipping while the history animates.
-      <div key={c.phone} style={{ borderRadius: R.card, border: "1px solid var(--border-soft)", background: "var(--bg-soft)", marginBottom: 8 }}>
+      <div key={c.key} style={{ borderRadius: R.card, border: "1px solid var(--border-soft)", background: "var(--bg-soft)", marginBottom: 8 }}>
         <div
           className="mgt-hover-scale"
-          onClick={function () { setOpenKey(open ? null : c.phone); setArmedKey(null); }}
+          onClick={function () { setOpenKey(open ? null : c.key); setArmedKey(null); }}
           // v17.8.0 fix: borderRadius is REQUIRED on any .mgt-hover-scale
           // element. Since v17.7.0 the hover rule no longer supplies one, but it
           // still paints an opaque --bg-hover-card — so a radius-less element
@@ -102,7 +110,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           // squared off inside its own rounded card on hover. R.card matches the
           // parent exactly. (ConnectionStatus's dot button was the first case in
           // the app; this is the second. Check any new one.)
-          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted }}>{formatPhone(c.phone) + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? chip(c.visits + " visit" + (c.visits !== 1 ? "s" : ""), { border: "var(--suggest-border)", text: "var(--success-text)" }) : null}{c.noShowCount > 0 ? chip(c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}{wlCount > 0 ? chip(<><WaitIcon size={IC.inline} />{wlCount}</>, { border: "var(--border-soft)", text: "var(--text-secondary)" }) : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></div></div>
+          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted }}>{(c.phone ? formatPhone(c.phone) : "No phone · linked guest") + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? chip(c.visits + " visit" + (c.visits !== 1 ? "s" : ""), { border: "var(--suggest-border)", text: "var(--success-text)" }) : null}{c.noShowCount > 0 ? chip(c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}{wlCount > 0 ? chip(<><WaitIcon size={IC.inline} />{wlCount}</>, { border: "var(--border-soft)", text: "var(--text-secondary)" }) : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></div></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
             <div style={{ fontSize: T.body, fontWeight: FW.bold, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
@@ -113,8 +121,8 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                 className="mgt-hover-scale mgt-press"
                 style={mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.del, opacity: armed ? 1 : 0.85 })}
                 onClick={function () {
-                  if (armed) { onDeleteCustomer(c.phone); setArmedKey(null); setOpenKey(null); }
-                  else setArmedKey(c.phone);
+                  if (armed) { onDeleteCustomer({ phone: c.phone, guestId: c.guestId }); setArmedKey(null); setOpenKey(null); }
+                  else setArmedKey(c.key);
                 }}>{armed ? "Confirm delete" : "Delete customer & all data"}</button>
             </div>
           </div>
@@ -157,7 +165,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           {phonelessNoShowCount > 0 ? (
             <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
               <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--warn-text)" }}>{phonelessNoShowCount}</div>
-              <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>no-show, no phone</div>
+              <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>no-show, unidentified</div>
             </div>
           ) : null}
         </div>
@@ -189,7 +197,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
             </span>
           ) : null}
         </div>
-        <div style={{ fontSize: T.small, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number across all bookings. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymized as “Data removed” for statistics.</div>
+        <div style={{ fontSize: T.small, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number, or — for guests who never gave one — by having been linked to each other from the name suggestions on a booking. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymized as “Data removed” for statistics.</div>
       </Section>
       {rows.length ? rows : <div style={{ textAlign: "center", padding: "18px 0", color: S.muted, fontSize: T.body }}>{query.trim() ? "No customers match." : "No customers yet — bookings with a phone number appear here."}</div>}
     </div>
