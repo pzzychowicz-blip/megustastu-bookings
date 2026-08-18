@@ -109,16 +109,6 @@ export function matchCustomerByPhone(phoneKey, bookings, excludeBookingId) {
   return matchCustomerFor({ phone: phoneKey }, bookings, excludeBookingId);
 }
 
-// matchCustomerFor — v17.10.0. The generalised matcher: same return shape as
-// matchCustomerByPhone (which now delegates here, keeping its exact name and
-// signature for the WA complementarity contract at the top of this file), but it
-// matches on the phone key OR the guestId.
-//
-// The OR is a UNION, not a fallback, and that is the load-bearing part. A guest
-// who books three times without a phone and then gives one on the fourth has
-// bookings carrying only a guestId and bookings carrying both; matching either
-// key keeps them one person. A "phone if present, else guestId" rule would split
-// them at exactly the moment they became easiest to identify.
 // matchesIdentity — does THIS booking belong to that identity? The union rule
 // above, as one predicate, so the matcher and every caller that has to reproduce
 // it (App's deleteCustomer) cannot drift apart. `ident` is {phone, guestId};
@@ -138,6 +128,16 @@ export function matchesIdentity(b, ident) {
   return !!(b.guestId && gids.indexOf(b.guestId) !== -1);
 }
 
+// matchCustomerFor — v17.10.0. The generalised matcher: same return shape as
+// matchCustomerByPhone (which now delegates here, keeping its exact name and
+// signature for the WA complementarity contract at the top of this file), but it
+// matches on the phone key OR the guestId.
+//
+// The OR is a UNION, not a fallback, and that is the load-bearing part. A guest
+// who books three times without a phone and then gives one on the fourth has
+// bookings carrying only a guestId and bookings carrying both; matching either
+// key keeps them one person. A "phone if present, else guestId" rule would split
+// them at exactly the moment they became easiest to identify.
 export function matchCustomerFor(ident, bookings, excludeBookingId) {
   const o = ident || {};
   const key = normalizePhone(o.phone);

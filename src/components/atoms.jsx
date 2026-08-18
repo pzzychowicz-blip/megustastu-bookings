@@ -599,13 +599,9 @@ export function Reveal({ show, children, style, horizontal = false }) {
 // conforming to content that has already changed. There is no arrival to
 // decelerate into, and ease-out's front-loading turned every modal resize into
 // a lurch-then-crawl. See M.resize for the reasoning in full.
-// ── The visible cap (v17.9.1) ────────────────────────────────────────────────
-// Every height at or above the enclosing scroll port's own height LOOKS THE
-// SAME: the port paints the same pixels either way and only the scroll range
-// differs. So the visible half of a height change is the range [0, cap], and
-// any part of an animation outside it is spent on something nobody can see.
-// Returns null when the box has no scroll port to be clamped against.
-// clampRange — the whole decision, as arithmetic (v17.10.0).
+
+// ── clampRange (v17.10.0) ────────────────────────────────────────────────────
+// The whole decision, as arithmetic.
 //
 // Both paths into an AutoHeight animation ask the same four questions, and both
 // have now been got wrong once: v17.9.1 shipped the `watch` swap clamped and the
@@ -641,6 +637,12 @@ function scrollPort(box) {
   return null;
 }
 
+// ── The visible cap (v17.9.1) ────────────────────────────────────────────────
+// Every height at or above the enclosing scroll port's own height LOOKS THE
+// SAME: the port paints the same pixels either way and only the scroll range
+// differs. So the visible half of a height change is the range [0, cap], and
+// any part of an animation outside it is spent on something nobody can see.
+// Returns null when the box has no scroll port to be clamped against.
 function visibleCap(box) {
   const p = scrollPort(box);
   if (!p) return null;
