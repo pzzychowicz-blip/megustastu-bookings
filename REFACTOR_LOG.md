@@ -9936,3 +9936,25 @@ the day header, a banner — make every card unclickable.
 Verified in DEV: with a live selection in the card, a click opens nothing; with
 none, it opens Edit booking. The first attempt appeared to fail and was HMR
 serving the old handler — reload before concluding a guard does not work.
+
+### Commit 17 — /code-review fix: the back-stamp moves to lib/ and gets tested
+
+**Files:** `src/lib/customers.js`, `src/App.jsx`, `tests/customers.test.js`.
+**Behavioural change:** none — the function moved verbatim.
+
+`stampGuestSeed` was a closure inside `BookingApp`, so nothing could reach it,
+and it writes a **permanent** link between two bookings that no UI can unpick.
+CLAUDE.md: "logic that decides something the restaurant acts on does not live in
+a `useEffect`… put the pure core in `lib/`." It is already a pure
+`(list, draft) → list`; only its address was wrong. It sits in `customers.js`
+with the rest of the identity layer.
+
+Five cases pin it, and each is a property the save path leans on: it stamps only
+the seed; it is a no-op unless the draft carries BOTH keys; it never re-homes a
+booking already in a group; it is idempotent (which is what makes the v15.4.0
+write-retry safe); and it does not mutate its input (it runs inside doSave's
+pure transform of `prev`, and mutating Firebase's snapshot there would corrupt
+the base the CAS compares against).
+
+Verified in DEV after the move: joined two phone-less bookings from the name
+dropdown and confirmed one Customers row holding both. 312 tests.

@@ -75,6 +75,34 @@ export function identityKey(b) {
   return b.guestId || null;
 }
 
+// stampGuestSeed — write the newly-minted `guestId` BACK onto the booking it was
+// derived from (v17.10.0; moved out of App.jsx by the /code-review pass).
+//
+// Picking an unjoined phone-less guest from the name dropdown mints a `guestId`
+// into the draft and records that guest's booking in `guestSeed`. This is the
+// other half: the source booking gets the same id, and the two become one
+// customer. It lives here rather than in App because it decides a PERMANENT,
+// un-undoable identity link and nothing in the UI can unpick one — CLAUDE.md's
+// rule is that logic the restaurant acts on belongs in `lib/` where a test can
+// reach it, and the stale-guestId defect this same review found lived in exactly
+// this seam.
+//
+// It is a pure `(list, draft) → list`, called INSIDE doSave's buildNext /
+// applyBase, so the source and the new booking ride ONE saveBookings call: the
+// v15.5.0 per-booking diff-write patches them together and the per-$id CAS
+// covers both. A separate write would be a second thing to fail.
+//
+// `!b.guestId` is what makes a replay safe — a retry on fresh data finds the
+// stamp already there and leaves it alone — and it also means a booking already
+// belonging to another group is never silently re-homed.
+export function stampGuestSeed(list, f) {
+  if (!Array.isArray(list) || !f || !f.guestSeed || !f.guestId) return list;
+  return list.map(function (b) {
+    if (!b || b.id !== f.guestSeed || b.guestId) return b;
+    return Object.assign({}, b, { guestId: f.guestId });
+  });
+}
+
 // isNoShow — did this booking end as a no-show?
 // Primary signal: the v16.0.0 `noShow` boolean set by doCancelBooking.
 // Fallback: the pre-v16 record was only a history entry {action:"no show"} (+

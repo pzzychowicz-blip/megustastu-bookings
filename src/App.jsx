@@ -40,7 +40,7 @@ import {
   undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
-import { normalizePhone, hasRealPhone, matchesIdentity } from "./lib/customers";
+import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { hourLabel } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
@@ -1640,26 +1640,9 @@ function BookingApp({uid}){
   // by doSave's try/catch. The v15.7.0 capture-intent-then-replay contract and
   // the prev-identity buildNextMemo are untouched.
 
-  // v17.10.0: the guest-identity BACK-STAMP. Picking an unjoined phone-less
-  // guest from the name dropdown mints `guestId` into the draft and records the
-  // source booking in `guestSeed`; this writes the same id onto that source, so
-  // the two bookings become one customer.
-  //
-  // It runs INSIDE buildNext/applyBase, i.e. as part of the same pure transform
-  // the new/edited booking goes through, so both children ride ONE saveBookings
-  // call: the v15.5.0 per-booking diff-write patches them together and the
-  // per-$id CAS covers both. A separate write would be a second thing to fail.
-  //
-  // `!b.guestId` is the guard that makes a replay safe — a retry on fresh data
-  // finds the stamp already there and leaves it alone, and it also means a
-  // booking already belonging to another group is never silently re-homed.
-  function stampGuestSeed(list,f){
-    if(!f||!f.guestSeed||!f.guestId) return list;
-    return list.map(function(b){
-      if(b.id!==f.guestSeed||b.guestId) return b;
-      return Object.assign({},b,{guestId:f.guestId});
-    });
-  }
+  // v17.10.0: the guest-identity back-stamp is `stampGuestSeed` in
+  // lib/customers.js — pure, tested, and called inside buildNext/applyBase so
+  // the source booking and the new one ride ONE saveBookings call.
   function doSaveEdit(f,v){
     const size=v.size,cleanPhone=v.cleanPhone,mt=v.mt;
         const orig=bookings.find(function(b){return b.id===editId;});

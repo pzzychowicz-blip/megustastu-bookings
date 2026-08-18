@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizePhone, formatPhone, hasRealPhone, isNoShow,
-  matchCustomerByPhone, matchCustomerFor, matchesIdentity, identityKey, customerIndex, noShowMap,
+  matchCustomerByPhone, matchCustomerFor, matchesIdentity, identityKey, customerIndex, noShowMap, stampGuestSeed,
   searchBookings, searchCustomers, searchGuestsByName, findPhoneOverlaps,
 } from "../src/lib/customers.js";
 
@@ -395,5 +395,50 @@ describe("findPhoneOverlaps", () => {
     expect(findPhoneOverlaps([existing, early], { phone: P, date: "2099-01-01", time: "18:30", dur: 15 }).map((b) => b.id)).toEqual(["e"]);
     // a long booking spans both — earliest first
     expect(findPhoneOverlaps([existing, early], { phone: P, date: "2099-01-01", time: "18:30", dur: 240 }).map((b) => b.id)).toEqual(["e", "x"]);
+  });
+});
+
+// ── v17.10.0 /code-review: the guest-identity back-stamp ──────────────────────
+// Extracted from App.jsx so it is reachable at all. It writes a PERMANENT link
+// between two bookings and nothing in the UI can unpick one, which is exactly
+// the kind of decision CLAUDE.md says must not live in a component closure.
+describe("stampGuestSeed", () => {
+  const draft = { guestId: "gb1", guestSeed: "b1" };
+
+  it("writes the minted id onto the seed booking and nothing else", () => {
+    const list = [bk({ id: "b1", phone: "" }), bk({ id: "b2", phone: "" })];
+    const out = stampGuestSeed(list, draft);
+    expect(out.find((b) => b.id === "b1").guestId).toBe("gb1");
+    expect(out.find((b) => b.id === "b2").guestId).toBeFalsy();
+  });
+
+  it("is a no-op unless the draft carries BOTH keys", () => {
+    const list = [bk({ id: "b1", phone: "" })];
+    expect(stampGuestSeed(list, { guestId: "gb1" })).toBe(list);       // no seed
+    expect(stampGuestSeed(list, { guestSeed: "b1" })).toBe(list);      // no id
+    expect(stampGuestSeed(list, null)).toBe(list);
+    expect(stampGuestSeed(null, draft)).toBe(null);
+  });
+
+  it("never re-homes a booking that already belongs to a group", () => {
+    // The same guard that makes a retry safe: a replay on fresh data finds the
+    // stamp already there, and a booking joined to someone else is left alone.
+    const list = [bk({ id: "b1", phone: "", guestId: "gOTHER" })];
+    expect(stampGuestSeed(list, draft)[0].guestId).toBe("gOTHER");
+  });
+
+  it("is idempotent, which is what makes the write-retry path safe", () => {
+    const list = [bk({ id: "b1", phone: "" })];
+    const once = stampGuestSeed(list, draft);
+    const twice = stampGuestSeed(once, draft);
+    expect(twice.map((b) => b.guestId)).toEqual(once.map((b) => b.guestId));
+  });
+
+  it("does not mutate the list it is given", () => {
+    // It runs inside doSave's pure transform of `prev`; mutating Firebase's
+    // snapshot there would corrupt the base the CAS compares against.
+    const src = bk({ id: "b1", phone: "" });
+    stampGuestSeed([src], draft);
+    expect(src.guestId).toBeFalsy();
   });
 });
