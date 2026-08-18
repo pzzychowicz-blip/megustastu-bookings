@@ -57,15 +57,4 @@ session and keeping it in sync.
 
 ## Ideas
 
-- **Verify timeline drag-and-drop on the Android tablet.** v17.10.1 stopped the
-  OS text-selection menu firing on a long-press, and the measurement taken while
-  fixing it showed something else: with the selection active, Chrome cancels the
-  pointer stream, so the 800ms drag-arm never fired and the quick-status popup
-  stayed open indefinitely instead of handing over to drag mode. It is therefore
-  likely that **drag-a-booking-to-another-table has never worked on Android** —
-  the gesture v17.0.0-correction added and v17.0.0 round 10 fought WebKit over.
-  This was NOT demonstrated either way: a stationary synthetic press
-  (`adb shell input swipe` with identical start/end) does not arm the drag in
-  either build, so the test needs a real multi-point swipe (`Input.dispatchTouchEvent`
-  over CDP, or a person). Confirm on the tablet; if it is broken, it is its own
-  fix, not a follow-up to the selection rule.
+_(nothing pending)_

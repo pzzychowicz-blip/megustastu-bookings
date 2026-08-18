@@ -10047,12 +10047,21 @@ would have passed for the wrong reason. Sampling the state every 350ms
 hard-coded** — a reload shifted the block 52px and a stale constant produced a
 confident null result. Derive them from `getBoundingClientRect()` on every trial.
 
-Worth noting for whoever tests this next: with the rule defeated the popup stayed
-open indefinitely, because Chrome entering selection mode cancels the pointer
-stream and the drag-arm never fires. That the two gestures interact is now
-established; whether the fix also restores drag-to-another-table on Android was
-**not** demonstrated — a stationary synthetic press does not arm it in either
-case, so the claim is left open rather than assumed.
+With the rule defeated the popup stayed open indefinitely, because Chrome
+entering selection mode cancels the pointer stream and the drag-arm never fires.
+That raised the question of whether **drag-to-another-table had ever worked on
+Android**, and it could not be settled here: a stationary synthetic press does
+not arm the drag in either build. It was booked as a ROADMAP item and then
+**closed the same session by Patryk on the device — drag-and-drop and the hold
+gesture both work correctly on the tablet with this build.** So the selection
+was indeed suppressing the drag-arm, and removing it restored a gesture that had
+been shipping broken on Android since v17.0.0.
+
+The wider lesson is the one the measurement kept teaching all session: **a
+synthetic press is not a finger.** It could not arm the drag, it could not
+produce a text selection on its own, and (commit 7) it does not set `:active` at
+all. The person holding the device settles in one second what an hour of
+instrumentation could not.
 
 ### Commit 2 — a stuck Firebase reconnect kicks itself
 
