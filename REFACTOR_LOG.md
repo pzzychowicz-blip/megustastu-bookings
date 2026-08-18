@@ -10243,3 +10243,31 @@ drag-arm never fires, so **drag-a-booking-to-another-table may never have worked
 on Android at all**. Not demonstrated either way here, because a stationary
 synthetic press does not arm the drag in either build. It needs a real
 multi-point swipe, and if it is broken it is its own fix.
+
+### Commit 6 — CLAUDE.md: the shadow scale as a 2×2, and the reconnect backoff
+
+**File:** `CLAUDE.md`. **Behavioural change:** none.
+
+The shadow guidance had grown into a list of tokens with a rule attached to each,
+which is why v17.10.0 could add `--shadow-flat` and still leave a cell empty. It
+is written as a **2×2** now — raised or not, fill flips or not — with the
+floating / card / input cases named beside it, so the next shadow is a lookup
+rather than a judgement.
+
+Two stale figures corrected, both of the "a number recorded once and never
+re-measured" kind this file keeps warning about: the white-inset literal count
+(22 → 2) and the test count (259 → 319). The v17.8.0 claim that plain drop-shadow
+literals are "a consistency nit, not a bug class" is left in place and marked as
+having failed, rather than deleted — the reasoning was explicit and knowing why
+it was wrong is worth more than a clean paragraph.
+
+New Gotchas row for the five-minute reconnect backoff, carrying the part that is
+hardest to rediscover: **toggling wifi cannot reproduce the stuck state**, with
+the measured 6.1s recovery that proves it, and the consequence that the watchdog
+must not be gated on `navigator.onLine`.
+
+**Verification for the whole version.** `npm run build` clean (main bundle
+198.45 kB gz, unchanged — the shadow sweep is a wash and the watchdog is a few
+lines), 319 tests, lint 0 errors, `check:style` clean, all re-run per commit.
+On-device work is recorded per commit above; the shadow tokens were read back out
+of the live CSSOM in both themes rather than trusted from the source.
