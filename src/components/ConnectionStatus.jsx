@@ -234,11 +234,17 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
               (usePersistence) already resets the SDK's backoff after 20s of a
               disconnected foreground page — this is the same lever on demand,
               so staff have a control instead of the minimise-and-restore ritual
-              they worked out for themselves. Only while disconnected: offering
-              "Reconnect" on a healthy connection invites a pointless drop. It
+              they worked out for themselves. Not on a healthy connection —
+              offering "Reconnect" there invites a pointless drop — but yes while
+              `connecting`, which /code-review caught: `connected` starts
+              optimistically TRUE and only goes false after a first handshake, so
+              a device that has NEVER connected is exactly the case where a user
+              stares at a dead app, and it was the one case with neither the
+              button nor the watchdog (which is deliberately a *re*connect
+              watchdog). goOnline() is harmless there and may be the whole fix. It
               sits under the status line rather than on it, because that row
               already right-aligns Log out and crowds on a phone. */}
-          {!connected && onReconnect ? (
+          {(!connected || connecting) && onReconnect ? (
             <button
               type="button"
               className="mgt-hover-scale"
