@@ -51,6 +51,22 @@ function stopped(fn) {
   return function (e) { e.stopPropagation(); fn(e); };
 }
 
+// v17.10.0 /code-review fix: a drag that ENDS a text selection is not a click on
+// the card. The card opens the edit form now, and the row it opens from prints
+// the guest's phone as plain text — which staff select and copy to ring a party.
+// Press-drag-release over that text fires `click` on the card, so copying a
+// number opened a modal over the selection, and if the form was mid-edit the
+// unsaved-changes guard fired on the way back out.
+//
+// The selection has to be INSIDE this card: a stale selection elsewhere on the
+// page (the day header, a banner) must not make cards unclickable, which is what
+// a bare `getSelection().toString()` check would do.
+function endsASelection(el) {
+  const sel = typeof window !== "undefined" && window.getSelection ? window.getSelection() : null;
+  if (!sel || sel.isCollapsed || !sel.toString().trim()) return false;
+  return el.contains(sel.anchorNode) || el.contains(sel.focusNode);
+}
+
 // v17.1.0 perf: React.memo — all function props are App's stable VA wrappers,
 // data props change identity only on real change (memoized in BookingApp).
 export const ListView = memo(function ListView({
@@ -360,7 +376,7 @@ export const ListView = memo(function ListView({
                PROGRAMMATIC selection (search-jump, arrow nav) and scrolling the
                page under a finger that just tapped is the bug it was added to
                avoid. */
-            onClick={() => { onSelect(b.id); onEdit(b); }}
+            onClick={(e) => { if (endsASelection(e.currentTarget)) return; onSelect(b.id); onEdit(b); }}
             style={{
               /* The resting fill goes through a CUSTOM PROPERTY rather than
                  `background`, because an inline `background` beats a stylesheet

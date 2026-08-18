@@ -9916,3 +9916,23 @@ a cap can only be shared by fires belonging to the same content change, and
 `heightAnimates` plus one per ancestor `scrollPort` walks): **3 per toggle**,
 i.e. exactly one probe, expand and collapse alike, with the animation itself
 unchanged (card 552 → 739 evenly across 0–460ms, port free at 500ms).
+
+### Commit 16 — /code-review fix: a drag that ends a selection is not a click
+
+**File:** `src/components/ListView.jsx`. **Behavioural change:** yes.
+
+The card opens the edit form now, and it prints the guest's phone as plain text
+— which staff select and copy to ring a party. A press-drag-release over that
+text fires `click` on the card, so copying a number opened a modal over the
+selection, and a form left mid-edit would raise the unsaved-changes guard on the
+way back out. (List cards are selectable: `user-select: none` is a *timeline
+block* thing, and confusing the two is how this nearly got dismissed as
+unreproducible — both wear `data-flip-id`.)
+
+The check requires the selection to be **inside this card**. A bare
+`getSelection().toString()` would let a stale selection anywhere on the page —
+the day header, a banner — make every card unclickable.
+
+Verified in DEV: with a live selection in the card, a click opens nothing; with
+none, it opens Edit booking. The first attempt appeared to fail and was HMR
+serving the old handler — reload before concluding a guard does not work.
