@@ -1068,7 +1068,12 @@ export const TimelineView = memo(function TimelineView({
               border: "1px solid " + (hasBlock ? "var(--tl-blocked-badge-border)" : indoor ? TBL.ind.border : TBL.out.border),
               width: 32, textAlign: "center", display: "inline-block",
               boxSizing: "border-box",
-              boxShadow: "var(--shadow-flat)"
+              // --shadow-btn, matching atoms' TBadge (/code-review fix). This is
+              // the SAME badge over the same theme-flipping TBL fill, and it is
+              // itself a .mgt-hover-scale control, so it takes the raised
+              // treatment; shipping the two on different tokens put one table
+              // label at two elevations depending on which view you were in.
+              boxShadow: "var(--shadow-btn)"
             }}>
               {id}
             </span>
