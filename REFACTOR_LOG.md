@@ -9825,7 +9825,15 @@ linked guest" holding both bookings, deleted the customer, confirmed the row is
 gone and that the anonymized pair does NOT come back as a customer called "Data
 removed". Both throwaway bookings then deleted; DEV is clean.
 
-### Commit 12/13 — /code-review fix: a pick REPLACES the identity, both keys
+### Commit 12/12 — the two /code-review fixes (both landed together)
+
+Both are guest-identity defects the review found, and both shipped in ONE commit
+(`8527f62`) whose subject names only the first. That is a §7 slip — one change
+per commit — recorded here rather than rewritten away, since the fix for a
+commit already made is a new commit, never an amend. What follows describes what
+is actually in it.
+
+#### (a) a pick REPLACES the identity, so both keys are written
 
 **File:** `src/components/BookingFormModal.jsx`. **Behavioural change:** yes.
 
@@ -9846,7 +9854,7 @@ Verified in DEV: made a phone-less guest and a similarly-named phone customer,
 performed exactly that mis-tap, saved — the phone customer holds its own two
 bookings and the guest was not stamped.
 
-### Commit 13/13 — /code-review fix: a guest who later gives a number stays one customer
+#### (b) a guest who later gives a number stays ONE customer
 
 **Files:** `src/lib/customers.js`, `src/components/CustomersSettings.jsx`,
 `src/App.jsx`, `tests/customers.test.js`. **Behavioural change:** yes.
