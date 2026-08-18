@@ -10120,3 +10120,27 @@ precisely the one where that property lies. Blocking the RTDB host via
 `Network.setBlockedURLs` was tried as a repro and does not work: it does not
 cover WebSocket handshakes. So the mechanism is established from the SDK source
 and the field report; the *watchdog's own behaviour* is what was measured here.
+
+### Commit 3 — "Reconnect now" in the connection popover
+
+**Files:** `src/components/ConnectionStatus.jsx`, `src/App.jsx`.
+**Behavioural change:** yes — one new control, visible only while disconnected.
+
+The watchdog above handles the stuck case on its own, but staff had already
+invented a remedy (minimise, restore) for a state the app gave them no control
+over. This is the same lever — `forceReconnect`, i.e. `goOnline(db)` — offered
+deliberately.
+
+Rendered **only** while disconnected: offering "Reconnect" on a healthy
+connection invites someone to drop a working socket out of curiosity. It sits
+under the status sentence rather than on the status row, because that row
+already right-aligns Log out and wraps on a phone.
+
+**Verified on the tablet:** absent while connected, present once
+`.info/connected` goes false, absent again after recovery; clicking it
+reconnected in 4.4s. Screenshotted on-device to confirm it matches Log out's
+32px/`BTN.nav` treatment.
+
+One testing note, since it cost two runs: the popover is a TOGGLE, so a probe
+that clicks the dot to "open" it will close an already-open one and report the
+button missing. Assert the popover's own state before reading its contents.
