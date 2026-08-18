@@ -1131,6 +1131,68 @@
         try {
           document.addEventListener("touchstart", function () {}, { passive: true });
         } catch (e) { /* pre-2015 Safari: no options object — press stays hover-only */ }
+        // v17.10.1: BOOT WATCHDOG — the app said nothing when it failed to start.
+        //
+        // Found by testing the offline shell on the tablet with the server
+        // stopped: the cached HTML was served, the bundle was not there, React
+        // never mounted, and the screen stayed WHITE. No message, no way out.
+        // That is within touching distance of the v17.4.0 symptom staff
+        // reported ("it just sits there"), and it is not specific to the
+        // service worker — a bad deploy, a blocked script or a dead network at
+        // the wrong moment all land in the same place.
+        //
+        // So this is deliberately NOT part of the worker: it watches the one
+        // thing that actually matters, whether the app rendered, and offers the
+        // two things that fix it. 10s is well past a cold start on a slow
+        // restaurant connection; a late mount removes the notice again.
+        //
+        // Inline handlers are impossible here (script-src has no 'unsafe-inline',
+        // which is the whole point of the hash) — hence addEventListener.
+        try {
+          window.setTimeout(function () {
+            var root = document.getElementById("root");
+            if (!root || root.children.length) return;
+            var box = document.createElement("div");
+            box.id = "mgt-boot-fail";
+            box.setAttribute("style", "position:fixed;inset:0;display:flex;align-items:center;"
+              + "justify-content:center;padding:24px;text-align:center;font:15px/1.5 -apple-system,"
+              + "BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--text-primary,#1a1d24);"
+              + "background:var(--bg-app,#eef1f6);z-index:9999");
+            var inner = document.createElement("div");
+            inner.setAttribute("style", "max-width:22rem");
+            var h = document.createElement("div");
+            h.setAttribute("style", "font-size:19px;font-weight:600;margin-bottom:8px");
+            h.textContent = "MGT Bookings didn't start";
+            var p2 = document.createElement("p");
+            p2.setAttribute("style", "opacity:.75;margin:0 0 18px");
+            p2.textContent = "Your bookings are safe on the server. Try again, and if that "
+              + "doesn't help, reset the offline copy of the app.";
+            var btn = document.createElement("button");
+            btn.setAttribute("style", "font:inherit;font-weight:600;color:#fff;background:#007AFF;"
+              + "border:0;border-radius:999px;padding:11px 22px;margin:0 6px 8px;cursor:pointer");
+            btn.textContent = "Try again";
+            btn.addEventListener("click", function () { location.reload(); });
+            var reset = document.createElement("button");
+            reset.setAttribute("style", "font:inherit;font-weight:600;color:var(--text-primary,#1a1d24);"
+              + "background:transparent;border:1px solid currentColor;border-radius:999px;"
+              + "padding:11px 22px;margin:0 6px 8px;cursor:pointer;opacity:.8");
+            reset.textContent = "Reset offline copy";
+            reset.addEventListener("click", function () {
+              location.href = location.pathname + "?sw=off";
+            });
+            inner.appendChild(h); inner.appendChild(p2);
+            inner.appendChild(btn); inner.appendChild(reset);
+            box.appendChild(inner);
+            document.body.appendChild(box);
+            // If React mounts late after all, get out of the way.
+            var poll = window.setInterval(function () {
+              if (root.children.length) {
+                window.clearInterval(poll);
+                if (box.parentNode) box.parentNode.removeChild(box);
+              }
+            }, 500);
+          }, 10000);
+        } catch (e) { /* no watchdog; the app either starts or it doesn't */ }
       })();
     </script>
     <div id="root"></div>

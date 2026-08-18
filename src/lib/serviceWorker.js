@@ -1,0 +1,75 @@
+// src/lib/serviceWorker.js
+//
+// v17.10.1 — the app's half of the offline shell. The worker itself is
+// public/sw.js; this file owns WHEN it is allowed to exist.
+//
+// Key, reader, writer and the apply step live in ONE file on purpose. The
+// theme's equivalent per-device mirror is split across three sites and needs a
+// written "keep the convention in sync" warning because of it; the restaurant-
+// name mirror (v17.9.0) was deliberately kept whole, and so is this.
+//
+// PER-DEVICE, localStorage ONLY — deliberately NOT in settings/users/{uid}.
+// Clearing site data is the last-resort escape from a misbehaving worker, and a
+// flag synced from Firebase would come straight back down and re-enable the
+// thing the user just escaped. Whether a device should run a worker is also a
+// property of the DEVICE (browser, platform, how it is installed), not of the
+// person — the same reasoning that keeps app width and the split layout local.
+//
+// DEFAULT ON, so only the non-default "0" is ever stored — the house convention
+// for a default-on setting (cf. splitEnabled; navLocked is the inverted one).
+
+export const SW_KEY = "mgt-sw";
+
+/** Is the offline shell enabled on this device? Default true. */
+export function readSwEnabled() {
+  try { return localStorage.getItem(SW_KEY) !== "0"; }
+  catch { return true; }
+}
+
+export function setSwEnabled(on) {
+  try {
+    if (on) localStorage.removeItem(SW_KEY);
+    else localStorage.setItem(SW_KEY, "0");
+  } catch { /* private mode — the apply step below still runs for this session */ }
+}
+
+/** Does this browser support service workers in this context at all? */
+export function swSupported() {
+  return typeof navigator !== "undefined"
+    && "serviceWorker" in navigator
+    && typeof isSecureContext !== "undefined" && isSecureContext;
+}
+
+/** Remove every registration and cache. The disable path, and the panic path. */
+export async function unregisterAll() {
+  if (!swSupported()) return 0;
+  let n = 0;
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) { await r.unregister(); n++; }
+    if (typeof caches !== "undefined") {
+      for (const k of await caches.keys()) await caches.delete(k);
+    }
+  } catch { /* nothing we can do from here; ?sw=off is the other route */ }
+  return n;
+}
+
+// Register, or tear down if disabled. Idempotent — safe to call on every change.
+//
+// The CALLER decides when. App.jsx waits until the first bookings snapshot has
+// landed, and that gate is the point: a worker only ever installs on a device
+// where the app has demonstrably booted AND reached Firebase. A build that
+// cannot load its data can therefore never persist itself into a cache, which
+// is the precise shape of the v17.4.0 failure this feature is repaying.
+export async function applyServiceWorker(enabled) {
+  if (!swSupported()) return "unsupported";
+  if (!enabled) { await unregisterAll(); return "disabled"; }
+  try {
+    await navigator.serviceWorker.register("/sw.js");
+    return "registered";
+  } catch (e) {
+    // A failed registration is not worth surfacing: the app works without it.
+    console.warn("[sw] registration failed —", e && e.message);
+    return "failed";
+  }
+}

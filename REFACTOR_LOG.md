@@ -10486,3 +10486,32 @@ shape: a build that succeeds, a lint that passes, and a browser that quietly
 declines to do the thing. The lesson CLAUDE.md already states for stylesheets —
 *"a stylesheet has no syntax errors, only rules that silently don't exist"* —
 generalises to headers.
+
+### Commit 13 — a failed boot now says so
+
+**Files:** `index.html`, `vercel.json`. **Behavioural change:** yes — a blank app
+becomes an actionable screen.
+
+Found by testing the offline shell on the tablet with the dev server stopped:
+the cached HTML was served, the bundle was not there, React never mounted, and
+the screen stayed **white**. No message, no explanation, no way out. That is
+within touching distance of what staff reported in v17.4.0 — *"it just sits
+there"* — and it is **not** a service-worker problem. A bad deploy, a
+CSP-blocked bundle (which, as commit 12 found, had already happened here), or a
+dead network at the wrong moment all land in exactly the same place.
+
+So the watchdog does not watch the worker. It watches the only thing that
+matters — whether the app rendered — and offers the two things that fix it:
+reload, and reset the offline copy (`?sw=off`, commit 14). 10s is well past a
+cold start on a slow restaurant connection, and a late mount removes the notice
+again, so it cannot sit on top of a working app.
+
+It lives in the boot script rather than in React, for the obvious reason: React
+is the thing that failed. And its handlers are `addEventListener`, not `onclick`
+attributes — `script-src` carries no `'unsafe-inline'`, which is the entire
+point of the hash, so an inline handler would be blocked exactly like commit
+12's script was.
+
+**Verified on the tablet**, both directions: with the server up the app mounts
+and the notice never appears; with the server stopped the notice renders and
+screenshots correctly, with working Try again / Reset offline copy buttons.

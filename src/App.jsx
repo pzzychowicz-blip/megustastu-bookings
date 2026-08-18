@@ -256,6 +256,7 @@ import { WaitAvailBanner } from "./components/WaitAvailBanner";
 const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel").then(function(m){return {default:m.SearchPanel};});},"SearchPanel"); // v17.1.0: lazy (opened on demand)
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
+import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -757,6 +758,10 @@ function BookingApp({uid}){
   // Resets to 'general' on modal close so reopens start fresh. Belongs to
   // the Settings subsystem; lived inside the reminder state block pre-D2
   // for historical reasons (the comment misleadingly grouped it there).
+  // v17.10.1: per-device offline shell (see lib/serviceWorker.js). Default ON,
+  // so only the non-default "0" is ever stored.
+  const [swEnabled, setSwEnabled_] = useState(readSwEnabled);
+  const swAppliedRef = useRef(false);
   const [settingsTab, setSettingsTab] = useState("general");
   useEffect(function(){formRef.current=form;},[form]);
   useEffect(function(){if(error) setError("");},[form.time,form.size,form.date,form.preference,form.customDur]);
@@ -811,6 +816,23 @@ function BookingApp({uid}){
     loadStalled, readError, hasConnected, forceReconnect,
     firstLoadCount,
   } = usePersistence({ autoOptimizer, nowMins });
+  // v17.10.1: install (or tear down) the offline shell.
+  //
+  // The `bookingsReady` gate is the safety property, not a detail. A worker is
+  // only ever registered on a device where the app has demonstrably booted AND
+  // received its first Firebase snapshot — so a build that cannot load its data
+  // can never persist itself into a cache and serve itself back. That is the
+  // precise shape of the v17.4.0 failure ("⟳ Loading bookings…" forever), and
+  // it is the one condition under which caching a shell is provably safe.
+  //
+  // Disabling is NOT gated the same way: turning it off must work immediately,
+  // on any device, in any state.
+  useEffect(function(){
+    if(!swEnabled){ applyServiceWorker(false); swAppliedRef.current=false; return; }
+    if(!bookingsReady||swAppliedRef.current) return;
+    swAppliedRef.current=true;
+    applyServiceWorker(true);
+  },[swEnabled,bookingsReady]);
   // v17.3.0: real-time device presence (connection-dot popover). Ephemeral node,
   // exempt from the CAS rule — see ./hooks/usePresence.js.
   const { devices: presenceDevices, myKey: presenceKey, offset: presenceOffset } = usePresence();
@@ -915,6 +937,14 @@ function BookingApp({uid}){
   const [reduceMotion,setReduceMotion]=useState(function(){
     try{return localStorage.getItem("mgt-reduce-motion")==="1";}catch{return false;}
   });
+  // v17.10.1: per-device offline shell. localStorage ONLY — deliberately not
+  // saveUserPrefs'd: clearing site data is the last-resort escape from a bad
+  // worker, and a synced flag would come straight back down and re-enable it.
+  function onToggleSw(){
+    const next=!swEnabled;
+    setSwEnabled(next);      // lib/serviceWorker.js owns the key
+    setSwEnabled_(next);
+  }
   function onToggleReduceMotion(){
     const next=!reduceMotion;
     try{
@@ -2997,6 +3027,8 @@ function BookingApp({uid}){
             onSetAppWidth={onSetAppWidth}
             reduceMotion={reduceMotion}
             onToggleReduceMotion={onToggleReduceMotion}
+            swEnabled={swEnabled}
+            onToggleSw={onToggleSw}
             navLocked={navLocked}
             onToggleNavLock={onToggleNavLock}
             splitEnabled={splitEnabled}
