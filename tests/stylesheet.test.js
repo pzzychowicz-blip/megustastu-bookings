@@ -174,4 +174,25 @@ describe("index.html stylesheet", () => {
     const found = preludes(css).some((p) => p.includes(sel));
     expect(found).toBe(true);
   });
+
+  // v17.10.1 — NOT a CRITICAL_SELECTORS entry, and that is the point. The
+  // obvious guard was to add `[role="button"]` to that list, which would have
+  // passed forever while guarding nothing: the selector already appears in the
+  // press-scale rules, and `"button"` is a substring of the font-family rule.
+  // A list that matches on selectors cannot see a DECLARATION going missing.
+  //
+  // Both halves are asserted because they cover different platforms and either
+  // could be dropped without the other showing it: unprefixed `user-select` is
+  // what Android Chrome reads (the reported bug — a long-press opening the OS
+  // text menu on top of the quick-status popup), `-webkit-touch-callout` is the
+  // iOS property for the same gesture.
+  it("keeps controls opted out of OS text selection", () => {
+    const bodies = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
+      .filter((m) => m[1].includes('[role="button"]'))
+      .map((m) => m[2]);
+    expect(bodies.some((b) => /(^|[^-])user-select:\s*none/.test(b)),
+      "no rule opts controls out of text selection").toBe(true);
+    expect(bodies.some((b) => /-webkit-touch-callout:\s*none/.test(b)),
+      "the iOS half of the control no-select rule is missing").toBe(true);
+  });
 });

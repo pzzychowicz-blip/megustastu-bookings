@@ -9958,3 +9958,98 @@ the base the CAS compares against).
 
 Verified in DEV after the move: joined two phone-less bookings from the name
 dropdown and confirmed one Customers row holding both. 312 tests.
+
+---
+
+## v17.10.1 — the long-press menu, the stuck reconnect, and the last shadow cell
+
+**Date:** 2026-08-18
+**Files:** see each entry.
+**Behavioural change:** yes — a long-press on a control no longer raises the OS
+text menu, a lost connection recovers itself, and 14 controls change depth in
+dark mode. No persisted-data change, no Firebase console step.
+**Verification:** see each entry.
+
+Three defects reported from the floor, plus the one ROADMAP idea that turned out
+to be real work rather than a checker rule. Two of the three were found by using
+the app on the restaurant's own Android tablet, which is the pattern worth
+noting: neither is reproducible on the MacBook, and both had been lived with.
+
+### Commit 1 — a control's label is not selectable text
+
+**Files:** `index.html`, `src/components/QuickStatusPopup.jsx`,
+`tests/stylesheet.test.js`. **Behavioural change:** yes, on touch devices.
+
+Holding a timeline block on the tablet opened the quick-status popup *and*
+Android's text-selection toolbar — Copy / Share / Web search / DeepL, with
+selection handles, sitting across the popup's own "Cancelled" button. The gesture
+worked; it just arrived wearing a system menu.
+
+The mechanism is that the popup opens **under the finger that is still pressed**.
+A long-press is two things at once: our hold timer, and the OS starting a
+selection at the touch point. `TimelineView`'s block already carries
+`user-select: none`, so the OS had nothing to select there — but ~800ms in, the
+popup is what is under the point, and its buttons are ordinary selectable text.
+
+So the rule belongs on controls generally, not on this popup:
+
+```css
+button, [role="button"] {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+```
+
+`user-select` is what Android Chrome reads and `-webkit-touch-callout` is the iOS
+property for the same gesture. **Both are set although only one platform shows
+the bug**: iOS does not raise a callout here today, and nothing in the code was
+preventing it — the report was Android, the fix is neither.
+
+Scoped to controls deliberately. Inputs, textareas and plain divs keep selection,
+which matters more than it looks: `ListView`'s card is a `<div>` and its phone
+number is text staff select and copy to ring a party — the reason v17.10.0 taught
+that card's click handler to stand down while a selection is live. Widening this
+to a container would silently undo that. `SplitMenu` (a 450ms hold on a view
+button) had the identical latent defect and is fixed by the same rule, which is
+the argument for one rule over a third and fourth inline copy —
+`TimelineView` and `ViewSwitcher` already hold two.
+
+`QuickStatusPopup`'s **card** takes the properties inline as well: the guest name
+above the buttons is a `<div>`, and it is under the same finger.
+
+The test for it is **not** a `CRITICAL_SELECTORS` entry, and that is worth
+recording because the entry was written first and was worthless. That list
+asserts `prelude.includes(sel)`: `"button"` is a substring of the existing
+`input, textarea, select, button` font rule, and `[role="button"]` already
+appears in the two press-scale preludes. Either entry would have passed forever
+with the new rule deleted. **A list that matches on SELECTORS cannot see a
+DECLARATION going missing** — the v17.9.0 blind-checker lesson, reached this time
+by walking the live CSSOM and noticing the selector was not as unique as it
+looked. It is a dedicated assertion over the rule BODY instead, checking both
+halves separately, since unprefixed `user-select` and `-webkit-touch-callout`
+serve different platforms and either could be dropped without the other showing
+it. Verified by deleting each and watching it fail.
+
+**Verified on the restaurant's own Android tablet** (adb + CDP against the DEV
+app), A/B by injecting a `user-select: text !important` override to defeat the
+rule and removing it again, twice each. Rule defeated: a long-press on a block
+opens the popup and `getSelection()` returns **`"Cancelled"`** — the exact word
+in the report. Rule active: the popup opens and the selection is empty. In List
+view a long-press on card text still selects it (`user-select: auto`) and does
+not open the edit form, so v17.10.0's selection-aware click guard is intact.
+
+Two things the device found that reading could not. **The first attempt held for
+1300ms and concluded "fixed" from a run where the popup never appeared** — a hold
+past **800ms** is the drag-arm handoff, which dismisses the quick-status *by
+design* (`TimelineView.jsx:322`), so the test was measuring the wrong thing and
+would have passed for the wrong reason. Sampling the state every 350ms
+*through* the press is what showed it: popup at 0.7s, gone by 1.1s. A realistic
+600ms hold is the correct probe. **The second: coordinates cannot be
+hard-coded** — a reload shifted the block 52px and a stale constant produced a
+confident null result. Derive them from `getBoundingClientRect()` on every trial.
+
+Worth noting for whoever tests this next: with the rule defeated the popup stayed
+open indefinitely, because Chrome entering selection mode cancels the pointer
+stream and the drag-arm never fires. That the two gestures interact is now
+established; whether the fix also restores drag-to-another-table on Android was
+**not** demonstrated — a stationary synthetic press does not arm it in either
+case, so the claim is left open rather than assumed.

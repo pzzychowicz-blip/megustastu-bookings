@@ -546,6 +546,28 @@
       input, textarea, select, button {
         font-family: inherit;
       }
+      /* v17.10.1: a control's LABEL is not selectable text.
+         On Android, a long-press does two things at once: it arms our own hold
+         gesture (the timeline/plan quick-status popup, ViewSwitcher's split
+         menu) AND it starts an OS text selection. Because the popup opens under
+         the still-pressed finger, the selection lands on the popup's own button
+         labels — Copy/Share/Web search/DeepL over "Cancelled", with handles.
+         The gesture worked; it just came with a system menu on top of it.
+         `user-select` is the property Android Chrome reads; `-webkit-touch-
+         callout` is the iOS one. Both are set so the two platforms behave
+         identically — iOS does not show this today, but nothing prevented it.
+         Scoped to controls on purpose: a button's label is never a copy target,
+         while inputs, textareas and plain divs keep selection. ListView's card
+         is a <div> and its phone number stays selectable — staff select and copy
+         it to ring a party, which is why v17.10.0 taught that card's click
+         handler to stand down mid-selection. Do not widen this to a container.
+         TimelineView's blocks and ViewSwitcher's buttons already did this
+         inline; this generalises their answer instead of adding a fourth copy. */
+      button, [role="button"] {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
       /* v14.3.0: .mgt-hover-scale hover-lift — ported from MGT Scheduling so
          both apps share one hover identity. Opt-in per element via
          className="mgt-hover-scale". Primary interactive surfaces lift 8% on
