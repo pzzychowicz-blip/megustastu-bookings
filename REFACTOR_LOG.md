@@ -9892,3 +9892,27 @@ Verified in DEV: joined two phone-less bookings, gave the guest a number on a
 third, saw ONE customer row under that number holding all three (was two rows,
 1 + 2), deleted it and confirmed all three were anonymized in one action.
 307 tests, lint 0 errors, `check:style` clean. Throwaway bookings removed.
+
+### Commit 13 — /code-review fix: the ceiling is probed once per animation
+
+**File:** `src/components/atoms.jsx`. **Behavioural change:** none visible; a
+per-frame cost removed.
+
+Commit 10's no-movement branch returns without marking a run, so `animRef`
+stayed false and every observer fire re-probed. `visibleCap` writes
+`height: 100000px` and reads `clientHeight` + `scrollHeight` back — two forced
+synchronous layouts — and a `Reveal` fires the observer ~23 times over its
+385ms. That is ~46 forced layouts of a 2700px modal subtree per Settings
+toggle, added by the commit whose entire subject was making that toggle
+smoother. Settings → General takes that branch on every fire, so the tab with
+the most content had the worst case.
+
+A **timestamp**, not a flag: the instant branch has no natural end to reset on.
+The reuse window is `M.dur.shift + 120` — the same window `armSettle` uses — so
+a cap can only be shared by fires belonging to the same content change, and
+`settle` zeroes it so the next real change always measures fresh.
+
+**Measured in DEV** by counting `getComputedStyle` calls (one per
+`heightAnimates` plus one per ancestor `scrollPort` walks): **3 per toggle**,
+i.e. exactly one probe, expand and collapse alike, with the animation itself
+unchanged (card 552 → 739 evenly across 0–460ms, port free at 500ms).

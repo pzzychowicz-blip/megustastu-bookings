@@ -722,6 +722,11 @@ function heightAnimates(box) {
   return durs[i % durs.length] > 0.02;
 }
 
+// How long a probed ceiling may be reused (/code-review fix). It mirrors
+// `armSettle`'s window on purpose: one animation's length, so a cap can only
+// ever be shared by fires belonging to the same content change.
+const CAP_TTL = M.dur.shift + 120;
+
 export function AutoHeight({ children, watch, style }) {
   const outer = useRef(null);
   const inner = useRef(null);
@@ -734,6 +739,7 @@ export function AutoHeight({ children, watch, style }) {
   const timerRef = useRef(null);
   const animRef = useRef(false);                // `animating`, readable mid-measure
   const capRef = useRef(null);                  // the visible ceiling for THIS run
+  const capAtRef = useRef(0);                   // when it was last probed
   const toRef = useRef(null);                   // the height the box is easing TO
 
   // Settle: leave the clipped state and retake the true height. Reached by
@@ -749,6 +755,7 @@ export function AutoHeight({ children, watch, style }) {
     setAnimating(false);
     animRef.current = false;
     capRef.current = null;
+    capAtRef.current = 0;                       // the next change re-probes
     const p = pendingRef.current;
     if (p == null) return;
     pendingRef.current = null;
@@ -808,8 +815,28 @@ export function AutoHeight({ children, watch, style }) {
       // animation was equally wrong there, it just had nothing to spoil. Under
       // the clamp that case now takes the instant branch below and stops
       // clipping the port for 843ms after every toggle.
+      // /code-review fix: the ceiling is probed at most ONCE per animation, not
+      // once per frame. `visibleCap` writes `height: 100000px` and reads
+      // `clientHeight` + `scrollHeight` back, i.e. two forced synchronous
+      // layouts, and the no-movement branch below returns WITHOUT marking a run
+      // — so `running` stayed false and every one of the ~23 observer fires
+      // during a 385ms `Reveal` re-probed. That is ~46 forced layouts of a
+      // 2700px modal subtree per Settings toggle, newly added by the commit
+      // whose whole subject was making that toggle smoother. Settings → General
+      // takes that branch on every fire, so it was the worst case.
+      //
+      // A timestamp rather than a flag, because the instant branch has no
+      // natural end to reset on. The window is the animation's own length, so
+      // the cap can only be reused by fires belonging to the same change; a
+      // scroll or resize mid-animation makes it stale by at most one frame's
+      // worth of clamp, which is invisible. `settle` zeroes it so the next real
+      // change always measures fresh.
       const running = animRef.current;
-      if (!running) capRef.current = heightAnimates(box) ? visibleCap(box) : null;
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      if (!running && now - capAtRef.current > CAP_TTL) {
+        capRef.current = heightAnimates(box) ? visibleCap(box) : null;
+        capAtRef.current = now;
+      }
       const cap = capRef.current;
       const live = running ? null : box.getBoundingClientRect().height;
       const r = clampRange(live == null ? next : live, next, cap);
@@ -921,6 +948,7 @@ export function AutoHeight({ children, watch, style }) {
     // inside the new tab (a font landing, an image sizing) must join THIS run
     // rather than start a second one on top of it.
     capRef.current = cap;
+    capAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
     toRef.current = to;
     animRef.current = true;
     setAnimating(true);
