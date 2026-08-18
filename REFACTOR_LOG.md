@@ -10441,3 +10441,48 @@ This is the same shape as v17.9.0's `time-grid` finding and v17.10.1's own
 ROADMAP correction: **an entry closed by discovering its premise does not hold
 is a result, not a failure to deliver.** Here the entry is not closed — it is
 corrected, with the bar left where it was and the reason written down.
+
+### Commit 12 — the CSP has been blocking the boot script in production
+
+**Files:** `vercel.json`, `tests/csp.test.js`. **Behavioural change:** yes, in
+production — a script that was being refused now runs.
+
+Found while checking whether `worker-src` would permit a service worker. It
+does. But `script-src` pins `index.html`'s inline boot script by SHA-256, and
+the pin had drifted: `vercel.json` carried
+`sha256-Q6OfSa…` while the served script hashes to `sha256-AAYhJC…`. **The
+mismatch is on `main`, so it predates this branch** — the boot script has simply
+not been running in production, silently, for however long.
+
+It costs three things, none of which throw:
+
+- the **no-flash theme script**, so production has been flashing the wrong theme
+  on every load — the exact defect that script exists to prevent;
+- the `data-motion="reduce"` pre-mount stamp;
+- the empty passive **`touchstart` listener** — which per CLAUDE.md is the ONLY
+  reason `:active` press feedback works on iOS at all. So the press-scale
+  v17.8.0 shipped has been dead on the iPhone and iPad this whole time. That is
+  worth holding next to v17.10.1's other finding, that synthetic input cannot
+  measure `:active`: the affordance was unverifiable by tooling *and* switched
+  off in production, and neither fact would surface the other.
+
+**Proven, not computed.** The arithmetic was unambiguous, but this class of
+belief has been wrong here before, so the mechanism was reproduced: a fixture
+page carrying the production `script-src` was served locally and Chrome refused
+its inline script with *"Executing inline script violates the following Content
+Security Policy directive"*, naming the required hash. No production app was
+loaded to establish this.
+
+The durable fix is `tests/csp.test.js`, not the corrected pin. It hashes the
+inline block, asserts `script-src` pins exactly that, asserts no pin matches
+*nothing* (the stale-pin case, which is what actually happened), and — because
+Vite processes `index.html` — asserts the built block still matches the source
+one when `dist/` exists. Written before the fix and watched to fail on the real
+bug first.
+
+**This is the fourth silent-failure guard this version** (`check:style` Rule 6,
+the two stylesheet declaration assertions, and now this), and they share a
+shape: a build that succeeds, a lint that passes, and a browser that quietly
+declines to do the thing. The lesson CLAUDE.md already states for stylesheets —
+*"a stylesheet has no syntax errors, only rules that silently don't exist"* —
+generalises to headers.
