@@ -500,7 +500,12 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         // MagicOS/Chrome. pan-x keeps horizontal timeline scrolling from a block
         // while reserving vertical gestures for the drag.
         touchAction: "pan-x",
-        boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" : "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",   /* @fixed-fill: BLOCK_BG[b.status], ~40 lines up */
+        // v17.10.1: the resting shadow is --shadow-btn-solid (raised, on a
+        // theme-invariant BLOCK_BG fill — exactly what that token is for), so
+        // the old /* @fixed-fill */ marker is gone with the white-inset literal
+        // it was blessing. The DRAG shadow stays a literal: a block lifted under
+        // a finger is a one-off depth, not a member of the scale.
+        boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" /* @shadow */ : "var(--shadow-btn-solid)",
         // v17.0.0: while dragging, the inline transform/zIndex/opacity lift the
         // block and follow the pointer (inline transform beats the hover class).
         ...(dragDy != null ? { transform: "translateY(" + dragDy + "px)", zIndex: 30, opacity: 0.85 } : null),
@@ -768,7 +773,7 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
         color: BLOCK_INK.pending,
         display: "flex", alignItems: "center", boxSizing: "border-box",
         border: g.resh ? "1px dashed rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.2)",
-        boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
+        boxShadow: "var(--shadow-btn-solid)",
         cursor: "pointer",
         // The one deliberate difference from a real block. A reshuffle-only match
         // is turned down further because it can sit over a table that is visibly

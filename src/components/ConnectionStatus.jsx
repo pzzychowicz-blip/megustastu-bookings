@@ -18,6 +18,8 @@
 //   devices    (array)   — v17.3.0: live presence list from usePresence()
 //                          [{key,email,ua,since}] — all connected tabs/devices
 //   myKey      (string)  — v17.3.0: this connection's presence key ("This device")
+//   onReconnect (fn)    — v17.10.1: usePersistence's forceReconnect. Renders a
+//                          "Reconnect now" button, but only while disconnected.
 //
 // v16.2.0 review fix: the anchor side is MEASURED at open time, not guessed
 // from isMobile. The dot's x position depends on header flex-wrap, not on
@@ -52,7 +54,7 @@ function sinceText(ts, offset) {
   return Math.floor(hrs / 24) + "d ago";
 }
 
-export function ConnectionStatus({ connected, hasConnected, userEmail, devices, myKey, onLogout, offset = 0 }) {
+export function ConnectionStatus({ connected, hasConnected, userEmail, devices, myKey, onLogout, onReconnect, offset = 0 }) {
   const [open, setOpen] = useState(false);
   const [alignRight, setAlignRight] = useState(true);
   const wrapRef = useRef(null);
@@ -228,6 +230,30 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                 ? "Realtime Database is connected."
                 : "Lost connection to the Realtime Database. Changes will sync when it reconnects."}
           </div>
+          {/* v17.10.1: the manual half of the reconnect watchdog. The watchdog
+              (usePersistence) already resets the SDK's backoff after 20s of a
+              disconnected foreground page — this is the same lever on demand,
+              so staff have a control instead of the minimise-and-restore ritual
+              they worked out for themselves. Not on a healthy connection —
+              offering "Reconnect" there invites a pointless drop — but yes while
+              `connecting`, which /code-review caught: `connected` starts
+              optimistically TRUE and only goes false after a first handshake, so
+              a device that has NEVER connected is exactly the case where a user
+              stares at a dead app, and it was the one case with neither the
+              button nor the watchdog (which is deliberately a *re*connect
+              watchdog). goOnline() is harmless there and may be the whole fix. It
+              sits under the status line rather than on it, because that row
+              already right-aligns Log out and crowds on a phone. */}
+          {(!connected || connecting) && onReconnect ? (
+            <button
+              type="button"
+              className="mgt-hover-scale"
+              onClick={onReconnect}
+              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "6px 12px", background: BTN.nav, marginBottom: 8 })}
+            >
+              Reconnect now
+            </button>
+          ) : null}
           <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
             <div style={{ fontSize: T.small, marginBottom: 2, color: S.muted }}>Signed in as</div>
             <div style={{ fontSize: T.body, color: S.text, wordBreak: "break-all" }}>

@@ -56,6 +56,8 @@ const CRITICAL_SELECTORS = [
   ".mgt-glyph",                       // floor-plan table hover halo + press dim
   ".mgt-tlghost",                     // the seated ghost's lockstep hover
   ".mgt-group-hover",                 // multi-table group lift
+  ".mgt-ac-row:active",               // the touch tint on card/row/panel surfaces
+  ".mgt-blk:active",                  // the timeline block/ghost press dip
   ".mgt-plan-headrow",                // Plan header grid (has a media fallback)
   ".mgt-detent",                      // TimeAxis snap
   "@media print",                     // DaySheet is print-only; nothing else shows it
@@ -173,5 +175,44 @@ describe("index.html stylesheet", () => {
   it.each(CRITICAL_SELECTORS)("still defines %s", (sel) => {
     const found = preludes(css).some((p) => p.includes(sel));
     expect(found).toBe(true);
+  });
+
+  // v17.10.1 — NOT a CRITICAL_SELECTORS entry, and that is the point. The
+  // obvious guard was to add `[role="button"]` to that list, which would have
+  // passed forever while guarding nothing: the selector already appears in the
+  // press-scale rules, and `"button"` is a substring of the font-family rule.
+  // A list that matches on selectors cannot see a DECLARATION going missing.
+  //
+  // Both halves are asserted because they cover different platforms and either
+  // could be dropped without the other showing it: unprefixed `user-select` is
+  // what Android Chrome reads (the reported bug — a long-press opening the OS
+  // text menu on top of the quick-status popup), `-webkit-touch-callout` is the
+  // iOS property for the same gesture.
+  it("keeps controls opted out of OS text selection", () => {
+    const bodies = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
+      .filter((m) => m[1].includes('[role="button"]'))
+      .map((m) => m[2]);
+    expect(bodies.some((b) => /(^|[^-])user-select:\s*none/.test(b)),
+      "no rule opts controls out of text selection").toBe(true);
+    expect(bodies.some((b) => /-webkit-touch-callout:\s*none/.test(b)),
+      "the iOS half of the control no-select rule is missing").toBe(true);
+  });
+
+  // v17.10.1 — same shape, same reason. Android's default tap highlight is
+  // rgba(51,181,229,0.4) painted as a RECTANGLE over the border box, ignoring
+  // border-radius: a blue rectangle around every pill you touch. The kill lives
+  // on `:root` because the property inherits, and `:root` is far too common a
+  // prelude to guard by name — so, again, assert the DECLARATION.
+  it("keeps the platform tap highlight suppressed", () => {
+    // /code-review: this WAS a whole-sheet search, which could not tell the
+    // difference between the declaration living on `:root` and it being
+    // narrowed onto one selector or buried in `@media print` — in either case
+    // the blue rectangle returns everywhere else while the test still passes.
+    // The fix relies on INHERITANCE from the root, so that is what to assert.
+    const rooted = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
+      .filter((m) => /(^|[\s,])(:root|html)\s*$/.test(m[1].trim()))
+      .map((m) => m[2]);
+    expect(rooted.some((b) => /-webkit-tap-highlight-color:\s*transparent/.test(b)),
+      "Android's blue tap-highlight rectangle is back (no :root/html suppression)").toBe(true);
   });
 });

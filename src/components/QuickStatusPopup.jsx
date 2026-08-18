@@ -46,7 +46,13 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
           border: "1px solid " + S.border,
           boxShadow: "var(--shadow-popover)",
           padding: "18px 24px",
-          minWidth: 240, maxWidth: 320, zIndex: 301
+          minWidth: 240, maxWidth: 320, zIndex: 301,
+          // v17.10.1: the buttons are covered by index.html's control rule, but
+          // the guest name above them is a <div> and this popup is opened by a
+          // HOLD — so on Android the finger that opened it is still down on the
+          // card, and the OS selects whatever is under it. The title is the one
+          // thing here that isn't a control.
+          WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none"
         }}
       >
         <div style={{ fontSize: T.display, fontWeight: FW.bold, color: S.text, marginBottom: 16 }}>

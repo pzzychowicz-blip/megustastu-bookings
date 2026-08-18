@@ -1164,7 +1164,7 @@ export function Toggle({ on, onClick }) {
         cursor: "pointer",
         background: on ? "var(--toggle-on)" : "var(--toggle-off)",
         position: "relative", flexShrink: 0,
-        boxShadow: "inset 0 1px 2px rgba(0,0,0,0.08)",
+        boxShadow: "var(--shadow-well)",
         // v17.8.0 correction: M.move, not M.tap — and `transform` is in the list
         // because an INLINE transition beats .mgt-hover-scale's stylesheet one,
         // so omitting it left this button's hover lift with nothing to ease
@@ -1204,7 +1204,11 @@ export function Kbd({ k }) {
       fontSize: T.body,
       fontWeight: FW.semi,
       color: "var(--text-primary)",
-      boxShadow: "0 1px 2px rgba(0,0,0,0.06), inset 0 -1px 0 rgba(0,0,0,0.08)",
+      // v17.10.1: NOT --shadow-well. A drop PLUS a bottom inset is the physical
+      // keycap look — the shading of a key you press, not a groove — and it is
+      // the only one of its kind. Same category as this atom's monospace font:
+      // a deliberate depiction, exempt from the scale rather than missing from it.
+      boxShadow: "0 1px 2px rgba(0,0,0,0.06), inset 0 -1px 0 rgba(0,0,0,0.08)",   /* @shadow */
       minWidth: 22,
       textAlign: "center",
       boxSizing: "border-box",

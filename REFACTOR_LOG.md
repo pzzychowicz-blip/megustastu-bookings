@@ -9958,3 +9958,734 @@ the base the CAS compares against).
 
 Verified in DEV after the move: joined two phone-less bookings from the name
 dropdown and confirmed one Customers row holding both. 312 tests.
+
+---
+
+## v17.10.1 — the long-press menu, the stuck reconnect, and the last shadow cell
+
+**Date:** 2026-08-18
+**Files:** see each entry.
+**Behavioural change:** yes — a long-press on a control no longer raises the OS
+text menu, a lost connection recovers itself, and 14 controls change depth in
+dark mode. No persisted-data change, no Firebase console step.
+**Verification:** see each entry.
+
+Three defects reported from the floor, plus the one ROADMAP idea that turned out
+to be real work rather than a checker rule. Two of the three were found by using
+the app on the restaurant's own Android tablet, which is the pattern worth
+noting: neither is reproducible on the MacBook, and both had been lived with.
+
+### Commit 1 — a control's label is not selectable text
+
+**Files:** `index.html`, `src/components/QuickStatusPopup.jsx`,
+`tests/stylesheet.test.js`. **Behavioural change:** yes, on touch devices.
+
+Holding a timeline block on the tablet opened the quick-status popup *and*
+Android's text-selection toolbar — Copy / Share / Web search / DeepL, with
+selection handles, sitting across the popup's own "Cancelled" button. The gesture
+worked; it just arrived wearing a system menu.
+
+The mechanism is that the popup opens **under the finger that is still pressed**.
+A long-press is two things at once: our hold timer, and the OS starting a
+selection at the touch point. `TimelineView`'s block already carries
+`user-select: none`, so the OS had nothing to select there — but ~800ms in, the
+popup is what is under the point, and its buttons are ordinary selectable text.
+
+So the rule belongs on controls generally, not on this popup:
+
+```css
+button, [role="button"] {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+```
+
+`user-select` is what Android Chrome reads and `-webkit-touch-callout` is the iOS
+property for the same gesture. **Both are set although only one platform shows
+the bug**: iOS does not raise a callout here today, and nothing in the code was
+preventing it — the report was Android, the fix is neither.
+
+Scoped to controls deliberately. Inputs, textareas and plain divs keep selection,
+which matters more than it looks: `ListView`'s card is a `<div>` and its phone
+number is text staff select and copy to ring a party — the reason v17.10.0 taught
+that card's click handler to stand down while a selection is live. Widening this
+to a container would silently undo that. `SplitMenu` (a 450ms hold on a view
+button) had the identical latent defect and is fixed by the same rule, which is
+the argument for one rule over a third and fourth inline copy —
+`TimelineView` and `ViewSwitcher` already hold two.
+
+`QuickStatusPopup`'s **card** takes the properties inline as well: the guest name
+above the buttons is a `<div>`, and it is under the same finger.
+
+The test for it is **not** a `CRITICAL_SELECTORS` entry, and that is worth
+recording because the entry was written first and was worthless. That list
+asserts `prelude.includes(sel)`: `"button"` is a substring of the existing
+`input, textarea, select, button` font rule, and `[role="button"]` already
+appears in the two press-scale preludes. Either entry would have passed forever
+with the new rule deleted. **A list that matches on SELECTORS cannot see a
+DECLARATION going missing** — the v17.9.0 blind-checker lesson, reached this time
+by walking the live CSSOM and noticing the selector was not as unique as it
+looked. It is a dedicated assertion over the rule BODY instead, checking both
+halves separately, since unprefixed `user-select` and `-webkit-touch-callout`
+serve different platforms and either could be dropped without the other showing
+it. Verified by deleting each and watching it fail.
+
+**Verified on the restaurant's own Android tablet** (adb + CDP against the DEV
+app), A/B by injecting a `user-select: text !important` override to defeat the
+rule and removing it again, twice each. Rule defeated: a long-press on a block
+opens the popup and `getSelection()` returns **`"Cancelled"`** — the exact word
+in the report. Rule active: the popup opens and the selection is empty. In List
+view a long-press on card text still selects it (`user-select: auto`) and does
+not open the edit form, so v17.10.0's selection-aware click guard is intact.
+
+Two things the device found that reading could not. **The first attempt held for
+1300ms and concluded "fixed" from a run where the popup never appeared** — a hold
+past **800ms** is the drag-arm handoff, which dismisses the quick-status *by
+design* (`TimelineView.jsx:322`), so the test was measuring the wrong thing and
+would have passed for the wrong reason. Sampling the state every 350ms
+*through* the press is what showed it: popup at 0.7s, gone by 1.1s. A realistic
+600ms hold is the correct probe. **The second: coordinates cannot be
+hard-coded** — a reload shifted the block 52px and a stale constant produced a
+confident null result. Derive them from `getBoundingClientRect()` on every trial.
+
+With the rule defeated the popup stayed open indefinitely, because Chrome
+entering selection mode cancels the pointer stream and the drag-arm never fires.
+That raised the question of whether **drag-to-another-table had ever worked on
+Android**, and it could not be settled here: a stationary synthetic press does
+not arm the drag in either build. It was booked as a ROADMAP item and then
+**closed the same session by Patryk on the device — drag-and-drop and the hold
+gesture both work correctly on the tablet with this build.** So the selection
+was indeed suppressing the drag-arm, and removing it restored a gesture that had
+been shipping broken on Android since v17.0.0.
+
+The wider lesson is the one the measurement kept teaching all session: **a
+synthetic press is not a finger.** It could not arm the drag, it could not
+produce a text selection on its own, and (commit 7) it does not set `:active` at
+all. The person holding the device settles in one second what an hour of
+instrumentation could not.
+
+### Commit 2 — a stuck Firebase reconnect kicks itself
+
+**File:** `src/hooks/usePersistence.js`. **Behavioural change:** yes — a lost
+connection now recovers without anyone minimising the app.
+
+Reported from the floor: the tablet sometimes sits on "Firebase connection lost"
+indefinitely, and minimising the app and bringing it back fixes it every time.
+That ritual is the diagnosis. Read from the pinned SDK
+(`node_modules/@firebase/database/dist/index.esm.js`):
+
+- `RECONNECT_MAX_DELAY_DEFAULT` is **five minutes** for a web client — the 30s
+  figure next to it is `RECONNECT_MAX_DELAY_FOR_ADMINS`. The delay grows ×1.3
+  per failed attempt.
+- `onRealtimeDisconnect_` sets the delay **straight to that maximum** when the
+  window is hidden at the moment the socket dies, which for a tablet in service
+  is most of the time.
+- It has exactly two reset paths: the browser `online` event, and `onVisible_` —
+  which fires ONLY on a hidden→visible edge, and ONLY when the delay is already
+  exactly at the maximum. **A page that stays visible has no reset path at all.**
+
+So: backgrounded during a blip, delay pinned at 5 minutes; you return while an
+attempt is in flight, so `onVisible_` skips `scheduleConnect_`; that attempt
+fails; the next retry is `Math.random() * 300000` ms and `visible_` is already
+`true`, so nothing will reset it. Minimise-and-restore recreates the one edge the
+SDK listens for.
+
+`goOnline(db)` is the public spelling of `PersistentConnection.resume()`, which
+sets `reconnectDelay_` back to `RECONNECT_MIN_DELAY` and schedules an immediate
+attempt. So the fix is a watchdog on the existing 10s heartbeat — no new timer —
+that calls it after **20s** of a disconnected, foreground page.
+
+Four conditions, each excluding a case where kicking is wrong: not connected;
+the page is **visible** (a hidden page gets the SDK's own reset for free when it
+returns, and waking a backgrounded tablet's radio to retry is the opposite of
+what we want); we have connected **before** (this is a *re*connect watchdog — a
+device that has never handshaken has a different problem, and v17.5.1's load
+watchdog owns reporting it); and past the deadline, measured from the later of
+"went offline" and "last kicked". `offlineSinceRef` is stamped on the way DOWN
+only, so a connection flapping between "no" and "no" cannot push its own
+deadline out.
+
+Kicking when nothing is wrong is harmless: with an attempt already in flight the
+SDK's `!this.realtime_` guard means `resume()` only resets the delay — still the
+useful half, because the *next* failure then retries in 1s rather than minutes.
+
+**Verified on the tablet** (adb + CDP, console captured). Offline with the page
+visible: kicks at t+21.8s, t+44.1s, t+73.7s — the 20s cadence at 10s heartbeat
+granularity. Offline with the page **hidden** for 61s: **zero** kicks. Brought to
+the foreground (via `Page.bringToFront`; an `am start` intent left the tab
+hidden and produced a falsely clean result first time): one kick at t+29.2s.
+Connected: silent. Recovery after the outage was 7.6s, against 6.1s for a control
+build with the watchdog disabled — it does not get in the way.
+
+**What the device disproved, and it matters for whoever tests this next: toggling
+wifi cannot reproduce the stuck state.** A wifi toggle fires the browser
+`offline`/`online` events, and `onOnline_` resets the backoff unconditionally —
+the control build recovered in 6.1s from a 200s outage for exactly that reason.
+The stuck state requires the socket to die while `navigator.onLine` stays
+**true**: an AP that stays associated with no upstream, a captive portal, a NAT
+dropping an idle socket. That is ordinary restaurant wifi, and it is why the
+report comes from the tablet and never from a desk. It is also why the watchdog
+is deliberately **not** gated on `navigator.onLine` — the case it exists for is
+precisely the one where that property lies. Blocking the RTDB host via
+`Network.setBlockedURLs` was tried as a repro and does not work: it does not
+cover WebSocket handshakes. So the mechanism is established from the SDK source
+and the field report; the *watchdog's own behaviour* is what was measured here.
+
+### Commit 3 — "Reconnect now" in the connection popover
+
+**Files:** `src/components/ConnectionStatus.jsx`, `src/App.jsx`.
+**Behavioural change:** yes — one new control, visible only while disconnected.
+
+The watchdog above handles the stuck case on its own, but staff had already
+invented a remedy (minimise, restore) for a state the app gave them no control
+over. This is the same lever — `forceReconnect`, i.e. `goOnline(db)` — offered
+deliberately.
+
+Rendered **only** while disconnected: offering "Reconnect" on a healthy
+connection invites someone to drop a working socket out of curiosity. It sits
+under the status sentence rather than on the status row, because that row
+already right-aligns Log out and wraps on a phone.
+
+**Verified on the tablet:** absent while connected, present once
+`.info/connected` goes false, absent again after recovery; clicking it
+reconnected in 4.4s. Screenshotted on-device to confirm it matches Log out's
+32px/`BTN.nav` treatment.
+
+One testing note, since it cost two runs: the popover is a TOGGLE, so a probe
+that clicks the dot to "open" it will close an already-open one and report the
+button missing. Assert the popover's own state before reading its contents.
+
+### Commit 4 — one token for a raised control on a fill that doesn't flip
+
+**Files:** `index.html` + 10 under `src/`. **Behavioural change:** visual —
+14 controls gain depth in **dark mode**, where they were flat.
+
+`ROADMAP.md` proposed a `check:style` rule for bare `boxShadow` literals, on the
+stated premise that v17.10.0 had tokenised the last of them and the backlog was
+zero. **It was not**: ~20 remained. Counting the DISTINCT VALUES rather than the
+sites (the v17.9.0 spacing lesson) showed why — **three different values all
+meant "a raised control on a theme-invariant fill"**: `0 2px 6px/0.12` ×11,
+`0 1px 4px/0.1` ×2 (the header Walk-in / + New), `0 1px 3px/0.15` ×1 (WeekView's
+segmented toggle). One intent, three spellings, differences nobody chose.
+
+That is a real gap in the scale, not untidiness. `--shadow-btn` is
+raised-on-a-flipping-fill; `--shadow-flat` is not-raised (and its own comment
+already says "anything that should read as raised takes `--shadow-btn`" — which
+is right for the elements it was written about, all of which sit on fills that
+flip). Raised on a fill that does **not** flip had no token.
+
+**`--shadow-btn-solid` is the only `--shadow-*` whose inset is the same in both
+themes, and that is the whole content of it.** The highlight belongs to the
+element's own fill — `BLOCK_BG`, `--app-*-solid`, `BTN.*` — which is deliberately
+theme-invariant, so tuning the highlight per theme would be wrong on it (the
+v17.8.0 white-inset-over-fixed-fill rule). The **drop** still deepens
+0.12 → 0.4, because it falls on the page and the page does flip. The literals
+never made that distinction, so a modal footer button sat at 0.12 in dark beside
+siblings at 0.35. Correcting it is the one visible change here.
+
+Three more tokens fall out of the same sweep. `--shadow-btn-accent` /
+`--shadow-btn-success` are a primary button glowing in its **own hue** — not
+elevation, so uniquely they are identical in both themes; they unify four
+literals that carried two different alphas (0.25 / 0.2) for one effect.
+`--shadow-well` is the inverse of `--shadow-btn-solid` — a groove — and its two
+sites (the Toggle track, HistoryPopup's panel) were both theme-**blind**: a
+0.06–0.08 black inset is close to invisible on a dark surface.
+
+**Two sites stay literals, marked `/* @shadow */` at the site** per the house
+convention: TimelineView's drag shadow (a block lifted under a finger is a
+one-off depth) and `Kbd`. `Kbd` was scoped into this sweep as a third "inset
+well" and is not one — a drop *plus* a **bottom** inset is the physical keycap
+look, the same category as that atom's deliberate monospace font: exempt from the
+scale, not missing from it. TimelineView's `/* @fixed-fill */` marker went with
+the literal it was blessing.
+
+**The glow count was wrong by one in my own survey, and the reason is the
+recurring one.** `WalkinForm`'s Seat button spells its ternary across three
+lines, so a `grep -o 'boxShadow[^,]*"[^"]*"'` over the values walked straight
+past it — the same shape as `StatusToasts`' `toastShadow` hiding behind a `const`
+in v17.10.0, and as an HTML entity hiding from a glyph scan in v17.9.0. It was
+caught by re-grepping for what *remained* after the sweep rather than trusting
+the plan's count. Do that last pass every time.
+
+**Verified** by reading the computed tokens out of the live CSSOM in both themes
+(`?theme=light` / `?theme=dark`): the asymmetry is real — `--shadow-btn-solid`
+resolves 0.12→0.4 on the drop with the inset held at 0.15, the glows are
+identical in both. Spot-checked the computed `boxShadow` on the header pair and
+the booking form's Save. 313 tests, lint clean, `check:style` clean.
+
+### Commit 5 — check:style: bare drop-shadow literals
+
+**Files:** `scripts/check-style-invariants.mjs`, `tests/style-check.test.js`,
+`ROADMAP.md`. **Behavioural change:** none — a CI gate.
+
+Rule 6 closes the ROADMAP idea, on the corrected premise from commit 4. The
+v17.8.0 header note here said plain drop-shadow literals were "a consistency
+nit, not a bug class" and that a rule would be noisy. **Both halves have now
+failed**: they were three spellings of one intent, none of which deepened for
+dark mode, which is a bug class (a black shadow cannot invert out from under
+itself, but it can be invisible on the wrong ground); and the backlog is zero
+after commit 4, so this guards the next one rather than nagging.
+
+Two conditions, and both are lessons from sweeps that **missed** sites. It
+matches the **value's shape anywhere on the line**, not `boxShadow:` — v17.10.0's
+sweep grepped the property name and walked past `StatusToasts`' literal because
+it sat behind a `const`. And the blur must be **non-zero**, because `0 0 0 3px …`
+is a ring or a focus glow (the connection dot, the selection rings), not a member
+of this scale. `/* @shadow */` marks a one-off; Rule 0 now polices that marker's
+placement alongside the other two.
+
+**The rule was wrong when first written, and only running it showed that.** It
+printed `OK` against the repo — and against a fixture it flagged
+`0 0 0 2px rgba(0,122,255,0.4)`, a ring, because the pattern **slides**: it
+matched starting at the second `0` and read `0 0 2px rgba(`, so the non-zero-blur
+condition it was built around excluded nothing. The fix anchors a shadow value to
+a quote, to `inset`, or to the comma separating it from the previous shadow in a
+list. This is the v17.9.0 rule doing exactly its job: reading the script cannot
+catch this, running it against known-bad input can. Six fixtures in
+`tests/style-check.test.js`, both directions — bare literal, literal behind a
+`const`, inset groove, rings left alone, token and marked one-off left alone,
+misplaced marker.
+
+**ROADMAP:** the Ideas entry is deleted, since it shipped. One new entry replaces
+it, and it is a real finding rather than tidiness — see commit 1's closing note:
+with the OS selection live, Chrome cancels the pointer stream and the 800ms
+drag-arm never fires, so **drag-a-booking-to-another-table may never have worked
+on Android at all**. Not demonstrated either way here, because a stationary
+synthetic press does not arm the drag in either build. It needs a real
+multi-point swipe, and if it is broken it is its own fix.
+
+### Commit 6 — CLAUDE.md: the shadow scale as a 2×2, and the reconnect backoff
+
+**File:** `CLAUDE.md`. **Behavioural change:** none.
+
+The shadow guidance had grown into a list of tokens with a rule attached to each,
+which is why v17.10.0 could add `--shadow-flat` and still leave a cell empty. It
+is written as a **2×2** now — raised or not, fill flips or not — with the
+floating / card / input cases named beside it, so the next shadow is a lookup
+rather than a judgement.
+
+Two stale figures corrected, both of the "a number recorded once and never
+re-measured" kind this file keeps warning about: the white-inset literal count
+(22 → 2) and the test count (259 → 319). The v17.8.0 claim that plain drop-shadow
+literals are "a consistency nit, not a bug class" is left in place and marked as
+having failed, rather than deleted — the reasoning was explicit and knowing why
+it was wrong is worth more than a clean paragraph.
+
+New Gotchas row for the five-minute reconnect backoff, carrying the part that is
+hardest to rediscover: **toggling wifi cannot reproduce the stuck state**, with
+the measured 6.1s recovery that proves it, and the consequence that the watchdog
+must not be gated on `navigator.onLine`.
+
+**Verification for the whole version.** `npm run build` clean (main bundle
+198.45 kB gz, unchanged — the shadow sweep is a wash and the watchdog is a few
+lines), 319 tests, lint 0 errors, `check:style` clean, all re-run per commit.
+On-device work is recorded per commit above; the shadow tokens were read back out
+of the live CSSOM in both themes rather than trusted from the source.
+
+### Commit 7 — the blue rectangle: Android's tap highlight, and what replaces it
+
+**Files:** `index.html`, `tests/stylesheet.test.js`. **Behavioural change:** yes,
+on touch.
+
+Reported: tapping anything on the tablet flashes a blue rectangle. It is
+`-webkit-tap-highlight-color`, sitting at Chrome's Android default
+`rgba(51, 181, 229, 0.4)` — Holo blue at 40% — which the app had never
+overridden. Confirmed on-device two ways: the computed value, and a screenshot
+taken 250ms into a press with the colour temporarily forced to opaque red. **The
+highlight is painted as a hard RECTANGLE over the border box, ignoring
+`border-radius`** — which is why it reads so badly on a UI made of pills, and
+why "rectangular" was the useful word in the report.
+
+It is also redundant. v17.8.0 gave every control its own press-scale dip, so the
+platform highlight is a second, uglier answer to a question the app already
+answers in its own language. Suppressed on `:root`, since the property inherits.
+
+**The interesting half is what had to replace it.** Two surfaces staff tap
+constantly are not `<button>`s and therefore had no press feedback of their own —
+the platform highlight was all they had. They are handled differently, and the
+difference is the v17.9.1 rule:
+
+- **The List card** (and every `.mgt-ac-row` surface — Summary, autocomplete
+  rows, the notification strip's lid) gets a **tint on `:active`**, the touch
+  equivalent of its existing hover tint. It could not be the press-scale:
+  `:active` matches ANCESTORS of the pressed element, so a scale here would
+  shrink the card under the very button you were aiming at — the v17.9.1 click
+  bug, arriving by a new route. `.mgt-nopress` is deliberately not excluded,
+  because that opt-out means "no transform" (its other rules are both transform
+  rules) and the strip's lid carries it precisely for being one of these
+  containers.
+- **The timeline block and the waitlist ghost** are leaf controls, so they take
+  the dip — targeted as `.mgt-blk`, NOT by widening the rule to
+  `.mgt-hover-scale`, which several containers of controls also carry
+  (`WaitlistPanel`'s row, `CustomersSettings`' row). Their inline `TL_MOVE`
+  transition already lists `transform`, so it eases; a drag's inline transform
+  still wins, as documented.
+
+**A methodology correction worth more than the fix.** Every attempt to measure
+`:active` on the device read `false` — on the new rules AND on a plain button,
+which would have meant v17.8.0's press-scale had never worked on this tablet.
+It had. **Synthetic input does not set the UA `:active` state**: not
+`element.dispatchEvent`, not CDP `Input.dispatchTouchEvent`, not CDP
+`Input.dispatchMouseEvent`, not `adb shell input`. The measurement was of the
+tooling. `CSS.forcePseudoState` is the instrument that answers the actual
+question — "if this element were `:active`, does my rule apply?" — and under it
+all three rules resolve: button `scale(0.966)`, block `scale(0.960)`, card
+`rgba(255,255,255,0.45)` → `rgba(255,255,255,0.984)`. The button rule behaving
+identically is the control that makes the other two trustworthy. **Never conclude
+a CSS state rule is dead from synthetic input.**
+
+Guarded in `tests/stylesheet.test.js`: `.mgt-ac-row:active` and `.mgt-blk:active`
+join `CRITICAL_SELECTORS`, and the tap-highlight suppression gets a DECLARATION
+assertion (it lives on `:root`, a prelude far too common to guard by name — the
+same reasoning as commit 1's). All three verified to fail when removed.
+
+### Commit 9 — CLAUDE.md: the tap highlight, and a measurement trap
+
+**File:** `CLAUDE.md`. **Behavioural change:** none.
+
+The press-feedback section gains the platform-highlight suppression and, more
+usefully, **which of the two affordances a surface gets and why** — the v17.9.1
+container-vs-control rule, restated for `:active`, with the reason a scale on a
+container is a bug (`:active` matches ancestors).
+
+New Gotchas row for the measurement trap, because it cost most of an hour and
+would cost it again: synthetic input does not set the UA `:active` state, by any
+mechanism available here, so a correct rule reads as dead. `CSS.forcePseudoState`
+is the instrument, and forcing the same state on a control that already works is
+what makes the reading trustworthy.
+
+### Commit 10 — /code-review round
+
+Eight findings, all fixed. Five are worth carrying forward.
+
+**The watchdog had no backoff of its own.** Fixing a stuck reconnect by kicking
+every 20s forever replaces the SDK's *bounded* exponential backoff with an
+*unbounded* flat poll — ~120 attempts per device per hour for as long as an
+outage lasts, which is precisely the load backoff exists to prevent. The spacing
+now doubles to a 2-minute ceiling and resets on connect (and on a manual tap,
+which is a fresh signal). The short outage still recovers in ~20s, which was the
+reported bug; only the long tail changed. **A fix for a fast case has to be
+checked against the slow one.**
+
+**The block press dip repeated the v17.9.1 bug, in the same commit that avoided
+it.** `.mgt-blk:active` scales the timeline block, which CONTAINS the Assign
+handle; `:active` matches ancestors, so on a **mouse** the handle slid out from
+under the cursor between mousedown and mouseup and `click` resolved to the block
+instead. The `.mgt-ac-row` comment eight lines above states this exact reasoning
+— written, applied to one rule, and not to the other. It is scoped to coarse
+pointers now, where implicit touch capture makes it harmless and where it was
+the only place it was ever needed.
+
+**"Reconnect now" was invisible in the one state that needs it most.** Gated on
+`!connected`, but `connected` starts optimistically true and only goes false
+after a first handshake — so a device that has NEVER connected showed
+"Connecting…" with no action, while the watchdog also stood down by design. That
+is the v17.5.1 never-connected class of bug, recurring one layer up.
+
+**Rule 6 could not see three of the forms it exists to catch** — `var()`, named
+colours, decimal px — so the checker added *in this version* to stop bare shadow
+literals shipped with the blind spot it was written about. Widened, with a
+fixture per form plus a decoy proving the new bare-identifier branch does not
+reach into `padding`/`transition`.
+
+**The tap-highlight guard could not see the rule being narrowed.** A whole-sheet
+regex passes whether the declaration is on `:root` or on one selector — but the
+fix depends on INHERITANCE from the root, so narrowing it silently restores the
+blue rectangle everywhere else. Scoped to a `:root`/`html` prelude and verified
+by narrowing it and watching the test fail.
+
+Also: a dead `typeof document !== "undefined"` guard removed (this hook calls
+`document.addEventListener` unguarded twenty lines below), the watchdog's
+`console.warn` reduced to one line per outage rather than one per kick, and
+`.mgt-blk:active` given the `.mgt-nopress` opt-out every other press rule has.
+
+**Verified after the fixes:** 328 tests, lint 0 errors, `check:style` clean,
+build clean. On the tablet (coarse pointer) the block still dips — 0.971
+mid-transition under `CSS.forcePseudoState` — and the tap highlight is still
+transparent; on the desktop the coarse media query does not match, the
+`.mgt-blk:active` rule exists only inside it and has no top-level copy, so the
+mouse path is provably gone.
+
+### Commit 11 — the iOS re-test the ROADMAP asked for, and why it decides nothing
+
+**File:** `ROADMAP.md`. **Behavioural change:** none.
+
+The Deferred PWA entry had carried a precondition since v17.5.1: *"Before any
+PWA work: re-test on iOS now that `forceWebSockets()` is deployed. The original
+outage may simply not recur."* Patryk ran it on his iPhone against PROD
+(v17.10.0) on 2026-08-18: bookings loaded normally, `getRegistrations()` → **0**,
+`controller: false`, `firebase:previous_websocket_failure` → **null**.
+
+**Three preconditions confirmed.** The v17.4.1 kill switch demonstrably worked —
+no worker registered or controlling — which was condition-zero for ever shipping
+another one and is now evidenced rather than assumed. PROD is healthy on iOS.
+That device holds no cached websocket-failure flag.
+
+**And the test cannot answer the question it was written to answer, which is the
+part worth recording.** The two candidate causes of the v17.4.0 freeze were the
+service worker and the CSP blocking Firebase's JSONP long-poll fallback on a
+device carrying that flag. With the flag absent *and* v17.5.1's
+`forceWebSockets()` making the JSONP transport unreachable regardless, the CSP
+theory predicts a healthy load — and so does "the worker was at fault and it is
+gone". **A healthy load is predicted by both hypotheses, so observing one
+discriminates nothing.** The entry now says so explicitly, so the next person
+does not run the same check and read a green result as an exoneration.
+
+What v17.5.1 genuinely changed is narrower than the entry implied: the CSP
+mechanism can no longer recur *at all*. The worker's innocence is still
+unproven, so conditions 1–3 stand in full, and the reason they cannot be shortcut
+is structural — **a service worker cannot register over a LAN IP** (insecure
+context), so it can never be exercised against the local dev server. A real test
+needs an HTTPS deploy and a physical device.
+
+This is the same shape as v17.9.0's `time-grid` finding and v17.10.1's own
+ROADMAP correction: **an entry closed by discovering its premise does not hold
+is a result, not a failure to deliver.** Here the entry is not closed — it is
+corrected, with the bar left where it was and the reason written down.
+
+### Commit 12 — the CSP has been blocking the boot script in production
+
+**Files:** `vercel.json`, `tests/csp.test.js`. **Behavioural change:** yes, in
+production — a script that was being refused now runs.
+
+Found while checking whether `worker-src` would permit a service worker. It
+does. But `script-src` pins `index.html`'s inline boot script by SHA-256, and
+the pin had drifted: `vercel.json` carried
+`sha256-Q6OfSa…` while the served script hashes to `sha256-AAYhJC…`. **The
+mismatch is on `main`, so it predates this branch** — the boot script has simply
+not been running in production, silently, for however long.
+
+It costs three things, none of which throw:
+
+- the **no-flash theme script**, so production has been flashing the wrong theme
+  on every load — the exact defect that script exists to prevent;
+- the `data-motion="reduce"` pre-mount stamp;
+- the empty passive **`touchstart` listener** — which per CLAUDE.md is the ONLY
+  reason `:active` press feedback works on iOS at all. So the press-scale
+  v17.8.0 shipped has been dead on the iPhone and iPad this whole time. That is
+  worth holding next to v17.10.1's other finding, that synthetic input cannot
+  measure `:active`: the affordance was unverifiable by tooling *and* switched
+  off in production, and neither fact would surface the other.
+
+**Proven, not computed.** The arithmetic was unambiguous, but this class of
+belief has been wrong here before, so the mechanism was reproduced: a fixture
+page carrying the production `script-src` was served locally and Chrome refused
+its inline script with *"Executing inline script violates the following Content
+Security Policy directive"*, naming the required hash. No production app was
+loaded to establish this.
+
+The durable fix is `tests/csp.test.js`, not the corrected pin. It hashes the
+inline block, asserts `script-src` pins exactly that, asserts no pin matches
+*nothing* (the stale-pin case, which is what actually happened), and — because
+Vite processes `index.html` — asserts the built block still matches the source
+one when `dist/` exists. Written before the fix and watched to fail on the real
+bug first.
+
+**This is the fourth silent-failure guard this version** (`check:style` Rule 6,
+the two stylesheet declaration assertions, and now this), and they share a
+shape: a build that succeeds, a lint that passes, and a browser that quietly
+declines to do the thing. The lesson CLAUDE.md already states for stylesheets —
+*"a stylesheet has no syntax errors, only rules that silently don't exist"* —
+generalises to headers.
+
+### Commit 13 — a failed boot now says so
+
+**Files:** `index.html`, `vercel.json`. **Behavioural change:** yes — a blank app
+becomes an actionable screen.
+
+Found by testing the offline shell on the tablet with the dev server stopped:
+the cached HTML was served, the bundle was not there, React never mounted, and
+the screen stayed **white**. No message, no explanation, no way out. That is
+within touching distance of what staff reported in v17.4.0 — *"it just sits
+there"* — and it is **not** a service-worker problem. A bad deploy, a
+CSP-blocked bundle (which, as commit 12 found, had already happened here), or a
+dead network at the wrong moment all land in exactly the same place.
+
+So the watchdog does not watch the worker. It watches the only thing that
+matters — whether the app rendered — and offers the two things that fix it:
+reload, and reset the offline copy (`?sw=off`, commit 14). 10s is well past a
+cold start on a slow restaurant connection, and a late mount removes the notice
+again, so it cannot sit on top of a working app.
+
+It lives in the boot script rather than in React, for the obvious reason: React
+is the thing that failed. And its handlers are `addEventListener`, not `onclick`
+attributes — `script-src` carries no `'unsafe-inline'`, which is the entire
+point of the hash, so an inline handler would be blocked exactly like commit
+12's script was.
+
+**Verified on the tablet**, both directions: with the server up the app mounts
+and the notice never appears; with the server stopped the notice renders and
+screenshots correctly, with working Try again / Reset offline copy buttons.
+
+### Commit 14 — the offline shell returns, on terms it can be trusted on
+
+**Files:** `public/sw.js` (rewritten), `src/lib/serviceWorker.js` (new),
+`src/App.jsx`, `src/components/Settings.jsx`, `index.html`, `vercel.json`.
+**Behavioural change:** yes — the app caches itself and opens without a network.
+
+v17.4.0 shipped an offline shell; it froze the app at "⟳ Loading bookings…" on
+iOS and was withdrawn in v17.4.1 with root cause **unestablished**. v17.10.1
+establishes it, and the deciding fact came from Patryk, not from the code: the
+freeze happened **in iOS Chrome as well as in a home-screen shortcut**. A
+service worker *cannot run in iOS Chrome at all* — third-party iOS browsers are
+WKWebView-based and only expose `navigator.serviceWorker` under App-Bound
+Domains, which a general-purpose browser cannot use. So the identical symptom
+appeared in a context where the worker could not exist. One cause explaining
+both contexts beats two, and the CSP/JSONP theory explains both — which
+v17.5.1's `forceWebSockets()` has already fixed. **The worker was very probably
+innocent.**
+
+That is why it comes back. What follows is why it comes back *safely*.
+
+**It is not near the data path.** `respondWith` is called for exactly two kinds
+of request, both same-origin GET: navigations (**network-first**, cache only as
+a fallback) and built assets under `/assets/` plus the icons (**cache-first**,
+because Vite content-hashes those filenames, so a hashed URL's bytes can never
+be stale). Everything else falls through with no `respondWith` at all — which
+explicitly includes every Firebase request, dropped by the first line of the
+handler as cross-origin. Network-first on navigation is the load-bearing half:
+an online device always gets fresh HTML, so this worker **cannot pin the app to
+a stale build**.
+
+**It only installs where the app demonstrably works.** Registration is gated on
+`bookingsReady` — the first Firebase snapshot having landed. A build that cannot
+load its data therefore can never persist itself into a cache and serve itself
+back, which is the precise shape of the v17.4.0 failure. Disabling is
+deliberately *not* gated the same way: turning it off must work immediately, in
+any state.
+
+**It has two independent ways out, both proven on the device.** `?sw=off` runs
+in the boot script, before React, so it works on a frozen app — the recovery
+v17.4.0 did not have. And the kill switch: shipping the v17.4.1 worker at the
+same URL again. Both were exercised on the restaurant's own tablet.
+
+**No `skipWaiting`** on the caching worker: a new version waits and takes over
+on the next navigation, so nothing swaps under a shift in progress. The kill
+switch keeps its `skipWaiting`, because there immediacy is the entire point.
+
+The toggle is **per-device localStorage, default ON**, and deliberately not
+synced to `settings/users/{uid}`: clearing site data is the last-resort escape
+from a bad worker, and a synced flag would come straight back down and re-enable
+the thing the user just escaped.
+
+**Verified end to end on the restaurant's Android tablet** (`adb reverse` makes
+`http://localhost:5174` a *secure context*, so a worker installs there exactly
+as it would in production — that is the test rig the ROADMAP said did not
+exist): registers only after boot; caches `/`, the icons and `/assets/*`;
+serves a second `/assets/` fetch from cache; **caches zero Firebase or
+googleapis URLs**; `?sw=off` takes 1 registration + 1 cache to 0 and 0 and stays
+off across reloads; the kill switch replaces a live worker and clears its cache
+within one update cycle; the app keeps its 15 bookings throughout.
+
+**What is NOT verified, stated plainly.** The production offline boot — cached
+HTML *plus* cached hashed bundle — cannot be exercised here: in dev the modules
+are not under `/assets/`, and a production build would point at PROD Firebase,
+which this environment must never load. The reasoning that it works is sound
+(HTML and its assets are cached in the same load, so the pair is consistent),
+and commit 13's boot watchdog exists precisely because that reasoning is not a
+test. **ROADMAP condition 3 — one device, in service, for a full shift — is
+still outstanding and is Patryk's to run.**
+
+### Commit 15 — CLAUDE.md + ROADMAP: the offline shell, documented
+
+**Files:** `CLAUDE.md`, `ROADMAP.md`. **Behavioural change:** none.
+
+A new architecture section states the four properties that make the worker safe
+and marks them as load-bearing, because the next person to touch it will be
+tempted by exactly the shortcuts they forbid — precaching (which would put the
+worker back near the build), `skipWaiting` (which would swap it under a shift),
+and caching a Firebase response (which would put it in the data path).
+
+New Gotchas row for the CSP hash, since commit 12 proved it is a live trap and
+this version edited that script twice more. It records both halves: the pin must
+be regenerated, and inline `onclick=` handlers are blocked by the same directive
+— which is why the boot watchdog uses `addEventListener`.
+
+`ROADMAP.md`'s PWA entry is **rewritten rather than deleted**. The feature
+shipped, but two things genuinely remain and neither is code: the production
+offline boot is unverified (for reasons the entry states), and condition 3 — one
+device, in service, a full shift — is Patryk's to run. The entry now reads as a
+deployment checklist with the recovery steps beside it, rather than as a design
+backlog.
+
+### Commit 16 — /code-review round on the offline shell
+
+Seven findings, all fixed. Three are worth carrying.
+
+**The recovery did not recover.** `?sw=off` unregistered the workers and dropped
+the caches, then left you looking at the same page — which on a frozen app is
+the same frozen app, because the page you run it on was already claimed by the
+old worker. The boot watchdog's "Reset offline copy" button therefore rendered
+the broken screen a second time, reading as *"the fix did nothing"*. It now
+awaits the unregister/delete promises and `location.replace()`s to the clean
+path: visible proof, and it cannot loop, because the reloaded URL no longer
+matches the branch. **A recovery path that produces no visible change is
+indistinguishable from a broken one** — verified on the tablet: 1 registration
++ 1 cache → 0 and 0, URL self-cleaned, app back with its 15 bookings.
+
+**`cache.put()` was fire-and-forget.** `respondWith` resolves as soon as the
+response is returned and the browser may then kill an idle worker, abandoning a
+put still in flight — so the shell would intermittently never land, in a way
+that passes every manual test and fails the one night it matters. Both call
+sites now hand the write to `event.waitUntil()`.
+
+**The handler for a broken app left a timer running on it.** The watchdog's
+500ms poll only cleared when React mounted, which in its own failure case never
+happens — so a dead device polled twice a second forever. Bounded to two
+minutes.
+
+Also: `unregisterAll()` deleted *every* cache on the origin rather than the one
+it owns (harmless only while nothing else creates one, and a trap for whatever
+does next); `ASSET_RE`'s `icon` branch was an unanchored prefix that would have
+made any future `/icon…` path cache-first, which is only safe for immutable
+names; `applyServiceWorker` is serialised through a promise queue so a rapid
+toggle cannot leave a register and an unregister racing; and the state setter
+`setSwEnabled_` — one underscore from the localStorage writer `setSwEnabled`,
+two lines apart — is now `setSwEnabledState`.
+
+**Re-verified on the tablet after the fixes:** registers, caches `/` plus the
+icons and manifest, **zero Firebase or googleapis URLs cached**, 15 bookings
+intact. 332 tests, lint clean, `check:style` clean.
+
+### Commit 17 — /code-review round 2, and the bug it found in round 1's fix
+
+Seven findings, all fixed — and the test written for one of them immediately
+caught a **regression introduced by the previous review round**.
+
+**`ASSET_RE` had stopped matching the app bundle.** Round 1 anchored the icon
+names to stop `|icon` over-matching, and folded `assets/` into the same
+alternation behind a shared `(\?|$)` terminator — which silently required the
+path to *end* at `assets/`. So `/assets/index-abc123.js`, the entire application,
+was no longer cached, and the offline shell cached nothing but its icons. **It
+survived a device re-test because the dev server has no `/assets/` directory at
+all** — I re-ran the caching check after that fix, saw icons and `/` in the
+cache, and read it as a pass. `assets/` is a PREFIX and the icon names are
+EXACT; they cannot share a terminator. Now proven both ways on the tablet, with
+a bundle-shaped file placed under `/assets/`.
+
+That is the whole argument for the test file this round adds. The worker had
+none — the highest-consequence code in the version, guarded only by a manual
+device run that had already missed something. `tests/service-worker.test.js`
+rebuilds `ASSET_RE` *from the worker's own source* (so it cannot drift by
+copying), checks both directions of the routing predicate, and asserts the four
+safety properties that fail **silently** if removed: no `skipWaiting` call,
+cross-origin dropped on the first line, a bounded navigation timeout, and every
+cache write inside `waitUntil`. It also pins `CACHE` against the app's
+`SW_CACHE` — two hand-copied strings in different files, where bumping one
+leaves "Work offline: off" unregistering the worker and stranding its cache.
+
+**Network-first was network-forever.** `fetch` only rejects when the browser
+gives up, which on a hung connection — an AP associated with no upstream, the
+exact condition this version's reconnect watchdog exists for — is 30s or more,
+with the cached shell sitting unused. The 10s boot watchdog would fire over a
+page that was still legitimately loading, teaching staff to distrust the
+recovery screen. The network now gets **3s** to win; the losing fetch is not
+aborted but left to refresh the cache in the background.
+
+Also: `activate`'s delete-all-caches is now documented as deliberate (it is what
+cleans a v17.4.0 leftover off a device that never saw the v17.4.1 kill switch —
+"do not fix it to match `unregisterAll`"); the offline page's inline `onclick`
+became `addEventListener`, matching the boot watchdog and its CSP reasoning;
+`applyServiceWorker` returns the real outcome while only the queue swallows
+failures; and `csp.test.js`'s dist comparison no longer silently skips.
+
+**355 tests.**

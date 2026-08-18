@@ -29,7 +29,7 @@ src/
 ├── App.jsx                          orchestration layer (~2360 lines; v17.3.3–.5 de-monolith: keyboard → useKeyboardShortcuts, toasts/banners → StatusToasts/AppBanners, and doSave split IN-FILE into doSaveEdit/doSaveNew + a validating doSave() orchestrator — bodies verbatim, still closures inside BookingApp)
 ├── firebase.js                      DEV/PROD env switch (import.meta.env.DEV) — DO NOT bypass the split; v17.5.1 also calls `forceWebSockets()` BEFORE `getDatabase()` (must precede it — the SDK asserts transports are chosen before the first Database instance). Do not remove: the long-poll fallback it disables is JSONP, which our CSP blocks, and one cached WebSocket failure would otherwise brick a device permanently
 ├── hooks/
-│   ├── usePersistence.js            Firebase + write-guards (loaded/empty + v15.2.0 freshness-resync gate + v16.0.0 wake-race fix: a gap trip resets isConnectedRef so resync waits for a FRESH .info/connected) + v15.5.0 per-booking-node diff-write (+ v16.0.0 baseUpdatedAt CAS + StrictMode patch-dedupe; blocks via revGuard) + lazy array→keyed migration + auto-extend + auto-complete-after-close (v15.1.0) + v17.3.0 `bookingsReady` state (false until the FIRST bookings snapshot lands — drives App's "⟳ Loading bookings…" floating toast)
+│   ├── usePersistence.js            v17.10.1 reconnect watchdog (`goOnline(db)` after 20s of a disconnected FOREGROUND page, on the existing 10s heartbeat — see the Gotchas row on the 5-minute backoff; `forceReconnect` is also exported for the popover's "Reconnect now") + Firebase + write-guards (loaded/empty + v15.2.0 freshness-resync gate + v16.0.0 wake-race fix: a gap trip resets isConnectedRef so resync waits for a FRESH .info/connected) + v15.5.0 per-booking-node diff-write (+ v16.0.0 baseUpdatedAt CAS + StrictMode patch-dedupe; blocks via revGuard) + lazy array→keyed migration + auto-extend + auto-complete-after-close (v15.1.0) + v17.3.0 `bookingsReady` state (false until the FIRST bookings snapshot lands — drives App's "⟳ Loading bookings…" floating toast)
 │   ├── usePresence.js               v17.3.0 — real-time device presence for the connection-dot popover. Subscribes to .info/connected → on connect pushes ONE ephemeral child `presence/{pushKey}` {email, ua (deviceLabel from userAgent), since:serverTimestamp} with onDisconnect().remove() (self-cleans on tab-close/sleep/drop); subscribes to `presence` → returns {devices[], myKey, offset}. **v17.8.0: onDisconnect alone leaks.** It arms ONE fire-once server op; if the socket drops between arming it and the `set()` landing, the server fires the (empty) removal and the SDK then REPLAYS the queued `set()` on reconnect — writing a child with no onDisconnect, i.e. immortal. Reordering the calls only moves the window. So a live connection re-proves itself with a 45s `lastSeen` heartbeat, a child counts as connected only inside STALE_MS (150s), and children past PRUNE_MS (10min) are deleted. **The staleness filter is enforced on READ**, so a pre-existing leak is hidden the moment the code runs, with no write needing to succeed; deletion is 4× more conservative because hiding is reversible and deleting isn't. The prune is ARMED on connect and CONSUMED by the next `presence` snapshot — it cannot run in the `.info/connected` handler, which resolves before the first snapshot exists (the first version did, and never fired). A pre-v17.8.0 child has no `lastSeen`, so the filter falls back to `since`. `.info/serverTimeOffset` is subscribed because the whole model compares a serverTimestamp to local time. EXEMPT from the CAS/revGuard rule (ephemeral, per-connection; the prune touches other keys but only to delete already-dead ones, which is idempotent); `presence` inherits the top-level .write:auth!=null with NO .validate, so NO Firebase console step
 │   ├── useReminders.jsx             reminder state + listeners + banner JSX — the ONLY hook that returns JSX, which is why the v14.2.x token sweep of `src/components` never saw its banner (themed at last in v17.8.0; needed a new `--app-success-solid` token) (v16.0.0: ref-mirror saves — the set()-in-updater shape is GONE — + revGuard CAS writes; v17.8.0 owns `reminderBaseline`/`reminderDirty` for the unsaved-changes guard, diffed via a local `flatReminder()`)
 │   ├── useNowMins.js                15s clock tick
@@ -76,12 +76,12 @@ src/
 │   ├── FloorGlyphs.jsx              v17.1.0 — chairPositions/TableGlyph/DoorGlyph extracted from FloorPlanEditor (multi-export geometry unit) so PlanView (main chunk) shares the shapes WITHOUT pulling the lazy editor into the startup bundle
 │   ├── SettingsChrome.jsx           v17.1.0 — the LIGHT Settings exports needed eagerly: SETTINGS_TABS (still the ONE tab list — App ←/→ nav + TabBar) + CogIcon, which v17.9.0 moved into Icons.jsx and this file now RE-EXPORTS. Lets Settings.jsx lazy-load; Settings.jsx re-exports both for back-compat
 │   ├── TimeAxis.jsx                 v17.5.0 — the Plan view's time scrubber: a **tape-measure ruler that scrolls under a FIXED centre marker** (replaced the `<input type=range>`, then the first attempt's row of tappable blocks, which read as a segmented control). Drag/scroll → whatever is under the centre is selected, snapping to 15 min on idle; tapping anywhere scrolls that time to centre. Mirrored ticks top+bottom with hour labels between (the two edges are what make it read as a tape), occupancy heat-tint per quarter, full-height now marker, and a `mgt-detent` squash replayed via `key={selected}`. Spans OPEN…**GRID_CLOSE** = TimelineView's exact range. **`padding-inline: 50%` on the scroller** lets the ends reach the centre AND makes the maths fall out: the track position under the marker is exactly `scrollLeft` (verified live). Scrolling is cheap because React re-renders only when the selected QUARTER changes — a per-pixel update would re-run PlanView's occupancy scan and repaint the floor SVG. NOT memo'd on purpose: it reads live bindings memo can't see, so gating happens in its memo'd parent via `hoursSig`
-│   ├── QuickStatusPopup.jsx         v17.0.0 — the quick-status popup extracted VERBATIM from TimelineView so PlanView shares the gating (pending → Confirmed+Cancelled only; late one-tap No show)
+│   ├── QuickStatusPopup.jsx         v17.0.0 — the quick-status popup extracted VERBATIM from TimelineView so PlanView shares the gating (pending → Confirmed+Cancelled only; late one-tap No show). v17.10.1: its CARD carries `user-select:none` — the buttons are covered by index.html's control rule, but the guest name is a `<div>` and this popup opens under a finger that is still pressed
 │   ├── PrefPickerModal.jsx          preferred-tables picker
 │   ├── BlockModal.jsx               table-block editor (v17.8.0 `onDirty` prop — its From/To are component-local so it REPORTS dirtiness up, ManualModal-style, with the unmount-only `onDirty(false)` cleanup; dirty = add-mode with a time actually changed from the default window)
 │   ├── HistoryPopup.jsx             per-booking audit trail
 │   ├── LoginScreen.jsx              auth gate (unauthenticated entry). v17.9.0: shows the app mark (`/icon.svg` — the SHIPPED icon file, never a re-drawn copy, so it cannot drift from the family `scripts/gen-icons.py` maintains) and the **configured restaurant name**. That name was the last surviving `"Me Gustas Tú"` literal, and it survived for a structural reason: this screen renders BEFORE sign-in and `settings/general` is behind `auth != null`, so a read here is permission-denied. It comes from a `localStorage` mirror (`RESTAURANT_NAME_KEY` / `readCachedRestaurantName`, both owned by `useGeneralSettings.js`) — correct on any device that has signed in once, seed on one that never has. **Key, writer and reader live in ONE file on purpose**: the theme's equivalent mirror is split across three sites and needs a written "keep the convention in sync" warning because of it
-│   ├── ConnectionStatus.jsx         Firebase connection dot in the header (v16.2.0; ported from MGT Scheduling) — green/red illuminated dot (from usePersistence `isOnline`); click → popover with status line + signed-in email; closes on outside-click/Esc. v17.3.0: also lists ALL connected devices (from usePresence — email · deviceLabel · "since", current tagged "This device", list scrolls at maxHeight 200). v17.8.0: **Log out lives HERE**, right-aligned on the status row — it belongs with the identity the popover already shows, and the header flexWrapped to three rows on a phone with it there; rendered only when `onLogout` is passed. `sinceText` takes the `offset` prop (see usePresence) because these are serverTimestamps
+│   ├── ConnectionStatus.jsx         v17.10.1 "Reconnect now" under the status line, rendered ONLY while disconnected (offering it on a healthy connection invites someone to drop a working socket) — the manual half of usePersistence's reconnect watchdog. Firebase connection dot in the header (v16.2.0; ported from MGT Scheduling) — green/red illuminated dot (from usePersistence `isOnline`); click → popover with status line + signed-in email; closes on outside-click/Esc. v17.3.0: also lists ALL connected devices (from usePresence — email · deviceLabel · "since", current tagged "This device", list scrolls at maxHeight 200). v17.8.0: **Log out lives HERE**, right-aligned on the status row — it belongs with the identity the popover already shows, and the header flexWrapped to three rows on a phone with it there; rendered only when `onLogout` is passed. `sinceText` takes the `offset` prop (see usePresence) because these are serverTimestamps
 │   ├── ReminderEditor.jsx           reminder edit modal (z=250)
 │   ├── Reminders.jsx                reminder list tab body
 │   ├── Settings.jsx                 settings modal shell + tabs (General/Layout/Customers/Reminders/Shortcuts — 5th tab v16.0.0); LAZY-loaded as of v17.1.0 (React.lazy chunk with all tab bodies + the floor-plan editor); SETTINGS_TABS + CogIcon live in SettingsChrome.jsx (re-exported here) — still ONE tab list, never duplicate; General = per-weekday hours · optimizer cutoff(0–24)/auto-switch · shifts · booking-duration tiers · running-late thresholds (v16.1.0) · v17.1.0 "Reduce animations" + v17.1.2 "Plan zoom & pan" + v17.5.0 "Lock navigation" (default OFF, so only `"1"` is stored — the INVERSE of the usual convention) and "Split view" (default ON, normal convention: only `"0"` is stored) per-device toggles + v17.2.0 "Timeline zoom" per-device steppers (default/Follow/max zoom + follow lead — App's tlSettings/onSetTlSetting) and Preferences party-size steppers, sections collapsible (v15.0.0)
@@ -100,6 +100,7 @@ src/
     ├── drafts.js                    v17.5.0 — `sameDraft(a,b)` behind the unsaved-changes guard. NOT JSON equality: key order differs between openEdit's literal and openNew's Object.assign spread; `<input type=number>` returns a STRING; `customDur:null`/`deposit:""` are the same nothing; table arrays are sets in spirit. Values normalise to strings, arrays sort, null/undefined/""/false all collapse to "" (tests/drafts.test.js)
     ├── dbError.js                   v17.5.1 — `dbError(path)` builds the THIRD argument every `onValue()` must pass (the optional error/cancel callback), and `onDbError(fn)` lets usePersistence subscribe so any listener failure anywhere surfaces in the UI. All 16 listeners pass it. Origin: a cancelled read produced NOTHING — no log, no banner, no state change — because `setBookingsReady(true)` lives in the success path, so the app showed "⟳ Loading bookings…" forever and was structurally incapable of reporting its own failure
     ├── revGuard.js                  revision-CAS writer for whole-node collections (v16.0.0) — attachRev/writeWithRev; every write = atomic update({node, nodeRev: base+1}), Security Rules reject a non-+1 rev; recovery is free via the SDK's rollback echo
+    ├── serviceWorker.js             v17.10.1 — the app's half of the offline shell (`public/sw.js` is the worker). Owns the `mgt-sw` key, its reader/writer and `applyServiceWorker()` in ONE file (the LoginScreen restaurant-name precedent). **Per-device localStorage ONLY, never `settings/users/{uid}`**: clearing site data is the last-resort escape from a bad worker, and a synced flag would come straight back down and re-enable what the user just escaped. Default ON, so only `"0"` is stored. App.jsx gates registration on `bookingsReady`, so a build that cannot load its data can never cache itself
     └── customers.js                 phone-identity layer (v16.0.0) — normalizePhone/formatPhone/matchCustomerByPhone (VERBATIM from the WA sandbox's whatsapp.js; complementarity contract: the WA module imports these from HERE on merge) + isNoShow (flag OR legacy history entry — zero-migration backfill) + v17.10.0 `guestId`, the SECOND identity key — minted only when a human picks an existing phone-less guest from the name dropdown, so nothing merges by accident — with `identityKey` (phone if real, else guestId), `matchesIdentity`/`matchCustomerFor` (a UNION of the two keys, never a fallback: a guest who later supplies a number has bookings carrying one key or both, and matching either keeps them one person) + `stampGuestSeed` (the back-stamp that writes a minted id onto the booking it came from — pure, idempotent, refuses to re-home a booking already in another group; it lives in `lib/` and not in App because it decides a PERMANENT link nothing can unpick) + customerIndex/searchCustomers/noShowMap, keyed on `identityKey` since v17.10.0 — a JOINED guest is a customer in Settings → Customers with a `key`/`guestId` on the entry and `phone: ""`; an UNJOINED phone-less booking still has no identity and is still skipped. Whoever adds a consumer: `searchGuestsByName` must skip index entries with no phone (it rebuilds the guest tier itself, from the bookings, and would otherwise emit each joined guest twice), and anything keying UI state on `c.phone` collapses every guest row onto one `""` key. **But the index is NOT keyed on `identityKey` alone** (/code-review): `guestPhoneAlias` folds a guest group into the phone it LATER acquired, because "phone if real, else guestId" is the very fallback `matchCustomerFor` warns splits a guest at the moment they become identifiable. It shipped that way for one commit and made one person two rows with half the visits each — and "Delete customer & all data" cleaned only the half you clicked. A `guestId` seen with two phones takes the lexicographically smallest: arbitrary, but DETERMINISTIC, so every device agrees who a customer is. Hence `matchesIdentity` takes `guestIds` (plural), and `noShowMap` mirrors each total onto the aliased id so `nsMap[identityKey(b)]` resolves for either spelling + v16.4.0 searchGuestsByName (booking-form NAME autocomplete). Customers are DERIVED from bookings — no separate collection. **v17.10.0 adds the SECOND identity key, `guestId`** — `identityKey(b)` (phone if real, else guestId) and `matchCustomerFor({phone,guestId},…)`, of which `matchCustomerByPhone` is now a thin alias keeping its exact name/signature for the WA contract. The two keys are UNIONED, never a fallback: a guest who books three times with no phone and then gives one carries bookings with only a guestId and bookings with both, and "phone if present, else guestId" would split them at exactly the moment they became easiest to identify. `searchGuestsByName`'s never-merge rule is UNCHANGED in substance — phone-less bookings still never merge on name, because nothing in the data separates two guests called Maria — but rows sharing a `guestId` now collapse into one, and that id is only ever minted by a human picking an existing phone-less guest from that dropdown (or Book Again on one). Merging is opt-in, per guest, by someone who could see both bookings. `noShowMap` is keyed on `identityKey` for the same reason; read it as `nsMap[identityKey(b)] || 0`.
 ```
 
@@ -326,6 +327,41 @@ src/
 - Component fires callbacks to mutate parent state (`onSave`, `onClose`, `onOpenPrefPicker`, etc.).
 - Pass setters directly only for the form draft itself (`setForm`/`setDraft`); wrap other parent-state mutations in named callbacks.
 - Sub-modals stay in parent's render tree even when triggered from inside the component — keeps z-stack ordering predictable.
+
+### The offline shell (v17.10.1) — a service worker, on terms
+
+v17.4.0's worker froze the app on iOS and was withdrawn with root cause
+unestablished. v17.10.1 established it: the freeze happened **in iOS Chrome as
+well as a home-screen shortcut**, and a service worker *cannot run in iOS Chrome
+at all* (WKWebView exposes `navigator.serviceWorker` only under App-Bound
+Domains, which a general-purpose browser cannot use). The same symptom in a
+context where the worker cannot exist means one cause explains both — the CSP
+blocking Firebase's JSONP fallback, already fixed in v17.5.1.
+
+Four properties make the new one safe, and none may be dropped:
+
+1. **It is not near the data path.** `respondWith` fires for exactly two things,
+   both same-origin GET: navigations (**network-first**) and hashed assets
+   (**cache-first**). Everything else falls through untouched — every Firebase
+   request is cross-origin and dropped on the handler's first line. Network-first
+   on navigation is what makes it structurally impossible to pin the app to a
+   stale build.
+2. **It installs only where the app demonstrably works** — registration is gated
+   on `bookingsReady`, so a build that cannot reach Firebase can never cache
+   itself and serve itself back. Disabling is NOT gated: it must work in any
+   state.
+3. **Two independent ways out**, both verified on the tablet: `?sw=off` (in the
+   boot script, so it works when React never mounts) and re-deploying the
+   v17.4.1 kill switch at the same URL.
+4. **No `skipWaiting`** — a new version takes over on the next navigation, so
+   nothing swaps under a shift in progress. The kill switch keeps its
+   `skipWaiting`; there, immediacy is the point.
+
+**The test rig the ROADMAP said did not exist now does:** `adb reverse tcp:5174`
+makes `http://localhost:5174` a **secure context** on the tablet, so a worker
+installs there exactly as it would in production. What still cannot be tested
+locally is the production offline BOOT (dev modules are not under `/assets/`, and
+a prod build points at PROD Firebase) — which is why the boot watchdog exists.
 
 ### Optimizer scope (Phase D3 Option A — permanent)
 - `autoOptimizer` thermostat lives in `useAutoOptimizer`. Daily reset: off at 15:00, on at new-day-start.
@@ -659,6 +695,26 @@ something is dirty; browsers ignore any custom message string.
   awaiting-confirmation is) and `NoShowIcon`; only **seated** and **completed**
   needed new shapes. Sizing: `IC.control`, not `IC.inline` — these are marks ON
   a control, and `Assign` sat in the same List row at `IC.control` already.
+- **A control's LABEL is not selectable text (v17.10.1).** One rule in
+  `index.html` — `button, [role="button"] { user-select: none;
+  -webkit-touch-callout: none }` — because a long-press is TWO gestures at once:
+  ours, and the OS starting a text selection. The quick-status popup opens under
+  the finger that is still pressed, so on Android the selection landed on its own
+  buttons (Copy / Share / DeepL across "Cancelled"). Both properties are set
+  although only Android showed it: `user-select` is what Chrome reads,
+  `-webkit-touch-callout` is Safari's, and neither platform should differ here.
+  **Scoped to controls, never to a container** — inputs, textareas and divs keep
+  selection, and `ListView`'s card is a `<div>` whose phone number staff select
+  and copy to ring a party (the reason v17.10.0 taught that card's click handler
+  to stand down mid-selection). Two testing traps, both of which produced a
+  falsely clean result first time: a hold past **800ms** is the drag-arm handoff
+  and dismisses the popup *by design*, so probe at ~600ms and sample state
+  *during* the press; and block coordinates move on reload, so derive them from
+  `getBoundingClientRect()` rather than hard-coding. Guarded by a DECLARATION
+  assertion in `tests/stylesheet.test.js`, **not** a `CRITICAL_SELECTORS` entry —
+  that list matches selectors, and both `button` and `[role="button"]` already
+  appear in other preludes, so either entry would have passed with the rule gone.
+
 - **v17.9.0: no control wears a typographic mark.** Dismiss, confirm, disclose,
   navigate, rename, print, download, assign, "preferred" and the status
   chevrons are all SVG from `Icons.jsx` — and so is every flag on a timeline
@@ -821,6 +877,28 @@ something is dirty; browsers ignore any custom message string.
   (`KTXT_OK`/`KTXT_TIGHT`), and that is the correct answer, not debt. **Triage a
   colour exactly like a shadow: ask whether the SURFACE UNDER it flips.** If it
   doesn't, the thing on top must not either.
+- **The shadow scale is a 2×2, and v17.10.1 filled the missing cell.** Ask two
+  questions: does the element read as RAISED, and does its own fill FLIP with
+  the theme? Raised + flipping fill ⇒ `--shadow-btn`. Raised + fixed fill ⇒
+  **`--shadow-btn-solid`**. Not raised ⇒ `--shadow-flat` either way (it has no
+  inset, so the fill question does not arise). Recessed ⇒ **`--shadow-well`**.
+  Floating ⇒ `--shadow-popover`; a card on `--bg-card`/`--bg-soft` ⇒
+  `--shadow-card`; a text field ⇒ `--shadow-input`.
+  **`--shadow-btn-solid` is the only `--shadow-*` whose INSET is identical in
+  both themes**, and that is its entire content: the highlight sits on the
+  element's own theme-invariant fill (`BLOCK_BG`, `--app-*-solid`, `BTN.*`), so
+  tuning it per theme would be wrong; the DROP still deepens, because it lands
+  on the page. It replaced **three spellings of one intent** across 14 sites
+  (`0 2px 6px/0.12` ×11, `0 1px 4px/0.1` ×2, `0 1px 3px/0.15` ×1), none of
+  which deepened for dark — modal footer buttons sat at 0.12 beside siblings at
+  0.35. **`--shadow-btn-accent` / `--shadow-btn-success`** are the one deliberate
+  exception to theme-splitting: a primary button glowing in its OWN hue is not
+  elevation, so they are identical in both themes.
+  **Count the DISTINCT VALUES before deciding a scale is missing** — and note
+  that `--shadow-flat`'s own comment says "anything that should read as raised
+  takes `--shadow-btn`", which is right for the elements it was written about
+  (all on flipping fills) and was NOT the answer for these.
+
 - **`--shadow-flat` is elevation over a fill that does NOT flip (v17.10.0).**
   Every other `--shadow-*` token leads with a white inset highlight — that is
   what makes a control look raised — and a highlight tuned for light and dimmed
@@ -849,7 +927,7 @@ something is dirty; browsers ignore any custom message string.
   and `<select>`s keep it.
 - **One stepper: `mkStep(size)` in atoms.** Settings and LayoutSettings each held
   a private, byte-identical copy before v17.8.0.
-- **v17.8.0: shadow literals are allowed ONLY over theme-invariant fills — and `npm run check:style` enforces it.** The script resolves the nearest governing `background` above a white-inset shadow and fails when it is a theme token; `/* @fixed-fill */` marks the one site whose fill is beyond a line-scanner's reach. All 22 surviving white-inset literals were audited and are correct (each sits on `BLOCK_BG` / `--app-*-solid` / `BTN.*` / a raw rgba), so the rule guards the NEXT one, not a backlog. Plain dark drop-shadow literals are deliberately unchecked — a black shadow cannot invert out from under itself, and a noisy check gets muted. The `--shadow-*` tokens are not cosmetic — light carries `inset 0 1px 1px rgba(255,255,255,0.6)`, dark drops it to `0.05` — so a hard-coded white inset ships a light-mode highlight into dark, 3–8× too bright. That was 24 call sites. The exception is real: TimelineView's blocks sit on `BLOCK_BG` fills, which are deliberately theme-invariant, so a fixed white inset is correct there in both themes (same reasoning as their `borderRadius` exemption). Triage by asking whether the SURFACE UNDER the shadow flips with the theme.
+- **v17.8.0: shadow literals are allowed ONLY over theme-invariant fills — and `npm run check:style` enforces it.** The script resolves the nearest governing `background` above a white-inset shadow and fails when it is a theme token; `/* @fixed-fill */` marks the one site whose fill is beyond a line-scanner's reach. The white-inset literals it was written for are **down to two** as of v17.10.1 (TimelineView's drag lift and the `Kbd` keycap, both marked `/* @shadow */`) — the figure of 22 recorded here was true in v17.8.0 and is not any more. **Plain dark drop-shadow literals are no longer unchecked either**: v17.8.0 called them "a consistency nit, not a bug class" and predicted a noisy rule, and both halves failed. They were three spellings of one intent, none deepening for dark — a black shadow cannot invert out from under itself, but it can be invisible on the wrong ground. `check:style` **Rule 6** now matches a drop-shadow-shaped VALUE anywhere on a line (not the `boxShadow` property — that is how a literal behind a `const` escaped v17.10.0's sweep) with a NON-ZERO blur (so rings and focus glows are excluded by construction). Anchoring is load-bearing: unanchored, the pattern slides and flags `0 0 0 2px rgba(…)` as a shadow. The `--shadow-*` tokens are not cosmetic — light carries `inset 0 1px 1px rgba(255,255,255,0.6)`, dark drops it to `0.05` — so a hard-coded white inset ships a light-mode highlight into dark, 3–8× too bright. That was 24 call sites. The exception is real: TimelineView's blocks sit on `BLOCK_BG` fills, which are deliberately theme-invariant, so a fixed white inset is correct there in both themes (same reasoning as their `borderRadius` exemption). Triage by asking whether the SURFACE UNDER the shadow flips with the theme.
 - **THE HOVER LIFT IS FOR CONTROLS, NOT FOR CONTAINERS OF CONTROLS (v17.9.1).**
   `scale(1.08)` is a PROPORTION — 3px on a 40px button, but ~30px on an 820px
   List card, which slid that card's own Edit and Delete buttons out from under
@@ -956,6 +1034,20 @@ to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
   `index.html`'s boot script is the only reason this works on the tablets.
   Remove it and the whole effect silently becomes desktop-only.
 - Inline transforms still win by design (TimelineView's drag `translateY`).
+- **v17.10.1: the PLATFORM tap highlight is suppressed, and the app owns 100% of
+  its press feedback.** Chrome's Android default `-webkit-tap-highlight-color` is
+  `rgba(51,181,229,0.4)` — Holo blue — and it is painted as a **rectangle over
+  the border box, ignoring `border-radius`**, so every pill in the app flashed a
+  blue rectangle on touch. Killed on `:root` (the property inherits). It was also
+  the only feedback the two non-`<button>` tap targets had, so both gained the
+  app's own language, and **which one they get is the v17.9.1 rule again**:
+  `.mgt-ac-row:active` gives a **tint** to containers of controls (List card,
+  Summary, autocomplete rows, the strip's lid) — a scale there would shrink the
+  card under the button you were aiming at, because **`:active` matches
+  ANCESTORS of the pressed element**; `.mgt-blk:active` gives the **dip** to the
+  timeline block and waitlist ghost, which are leaf controls. Target `.mgt-blk`
+  rather than widening the rule to `.mgt-hover-scale` — several containers of
+  controls carry that class too.
 - The older `.mgt-press` brightness dim stays and composes — `filter` and
   `transform` are orthogonal.
 
@@ -1121,6 +1213,9 @@ tell what moves by reading it. Name the properties.
 | An `onValue()` without its third argument | `onValue(ref, success)` takes an OPTIONAL third **error/cancel** callback. Without it a failed read (permission denied, blocked transport, rule rejection) fires **nothing at all** — no console line, no state change — and since `setBookingsReady(true)` lives in the success path, the app shows "⟳ Loading bookings…" forever with no way to diagnose it. All 16 listeners now pass `dbError("<path>")` (`src/lib/dbError.js`); **any new one must too.** This single omission is why the v17.4.0→v17.5.0 tablet outage was misattributed to the PWA for a full release cycle |
 | CSP `connect-src` does NOT cover the RTDB fallback | Firebase RTDB has two transports. WebSocket is `connect-src`. The **long-poll fallback is JSONP** — it injects `<script>` tags into a hidden iframe, so it is governed by **`script-src`**, which is `'self'` + one hash in `vercel.json`. Worse, the SDK caches a single WebSocket failure in `localStorage["firebase:previous_websocket_failure"]` and then prefers long-poll on that device **forever**, so one wifi blip permanently bricked the Android tablet while identical devices were fine. v17.5.1 fixes it with `forceWebSockets()`. Widening `script-src` was tested on the affected device and is **insufficient** — the `.lp` requests then return 200s and the app *still* never loads. Don't "fix" this by loosening the CSP |
 | A green connection dot does not mean connected | `isOnline` is `useState(true)` and its offline branch is gated on `hasConnectedRef.current`, so before v17.5.1 a device that had **never** completed a handshake showed a confident green dot and no offline banner. It asserted a connection that had never existed, which is what sent the tablet investigation after an auth bug. There are now THREE states — `hasConnected` distinguishes amber "Connecting…" from green "Connected". Any new connection UI must keep that distinction |
+| The CSP pins the inline boot script BY HASH | `vercel.json`'s `script-src` is `'self'` plus one `sha256-` of `index.html`'s inline `<script>`. **Edit that script without regenerating the hash and the browser silently blocks it in production** — build passes, lint passes, nothing throws. It had already happened before v17.10.1: the pin had drifted, so the no-flash theme script, the `data-motion` stamp and the passive `touchstart` listener (the only reason `:active` works on iOS) were all dead in PROD. `tests/csp.test.js` now fails on a drifted or stale pin and checks the built block still matches the source, since Vite processes that file. Regenerate from a sha256 of the exact bytes between the tags. Note also that **inline event handlers (`onclick=`) are blocked by the same directive** — use `addEventListener` in that script |
+| Synthetic input does NOT set the UA `:active` state | Not `element.dispatchEvent`, not CDP `Input.dispatchTouchEvent` / `dispatchMouseEvent`, not `adb shell input`. Every attempt to measure a `:active` rule on the tablet read `false` — including on a plain `<button>`, which would have meant v17.8.0's universal press-scale had never worked there. It had; the measurement was of the tooling. Use CDP **`CSS.forcePseudoState`**, which answers the real question ("if this element WERE `:active`, does my rule apply?") — and always force the same state on a control that already works, as a control group. The same family of trap as v17.10.1's other two: a synthetic press also cannot arm the timeline drag and cannot raise an OS text selection. **A synthetic press is not a finger** — for anything gesture- or UA-state-shaped, the person holding the device settles in one second what an hour of instrumentation cannot |
+| Firebase's reconnect backoff is 5 MINUTES, and a visible page never resets it | `RECONNECT_MAX_DELAY_DEFAULT` is `60*5*1000` for a web client (the 30s constant beside it is admin-only); `onRealtimeDisconnect_` jumps straight to that maximum whenever the window is hidden when the socket dies. The only resets are the browser `online` event and `onVisible_`, which fires ONLY on a hidden→visible edge and ONLY at exactly the maximum — so a page that stays visible has **no reset path at all**. That is why minimising the app and restoring it cures a stuck reconnect: it recreates the one edge the SDK listens for. v17.10.1's watchdog (`usePersistence`, on the existing 10s heartbeat) calls `goOnline(db)` after 20s of a disconnected FOREGROUND page. **Toggling wifi cannot reproduce the stuck state** — that fires `online`, which resets the backoff unconditionally (measured: 6.1s recovery from a 200s outage on a build with the watchdog disabled). It needs the socket to die while `navigator.onLine` stays **true**: an AP associated with no upstream, a captive portal, a NAT dropping an idle socket — ordinary restaurant wifi, which is why the report comes from the tablet and never from a desk. The watchdog is therefore deliberately **not** gated on `navigator.onLine`; that property lies in exactly the case it exists for |
 | SVG `<text>` in a shipped icon | An icon referencing `font-family="-apple-system, …"` renders a DIFFERENT face on every non-Apple platform (the pre-redesign v17.4.0 icon did exactly this — Android and the Chrome tab disagreed with iOS). Icons must carry type as OUTLINES; `scripts/gen-icons.py` does the conversion |
 
 ---
@@ -1143,7 +1238,7 @@ tell what moves by reading it. Name the properties.
 
 - **Multi-tenancy** — single-restaurant app; no plans to generalise.
 - **Mobile app** — web-only; mobile is responsive layout (`useWinW` → `isMobile`).
-- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS — `booking-logic` · `customers` · `drafts` · `waitlist-match` · `presence-state` · `stylesheet` · `contrast` · `time-grid` · **`style-check`**, **259 tests** as of v17.9.0 (`npm test`). CI gates build + test + **lint (0 errors, hard)** + **`npm run check:style`** on every PR via `.github/workflows/ci.yml`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
+- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS — `booking-logic` · `customers` · `drafts` · `waitlist-match` · `presence-state` · `stylesheet` · `contrast` · `time-grid` · `style-check` · **`csp`**, **332 tests** as of v17.10.1 (`npm test`). CI gates build + test + **lint (0 errors, hard)** + **`npm run check:style`** on every PR via `.github/workflows/ci.yml`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
   **The rule v17.8.0 added: logic that decides something the restaurant acts on does not live in a `useEffect`.** `placeWaitlist` and `presenceState` were both extracted for that reason — a double-booking fix had shipped on "it looked right in DEV". If a behaviour is worth a REFACTOR_LOG paragraph it is worth being reachable by a test: put the pure core in `lib/`, leave the hook its subscription, refs and setState.
   **Fixture trap:** `ALL_TABLES` holds `{id, capacity}` OBJECTS, not ids. A "fill every table" fixture built straight from it silently occupies nothing, and the failures point at the code. Use `ALL_TABLES.map(t => t.id)`.
   **`tests/stylesheet.test.js` guards `index.html`'s `<style>`** — a stylesheet has no syntax errors, only rules that silently don't exist (v17.8.0 lost `.mgt-press:active` to a stray `*/` and nothing noticed). It checks comment hygiene, brace balance, a CRITICAL_SELECTORS list, and — added after the same defect recurred one scope deeper — **loose prose inside a DECLARATION block**, which eats the declaration *after* it rather than the rule after it. That version made `--tbl-out-rgb` resolve to empty, which would have rendered nine table badges transparent, while every existing test passed. Entry criterion for CRITICAL_SELECTORS: does the rule fail SILENTLY when missing?

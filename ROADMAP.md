@@ -14,36 +14,29 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **PWA / offline shell — withdrawn in v17.4.1. The worker may have been
-  innocent (v17.5.1 finding).** v17.5.1 root-caused the *Android* tablet's
-  identical "⟳ Loading bookings…" freeze to something else entirely: the CSP's
-  `script-src` blocking Firebase's JSONP long-poll fallback, on any device
-  carrying a cached `firebase:previous_websocket_failure` flag. The CSP went
-  blocking on 2026-07-24, one day before v17.4.0 shipped. The iOS devices were
-  "fixed" by clearing site data — which also clears **localStorage**, i.e. that
-  same flag — so the evidence that convicted the worker fits this cause just as
-  well, as `public/sw.js`'s own comment hedged at the time. **Before any PWA
-  work: re-test on iOS now that v17.5.1's `forceWebSockets()` is deployed.** The
-  original outage may simply not recur. Keep the conditions below regardless.
-  v17.4.0 shipped an offline-shell service worker; in production it froze the
-  app at "⟳ Loading bookings…" on iPhone and iPad (desktop unaffected). It
-  didn't reproduce locally under a PROD-mode build against DEV data. v17.4.1
-  replaced it with a kill switch (see
-  `CLAUDE.md`'s Gotchas table: "A shipped service worker CANNOT be withdrawn
-  by deleting it" / "A SW must be testable on the target device before it
-  ships" — read both before touching this). The manifest and icon family were
-  kept (inert without a worker, still used by iOS add-to-home-screen).
-  **Conditions before this returns:**
-  1. A way to run the candidate worker on a real iPhone/iPad against
-     production-scale data — remote-debug via Safari Web Inspector, or a
-     separate Vercel project pointed at a production-sized copy.
-  2. A kill switch kept deployed alongside it from day one.
-  3. A staged rollout — one device, in service, for a full shift — before the
-     tablets get it.
+- **Stage the offline shell on one device, for a full shift.** The PWA shipped
+  in v17.10.1 (see `REFACTOR_LOG.md` for why the v17.4.0 worker is now believed
+  innocent, and for the safety design). Two things remain, and neither is code:
 
-  The offline win is small (Firebase already queues offline data writes; the
-  worker only cached the HTML/JS shell the normal HTTP cache handles), so the
-  bar for re-adding it is genuinely high.
+  1. **The production offline boot is unverified.** Everything was exercised on
+     the restaurant's Android tablet — registration, caching, `/assets/`
+     cache-first, zero Firebase URLs cached, `?sw=off`, the kill switch — but
+     *cached HTML plus cached hashed bundle* cannot be tested locally: in dev
+     the modules are not under `/assets/`, and a production build points at PROD
+     Firebase, which the dev environment must never load. After deploying, open
+     the app on the tablet once online, then put the device in aeroplane mode and
+     reload. It should open and show the day's bookings from cache. If it shows
+     the "MGT Bookings didn't start" screen instead, that is the boot watchdog
+     doing its job — tap **Reset offline copy** and report it.
+  2. **A full shift on one device before the others get it.** The toggle is
+     per-device (Settings → General → "Work offline"), so leave it ON for one
+     tablet and OFF elsewhere until it has been through a real service.
+
+  **If anything goes wrong:** open the app with `?sw=off` on the end of the
+  address — it works even when the app will not start. To remove it from every
+  device at once, re-deploy the v17.4.1 kill switch as `public/sw.js` (recover it
+  from git history, the commit before v17.10.1); that path was verified on the
+  tablet to clear a live worker and its cache within one update cycle.
 
 ## Designed, not implemented
 
@@ -57,15 +50,4 @@ session and keeping it in sync.
 
 ## Ideas
 
-- **A `check:style` rule for bare `boxShadow` literals.** v17.10.0 tokenised the
-  last of them (18 sites → `--shadow-flat` / `--shadow-btn` / `--shadow-card` /
-  `--shadow-popover`), so the backlog that made such a rule noisy is now zero and
-  it would guard the *next* one rather than nag about existing ones. Two things
-  it must handle: the genuine exceptions are **rings and glows**, not drop
-  shadows (`0 0 0 3px …` — the connection dot, the focus/selection rings), so
-  match on a non-zero blur rather than on `boxShadow`; and a literal can hide
-  behind a `const` (that is how `StatusToasts`' `toastShadow` survived the
-  v17.10.0 sweep), so match the VALUE's shape, not the property name. Per the
-  v17.9.0 rule, any new rule needs a fixture in `tests/style-check.test.js` —
-  both a violating case and a legitimate one.
-
+_(nothing pending)_
