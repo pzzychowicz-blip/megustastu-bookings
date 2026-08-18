@@ -10202,3 +10202,44 @@ the plan's count. Do that last pass every time.
 resolves 0.12→0.4 on the drop with the inset held at 0.15, the glows are
 identical in both. Spot-checked the computed `boxShadow` on the header pair and
 the booking form's Save. 313 tests, lint clean, `check:style` clean.
+
+### Commit 5 — check:style: bare drop-shadow literals
+
+**Files:** `scripts/check-style-invariants.mjs`, `tests/style-check.test.js`,
+`ROADMAP.md`. **Behavioural change:** none — a CI gate.
+
+Rule 6 closes the ROADMAP idea, on the corrected premise from commit 4. The
+v17.8.0 header note here said plain drop-shadow literals were "a consistency
+nit, not a bug class" and that a rule would be noisy. **Both halves have now
+failed**: they were three spellings of one intent, none of which deepened for
+dark mode, which is a bug class (a black shadow cannot invert out from under
+itself, but it can be invisible on the wrong ground); and the backlog is zero
+after commit 4, so this guards the next one rather than nagging.
+
+Two conditions, and both are lessons from sweeps that **missed** sites. It
+matches the **value's shape anywhere on the line**, not `boxShadow:` — v17.10.0's
+sweep grepped the property name and walked past `StatusToasts`' literal because
+it sat behind a `const`. And the blur must be **non-zero**, because `0 0 0 3px …`
+is a ring or a focus glow (the connection dot, the selection rings), not a member
+of this scale. `/* @shadow */` marks a one-off; Rule 0 now polices that marker's
+placement alongside the other two.
+
+**The rule was wrong when first written, and only running it showed that.** It
+printed `OK` against the repo — and against a fixture it flagged
+`0 0 0 2px rgba(0,122,255,0.4)`, a ring, because the pattern **slides**: it
+matched starting at the second `0` and read `0 0 2px rgba(`, so the non-zero-blur
+condition it was built around excluded nothing. The fix anchors a shadow value to
+a quote, to `inset`, or to the comma separating it from the previous shadow in a
+list. This is the v17.9.0 rule doing exactly its job: reading the script cannot
+catch this, running it against known-bad input can. Six fixtures in
+`tests/style-check.test.js`, both directions — bare literal, literal behind a
+`const`, inset groove, rings left alone, token and marked one-off left alone,
+misplaced marker.
+
+**ROADMAP:** the Ideas entry is deleted, since it shipped. One new entry replaces
+it, and it is a real finding rather than tidiness — see commit 1's closing note:
+with the OS selection live, Chrome cancels the pointer stream and the 800ms
+drag-arm never fires, so **drag-a-booking-to-another-table may never have worked
+on Android at all**. Not demonstrated either way here, because a stationary
+synthetic press does not arm the drag in either build. It needs a real
+multi-point swipe, and if it is broken it is its own fix.

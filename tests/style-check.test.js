@@ -42,6 +42,53 @@ function run(files) {
 beforeAll(() => { dir = mkdtempSync(join(tmpdir(), "mgt-style-")); });
 afterAll(() => { rmSync(dir, { recursive: true, force: true }); });
 
+describe("check:style — shadow literals (v17.10.1)", () => {
+  it("catches a bare drop-shadow literal", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ boxShadow: "0 2px 6px rgba(0,0,0,0.12)" }} />;\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/shadow-literal/);
+  });
+
+  // The v17.10.0 miss: the sweep grepped the PROPERTY name, so a literal
+  // assigned to a const (StatusToasts' toastShadow) was invisible to it.
+  it("catches a literal hiding behind a const", () => {
+    const r = run({ "a.jsx": 'const shd = "0 1px 4px rgba(0,0,0,0.1)";\nconst y = <div style={{ boxShadow: shd }} />;\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/shadow-literal/);
+  });
+
+  it("catches an inset groove", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ boxShadow: "inset 0 1px 2px rgba(0,0,0,0.08)" }} />;\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/shadow-literal/);
+  });
+
+  // THE regression case for this rule. Without anchoring the value to a quote,
+  // `inset`, or a list comma, the pattern SLIDES: it matches `0 0 2px rgba(`
+  // inside `0 0 0 2px rgba(...)` and flags a ring — precisely what the
+  // non-zero-blur condition exists to exclude. Found by running it, not by
+  // reading it.
+  it("leaves zero-blur rings and glows alone", () => {
+    const r = run({ "a.jsx":
+      'const a = <div style={{ boxShadow: "0 0 0 3px var(--accent)" }} />;\n'
+      + 'const b = <div style={{ boxShadow: "0 0 0 2px rgba(0,122,255,0.4)" }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  it("leaves a token and a marked one-off alone", () => {
+    const r = run({ "a.jsx":
+      'const a = <div style={{ boxShadow: "var(--shadow-btn-solid)" }} />;\n'
+      + 'const b = <div style={{ boxShadow: "0 10px 24px rgba(0,0,0,0.3)"   /* @shadow */ }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  it("rejects an @shadow marker parked in JSX children position", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ borderRadius: 4 }} />   /* @shadow */;\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/marker-placement/);
+  });
+});
+
 describe("check:style — spacing scale", () => {
   // THE regression case. A whitespace-only prefix must still be inspected.
   it("catches an off-scale value in a MULTI-LINE style object", () => {
