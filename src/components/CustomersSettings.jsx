@@ -121,7 +121,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                 className="mgt-hover-scale mgt-press"
                 style={mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.del, opacity: armed ? 1 : 0.85 })}
                 onClick={function () {
-                  if (armed) { onDeleteCustomer({ phone: c.phone, guestId: c.guestId }); setArmedKey(null); setOpenKey(null); }
+                  if (armed) { onDeleteCustomer({ phone: c.phone, guestIds: c.guestIds }); setArmedKey(null); setOpenKey(null); }
                   else setArmedKey(c.key);
                 }}>{armed ? "Confirm delete" : "Delete customer & all data"}</button>
             </div>

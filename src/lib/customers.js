@@ -130,9 +130,12 @@ export function matchesIdentity(b, ident) {
   // were "any non-empty normalized key", and every caller already gates on
   // hasRealPhone before asking.
   const key = normalizePhone(o.phone);
-  const gid = o.guestId || "";
+  // `guestIds` (plural) as well as `guestId`, because a customer can have
+  // ABSORBED more than one guest group — see customerIndex's alias pass. Delete
+  // must reach every id the row is showing, or "delete all data" leaves some.
+  const gids = Array.isArray(o.guestIds) ? o.guestIds : (o.guestId ? [o.guestId] : []);
   if (key && b.phone && normalizePhone(b.phone) === key) return true;
-  return !!(gid && b.guestId === gid);
+  return !!(b.guestId && gids.indexOf(b.guestId) !== -1);
 }
 
 export function matchCustomerFor(ident, bookings, excludeBookingId) {
@@ -181,9 +184,40 @@ export function matchCustomerFor(ident, bookings, excludeBookingId) {
 //
 // A consumer that needs a phone must check for one: `phone` is "" on a guest
 // entry rather than absent, so string operations on it are safe either way.
+// guestPhoneAlias — guestId → the phone it has since been attached to.
+//
+// v17.10.0 /code-review fix. `identityKey` is "phone if real, else guestId",
+// which is exactly the fallback rule matchCustomerFor's comment above calls out
+// as splitting a guest "at the moment they became easiest to identify" — and
+// customerIndex/noShowMap were keying on it. A guest joined by guestId who later
+// gives a number has bookings carrying only the guestId and bookings carrying
+// both, so they came out as TWO customers: one with the number, one still
+// labelled "No phone · linked guest", each with half the visits, and deleting
+// either left the other half's name and notes on the record.
+//
+// So before keying anything, learn which guest groups have acquired a phone.
+// Any booking carrying BOTH keys is the evidence, and the two are then one
+// customer under the phone — the stronger claim, as identityKey already says.
+//
+// The tie-break matters: a guestId seen with two different phones means the join
+// was wrong (two people merged, then both gave numbers). Nothing here can tell
+// which is right, so it takes the lexicographically smallest — an arbitrary rule,
+// but a DETERMINISTIC one, so every device derives the same map from the same
+// bookings and no two clients disagree about who a customer is.
+function guestPhoneAlias(bookings) {
+  const alias = {};
+  bookings.forEach(function (b) {
+    if (!b || !b.guestId || !hasRealPhone(b.phone)) return;
+    const phone = normalizePhone(b.phone);
+    if (!alias[b.guestId] || phone < alias[b.guestId]) alias[b.guestId] = phone;
+  });
+  return alias;
+}
+
 export function customerIndex(bookings) {
   const map = {};
   if (!Array.isArray(bookings)) return map;
+  const alias = guestPhoneAlias(bookings);
   bookings.forEach(function (b) {
     if (!b) return;
     const phone = hasRealPhone(b.phone) ? normalizePhone(b.phone) : "";
@@ -191,16 +225,20 @@ export function customerIndex(bookings) {
     // everything else; deleteCustomer clears its guestId, so this only guards
     // against a stray one. A phone it cannot have — anonymizing empties it.
     if (!phone && b.anonymized) return;
-    const key = phone || b.guestId || "";
+    const key = phone || alias[b.guestId] || b.guestId || "";
     if (!key) return;
-    if (!map[key]) map[key] = { key: key, phone: phone, guestId: phone ? null : b.guestId, rawPhone: phone ? b.phone : "", name: b.name || "", visits: 0, noShowCount: 0, latestDate: "", bookings: [] };
+    if (!map[key]) map[key] = { key: key, phone: key === phone ? phone : (alias[b.guestId] ? key : ""), guestId: null, guestIds: [], rawPhone: "", name: b.name || "", visits: 0, noShowCount: 0, latestDate: "", bookings: [] };
+    if (b.guestId && map[key].guestIds.indexOf(b.guestId) === -1) map[key].guestIds.push(b.guestId);
     map[key].bookings.push(b);
   });
   Object.keys(map).forEach(function (key) {
     const c = map[key];
+    // `guestId` stays a scalar for the callers that only ever see one; `guestIds`
+    // is the truth, and is what delete reaches through.
+    c.guestId = c.phone ? null : (c.guestIds[0] || null);
     c.bookings.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
     c.name = c.bookings[0].name || "";
-    if (c.phone) c.rawPhone = c.bookings[0].phone;
+    if (c.phone) c.rawPhone = (c.bookings.find(function (b) { return hasRealPhone(b.phone); }) || c.bookings[0]).phone || "";
     c.latestDate = c.bookings[0].date || "";
     c.visits = c.bookings.filter(function (b) { return b.status === "completed"; }).length;
     c.noShowCount = c.bookings.filter(isNoShow).length;
@@ -218,11 +256,23 @@ export function customerIndex(bookings) {
 export function noShowMap(bookings) {
   const map = {};
   if (!Array.isArray(bookings)) return map;
+  // Same alias pass as customerIndex (/code-review fix): a guest who later gave
+  // a number had their no-shows split across two keys, so the repeat-offender
+  // flag — which trips at 2 — never fired even though the booking form's chip,
+  // which unions the keys, said 2.
+  const alias = guestPhoneAlias(bookings);
   bookings.forEach(function (b) {
     if (!b || !isNoShow(b)) return;
-    const key = identityKey(b);
+    const key = hasRealPhone(b.phone) ? normalizePhone(b.phone) : (alias[b.guestId] || b.guestId || "");
     if (!key) return;
     map[key] = (map[key] || 0) + 1;
+  });
+  // Every call site reads this as `nsMap[identityKey(b)]`, and identityKey on a
+  // phone-LESS booking returns its raw guestId — which is not the key its count
+  // now lives under. Mirror the total onto the alias so both spellings resolve
+  // without every caller having to learn about aliasing.
+  Object.keys(alias).forEach(function (gid) {
+    if (map[alias[gid]] != null) map[gid] = map[alias[gid]];
   });
   return map;
 }
@@ -323,9 +373,15 @@ export function searchGuestsByName(bookings, index, query, limit) {
   // Phone-LESS bookings whose name matches. Ones carrying a guestId are grouped
   // into a single row; the rest stay one row each, exactly as before.
   const groups = {};
+  const alias = guestPhoneAlias(bookings);
   bookings.forEach(function (b) {
     if (!b || b.anonymized || hasRealPhone(b.phone)) return; // v17.0.0: skip anonymized
     if (!b.name || b.name.toLowerCase().indexOf(q) === -1) return;
+    // A guest group that has since acquired a phone IS the phone customer the
+    // pass above already emitted (/code-review fix) — offering it again as a
+    // separate "no phone" row would show one person twice and let staff pick the
+    // weaker half.
+    if (b.guestId && alias[b.guestId]) return;
     if (b.guestId) {
       const g = groups[b.guestId] || (groups[b.guestId] = []);
       g.push(b);

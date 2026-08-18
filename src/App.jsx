@@ -1508,7 +1508,7 @@ function BookingApp({uid}){
   function deleteCustomer(ident){
     const o=(ident&&typeof ident==="object")?ident:{phone:ident};
     const key=normalizePhone(o.phone);
-    if(!key&&!o.guestId) return;
+    if(!key&&!o.guestId&&!(o.guestIds&&o.guestIds.length)) return;
     saveBookings(function(prev){return prev.map(function(b){
       if(!matchesIdentity(b,o)) return b;
       return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],guestId:null,anonymized:true});

@@ -9824,3 +9824,63 @@ first from the name dropdown, confirmed ONE Customers row reading "No phone ·
 linked guest" holding both bookings, deleted the customer, confirmed the row is
 gone and that the anonymized pair does NOT come back as a customer called "Data
 removed". Both throwaway bookings then deleted; DEV is clean.
+
+### Commit 12/13 — /code-review fix: a pick REPLACES the identity, both keys
+
+**File:** `src/components/BookingFormModal.jsx`. **Behavioural change:** yes.
+
+`pickGuest` wrote `guestId`/`guestSeed` only inside its `r.isPhoneless` branch,
+so a pick that was NOT phone-less left the previous pick's keys on the draft.
+Type "Ana", tap the phone-less guest by mistake, tap "Ana García" to correct
+yourself, save: the booking is written under García's phone AND joined to the
+stranger, and `stampGuestSeed` stamps the stranger's booking to match. Two
+unrelated customers fused — and **irreversibly**, because nothing in the UI can
+remove a `guestId` (`doSaveEdit`'s `f.guestId||b.guestId||null` can only add
+one).
+
+Both keys are now assigned on every pick. The rule is the general one: **a pick
+replaces who this booking is for, so no field it owns may survive it.** A
+conditional assignment inside `Object.assign` is a carry-forward, not a no-op.
+
+Verified in DEV: made a phone-less guest and a similarly-named phone customer,
+performed exactly that mis-tap, saved — the phone customer holds its own two
+bookings and the guest was not stamped.
+
+### Commit 13/13 — /code-review fix: a guest who later gives a number stays one customer
+
+**Files:** `src/lib/customers.js`, `src/components/CustomersSettings.jsx`,
+`src/App.jsx`, `tests/customers.test.js`. **Behavioural change:** yes.
+
+Commit 11 keyed `customerIndex`/`noShowMap` on `identityKey` — "phone if real,
+else guestId". That is precisely the fallback rule `matchCustomerFor`'s own
+comment calls out as splitting a guest "at exactly the moment they became
+easiest to identify", and the review caught the contradiction sitting two
+functions apart in one file.
+
+A guest joined by `guestId` who later gives a number has bookings carrying one
+key and bookings carrying both, so they came out as TWO customers: one with the
+number, one still labelled "No phone · linked guest", each holding half the
+visits. Worse, **"Delete customer & all data" only cleaned the half you clicked**
+— the other half kept its name and notes.
+
+`guestPhoneAlias(bookings)` now learns which guest groups have acquired a phone
+(any booking carrying both is the evidence) before anything is keyed, and those
+fold into the phone entry. A `guestId` seen with two different phones — a wrong
+join, later disambiguated — takes the lexicographically smallest: arbitrary, but
+**deterministic**, so every device derives the same map and no two clients
+disagree about who a customer is.
+
+Three consequences carried through. `matchesIdentity` accepts `guestIds`
+(plural), because a row can have absorbed more than one group and delete has to
+reach every id it is showing. `noShowMap` mirrors each total onto the aliased
+id, so the call sites' `nsMap[identityKey(b)]` resolves for a phone-less and a
+phone-bearing booking alike without any of them learning about aliasing — the
+repeat-offender flag trips at 2 and was seeing 1 and 1. And
+`searchGuestsByName` skips an aliased group, which the phone tier already
+emits, or the dropdown offers one person twice and lets staff pick the weaker
+half.
+
+Verified in DEV: joined two phone-less bookings, gave the guest a number on a
+third, saw ONE customer row under that number holding all three (was two rows,
+1 + 2), deleted it and confirmed all three were anonymized in one action.
+307 tests, lint 0 errors, `check:style` clean. Throwaway bookings removed.

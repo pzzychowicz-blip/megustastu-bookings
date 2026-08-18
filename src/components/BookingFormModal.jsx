@@ -166,10 +166,18 @@ export function BookingFormModal({
       // booking. Deriving the id from data both devices already hold is what
       // makes two clients joining concurrently converge instead of forking the
       // guest in two (the recurring-occurrence-id reasoning).
-      if(r.isPhoneless&&latest){
-        next.guestId=r.guestId||("g"+latest.id);
-        next.guestSeed=r.guestId?null:latest.id;
-      }
+      //
+      // BOTH keys are assigned on EVERY pick, never only on the phone-less
+      // branch (/code-review). A pick REPLACES who this booking is for, so the
+      // previous pick's keys cannot be allowed to survive it: tap a phone-less
+      // guest by mistake, then tap the phone customer you meant, and a
+      // conditional assignment leaves the stranger's `guestId` on the draft —
+      // the new booking is saved under the phone customer AND joined to the
+      // stranger, whose booking `guestSeed` then stamps to match. Two unrelated
+      // customers fused, permanently: nothing in the UI can remove a guestId
+      // (doSaveEdit's `f.guestId||b.guestId||null` can only ever add one).
+      next.guestId=(r.isPhoneless&&latest)?(r.guestId||("g"+latest.id)):null;
+      next.guestSeed=(r.isPhoneless&&latest&&!r.guestId)?latest.id:null;
       if(!editId&&latest){ // Book-Again-style prefill (new bookings only)
         next.size=latest.size||f.size;
         next.preference=latest.preference||f.preference;
