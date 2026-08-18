@@ -204,11 +204,15 @@ describe("index.html stylesheet", () => {
   // on `:root` because the property inherits, and `:root` is far too common a
   // prelude to guard by name — so, again, assert the DECLARATION.
   it("keeps the platform tap highlight suppressed", () => {
-    // Deliberately a whole-sheet search, not a scoped one: the declaration
-    // lives on `:root` because the property inherits, and there is nothing
-    // useful to scope to — `:root` is the token block's prelude too. What
-    // matters is that SOME rule still suppresses it.
-    expect(/-webkit-tap-highlight-color:\s*transparent/.test(css),
-      "Android's blue tap-highlight rectangle is back").toBe(true);
+    // /code-review: this WAS a whole-sheet search, which could not tell the
+    // difference between the declaration living on `:root` and it being
+    // narrowed onto one selector or buried in `@media print` — in either case
+    // the blue rectangle returns everywhere else while the test still passes.
+    // The fix relies on INHERITANCE from the root, so that is what to assert.
+    const rooted = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
+      .filter((m) => /(^|[\s,])(:root|html)\s*$/.test(m[1].trim()))
+      .map((m) => m[2]);
+    expect(rooted.some((b) => /-webkit-tap-highlight-color:\s*transparent/.test(b)),
+      "Android's blue tap-highlight rectangle is back (no :root/html suppression)").toBe(true);
   });
 });

@@ -10352,3 +10352,55 @@ would cost it again: synthetic input does not set the UA `:active` state, by any
 mechanism available here, so a correct rule reads as dead. `CSS.forcePseudoState`
 is the instrument, and forcing the same state on a control that already works is
 what makes the reading trustworthy.
+
+### Commit 10 — /code-review round
+
+Eight findings, all fixed. Five are worth carrying forward.
+
+**The watchdog had no backoff of its own.** Fixing a stuck reconnect by kicking
+every 20s forever replaces the SDK's *bounded* exponential backoff with an
+*unbounded* flat poll — ~120 attempts per device per hour for as long as an
+outage lasts, which is precisely the load backoff exists to prevent. The spacing
+now doubles to a 2-minute ceiling and resets on connect (and on a manual tap,
+which is a fresh signal). The short outage still recovers in ~20s, which was the
+reported bug; only the long tail changed. **A fix for a fast case has to be
+checked against the slow one.**
+
+**The block press dip repeated the v17.9.1 bug, in the same commit that avoided
+it.** `.mgt-blk:active` scales the timeline block, which CONTAINS the Assign
+handle; `:active` matches ancestors, so on a **mouse** the handle slid out from
+under the cursor between mousedown and mouseup and `click` resolved to the block
+instead. The `.mgt-ac-row` comment eight lines above states this exact reasoning
+— written, applied to one rule, and not to the other. It is scoped to coarse
+pointers now, where implicit touch capture makes it harmless and where it was
+the only place it was ever needed.
+
+**"Reconnect now" was invisible in the one state that needs it most.** Gated on
+`!connected`, but `connected` starts optimistically true and only goes false
+after a first handshake — so a device that has NEVER connected showed
+"Connecting…" with no action, while the watchdog also stood down by design. That
+is the v17.5.1 never-connected class of bug, recurring one layer up.
+
+**Rule 6 could not see three of the forms it exists to catch** — `var()`, named
+colours, decimal px — so the checker added *in this version* to stop bare shadow
+literals shipped with the blind spot it was written about. Widened, with a
+fixture per form plus a decoy proving the new bare-identifier branch does not
+reach into `padding`/`transition`.
+
+**The tap-highlight guard could not see the rule being narrowed.** A whole-sheet
+regex passes whether the declaration is on `:root` or on one selector — but the
+fix depends on INHERITANCE from the root, so narrowing it silently restores the
+blue rectangle everywhere else. Scoped to a `:root`/`html` prelude and verified
+by narrowing it and watching the test fail.
+
+Also: a dead `typeof document !== "undefined"` guard removed (this hook calls
+`document.addEventListener` unguarded twenty lines below), the watchdog's
+`console.warn` reduced to one line per outage rather than one per kick, and
+`.mgt-blk:active` given the `.mgt-nopress` opt-out every other press rule has.
+
+**Verified after the fixes:** 328 tests, lint 0 errors, `check:style` clean,
+build clean. On the tablet (coarse pointer) the block still dips — 0.971
+mid-transition under `CSS.forcePseudoState` — and the tap highlight is still
+transparent; on the desktop the coarse media query does not match, the
+`.mgt-blk:active` rule exists only inside it and has no top-level copy, so the
+mouse path is provably gone.
