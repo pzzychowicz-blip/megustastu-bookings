@@ -335,9 +335,7 @@ export function WalkinForm({
             borderRadius: R.pill, padding: "10px 18px",
             cursor: wOk ? "pointer" : "not-allowed",
             fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
-            boxShadow: wOk
-              ? "0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)"
-              : "none"
+            boxShadow: wOk ? "var(--shadow-btn-success)" : "none"
           }}
         >
           Seat

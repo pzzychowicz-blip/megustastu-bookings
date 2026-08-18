@@ -214,6 +214,33 @@
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.6);
         --shadow-input: inset 0 1px 2px rgba(255, 255, 255, 0.6), 0 1px 3px rgba(0, 0, 0, 0.06);
         --shadow-btn: 0 1px 4px rgba(0, 0, 0, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+        /* v17.10.1: RAISED, on a fill that does NOT flip with the theme — the
+           cell the shadow scale was missing. --shadow-btn is raised-on-a-
+           flipping-fill; --shadow-flat is not-raised. This one was spelled
+           three different ways across 14 sites (0 2px 6px/0.12 ×11,
+           0 1px 4px/0.1 ×2, 0 1px 3px/0.15 ×1) — one intent, differences
+           nobody chose. Value is the most common of the three, not an average
+           (--shadow-flat's own precedent).
+           It is the only --shadow-* token whose INSET does not change between
+           themes, and that is the whole point: the highlight belongs to the
+           element's own fill (BLOCK_BG, --app-*-solid, BTN.*), which is
+           deliberately theme-invariant, so a highlight tuned per theme would be
+           wrong on it (the v17.8.0 white-inset-over-fixed-fill rule). The DROP
+           still deepens, because it falls on the page and the page does flip —
+           which the hand-written literals never did, leaving a modal footer
+           button at 0.12 in dark beside siblings at 0.35. */
+        --shadow-btn-solid: 0 2px 6px rgba(0, 0, 0, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+        /* v17.10.1: a primary button glowing in its OWN hue. Not elevation — a
+           coloured halo announcing the default action — so unlike every other
+           shadow here it is identical in both themes. Unifies three literals
+           that carried two different alphas (0.25 / 0.2) for one effect. */
+        --shadow-btn-accent: 0 2px 8px rgba(0, 122, 255, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+        --shadow-btn-success: 0 2px 8px rgba(22, 101, 52, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+        /* v17.10.1: RECESSED — a groove, the inverse of --shadow-btn-solid.
+           Two sites (the Toggle track, HistoryPopup's scrolling panel) held two
+           different values, and both were theme-BLIND: a 0.06–0.08 black inset
+           is close to invisible on a dark surface. */
+        --shadow-well: inset 0 1px 2px rgba(0, 0, 0, 0.08);
         /* v17.10.0: elevation WITHOUT a raised highlight. Every other --shadow-*
            token leads with a white inset, which is what makes a control look
            lifted off the page; this one carries none, and there are two reasons
@@ -508,6 +535,12 @@
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
         --shadow-input: inset 0 1px 2px rgba(255, 255, 255, 0.05), 0 1px 3px rgba(0, 0, 0, 0.3);
         --shadow-btn: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        /* v17.10.1: the DROP deepens (it lands on the page); the INSET does
+           not (it lands on a theme-invariant fill). See :root. */
+        --shadow-btn-solid: 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+        --shadow-well: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+        /* --shadow-btn-accent / --shadow-btn-success are deliberately NOT
+           redefined: a coloured halo is the button's own hue, not elevation. */
         --shadow-flat: 0 1px 3px rgba(0, 0, 0, 0.35);
         /* ── v14.2.5: App.jsx main-screen chrome (dark) ── */
         --app-saved-bg: rgba(90, 75, 20, 0.35);    --app-saved-border: rgba(253, 230, 138, 0.35); --app-saved-text: #fde68a;

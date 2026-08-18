@@ -267,7 +267,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               padding: "10px 18px",
               cursor: err ? "not-allowed" : "pointer",
               fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 40,
-              boxShadow: err ? "none" : "0 2px 8px rgba(22,101,52,0.2), inset 0 1px 1px rgba(255,255,255,0.15)"
+              boxShadow: err ? "none" : "var(--shadow-btn-success)"
             }}
           >
             Save

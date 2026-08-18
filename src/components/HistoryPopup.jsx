@@ -46,7 +46,7 @@ export function HistoryPopup({ booking, onClose }) {
         border: "1px solid rgba(160,170,190,0.4)",
         background: "rgba(255,255,255,0.35)",
         padding: "10px 12px",
-        boxShadow: "inset 0 1px 4px rgba(0,0,0,0.06)"
+        boxShadow: "var(--shadow-well)"
       }}>
         {reversed.length ? reversed.map((h, i) => {
           const d = new Date(h.at);

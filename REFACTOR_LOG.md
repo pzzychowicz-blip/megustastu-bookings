@@ -10144,3 +10144,61 @@ reconnected in 4.4s. Screenshotted on-device to confirm it matches Log out's
 One testing note, since it cost two runs: the popover is a TOGGLE, so a probe
 that clicks the dot to "open" it will close an already-open one and report the
 button missing. Assert the popover's own state before reading its contents.
+
+### Commit 4 — one token for a raised control on a fill that doesn't flip
+
+**Files:** `index.html` + 10 under `src/`. **Behavioural change:** visual —
+14 controls gain depth in **dark mode**, where they were flat.
+
+`ROADMAP.md` proposed a `check:style` rule for bare `boxShadow` literals, on the
+stated premise that v17.10.0 had tokenised the last of them and the backlog was
+zero. **It was not**: ~20 remained. Counting the DISTINCT VALUES rather than the
+sites (the v17.9.0 spacing lesson) showed why — **three different values all
+meant "a raised control on a theme-invariant fill"**: `0 2px 6px/0.12` ×11,
+`0 1px 4px/0.1` ×2 (the header Walk-in / + New), `0 1px 3px/0.15` ×1 (WeekView's
+segmented toggle). One intent, three spellings, differences nobody chose.
+
+That is a real gap in the scale, not untidiness. `--shadow-btn` is
+raised-on-a-flipping-fill; `--shadow-flat` is not-raised (and its own comment
+already says "anything that should read as raised takes `--shadow-btn`" — which
+is right for the elements it was written about, all of which sit on fills that
+flip). Raised on a fill that does **not** flip had no token.
+
+**`--shadow-btn-solid` is the only `--shadow-*` whose inset is the same in both
+themes, and that is the whole content of it.** The highlight belongs to the
+element's own fill — `BLOCK_BG`, `--app-*-solid`, `BTN.*` — which is deliberately
+theme-invariant, so tuning the highlight per theme would be wrong on it (the
+v17.8.0 white-inset-over-fixed-fill rule). The **drop** still deepens
+0.12 → 0.4, because it falls on the page and the page does flip. The literals
+never made that distinction, so a modal footer button sat at 0.12 in dark beside
+siblings at 0.35. Correcting it is the one visible change here.
+
+Three more tokens fall out of the same sweep. `--shadow-btn-accent` /
+`--shadow-btn-success` are a primary button glowing in its **own hue** — not
+elevation, so uniquely they are identical in both themes; they unify four
+literals that carried two different alphas (0.25 / 0.2) for one effect.
+`--shadow-well` is the inverse of `--shadow-btn-solid` — a groove — and its two
+sites (the Toggle track, HistoryPopup's panel) were both theme-**blind**: a
+0.06–0.08 black inset is close to invisible on a dark surface.
+
+**Two sites stay literals, marked `/* @shadow */` at the site** per the house
+convention: TimelineView's drag shadow (a block lifted under a finger is a
+one-off depth) and `Kbd`. `Kbd` was scoped into this sweep as a third "inset
+well" and is not one — a drop *plus* a **bottom** inset is the physical keycap
+look, the same category as that atom's deliberate monospace font: exempt from the
+scale, not missing from it. TimelineView's `/* @fixed-fill */` marker went with
+the literal it was blessing.
+
+**The glow count was wrong by one in my own survey, and the reason is the
+recurring one.** `WalkinForm`'s Seat button spells its ternary across three
+lines, so a `grep -o 'boxShadow[^,]*"[^"]*"'` over the values walked straight
+past it — the same shape as `StatusToasts`' `toastShadow` hiding behind a `const`
+in v17.10.0, and as an HTML entity hiding from a glyph scan in v17.9.0. It was
+caught by re-grepping for what *remained* after the sweep rather than trusting
+the plan's count. Do that last pass every time.
+
+**Verified** by reading the computed tokens out of the live CSSOM in both themes
+(`?theme=light` / `?theme=dark`): the asymmetry is real — `--shadow-btn-solid`
+resolves 0.12→0.4 on the drop with the inset held at 0.15, the glows are
+identical in both. Spot-checked the computed `boxShadow` on the header pair and
+the booking form's Save. 313 tests, lint clean, `check:style` clean.

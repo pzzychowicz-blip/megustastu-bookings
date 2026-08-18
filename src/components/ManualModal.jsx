@@ -227,7 +227,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
           borderRadius: R.pill, padding: "10px 18px",
           cursor: ok ? "pointer" : "not-allowed",
           fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
-          boxShadow: ok ? "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"
+          boxShadow: ok ? "var(--shadow-btn-solid)" : "none"
         }}
       >
         {assignLabel}
