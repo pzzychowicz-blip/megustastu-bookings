@@ -930,7 +930,21 @@
          intended. During a drag the block's INLINE transform wins over both,
          which is the documented behaviour. Its inline `TL_MOVE` transition
          already lists `transform`, so this eases rather than snapping. */
-      .mgt-blk:active { transform: scale(0.96); }
+      /* /code-review: scoped to COARSE pointers, and that is a correctness fix,
+         not tidiness. The block CONTAINS a click target (the Assign handle, a
+         <span onClick> in TimelineView), and `:active` matches ancestors — so on
+         a mouse, pressing Assign would scale the block between mousedown and
+         mouseup, the handle would slide out from under the cursor, and `click`
+         would resolve to their common ancestor (the block) instead of the
+         handle. That is the v17.9.1 bug exactly.
+         On touch it cannot happen: the pointer is implicitly captured to the
+         touchstart target, so the handle still receives the tap however far it
+         moves. Touch is also the only place this rule was ever needed — a mouse
+         already has the hover lift and the `.mgt-hover-scale:active` dip above.
+         `.mgt-nopress` is honoured here as it is on every other press rule. */
+      @media (hover: none), (pointer: coarse) {
+        .mgt-blk:active:not(.mgt-nopress) { transform: scale(0.96); }
+      }
 
       /* ── v17.8.0: the keyboard focus ring ───────────────────────────────────
          The app had NO :focus or :focus-visible rule anywhere, so a focused
