@@ -48,15 +48,29 @@
 // cross-origin, and the first line of onFetch drops them.
 
 const CACHE = "mgt-shell-v1";
+
+// How long a navigation waits for the network before the cache answers. Short
+// on purpose: the shell is the thing you are waiting for, and it is already on
+// the device. See the race in the navigate branch.
+const NAV_TIMEOUT_MS = 3000;
 // /code-review: the icon names are ANCHORED, not prefix-matched. `|icon` also
 // matched any future top-level path starting with those letters, and cache-first
 // is only safe for names that are content-hashed or genuinely immutable.
 // (`\??` because index.html appends a ?v=<version> cache-buster to the icons.)
+// /code-review round 2: `assets/` is a PREFIX (it holds the hashed bundle, so
+// everything under it is immutable), while the icon names are EXACT. Collapsing
+// both into one alternation with a shared `(\?|$)` terminator — as the first
+// anchoring fix did — silently required the path to END at `assets/`, so
+// `/assets/index-abc123.js`, i.e. the entire app bundle, stopped being cached.
+// It survived a device re-test because the dev server has no /assets/ at all;
+// tests/service-worker.test.js is what caught it.
 const ASSET_RE = new RegExp(
-  "^\\/(assets\\/"
-  + "|icon\\.svg|icons\\.svg|icon-192\\.png|icon-512\\.png"
+  "^\\/("
+  + "assets\\/.+"
+  + "|(icon\\.svg|icons\\.svg|icon-192\\.png|icon-512\\.png"
   + "|icon-maskable-512\\.png|apple-touch-icon\\.png"
   + "|favicon\\.svg|manifest\\.webmanifest)(\\?|$)"
+  + ")"
 );
 
 // Shown only when a navigation fails AND nothing is cached — i.e. a cold start
@@ -77,8 +91,8 @@ border:0;border-radius:999px;padding:11px 22px;cursor:pointer}
 <h1>No connection</h1>
 <p>MGT Bookings can't load right now. Bookings already on this device are safe,
 and any changes you made will sync once you're back online.</p>
-<button onclick="location.reload()">Try again</button>
-</main></body></html>`;
+<button id="r">Try again</button>
+</main><script>document.getElementById("r").addEventListener("click",function(){location.reload()})</script></body></html>`;
 
 // No skipWaiting(). A new worker waits for the old one to release the page and
 // takes over on the next navigation. Nothing swaps under a shift in progress,
@@ -89,6 +103,12 @@ self.addEventListener("install", () => {});
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
+    // /code-review: this sweep is DELIBERATELY broad, unlike unregisterAll()'s
+    // scoped delete in lib/serviceWorker.js — do not "fix" it to match. It is
+    // what cleans up a v17.4.0 leftover on a device that never saw the v17.4.1
+    // kill switch (one that has been off since before that deploy): such a
+    // device fetches this worker directly, and its stale caches are only ever
+    // going to be removed here.
     for (const key of await caches.keys()) {
       if (key !== CACHE) await caches.delete(key);
     }
@@ -108,7 +128,20 @@ self.addEventListener("fetch", (event) => {
   if (req.mode === "navigate") {
     event.respondWith((async () => {
       try {
-        const fresh = await fetch(req);
+        // /code-review: network-FIRST, not network-FOREVER. `fetch` only
+        // rejects when the browser gives up, which on a hung connection — an AP
+        // associated with no upstream, i.e. the exact restaurant condition this
+        // whole version has been chasing — is 30s or more, with the cached
+        // shell sitting right there unused. Worse, index.html's boot watchdog
+        // fires at 10s and accuses a page that is still legitimately loading.
+        // So the network gets NAV_TIMEOUT_MS to win; after that the cache
+        // answers. The fetch is not aborted — it is left to finish and populate
+        // the cache via waitUntil below, so a slow network still refreshes the
+        // shell for next time.
+        const fresh = await Promise.race([
+          fetch(req),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("nav-timeout")), NAV_TIMEOUT_MS))
+        ]);
         // Only a real, complete response is worth keeping.
         //
         // /code-review: handed to waitUntil, not fired and forgotten.
@@ -123,6 +156,13 @@ self.addEventListener("fetch", (event) => {
         }
         return fresh;
       } catch {
+        // The network either failed or lost the race. If it is merely slow, let
+        // it finish in the background and refresh the shell for next time.
+        event.waitUntil(fetch(req).then((late) => {
+          if (late && late.ok && late.type === "basic") {
+            return caches.open(CACHE).then((c) => c.put("/", late));
+          }
+        }).catch(() => {}));
         const cached = await caches.match("/", { cacheName: CACHE });
         if (cached) return cached;
         return new Response(OFFLINE_HTML, {

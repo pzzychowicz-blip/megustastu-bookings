@@ -74,8 +74,14 @@ export async function unregisterAll() {
 let queue = Promise.resolve();
 
 export function applyServiceWorker(enabled) {
-  queue = queue.then(() => applyNow(enabled)).catch(() => {});
-  return queue;
+  // /code-review: the caller gets the real outcome; the QUEUE gets the swallow.
+  // Attaching one .catch() to both meant `await applyServiceWorker(true)`
+  // resolved to undefined on failure — indistinguishable from success. Nothing
+  // awaits it today, which is exactly why it would go unnoticed the day
+  // something does.
+  const run = queue.then(() => applyNow(enabled));
+  queue = run.catch(() => {});
+  return run;
 }
 
 async function applyNow(enabled) {

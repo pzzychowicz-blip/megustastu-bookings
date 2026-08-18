@@ -84,11 +84,25 @@ describe("CSP ↔ inline boot script", () => {
 
   // Vite processes index.html; if it ever rewrites the inline block, the source
   // hash would pass here while production stayed blocked.
-  it("built output matches the source block, when dist/ exists", () => {
-    const distPath = join(ROOT, "dist/index.html");
-    if (!existsSync(distPath)) return;
-    const built = inlineScripts(readFileSync(distPath, "utf8"));
-    expect(built.length).toBe(blocks.length);
-    expect(sha256(built[0])).toBe(sha256(blocks[0]));
-  });
+  //
+  // /code-review: this used to `return` when dist/ was missing, which made the
+  // one assertion covering "Vite rewrote the block" the one most likely never
+  // to run — `npm test` alone skips it entirely, and CI only happens to build
+  // first. A stale dist is the other half: during this session a pin refresh
+  // preceded a rebuild and the comparison was against a build that no longer
+  // corresponded. So: skipping is now VISIBLE, and a stale dist fails loudly
+  // rather than comparing the wrong bytes.
+  it.runIf(existsSync(join(ROOT, "dist/index.html")))(
+    "built output matches the source block",
+    () => {
+      const built = inlineScripts(readFileSync(join(ROOT, "dist/index.html"), "utf8"));
+      expect(built.length).toBe(blocks.length);
+      expect(
+        sha256(built[0]),
+        "dist/index.html's boot script differs from the source — either Vite "
+          + "rewrote it (in which case the pin must be computed from dist), or "
+          + "dist/ is stale; re-run `npm run build`."
+      ).toBe(sha256(blocks[0]));
+    }
+  );
 });

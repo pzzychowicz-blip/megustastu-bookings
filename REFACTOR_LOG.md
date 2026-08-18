@@ -10645,3 +10645,47 @@ two lines apart — is now `setSwEnabledState`.
 **Re-verified on the tablet after the fixes:** registers, caches `/` plus the
 icons and manifest, **zero Firebase or googleapis URLs cached**, 15 bookings
 intact. 332 tests, lint clean, `check:style` clean.
+
+### Commit 17 — /code-review round 2, and the bug it found in round 1's fix
+
+Seven findings, all fixed — and the test written for one of them immediately
+caught a **regression introduced by the previous review round**.
+
+**`ASSET_RE` had stopped matching the app bundle.** Round 1 anchored the icon
+names to stop `|icon` over-matching, and folded `assets/` into the same
+alternation behind a shared `(\?|$)` terminator — which silently required the
+path to *end* at `assets/`. So `/assets/index-abc123.js`, the entire application,
+was no longer cached, and the offline shell cached nothing but its icons. **It
+survived a device re-test because the dev server has no `/assets/` directory at
+all** — I re-ran the caching check after that fix, saw icons and `/` in the
+cache, and read it as a pass. `assets/` is a PREFIX and the icon names are
+EXACT; they cannot share a terminator. Now proven both ways on the tablet, with
+a bundle-shaped file placed under `/assets/`.
+
+That is the whole argument for the test file this round adds. The worker had
+none — the highest-consequence code in the version, guarded only by a manual
+device run that had already missed something. `tests/service-worker.test.js`
+rebuilds `ASSET_RE` *from the worker's own source* (so it cannot drift by
+copying), checks both directions of the routing predicate, and asserts the four
+safety properties that fail **silently** if removed: no `skipWaiting` call,
+cross-origin dropped on the first line, a bounded navigation timeout, and every
+cache write inside `waitUntil`. It also pins `CACHE` against the app's
+`SW_CACHE` — two hand-copied strings in different files, where bumping one
+leaves "Work offline: off" unregistering the worker and stranding its cache.
+
+**Network-first was network-forever.** `fetch` only rejects when the browser
+gives up, which on a hung connection — an AP associated with no upstream, the
+exact condition this version's reconnect watchdog exists for — is 30s or more,
+with the cached shell sitting unused. The 10s boot watchdog would fire over a
+page that was still legitimately loading, teaching staff to distrust the
+recovery screen. The network now gets **3s** to win; the losing fetch is not
+aborted but left to refresh the cache in the background.
+
+Also: `activate`'s delete-all-caches is now documented as deliberate (it is what
+cleans a v17.4.0 leftover off a device that never saw the v17.4.1 kill switch —
+"do not fix it to match `unregisterAll`"); the offline page's inline `onclick`
+became `addEventListener`, matching the boot watchdog and its CSP reasoning;
+`applyServiceWorker` returns the real outcome while only the queue swallows
+failures; and `csp.test.js`'s dist comparison no longer silently skips.
+
+**355 tests.**
