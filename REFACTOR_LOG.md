@@ -10337,3 +10337,18 @@ Guarded in `tests/stylesheet.test.js`: `.mgt-ac-row:active` and `.mgt-blk:active
 join `CRITICAL_SELECTORS`, and the tap-highlight suppression gets a DECLARATION
 assertion (it lives on `:root`, a prelude far too common to guard by name — the
 same reasoning as commit 1's). All three verified to fail when removed.
+
+### Commit 9 — CLAUDE.md: the tap highlight, and a measurement trap
+
+**File:** `CLAUDE.md`. **Behavioural change:** none.
+
+The press-feedback section gains the platform-highlight suppression and, more
+usefully, **which of the two affordances a surface gets and why** — the v17.9.1
+container-vs-control rule, restated for `:active`, with the reason a scale on a
+container is a bug (`:active` matches ancestors).
+
+New Gotchas row for the measurement trap, because it cost most of an hour and
+would cost it again: synthetic input does not set the UA `:active` state, by any
+mechanism available here, so a correct rule reads as dead. `CSS.forcePseudoState`
+is the instrument, and forcing the same state on a control that already works is
+what makes the reading trustworthy.
