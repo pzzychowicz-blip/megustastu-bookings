@@ -579,6 +579,22 @@
       input, textarea, select, button {
         font-family: inherit;
       }
+      /* v17.10.1: kill Android's platform tap highlight.
+         Chrome's default `-webkit-tap-highlight-color` is rgba(51,181,229,0.4)
+         — Holo blue at 40% — and it is painted as a RECTANGLE over the
+         element's border box, ignoring border-radius. On a UI made of pills
+         that is a hard blue rectangle flashing around every button you touch,
+         which is what it looked like on the restaurant's tablet.
+         It is also redundant: v17.8.0 gave every control its own press-scale
+         dip, so the platform highlight is a second, uglier answer to a question
+         the app already answers in its own language. The two surfaces that are
+         NOT buttons — the List card and the timeline block — get that language
+         extended to them below, so nothing loses its touch feedback.
+         Set on :root because the property INHERITS; one declaration covers
+         everything including future elements. */
+      :root {
+        -webkit-tap-highlight-color: transparent;
+      }
       /* v17.10.1: a control's LABEL is not selectable text.
          On Android, a long-press does two things at once: it arms our own hold
          gesture (the timeline/plan quick-status popup, ViewSwitcher's split
@@ -679,6 +695,19 @@
       }
       @media (hover: hover) and (pointer: fine) {
         .mgt-ac-row:hover { background-color: var(--row-bg-hover, var(--bg-ac-hover)); }
+      }
+      /* v17.10.1: the same tint on PRESS, which is the touch equivalent of the
+         hover above — and outside the hover query, because touch is exactly
+         where it is needed. It has to be a tint and not the press-scale: these
+         surfaces are CONTAINERS OF CONTROLS, `:active` matches ancestors of the
+         pressed element, so a scale here would shrink the card under the very
+         button you were aiming at — the v17.9.1 click bug, arriving by a new
+         route. `.mgt-nopress` is deliberately NOT excluded: that opt-out means
+         "no transform" (its two other rules are both transform rules), and the
+         notification strip's lid carries it precisely because it is one of
+         these containers. It should still acknowledge a tap. */
+      .mgt-ac-row:active:not(:disabled) {
+        background-color: var(--row-bg-hover, var(--bg-ac-hover));
       }
       /* v17.5.0 correction: TimeAxis is now a ruler/tape picker whose centre
          marker is fixed while the ruler scrolls under it. This is the "detent"
@@ -891,6 +920,17 @@
       @media (hover: hover) and (pointer: fine) {
         .mgt-hover-scale:active:not(:disabled):not(.mgt-nopress) { transform: scale(1.02); }
       }
+      /* v17.10.1: the timeline block and the waitlist ghost are the app's only
+         non-button LEAF controls that staff tap constantly, so they take the
+         same dip. Targeted by `.mgt-blk` rather than by widening the rule to
+         `.mgt-hover-scale`, which several containers of controls also carry —
+         see the .mgt-ac-row note above for why that would reintroduce a
+         geometry bug. On a pointer device the rule above wins on specificity
+         (0,4,0 vs 0,2,0) and the block presses from its lifted size, as
+         intended. During a drag the block's INLINE transform wins over both,
+         which is the documented behaviour. Its inline `TL_MOVE` transition
+         already lists `transform`, so this eases rather than snapping. */
+      .mgt-blk:active { transform: scale(0.96); }
 
       /* ── v17.8.0: the keyboard focus ring ───────────────────────────────────
          The app had NO :focus or :focus-visible rule anywhere, so a focused

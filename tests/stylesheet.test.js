@@ -56,6 +56,8 @@ const CRITICAL_SELECTORS = [
   ".mgt-glyph",                       // floor-plan table hover halo + press dim
   ".mgt-tlghost",                     // the seated ghost's lockstep hover
   ".mgt-group-hover",                 // multi-table group lift
+  ".mgt-ac-row:active",               // the touch tint on card/row/panel surfaces
+  ".mgt-blk:active",                  // the timeline block/ghost press dip
   ".mgt-plan-headrow",                // Plan header grid (has a media fallback)
   ".mgt-detent",                      // TimeAxis snap
   "@media print",                     // DaySheet is print-only; nothing else shows it
@@ -194,5 +196,19 @@ describe("index.html stylesheet", () => {
       "no rule opts controls out of text selection").toBe(true);
     expect(bodies.some((b) => /-webkit-touch-callout:\s*none/.test(b)),
       "the iOS half of the control no-select rule is missing").toBe(true);
+  });
+
+  // v17.10.1 — same shape, same reason. Android's default tap highlight is
+  // rgba(51,181,229,0.4) painted as a RECTANGLE over the border box, ignoring
+  // border-radius: a blue rectangle around every pill you touch. The kill lives
+  // on `:root` because the property inherits, and `:root` is far too common a
+  // prelude to guard by name — so, again, assert the DECLARATION.
+  it("keeps the platform tap highlight suppressed", () => {
+    // Deliberately a whole-sheet search, not a scoped one: the declaration
+    // lives on `:root` because the property inherits, and there is nothing
+    // useful to scope to — `:root` is the token block's prelude too. What
+    // matters is that SOME rule still suppresses it.
+    expect(/-webkit-tap-highlight-color:\s*transparent/.test(css),
+      "Android's blue tap-highlight rectangle is back").toBe(true);
   });
 });

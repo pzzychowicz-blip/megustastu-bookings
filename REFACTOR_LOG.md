@@ -10271,3 +10271,60 @@ must not be gated on `navigator.onLine`.
 lines), 319 tests, lint 0 errors, `check:style` clean, all re-run per commit.
 On-device work is recorded per commit above; the shadow tokens were read back out
 of the live CSSOM in both themes rather than trusted from the source.
+
+### Commit 7 — the blue rectangle: Android's tap highlight, and what replaces it
+
+**Files:** `index.html`, `tests/stylesheet.test.js`. **Behavioural change:** yes,
+on touch.
+
+Reported: tapping anything on the tablet flashes a blue rectangle. It is
+`-webkit-tap-highlight-color`, sitting at Chrome's Android default
+`rgba(51, 181, 229, 0.4)` — Holo blue at 40% — which the app had never
+overridden. Confirmed on-device two ways: the computed value, and a screenshot
+taken 250ms into a press with the colour temporarily forced to opaque red. **The
+highlight is painted as a hard RECTANGLE over the border box, ignoring
+`border-radius`** — which is why it reads so badly on a UI made of pills, and
+why "rectangular" was the useful word in the report.
+
+It is also redundant. v17.8.0 gave every control its own press-scale dip, so the
+platform highlight is a second, uglier answer to a question the app already
+answers in its own language. Suppressed on `:root`, since the property inherits.
+
+**The interesting half is what had to replace it.** Two surfaces staff tap
+constantly are not `<button>`s and therefore had no press feedback of their own —
+the platform highlight was all they had. They are handled differently, and the
+difference is the v17.9.1 rule:
+
+- **The List card** (and every `.mgt-ac-row` surface — Summary, autocomplete
+  rows, the notification strip's lid) gets a **tint on `:active`**, the touch
+  equivalent of its existing hover tint. It could not be the press-scale:
+  `:active` matches ANCESTORS of the pressed element, so a scale here would
+  shrink the card under the very button you were aiming at — the v17.9.1 click
+  bug, arriving by a new route. `.mgt-nopress` is deliberately not excluded,
+  because that opt-out means "no transform" (its other rules are both transform
+  rules) and the strip's lid carries it precisely for being one of these
+  containers.
+- **The timeline block and the waitlist ghost** are leaf controls, so they take
+  the dip — targeted as `.mgt-blk`, NOT by widening the rule to
+  `.mgt-hover-scale`, which several containers of controls also carry
+  (`WaitlistPanel`'s row, `CustomersSettings`' row). Their inline `TL_MOVE`
+  transition already lists `transform`, so it eases; a drag's inline transform
+  still wins, as documented.
+
+**A methodology correction worth more than the fix.** Every attempt to measure
+`:active` on the device read `false` — on the new rules AND on a plain button,
+which would have meant v17.8.0's press-scale had never worked on this tablet.
+It had. **Synthetic input does not set the UA `:active` state**: not
+`element.dispatchEvent`, not CDP `Input.dispatchTouchEvent`, not CDP
+`Input.dispatchMouseEvent`, not `adb shell input`. The measurement was of the
+tooling. `CSS.forcePseudoState` is the instrument that answers the actual
+question — "if this element were `:active`, does my rule apply?" — and under it
+all three rules resolve: button `scale(0.966)`, block `scale(0.960)`, card
+`rgba(255,255,255,0.45)` → `rgba(255,255,255,0.984)`. The button rule behaving
+identically is the control that makes the other two trustworthy. **Never conclude
+a CSS state rule is dead from synthetic input.**
+
+Guarded in `tests/stylesheet.test.js`: `.mgt-ac-row:active` and `.mgt-blk:active`
+join `CRITICAL_SELECTORS`, and the tap-highlight suppression gets a DECLARATION
+assertion (it lives on `:root`, a prelude far too common to guard by name — the
+same reasoning as commit 1's). All three verified to fail when removed.
