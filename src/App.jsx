@@ -760,7 +760,7 @@ function BookingApp({uid}){
   // for historical reasons (the comment misleadingly grouped it there).
   // v17.10.1: per-device offline shell (see lib/serviceWorker.js). Default ON,
   // so only the non-default "0" is ever stored.
-  const [swEnabled, setSwEnabled_] = useState(readSwEnabled);
+  const [swEnabled, setSwEnabledState] = useState(readSwEnabled);
   const swAppliedRef = useRef(false);
   const [settingsTab, setSettingsTab] = useState("general");
   useEffect(function(){formRef.current=form;},[form]);
@@ -942,8 +942,10 @@ function BookingApp({uid}){
   // worker, and a synced flag would come straight back down and re-enable it.
   function onToggleSw(){
     const next=!swEnabled;
-    setSwEnabled(next);      // lib/serviceWorker.js owns the key
-    setSwEnabled_(next);
+    setSwEnabled(next);        // lib/serviceWorker.js owns the localStorage key
+    setSwEnabledState(next);   // /code-review: was setSwEnabled_ — one underscore
+                               // apart from the writer above, which is a name
+                               // that only tells you it is not the other one.
   }
   function onToggleReduceMotion(){
     const next=!reduceMotion;

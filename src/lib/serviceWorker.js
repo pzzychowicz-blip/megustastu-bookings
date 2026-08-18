@@ -20,6 +20,13 @@
 
 export const SW_KEY = "mgt-sw";
 
+// Must match CACHE in public/sw.js. /code-review: unregisterAll() used to drop
+// EVERY cache on the origin, which is harmless only for as long as this worker
+// is the only thing that creates one — and makes turning the setting off a
+// blunt instrument that would silently destroy an unrelated cache the moment
+// one exists. Delete what we own, nothing else.
+export const SW_CACHE = "mgt-shell-v1";
+
 /** Is the offline shell enabled on this device? Default true. */
 export function readSwEnabled() {
   try { return localStorage.getItem(SW_KEY) !== "0"; }
@@ -47,9 +54,7 @@ export async function unregisterAll() {
   try {
     const regs = await navigator.serviceWorker.getRegistrations();
     for (const r of regs) { await r.unregister(); n++; }
-    if (typeof caches !== "undefined") {
-      for (const k of await caches.keys()) await caches.delete(k);
-    }
+    if (typeof caches !== "undefined") await caches.delete(SW_CACHE);
   } catch { /* nothing we can do from here; ?sw=off is the other route */ }
   return n;
 }
@@ -61,7 +66,19 @@ export async function unregisterAll() {
 // where the app has demonstrably booted AND reached Firebase. A build that
 // cannot load its data can therefore never persist itself into a cache, which
 // is the precise shape of the v17.4.0 failure this feature is repaying.
-export async function applyServiceWorker(enabled) {
+// /code-review: serialised. The caller fires this without awaiting, so a rapid
+// toggle (or a re-render landing between two changes) could leave a register
+// and an unregister in flight with no ordering guarantee — and the final state
+// could be the opposite of the switch position. Chaining on one promise makes
+// the LAST call win, which is what a toggle means.
+let queue = Promise.resolve();
+
+export function applyServiceWorker(enabled) {
+  queue = queue.then(() => applyNow(enabled)).catch(() => {});
+  return queue;
+}
+
+async function applyNow(enabled) {
   if (!swSupported()) return "unsupported";
   if (!enabled) { await unregisterAll(); return "disabled"; }
   try {

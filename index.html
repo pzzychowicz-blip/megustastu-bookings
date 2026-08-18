@@ -1141,22 +1141,32 @@
         // work when React never mounts — which is exactly the state you would
         // be in when you need it.
         //
-        // The querystring is deliberately not cleaned up afterwards: the page
-        // is about to be reloaded by hand anyway, and rewriting history from
-        // the boot script is one more thing that could itself fail.
+        // /code-review: it RELOADS when it is done, and that is the difference
+        // between a recovery and a rumour. The page you run this on was already
+        // claimed by the old worker, so unregistering changes nothing you can
+        // see — a frozen app stays frozen, and the watchdog's "Reset offline
+        // copy" button would render the same broken page a second time, which
+        // reads as "the fix did nothing". Reloading to the CLEAN path (no
+        // ?sw=off) both shows the result and cannot loop, because the reloaded
+        // page no longer matches this branch.
         try {
           if (/[?&]sw=off\b/.test(location.search)) {
             try { localStorage.setItem("mgt-sw", "0"); } catch (e) {}
+            var jobs = [];
             if (navigator.serviceWorker) {
-              navigator.serviceWorker.getRegistrations().then(function (rs) {
-                rs.forEach(function (r) { r.unregister(); });
-              }).catch(function () {});
+              jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+                return Promise.all(rs.map(function (r) { return r.unregister(); }));
+              }).catch(function () {}));
             }
             if (window.caches) {
-              caches.keys().then(function (ks) {
-                ks.forEach(function (k) { caches.delete(k); });
-              }).catch(function () {});
+              jobs.push(caches.keys().then(function (ks) {
+                return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+              }).catch(function () {}));
             }
+            // replace(), not assign(): Back must not walk into ?sw=off again.
+            Promise.all(jobs).then(function () {
+              location.replace(location.pathname);
+            });
           }
         } catch (e) { /* the Settings toggle is the other way out */ }
         // v17.10.1: BOOT WATCHDOG — the app said nothing when it failed to start.
@@ -1213,10 +1223,17 @@
             box.appendChild(inner);
             document.body.appendChild(box);
             // If React mounts late after all, get out of the way.
+            // /code-review: BOUNDED. This used to poll twice a second forever
+            // when React never mounted — which is the exact case it exists for,
+            // so the handler for a broken app left a timer running on it. Two
+            // minutes is far past any late mount worth waiting for.
+            var tries = 0;
             var poll = window.setInterval(function () {
               if (root.children.length) {
                 window.clearInterval(poll);
                 if (box.parentNode) box.parentNode.removeChild(box);
+              } else if (++tries > 240) {
+                window.clearInterval(poll);
               }
             }, 500);
           }, 10000);

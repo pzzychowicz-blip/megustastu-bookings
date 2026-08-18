@@ -48,7 +48,16 @@
 // cross-origin, and the first line of onFetch drops them.
 
 const CACHE = "mgt-shell-v1";
-const ASSET_RE = /^\/(assets\/|icon|apple-touch-icon|favicon|manifest\.webmanifest)/;
+// /code-review: the icon names are ANCHORED, not prefix-matched. `|icon` also
+// matched any future top-level path starting with those letters, and cache-first
+// is only safe for names that are content-hashed or genuinely immutable.
+// (`\??` because index.html appends a ?v=<version> cache-buster to the icons.)
+const ASSET_RE = new RegExp(
+  "^\\/(assets\\/"
+  + "|icon\\.svg|icons\\.svg|icon-192\\.png|icon-512\\.png"
+  + "|icon-maskable-512\\.png|apple-touch-icon\\.png"
+  + "|favicon\\.svg|manifest\\.webmanifest)(\\?|$)"
+);
 
 // Shown only when a navigation fails AND nothing is cached — i.e. a cold start
 // with no network. Inline, so there is no extra file that could itself 404.
@@ -101,9 +110,16 @@ self.addEventListener("fetch", (event) => {
       try {
         const fresh = await fetch(req);
         // Only a real, complete response is worth keeping.
+        //
+        // /code-review: handed to waitUntil, not fired and forgotten.
+        // respondWith resolves the moment the response is returned, and the
+        // browser may then kill an idle worker — abandoning a cache.put still
+        // in flight, so the shell silently never lands. Intermittent and
+        // load-dependent: it passes every manual test and fails the one night
+        // it matters.
         if (fresh && fresh.ok && fresh.type === "basic") {
-          const cache = await caches.open(CACHE);
-          cache.put("/", fresh.clone());
+          const copy = fresh.clone();
+          event.waitUntil(caches.open(CACHE).then((c) => c.put("/", copy)));
         }
         return fresh;
       } catch {
@@ -125,8 +141,8 @@ self.addEventListener("fetch", (event) => {
     if (cached) return cached;
     const fresh = await fetch(req);
     if (fresh && fresh.ok && fresh.type === "basic") {
-      const cache = await caches.open(CACHE);
-      cache.put(req, fresh.clone());
+      const copy = fresh.clone();   // see the navigation branch: waitUntil, not fire-and-forget
+      event.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy)));
     }
     return fresh;
   })());

@@ -10606,3 +10606,42 @@ offline boot is unverified (for reasons the entry states), and condition 3 — o
 device, in service, a full shift — is Patryk's to run. The entry now reads as a
 deployment checklist with the recovery steps beside it, rather than as a design
 backlog.
+
+### Commit 16 — /code-review round on the offline shell
+
+Seven findings, all fixed. Three are worth carrying.
+
+**The recovery did not recover.** `?sw=off` unregistered the workers and dropped
+the caches, then left you looking at the same page — which on a frozen app is
+the same frozen app, because the page you run it on was already claimed by the
+old worker. The boot watchdog's "Reset offline copy" button therefore rendered
+the broken screen a second time, reading as *"the fix did nothing"*. It now
+awaits the unregister/delete promises and `location.replace()`s to the clean
+path: visible proof, and it cannot loop, because the reloaded URL no longer
+matches the branch. **A recovery path that produces no visible change is
+indistinguishable from a broken one** — verified on the tablet: 1 registration
++ 1 cache → 0 and 0, URL self-cleaned, app back with its 15 bookings.
+
+**`cache.put()` was fire-and-forget.** `respondWith` resolves as soon as the
+response is returned and the browser may then kill an idle worker, abandoning a
+put still in flight — so the shell would intermittently never land, in a way
+that passes every manual test and fails the one night it matters. Both call
+sites now hand the write to `event.waitUntil()`.
+
+**The handler for a broken app left a timer running on it.** The watchdog's
+500ms poll only cleared when React mounted, which in its own failure case never
+happens — so a dead device polled twice a second forever. Bounded to two
+minutes.
+
+Also: `unregisterAll()` deleted *every* cache on the origin rather than the one
+it owns (harmless only while nothing else creates one, and a trap for whatever
+does next); `ASSET_RE`'s `icon` branch was an unanchored prefix that would have
+made any future `/icon…` path cache-first, which is only safe for immutable
+names; `applyServiceWorker` is serialised through a promise queue so a rapid
+toggle cannot leave a register and an unregister racing; and the state setter
+`setSwEnabled_` — one underscore from the localStorage writer `setSwEnabled`,
+two lines apart — is now `setSwEnabledState`.
+
+**Re-verified on the tablet after the fixes:** registers, caches `/` plus the
+icons and manifest, **zero Firebase or googleapis URLs cached**, 15 bookings
+intact. 332 tests, lint clean, `check:style` clean.
