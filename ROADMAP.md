@@ -14,45 +14,29 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **PWA / offline shell — withdrawn in v17.4.1. The iOS re-test was RUN on
-  2026-08-18 and it does not settle the question.** Result on the iPhone against
-  PROD (v17.10.0): bookings loaded normally, `getRegistrations()` → **0**,
-  `controller: false`, `firebase:previous_websocket_failure` → **null**.
+- **Stage the offline shell on one device, for a full shift.** The PWA shipped
+  in v17.10.1 (see `REFACTOR_LOG.md` for why the v17.4.0 worker is now believed
+  innocent, and for the safety design). Two things remain, and neither is code:
 
-  That confirms three preconditions and answers nothing else:
-  1. **The v17.4.1 kill switch demonstrably worked.** No worker is registered or
-     controlling on iOS, so a future candidate starts from a clean slate. This
-     was condition-zero for ever re-adding one and it is now evidenced, not
-     assumed.
-  2. PROD is healthy on iOS today.
-  3. That device carries no cached websocket-failure flag.
+  1. **The production offline boot is unverified.** Everything was exercised on
+     the restaurant's Android tablet — registration, caching, `/assets/`
+     cache-first, zero Firebase URLs cached, `?sw=off`, the kill switch — but
+     *cached HTML plus cached hashed bundle* cannot be tested locally: in dev
+     the modules are not under `/assets/`, and a production build points at PROD
+     Firebase, which the dev environment must never load. After deploying, open
+     the app on the tablet once online, then put the device in aeroplane mode and
+     reload. It should open and show the day's bookings from cache. If it shows
+     the "MGT Bookings didn't start" screen instead, that is the boot watchdog
+     doing its job — tap **Reset offline copy** and report it.
+  2. **A full shift on one device before the others get it.** The toggle is
+     per-device (Settings → General → "Work offline"), so leave it ON for one
+     tablet and OFF elsewhere until it has been through a real service.
 
-  **Why it cannot discriminate, so nobody repeats it expecting an answer.** The
-  two candidate causes of the v17.4.0 freeze were the service worker and the
-  CSP blocking Firebase's JSONP long-poll fallback on a device holding that
-  flag. With the flag absent *and* v17.5.1's `forceWebSockets()` making the
-  JSONP path unreachable anyway, the CSP theory predicts a healthy load — and so
-  does "the worker was at fault, and it is gone". **A healthy load is predicted
-  by both, so observing one distinguishes nothing.** What v17.5.1 did change is
-  that the CSP mechanism can no longer recur at all; the worker's innocence is
-  still unproven.
-
-  **The bar is therefore unchanged.** A real test needs a candidate worker on an
-  HTTPS deploy exercised on a physical iPhone/iPad — a service worker cannot
-  register over a LAN IP, so it can never be tested against the local dev
-  server. Conditions 1–3 below stand in full:
-  1. A way to run the candidate worker on a real iPhone/iPad against
-     production-scale data — remote-debug via Safari Web Inspector, or a
-     separate Vercel project pointed at a production-sized copy.
-  2. A kill switch kept deployed alongside it from day one.
-  3. A staged rollout — one device, in service, for a full shift — before the
-     tablets get it.
-
-  Read `CLAUDE.md`'s two Gotchas rows first: "A shipped service worker CANNOT be
-  withdrawn by deleting it" and "A SW must be testable on the target device
-  before it ships". The offline win remains small — Firebase already queues
-  offline writes, and the worker only cached the HTML/JS shell the normal HTTP
-  cache handles — so the bar is high on purpose.
+  **If anything goes wrong:** open the app with `?sw=off` on the end of the
+  address — it works even when the app will not start. To remove it from every
+  device at once, re-deploy the v17.4.1 kill switch as `public/sw.js` (recover it
+  from git history, the commit before v17.10.1); that path was verified on the
+  tablet to clear a live worker and its cache within one update cycle.
 
 ## Designed, not implemented
 

@@ -10584,3 +10584,25 @@ which this environment must never load. The reasoning that it works is sound
 and commit 13's boot watchdog exists precisely because that reasoning is not a
 test. **ROADMAP condition 3 — one device, in service, for a full shift — is
 still outstanding and is Patryk's to run.**
+
+### Commit 15 — CLAUDE.md + ROADMAP: the offline shell, documented
+
+**Files:** `CLAUDE.md`, `ROADMAP.md`. **Behavioural change:** none.
+
+A new architecture section states the four properties that make the worker safe
+and marks them as load-bearing, because the next person to touch it will be
+tempted by exactly the shortcuts they forbid — precaching (which would put the
+worker back near the build), `skipWaiting` (which would swap it under a shift),
+and caching a Firebase response (which would put it in the data path).
+
+New Gotchas row for the CSP hash, since commit 12 proved it is a live trap and
+this version edited that script twice more. It records both halves: the pin must
+be regenerated, and inline `onclick=` handlers are blocked by the same directive
+— which is why the boot watchdog uses `addEventListener`.
+
+`ROADMAP.md`'s PWA entry is **rewritten rather than deleted**. The feature
+shipped, but two things genuinely remain and neither is code: the production
+offline boot is unverified (for reasons the entry states), and condition 3 — one
+device, in service, a full shift — is Patryk's to run. The entry now reads as a
+deployment checklist with the recovery steps beside it, rather than as a design
+backlog.
