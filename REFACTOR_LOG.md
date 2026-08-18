@@ -10053,3 +10053,70 @@ stream and the drag-arm never fires. That the two gestures interact is now
 established; whether the fix also restores drag-to-another-table on Android was
 **not** demonstrated — a stationary synthetic press does not arm it in either
 case, so the claim is left open rather than assumed.
+
+### Commit 2 — a stuck Firebase reconnect kicks itself
+
+**File:** `src/hooks/usePersistence.js`. **Behavioural change:** yes — a lost
+connection now recovers without anyone minimising the app.
+
+Reported from the floor: the tablet sometimes sits on "Firebase connection lost"
+indefinitely, and minimising the app and bringing it back fixes it every time.
+That ritual is the diagnosis. Read from the pinned SDK
+(`node_modules/@firebase/database/dist/index.esm.js`):
+
+- `RECONNECT_MAX_DELAY_DEFAULT` is **five minutes** for a web client — the 30s
+  figure next to it is `RECONNECT_MAX_DELAY_FOR_ADMINS`. The delay grows ×1.3
+  per failed attempt.
+- `onRealtimeDisconnect_` sets the delay **straight to that maximum** when the
+  window is hidden at the moment the socket dies, which for a tablet in service
+  is most of the time.
+- It has exactly two reset paths: the browser `online` event, and `onVisible_` —
+  which fires ONLY on a hidden→visible edge, and ONLY when the delay is already
+  exactly at the maximum. **A page that stays visible has no reset path at all.**
+
+So: backgrounded during a blip, delay pinned at 5 minutes; you return while an
+attempt is in flight, so `onVisible_` skips `scheduleConnect_`; that attempt
+fails; the next retry is `Math.random() * 300000` ms and `visible_` is already
+`true`, so nothing will reset it. Minimise-and-restore recreates the one edge the
+SDK listens for.
+
+`goOnline(db)` is the public spelling of `PersistentConnection.resume()`, which
+sets `reconnectDelay_` back to `RECONNECT_MIN_DELAY` and schedules an immediate
+attempt. So the fix is a watchdog on the existing 10s heartbeat — no new timer —
+that calls it after **20s** of a disconnected, foreground page.
+
+Four conditions, each excluding a case where kicking is wrong: not connected;
+the page is **visible** (a hidden page gets the SDK's own reset for free when it
+returns, and waking a backgrounded tablet's radio to retry is the opposite of
+what we want); we have connected **before** (this is a *re*connect watchdog — a
+device that has never handshaken has a different problem, and v17.5.1's load
+watchdog owns reporting it); and past the deadline, measured from the later of
+"went offline" and "last kicked". `offlineSinceRef` is stamped on the way DOWN
+only, so a connection flapping between "no" and "no" cannot push its own
+deadline out.
+
+Kicking when nothing is wrong is harmless: with an attempt already in flight the
+SDK's `!this.realtime_` guard means `resume()` only resets the delay — still the
+useful half, because the *next* failure then retries in 1s rather than minutes.
+
+**Verified on the tablet** (adb + CDP, console captured). Offline with the page
+visible: kicks at t+21.8s, t+44.1s, t+73.7s — the 20s cadence at 10s heartbeat
+granularity. Offline with the page **hidden** for 61s: **zero** kicks. Brought to
+the foreground (via `Page.bringToFront`; an `am start` intent left the tab
+hidden and produced a falsely clean result first time): one kick at t+29.2s.
+Connected: silent. Recovery after the outage was 7.6s, against 6.1s for a control
+build with the watchdog disabled — it does not get in the way.
+
+**What the device disproved, and it matters for whoever tests this next: toggling
+wifi cannot reproduce the stuck state.** A wifi toggle fires the browser
+`offline`/`online` events, and `onOnline_` resets the backoff unconditionally —
+the control build recovered in 6.1s from a 200s outage for exactly that reason.
+The stuck state requires the socket to die while `navigator.onLine` stays
+**true**: an AP that stays associated with no upstream, a captive portal, a NAT
+dropping an idle socket. That is ordinary restaurant wifi, and it is why the
+report comes from the tablet and never from a desk. It is also why the watchdog
+is deliberately **not** gated on `navigator.onLine` — the case it exists for is
+precisely the one where that property lies. Blocking the RTDB host via
+`Network.setBlockedURLs` was tried as a repro and does not work: it does not
+cover WebSocket handshakes. So the mechanism is established from the SDK source
+and the field report; the *watchdog's own behaviour* is what was measured here.

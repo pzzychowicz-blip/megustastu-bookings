@@ -19,7 +19,7 @@
 // prop and the seam disappears.
 
 import { useState, useRef, useEffect } from "react";
-import { ref, onValue, set, get, update } from "firebase/database";
+import { ref, onValue, set, get, update, goOnline } from "firebase/database";
 import { db } from "../firebase";
 import { sanitizeAll, toMins, bookingsAfterAction, histEntry } from "../lib/booking-logic";
 import { hoursFor } from "../lib/constants";
@@ -37,6 +37,30 @@ const STALE_GAP_MS = 90000;
 // freshly-resynced data before giving up and surfacing a red error. ~3 covers
 // the realistic stale-wake / concurrent-reject cases without looping forever.
 const MAX_RETRIES = 3;
+
+// v17.10.1: how long `.info/connected` may stay false, with the page in the
+// FOREGROUND, before we reset the SDK's reconnect backoff ourselves.
+//
+// The RTDB SDK backs off exponentially (×1.3) to RECONNECT_MAX_DELAY_DEFAULT,
+// which is **five minutes** for a web client (the 30s figure in the SDK is
+// RECONNECT_MAX_DELAY_FOR_ADMINS). Worse, `onRealtimeDisconnect_` jumps the
+// delay straight to that maximum whenever the window is hidden at the moment
+// the socket dies — which for a tablet in service is most of the time.
+//
+// It has exactly two reset paths: the browser `online` event, and `onVisible_`,
+// which fires ONLY on a hidden→visible edge and ONLY when the delay is already
+// exactly at the maximum. A page that stays visible has no reset path at all.
+// So: backgrounded during a blip → delay pinned at 5 min → you come back while
+// an attempt is in flight, so onVisible_ skips scheduleConnect_ → that attempt
+// fails → the next retry is Math.random()*300000 ms, and `visible_` is already
+// true so nothing will ever reset it. That is the reported "stuck reconnecting",
+// and it is why minimising the app and restoring it reliably cures it: that
+// recreates the one edge the SDK listens for.
+//
+// 20s is well past the SDK's own early retries (1–3s) and short enough that
+// staff never see it. The heartbeat below is 10s, so the first kick lands at
+// 20–30s and repeats on the same spacing while the connection is still down.
+const RECONNECT_KICK_MS = 20000;
 
 // v17.5.1: how long the first bookings snapshot may take before the app stops
 // showing "loading" and reports that the read is not completing. Generous —
@@ -117,6 +141,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
   const staleRef=useRef(false);
   const lastBeatRef=useRef(Date.now()); // bumped each heartbeat; a large gap == the event loop was frozen (sleep)
   const isConnectedRef=useRef(false);
+  // v17.10.1: when did `.info/connected` last go false, and when did we last
+  // kick the SDK out of its backoff? Both drive the reconnect watchdog in the
+  // heartbeat effect (see RECONNECT_KICK_MS).
+  const offlineSinceRef=useRef(null);
+  const lastKickRef=useRef(0);
   const resyncInFlightRef=useRef(false);
   const [resyncing, setResyncing] = useState(false);
   // ── v15.5.0: per-booking-node write model ───────────────────────────────────
@@ -469,6 +498,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
     const unsub=onValue(ref(db,".info/connected"),function(snap){
       const connected=snap.val()===true;
       isConnectedRef.current=connected; // v15.2.0: gates resync()'s server read
+      // v17.10.1: the watchdog's clock. Stamped on the way DOWN only — a second
+      // false snapshot must not push the deadline out, or a connection that
+      // flaps between "no" and "no" would never qualify as stuck.
+      if(connected) offlineSinceRef.current=null;
+      else if(offlineSinceRef.current===null) offlineSinceRef.current=Date.now();
       if(connected){
         // v15.2.0: if we went stale while offline (a resume/heartbeat fired
         // markStale but resync couldn't read), run it now the socket is back.
@@ -520,6 +554,41 @@ export function usePersistence({ autoOptimizer, nowMins }){
       });
     });
   },[]);
+  // v17.10.1: reset the SDK's reconnect backoff. `goOnline` is the public
+  // spelling of PersistentConnection.resume(), which sets reconnectDelay_ back
+  // to RECONNECT_MIN_DELAY and schedules an immediate attempt — precisely what
+  // minimising and restoring the app does, without needing a person to do it.
+  // Safe when there is nothing wrong: with a connection already in flight it
+  // only resets the delay (the SDK's own `!this.realtime_` guard), and that is
+  // still the useful half, because the NEXT failure then retries in 1s instead
+  // of up to five minutes.
+  function forceReconnect(){
+    lastKickRef.current=Date.now();
+    try{ goOnline(db); }catch{ /* a deleted app instance — nothing to resume */ }
+  }
+  // Called from the 10s heartbeat. Four conditions, and each excludes a case
+  // where kicking would be wrong or pointless:
+  //   • not connected                — nothing to fix otherwise;
+  //   • the page is VISIBLE          — a hidden page gets the SDK's own
+  //     hidden→visible reset for free the moment it comes back, and waking a
+  //     backgrounded tablet's radio to retry is exactly what we don't want;
+  //   • we have connected BEFORE     — this is a *re*connect watchdog. A device
+  //     that has never completed a handshake has a different problem (CSP,
+  //     rules, transport) and the v17.5.1 load watchdog owns reporting it;
+  //     retrying faster there would only make that diagnosis harder to read.
+  //   • past the deadline            — measured from the later of "went
+  //     offline" and "last kicked", so the spacing is the same either way.
+  function kickIfStuck(){
+    if(isConnectedRef.current) return;
+    if(!hasConnectedRef.current) return;
+    if(typeof document!=="undefined"&&document.visibilityState!=="visible") return;
+    const since=offlineSinceRef.current;
+    if(since===null) return;
+    if(Date.now()-Math.max(since,lastKickRef.current)<RECONNECT_KICK_MS) return;
+    console.warn("[conn] still offline after "+Math.round((Date.now()-since)/1000)
+      +"s — resetting the Firebase reconnect backoff.");
+    forceReconnect();
+  }
   // v15.2.0: heartbeat + resume detection driving the freshness gate.
   // The heartbeat bumps lastBeatRef every 10s; a gap >STALE_GAP_MS means the
   // event loop was frozen (OS sleep / lid close) → the local snapshot is stale.
@@ -532,6 +601,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       const gap=Date.now()-lastBeatRef.current;
       lastBeatRef.current=Date.now();
       if(gap>STALE_GAP_MS) gapTrip();
+      kickIfStuck();
     },10000);
     function onResume(){ if(Date.now()-lastBeatRef.current>STALE_GAP_MS) gapTrip(); }
     function onVis(){ if(document.visibilityState==="visible") onResume(); }
@@ -612,6 +682,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
     loadBannerShown, reconnectShown, resyncing, bookingsReady,
     // v17.5.1 diagnosis surface — see the load-watchdog effect above.
     loadStalled, readError, hasConnected,
+    // v17.10.1: the manual half of the reconnect watchdog — the connection
+    // popover's "Reconnect now". Same lever the watchdog pulls, on demand.
+    forceReconnect,
     // firstLoadCount is exposed as a ref because the load-banner JSX in
     // BookingApp reads .current to show the booking count from the first
     // successful Firebase load. It must remain a ref (not state) so
