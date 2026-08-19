@@ -77,7 +77,7 @@ export function useRecurring({ setWriteWarning }) {
   function saveRecurring(next, isSilent) {
     if (!loaded.current) {
       console.warn("[SAFE] Refused to write recurring — initial read has not completed yet.");
-      if (!isSilent) setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
+      if (!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
       return false;
     }
     const computed = sanitizeRecurring(typeof next === "function" ? next(recurringRef.current) : next);

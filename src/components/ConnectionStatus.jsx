@@ -111,8 +111,8 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
         type="button"
         className="mgt-hover-scale"
         onClick={toggleOpen}
-        title={connecting ? "Connecting to Firebase…" : connected ? "Connected to Firebase" : "Firebase connection lost"}
-        aria-label={connecting ? "Connecting to Firebase" : connected ? "Connected to Firebase" : "Firebase connection lost"}
+        title={connecting ? "Connecting to the server…" : connected ? "Connected to the server" : "Lost connection to the server"}
+        aria-label={connecting ? "Connecting to the server" : connected ? "Connected to the server" : "Lost connection to the server"}
         style={{
           appearance: "none",
           border: "none",
@@ -225,10 +225,10 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
           </div>
           <div style={{ fontSize: T.small, marginBottom: 8, color: S.muted }}>
             {connecting
-              ? "Establishing the first connection to the Realtime Database…"
+              ? "Establishing the first connection to the server…"
               : connected
-                ? "Realtime Database is connected."
-                : "Lost connection to the Realtime Database. Changes will sync when it reconnects."}
+                ? "Connected to the server."
+                : "Lost connection to the server. Changes will sync when it reconnects."}
           </div>
           {/* v17.10.1: the manual half of the reconnect watchdog. The watchdog
               (usePersistence) already resets the SDK's backoff after 20s of a

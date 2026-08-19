@@ -10835,3 +10835,34 @@ unit from the tile beside it ("customers *with a no-show*"), so the label has to
 carry that difference. "no-shows with no phone" says both the count and the reason
 those rows are not in the list below it. CLAUDE.md already described the tile in
 almost these words; the screen had never been updated to match.
+
+### Commit 5 — one user-facing noun for the thing the app talks to
+
+**Files:** `src/App.jsx`, `ConnectionStatus.jsx`, `AppBanners.jsx`,
+`StatusToasts.jsx`, `usePersistence.js`, `useWaitlist.js`, `useReminders.jsx`,
+`useRecurring.js`. **Behavioural change:** copy only.
+
+Staff were told about **"Firebase"** and **"the Realtime Database"** — products
+they have no reason to know — and the same thing was named three ways, sometimes
+two of them on one screen:
+
+- "Connected to Firebase" · "Connecting to Firebase…" · "Firebase connected — N
+  bookings loaded." · "Firebase connection lost"
+- "Realtime Database is connected." · "Establishing the first connection to the
+  Realtime Database…" · "Lost connection to the Realtime Database…"
+- "Can't reach the database…" · "Refused to write: Firebase not yet connected."
+
+All of it is **"the server"** now. Patryk chose the noun over the alternative of
+making the sentence about the app ("Connected", "Connection lost"), on the
+grounds that a noun says *what* is failing — useful when the wifi is the usual
+suspect.
+
+**"Firebase" stays in the console**, where it is the correct and genuinely useful
+name: `usePersistence`'s reconnect-backoff log still says so, and every
+`Firebase-shared (settings/…)` source comment is untouched. The distinction is
+audience, not vocabulary hygiene.
+
+Three comments in `StatusToasts.jsx` *quoted* the old strings and were updated in
+the same commit — the v17.9.0 lesson that **copy describing a thing has to change
+when the thing does**, which the app has now been bitten by for glyphs and for
+prose.

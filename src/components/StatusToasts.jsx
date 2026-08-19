@@ -46,9 +46,9 @@
 //  reshuffled      — the post-save flag
 //  reshuffledMsg   — "Tables re-optimised." / "Booking saved." (computed in
 //                    App — it reads optimizerActiveFor(viewDate, autoOptimizer))
-//  loadShown       — the 6s "Firebase connected" banner flag (NOT a loaded
+//  loadShown       — the 6s "Connected to the server" banner flag (NOT a loaded
 //                    signal — see the loadBannerShown gotcha in CLAUDE.md)
-//  loadMsg         — "Firebase connected — N bookings loaded."
+//  loadMsg         — "Connected to the server — N bookings loaded."
 
 import { mkBtn, Toast } from "./atoms";
 import { BTN, R, T, FW, H } from "../lib/constants";
@@ -69,7 +69,7 @@ const toastShadow="var(--shadow-popover)";
 // These nine toasts used to be nine hand-written style objects, each a
 // saturated tint behind a 2px ring in its own semantic colour. Two problems.
 // They shouted — a 2px ring plus a full-surface wash is the loudest treatment
-// in the app, spent on messages that are mostly ambient ("Firebase connected").
+// in the app, spent on messages that are mostly ambient ("Connected to the server").
 // And they were nine independent definitions of the same object, so the
 // vocabulary drifted: font weight alternated 600/700 with no rule behind it.
 //

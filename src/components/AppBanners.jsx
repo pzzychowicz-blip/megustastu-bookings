@@ -70,10 +70,10 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, in
       <>
         <span style={{ flex: 1, minWidth: 0, fontWeight: FW.medium, color: "var(--text-primary)" }}>
           {readError
-            ? "The database refused the read (" + readError.code + " on /" + readError.path + ")."
+            ? "The server refused the read (" + readError.code + " on /" + readError.path + ")."
             : hasConnected
               ? "Connected, but no data has arrived."
-              : "Can\u2019t reach the database \u2014 no connection has been established."}
+              : "Can\u2019t reach the server \u2014 no connection has been established."}
         </span>
         <button
           onClick={function () { window.location.reload(); }}
