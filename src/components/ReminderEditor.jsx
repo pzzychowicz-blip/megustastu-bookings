@@ -20,7 +20,7 @@
 
 import { S, BTN, R, T, FW, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
-import { Fld, Toggle, mkBtn, mkInp, mkArea, usePresence, AutoHeight } from "./atoms";
+import { Fld, Toggle, mkBtn, mkInp, mkArea, useModalPresence, AutoHeight } from "./atoms";
 import { CloseIcon } from "./Icons";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
@@ -35,7 +35,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
   const rec = draft.recurrence || {};
   const todayStr = new Date().toISOString().slice(0, 10);
   // v15.8.0: symmetric open/close animation via the wrapping <ModalPresence>.
-  const { leaving } = usePresence();
+  const { leaving } = useModalPresence();
 
   // ── Field updaters ──────────────────────────────────────────────────────
   // Each one returns a new draft via spread; never mutates the existing one.

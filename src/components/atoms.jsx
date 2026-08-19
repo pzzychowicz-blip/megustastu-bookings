@@ -158,7 +158,7 @@ export function Overlay({ onClose, children, footer }) {
   // v15.8.0: symmetric open/close animation. `leaving` comes from the wrapping
   // <ModalPresence> (default false when there's no provider → enter-only). Mobile
   // = slide-up/down sheet; desktop = scrim fade + card fade/scale. See index.html.
-  const { leaving } = usePresence();
+  const { leaving } = useModalPresence();
   const sheetCls = leaving ? "mgt-sheet-out" : "mgt-sheet-in";
   const scrimCls = leaving ? "mgt-scrim-out" : "mgt-scrim-in";
   const cardCls = leaving ? "mgt-card-out" : "mgt-card-in";
@@ -1120,7 +1120,12 @@ export function Toast({ show, children, style }) {
 // card/sheet to the *-out keyframe before unmounting. No wrapper element is
 // rendered, so the modal's own fixed/overlay positioning is untouched.
 export const PresenceContext = createContext({ leaving: false });
-export function usePresence() { return useContext(PresenceContext); }
+// v17.10.2: was `usePresence`, which collided with the Firebase device-presence
+// hook in src/hooks/usePresence.js — two exported, importable functions of that
+// name sharing nothing but a good word. Importing the wrong one gave a confusing
+// RUNTIME failure, not a build error. This is the narrower, purely-local concern,
+// so it takes the specific name, and it now pairs with its own provider.
+export function useModalPresence() { return useContext(PresenceContext); }
 
 export function ModalPresence({ show, children, outMs = 200 }) {
   const last = useRef(null);
