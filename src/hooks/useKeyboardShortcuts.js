@@ -14,6 +14,7 @@
 // ctx object at the call site AND use it here via `K.<name>`.
 
 import { useRef, useEffect } from "react";
+import { isTyping } from "../lib/keyboard";
 import { validateReminderDraft } from "../lib/reminders";
 // v16.0.0 follow-up: the ←/→ Settings tab-cycle derives from SETTINGS_TABS (the
 // ONE tab list) so a newly added tab can never be skipped. Never inline ids.
@@ -53,7 +54,6 @@ export function useKeyboardShortcuts(ctx){
   // events can only fire between commits, after this effect has run.
   useEffect(function(){kbRef.current=ctx;});
   useEffect(function(){
-    function isTyping(el){if(!el) return false;const t=el.tagName;return t==="INPUT"||t==="TEXTAREA"||t==="SELECT"||el.isContentEditable;}
     function handler(e){
       if(e.ctrlKey||e.metaKey||e.altKey) return;
       const K=kbRef.current;const k=e.key;const typing=isTyping(e.target);

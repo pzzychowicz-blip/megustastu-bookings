@@ -10914,3 +10914,22 @@ Firebase (RTDB cannot store null; writing null deletes the key, so an absent
 field arrives as `undefined` and correctly takes the default). It is pinned in
 `tests/clamp.test.js` so the next person to "fix" the guard sees the distinction
 before they move it. **368 tests.**
+
+### Commit 8 — `isTyping`, the keyboard guard, in two places
+
+**Files:** `src/lib/keyboard.js` (new), `useKeyboardShortcuts.js`,
+`ManualModal.jsx`. **Behavioural change:** none.
+
+Both the global shortcut handler and `ManualModal`'s local S / C / Enter handling
+defined their own copy of "is focus inside something the user is typing into". One
+concern, two implementations — and the failure mode of a drift between them is the
+kind that costs a service: a key correctly ignored while typing on one surface and
+silently swallowing a keystroke on the other.
+
+The shared version records the one thing about it that looks like a mistake:
+`SELECT` is in the list even though you do not type into a dropdown. A `<select>`
+handles its own letter keys for type-ahead, so treating it as a text field is what
+stops the app's single-letter shortcuts from stealing them.
+
+**Verified live**: `l` still switches to List; `/` then typing `tp` puts "tp" in
+the search box and does **not** switch to Timeline or Plan behind it.

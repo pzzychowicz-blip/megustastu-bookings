@@ -30,6 +30,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { S, BTN, R, M, T, FW } from "../lib/constants";
+import { isTyping } from "../lib/keyboard";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
 } from "../lib/booking-logic";
@@ -166,11 +167,6 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   // — the listener gets re-registered, but that's the existing behaviour
   // and changing it is out of scope for the structural extraction.
   useEffect(() => {
-    function isTyping(el) {
-      if (!el) return false;
-      const t = el.tagName;
-      return t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || el.isContentEditable;
-    }
     function handler(ev) {
       // v17.4.0 /code-review: bail when there is no booking. The null guard sits
       // BELOW this effect (moving it above would change the hook count — the
