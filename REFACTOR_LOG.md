@@ -11027,3 +11027,22 @@ expanded body — Book, Reassign, each ✕ — sits inside that same pane, so th
 hover lifts were being clipped by it as well. Measured after the change: the lid
 has **13px** of room above (was 1) and the Book button 55px, against 4 needed for
 the ring and 1.4 for the lift.
+
+### Commit 13 — the `@canvas` exemption list had drifted 17 → 26
+
+**File:** `CLAUDE.md`. **Behavioural change:** none — documentation.
+
+CLAUDE.md listed "the 17 genuine exceptions". The code carries **26**. Ten were
+added without the documented list being updated, and each may be individually
+justified — the marker is at its site, which was the point — but *an exemption
+list that drifts is how a rule quietly stops meaning anything*. The refreshed
+entry names all 26 by group rather than giving a bare number, so the next drift
+is visible as a category that is missing rather than as an integer nobody can
+check.
+
+**One correction to the finding, which the count itself demonstrates.** The
+review reported 27 from a plain grep. The 27th hit is `constants.js`'s own
+*prose about* the marker, not an exemption — so the rule for checking this is
+written down with the number: grep for the marker **on a line that also carries
+an exempted property**. Counting the documentation as an instance of the thing it
+documents is how the figure drifts back in the other direction.
