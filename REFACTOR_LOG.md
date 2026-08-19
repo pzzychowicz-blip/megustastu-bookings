@@ -10760,3 +10760,43 @@ is noise — and the control says it properly, with `aria-required`.
 typing with the input keeping DOM focus (the v17.10.0 reopen fix, which this
 commit restructures the JSX around). Build, lint 0 errors, 355 tests,
 `check:style` OK.
+
+### Commit 2 — "Cancel" was the dismiss button, in an app where Cancel is a status
+
+**Files:** `src/App.jsx`, `BookingFormModal.jsx`, `WalkinForm.jsx`,
+`BlockModal.jsx`, `ManualModal.jsx`, `ReminderEditor.jsx`.
+**Behavioural change:** wording and one button colour; no logic.
+
+The **Delete booking?** dialog's dismiss read `Cancel` and wore the RED
+`BTN.cancel`. One tap away, on the same card, `Cancel booking` performs a
+destructive domain action — and that dialog's dismiss already read `Back` in
+slate, correctly. So the same word meant both "abort this dialog" and "cancel
+the reservation" on adjacent surfaces, and the delete footer rendered as two red
+buttons.
+
+CLAUDE.md already reasons about exactly this, at the colour level: *"`BTN.cancel`
+is RED — in this app 'cancel' means cancel the BOOKING… do NOT reach for it as a
+generic dialog 'go back'."* The rule was applied to the token and missed on the
+word.
+
+**The review measured the two dialogs; the grep found five more.** v17.8.0 fixed
+`BookingFormModal`'s footer and wrote the comment explaining why — and left
+`ManualModal`, `BlockModal` (×2), `WalkinForm` and `ReminderEditor` on the red
+`BTN.cancel`, four of them also labelled "Cancel". That is this repo's own
+recorded lesson recurring: *fixing one copy of a literal does not fix the
+literal.* All are now `--app-btn-slate`, the documented neutral dialog secondary,
+and every surface-dismissing control in the app says **Back**.
+
+`BTN.cancel` is left with exactly one user — `WaitlistPanel`'s two-tap Remove —
+which is genuinely destructive, so the token now means what CLAUDE.md says it
+means. The one control still labelled "Cancel" is `LayoutSettings`' inline table
+rename, and that is deliberate: **"Back" dismisses a surface, "Cancel" abandons
+an inline edit.** You are not going back anywhere when you abandon a rename, and
+there is no booking in sight in the Layout tab.
+
+**And the permanence clause is only true of one of them.** The review asked for
+"this can't be undone" on both destructive dialogs. Delete gets it — there are no
+backups on the free plan. Cancel does **not**: a cancelled booking stays on the
+day and v17.6.0's edit form can walk it back to pending, so claiming permanence
+there would be a new copy defect in place of the old one. It states what actually
+happens instead: *"The booking stays on the day, marked cancelled."*

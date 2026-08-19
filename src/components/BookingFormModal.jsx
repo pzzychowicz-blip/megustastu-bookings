@@ -630,7 +630,7 @@ export function BookingFormModal({
            primary, so the footer read as three warnings. --app-btn-slate is the
            documented neutral dialog secondary. */
         style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
-        onClick={function(){onClose();}}>Cancel</button>{(function(){
+        onClick={function(){onClose();}}>Back</button>{(function(){
         // v14 p1 (Issue 3): Save is disabled when date is empty. Prevents the
         // dd.mm.yyyy placeholder state from being submitted (esp. via Book Again
         // where we intentionally clear the date to force staff to pick one).

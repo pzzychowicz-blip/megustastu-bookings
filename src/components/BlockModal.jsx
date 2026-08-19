@@ -64,7 +64,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
         </button>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: BTN.cancel })}
+          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: "var(--app-btn-slate)" })}
           onClick={onClose}
         >
           Close
@@ -118,10 +118,10 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
       <button
         className="mgt-hover-scale"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
         onClick={onClose}
       >
-        Cancel
+        Back
       </button>
       <button
         onClick={handleSave}

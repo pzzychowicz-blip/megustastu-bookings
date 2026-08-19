@@ -2739,11 +2739,11 @@ function BookingApp({uid}){
 
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
-        onClick={function(){setConfirmDel(null);}}>Cancel</button><button
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+        onClick={function(){setConfirmDel(null);}}>Back</button><button
         onClick={function(){delBooking(confirmDel);}}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This can't be undone. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence>;
 
   // v17.5.0: the ONE discard confirm, shared by the booking form, the walk-in
   // form and ManualModal (requestClose* raise it; doDiscard commits).
@@ -3002,7 +3002,7 @@ function BookingApp({uid}){
               style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>No show</button><button
               onClick={function(){doCancelBooking(confirmCancel,false);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>The booking stays on the day, marked cancelled. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button

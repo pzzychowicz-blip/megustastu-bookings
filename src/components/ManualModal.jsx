@@ -212,10 +212,10 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
       <button
         className="mgt-hover-scale"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
         onClick={onClose}
       >
-        Cancel
+        Back
       </button>
       <button
         disabled={!ok}

@@ -255,9 +255,9 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           <button
             onClick={onCancel}
             className="mgt-hover-scale"
-            style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.cancel })}
+            style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })}
           >
-            Cancel
+            Back
           </button>
           <button
             onClick={() => { if (!err) onSave(); }}
