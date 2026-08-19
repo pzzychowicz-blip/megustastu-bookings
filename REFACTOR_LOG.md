@@ -11003,3 +11003,27 @@ one of them exported from the shared module. Someone importing `weekdayOf` into
 `DaySheet` to "remove the copy" would silently print `3 · 2026-08-19` at the top
 of the day sheet the kitchen works from, and nothing would fail. `weekdayName`
 says what it returns.
+
+### Commit 12 — the notification strip clipped its own focus ring
+
+**File:** `src/components/NotificationStrip.jsx`. **Behavioural change:** none
+visible; a keyboard-focused lid now shows its full ring.
+
+The strip's lid had **1px** of room inside its nearest `overflow` ancestor; the
+focus ring needs **4** (2px offset + 2px width). Exactly the clipping trap
+CLAUDE.md documents for the hover lift, recurring at a new site — and this is the
+one app here that is explicitly keyboard-driven.
+
+The `overflow: hidden` was on the strip's own pane and was only ever protecting
+its rounded corners from the lid's full-bleed hover tint, so **the child takes a
+radius and the parent stops clipping**. The lid's bottom corners go square while
+the body is open — it is then the top of a taller surface, not the whole of it.
+Nothing else in the pane needs a clip: the body's rows are transparent with
+hairline separators, and `Reveal` already manages its own overflow while it
+animates.
+
+**It was clipping something the review did not report, too.** Every button in the
+expanded body — Book, Reassign, each ✕ — sits inside that same pane, so their
+hover lifts were being clipped by it as well. Measured after the change: the lid
+has **13px** of room above (was 1) and the Book button 55px, against 4 needed for
+the ring and 1.4 for the lift.
