@@ -200,7 +200,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
         </div>
         <div style={{ fontSize: T.small, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number, or — for guests who never gave one — by having been linked to each other from the name suggestions on a booking. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymized as “Data removed” for statistics.</div>
       </Section>
-      {rows.length ? rows : <div style={{ textAlign: "center", padding: "18px 0", color: S.muted, fontSize: T.body }}>{query.trim() ? "No customers match." : "No customers yet — bookings with a phone number appear here."}</div>}
+      {rows.length ? rows : <div style={{ textAlign: "center", padding: "18px 0", color: S.muted, fontSize: T.body }}>{query.trim() ? "No customers match." : "No customers yet — they appear here once a booking has a phone number, or once you link a guest from the name suggestions."}</div>}
     </div>
   );
 }

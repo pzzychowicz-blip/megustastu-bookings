@@ -456,11 +456,18 @@ both children through **one** `saveBookings` call — `stampGuestSeed` runs insi
 booking already in another group being silently re-homed. `guestSeed` is
 draft-only and never persisted.
 
-**`customerIndex` stays phone-only, deliberately** — it feeds `searchCustomers`
-and the Customers settings tab, both of which assume every entry has a real phone,
-and a guest entry would hand `pickCustomer` a customer with `rawPhone: ""`. Known
-consequence: **joined phone-less guests do not appear in Settings → Customers.**
-The form chips, the name dropdown and the no-show markers all see them.
+**`customerIndex` is keyed on `identityKey`, so a JOINED guest IS a customer** —
+they appear in Settings → Customers with `phone: ""` and a `guestId` on the entry,
+exactly like the phone-keyed rows beside them. An UNJOINED phone-less booking has
+no identity and is still skipped, which is the never-merge rule holding where it
+should. (v17.10.2 corrected this paragraph: it still described the design as it
+stood **before** v17.10.0's `/code-review` alias fix, and asserted the opposite of
+the file-structure block's own line on `customers.js` — the app's single source of
+truth contradicting itself in two places about the same rule. The Customers
+empty-state copy had inherited the same stale rule and was fixed in the same
+commit. Consumers must still handle `rawPhone: ""` — `searchGuestsByName` skips
+index entries with no phone, and anything keying UI state on `c.phone` would
+collapse every guest row onto one `""` key.)
 
 ### Waitlist active matching (v16.0.0)
 `waitAvail` is **state computed by a BookingApp effect**, not a render-time derivation — the `trialFits` scans are heavy, so the effect keys on `[bookings, tableBlocks, waitlist, autoOptimizer, nowQuarter]` where `nowQuarter = Math.floor(nowMins/15)` (never the raw 15s tick). Per waiting entry: try `prefTime` first; else a 15-min first-fit scan **clamped to ±90 min around the wanted time** (a 13:45 slot is no use to a party waiting for ~20:30); no wanted time → the whole remaining day.

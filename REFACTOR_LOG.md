@@ -10800,3 +10800,27 @@ backups on the free plan. Cancel does **not**: a cancelled booking stays on the
 day and v17.6.0's edit form can walk it back to pending, so claiming permanence
 there would be a new copy defect in place of the old one. It states what actually
 happens instead: *"The booking stays on the day, marked cancelled."*
+
+### Commit 3 — the Customers rule was stale in two places, from one root cause
+
+**Files:** `src/components/CustomersSettings.jsx`, `CLAUDE.md`.
+**Behavioural change:** copy only.
+
+Shipped empty state: *"No customers yet — bookings with a phone number appear
+here."* True before v17.10.0; not true after. `customerIndex` keys on
+`identityKey`, so a phone-less guest who has been **joined** from the name
+suggestions is a customer with `phone: ""` — and the tab's own explanatory
+paragraph two lines away already said so correctly.
+
+The same stale rule had also been left in `CLAUDE.md`, which asserted **both**
+that a joined guest *is* a customer in Settings → Customers (the `customers.js`
+file-structure line) and that joined phone-less guests *do not appear* there. The
+code settles it — `const key = phone || alias[b.guestId] || b.guestId` — and the
+second statement described the design as it stood before v17.10.0's
+`/code-review` alias fix. Two independent passes found the two halves separately;
+they are one defect.
+
+Worth naming, because the file is the app's single source of truth: **a source of
+truth that contradicts itself is worse than one that is merely incomplete**, since
+either half can be cited. The surviving paragraph now also keeps the part that is
+still true and load-bearing — consumers must handle `rawPhone: ""`.
