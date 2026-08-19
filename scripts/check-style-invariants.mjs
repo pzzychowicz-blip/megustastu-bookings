@@ -35,10 +35,29 @@
 //
 //     boxShadow: "… inset 0 1px 1px rgba(255,255,255,0.15)",  /* @fixed-fill */
 //
-// Deliberately NOT checked: plain dark drop-shadow literals
-// (`0 1px 4px rgba(0,0,0,0.04)`). They are a consistency nit, not a bug class —
-// a black shadow does not invert out from under itself. Pretending to cover
-// them would make this script noisy, and a noisy check gets muted.
+// ── Rule 6: no bare drop-shadow literal ─────────────────────────────────────
+// v17.10.1. The v17.8.0 note here said plain dark drop-shadows were "a
+// consistency nit, not a bug class", and that a rule for them would be noisy.
+// The first half turned out to be wrong and the second half is no longer true.
+//
+// Wrong, because the literals were not one value repeated — they were THREE
+// spellings of "raised control on a theme-invariant fill" (0 2px 6px/0.12,
+// 0 1px 4px/0.1, 0 1px 3px/0.15), and none of them deepened for dark mode the
+// way every --shadow-* token does. That is a bug class: a black shadow cannot
+// invert out from under itself, but it can be invisible on the wrong ground.
+// No longer noisy, because v17.10.1 tokenised all 20 remaining sites, so this
+// guards the NEXT one rather than nagging about a backlog.
+//
+// Two things it must get right, and both come from how earlier sweeps MISSED
+// sites. It matches the VALUE's shape anywhere on the line, not `boxShadow:` —
+// v17.10.0's sweep grepped the property name and walked past `StatusToasts`'
+// literal because it sat behind a `const`. And it requires a NON-ZERO blur,
+// because `0 0 0 3px …` is a ring or a focus glow, not a drop shadow — the
+// connection dot and the selection rings are not members of this scale.
+//
+//     boxShadow: "0 10px 24px rgba(0,0,0,0.3)",   /* @shadow */
+//
+// marks a genuine one-off (a block lifted under a finger; the Kbd keycap).
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -55,6 +74,28 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // having passed. Same lesson as the v17.8.0 marker-placement bug.
 const SRC = process.argv[2] ? resolve(process.argv[2]) : join(ROOT, "src");
 const LOOKBACK = 10;   // lines to search upward for the governing fill
+
+// A CSS shadow value: <x> <y> <blur> <colour>, where x/y are `0` or `Npx`. The
+// blur must be NON-ZERO — `0 0 0 3px` is a ring, not a drop shadow. A leading
+// `inset` is matched too (a groove is still a shadow literal). Requiring the
+// colour to follow is what keeps this off `padding`, `transform` and friends.
+//
+// The leading alternation is load-bearing and was found by running the rule
+// against a fixture rather than by reading it: without it the pattern SLIDES,
+// so `0 0 0 2px rgba(...)` — a ring, and the thing the non-zero-blur condition
+// exists to exclude — matched by starting at the second `0` and reading
+// `0 0 2px rgba(`. A shadow value must begin at a quote, after `inset`, or
+// after the comma separating it from the previous shadow in a list.
+//
+// /code-review: the COLOUR alternation and the decimal handling were both too
+// narrow in the first version — `0 2px 6px var(--x)`, `0 2px 6px black` and
+// `0 1.5px 3px rgba(…)` are all exactly the literal this rule exists to catch,
+// and all three made it print OK. That is the "a checker with a blind spot
+// still prints OK" failure this repo has now hit three times, so the colour is
+// rgb/hsl/var/hex/bare-identifier and the lengths accept decimals. The blur is
+// still required to be non-zero, now via a negative lookahead so `0px` is
+// excluded as well as `0` — a ring is not a drop shadow.
+const SHADOW_VALUE = /(?:["'`]|inset\s+|,\s*)(?:0|-?[\d.]+px)\s+(?:0|-?[\d.]+px)\s+(?!0(?:px)?[\s,)])[\d.]+px\s+(?:rgba?\(|hsla?\(|var\(|#[0-9a-fA-F]|[a-z]{3,})/;
 
 // v17.9.0 — must match SP and H in src/lib/constants.js. Hand-synced: this
 // script runs standalone (no bundler, no JSX transform), so it cannot import
@@ -158,7 +199,7 @@ for (const file of walk(SRC)) {
     // PRESENT on the line, never where — so the sites it was meant to bless
     // were the exact sites it broke, and it reported OK on all of them. A
     // checker that cannot see its own annotation is worth less than none.
-    if (/(?:\/>|[^{,\s])>\s*\/\*\s*@(?:canvas|fixed-fill)/.test(line)) {
+    if (/(?:\/>|[^{,\s])>\s*\/\*\s*@(?:canvas|fixed-fill|shadow)/.test(line)) {
       problems.push({
         file: rel, line: i + 1, rule: "marker-placement",
         text: line.trim().slice(0, 90),
@@ -311,12 +352,25 @@ for (const file of walk(SRC)) {
         });
       }
     }
+
+    // ── Rule 6 ──────────────────────────────────────────────────────────────
+    const bare = line.trim();
+    const isComment = bare.startsWith("//") || bare.startsWith("*") || bare.startsWith("/*");
+    if (!isComment && !/@shadow/.test(line) && SHADOW_VALUE.test(line)) {
+      problems.push({
+        file: rel, line: i + 1, rule: "shadow-literal",
+        text: bare.slice(0, 90),
+        hint: "bare drop-shadow literal — use a --shadow-* token (btn / btn-solid / "
+              + "flat / card / popover / well / btn-accent / btn-success), or mark a "
+              + "genuine one-off /* @shadow */",
+      });
+    }
   });
 }
 
 if (problems.length === 0) {
   console.log("style invariants: OK (radius + type + spacing + height scales, "
-            + "white-inset-over-fixed-fill, marker placement)");
+            + "white-inset-over-fixed-fill, shadow literals, marker placement)");
   process.exit(0);
 }
 

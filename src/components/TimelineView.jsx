@@ -43,7 +43,7 @@ import {
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
-import { noShowMap, normalizePhone } from "../lib/customers";
+import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
@@ -77,7 +77,7 @@ const HOUR_PILL = {
   fontSize: T.micro, fontWeight: FW.semi,
   fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
   background: "var(--tl-hour-pill)", color: "var(--text-on-accent)",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+  boxShadow: "var(--shadow-flat)"
 };
 
 // ── The party-size ring (v17.9.0) ────────────────────────────────────────────
@@ -500,7 +500,12 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
         // MagicOS/Chrome. pan-x keeps horizontal timeline scrolling from a block
         // while reserving vertical gestures for the drag.
         touchAction: "pan-x",
-        boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" : "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",   /* @fixed-fill: BLOCK_BG[b.status], ~40 lines up */
+        // v17.10.1: the resting shadow is --shadow-btn-solid (raised, on a
+        // theme-invariant BLOCK_BG fill — exactly what that token is for), so
+        // the old /* @fixed-fill */ marker is gone with the white-inset literal
+        // it was blessing. The DRAG shadow stays a literal: a block lifted under
+        // a finger is a one-off depth, not a member of the scale.
+        boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" /* @shadow */ : "var(--shadow-btn-solid)",
         // v17.0.0: while dragging, the inline transform/zIndex/opacity lift the
         // block and follow the pointer (inline transform beats the hover class).
         ...(dragDy != null ? { transform: "translateY(" + dragDy + "px)", zIndex: 30, opacity: 0.85 } : null),
@@ -768,7 +773,7 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
         color: BLOCK_INK.pending,
         display: "flex", alignItems: "center", boxSizing: "border-box",
         border: g.resh ? "1px dashed rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.2)",
-        boxShadow: "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)",
+        boxShadow: "var(--shadow-btn-solid)",
         cursor: "pointer",
         // The one deliberate difference from a real block. A reshuffle-only match
         // is turned down further because it can sit over a table that is visibly
@@ -943,7 +948,7 @@ export const TimelineView = memo(function TimelineView({
   // the per-block part is only what each block needs, and the worst one decides.
   const confirmedDay = day.filter((b) => b.status === "confirmed" || b.status === "pending");
   const chipsOn = confirmedDay.length > 0 && confirmedDay.every(function (b) {
-    return liveBarDur(b, nowMins) * pxPerMin >= chipRoomFor(b, nsMap[normalizePhone(b.phone)] || 0, warnings[b.id]);
+    return liveBarDur(b, nowMins) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id]);
   });
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
@@ -1068,7 +1073,12 @@ export const TimelineView = memo(function TimelineView({
               border: "1px solid " + (hasBlock ? "var(--tl-blocked-badge-border)" : indoor ? TBL.ind.border : TBL.out.border),
               width: 32, textAlign: "center", display: "inline-block",
               boxSizing: "border-box",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+              // --shadow-btn, matching atoms' TBadge (/code-review fix). This is
+              // the SAME badge over the same theme-flipping TBL fill, and it is
+              // itself a .mgt-hover-scale control, so it takes the raised
+              // treatment; shipping the two on different tokens put one table
+              // label at two elevations depending on which view you were in.
+              boxShadow: "var(--shadow-btn)"
             }}>
               {id}
             </span>
@@ -1200,7 +1210,7 @@ export const TimelineView = memo(function TimelineView({
             <Fragment key={b.id}>
               {tail}
               {ghost}
-              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
+              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
             </Fragment>
           );
         })}
@@ -1216,7 +1226,7 @@ export const TimelineView = memo(function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[normalizePhone(b.phone)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
     </div>
   ) : null;
 
@@ -1235,7 +1245,7 @@ export const TimelineView = memo(function TimelineView({
         fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
         background: "var(--tl-now-pill)",
         padding: "2px 4px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
-        boxShadow: "0 1px 4px rgba(0,0,0,0.15)"
+        boxShadow: "var(--shadow-btn)"
       }}>
         {toTime(nowMins)}
       </div>
@@ -1394,7 +1404,7 @@ export const TimelineView = memo(function TimelineView({
           color: BLOCK_INK[s] || "var(--text-on-accent)",
           border: "1px solid rgba(255,255,255,0.2)",
           fontWeight: FW.semi, textTransform: "capitalize",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
+          boxShadow: "var(--shadow-flat)"
         }}
       >
         {s}

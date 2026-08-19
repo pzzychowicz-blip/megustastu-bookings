@@ -164,7 +164,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
           fontSize: T.body, fontWeight: FW.bold, minHeight: 32,
           background: active ? S.accent : "transparent",
           color: active ? "var(--text-on-accent)" : "var(--text-secondary)",
-          boxShadow: active ? "0 1px 3px rgba(0,0,0,0.15), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"
+          boxShadow: active ? "var(--shadow-btn-solid)" : "none"
         }}
       >
         {label}

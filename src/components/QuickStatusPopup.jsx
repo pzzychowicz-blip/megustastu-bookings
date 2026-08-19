@@ -19,7 +19,8 @@
 //   onClose()      — clear the parent's popup state
 
 import { createPortal } from "react-dom";
-import { S, BLOCK_BG, BLOCK_INK, BTN, R, T, FW } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, BTN, R, T, FW, IC } from "../lib/constants";
+import { NoShowIcon, StatusIcon } from "./Icons";
 
 export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClose }) {
   if (!booking) return null;
@@ -45,7 +46,13 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
           border: "1px solid " + S.border,
           boxShadow: "var(--shadow-popover)",
           padding: "18px 24px",
-          minWidth: 240, maxWidth: 320, zIndex: 301
+          minWidth: 240, maxWidth: 320, zIndex: 301,
+          // v17.10.1: the buttons are covered by index.html's control rule, but
+          // the guest name above them is a <div> and this popup is opened by a
+          // HOLD — so on Android the finger that opened it is still down on the
+          // card, and the OS selects whatever is under it. The title is the one
+          // thing here that isn't a control.
+          WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none"
         }}
       >
         <div style={{ fontSize: T.display, fontWeight: FW.bold, color: S.text, marginBottom: 16 }}>
@@ -56,6 +63,11 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
             ? ["confirmed", "cancelled"]
             : ["confirmed", "seated", "completed", "cancelled"])
             .filter((st) => st !== booking.status)
+            // v17.10.0: this popup is the surface staff use DURING service (a
+            // long-press on the timeline or the floor plan), and it was the one
+            // place the same five decisions carried no mark at all — so the
+            // same choice looked different in three places. Same source, same
+            // size as the List card and the edit form.
             .map((st) => (
               <button
                 key={st}
@@ -65,14 +77,15 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
                   borderRadius: R.pill, padding: "10px 18px",
                   fontSize: T.lead, fontWeight: FW.bold, color: BLOCK_INK[st] || "var(--text-on-accent)",
                   cursor: "pointer", textTransform: "capitalize",
-                  minHeight: 44, flex: "1 1 auto"
+                  minHeight: 44, flex: "1 1 auto",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
                 }}
                 onClick={() => {
                   onStatus(booking.id, st);
                   onClose();
                 }}
               >
-                {st}
+                <StatusIcon status={st} size={IC.control} />{st}
               </button>
             ))}
           {(booking.status === "confirmed" || booking.status === "pending") && late[booking.id] === "noshow" ? (
@@ -83,14 +96,15 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
                 borderRadius: R.pill, padding: "10px 18px",
                 fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-on-accent)",
                 cursor: "pointer",
-                minHeight: 44, flex: "1 1 auto"
+                minHeight: 44, flex: "1 1 auto",
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
               }}
               onClick={() => {
                 onNoShow(booking.id);
                 onClose();
               }}
             >
-              No show
+              <NoShowIcon size={IC.control} />No show
             </button>
           ) : null}
         </div>

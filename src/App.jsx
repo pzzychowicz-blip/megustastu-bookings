@@ -40,7 +40,7 @@ import {
   undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
-import { normalizePhone } from "./lib/customers";
+import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { hourLabel } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
@@ -256,6 +256,7 @@ import { WaitAvailBanner } from "./components/WaitAvailBanner";
 const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel").then(function(m){return {default:m.SearchPanel};});},"SearchPanel"); // v17.1.0: lazy (opened on demand)
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
+import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -282,7 +283,7 @@ const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
   // Sandbox build marker — WhatsApp module under local test, NOT a release.
   // The formal version bump happens on "give me the deployment version".
-  version:"17.9.1-wa-sandbox",
+  version:"17.10.1-wa-sandbox",
   sandbox:"WhatsApp inbox + simulator (localhost only)",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
@@ -789,6 +790,10 @@ function BookingApp({uid}){
   // Resets to 'general' on modal close so reopens start fresh. Belongs to
   // the Settings subsystem; lived inside the reminder state block pre-D2
   // for historical reasons (the comment misleadingly grouped it there).
+  // v17.10.1: per-device offline shell (see lib/serviceWorker.js). Default ON,
+  // so only the non-default "0" is ever stored.
+  const [swEnabled, setSwEnabledState] = useState(readSwEnabled);
+  const swAppliedRef = useRef(false);
   const [settingsTab, setSettingsTab] = useState("general");
   useEffect(function(){formRef.current=form;},[form]);
   useEffect(function(){if(error) setError("");},[form.time,form.size,form.date,form.preference,form.customDur]);
@@ -843,9 +848,26 @@ function BookingApp({uid}){
     saveBookings, saveBlocks,
     isOnline, writeWarning, setWriteWarning,
     loadBannerShown, reconnectShown, resyncing, bookingsReady,
-    loadStalled, readError, hasConnected,
+    loadStalled, readError, hasConnected, forceReconnect,
     firstLoadCount,
   } = usePersistence({ autoOptimizer, nowMins });
+  // v17.10.1: install (or tear down) the offline shell.
+  //
+  // The `bookingsReady` gate is the safety property, not a detail. A worker is
+  // only ever registered on a device where the app has demonstrably booted AND
+  // received its first Firebase snapshot — so a build that cannot load its data
+  // can never persist itself into a cache and serve itself back. That is the
+  // precise shape of the v17.4.0 failure ("⟳ Loading bookings…" forever), and
+  // it is the one condition under which caching a shell is provably safe.
+  //
+  // Disabling is NOT gated the same way: turning it off must work immediately,
+  // on any device, in any state.
+  useEffect(function(){
+    if(!swEnabled){ applyServiceWorker(false); swAppliedRef.current=false; return; }
+    if(!bookingsReady||swAppliedRef.current) return;
+    swAppliedRef.current=true;
+    applyServiceWorker(true);
+  },[swEnabled,bookingsReady]);
   // v17.3.0: real-time device presence (connection-dot popover). Ephemeral node,
   // exempt from the CAS rule — see ./hooks/usePresence.js.
   const { devices: presenceDevices, myKey: presenceKey, offset: presenceOffset } = usePresence();
@@ -1000,6 +1022,16 @@ function BookingApp({uid}){
   const [reduceMotion,setReduceMotion]=useState(function(){
     try{return localStorage.getItem("mgt-reduce-motion")==="1";}catch{return false;}
   });
+  // v17.10.1: per-device offline shell. localStorage ONLY — deliberately not
+  // saveUserPrefs'd: clearing site data is the last-resort escape from a bad
+  // worker, and a synced flag would come straight back down and re-enable it.
+  function onToggleSw(){
+    const next=!swEnabled;
+    setSwEnabled(next);        // lib/serviceWorker.js owns the localStorage key
+    setSwEnabledState(next);   // /code-review: was setSwEnabled_ — one underscore
+                               // apart from the writer above, which is a name
+                               // that only tells you it is not the other one.
+  }
   function onToggleReduceMotion(){
     const next=!reduceMotion;
     try{
@@ -1583,18 +1615,26 @@ function BookingApp({uid}){
   // Waitlist entries are still fully deleted (personal data, not statistics).
   // Side benefit: the old whole-DB edge (filter → empty array refused by the
   // write-guard) is gone — a map never changes the booking count.
-  function deleteCustomer(phoneKey){
-    const key=normalizePhone(phoneKey);
-    if(!key) return;
+  // v17.10.0: takes an IDENTITY ({phone, guestId}), not a phone string — the
+  // Customers tab now lists joined phone-less guests too, and "delete this
+  // customer" has to reach their bookings as well. The membership test is
+  // customers.js's own `matchesIdentity`, never a second copy of the union rule.
+  // `guestId` is cleared alongside the personal fields: it is the only thing
+  // still binding the anonymized bookings into a customer, so leaving it would
+  // leave the deleted guest sitting in the list under "Data removed".
+  function deleteCustomer(ident){
+    const o=(ident&&typeof ident==="object")?ident:{phone:ident};
+    const key=normalizePhone(o.phone);
+    if(!key&&!o.guestId&&!(o.guestIds&&o.guestIds.length)) return;
     saveBookings(function(prev){return prev.map(function(b){
-      if(normalizePhone(b.phone)!==key) return b;
-      return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],anonymized:true});
+      if(!matchesIdentity(b,o)) return b;
+      return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],guestId:null,anonymized:true});
     });});
-    saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
+    if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
   }
 
   function openNew(){pendingWaitlistRef.current=null;openForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openEdit(b){pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -1619,7 +1659,15 @@ function BookingApp({uid}){
       customDur:null,
       manualTables:[],
       status:"confirmed",
-      returnOf:sourceBooking.id
+      returnOf:sourceBooking.id,
+      // v17.10.0: Book Again on a PHONE-LESS guest is the same assertion as
+      // picking them from the name dropdown — you are looking at their booking
+      // and saying "them again" — so it joins them too. An existing guestId is
+      // adopted; otherwise one is minted from the source and `guestSeed` asks
+      // doSave to write it back. A source WITH a phone needs neither: the phone
+      // copied above already is the identity.
+      guestId:hasRealPhone(sourceBooking.phone)?null:(sourceBooking.guestId||("g"+sourceBooking.id)),
+      guestSeed:(hasRealPhone(sourceBooking.phone)||sourceBooking.guestId)?null:sourceBooking.id
     }));
     setEditId(null);
     setError("");
@@ -1708,6 +1756,10 @@ function BookingApp({uid}){
   // before (doSave has nothing after the dispatch); helper throws are caught
   // by doSave's try/catch. The v15.7.0 capture-intent-then-replay contract and
   // the prev-identity buildNextMemo are untouched.
+
+  // v17.10.0: the guest-identity back-stamp is `stampGuestSeed` in
+  // lib/customers.js — pure, tested, and called inside buildNext/applyBase so
+  // the source booking and the new one ride ONE saveBookings call.
   function doSaveEdit(f,v){
     const size=v.size,cleanPhone=v.cleanPhone,mt=v.mt;
         const orig=bookings.find(function(b){return b.id===editId;});
@@ -1791,12 +1843,12 @@ function BookingApp({uid}){
         // are applied to whichever version of the booking is in fresh `prev`, so a
         // concurrent edit to OTHER bookings (which live in `prev`) is preserved.
         function buildNext(prev){
-          const upd=prev.map(function(b){
+          const upd=stampGuestSeed(prev,f).map(function(b){
             if(b.id===editId){
               let h=(b.history||[]).concat([editHist]);
               if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
               const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
-              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
             }
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
@@ -1863,14 +1915,14 @@ function BookingApp({uid}){
         }
         // v14 p1: scheduledTime=f.time on creation. v17.0.0: new bookings start
         // confirmed, OR pending via the "Save pending" button (status override).
-        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,history:[createHist]};
+        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,guestId:f.guestId||null,history:[createHist]};
         // v15.7.0: build the next state as a PURE transform of `prev` (see the edit
         // path above) so the new-booking save joins the optimistic-show + auto-retry
         // path. `newId`/`nb` are computed once (stable id) → a held/rejected write
         // replayed on fresh data can never duplicate the booking (the defensive
         // filter below also drops any stray match before re-adding it).
         function applyBase(prev){
-          let base=prev.filter(function(b){return b.id!==newId;});
+          let base=stampGuestSeed(prev,f).filter(function(b){return b.id!==newId;});
           if(swapAffected){base=base.map(function(b){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}return b;});}
           // If this is a Book Again creation, append a back-reference entry to the
           // source booking's history (purely informational — no status/table change).
@@ -2101,9 +2153,26 @@ function BookingApp({uid}){
         const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins),os+1);
         const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins)};}).concat(blockSlots);
         if(canAssign(newSrc,slots,s,e)&&canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){
+          // v17.10.0: ONLY THE BOOKING YOU DRAGGED GETS LOCKED. This branch used
+          // to write `_manual:true,_locked:true` to BOTH sides, which pinned a
+          // party nobody asked to pin — the optimizer could then never tidy the
+          // displaced booking again, and every swap quietly grew the set of
+          // hand-placed bookings. The other two paths that move an occupant out
+          // of the way (step 4's displacement below, and manualAssign's
+          // `affected` branch) have always unlocked them; this one was the odd
+          // one out.
+          //
+          // The exception is real and is the reason these two flags are read off
+          // the CAPTURED `other` rather than being written false outright: a
+          // walk-in is `_manual+_locked` BY DEFINITION and immune to the
+          // optimizer (CLAUDE.md's Gotchas table), so force-unlocking one here
+          // would let a reshuffle move a party that is physically sitting down.
+          // An already-locked booking therefore keeps its lock on its NEW tables;
+          // an ordinary confirmed booking comes out unlocked, which is the ask.
+          const otherLocked=!!other._locked,otherManual=!!other._manual;
           const ok=saveBookings(function(prev){return prev.map(function(b){
             if(b.id===id) return Object.assign({},b,{tables:newSrc,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+other.name+" ("+(cur.join("+")||"none")+" → "+newSrc.join("+")+")",user)])});
-            if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
+            if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:otherManual,_locked:otherLocked,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
             return b;
           });});
           if(ok) flashDragMsg(src.name+" and "+other.name+" — tables swapped.",true);
@@ -2181,6 +2250,15 @@ function BookingApp({uid}){
     const delMemo=memoByPrev(delTransform);
     const postDel=delMemo(bookings);
     const ok=saveBookings(delMemo);setConfirmDel(null);
+    // v17.10.0: Delete is now reachable from INSIDE the edit form, so the form
+    // has to go with the booking — otherwise you are left editing a record that
+    // no longer exists. Deliberately the raw setter, not requestCloseForm: the
+    // unsaved-changes guard exists to stop you losing edits by accident, and
+    // confirming a delete is not an accident. It also covers the pre-existing
+    // edge where the LIST's Delete removes the booking the form happens to be
+    // open on. Gated on the id so deleting a different booking leaves the form
+    // alone. formDirty is `showForm && …`, so this disarms beforeunload too.
+    if(editId===id) setShowForm(false);
     // v17.4.0: deletes are undoable too (general undo). The recurring skipDate
     // added above deliberately STAYS on undo — the restored occurrence keeps
     // its deterministic id, so the generator never duplicates it, and the
@@ -2766,7 +2844,7 @@ function BookingApp({uid}){
         onClick={function(){setConfirmDel(null);}}>Cancel</button><button
         onClick={function(){delBooking(confirmDel);}}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
 
   // v17.5.0: the ONE discard confirm, shared by the booking form, the walk-in
   // form and ManualModal (requestClose* raise it; doDiscard commits).
@@ -2796,7 +2874,7 @@ function BookingApp({uid}){
         onClick={function(){setConfirmDiscard(null);}}>Keep editing</button><button
         onClick={doDiscard}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Discard</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Discard unsaved changes?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Discard</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Discard unsaved changes?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
 
   const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
     booking={manualBooking}
@@ -2864,17 +2942,17 @@ function BookingApp({uid}){
               onExitSplit={exitSplit} /><button
               onClick={openWalkin}
               className="mgt-hover-scale"
-              style={{background:"var(--app-walkin)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Walk-in</button><button
+              style={{background:"var(--app-walkin)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"var(--shadow-btn-solid)"}}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
-              style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"0 1px 4px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.15)"}}>+ New</button>{/* PROD-leak guard: the whole WA entry point is WA_SANDBOX-gated — a
+              style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"var(--shadow-btn-solid)"}}>+ New</button>{/* PROD-leak guard: the whole WA entry point is WA_SANDBOX-gated — a
               build without VITE_FB_TARGET=dev (e.g. a main-project Vercel preview
               of this branch) runs on PROD Firebase and must show no WA UI. */}
             {WA_SANDBOX?<button
               onClick={function(){setShowInbox(true);}}
               className="mgt-hover-scale"
               title="WhatsApp inbox (I)"
-              style={{position:"relative",background:"var(--wa-green)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"var(--shadow-btn)"}}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:R.pill,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize: T.small,fontWeight: FW.bold,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button>:null}{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
+              style={{position:"relative",background:"var(--wa-green)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"var(--shadow-btn)"}}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:R.pill,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize: T.small,fontWeight: FW.bold,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"var(--shadow-flat)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button>:null}{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
               toolbar, between "+ New" and the dot. Searching is an ACTION, and
               this is the row of them — it reads as the counterpart to adding a
               booking rather than as view chrome. */}<button
@@ -2885,7 +2963,7 @@ function BookingApp({uid}){
               style={CHROME_BTN}><SearchIcon size={IC.chrome} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
               It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
-              wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onLogout={function(){signOut(auth);}} /></div></div><div
+              wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onReconnect={forceReconnect} onLogout={function(){signOut(auth);}} /></div></div><div
           /* v17.9.0 (Patryk): the date controls are 40px and the collapsed
              Summary card beside them is 58, so `flex-start` left them sitting
              flush against the top of the row with 18px of dead space beneath —
@@ -2931,7 +3009,15 @@ function BookingApp({uid}){
               aria-label={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               title={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BTN.orange:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={IC.control} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.9.0: the 🔍/⚙ pair that lived here since v17.0.0 round 8 is
+              /* v17.10.0: the waitlist wears the PENDING amber, not the burnt
+                 orange it shared with No show / Reassign / Reshuffle / the swap
+                 family — a party on the waitlist is a pending thing, and that
+                 amber is the app's colour for pending things. See the contrast
+                 note at tests/contrast.test.js's EXEMPT_FLOOR: this fill under
+                 white text is a recorded exemption, extended to this chrome by
+                 Patryk after seeing all three candidate treatments side by side
+                 in both themes. */
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BLOCK_BG.pending:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={IC.control} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.9.0: the 🔍/⚙ pair that lived here since v17.0.0 round 8 is
               gone — both buttons moved up into the header row above, each to the
               thing it acts on (see CHROME_BTN). The pair was created to give all
               three views ONE copy of these controls, and that still holds: the
@@ -3005,6 +3091,7 @@ function BookingApp({uid}){
               onOpenManualAssign={function(target){setManualTarget(target);}}
               onOpenHistory={function(){setShowHistory(true);}}
               onRequestCancel={function(id){setConfirmCancel(id);}}
+              onRequestDelete={function(id){setConfirmDel(id);}}
               onAddToWaitlist={addFormToWaitlist}
               standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
@@ -3019,22 +3106,22 @@ function BookingApp({uid}){
               onClick={function(){setConfirmCancel(null);}}>Back</button><button
               onClick={function(){doCancelBooking(confirmCancel,true);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>No show</button><button
+              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>No show</button><button
               onClick={function(){doCancelBooking(confirmCancel,false);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
               onClick={function(){setConfirmReshuffle(false);forceReshuffle();}}
               className="mgt-hover-scale"
-              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
+              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
@@ -3050,6 +3137,8 @@ function BookingApp({uid}){
             onSetAppWidth={onSetAppWidth}
             reduceMotion={reduceMotion}
             onToggleReduceMotion={onToggleReduceMotion}
+            swEnabled={swEnabled}
+            onToggleSw={onToggleSw}
             navLocked={navLocked}
             onToggleNavLock={onToggleNavLock}
             splitEnabled={splitEnabled}
@@ -3100,7 +3189,7 @@ function BookingApp({uid}){
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
               onClick={function(){doDeleteReminder(confirmReminderDel);}}
               className="mgt-hover-scale"
-              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
+              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
         reminderEditor?<ReminderEditor
           draft={reminderEditor.draft}
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
@@ -3142,14 +3231,14 @@ function BookingApp({uid}){
               onClick={function(){setConfirmArchive(null);}}>Back</button><button
               onClick={function(){wa.doArchive(confirmArchive);setConfirmArchive(null);}}
               className="mgt-hover-scale"
-              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+bk.date+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
+              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+bk.date+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
         })():null}{confirmDeleteConv?<Overlay onClose={function(){setConfirmDeleteConv(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmDeleteConv(null);}}>Back</button><button
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
-              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)"}}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<WaSimulator
+              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<WaSimulator
           ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.appendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
           onClose={function(){setShowSim(false);}} />:null):null}{historyPopup}</div></div>
   );

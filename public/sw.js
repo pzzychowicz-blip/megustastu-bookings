@@ -1,82 +1,189 @@
-// MGT Bookings — service worker KILL SWITCH (v17.4.1).
+// MGT Bookings — offline app shell (v17.10.1).
 //
-// v17.4.0 shipped an offline-shell service worker. In production it froze the
-// app at "⟳ Loading bookings…" on iPhone AND iPad — the first Firebase snapshot
-// never arrived — while desktop was completely unaffected. Clearing site data
-// on a device fixed it. NOTE the limit of that evidence: clearing site data
-// also wipes IndexedDB (where Firebase Auth keeps its session) and
-// localStorage, so it points AT the worker without proving it; the laptop had
-// the same worker installed and was fine, so the real differentiator is iOS.
-// It was never reproducible locally either — a production-mode build with that
-// worker, pointed at the DEV database, loads fine on desktop. The worker is
-// withdrawn because it is unverifiable on the affected devices, not because
-// root cause was established.
+// ─────────────────────────────────────────────────────────────────────────────
+// TO KILL THIS WORKER REMOTELY, IF IT EVER MISBEHAVES
 //
-// THE FILE CANNOT SIMPLY BE DELETED. An installed service worker keeps
-// controlling the page forever; removing /sw.js from the deploy does not
-// unregister it, and every already-affected device would stay broken until
-// someone cleared its data by hand. The only reliable remote fix is to ship a
-// worker at the SAME URL that removes itself — browsers re-fetch /sw.js on
-// navigation for any live registration, so this reaches them.
+// A shipped service worker CANNOT be withdrawn by deleting the file: an
+// installed worker keeps controlling the page forever, and removing /sw.js from
+// the deploy does not unregister it. The only remote fix is to ship a worker at
+// this SAME URL whose `activate` clears the caches and unregisters itself —
+// browsers re-fetch /sw.js on navigation for any live registration, so it
+// reaches the device. That file is the v17.4.1 kill switch; recover it verbatim
+// from git history (`public/sw.js` as of the commit before v17.10.1) and deploy
+// it. Verified to work on the restaurant's Android tablet on 2026-08-18: a live
+// registration was replaced, its caches cleared and the page released within a
+// single update cycle.
 //
-// What this does, once, then never again: deletes the caches the old worker
-// created, and unregisters itself.
+// There is also an IN-BAND escape hatch that needs no deploy at all:
+// opening the app with `?sw=off` unregisters everything and clears the caches
+// before React mounts, then remembers the choice on that device. That is the
+// recovery v17.4.0 did not have — it works on a frozen app, and on a device you
+// cannot reach.
+// ─────────────────────────────────────────────────────────────────────────────
 //
-// WHAT IT DELIBERATELY DOES NOT DO: force-reload open tabs. An earlier cut
-// called clients.navigate() so a frozen device would heal without a second
-// reload. That was dropped, for three reasons:
-//   • It fires on HEALTHY devices too — the laptop was never broken but still
-//     has the old worker — where an unsolicited reload destroys whatever is
-//     half-typed in the booking/walk-in form (that draft is React state and is
-//     never persisted).
-//   • Caches are gone by that point, so if the network blips during the forced
-//     reload the tab lands on the browser's offline error page with nothing to
-//     fall back on — strictly worse than leaving it alone.
-//   • It bought very little: a device has to navigate before it even FETCHES
-//     this file, so the user is already reloading. The most it ever saved was
-//     one extra reload.
-// Do not add it back.
+// WHAT THIS DOES, AND — MORE IMPORTANTLY — WHAT IT REFUSES TO TOUCH.
 //
-// NOTE THE ABSENCE OF A `fetch` HANDLER. That is deliberate and load-bearing:
-// a worker with no fetch listener intercepts nothing at all, so from the
-// moment this version is picked up the app talks straight to the network even
-// before activation finishes.
+// v17.4.0's worker was withdrawn because the app froze at "⟳ Loading bookings…"
+// on iOS: the first Firebase snapshot never arrived. Whatever the true cause
+// (v17.10.1's investigation points hard at the CSP blocking Firebase's JSONP
+// fallback, since the same freeze happened in iOS Chrome, where a service
+// worker cannot run at all), the structural lesson stands: a worker anywhere
+// near the data path can starve the app of its data.
 //
-// `src/main.jsx` no longer registers anything, so no NEW device installs a
-// worker. This file exists purely to clean up the ones that already have one.
-// Keep it deployed until every device has been seen working — it is inert on a
-// device that has no registration.
+// So this one is not near it. It calls respondWith() for exactly two kinds of
+// request, both same-origin GET:
 //
-// Before reintroducing a PWA here, see CLAUDE.md ("PWA — withdrawn in v17.4.1")
-// for the conditions that have to be met first.
+//   1. NAVIGATIONS — network-first, cache as a fallback. Network-first is the
+//      whole safety argument: an online device always gets fresh HTML, so this
+//      worker can never pin the app to a stale build. The cache is consulted
+//      only when the network has already failed.
+//   2. BUILT ASSETS (/assets/*, icons) — cache-first, because Vite content-
+//      hashes these filenames. A hashed URL's bytes never change, so serving
+//      them from cache cannot be stale; a new deploy's HTML references new
+//      hashes, which miss the cache and are fetched.
+//
+// Everything else falls through with NO respondWith at all — the browser
+// handles it exactly as if this worker did not exist. That explicitly includes
+// every Firebase request: the WebSocket, the REST calls, auth. They are
+// cross-origin, and the first line of onFetch drops them.
 
-self.addEventListener("install", () => {
-  // Take over from the broken worker immediately rather than waiting for every
-  // tab to close — on a frozen device the tab is not going to be closed.
-  self.skipWaiting();
-});
+const CACHE = "mgt-shell-v1";
+
+// How long a navigation waits for the network before the cache answers. Short
+// on purpose: the shell is the thing you are waiting for, and it is already on
+// the device. See the race in the navigate branch.
+const NAV_TIMEOUT_MS = 3000;
+// /code-review: the icon names are ANCHORED, not prefix-matched. `|icon` also
+// matched any future top-level path starting with those letters, and cache-first
+// is only safe for names that are content-hashed or genuinely immutable.
+// (`\??` because index.html appends a ?v=<version> cache-buster to the icons.)
+// /code-review round 2: `assets/` is a PREFIX (it holds the hashed bundle, so
+// everything under it is immutable), while the icon names are EXACT. Collapsing
+// both into one alternation with a shared `(\?|$)` terminator — as the first
+// anchoring fix did — silently required the path to END at `assets/`, so
+// `/assets/index-abc123.js`, i.e. the entire app bundle, stopped being cached.
+// It survived a device re-test because the dev server has no /assets/ at all;
+// tests/service-worker.test.js is what caught it.
+const ASSET_RE = new RegExp(
+  "^\\/("
+  + "assets\\/.+"
+  + "|(icon\\.svg|icons\\.svg|icon-192\\.png|icon-512\\.png"
+  + "|icon-maskable-512\\.png|apple-touch-icon\\.png"
+  + "|favicon\\.svg|manifest\\.webmanifest)(\\?|$)"
+  + ")"
+);
+
+// Shown only when a navigation fails AND nothing is cached — i.e. a cold start
+// with no network. Inline, so there is no extra file that could itself 404.
+const OFFLINE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Offline — MGT Bookings</title><style>
+html{background:#eef1f6;color:#1a1d24}
+@media (prefers-color-scheme:dark){html{background:#15171c;color:#e8eaf0}}
+body{margin:0;min-height:100dvh;display:flex;align-items:center;justify-content:center;
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:24px}
+main{max-width:22rem;text-align:center}
+h1{font-size:19px;font-weight:600;margin:0 0 8px}
+p{font-size:15px;line-height:1.5;margin:0 0 18px;opacity:.75}
+button{font:inherit;font-size:15px;font-weight:600;color:#fff;background:#007AFF;
+border:0;border-radius:999px;padding:11px 22px;cursor:pointer}
+</style></head><body><main>
+<h1>No connection</h1>
+<p>MGT Bookings can't load right now. Bookings already on this device are safe,
+and any changes you made will sync once you're back online.</p>
+<button id="r">Try again</button>
+</main><script>document.getElementById("r").addEventListener("click",function(){location.reload()})</script></body></html>`;
+
+// No skipWaiting(). A new worker waits for the old one to release the page and
+// takes over on the next navigation. Nothing swaps under a shift in progress,
+// which matters on a device someone is actively taking bookings on. (The KILL
+// SWITCH does the opposite and calls skipWaiting — when the job is to get rid
+// of a worker, immediacy is the point.)
+self.addEventListener("install", () => {});
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    (async () => {
-      try {
-        const keys = await caches.keys();
-        // Scoped to our own caches ("mgt-shell-v1" / "mgt-shell-v2") rather
-        // than everything on the origin. Nothing else here uses Cache Storage
-        // today, but this file is meant to stay deployed indefinitely, and an
-        // unfiltered wipe would silently eat any cache a future feature adds.
-        await Promise.all(
-          keys.filter((k) => k.startsWith("mgt-")).map((k) => caches.delete(k))
-        );
-      } catch {
-        /* Cache Storage unavailable (iOS quota/private mode) — nothing to drop */
-      }
+  event.waitUntil((async () => {
+    // /code-review: this sweep is DELIBERATELY broad, unlike unregisterAll()'s
+    // scoped delete in lib/serviceWorker.js — do not "fix" it to match. It is
+    // what cleans up a v17.4.0 leftover on a device that never saw the v17.4.1
+    // kill switch (one that has been off since before that deploy): such a
+    // device fetches this worker directly, and its stale caches are only ever
+    // going to be removed here.
+    for (const key of await caches.keys()) {
+      if (key !== CACHE) await caches.delete(key);
+    }
+    await self.clients.claim();
+  })());
+});
 
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+
+  let url;
+  try { url = new URL(req.url); } catch { return; }
+  // Cross-origin is Firebase, Google APIs and nothing else here. Never touched.
+  if (url.origin !== self.location.origin) return;
+
+  if (req.mode === "navigate") {
+    event.respondWith((async () => {
       try {
-        await self.registration.unregister();
+        // /code-review: network-FIRST, not network-FOREVER. `fetch` only
+        // rejects when the browser gives up, which on a hung connection — an AP
+        // associated with no upstream, i.e. the exact restaurant condition this
+        // whole version has been chasing — is 30s or more, with the cached
+        // shell sitting right there unused. Worse, index.html's boot watchdog
+        // fires at 10s and accuses a page that is still legitimately loading.
+        // So the network gets NAV_TIMEOUT_MS to win; after that the cache
+        // answers. The fetch is not aborted — it is left to finish and populate
+        // the cache via waitUntil below, so a slow network still refreshes the
+        // shell for next time.
+        const fresh = await Promise.race([
+          fetch(req),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("nav-timeout")), NAV_TIMEOUT_MS))
+        ]);
+        // Only a real, complete response is worth keeping.
+        //
+        // /code-review: handed to waitUntil, not fired and forgotten.
+        // respondWith resolves the moment the response is returned, and the
+        // browser may then kill an idle worker — abandoning a cache.put still
+        // in flight, so the shell silently never lands. Intermittent and
+        // load-dependent: it passes every manual test and fails the one night
+        // it matters.
+        if (fresh && fresh.ok && fresh.type === "basic") {
+          const copy = fresh.clone();
+          event.waitUntil(caches.open(CACHE).then((c) => c.put("/", copy)));
+        }
+        return fresh;
       } catch {
-        /* already gone */
+        // The network either failed or lost the race. If it is merely slow, let
+        // it finish in the background and refresh the shell for next time.
+        event.waitUntil(fetch(req).then((late) => {
+          if (late && late.ok && late.type === "basic") {
+            return caches.open(CACHE).then((c) => c.put("/", late));
+          }
+        }).catch(() => {}));
+        const cached = await caches.match("/", { cacheName: CACHE });
+        if (cached) return cached;
+        return new Response(OFFLINE_HTML, {
+          status: 503,
+          headers: { "Content-Type": "text/html; charset=utf-8" }
+        });
       }
-    })()
-  );
+    })());
+    return;
+  }
+
+  if (!ASSET_RE.test(url.pathname)) return;   // not ours — browser handles it
+
+  event.respondWith((async () => {
+    const cached = await caches.match(req, { cacheName: CACHE });
+    if (cached) return cached;
+    const fresh = await fetch(req);
+    if (fresh && fresh.ok && fresh.type === "basic") {
+      const copy = fresh.clone();   // see the navigation branch: waitUntil, not fire-and-forget
+      event.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy)));
+    }
+    return fresh;
+  })());
 });

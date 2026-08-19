@@ -17,7 +17,7 @@
 //   onClose()      — close the panel
 
 import { useState } from "react";
-import { S, BTN, R, T, FW } from "../lib/constants";
+import { S, BTN, BLOCK_BG, R, T, FW } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
 import { Overlay, ModalTitle, mkBtn, AutoHeight } from "./atoms";
 
@@ -62,8 +62,10 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
         onClick={onClose}>Done</button></div>
   );
 
+  // v17.10.0: the title pill follows the button that opens it (ModalTitle's
+  // colour rule), and that badge is now the pending amber.
   return (
-    <Overlay onClose={onClose} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background="var(--btn-orange)">{"Waitlist — "+date}</ModalTitle>{rows.length?rows:<div
+    <Overlay onClose={onClose} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={BLOCK_BG.pending}>{"Waitlist — "+date}</ModalTitle>{rows.length?rows:<div
         style={{textAlign:"center",padding:"24px 0",color:S.muted,fontSize: T.lead}}>No one on the waitlist for this day.</div>}<div style={{fontSize: T.small,color:S.muted,textAlign:"center",marginTop:10}}>First come, first served — "Table free" means a table currently fits this party.</div></AutoHeight></Overlay>
   );
 }

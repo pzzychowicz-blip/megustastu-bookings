@@ -17,6 +17,8 @@
 //   onOpenManualAssign(targetIdOrNew)      show ManualModal; "__new__" or editId
 //   onOpenHistory                          show HistoryPopup
 //   onRequestCancel(bookingId)             show confirm-cancel overlay
+//   onRequestDelete(bookingId)             show the SAME confirm-delete overlay
+//                                          the List's Delete uses (v17.10.0)
 //
 // The component reads no React hooks — it's a pure render function whose
 // outputs depend only on its props. Derivations (formAvail, tablesBtn,
@@ -41,9 +43,9 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   optimizerActiveFor
 } from "../lib/booking-logic";
-import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerByPhone, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
+import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
-import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon } from "./Icons";
+import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
@@ -54,7 +56,7 @@ export function BookingFormModal({
   bookings, liveBookings, tableBlocks,
   autoOptimizer, isMobile,
   onSave, onSavePending, onSaveConfirm, onClose, onClearSwap, onBookAgain,
-  onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel,
+  onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
   currency = "€", regularMin = DEFAULT_REGULAR_MIN, // v17.0.0: settings/general
 }){
@@ -125,9 +127,19 @@ export function BookingFormModal({
   // (phone customers + phone-less bookings, per-booking, NEVER merged — see
   // searchGuestsByName). Mirrors the phone dropdown; only shown for NEW bookings
   // (an edit already has its customer). A phone-less pick fills only the name.
+  // v17.10.0: the `!editId` gate is GONE. It made the name dropdown a
+  // new-bookings-only feature, and an edit form arrives PRE-FILLED — which is
+  // exactly the case the reopen fix below is about. A pick while editing fills
+  // the name (and the phone, for a phone row) and nothing else: `size` /
+  // `preference` / `preferredTables` belong to the booking you are editing, and
+  // the `!editId&&latest` guard inside pickGuest already draws that line.
   const [nameFocus,setNameFocus]=useState(false);
-  const nameMatches=(nameFocus&&!editId&&String(form.name||"").trim().length>=2)
+  const nameMatches=(nameFocus&&String(form.name||"").trim().length>=2)
     ?searchGuestsByName(bookings,custIdx,form.name,20).filter(function(r){
+      // Don't offer the booking you are editing as somebody to link yourself to.
+      // Only when it is the row's ONLY booking — a GROUP row that happens to be
+      // led by this booking still represents other visits and is a real target.
+      if(editId&&r.isPhoneless&&r.count===1&&r.latest&&r.latest.id===editId) return false;
       // Hide an exact already-applied PHONE-customer selection (name+phone both
       // match = this row is what's in the form) so a refocused dropdown isn't
       // noise. Phone-LESS rows are deliberately NOT self-hidden (/code-review):
@@ -142,6 +154,30 @@ export function BookingFormModal({
     setForm(function(f){
       const next={name:r.name};
       if(!r.isPhoneless) next.phone=r.rawPhone;
+      // v17.10.0: picking a PHONE-LESS guest is the join. This click is the only
+      // place a `guestId` is ever minted, because it is the only moment someone
+      // who can see both bookings asserts they are the same person — see the
+      // never-merge discussion in customers.js → searchGuestsByName.
+      //
+      // A row that already carries a guestId is an existing group, so the draft
+      // just adopts it and there is nothing to write back. An UNJOINED row mints
+      // `"g"+<that booking's id>` and records the booking in `guestSeed`, which
+      // doSave consumes to stamp the source in the SAME write as the new
+      // booking. Deriving the id from data both devices already hold is what
+      // makes two clients joining concurrently converge instead of forking the
+      // guest in two (the recurring-occurrence-id reasoning).
+      //
+      // BOTH keys are assigned on EVERY pick, never only on the phone-less
+      // branch (/code-review). A pick REPLACES who this booking is for, so the
+      // previous pick's keys cannot be allowed to survive it: tap a phone-less
+      // guest by mistake, then tap the phone customer you meant, and a
+      // conditional assignment leaves the stranger's `guestId` on the draft —
+      // the new booking is saved under the phone customer AND joined to the
+      // stranger, whose booking `guestSeed` then stamps to match. Two unrelated
+      // customers fused, permanently: nothing in the UI can remove a guestId
+      // (doSaveEdit's `f.guestId||b.guestId||null` can only ever add one).
+      next.guestId=(r.isPhoneless&&latest)?(r.guestId||("g"+latest.id)):null;
+      next.guestSeed=(r.isPhoneless&&latest&&!r.guestId)?latest.id:null;
       if(!editId&&latest){ // Book-Again-style prefill (new bookings only)
         next.size=latest.size||f.size;
         next.preference=latest.preference||f.preference;
@@ -158,9 +194,19 @@ export function BookingFormModal({
   // disclosure, ported: Regular → regularBookings, no-show → noShowBookings.
   // `chipHist` is keyed by the normalized phone at click time, so editing the
   // phone (a different customer) closes the panel by itself — no effect needed.
-  const custMatch=hasRealPhone(form.phone)?matchCustomerByPhone(form.phone,bookings,editId):null;
+  // v17.10.0: resolved on phone OR guestId, so a JOINED phone-less guest earns
+  // the same Regular / no-show chips a phone customer does — which is the whole
+  // point of the guest identity. matchCustomerFor unions the two keys; see
+  // customers.js.
+  const custMatch=(hasRealPhone(form.phone)||form.guestId)
+    ?matchCustomerFor({phone:form.phone,guestId:form.guestId},bookings,editId)
+    :null;
   const [chipHist,setChipHist]=useState(null); // {key,which:"regular"|"noshow"} | null
-  const phoneKeyNow=normalizePhone(form.phone);
+  // The disclosure panel is keyed by the identity it was opened for, so changing
+  // the phone (or picking a different guest) closes it by itself — no effect
+  // needed. v17.10.0: that key is now the resolved identity, not the phone
+  // alone, or the panel would never self-close for a phone-less guest.
+  const phoneKeyNow=identityKey({phone:form.phone,guestId:form.guestId})||"";
   const histWhich=chipHist&&chipHist.key===phoneKeyNow?chipHist.which:null;
   function toggleChipHist(which){
     setChipHist(histWhich===which?null:{key:phoneKeyNow,which:which});
@@ -255,7 +301,7 @@ export function BookingFormModal({
       key={r.key}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickGuest(r);})}
-      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
+      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")+(r.count>1?"  ·  "+r.count+" bookings":"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
   );})}</div>:null;
 
   const formCols=isMobile?"1fr":"1fr 1fr";
@@ -371,7 +417,8 @@ export function BookingFormModal({
     sugg={formAvail.sugg}
     onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />{!editId&&onAddToWaitlist?<div style={{display:"flex",justifyContent:"center",marginTop:-4,marginBottom:12}}><button
       className="mgt-hover-scale"
-      style={mkBtn({fontSize: T.body,background:BTN.orange,minHeight:40,padding:"8px 16px",display:"inline-flex",alignItems:"center",gap:6})}
+      /* v17.10.0: pending amber — the waitlist's colour, see App's badge. */
+      style={mkBtn({fontSize: T.body,background:BLOCK_BG.pending,minHeight:40,padding:"8px 16px",display:"inline-flex",alignItems:"center",gap:6})}
       onClick={function(){onAddToWaitlist();}}><WaitIcon size={IC.control} />Add to waitlist</button></div>:null}</>:null;
   // v15.0.0: closed-day notice — the chosen date falls on a weekday marked Closed
   // (Settings → General → Opening hours). doSave blocks the write; this explains why.
@@ -413,7 +460,7 @@ export function BookingFormModal({
         key={r.timeStr}
         className="mgt-hover-scale"
         onClick={function(){setForm(function(f){return Object.assign({},f,{time:r.timeStr});});}}
-        style={{cursor:"pointer",padding:"2px 8px",borderRadius:R.pill,fontWeight: FW.semi,fontSize: T.body,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?KTXT_OK:KTXT_TIGHT,border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>{r.timeStr}</span>
+        style={{cursor:"pointer",padding:"2px 8px",borderRadius:R.pill,fontWeight: FW.semi,fontSize: T.body,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?KTXT_OK:KTXT_TIGHT,border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"var(--shadow-flat)"}}>{r.timeStr}</span>
     );});
   }
   // v15.8.0 cont.4: the kitchen suggestion sub-panel (the part that appears when the
@@ -450,11 +497,13 @@ export function BookingFormModal({
   const quickStatusBtns=editId?<Section style={{position:"relative"}}>{statusFlash?(
         <div key={statusFlash.k} className="mgt-wipe-ltr" style={{position:"absolute",inset:0,borderRadius:R.card,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
       ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.semi,marginRight:4}}>Status:</span>{statusTargets.map(function(s){return (
+        // v17.10.0: the per-status mark, from the ONE source in Icons.jsx that
+        // this row, the List card and the quick-status popup all read.
         <button
           key={s}
           className="mgt-hover-scale"
           style={mkBtn({background:BLOCK_BG[s],color:BLOCK_INK[s]||"var(--text-on-accent)",textTransform:"capitalize",minHeight:H.control,display:"inline-flex",alignItems:"center",gap:6})}
-          onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}><ChevronRightIcon size={IC.inline} />{s}</button>
+          onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}><StatusIcon status={s} size={IC.control} />{s}</button>
       );})}</div></Section>:null;
 
   const historyBtn=(function(){
@@ -472,6 +521,22 @@ export function BookingFormModal({
   // seated or completed. One tap closes the edit modal and opens a new-booking
   // form pre-filled with this customer's details (name, phone, size, preference,
   // preferred tables, original time). Staff must still pick a date.
+  // v17.10.0: Delete, in the form. It existed only on the List card, so deleting
+  // a booking you had open meant closing the form, finding the card again and
+  // deleting from there — and in Timeline or Plan there was no route to it at
+  // all without switching view. Edit mode only: there is nothing to delete on a
+  // new booking.
+  //
+  // It raises the SAME confirm overlay the List's Delete raises (App's
+  // confirmDel) rather than a second dialog of its own — one armed confirm for
+  // one irreversible action, and Firebase's free plan has no backups. App closes
+  // the form on the delete path.
+  const deleteBtn=editId?(
+    <button
+      onClick={function(){onRequestDelete(editId);}}
+      className="mgt-hover-scale mgt-press"
+      style={mkBtn({fontSize: T.body,background:BTN.del,padding:"8px 16px",minHeight:36})}>Delete</button>
+  ):null;
   const bookAgainBtn=(function(){
     if(!editId) return null;
     const cur=bookings.find(function(b){return b.id===editId;});
@@ -537,7 +602,7 @@ export function BookingFormModal({
   const footerEl=(
     <>
       {errorEl}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{(function(){
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{deleteBtn}{(function(){
         if(editId) return null;
         const canSave=!!form.date;
         return (
@@ -575,7 +640,7 @@ export function BookingFormModal({
             disabled={!canSave}
             onClick={onSave}
             className="mgt-hover-scale"
-            style={{background:canSave?S.accent:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"0 2px 8px rgba(0,122,255,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save booking</button>
+            style={{background:canSave?S.accent:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"var(--shadow-btn-accent)":"none"}}>Save booking</button>
         );
       })()}{origPendingBooking?(
         <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" outMs={190} tag="span">
@@ -583,7 +648,7 @@ export function BookingFormModal({
             disabled={!form.date}
             onClick={onSaveConfirm}
             className="mgt-hover-scale"
-            style={{background:form.date?"var(--app-success-solid)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"0 2px 8px rgba(22,101,52,0.25), inset 0 1px 1px rgba(255,255,255,0.2)":"none"}}>Save&confirm</button>
+            style={{background:form.date?"var(--app-success-solid)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"var(--shadow-btn-success)":"none"}}>Save&confirm</button>
         </Presence>
       ):null}</div></div>
     </>
@@ -593,16 +658,26 @@ export function BookingFormModal({
   return (
     <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><div style={{position:"relative"}}><input
             value={form.name}
-            onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
+            /* v17.10.0: the dropdown reopens on TYPING and on CLICK, not only on
+               focus. Picking a row calls preventDefault on mousedown so the input
+               keeps DOM focus, and the pick handler then clears this flag — so the
+               field ends up focused with the list closed and NO further `focus`
+               event can ever fire. Typing more did nothing; you had to tab away
+               and come back. That is the whole of "the suggestions only work the
+               first time you type something in". */
+            onChange={function(e){setNameFocus(true);setForm(function(f){return Object.assign({},f,{name:e.target.value});});}}
             onFocus={function(){setNameFocus(true);}}
+            onClick={function(){setNameFocus(true);}}
             onBlur={function(){setNameFocus(false);}}
             placeholder="Full name"
             className="mgt-hover-scale"
             style={inp()} />{nameDropdown}</div></Fld><Fld label="Phone number"><div style={{position:"relative"}}><input
             type="tel"
             value={form.phone}
-            onChange={function(e){setForm(function(f){return Object.assign({},f,{phone:e.target.value});});}}
+            /* Same reopen fix as the name field above. */
+            onChange={function(e){setPhoneFocus(true);setForm(function(f){return Object.assign({},f,{phone:e.target.value});});}}
             onFocus={function(e){setPhoneFocus(true);const el=e.target;if(!el.value) setForm(function(f){return Object.assign({},f,{phone:"+"});});setTimeout(function(){el.selectionStart=el.selectionEnd=el.value.length;},0);}}
+            onClick={function(){setPhoneFocus(true);}}
             onBlur={function(){setPhoneFocus(false);}}
             placeholder="+34 600 000 000"
             className="mgt-hover-scale"

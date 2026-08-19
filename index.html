@@ -214,6 +214,51 @@
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.6);
         --shadow-input: inset 0 1px 2px rgba(255, 255, 255, 0.6), 0 1px 3px rgba(0, 0, 0, 0.06);
         --shadow-btn: 0 1px 4px rgba(0, 0, 0, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+        /* v17.10.1: RAISED, on a fill that does NOT flip with the theme — the
+           cell the shadow scale was missing. --shadow-btn is raised-on-a-
+           flipping-fill; --shadow-flat is not-raised. This one was spelled
+           three different ways across 14 sites (0 2px 6px/0.12 ×11,
+           0 1px 4px/0.1 ×2, 0 1px 3px/0.15 ×1) — one intent, differences
+           nobody chose. Value is the most common of the three, not an average
+           (--shadow-flat's own precedent).
+           It is the only --shadow-* token whose INSET does not change between
+           themes, and that is the whole point: the highlight belongs to the
+           element's own fill (BLOCK_BG, --app-*-solid, BTN.*), which is
+           deliberately theme-invariant, so a highlight tuned per theme would be
+           wrong on it (the v17.8.0 white-inset-over-fixed-fill rule). The DROP
+           still deepens, because it falls on the page and the page does flip —
+           which the hand-written literals never did, leaving a modal footer
+           button at 0.12 in dark beside siblings at 0.35. */
+        --shadow-btn-solid: 0 2px 6px rgba(0, 0, 0, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+        /* v17.10.1: a primary button glowing in its OWN hue. Not elevation — a
+           coloured halo announcing the default action — so unlike every other
+           shadow here it is identical in both themes. Unifies three literals
+           that carried two different alphas (0.25 / 0.2) for one effect. */
+        --shadow-btn-accent: 0 2px 8px rgba(0, 122, 255, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+        --shadow-btn-success: 0 2px 8px rgba(22, 101, 52, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+        /* v17.10.1: RECESSED — a groove, the inverse of --shadow-btn-solid.
+           Two sites (the Toggle track, HistoryPopup's scrolling panel) held two
+           different values, and both were theme-BLIND: a 0.06–0.08 black inset
+           is close to invisible on a dark surface. */
+        --shadow-well: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+        /* v17.10.0: elevation WITHOUT a raised highlight. Every other --shadow-*
+           token leads with a white inset, which is what makes a control look
+           lifted off the page; this one carries none, and there are two reasons
+           to want that. The first is the v17.8.0 white-inset-over-fixed-fill
+           rule — a highlight tuned for light and dimmed for dark is wrong on a
+           fill that stays the same in both (a timeline block, an --app-*-solid,
+           a hard-coded pale chip). The second is that the element is simply not
+           a raised thing: a ruler label, a legend swatch, the Toggle knob.
+           /code-review: state BOTH, because the first alone reads as a rule that
+           several correct call sites break — HOUR_PILL and the timeline's status
+           swatch sit on fills that do flip, and are flat on purpose. Anything
+           that should read as raised takes --shadow-btn, and a badge that is the
+           same badge in two views takes the same one in both.
+           It is still theme-split, because the shadow falls on the PAGE and the
+           page does flip.
+           It replaced ~17 accumulated `0 1px Npx rgba(0,0,0,0.0x)` literals; the
+           value is the most common of them (0.1), not an average of all. */
+        --shadow-flat: 0 1px 3px rgba(0, 0, 0, 0.1);
         /* ── v14.2.3: TimelineView (Gantt canvas) ── */
         --tl-card-bg: rgba(255, 255, 255, 0.4);        /* the timeline container glass card */
         --tl-card-border: rgba(255, 255, 255, 0.45);
@@ -556,6 +601,13 @@
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
         --shadow-input: inset 0 1px 2px rgba(255, 255, 255, 0.05), 0 1px 3px rgba(0, 0, 0, 0.3);
         --shadow-btn: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        /* v17.10.1: the DROP deepens (it lands on the page); the INSET does
+           not (it lands on a theme-invariant fill). See :root. */
+        --shadow-btn-solid: 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+        --shadow-well: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+        /* --shadow-btn-accent / --shadow-btn-success are deliberately NOT
+           redefined: a coloured halo is the button's own hue, not elevation. */
+        --shadow-flat: 0 1px 3px rgba(0, 0, 0, 0.35);
         /* ── v14.2.5: App.jsx main-screen chrome (dark) ── */
         --app-saved-bg: rgba(90, 75, 20, 0.35);    --app-saved-border: rgba(253, 230, 138, 0.35); --app-saved-text: #fde68a;
         --app-offline-bg: rgba(90, 70, 15, 0.4);   --app-offline-border: rgba(252, 211, 77, 0.45); --app-offline-text: #fcd34d;
@@ -606,6 +658,44 @@
          (monospace keycap — intentional). */
       input, textarea, select, button {
         font-family: inherit;
+      }
+      /* v17.10.1: kill Android's platform tap highlight.
+         Chrome's default `-webkit-tap-highlight-color` is rgba(51,181,229,0.4)
+         — Holo blue at 40% — and it is painted as a RECTANGLE over the
+         element's border box, ignoring border-radius. On a UI made of pills
+         that is a hard blue rectangle flashing around every button you touch,
+         which is what it looked like on the restaurant's tablet.
+         It is also redundant: v17.8.0 gave every control its own press-scale
+         dip, so the platform highlight is a second, uglier answer to a question
+         the app already answers in its own language. The two surfaces that are
+         NOT buttons — the List card and the timeline block — get that language
+         extended to them below, so nothing loses its touch feedback.
+         Set on :root because the property INHERITS; one declaration covers
+         everything including future elements. */
+      :root {
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* v17.10.1: a control's LABEL is not selectable text.
+         On Android, a long-press does two things at once: it arms our own hold
+         gesture (the timeline/plan quick-status popup, ViewSwitcher's split
+         menu) AND it starts an OS text selection. Because the popup opens under
+         the still-pressed finger, the selection lands on the popup's own button
+         labels — Copy/Share/Web search/DeepL over "Cancelled", with handles.
+         The gesture worked; it just came with a system menu on top of it.
+         `user-select` is the property Android Chrome reads; `-webkit-touch-
+         callout` is the iOS one. Both are set so the two platforms behave
+         identically — iOS does not show this today, but nothing prevented it.
+         Scoped to controls on purpose: a button's label is never a copy target,
+         while inputs, textareas and plain divs keep selection. ListView's card
+         is a <div> and its phone number stays selectable — staff select and copy
+         it to ring a party, which is why v17.10.0 taught that card's click
+         handler to stand down mid-selection. Do not widen this to a container.
+         TimelineView's blocks and ViewSwitcher's buttons already did this
+         inline; this generalises their answer instead of adding a fourth copy. */
+      button, [role="button"] {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
       }
       /* v14.3.0: .mgt-hover-scale hover-lift — ported from MGT Scheduling so
          both apps share one hover identity. Opt-in per element via
@@ -685,6 +775,19 @@
       }
       @media (hover: hover) and (pointer: fine) {
         .mgt-ac-row:hover { background-color: var(--row-bg-hover, var(--bg-ac-hover)); }
+      }
+      /* v17.10.1: the same tint on PRESS, which is the touch equivalent of the
+         hover above — and outside the hover query, because touch is exactly
+         where it is needed. It has to be a tint and not the press-scale: these
+         surfaces are CONTAINERS OF CONTROLS, `:active` matches ancestors of the
+         pressed element, so a scale here would shrink the card under the very
+         button you were aiming at — the v17.9.1 click bug, arriving by a new
+         route. `.mgt-nopress` is deliberately NOT excluded: that opt-out means
+         "no transform" (its two other rules are both transform rules), and the
+         notification strip's lid carries it precisely because it is one of
+         these containers. It should still acknowledge a tap. */
+      .mgt-ac-row:active:not(:disabled) {
+        background-color: var(--row-bg-hover, var(--bg-ac-hover));
       }
       /* v17.5.0 correction: TimeAxis is now a ruler/tape picker whose centre
          marker is fixed while the ruler scrolls under it. This is the "detent"
@@ -896,6 +999,31 @@
          proportional instead of jumping down through the resting scale. */
       @media (hover: hover) and (pointer: fine) {
         .mgt-hover-scale:active:not(:disabled):not(.mgt-nopress) { transform: scale(1.02); }
+      }
+      /* v17.10.1: the timeline block and the waitlist ghost are the app's only
+         non-button LEAF controls that staff tap constantly, so they take the
+         same dip. Targeted by `.mgt-blk` rather than by widening the rule to
+         `.mgt-hover-scale`, which several containers of controls also carry —
+         see the .mgt-ac-row note above for why that would reintroduce a
+         geometry bug. On a pointer device the rule above wins on specificity
+         (0,4,0 vs 0,2,0) and the block presses from its lifted size, as
+         intended. During a drag the block's INLINE transform wins over both,
+         which is the documented behaviour. Its inline `TL_MOVE` transition
+         already lists `transform`, so this eases rather than snapping. */
+      /* /code-review: scoped to COARSE pointers, and that is a correctness fix,
+         not tidiness. The block CONTAINS a click target (the Assign handle, a
+         <span onClick> in TimelineView), and `:active` matches ancestors — so on
+         a mouse, pressing Assign would scale the block between mousedown and
+         mouseup, the handle would slide out from under the cursor, and `click`
+         would resolve to their common ancestor (the block) instead of the
+         handle. That is the v17.9.1 bug exactly.
+         On touch it cannot happen: the pointer is implicitly captured to the
+         touchstart target, so the handle still receives the tap however far it
+         moves. Touch is also the only place this rule was ever needed — a mouse
+         already has the hover lift and the `.mgt-hover-scale:active` dip above.
+         `.mgt-nopress` is honoured here as it is on every other press rule. */
+      @media (hover: none), (pointer: coarse) {
+        .mgt-blk:active:not(.mgt-nopress) { transform: scale(0.96); }
       }
 
       /* ── v17.8.0: the keyboard focus ring ───────────────────────────────────
@@ -1119,6 +1247,113 @@
         try {
           document.addEventListener("touchstart", function () {}, { passive: true });
         } catch (e) { /* pre-2015 Safari: no options object — press stays hover-only */ }
+        // v17.10.1: ?sw=off — the IN-BAND service-worker escape hatch.
+        //
+        // v17.4.0's worker could only be withdrawn by shipping a replacement,
+        // which meant a frozen device stayed frozen until a deploy reached it.
+        // This is the recovery that was missing: opening the app with `?sw=off`
+        // unregisters every worker, drops every cache, and remembers the choice
+        // on this device. It lives HERE, in the boot script, because it has to
+        // work when React never mounts — which is exactly the state you would
+        // be in when you need it.
+        //
+        // /code-review: it RELOADS when it is done, and that is the difference
+        // between a recovery and a rumour. The page you run this on was already
+        // claimed by the old worker, so unregistering changes nothing you can
+        // see — a frozen app stays frozen, and the watchdog's "Reset offline
+        // copy" button would render the same broken page a second time, which
+        // reads as "the fix did nothing". Reloading to the CLEAN path (no
+        // ?sw=off) both shows the result and cannot loop, because the reloaded
+        // page no longer matches this branch.
+        try {
+          if (/[?&]sw=off\b/.test(location.search)) {
+            try { localStorage.setItem("mgt-sw", "0"); } catch (e) {}
+            var jobs = [];
+            if (navigator.serviceWorker) {
+              jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+                return Promise.all(rs.map(function (r) { return r.unregister(); }));
+              }).catch(function () {}));
+            }
+            if (window.caches) {
+              jobs.push(caches.keys().then(function (ks) {
+                return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+              }).catch(function () {}));
+            }
+            // replace(), not assign(): Back must not walk into ?sw=off again.
+            Promise.all(jobs).then(function () {
+              location.replace(location.pathname);
+            });
+          }
+        } catch (e) { /* the Settings toggle is the other way out */ }
+        // v17.10.1: BOOT WATCHDOG — the app said nothing when it failed to start.
+        //
+        // Found by testing the offline shell on the tablet with the server
+        // stopped: the cached HTML was served, the bundle was not there, React
+        // never mounted, and the screen stayed WHITE. No message, no way out.
+        // That is within touching distance of the v17.4.0 symptom staff
+        // reported ("it just sits there"), and it is not specific to the
+        // service worker — a bad deploy, a blocked script or a dead network at
+        // the wrong moment all land in the same place.
+        //
+        // So this is deliberately NOT part of the worker: it watches the one
+        // thing that actually matters, whether the app rendered, and offers the
+        // two things that fix it. 10s is well past a cold start on a slow
+        // restaurant connection; a late mount removes the notice again.
+        //
+        // Inline handlers are impossible here (script-src has no 'unsafe-inline',
+        // which is the whole point of the hash) — hence addEventListener.
+        try {
+          window.setTimeout(function () {
+            var root = document.getElementById("root");
+            if (!root || root.children.length) return;
+            var box = document.createElement("div");
+            box.id = "mgt-boot-fail";
+            box.setAttribute("style", "position:fixed;inset:0;display:flex;align-items:center;"
+              + "justify-content:center;padding:24px;text-align:center;font:15px/1.5 -apple-system,"
+              + "BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--text-primary,#1a1d24);"
+              + "background:var(--bg-app,#eef1f6);z-index:9999");
+            var inner = document.createElement("div");
+            inner.setAttribute("style", "max-width:22rem");
+            var h = document.createElement("div");
+            h.setAttribute("style", "font-size:19px;font-weight:600;margin-bottom:8px");
+            h.textContent = "MGT Bookings didn't start";
+            var p2 = document.createElement("p");
+            p2.setAttribute("style", "opacity:.75;margin:0 0 18px");
+            p2.textContent = "Your bookings are safe on the server. Try again, and if that "
+              + "doesn't help, reset the offline copy of the app.";
+            var btn = document.createElement("button");
+            btn.setAttribute("style", "font:inherit;font-weight:600;color:#fff;background:#007AFF;"
+              + "border:0;border-radius:999px;padding:11px 22px;margin:0 6px 8px;cursor:pointer");
+            btn.textContent = "Try again";
+            btn.addEventListener("click", function () { location.reload(); });
+            var reset = document.createElement("button");
+            reset.setAttribute("style", "font:inherit;font-weight:600;color:var(--text-primary,#1a1d24);"
+              + "background:transparent;border:1px solid currentColor;border-radius:999px;"
+              + "padding:11px 22px;margin:0 6px 8px;cursor:pointer;opacity:.8");
+            reset.textContent = "Reset offline copy";
+            reset.addEventListener("click", function () {
+              location.href = location.pathname + "?sw=off";
+            });
+            inner.appendChild(h); inner.appendChild(p2);
+            inner.appendChild(btn); inner.appendChild(reset);
+            box.appendChild(inner);
+            document.body.appendChild(box);
+            // If React mounts late after all, get out of the way.
+            // /code-review: BOUNDED. This used to poll twice a second forever
+            // when React never mounted — which is the exact case it exists for,
+            // so the handler for a broken app left a timer running on it. Two
+            // minutes is far past any late mount worth waiting for.
+            var tries = 0;
+            var poll = window.setInterval(function () {
+              if (root.children.length) {
+                window.clearInterval(poll);
+                if (box.parentNode) box.parentNode.removeChild(box);
+              } else if (++tries > 240) {
+                window.clearInterval(poll);
+              }
+            }, 500);
+          }, 10000);
+        } catch (e) { /* no watchdog; the app either starts or it doesn't */ }
       })();
     </script>
     <div id="root"></div>

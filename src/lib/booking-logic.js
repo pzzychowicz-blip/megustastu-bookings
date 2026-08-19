@@ -148,6 +148,13 @@ export function sanitize(b){if(!b||typeof b!=="object") return null;var t=b.time
   // stays for statistics as name "Data removed" (phone/notes/history wiped,
   // noShow kept). The flag excludes it from the name-search/autocomplete paths.
   anonymized:!!b.anonymized,
+  // v17.10.0: the SECOND customer-identity key, for guests who never give a
+  // phone number — `"g"+<seed booking id>`, minted only when a human joins two
+  // phone-less bookings from the name dropdown. Whitelisted so it survives
+  // reads; per-booking field, so the existing per-$id updatedAt CAS covers it
+  // and there is NO new node and no Firebase console step. See
+  // customers.js → identityKey / matchCustomerFor.
+  guestId:b.guestId||null,
   // v17.6.0: how long the party ACTUALLY stayed, in minutes — written by the two
   // completion paths ONLY on a real seated→completed transition (App.jsx's
   // updateStatus + doSave). Whitelisted so it survives reads. 0/absent means

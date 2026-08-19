@@ -341,10 +341,14 @@ export function Overlay({ onClose, children, footer }) {
 // The extraction commit deliberately changed no pill's colour; `Waitlist` and
 // `Find a booking` were the two the rule left arguable (you book from the
 // waitlist; you jump to a booking from search), and Patryk then decided both on
-// their own merits: Waitlist wears `--btn-orange`, the colour of the button that
-// opens it, and Find a booking joined Settings on the neutral, because searching
-// is a read. This atom exists so that judgement has one place to land instead of
-// seven.
+// their own merits: Waitlist wears the colour of the button that opens it, and
+// Find a booking joined Settings on the neutral, because searching is a read.
+// This atom exists so that judgement has one place to land instead of seven.
+//
+// v17.10.0: Waitlist's pill is now `BLOCK_BG.pending`, because the badge that
+// opens it moved to the pending amber — the rule did the work, the pill just
+// followed. Note what that means for anyone retuning this: the pill's colour is
+// NOT an independent choice, so change the opener first.
 //
 // `background` is required and has no default on purpose: a default would be a
 // silent seventh answer to the question above.
@@ -439,13 +443,56 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
   const open = controlled ? openProp : openState;
   return (
     <Section style={{ marginBottom: 18, ...(style || {}) }}>
+      {/* v17.10.0: the header answers the pointer. It is a full-width row that
+          holds a click target, which is exactly what `.mgt-ac-row` is for — the
+          v17.9.1 rule that the 1.08 hover LIFT is for controls and a tint is for
+          containers of controls (a lift here would also clip against the
+          Settings card's overflow, which is what the note above already said).
+          Every collapsible header gets it, List's "Completed & cancelled" fold
+          and all ~15 Settings sections alike, so there is one kind of header.
+
+          `--row-bg-hover` is `--bg-veil`, NOT the class default `--bg-ac-hover`:
+          the header sits on Section's own `--bg-soft` fill, and an accent wash
+          would recolour that rather than lighten it (the v17.9.1
+          NotificationStrip finding — a class with a default is only
+          half-configured until you check what the default means on your
+          surface).
+
+          The padding is what makes a tint read as a row rather than a hairline
+          band; the matching negative margin is what keeps the RESTING layout
+          identical, verified by measuring rather than by arithmetic — the gap
+          between consecutive headers is 64.5px before and after.
+
+          The width needs `calc(100% + 20px)` and it is worth knowing why, since
+          the obvious two spellings both fail. `width:100%` with negative
+          horizontal margins is OVER-CONSTRAINED, so the browser silently drops
+          one side. Dropping `width` altogether looks safe — `display:flex` makes
+          a block-level flex container, which normally fills its parent — but a
+          <button> keeps its shrink-to-fit intrinsic sizing, so the header
+          collapsed to its text and the chevron left the right edge (measured:
+          213px instead of 337px). Explicit width + `border-box` means the CONTENT
+          box is exactly the container width and the 10px bleed lands inside
+          Section's 14px padding.
+
+          And note there is NO inline `background` here any more. The header used
+          to carry `background:"transparent"`, and an inline background beats a
+          stylesheet `background-color` outright — so the hover rule matched, the
+          element reported `:hover`, and the computed fill stayed
+          `rgba(0,0,0,0)`. That is the exact trap this class's own comment in
+          index.html warns about, walked into anyway; only measuring the computed
+          style caught it. The resting fill comes through `--row-bg`, which is
+          why the class takes it as a custom property in the first place. */}
       <button
         type="button"
         aria-expanded={open}
+        className="mgt-ac-row"
         onClick={() => { if (controlled) { if (onToggle) onToggle(!open); } else { setOpen((o) => !o); } }}
         style={{
-          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          gap: 12, background: "transparent", border: "none", padding: 0, margin: 0,
+          "--row-bg": "transparent", "--row-bg-hover": "var(--bg-veil)",
+          width: "calc(100% + 20px)", boxSizing: "border-box",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: 12, border: "none",
+          padding: "6px 10px", margin: "-6px -10px", borderRadius: R.inset,
           cursor: "pointer", textAlign: "left", color: "inherit"
         }}
       >
@@ -590,6 +637,44 @@ export function Reveal({ show, children, style, horizontal = false, ms = null })
 // conforming to content that has already changed. There is no arrival to
 // decelerate into, and ease-out's front-loading turned every modal resize into
 // a lurch-then-crawl. See M.resize for the reasoning in full.
+
+// ── clampRange (v17.10.0) ────────────────────────────────────────────────────
+// The whole decision, as arithmetic.
+//
+// Both paths into an AutoHeight animation ask the same four questions, and both
+// have now been got wrong once: v17.9.1 shipped the `watch` swap clamped and the
+// observer unclamped, on the stated belief that the observer was already
+// correct. Pulling the arithmetic out of the two effects is what lets it be
+// pinned by a test (tests/auto-height.test.js) instead of by reading it.
+//
+//   from    where the box starts easing — its live height, pulled down to the
+//           ceiling when it is already above it (that jump only removes scroll
+//           range, which is why it is invisible)
+//   to      where it eases to, likewise clamped
+//   pending the TRUE height to retake once the visible part has run, or null
+//           when nothing was clamped away
+//   moves   is there anything to animate at all? false means the change is
+//           entirely above the ceiling, i.e. off screen, and the box should
+//           simply take the new height rather than clip the port to ease to it
+//
+// `cap == null` (no scroll port, or no height transition to drive the restore)
+// disables all of it and gives back the plain measure this always was.
+export function clampRange(live, next, cap) {
+  const from = cap == null ? live : Math.min(live, cap);
+  const to = cap == null ? next : Math.min(next, cap);
+  return { from: from, to: to, pending: to === next ? null : next, moves: to !== from };
+}
+
+function scrollPort(box) {
+  let p = box.parentElement;
+  while (p && p !== document.body) {
+    const oy = getComputedStyle(p).overflowY;
+    if (oy === "auto" || oy === "scroll") return p;
+    p = p.parentElement;
+  }
+  return null;
+}
+
 // ── The visible cap (v17.9.1) ────────────────────────────────────────────────
 // Every height at or above the enclosing scroll port's own height LOOKS THE
 // SAME: the port paints the same pixels either way and only the scroll range
@@ -597,13 +682,17 @@ export function Reveal({ show, children, style, horizontal = false, ms = null })
 // any part of an animation outside it is spent on something nobody can see.
 // Returns null when the box has no scroll port to be clamped against.
 function visibleCap(box) {
-  let p = box.parentElement;
-  while (p && p !== document.body) {
-    const oy = getComputedStyle(p).overflowY;
-    if (oy === "auto" || oy === "scroll") break;
-    p = p.parentElement;
-  }
-  if (!p || p === document.body) return null;
+  const p = scrollPort(box);
+  if (!p) return null;
+  // v17.10.0: read the scroll offset BEFORE the probe. The cap is really "the
+  // box height at which the box's bottom edge reaches the bottom of what is on
+  // screen RIGHT NOW", and the port being scrolled by `st` pushes that down by
+  // exactly `st`. v17.9.1 could assume zero because its only caller was a tab
+  // swap, which resets the port's scroll in the click handler before the layout
+  // effect runs; the observer path has no such guarantee, and without the term a
+  // section collapsed after scrolling down would clamp BELOW the visible window
+  // — shrinking the scroll range under the reader and yanking the page up.
+  const st = p.scrollTop;
   // The port is ELASTIC — `flex: 1` inside a card that is `height: auto` under a
   // `maxHeight` — so its height RIGHT NOW understates what it could show: in a
   // short tab the card has shrunk to fit and the port with it, and reading it
@@ -630,7 +719,7 @@ function visibleCap(box) {
   box.style.height = h0;
   void p.clientHeight;
   box.style.transition = t;
-  const cap = max - others;
+  const cap = max - others + st;
   return cap > 0 ? cap : null;
 }
 
@@ -673,6 +762,11 @@ function heightAnimates(box) {
   return durs[i % durs.length] > 0.02;
 }
 
+// How long a probed ceiling may be reused (/code-review fix). It mirrors
+// `armSettle`'s window on purpose: one animation's length, so a cap can only
+// ever be shared by fires belonging to the same content change.
+const CAP_TTL = M.dur.shift + 120;
+
 export function AutoHeight({ children, watch, style }) {
   const outer = useRef(null);
   const inner = useRef(null);
@@ -683,6 +777,10 @@ export function AutoHeight({ children, watch, style }) {
   const [animating, setAnimating] = useState(false);
   const measureRef = useRef(null);
   const timerRef = useRef(null);
+  const animRef = useRef(false);                // `animating`, readable mid-measure
+  const capRef = useRef(null);                  // the visible ceiling for THIS run
+  const capAtRef = useRef(0);                   // when it was last probed
+  const toRef = useRef(null);                   // the height the box is easing TO
 
   // Settle: leave the clipped state and retake the true height. Reached by
   // `transitionend` normally, and by a timer when that event does not come —
@@ -695,11 +793,15 @@ export function AutoHeight({ children, watch, style }) {
   function settle() {
     clearTimeout(timerRef.current);
     setAnimating(false);
+    animRef.current = false;
+    capRef.current = null;
+    capAtRef.current = 0;                       // the next change re-probes
     const p = pendingRef.current;
     if (p == null) return;
     pendingRef.current = null;
     setHeightNow(outer.current, p);
     hRef.current = p;
+    toRef.current = p;
     setH(p);
   }
   function armSettle() {
@@ -711,6 +813,8 @@ export function AutoHeight({ children, watch, style }) {
     const el = inner.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
     function measure() {
+      const box = outer.current;
+      if (!box) return;
       const next = el.offsetHeight;
       const prev = cRef.current;
       // v17.9.1: compare against the last CONTENT height, not the last height
@@ -719,12 +823,95 @@ export function AutoHeight({ children, watch, style }) {
       // swap, saw box 543 vs content 2226, called that a change and overwrote
       // the clamped target with the true one, undoing the whole animation.
       if (prev === next) return;
-      // Only a CHANGE from a known prior height animates → clip while it runs.
-      // The first (null→number) measure must not clip the rest state.
-      if (prev != null) { setAnimating(true); armSettle(); }
       cRef.current = next;
-      hRef.current = next;
-      setH(next);
+      // The first (null→number) measure adopts the height; it must not clip or
+      // animate the rest state.
+      if (prev == null) { hRef.current = next; toRef.current = next; setH(next); return; }
+
+      // ── v17.10.0: the clamped range, on the OBSERVER path too ──────────────
+      //
+      // v17.9.1 added this to the `watch` swap and asserted that "callers that
+      // only grow/shrink their own content are already served correctly by the
+      // observer". That was wrong, and Settings → Layout is where it shows.
+      // Opening `Combos` there, sampled per rAF (port 477px, card 552px under a
+      // 739px max):
+      //     0–166ms    card 552 → 739     the entire visible change
+      //     166–866ms  card 739, box 535 → 2602, port CLIPPED
+      // 165ms of travel inside an 864ms animation, and 700ms of it locking the
+      // scroll port to animate pixels below the fold. That is the same defect
+      // v17.9.1 diagnosed one level up, in the same component, for the same
+      // reason — the range being animated is not the range anyone can see.
+      //
+      // The observer path is harder than the swap in one way: it fires EVERY
+      // FRAME while the content is itself animating (a `Collapsible` opening is
+      // a `Reveal` easing a grid track for 385ms), so a run has to survive being
+      // re-measured ~23 times. It does, because the clamped target stops moving
+      // as soon as the content passes the ceiling: the first fire starts the
+      // transition, the rest only update the true height to restore afterwards.
+      //
+      // The 864ms also explains why the General tab "looks fine" and Layout does
+      // not. General's content already overflows its port at rest, so the card
+      // is pinned at its max and the whole height change is invisible — the
+      // animation was equally wrong there, it just had nothing to spoil. Under
+      // the clamp that case now takes the instant branch below and stops
+      // clipping the port for 843ms after every toggle.
+      // /code-review fix: the ceiling is probed at most ONCE per animation, not
+      // once per frame. `visibleCap` writes `height: 100000px` and reads
+      // `clientHeight` + `scrollHeight` back, i.e. two forced synchronous
+      // layouts, and the no-movement branch below returns WITHOUT marking a run
+      // — so `running` stayed false and every one of the ~23 observer fires
+      // during a 385ms `Reveal` re-probed. That is ~46 forced layouts of a
+      // 2700px modal subtree per Settings toggle, newly added by the commit
+      // whose whole subject was making that toggle smoother. Settings → General
+      // takes that branch on every fire, so it was the worst case.
+      //
+      // A timestamp rather than a flag, because the instant branch has no
+      // natural end to reset on. The window is the animation's own length, so
+      // the cap can only be reused by fires belonging to the same change; a
+      // scroll or resize mid-animation makes it stale by at most one frame's
+      // worth of clamp, which is invisible. `settle` zeroes it so the next real
+      // change always measures fresh.
+      const running = animRef.current;
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      if (!running && now - capAtRef.current > CAP_TTL) {
+        capRef.current = heightAnimates(box) ? visibleCap(box) : null;
+        capAtRef.current = now;
+      }
+      const cap = capRef.current;
+      const live = running ? null : box.getBoundingClientRect().height;
+      const r = clampRange(live == null ? next : live, next, cap);
+      const to = r.to;
+      pendingRef.current = r.pending;
+
+      if (running) {
+        // Mid-flight. `pendingRef` above already carries the new true height, so
+        // the only thing left is whether the VISIBLE target moved — it does not
+        // while the content is still growing past the ceiling, and re-setting
+        // the same value would leave the transition alone anyway. Re-arm the
+        // fallback timer, since this run may now outlast its original window.
+        if (to !== toRef.current) { toRef.current = to; hRef.current = to; setH(to); armSettle(); }
+        return;
+      }
+
+      const from = r.from;
+      if (!r.moves) {
+        // Nothing on screen would move. Take the true height outright rather
+        // than clipping the port for a third of a second to animate a change
+        // that is entirely below the fold.
+        pendingRef.current = null;
+        setHeightNow(box, next);
+        hRef.current = next;
+        toRef.current = next;
+        setH(next);
+        return;
+      }
+      if (from !== live) setHeightNow(box, from);
+      hRef.current = from;
+      toRef.current = to;
+      animRef.current = true;
+      setAnimating(true);
+      armSettle();
+      setH(to);
     }
     measureRef.current = measure;
     measure();
@@ -786,9 +973,9 @@ export function AutoHeight({ children, watch, style }) {
     // plain path — which is also the right behaviour there: instant.
     const cap = live == null || !heightAnimates(box) ? null : visibleCap(box);
     const next = el.offsetHeight;
-    const from = cap == null ? live : Math.min(live, cap);
-    const to = cap == null ? next : Math.min(next, cap);
-    if (cap == null || to === from) {
+    const r = clampRange(live, next, cap);
+    const from = r.from, to = r.to;
+    if (cap == null || !r.moves) {
       pendingRef.current = null;
       measureRef.current();
       return;
@@ -796,7 +983,14 @@ export function AutoHeight({ children, watch, style }) {
     if (from !== live) setHeightNow(box, from);
     cRef.current = next;                        // the observer must not re-fire
     hRef.current = from;
-    pendingRef.current = to === next ? null : next;
+    pendingRef.current = r.pending;
+    // v17.10.0: the run bookkeeping the observer path reads. A late resize
+    // inside the new tab (a font landing, an image sizing) must join THIS run
+    // rather than start a second one on top of it.
+    capRef.current = cap;
+    capAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+    toRef.current = to;
+    animRef.current = true;
     setAnimating(true);
     armSettle();
     setH(to);
@@ -971,7 +1165,7 @@ export function SBadge({ status }) {
       color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: "1px solid rgba(255,255,255,0.2)",
       fontWeight: FW.semi, textTransform: "capitalize",
       display: "inline-block",
-      boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+      boxShadow: "var(--shadow-flat)"
     }}>
       {status}
     </span>
@@ -988,7 +1182,7 @@ export function TBadge({ id }) {
       background: t.bg, color: t.text,
       border: "1px solid " + t.border,
       fontWeight: FW.semi, display: "inline-block",
-      boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
+      boxShadow: "var(--shadow-btn)"
     }}>
       {id}
     </span>
@@ -1022,7 +1216,7 @@ export function Toggle({ on, onClick }) {
         cursor: "pointer",
         background: on ? "var(--toggle-on)" : "var(--toggle-off)",
         position: "relative", flexShrink: 0,
-        boxShadow: "inset 0 1px 2px rgba(0,0,0,0.08)",
+        boxShadow: "var(--shadow-well)",
         // v17.8.0 correction: M.move, not M.tap — and `transform` is in the list
         // because an INLINE transition beats .mgt-hover-scale's stylesheet one,
         // so omitting it left this button's hover lift with nothing to ease
@@ -1036,7 +1230,10 @@ export function Toggle({ on, onClick }) {
         left: on ? 24 : 3,
         width: 20, height: 20, borderRadius: R.pill,
         background: "var(--text-on-accent)",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
+        // v17.10.0: --shadow-flat, not --shadow-btn. The knob is white in BOTH
+        // themes (--text-on-accent is declared once), so a white inset
+        // highlight tuned for light and dimmed for dark would be wrong on it.
+        boxShadow: "var(--shadow-flat)",
         // The knob crosses 21px. That is TRAVEL, not a control acknowledging a
         // tap, so it takes M.move — under M.tap it arrived before the eye could
         // follow it and the switch read as teleporting rather than sliding.
@@ -1059,7 +1256,11 @@ export function Kbd({ k }) {
       fontSize: T.body,
       fontWeight: FW.semi,
       color: "var(--text-primary)",
-      boxShadow: "0 1px 2px rgba(0,0,0,0.06), inset 0 -1px 0 rgba(0,0,0,0.08)",
+      // v17.10.1: NOT --shadow-well. A drop PLUS a bottom inset is the physical
+      // keycap look — the shading of a key you press, not a groove — and it is
+      // the only one of its kind. Same category as this atom's monospace font:
+      // a deliberate depiction, exempt from the scale rather than missing from it.
+      boxShadow: "0 1px 2px rgba(0,0,0,0.06), inset 0 -1px 0 rgba(0,0,0,0.08)",   /* @shadow */
       minWidth: 22,
       textAlign: "center",
       boxSizing: "border-box",
@@ -1097,7 +1298,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
               background: "var(--suggest-bg)",
               color: "var(--success-text)",
               border: "1px solid var(--suggest-border)",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
+              boxShadow: "var(--shadow-btn)"
             }}
           >
             {t}
@@ -1116,7 +1317,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
       marginBottom: 14,
       fontSize: T.body,
       color: txtClr,
-      boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+      boxShadow: "var(--shadow-card)",
       ...(style || {})
     }}>
       <div style={{ fontWeight: FW.bold, marginBottom: hasSugg ? 6 : 0 }}>{message}</div>

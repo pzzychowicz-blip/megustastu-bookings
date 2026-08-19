@@ -689,7 +689,11 @@ export var M={
   easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"
 };
 
-export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,10),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null};
+// v17.10.0: `guestId` is the phone-less customer identity carried by the draft
+// (see customers.js → identityKey); `guestSeed` is the id of the booking that
+// still needs the same stamp written BACK to it, and is draft-only — doSave
+// consumes it and it is never persisted.
+export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,10),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null,guestId:null,guestSeed:null};
 
 // ── Button colour tokens ──────────────────────────────────────────────────────
 // Phase B1 addition: BTN was previously defined inline in App.jsx; moved here

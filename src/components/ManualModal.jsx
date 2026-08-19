@@ -227,7 +227,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
           borderRadius: R.pill, padding: "10px 18px",
           cursor: ok ? "pointer" : "not-allowed",
           fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
-          boxShadow: ok ? "0 2px 6px rgba(0,0,0,0.12), inset 0 1px 1px rgba(255,255,255,0.15)" : "none"
+          boxShadow: ok ? "var(--shadow-btn-solid)" : "none"
         }}
       >
         {assignLabel}
@@ -248,7 +248,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "10px 14px", borderRadius: R.card,
         background: swapBg, border: swapBrd,
-        boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+        boxShadow: "var(--shadow-flat)",
         transition: "background-color " + M.tap + ", border-color " + M.tap
       }}>
         <div>
@@ -275,7 +275,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         border: "1px solid " + (conflict ? "var(--danger-border)" : ok ? "var(--suggest-border)" : "var(--border-sheet)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: 8, flexWrap: "wrap",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.04)"
+        boxShadow: "var(--shadow-card)"
       }}>
         <div>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>

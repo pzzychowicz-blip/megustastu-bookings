@@ -9286,3 +9286,1406 @@ reason `--shadow-*` is.
 what the default means on your surface.** `--bg-ac-hover` is right for an
 autocomplete row, which has no colour of its own; it is wrong for anything whose
 resting colour is the message.
+
+---
+
+## v17.10.0 — nine items from a shift on the floor
+
+**Date:** 2026-08-17
+**Files:** see each entry.
+**Behavioural change:** yes — one persisted field is added (`guestId`, per
+booking, covered by the existing per-`$id` CAS: **no new node, no Firebase
+console step**), and five surfaces change how they respond to a tap.
+**Verification:** see each entry.
+
+Nine independent items, collected from using the app rather than from reading it:
+a swap that locked one booking too many, guests with no phone number who could
+never become regulars, an autocomplete that only fired once, status buttons that
+all wore the same chevron, a List card whose Edit button was redundant with the
+card itself, a Delete that existed in only one of the two places you would look
+for it, the waitlist wearing a colour that meant something else, a collapsible
+header that did not answer the pointer, and the last of the `ROADMAP.md` shadow
+literals.
+
+They share no code, so they ship as nine commits under one version.
+
+### 1 — a swap locks only the booking you dragged
+
+**Files:** `src/App.jsx`.
+
+Dragging a block onto an occupied row can resolve as a straight swap: the two
+parties exchange table sets. That branch wrote `_manual:true, _locked:true` to
+**both** bookings — so a swap pinned a party nobody asked to pin, the optimizer
+could never tidy it again, and every swap quietly grew the set of hand-placed
+bookings until the day had to be reshuffled by hand.
+
+Only the booking the user actually dragged is a deliberate placement. The
+displaced one keeps its new tables and its history entry, and comes out unlocked.
+
+**The exception is why the two flags are read off the captured `other` rather
+than written `false` outright.** A walk-in is `_manual + _locked` *by definition*
+and immune to the optimizer; force-unlocking one here would let a reshuffle move
+a party that is physically sitting down. So an already-locked booking keeps its
+lock on its NEW tables, and an ordinary confirmed booking comes out unlocked.
+
+The two other paths that move an occupant out of the way — step 4's displacement
+and `manualAssign`'s `affected` branch — have always unlocked them, and are
+untouched. They strip the tables and let the optimizer re-place the booking from
+scratch, so the walk-in argument does not transfer: there is no "new tables" for
+a lock to protect.
+
+### 2 — `guestId`: guests with no phone number can become regulars
+
+**Files:** `src/lib/customers.js`, `src/lib/booking-logic.js`,
+`src/lib/constants.js`, `src/App.jsx`, `src/components/BookingFormModal.jsx`,
+`src/components/ListView.jsx`, `src/components/TimelineView.jsx`,
+`tests/customers.test.js`, `CLAUDE.md`.
+
+Since v16.0.0 a customer has been derived from bookings by normalized phone, and
+that has been right: a phone number is verified, self-normalising, and shared
+across the WhatsApp module. But plenty of parties never give one, and those guests
+could never become regulars however often they came back. Every phone-less booking
+was its own island.
+
+**That was deliberate, and the reason still stands.** `searchGuestsByName`'s
+never-merge rule exists because nothing in the data separates two people called
+Maria with no phone numbers, and fusing them produces one customer with one merged
+visit count and one merged no-show record — a wrong answer presented with
+confidence. Matching on names would have been the easy version of this feature and
+the wrong one.
+
+So the fix is not a better guess. **`guestId` is an explicit assertion by a human
+who can see both bookings**: picking an existing phone-less guest out of the name
+dropdown, or Book Again on a phone-less booking. Absent that click nothing merges,
+and the v16.4.0 test that pins the never-merge rule passes unchanged.
+
+Three decisions worth keeping:
+
+**The id is `"g" + <seed booking id>`, not random.** It is derived from data both
+devices already hold, so two clients joining the same guest concurrently mint the
+SAME id and converge. A random id would fork the guest in two, silently. This is
+the recurring-occurrence-id argument, and it applies for the same reason.
+
+**Identity is a UNION of the two keys, not a fallback.** `matchCustomerFor` matches
+phone OR guestId. A guest who books three times with no phone and then gives one
+has bookings carrying only a guestId and bookings carrying both; "phone if present,
+else guestId" would split them at exactly the moment they became easiest to
+identify. `identityKey(b)` — phone if real, else guestId — answers the narrower
+question "which key does this ONE booking answer to", and is what `noShowMap` is
+now built on.
+
+**The back-stamp rides the same write.** Joining needs the id on both bookings, so
+`stampGuestSeed` runs inside `buildNext`/`applyBase` rather than as a second
+`saveBookings` call: the v15.5.0 per-booking diff-write patches both children
+together and the per-`$id` CAS covers both. Its `!b.guestId` guard is what makes a
+held-and-retried write idempotent, and it also refuses to re-home a booking that
+already belongs to another group.
+
+`matchCustomerByPhone` survives as a thin alias with its exact name and signature
+— the complementarity contract at the top of `customers.js` requires the WA module
+to import that symbol on merge, and a generalisation that renames it would break a
+promise made to a file that does not exist yet.
+
+**Flagged non-goal:** `customerIndex` stays phone-only, so joined phone-less guests
+do NOT appear in Settings → Customers. That index feeds `searchCustomers` and the
+Customers tab, both of which assume every entry has a real phone; adding guest
+entries would hand `pickCustomer` a customer with `rawPhone: ""`. The form chips,
+the name dropdown and the no-show markers all see them, which is where the
+recognition actually matters.
+
+**Verification:** 8 new tests in `tests/customers.test.js` (290 total) — the union
+match, `identityKey`'s precedence, the `searchGuestsByName` collapse *and* the
+un-joined same-name guest staying separate beside it, `noShowMap` on a guestId,
+and `matchCustomerByPhone`'s unchanged behaviour. Build clean.
+
+### 3 — the suggestions reopen after you pick one
+
+**Files:** `src/components/BookingFormModal.jsx`.
+
+Reported as "the name/phone suggestions only work the first time you type
+something in". The cause is exact, and it is a two-line bug hiding behind a
+correct-looking design.
+
+The dropdown rows call `preventDefault()` on mousedown, deliberately: that beats
+the input's blur, which would unmount the list before the click landed. So after
+a pick the input **still has DOM focus**. The pick handler then sets
+`nameFocus` / `phoneFocus` to `false` — and because the field never lost focus,
+**no further `focus` event can ever fire**. Typing more did nothing; you had to
+tab away to another control and come back.
+
+Both fields now raise the flag on `change` and on `click` as well as on `focus`.
+`focus` is the wrong single event to hang a dropdown on whenever something else
+can close it while the field stays focused.
+
+The `!editId` gate on the NAME dropdown is also gone. It made name autocomplete a
+new-bookings-only feature — and an edit form arrives **pre-filled**, which is
+precisely the already-has-text case this fix is about. A pick while editing fills
+the name (and the phone, for a phone row) and nothing else: `size` / `preference`
+/ `preferredTables` belong to the booking you are editing, and the `!editId`
+guard inside `pickGuest` already drew that line. One new filter: the booking you
+are editing is not offered as somebody to link yourself to — but only when it is
+the row's *only* booking, since a group row led by it still represents other
+visits and is a real target.
+
+**Verification:** live in DEV. Typed "ma" → picked Marta Ferrer (name, phone,
+party size and the Regular chip all filled) → retyped "Marta Fe" and the dropdown
+reopened, which it could not do before. Opened an existing booking and typed in
+the name field: suggestions appear, including a phone-less "Marko · no phone".
+
+### 4 — every status button carries its own mark
+
+**Files:** `src/components/Icons.jsx`, `ListView.jsx`, `BookingFormModal.jsx`,
+`QuickStatusPopup.jsx`, `LateBanner.jsx`, `CLAUDE.md`.
+
+Every button that moves a booking to another status was prefixed with the SAME
+`ChevronRightIcon` — ">Confirmed", ">Seated", ">Completed", ">Cancelled". A
+chevron marks "there is more this way". Four buttons in a row wearing it is one
+glyph repeated and no information, and it is a leftover from when these were
+plain `">"+status` strings.
+
+And the surface that matters most had nothing. The quick-status popup — the
+long-press on a timeline block or a floor-plan table, i.e. the one used **during
+service** — carried no marks at all, so the same five decisions looked different
+in three places.
+
+**Four of the six marks already existed.** A status button is not a reason to
+invent a shape when the app has one meaning the same thing: `CheckIcon`,
+`CloseIcon`, `NoShowIcon`, and `WaitIcon` for pending — the hourglass already
+means a party is waiting, which is exactly what awaiting-confirmation is.
+
+`StatusIcon` is the single source, and it is a **component, not the map**. The
+mechanical reason is that `Icons.jsx` exports only components, so a plain const
+export breaks Fast Refresh — `react-refresh/only-export-components` is a lint
+ERROR and CI gates on zero. The better reason is that a call site should ask for
+"the mark for this status" instead of holding a table it can index wrongly; an
+unrecognised status renders nothing rather than throwing.
+
+**`ChairIcon` took five variants, judged rasterised at the size it ships at** —
+the `DepositIcon` rule, applied by drawing each candidate to a canvas at 12 and
+14px and magnifying it 10×. Four failed, and all four failed as *silhouettes*
+rather than as details:
+
+* a profile chair (back post · seat · front leg) is a vertical, a horizontal and
+  a short vertical — at 12px, a lowercase "h";
+* the same with the seat overhanging behind reads as a plus sign;
+* two back posts instead of a solid backrest reads as a capital "H";
+* a solid backrest with the seat WIDER than the back reads as a table with
+  something standing on it. **The overhang is what makes it a tabletop.**
+
+What ships has backrest and seat at the same width, so the two read as one
+object, with the legs as two ticks below. The backrest interior is 8 units
+against a 2.2 stroke — the ~3× an enclosed shape needs before it fills in solid,
+the same constraint that leaves `LockIcon` without a keyhole.
+
+`DoubleCheckIcon` offsets its two strokes along their own diagonal rather than
+stacking them: stacked, the gap has to survive the stroke (~1.1px at the shipped
+size) and the pair closes into one fat tick.
+
+**Sizing correction:** these render at `IC.control` (14), not `IC.inline` (12).
+They are marks ON a control, and the `Assign` button already sat at `IC.control`
+in the very same List row — a mismatch that pre-dated this change.
+
+**Verification:** live in DEV at 3× zoom. The List card's row reads
+Assign · Edit · [chair] Seated · [double-check] Completed · [✕] Cancelled ·
+Delete; the edit form's Status row adds [hourglass] Pending. Build clean, lint 0
+errors, 290 tests.
+
+### 5 — the List card is the Edit affordance
+
+**Files:** `src/components/ListView.jsx`, `CLAUDE.md`.
+
+The card already had a pointer cursor, and since v17.9.1 a hover tint. Both
+promise that clicking does something. What it did was set an invisible keyboard
+selection — while a button labelled **Edit** sat inside it doing the thing the
+card already looked like it would do.
+
+The card now opens the edit form, and the Edit button is gone.
+
+**It selects first, then opens**, and the order is the point: the keyboard model
+(↑/↓ over the day, the per-card shortcuts) resumes from the card you just opened,
+so closing the form leaves you where you were rather than wherever the arrows had
+last been. `listFocusReq` is deliberately NOT bumped — that counter exists for
+PROGRAMMATIC selection (a search jump, arrow nav), and scrolling the page under a
+finger that has just tapped is the exact bug it was introduced to avoid.
+
+**The regression risk is the whole of the work.** A click target inside a click
+target means every control in the card has to stop the event or it does its own
+job *and* opens the form. That is five controls (Assign, each status changer,
+No show, Cancelled, Delete), and a forgotten one fails in a way that reads as
+"the form opens at random". They go through a local `stopped()` wrapper rather
+than five hand-written `stopPropagation` lines, so the requirement is one visible
+word per handler and an audit is a single grep.
+
+The action row is now three groups, per Patryk: **Assign** left, the **status
+changers** pushed right by `marginLeft:auto`, and the two ways a booking **ends**
+hard right after a wider gap — space between "advance this booking" and "end this
+booking".
+
+**Verification:** live in DEV. Clicking a card opens its edit form and leaves the
+selection ring on that card; clicking Assign opens the manual-assignment modal
+and the edit form does **not** appear behind it. Grepped every `onClick` in the
+file: the five in-card controls all carry `stopped()`, and the two that do not
+(New booking / Walk-in) are in the empty-day state, where there is no card.
+
+### 6 — Delete reaches the Edit booking form
+
+**Files:** `src/App.jsx`, `src/components/BookingFormModal.jsx`.
+
+Delete existed only on the List card. Deleting a booking you had open meant
+closing the form, finding the card again and deleting from there — and from
+Timeline or Plan there was no route to it at all without changing view.
+
+It sits in the footer's left group beside History and Book again, in the red
+`BTN.del`, and only in edit mode: there is nothing to delete on a new booking.
+
+**It raises the SAME confirm overlay the List's Delete raises** rather than a
+dialog of its own. One armed confirm for one irreversible action — Firebase's
+free plan has no backups, so a second confirm shape here would be a second thing
+to get subtly wrong.
+
+Two consequences handled in `delBooking` rather than at the call site:
+
+* **The form closes with the booking.** Otherwise you are left editing a record
+  that no longer exists. It is the RAW setter, deliberately, not
+  `requestCloseForm` — the unsaved-changes guard exists to stop you losing edits
+  by accident, and confirming a delete is not an accident. `formDirty` is
+  `showForm && …`, so this disarms `beforeunload` on the way out.
+* It is gated on `editId === id`, which also fixes a pre-existing edge: the
+  LIST's Delete removing the booking the form happens to be open on.
+
+No Escape-chain change was needed — `confirmDel` was already above `showForm` in
+`useKeyboardShortcuts`' z-order, so Esc dismisses the confirm and returns you to
+the form. The confirm overlay is mounted after the form in App's tree, so it
+already renders on top.
+
+**Verification:** live in DEV, end to end on a throwaway booking. Created "ZZ
+Delete Test", opened it from the List by clicking the card, tapped Delete → the
+confirm rendered above the form; Cancel returned to the form intact; Delete
+removed the booking and closed **both** dialogs (measured: 2 dialogs → 0, and the
+name gone from the list). DEV left as it was found.
+
+### 7 — the waitlist wears the pending amber
+
+**Files:** `src/App.jsx`, `src/components/BookingFormModal.jsx`,
+`src/components/WalkinForm.jsx`, `src/components/WaitlistPanel.jsx`,
+`src/components/atoms.jsx`, `tests/contrast.test.js`, `CLAUDE.md`.
+
+The waitlist's chrome wore `--btn-orange` — the burnt orange it shares with No
+show, Reassign, Reshuffle and the swap family, i.e. the colour that means
+*something has gone wrong or needs undoing*. A party waiting for a table has not
+gone wrong; it is **pending**, and the app already has a colour for pending
+things. Four surfaces moved: the ⏳ count badge in the date-nav row, both "Add to
+waitlist" buttons, and the Waitlist panel's title pill (which followed
+automatically — `ModalTitle`'s rule is that the pill wears the colour of the
+button that opens it, so the pill was not an independent decision).
+
+The token itself is untouched; the green "table free" signals stay green, because
+those say an opportunity opened, which is the opposite of "still waiting" and
+would have collided with the amber Running-late section directly above them.
+
+**The interesting part is the contrast, and how the decision was made.** This
+fill under white ink is the app's recorded amber exemption — and that exemption's
+stated justification does **not** stretch to cover a button. A block's meaning is
+carried by its colour, its position on the time axis and its width, and the one
+part that is information was deliberately moved onto an opaque chip; on "Add to
+waitlist", the label *is* the content. Measured: **1.82:1 light, 2.20:1 dark**,
+against a 3:1 bar for buttons. The orange it replaces passed at 3.01 / 5.25.
+
+So rather than either shipping it quietly or refusing it, all three candidates
+were **built into the running app and compared side by side in both themes** —
+an outline (amber border + amber text: the `Save pending` shape, legible in both,
+no exemption needed), a solid fill with dark amber ink (3.76 / 3.12, over the
+bar, but CLAUDE.md records that pairing reading as *disabled*), and a solid fill
+with white ink. Patryk chose the third, with the numbers and the pixels in front
+of him.
+
+**What that obliges is a truthful record, not a silent one.** The note beside
+`EXEMPT_FLOOR` in `tests/contrast.test.js` now says what the exemption actually
+blesses, why the block argument does not transfer, what the three options were,
+and that this was an informed choice. The floors still gate a regression: an
+accepted contrast is not a licence to keep going.
+
+**Verification:** live in DEV. Triggered the no-tables banner with a 25-guest
+booking and read the computed style off the real button —
+`rgba(234, 179, 8, 0.92)` on `rgb(255,255,255)`, i.e. the pending fill — and it
+renders directly above the amber `Save pending` in the same footer, so the two
+amber things read as one family. Same computed check on the walk-in form's copy.
+Grepped `BTN.orange` afterwards: every remaining use is No show / Reassign /
+Reshuffle / the manual-swap panel, which is the intended family.
+
+### 8 — collapsible headers answer the pointer
+
+**Files:** `src/components/atoms.jsx`, `CLAUDE.md`.
+
+The "Completed & cancelled" fold had no hover feedback, and neither did any of
+the ~15 Settings sections — they are the same atom. A full-width row that is a
+click target is exactly what `.mgt-ac-row` exists for (v17.9.1: the 1.08 lift is
+for controls, a tint is for containers of controls), so it went in the atom
+rather than at one call site, and there is now one kind of collapsible header.
+
+`--row-bg-hover` is `--bg-veil`, not the class default `--bg-ac-hover`: the
+header sits on `Section`'s own `--bg-soft` fill, and an accent wash would
+recolour that instead of lightening it — the v17.9.1 NotificationStrip finding
+that a class with a default is only half-configured until you check what the
+default means on your surface.
+
+**Three things went wrong on the way, and all three were caught by measuring
+rather than by reading.**
+
+**The inline background.** The header carried `background:"transparent"` inline.
+An inline background beats a stylesheet `background-color` outright, so the rule
+matched, the element reported `:hover`, and the computed fill stayed
+`rgba(0,0,0,0)`. This is the *exact* trap `.mgt-ac-row`'s own comment in
+`index.html` was written about, and reading the source shows nothing wrong: the
+class is there, the custom property is set, the rule exists. Only reading the
+computed background *while hovering* revealed it. **Adding `.mgt-ac-row` to an
+existing element means DELETING its inline `background`, not just adding
+`--row-bg`.**
+
+**The width.** `width:100%` plus negative horizontal margins is over-constrained,
+so the browser silently drops one side. Dropping `width` looked safe —
+`display:flex` makes a block-level flex container, which normally fills its
+parent — but a `<button>` keeps its shrink-to-fit intrinsic sizing, so the header
+collapsed to its own text and the chevron left the right edge: **213px instead of
+337px**. `calc(100% + 20px)` with `border-box` is the spelling that holds.
+
+**The layout.** The tint needs a padding box to read as a row rather than a
+hairline band, and the negative margin is what keeps the resting layout put.
+Verified by measurement, not arithmetic: content still starts at x=131.5 and the
+chevron still ends at x=631.5, and the gap between consecutive headers is 64.5px
+before and after.
+
+**Verification:** live in DEV, hovering a Settings section — the hovered header
+computes `rgba(0, 0, 0, 0.05)` while its neighbour computes `rgba(0, 0, 0, 0)`,
+and the tint bleeds 10px into `Section`'s padding with `R.inset` corners.
+
+### 9 — the plain drop-shadow literals become tokens
+
+**Files:** `index.html`, plus nine components; `ROADMAP.md`, `CLAUDE.md`.
+
+Closes the `ROADMAP.md` "Plain drop-shadow literals" entry. 18 inline
+`0 1px Npx rgba(0,0,0,0.0x)` values across nine files, in seven distinct depths
+nobody had chosen — they accumulated, one per feature, the same way the radii and
+type sizes did before `R` and `T`.
+
+**A new token was needed, and the reason is the interesting part.** Every
+existing `--shadow-*` leads with a white inset highlight; that is what makes a
+control read as raised. But a highlight tuned for light mode and dimmed for dark
+is *wrong* on a fill that is identical in both themes — the v17.8.0
+white-inset-over-fixed-fill rule, in reverse. Mapping the whole set onto
+`--shadow-btn` would have re-introduced exactly the bug class that rule guards.
+So `--shadow-flat` carries **no inset at all**, and is still theme-split, because
+the shadow falls on the PAGE and the page does flip.
+
+**Triage is one question: does the ELEMENT's own fill flip with the theme?** It
+was answered by parsing `index.html`'s `:root` and `[data-theme="dark"]` blocks
+rather than by assumption, and that turned up two things worth knowing:
+`--block-confirmed` / `--block-pending` / `--block-completed` / `--tl-blocked-badge`
+are invariant while `--block-seated` / `--block-cancelled` / `--tl-hour-pill` /
+`--tl-now-pill` / `--accent` are **not** — so "BLOCK_BG is theme-invariant" is
+true of three of the five, not all. A MIX therefore counts as "does not flip":
+`SBadge` and the timeline's status swatch both take `--shadow-flat`, because a
+single style object cannot branch on which status it is about to paint.
+
+The rest went to `--shadow-btn` (raised pills whose fill flips: the now-pill,
+`TBadge`, the Plan badge, the suggestion chip), `--shadow-card` (cards on
+`--bg-card` / `--bg-soft`) and `--shadow-popover` (`StatusToasts` — a floating
+surface, the same role as the quick-status popup, and it gains a depth that
+actually deepens over a dark page).
+
+**One literal was hidden behind a `const`.** `StatusToasts`' `toastShadow`
+survived the first pass because the sweep grepped `boxShadow: "0 …` and the
+property was assigned a variable. Same shape as the v17.9.0 finding that an HTML
+entity is invisible to a glyph scan: **grep the VALUE's shape, not the property
+it ends up on.** A second grep on `"[0-9]+ [0-9]+px [0-9]+px rgba` found it.
+
+Genuine exceptions kept: the connection dot's `0 0 0 3px` glow and WeekView's
+`0 0 0 2px` focus rings are **rings, not drop shadows**, and `WalkinForm`'s Seat
+button keeps its white-inset literal, which sits on a theme-invariant fill and is
+correct there.
+
+**Verification:** grepped all seven old values afterwards across `src/` **and**
+`index.html` — zero hits. Build, 290 tests, lint 0 errors, `check:style` clean.
+Loaded the app in dark mode and confirmed no element gained a bright white top
+highlight; read `--shadow-flat` / `--shadow-btn` / `--shadow-popover` back out of
+the live CSSOM in both themes.
+
+**ROADMAP.md:** the entry is replaced by its successor — a `check:style` rule for
+bare shadow literals, now that the backlog which would have made it noisy is
+zero. It records the two traps such a rule must handle (rings are not drop
+shadows; literals hide behind consts).
+
+### Commit 10/11 — the collapsible expand eases the part you can see
+
+**Files:** `src/components/atoms.jsx`, `tests/auto-height.test.js` (new).
+**Behavioural change:** yes — `AutoHeight` no longer animates a height change
+that is entirely off screen, and clamps one that is partly off screen to the
+visible part.
+
+Patryk sent a screen recording of Settings → Layout: opening `Combos` did not
+feel like the tab switch beside it. Sampled per rAF (port 477px, card 552px
+under a 739px max):
+
+```
+0–166ms    card 552 → 739      the whole visible change
+166–866ms  card 739, box 535 → 2602, port CLIPPED
+```
+
+165ms of travel inside an 864ms animation, and 700ms of that spent locking the
+scroll port to animate 2000px nobody can see. **This is the exact defect v17.9.1
+diagnosed, in the same component, one path over.** That round added the clamped
+range to the `watch` swap and wrote that "callers that only grow/shrink their own
+content are already served correctly by the observer." They are not, and the
+belief is why nobody looked.
+
+So `clampRange(live, next, cap)` now drives BOTH paths. `visibleCap` gained the
+port's `scrollTop`: the ceiling is "where the box's bottom edge reaches the
+bottom of what is on screen **now**", and v17.9.1 could read that as zero only
+because its one caller was a tab swap, which resets the port's scroll in the
+click handler first. Without the term, collapsing a section after scrolling down
+clamps *below* the visible window and yanks the page up.
+
+The observer path is harder than the swap in one way: it fires every frame while
+the content animates itself (a `Collapsible` is a `Reveal` easing a grid track
+for 385ms), so a run must survive ~23 re-measures. It does, because the clamped
+target stops moving once the content passes the ceiling — the first fire starts
+the transition and the rest only update the true height to retake afterwards.
+
+**The General tab is why this hid for a version.** Its content already overflows
+the port at rest, so the card is pinned at its max and the height change cannot
+move a pixel — the animation was equally wrong there, it just had nothing to
+spoil. "It only happens in one tab" was a clue about *visibility*, not about
+scope. Under the clamp that case takes the new no-movement branch and stops
+clipping the port for 843ms after every toggle.
+
+**Measured after (same day, same port):** expand — card 552 → 739 evenly across
+0–460ms, port free at 500ms. Collapse — content shrinks untouched while it is
+above the ceiling, then card 739 → 552 across 325–726ms. Tab swap unchanged
+(739 → 552 over 450ms, the v17.9.1 numbers). Week↔Month unchanged: it fits its
+port, so `cap` never bites and it takes the plain path it always did.
+
+**Why a new test file.** The arithmetic has now been got wrong twice, so it is
+extracted as a pure `clampRange` export and pinned by seven cases — including
+the two that are easy to reason away, "both ends above the ceiling" and "only
+set `pending` when something was actually clamped". The component around it
+stays DOM-bound and untested, which is the repo's standing split.
+
+### Commit 11/11 — the customer index learns the second identity key
+
+**Files:** `src/lib/customers.js`, `src/components/CustomersSettings.jsx`,
+`src/App.jsx`, `tests/customers.test.js`.
+**Behavioural change:** yes — a joined phone-less guest is now a customer in
+Settings → Customers, and can be deleted like any other.
+
+Commit 2 of this version gave phone-less guests an identity (`guestId`) and
+threaded it through the form chips, `matchCustomerFor`, `noShowMap` and
+`searchGuestsByName` — and left `customerIndex` phone-only, which was flagged as
+a deliberate non-goal. It was the wrong call: `guestId` reached every screen
+**except the one that lists customers**, so a guest could be a regular with a
+visit count everywhere and not exist on the Customers tab. Patryk asked for it.
+
+`customerIndex` now keys on `identityKey` — phone if there is one, else the
+`guestId`. A phone-less booking with no `guestId` still has no identity and is
+still skipped, which is the never-merge rule holding exactly where it should:
+nothing merges by accident, only by a human picking a guest from the dropdown.
+Entries gained `key` (the map key) and `guestId`, and `phone` is `""` rather
+than absent on a guest entry so a caller can do string work on it either way.
+
+**Three consumers had to be told, and each was a real bug if not.**
+`searchGuestsByName` rebuilds the guest tier from the bookings (it needs the
+UNJOINED ones too), so its index pass had to be narrowed to `if (!c.phone)
+return;` or every joined guest would appear in that dropdown twice. The existing
+v17.10.0 test for that dropdown covers it and needed no edit — it already asserts
+exactly two rows. `searchCustomers` guards `c.phone` before a digits match, so a
+guest is findable by name and never by number. And `CustomersSettings` keyed its
+React key, its open row, its armed-delete and its delete call on `c.phone`:
+every guest row would have collapsed onto the same `""` key — one shared open
+state and one delete hitting all of them.
+
+**`deleteCustomer` takes an identity, not a phone**, and matches through
+customers.js's own `matchesIdentity` (extracted from `matchCustomerFor`, so the
+union rule has one home rather than a copy in App.jsx). It clears `guestId`
+alongside the personal fields: that id is the only thing still binding the
+anonymized bookings into a customer, and leaving it would leave the deleted guest
+sitting in the list under "Data removed" — which looks exactly like a delete that
+did nothing.
+
+**Two things that are easy to miss and were not.** The fourth totals tile counted
+`!hasRealPhone(b.phone) && isNoShow(b)`; a joined guest satisfies that and now
+also has a row above, so it would have been counted twice while the tile called
+them untraceable. It is `!identityKey(b)` now, and reads "no-show,
+unidentified". And the tab's own footnote said customers "are recognised by phone
+number across all bookings" — the same trap as v17.9.0's copy describing glyphs
+that no longer existed. Rewritten.
+
+**Verification:** built, 303 tests (up from 297), lint 0 errors, `check:style`
+clean. Live in DEV: created two phone-less bookings, joined the second to the
+first from the name dropdown, confirmed ONE Customers row reading "No phone ·
+linked guest" holding both bookings, deleted the customer, confirmed the row is
+gone and that the anonymized pair does NOT come back as a customer called "Data
+removed". Both throwaway bookings then deleted; DEV is clean.
+
+### Commit 12/12 — the two /code-review fixes (both landed together)
+
+Both are guest-identity defects the review found, and both shipped in ONE commit
+(`8527f62`) whose subject names only the first. That is a §7 slip — one change
+per commit — recorded here rather than rewritten away, since the fix for a
+commit already made is a new commit, never an amend. What follows describes what
+is actually in it.
+
+#### (a) a pick REPLACES the identity, so both keys are written
+
+**File:** `src/components/BookingFormModal.jsx`. **Behavioural change:** yes.
+
+`pickGuest` wrote `guestId`/`guestSeed` only inside its `r.isPhoneless` branch,
+so a pick that was NOT phone-less left the previous pick's keys on the draft.
+Type "Ana", tap the phone-less guest by mistake, tap "Ana García" to correct
+yourself, save: the booking is written under García's phone AND joined to the
+stranger, and `stampGuestSeed` stamps the stranger's booking to match. Two
+unrelated customers fused — and **irreversibly**, because nothing in the UI can
+remove a `guestId` (`doSaveEdit`'s `f.guestId||b.guestId||null` can only add
+one).
+
+Both keys are now assigned on every pick. The rule is the general one: **a pick
+replaces who this booking is for, so no field it owns may survive it.** A
+conditional assignment inside `Object.assign` is a carry-forward, not a no-op.
+
+Verified in DEV: made a phone-less guest and a similarly-named phone customer,
+performed exactly that mis-tap, saved — the phone customer holds its own two
+bookings and the guest was not stamped.
+
+#### (b) a guest who later gives a number stays ONE customer
+
+**Files:** `src/lib/customers.js`, `src/components/CustomersSettings.jsx`,
+`src/App.jsx`, `tests/customers.test.js`. **Behavioural change:** yes.
+
+Commit 11 keyed `customerIndex`/`noShowMap` on `identityKey` — "phone if real,
+else guestId". That is precisely the fallback rule `matchCustomerFor`'s own
+comment calls out as splitting a guest "at exactly the moment they became
+easiest to identify", and the review caught the contradiction sitting two
+functions apart in one file.
+
+A guest joined by `guestId` who later gives a number has bookings carrying one
+key and bookings carrying both, so they came out as TWO customers: one with the
+number, one still labelled "No phone · linked guest", each holding half the
+visits. Worse, **"Delete customer & all data" only cleaned the half you clicked**
+— the other half kept its name and notes.
+
+`guestPhoneAlias(bookings)` now learns which guest groups have acquired a phone
+(any booking carrying both is the evidence) before anything is keyed, and those
+fold into the phone entry. A `guestId` seen with two different phones — a wrong
+join, later disambiguated — takes the lexicographically smallest: arbitrary, but
+**deterministic**, so every device derives the same map and no two clients
+disagree about who a customer is.
+
+Three consequences carried through. `matchesIdentity` accepts `guestIds`
+(plural), because a row can have absorbed more than one group and delete has to
+reach every id it is showing. `noShowMap` mirrors each total onto the aliased
+id, so the call sites' `nsMap[identityKey(b)]` resolves for a phone-less and a
+phone-bearing booking alike without any of them learning about aliasing — the
+repeat-offender flag trips at 2 and was seeing 1 and 1. And
+`searchGuestsByName` skips an aliased group, which the phone tier already
+emits, or the dropdown offers one person twice and lets staff pick the weaker
+half.
+
+Verified in DEV: joined two phone-less bookings, gave the guest a number on a
+third, saw ONE customer row under that number holding all three (was two rows,
+1 + 2), deleted it and confirmed all three were anonymized in one action.
+307 tests, lint 0 errors, `check:style` clean. Throwaway bookings removed.
+
+### Commit 13 — /code-review fix: the ceiling is probed once per animation
+
+**File:** `src/components/atoms.jsx`. **Behavioural change:** none visible; a
+per-frame cost removed.
+
+Commit 10's no-movement branch returns without marking a run, so `animRef`
+stayed false and every observer fire re-probed. `visibleCap` writes
+`height: 100000px` and reads `clientHeight` + `scrollHeight` back — two forced
+synchronous layouts — and a `Reveal` fires the observer ~23 times over its
+385ms. That is ~46 forced layouts of a 2700px modal subtree per Settings
+toggle, added by the commit whose entire subject was making that toggle
+smoother. Settings → General takes that branch on every fire, so the tab with
+the most content had the worst case.
+
+A **timestamp**, not a flag: the instant branch has no natural end to reset on.
+The reuse window is `M.dur.shift + 120` — the same window `armSettle` uses — so
+a cap can only be shared by fires belonging to the same content change, and
+`settle` zeroes it so the next real change always measures fresh.
+
+**Measured in DEV** by counting `getComputedStyle` calls (one per
+`heightAnimates` plus one per ancestor `scrollPort` walks): **3 per toggle**,
+i.e. exactly one probe, expand and collapse alike, with the animation itself
+unchanged (card 552 → 739 evenly across 0–460ms, port free at 500ms).
+
+### Commit 16 — /code-review fix: a drag that ends a selection is not a click
+
+**File:** `src/components/ListView.jsx`. **Behavioural change:** yes.
+
+The card opens the edit form now, and it prints the guest's phone as plain text
+— which staff select and copy to ring a party. A press-drag-release over that
+text fires `click` on the card, so copying a number opened a modal over the
+selection, and a form left mid-edit would raise the unsaved-changes guard on the
+way back out. (List cards are selectable: `user-select: none` is a *timeline
+block* thing, and confusing the two is how this nearly got dismissed as
+unreproducible — both wear `data-flip-id`.)
+
+The check requires the selection to be **inside this card**. A bare
+`getSelection().toString()` would let a stale selection anywhere on the page —
+the day header, a banner — make every card unclickable.
+
+Verified in DEV: with a live selection in the card, a click opens nothing; with
+none, it opens Edit booking. The first attempt appeared to fail and was HMR
+serving the old handler — reload before concluding a guard does not work.
+
+### Commit 17 — /code-review fix: the back-stamp moves to lib/ and gets tested
+
+**Files:** `src/lib/customers.js`, `src/App.jsx`, `tests/customers.test.js`.
+**Behavioural change:** none — the function moved verbatim.
+
+`stampGuestSeed` was a closure inside `BookingApp`, so nothing could reach it,
+and it writes a **permanent** link between two bookings that no UI can unpick.
+CLAUDE.md: "logic that decides something the restaurant acts on does not live in
+a `useEffect`… put the pure core in `lib/`." It is already a pure
+`(list, draft) → list`; only its address was wrong. It sits in `customers.js`
+with the rest of the identity layer.
+
+Five cases pin it, and each is a property the save path leans on: it stamps only
+the seed; it is a no-op unless the draft carries BOTH keys; it never re-homes a
+booking already in a group; it is idempotent (which is what makes the v15.4.0
+write-retry safe); and it does not mutate its input (it runs inside doSave's
+pure transform of `prev`, and mutating Firebase's snapshot there would corrupt
+the base the CAS compares against).
+
+Verified in DEV after the move: joined two phone-less bookings from the name
+dropdown and confirmed one Customers row holding both. 312 tests.
+
+---
+
+## v17.10.1 — the long-press menu, the stuck reconnect, and the last shadow cell
+
+**Date:** 2026-08-18
+**Files:** see each entry.
+**Behavioural change:** yes — a long-press on a control no longer raises the OS
+text menu, a lost connection recovers itself, and 14 controls change depth in
+dark mode. No persisted-data change, no Firebase console step.
+**Verification:** see each entry.
+
+Three defects reported from the floor, plus the one ROADMAP idea that turned out
+to be real work rather than a checker rule. Two of the three were found by using
+the app on the restaurant's own Android tablet, which is the pattern worth
+noting: neither is reproducible on the MacBook, and both had been lived with.
+
+### Commit 1 — a control's label is not selectable text
+
+**Files:** `index.html`, `src/components/QuickStatusPopup.jsx`,
+`tests/stylesheet.test.js`. **Behavioural change:** yes, on touch devices.
+
+Holding a timeline block on the tablet opened the quick-status popup *and*
+Android's text-selection toolbar — Copy / Share / Web search / DeepL, with
+selection handles, sitting across the popup's own "Cancelled" button. The gesture
+worked; it just arrived wearing a system menu.
+
+The mechanism is that the popup opens **under the finger that is still pressed**.
+A long-press is two things at once: our hold timer, and the OS starting a
+selection at the touch point. `TimelineView`'s block already carries
+`user-select: none`, so the OS had nothing to select there — but ~800ms in, the
+popup is what is under the point, and its buttons are ordinary selectable text.
+
+So the rule belongs on controls generally, not on this popup:
+
+```css
+button, [role="button"] {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+```
+
+`user-select` is what Android Chrome reads and `-webkit-touch-callout` is the iOS
+property for the same gesture. **Both are set although only one platform shows
+the bug**: iOS does not raise a callout here today, and nothing in the code was
+preventing it — the report was Android, the fix is neither.
+
+Scoped to controls deliberately. Inputs, textareas and plain divs keep selection,
+which matters more than it looks: `ListView`'s card is a `<div>` and its phone
+number is text staff select and copy to ring a party — the reason v17.10.0 taught
+that card's click handler to stand down while a selection is live. Widening this
+to a container would silently undo that. `SplitMenu` (a 450ms hold on a view
+button) had the identical latent defect and is fixed by the same rule, which is
+the argument for one rule over a third and fourth inline copy —
+`TimelineView` and `ViewSwitcher` already hold two.
+
+`QuickStatusPopup`'s **card** takes the properties inline as well: the guest name
+above the buttons is a `<div>`, and it is under the same finger.
+
+The test for it is **not** a `CRITICAL_SELECTORS` entry, and that is worth
+recording because the entry was written first and was worthless. That list
+asserts `prelude.includes(sel)`: `"button"` is a substring of the existing
+`input, textarea, select, button` font rule, and `[role="button"]` already
+appears in the two press-scale preludes. Either entry would have passed forever
+with the new rule deleted. **A list that matches on SELECTORS cannot see a
+DECLARATION going missing** — the v17.9.0 blind-checker lesson, reached this time
+by walking the live CSSOM and noticing the selector was not as unique as it
+looked. It is a dedicated assertion over the rule BODY instead, checking both
+halves separately, since unprefixed `user-select` and `-webkit-touch-callout`
+serve different platforms and either could be dropped without the other showing
+it. Verified by deleting each and watching it fail.
+
+**Verified on the restaurant's own Android tablet** (adb + CDP against the DEV
+app), A/B by injecting a `user-select: text !important` override to defeat the
+rule and removing it again, twice each. Rule defeated: a long-press on a block
+opens the popup and `getSelection()` returns **`"Cancelled"`** — the exact word
+in the report. Rule active: the popup opens and the selection is empty. In List
+view a long-press on card text still selects it (`user-select: auto`) and does
+not open the edit form, so v17.10.0's selection-aware click guard is intact.
+
+Two things the device found that reading could not. **The first attempt held for
+1300ms and concluded "fixed" from a run where the popup never appeared** — a hold
+past **800ms** is the drag-arm handoff, which dismisses the quick-status *by
+design* (`TimelineView.jsx:322`), so the test was measuring the wrong thing and
+would have passed for the wrong reason. Sampling the state every 350ms
+*through* the press is what showed it: popup at 0.7s, gone by 1.1s. A realistic
+600ms hold is the correct probe. **The second: coordinates cannot be
+hard-coded** — a reload shifted the block 52px and a stale constant produced a
+confident null result. Derive them from `getBoundingClientRect()` on every trial.
+
+With the rule defeated the popup stayed open indefinitely, because Chrome
+entering selection mode cancels the pointer stream and the drag-arm never fires.
+That raised the question of whether **drag-to-another-table had ever worked on
+Android**, and it could not be settled here: a stationary synthetic press does
+not arm the drag in either build. It was booked as a ROADMAP item and then
+**closed the same session by Patryk on the device — drag-and-drop and the hold
+gesture both work correctly on the tablet with this build.** So the selection
+was indeed suppressing the drag-arm, and removing it restored a gesture that had
+been shipping broken on Android since v17.0.0.
+
+The wider lesson is the one the measurement kept teaching all session: **a
+synthetic press is not a finger.** It could not arm the drag, it could not
+produce a text selection on its own, and (commit 7) it does not set `:active` at
+all. The person holding the device settles in one second what an hour of
+instrumentation could not.
+
+### Commit 2 — a stuck Firebase reconnect kicks itself
+
+**File:** `src/hooks/usePersistence.js`. **Behavioural change:** yes — a lost
+connection now recovers without anyone minimising the app.
+
+Reported from the floor: the tablet sometimes sits on "Firebase connection lost"
+indefinitely, and minimising the app and bringing it back fixes it every time.
+That ritual is the diagnosis. Read from the pinned SDK
+(`node_modules/@firebase/database/dist/index.esm.js`):
+
+- `RECONNECT_MAX_DELAY_DEFAULT` is **five minutes** for a web client — the 30s
+  figure next to it is `RECONNECT_MAX_DELAY_FOR_ADMINS`. The delay grows ×1.3
+  per failed attempt.
+- `onRealtimeDisconnect_` sets the delay **straight to that maximum** when the
+  window is hidden at the moment the socket dies, which for a tablet in service
+  is most of the time.
+- It has exactly two reset paths: the browser `online` event, and `onVisible_` —
+  which fires ONLY on a hidden→visible edge, and ONLY when the delay is already
+  exactly at the maximum. **A page that stays visible has no reset path at all.**
+
+So: backgrounded during a blip, delay pinned at 5 minutes; you return while an
+attempt is in flight, so `onVisible_` skips `scheduleConnect_`; that attempt
+fails; the next retry is `Math.random() * 300000` ms and `visible_` is already
+`true`, so nothing will reset it. Minimise-and-restore recreates the one edge the
+SDK listens for.
+
+`goOnline(db)` is the public spelling of `PersistentConnection.resume()`, which
+sets `reconnectDelay_` back to `RECONNECT_MIN_DELAY` and schedules an immediate
+attempt. So the fix is a watchdog on the existing 10s heartbeat — no new timer —
+that calls it after **20s** of a disconnected, foreground page.
+
+Four conditions, each excluding a case where kicking is wrong: not connected;
+the page is **visible** (a hidden page gets the SDK's own reset for free when it
+returns, and waking a backgrounded tablet's radio to retry is the opposite of
+what we want); we have connected **before** (this is a *re*connect watchdog — a
+device that has never handshaken has a different problem, and v17.5.1's load
+watchdog owns reporting it); and past the deadline, measured from the later of
+"went offline" and "last kicked". `offlineSinceRef` is stamped on the way DOWN
+only, so a connection flapping between "no" and "no" cannot push its own
+deadline out.
+
+Kicking when nothing is wrong is harmless: with an attempt already in flight the
+SDK's `!this.realtime_` guard means `resume()` only resets the delay — still the
+useful half, because the *next* failure then retries in 1s rather than minutes.
+
+**Verified on the tablet** (adb + CDP, console captured). Offline with the page
+visible: kicks at t+21.8s, t+44.1s, t+73.7s — the 20s cadence at 10s heartbeat
+granularity. Offline with the page **hidden** for 61s: **zero** kicks. Brought to
+the foreground (via `Page.bringToFront`; an `am start` intent left the tab
+hidden and produced a falsely clean result first time): one kick at t+29.2s.
+Connected: silent. Recovery after the outage was 7.6s, against 6.1s for a control
+build with the watchdog disabled — it does not get in the way.
+
+**What the device disproved, and it matters for whoever tests this next: toggling
+wifi cannot reproduce the stuck state.** A wifi toggle fires the browser
+`offline`/`online` events, and `onOnline_` resets the backoff unconditionally —
+the control build recovered in 6.1s from a 200s outage for exactly that reason.
+The stuck state requires the socket to die while `navigator.onLine` stays
+**true**: an AP that stays associated with no upstream, a captive portal, a NAT
+dropping an idle socket. That is ordinary restaurant wifi, and it is why the
+report comes from the tablet and never from a desk. It is also why the watchdog
+is deliberately **not** gated on `navigator.onLine` — the case it exists for is
+precisely the one where that property lies. Blocking the RTDB host via
+`Network.setBlockedURLs` was tried as a repro and does not work: it does not
+cover WebSocket handshakes. So the mechanism is established from the SDK source
+and the field report; the *watchdog's own behaviour* is what was measured here.
+
+### Commit 3 — "Reconnect now" in the connection popover
+
+**Files:** `src/components/ConnectionStatus.jsx`, `src/App.jsx`.
+**Behavioural change:** yes — one new control, visible only while disconnected.
+
+The watchdog above handles the stuck case on its own, but staff had already
+invented a remedy (minimise, restore) for a state the app gave them no control
+over. This is the same lever — `forceReconnect`, i.e. `goOnline(db)` — offered
+deliberately.
+
+Rendered **only** while disconnected: offering "Reconnect" on a healthy
+connection invites someone to drop a working socket out of curiosity. It sits
+under the status sentence rather than on the status row, because that row
+already right-aligns Log out and wraps on a phone.
+
+**Verified on the tablet:** absent while connected, present once
+`.info/connected` goes false, absent again after recovery; clicking it
+reconnected in 4.4s. Screenshotted on-device to confirm it matches Log out's
+32px/`BTN.nav` treatment.
+
+One testing note, since it cost two runs: the popover is a TOGGLE, so a probe
+that clicks the dot to "open" it will close an already-open one and report the
+button missing. Assert the popover's own state before reading its contents.
+
+### Commit 4 — one token for a raised control on a fill that doesn't flip
+
+**Files:** `index.html` + 10 under `src/`. **Behavioural change:** visual —
+14 controls gain depth in **dark mode**, where they were flat.
+
+`ROADMAP.md` proposed a `check:style` rule for bare `boxShadow` literals, on the
+stated premise that v17.10.0 had tokenised the last of them and the backlog was
+zero. **It was not**: ~20 remained. Counting the DISTINCT VALUES rather than the
+sites (the v17.9.0 spacing lesson) showed why — **three different values all
+meant "a raised control on a theme-invariant fill"**: `0 2px 6px/0.12` ×11,
+`0 1px 4px/0.1` ×2 (the header Walk-in / + New), `0 1px 3px/0.15` ×1 (WeekView's
+segmented toggle). One intent, three spellings, differences nobody chose.
+
+That is a real gap in the scale, not untidiness. `--shadow-btn` is
+raised-on-a-flipping-fill; `--shadow-flat` is not-raised (and its own comment
+already says "anything that should read as raised takes `--shadow-btn`" — which
+is right for the elements it was written about, all of which sit on fills that
+flip). Raised on a fill that does **not** flip had no token.
+
+**`--shadow-btn-solid` is the only `--shadow-*` whose inset is the same in both
+themes, and that is the whole content of it.** The highlight belongs to the
+element's own fill — `BLOCK_BG`, `--app-*-solid`, `BTN.*` — which is deliberately
+theme-invariant, so tuning the highlight per theme would be wrong on it (the
+v17.8.0 white-inset-over-fixed-fill rule). The **drop** still deepens
+0.12 → 0.4, because it falls on the page and the page does flip. The literals
+never made that distinction, so a modal footer button sat at 0.12 in dark beside
+siblings at 0.35. Correcting it is the one visible change here.
+
+Three more tokens fall out of the same sweep. `--shadow-btn-accent` /
+`--shadow-btn-success` are a primary button glowing in its **own hue** — not
+elevation, so uniquely they are identical in both themes; they unify four
+literals that carried two different alphas (0.25 / 0.2) for one effect.
+`--shadow-well` is the inverse of `--shadow-btn-solid` — a groove — and its two
+sites (the Toggle track, HistoryPopup's panel) were both theme-**blind**: a
+0.06–0.08 black inset is close to invisible on a dark surface.
+
+**Two sites stay literals, marked `/* @shadow */` at the site** per the house
+convention: TimelineView's drag shadow (a block lifted under a finger is a
+one-off depth) and `Kbd`. `Kbd` was scoped into this sweep as a third "inset
+well" and is not one — a drop *plus* a **bottom** inset is the physical keycap
+look, the same category as that atom's deliberate monospace font: exempt from the
+scale, not missing from it. TimelineView's `/* @fixed-fill */` marker went with
+the literal it was blessing.
+
+**The glow count was wrong by one in my own survey, and the reason is the
+recurring one.** `WalkinForm`'s Seat button spells its ternary across three
+lines, so a `grep -o 'boxShadow[^,]*"[^"]*"'` over the values walked straight
+past it — the same shape as `StatusToasts`' `toastShadow` hiding behind a `const`
+in v17.10.0, and as an HTML entity hiding from a glyph scan in v17.9.0. It was
+caught by re-grepping for what *remained* after the sweep rather than trusting
+the plan's count. Do that last pass every time.
+
+**Verified** by reading the computed tokens out of the live CSSOM in both themes
+(`?theme=light` / `?theme=dark`): the asymmetry is real — `--shadow-btn-solid`
+resolves 0.12→0.4 on the drop with the inset held at 0.15, the glows are
+identical in both. Spot-checked the computed `boxShadow` on the header pair and
+the booking form's Save. 313 tests, lint clean, `check:style` clean.
+
+### Commit 5 — check:style: bare drop-shadow literals
+
+**Files:** `scripts/check-style-invariants.mjs`, `tests/style-check.test.js`,
+`ROADMAP.md`. **Behavioural change:** none — a CI gate.
+
+Rule 6 closes the ROADMAP idea, on the corrected premise from commit 4. The
+v17.8.0 header note here said plain drop-shadow literals were "a consistency
+nit, not a bug class" and that a rule would be noisy. **Both halves have now
+failed**: they were three spellings of one intent, none of which deepened for
+dark mode, which is a bug class (a black shadow cannot invert out from under
+itself, but it can be invisible on the wrong ground); and the backlog is zero
+after commit 4, so this guards the next one rather than nagging.
+
+Two conditions, and both are lessons from sweeps that **missed** sites. It
+matches the **value's shape anywhere on the line**, not `boxShadow:` — v17.10.0's
+sweep grepped the property name and walked past `StatusToasts`' literal because
+it sat behind a `const`. And the blur must be **non-zero**, because `0 0 0 3px …`
+is a ring or a focus glow (the connection dot, the selection rings), not a member
+of this scale. `/* @shadow */` marks a one-off; Rule 0 now polices that marker's
+placement alongside the other two.
+
+**The rule was wrong when first written, and only running it showed that.** It
+printed `OK` against the repo — and against a fixture it flagged
+`0 0 0 2px rgba(0,122,255,0.4)`, a ring, because the pattern **slides**: it
+matched starting at the second `0` and read `0 0 2px rgba(`, so the non-zero-blur
+condition it was built around excluded nothing. The fix anchors a shadow value to
+a quote, to `inset`, or to the comma separating it from the previous shadow in a
+list. This is the v17.9.0 rule doing exactly its job: reading the script cannot
+catch this, running it against known-bad input can. Six fixtures in
+`tests/style-check.test.js`, both directions — bare literal, literal behind a
+`const`, inset groove, rings left alone, token and marked one-off left alone,
+misplaced marker.
+
+**ROADMAP:** the Ideas entry is deleted, since it shipped. One new entry replaces
+it, and it is a real finding rather than tidiness — see commit 1's closing note:
+with the OS selection live, Chrome cancels the pointer stream and the 800ms
+drag-arm never fires, so **drag-a-booking-to-another-table may never have worked
+on Android at all**. Not demonstrated either way here, because a stationary
+synthetic press does not arm the drag in either build. It needs a real
+multi-point swipe, and if it is broken it is its own fix.
+
+### Commit 6 — CLAUDE.md: the shadow scale as a 2×2, and the reconnect backoff
+
+**File:** `CLAUDE.md`. **Behavioural change:** none.
+
+The shadow guidance had grown into a list of tokens with a rule attached to each,
+which is why v17.10.0 could add `--shadow-flat` and still leave a cell empty. It
+is written as a **2×2** now — raised or not, fill flips or not — with the
+floating / card / input cases named beside it, so the next shadow is a lookup
+rather than a judgement.
+
+Two stale figures corrected, both of the "a number recorded once and never
+re-measured" kind this file keeps warning about: the white-inset literal count
+(22 → 2) and the test count (259 → 319). The v17.8.0 claim that plain drop-shadow
+literals are "a consistency nit, not a bug class" is left in place and marked as
+having failed, rather than deleted — the reasoning was explicit and knowing why
+it was wrong is worth more than a clean paragraph.
+
+New Gotchas row for the five-minute reconnect backoff, carrying the part that is
+hardest to rediscover: **toggling wifi cannot reproduce the stuck state**, with
+the measured 6.1s recovery that proves it, and the consequence that the watchdog
+must not be gated on `navigator.onLine`.
+
+**Verification for the whole version.** `npm run build` clean (main bundle
+198.45 kB gz, unchanged — the shadow sweep is a wash and the watchdog is a few
+lines), 319 tests, lint 0 errors, `check:style` clean, all re-run per commit.
+On-device work is recorded per commit above; the shadow tokens were read back out
+of the live CSSOM in both themes rather than trusted from the source.
+
+### Commit 7 — the blue rectangle: Android's tap highlight, and what replaces it
+
+**Files:** `index.html`, `tests/stylesheet.test.js`. **Behavioural change:** yes,
+on touch.
+
+Reported: tapping anything on the tablet flashes a blue rectangle. It is
+`-webkit-tap-highlight-color`, sitting at Chrome's Android default
+`rgba(51, 181, 229, 0.4)` — Holo blue at 40% — which the app had never
+overridden. Confirmed on-device two ways: the computed value, and a screenshot
+taken 250ms into a press with the colour temporarily forced to opaque red. **The
+highlight is painted as a hard RECTANGLE over the border box, ignoring
+`border-radius`** — which is why it reads so badly on a UI made of pills, and
+why "rectangular" was the useful word in the report.
+
+It is also redundant. v17.8.0 gave every control its own press-scale dip, so the
+platform highlight is a second, uglier answer to a question the app already
+answers in its own language. Suppressed on `:root`, since the property inherits.
+
+**The interesting half is what had to replace it.** Two surfaces staff tap
+constantly are not `<button>`s and therefore had no press feedback of their own —
+the platform highlight was all they had. They are handled differently, and the
+difference is the v17.9.1 rule:
+
+- **The List card** (and every `.mgt-ac-row` surface — Summary, autocomplete
+  rows, the notification strip's lid) gets a **tint on `:active`**, the touch
+  equivalent of its existing hover tint. It could not be the press-scale:
+  `:active` matches ANCESTORS of the pressed element, so a scale here would
+  shrink the card under the very button you were aiming at — the v17.9.1 click
+  bug, arriving by a new route. `.mgt-nopress` is deliberately not excluded,
+  because that opt-out means "no transform" (its other rules are both transform
+  rules) and the strip's lid carries it precisely for being one of these
+  containers.
+- **The timeline block and the waitlist ghost** are leaf controls, so they take
+  the dip — targeted as `.mgt-blk`, NOT by widening the rule to
+  `.mgt-hover-scale`, which several containers of controls also carry
+  (`WaitlistPanel`'s row, `CustomersSettings`' row). Their inline `TL_MOVE`
+  transition already lists `transform`, so it eases; a drag's inline transform
+  still wins, as documented.
+
+**A methodology correction worth more than the fix.** Every attempt to measure
+`:active` on the device read `false` — on the new rules AND on a plain button,
+which would have meant v17.8.0's press-scale had never worked on this tablet.
+It had. **Synthetic input does not set the UA `:active` state**: not
+`element.dispatchEvent`, not CDP `Input.dispatchTouchEvent`, not CDP
+`Input.dispatchMouseEvent`, not `adb shell input`. The measurement was of the
+tooling. `CSS.forcePseudoState` is the instrument that answers the actual
+question — "if this element were `:active`, does my rule apply?" — and under it
+all three rules resolve: button `scale(0.966)`, block `scale(0.960)`, card
+`rgba(255,255,255,0.45)` → `rgba(255,255,255,0.984)`. The button rule behaving
+identically is the control that makes the other two trustworthy. **Never conclude
+a CSS state rule is dead from synthetic input.**
+
+Guarded in `tests/stylesheet.test.js`: `.mgt-ac-row:active` and `.mgt-blk:active`
+join `CRITICAL_SELECTORS`, and the tap-highlight suppression gets a DECLARATION
+assertion (it lives on `:root`, a prelude far too common to guard by name — the
+same reasoning as commit 1's). All three verified to fail when removed.
+
+### Commit 9 — CLAUDE.md: the tap highlight, and a measurement trap
+
+**File:** `CLAUDE.md`. **Behavioural change:** none.
+
+The press-feedback section gains the platform-highlight suppression and, more
+usefully, **which of the two affordances a surface gets and why** — the v17.9.1
+container-vs-control rule, restated for `:active`, with the reason a scale on a
+container is a bug (`:active` matches ancestors).
+
+New Gotchas row for the measurement trap, because it cost most of an hour and
+would cost it again: synthetic input does not set the UA `:active` state, by any
+mechanism available here, so a correct rule reads as dead. `CSS.forcePseudoState`
+is the instrument, and forcing the same state on a control that already works is
+what makes the reading trustworthy.
+
+### Commit 10 — /code-review round
+
+Eight findings, all fixed. Five are worth carrying forward.
+
+**The watchdog had no backoff of its own.** Fixing a stuck reconnect by kicking
+every 20s forever replaces the SDK's *bounded* exponential backoff with an
+*unbounded* flat poll — ~120 attempts per device per hour for as long as an
+outage lasts, which is precisely the load backoff exists to prevent. The spacing
+now doubles to a 2-minute ceiling and resets on connect (and on a manual tap,
+which is a fresh signal). The short outage still recovers in ~20s, which was the
+reported bug; only the long tail changed. **A fix for a fast case has to be
+checked against the slow one.**
+
+**The block press dip repeated the v17.9.1 bug, in the same commit that avoided
+it.** `.mgt-blk:active` scales the timeline block, which CONTAINS the Assign
+handle; `:active` matches ancestors, so on a **mouse** the handle slid out from
+under the cursor between mousedown and mouseup and `click` resolved to the block
+instead. The `.mgt-ac-row` comment eight lines above states this exact reasoning
+— written, applied to one rule, and not to the other. It is scoped to coarse
+pointers now, where implicit touch capture makes it harmless and where it was
+the only place it was ever needed.
+
+**"Reconnect now" was invisible in the one state that needs it most.** Gated on
+`!connected`, but `connected` starts optimistically true and only goes false
+after a first handshake — so a device that has NEVER connected showed
+"Connecting…" with no action, while the watchdog also stood down by design. That
+is the v17.5.1 never-connected class of bug, recurring one layer up.
+
+**Rule 6 could not see three of the forms it exists to catch** — `var()`, named
+colours, decimal px — so the checker added *in this version* to stop bare shadow
+literals shipped with the blind spot it was written about. Widened, with a
+fixture per form plus a decoy proving the new bare-identifier branch does not
+reach into `padding`/`transition`.
+
+**The tap-highlight guard could not see the rule being narrowed.** A whole-sheet
+regex passes whether the declaration is on `:root` or on one selector — but the
+fix depends on INHERITANCE from the root, so narrowing it silently restores the
+blue rectangle everywhere else. Scoped to a `:root`/`html` prelude and verified
+by narrowing it and watching the test fail.
+
+Also: a dead `typeof document !== "undefined"` guard removed (this hook calls
+`document.addEventListener` unguarded twenty lines below), the watchdog's
+`console.warn` reduced to one line per outage rather than one per kick, and
+`.mgt-blk:active` given the `.mgt-nopress` opt-out every other press rule has.
+
+**Verified after the fixes:** 328 tests, lint 0 errors, `check:style` clean,
+build clean. On the tablet (coarse pointer) the block still dips — 0.971
+mid-transition under `CSS.forcePseudoState` — and the tap highlight is still
+transparent; on the desktop the coarse media query does not match, the
+`.mgt-blk:active` rule exists only inside it and has no top-level copy, so the
+mouse path is provably gone.
+
+### Commit 11 — the iOS re-test the ROADMAP asked for, and why it decides nothing
+
+**File:** `ROADMAP.md`. **Behavioural change:** none.
+
+The Deferred PWA entry had carried a precondition since v17.5.1: *"Before any
+PWA work: re-test on iOS now that `forceWebSockets()` is deployed. The original
+outage may simply not recur."* Patryk ran it on his iPhone against PROD
+(v17.10.0) on 2026-08-18: bookings loaded normally, `getRegistrations()` → **0**,
+`controller: false`, `firebase:previous_websocket_failure` → **null**.
+
+**Three preconditions confirmed.** The v17.4.1 kill switch demonstrably worked —
+no worker registered or controlling — which was condition-zero for ever shipping
+another one and is now evidenced rather than assumed. PROD is healthy on iOS.
+That device holds no cached websocket-failure flag.
+
+**And the test cannot answer the question it was written to answer, which is the
+part worth recording.** The two candidate causes of the v17.4.0 freeze were the
+service worker and the CSP blocking Firebase's JSONP long-poll fallback on a
+device carrying that flag. With the flag absent *and* v17.5.1's
+`forceWebSockets()` making the JSONP transport unreachable regardless, the CSP
+theory predicts a healthy load — and so does "the worker was at fault and it is
+gone". **A healthy load is predicted by both hypotheses, so observing one
+discriminates nothing.** The entry now says so explicitly, so the next person
+does not run the same check and read a green result as an exoneration.
+
+What v17.5.1 genuinely changed is narrower than the entry implied: the CSP
+mechanism can no longer recur *at all*. The worker's innocence is still
+unproven, so conditions 1–3 stand in full, and the reason they cannot be shortcut
+is structural — **a service worker cannot register over a LAN IP** (insecure
+context), so it can never be exercised against the local dev server. A real test
+needs an HTTPS deploy and a physical device.
+
+This is the same shape as v17.9.0's `time-grid` finding and v17.10.1's own
+ROADMAP correction: **an entry closed by discovering its premise does not hold
+is a result, not a failure to deliver.** Here the entry is not closed — it is
+corrected, with the bar left where it was and the reason written down.
+
+### Commit 12 — the CSP has been blocking the boot script in production
+
+**Files:** `vercel.json`, `tests/csp.test.js`. **Behavioural change:** yes, in
+production — a script that was being refused now runs.
+
+Found while checking whether `worker-src` would permit a service worker. It
+does. But `script-src` pins `index.html`'s inline boot script by SHA-256, and
+the pin had drifted: `vercel.json` carried
+`sha256-Q6OfSa…` while the served script hashes to `sha256-AAYhJC…`. **The
+mismatch is on `main`, so it predates this branch** — the boot script has simply
+not been running in production, silently, for however long.
+
+It costs three things, none of which throw:
+
+- the **no-flash theme script**, so production has been flashing the wrong theme
+  on every load — the exact defect that script exists to prevent;
+- the `data-motion="reduce"` pre-mount stamp;
+- the empty passive **`touchstart` listener** — which per CLAUDE.md is the ONLY
+  reason `:active` press feedback works on iOS at all. So the press-scale
+  v17.8.0 shipped has been dead on the iPhone and iPad this whole time. That is
+  worth holding next to v17.10.1's other finding, that synthetic input cannot
+  measure `:active`: the affordance was unverifiable by tooling *and* switched
+  off in production, and neither fact would surface the other.
+
+**Proven, not computed.** The arithmetic was unambiguous, but this class of
+belief has been wrong here before, so the mechanism was reproduced: a fixture
+page carrying the production `script-src` was served locally and Chrome refused
+its inline script with *"Executing inline script violates the following Content
+Security Policy directive"*, naming the required hash. No production app was
+loaded to establish this.
+
+The durable fix is `tests/csp.test.js`, not the corrected pin. It hashes the
+inline block, asserts `script-src` pins exactly that, asserts no pin matches
+*nothing* (the stale-pin case, which is what actually happened), and — because
+Vite processes `index.html` — asserts the built block still matches the source
+one when `dist/` exists. Written before the fix and watched to fail on the real
+bug first.
+
+**This is the fourth silent-failure guard this version** (`check:style` Rule 6,
+the two stylesheet declaration assertions, and now this), and they share a
+shape: a build that succeeds, a lint that passes, and a browser that quietly
+declines to do the thing. The lesson CLAUDE.md already states for stylesheets —
+*"a stylesheet has no syntax errors, only rules that silently don't exist"* —
+generalises to headers.
+
+### Commit 13 — a failed boot now says so
+
+**Files:** `index.html`, `vercel.json`. **Behavioural change:** yes — a blank app
+becomes an actionable screen.
+
+Found by testing the offline shell on the tablet with the dev server stopped:
+the cached HTML was served, the bundle was not there, React never mounted, and
+the screen stayed **white**. No message, no explanation, no way out. That is
+within touching distance of what staff reported in v17.4.0 — *"it just sits
+there"* — and it is **not** a service-worker problem. A bad deploy, a
+CSP-blocked bundle (which, as commit 12 found, had already happened here), or a
+dead network at the wrong moment all land in exactly the same place.
+
+So the watchdog does not watch the worker. It watches the only thing that
+matters — whether the app rendered — and offers the two things that fix it:
+reload, and reset the offline copy (`?sw=off`, commit 14). 10s is well past a
+cold start on a slow restaurant connection, and a late mount removes the notice
+again, so it cannot sit on top of a working app.
+
+It lives in the boot script rather than in React, for the obvious reason: React
+is the thing that failed. And its handlers are `addEventListener`, not `onclick`
+attributes — `script-src` carries no `'unsafe-inline'`, which is the entire
+point of the hash, so an inline handler would be blocked exactly like commit
+12's script was.
+
+**Verified on the tablet**, both directions: with the server up the app mounts
+and the notice never appears; with the server stopped the notice renders and
+screenshots correctly, with working Try again / Reset offline copy buttons.
+
+### Commit 14 — the offline shell returns, on terms it can be trusted on
+
+**Files:** `public/sw.js` (rewritten), `src/lib/serviceWorker.js` (new),
+`src/App.jsx`, `src/components/Settings.jsx`, `index.html`, `vercel.json`.
+**Behavioural change:** yes — the app caches itself and opens without a network.
+
+v17.4.0 shipped an offline shell; it froze the app at "⟳ Loading bookings…" on
+iOS and was withdrawn in v17.4.1 with root cause **unestablished**. v17.10.1
+establishes it, and the deciding fact came from Patryk, not from the code: the
+freeze happened **in iOS Chrome as well as in a home-screen shortcut**. A
+service worker *cannot run in iOS Chrome at all* — third-party iOS browsers are
+WKWebView-based and only expose `navigator.serviceWorker` under App-Bound
+Domains, which a general-purpose browser cannot use. So the identical symptom
+appeared in a context where the worker could not exist. One cause explaining
+both contexts beats two, and the CSP/JSONP theory explains both — which
+v17.5.1's `forceWebSockets()` has already fixed. **The worker was very probably
+innocent.**
+
+That is why it comes back. What follows is why it comes back *safely*.
+
+**It is not near the data path.** `respondWith` is called for exactly two kinds
+of request, both same-origin GET: navigations (**network-first**, cache only as
+a fallback) and built assets under `/assets/` plus the icons (**cache-first**,
+because Vite content-hashes those filenames, so a hashed URL's bytes can never
+be stale). Everything else falls through with no `respondWith` at all — which
+explicitly includes every Firebase request, dropped by the first line of the
+handler as cross-origin. Network-first on navigation is the load-bearing half:
+an online device always gets fresh HTML, so this worker **cannot pin the app to
+a stale build**.
+
+**It only installs where the app demonstrably works.** Registration is gated on
+`bookingsReady` — the first Firebase snapshot having landed. A build that cannot
+load its data therefore can never persist itself into a cache and serve itself
+back, which is the precise shape of the v17.4.0 failure. Disabling is
+deliberately *not* gated the same way: turning it off must work immediately, in
+any state.
+
+**It has two independent ways out, both proven on the device.** `?sw=off` runs
+in the boot script, before React, so it works on a frozen app — the recovery
+v17.4.0 did not have. And the kill switch: shipping the v17.4.1 worker at the
+same URL again. Both were exercised on the restaurant's own tablet.
+
+**No `skipWaiting`** on the caching worker: a new version waits and takes over
+on the next navigation, so nothing swaps under a shift in progress. The kill
+switch keeps its `skipWaiting`, because there immediacy is the entire point.
+
+The toggle is **per-device localStorage, default ON**, and deliberately not
+synced to `settings/users/{uid}`: clearing site data is the last-resort escape
+from a bad worker, and a synced flag would come straight back down and re-enable
+the thing the user just escaped.
+
+**Verified end to end on the restaurant's Android tablet** (`adb reverse` makes
+`http://localhost:5174` a *secure context*, so a worker installs there exactly
+as it would in production — that is the test rig the ROADMAP said did not
+exist): registers only after boot; caches `/`, the icons and `/assets/*`;
+serves a second `/assets/` fetch from cache; **caches zero Firebase or
+googleapis URLs**; `?sw=off` takes 1 registration + 1 cache to 0 and 0 and stays
+off across reloads; the kill switch replaces a live worker and clears its cache
+within one update cycle; the app keeps its 15 bookings throughout.
+
+**What is NOT verified, stated plainly.** The production offline boot — cached
+HTML *plus* cached hashed bundle — cannot be exercised here: in dev the modules
+are not under `/assets/`, and a production build would point at PROD Firebase,
+which this environment must never load. The reasoning that it works is sound
+(HTML and its assets are cached in the same load, so the pair is consistent),
+and commit 13's boot watchdog exists precisely because that reasoning is not a
+test. **ROADMAP condition 3 — one device, in service, for a full shift — is
+still outstanding and is Patryk's to run.**
+
+### Commit 15 — CLAUDE.md + ROADMAP: the offline shell, documented
+
+**Files:** `CLAUDE.md`, `ROADMAP.md`. **Behavioural change:** none.
+
+A new architecture section states the four properties that make the worker safe
+and marks them as load-bearing, because the next person to touch it will be
+tempted by exactly the shortcuts they forbid — precaching (which would put the
+worker back near the build), `skipWaiting` (which would swap it under a shift),
+and caching a Firebase response (which would put it in the data path).
+
+New Gotchas row for the CSP hash, since commit 12 proved it is a live trap and
+this version edited that script twice more. It records both halves: the pin must
+be regenerated, and inline `onclick=` handlers are blocked by the same directive
+— which is why the boot watchdog uses `addEventListener`.
+
+`ROADMAP.md`'s PWA entry is **rewritten rather than deleted**. The feature
+shipped, but two things genuinely remain and neither is code: the production
+offline boot is unverified (for reasons the entry states), and condition 3 — one
+device, in service, a full shift — is Patryk's to run. The entry now reads as a
+deployment checklist with the recovery steps beside it, rather than as a design
+backlog.
+
+### Commit 16 — /code-review round on the offline shell
+
+Seven findings, all fixed. Three are worth carrying.
+
+**The recovery did not recover.** `?sw=off` unregistered the workers and dropped
+the caches, then left you looking at the same page — which on a frozen app is
+the same frozen app, because the page you run it on was already claimed by the
+old worker. The boot watchdog's "Reset offline copy" button therefore rendered
+the broken screen a second time, reading as *"the fix did nothing"*. It now
+awaits the unregister/delete promises and `location.replace()`s to the clean
+path: visible proof, and it cannot loop, because the reloaded URL no longer
+matches the branch. **A recovery path that produces no visible change is
+indistinguishable from a broken one** — verified on the tablet: 1 registration
++ 1 cache → 0 and 0, URL self-cleaned, app back with its 15 bookings.
+
+**`cache.put()` was fire-and-forget.** `respondWith` resolves as soon as the
+response is returned and the browser may then kill an idle worker, abandoning a
+put still in flight — so the shell would intermittently never land, in a way
+that passes every manual test and fails the one night it matters. Both call
+sites now hand the write to `event.waitUntil()`.
+
+**The handler for a broken app left a timer running on it.** The watchdog's
+500ms poll only cleared when React mounted, which in its own failure case never
+happens — so a dead device polled twice a second forever. Bounded to two
+minutes.
+
+Also: `unregisterAll()` deleted *every* cache on the origin rather than the one
+it owns (harmless only while nothing else creates one, and a trap for whatever
+does next); `ASSET_RE`'s `icon` branch was an unanchored prefix that would have
+made any future `/icon…` path cache-first, which is only safe for immutable
+names; `applyServiceWorker` is serialised through a promise queue so a rapid
+toggle cannot leave a register and an unregister racing; and the state setter
+`setSwEnabled_` — one underscore from the localStorage writer `setSwEnabled`,
+two lines apart — is now `setSwEnabledState`.
+
+**Re-verified on the tablet after the fixes:** registers, caches `/` plus the
+icons and manifest, **zero Firebase or googleapis URLs cached**, 15 bookings
+intact. 332 tests, lint clean, `check:style` clean.
+
+### Commit 17 — /code-review round 2, and the bug it found in round 1's fix
+
+Seven findings, all fixed — and the test written for one of them immediately
+caught a **regression introduced by the previous review round**.
+
+**`ASSET_RE` had stopped matching the app bundle.** Round 1 anchored the icon
+names to stop `|icon` over-matching, and folded `assets/` into the same
+alternation behind a shared `(\?|$)` terminator — which silently required the
+path to *end* at `assets/`. So `/assets/index-abc123.js`, the entire application,
+was no longer cached, and the offline shell cached nothing but its icons. **It
+survived a device re-test because the dev server has no `/assets/` directory at
+all** — I re-ran the caching check after that fix, saw icons and `/` in the
+cache, and read it as a pass. `assets/` is a PREFIX and the icon names are
+EXACT; they cannot share a terminator. Now proven both ways on the tablet, with
+a bundle-shaped file placed under `/assets/`.
+
+That is the whole argument for the test file this round adds. The worker had
+none — the highest-consequence code in the version, guarded only by a manual
+device run that had already missed something. `tests/service-worker.test.js`
+rebuilds `ASSET_RE` *from the worker's own source* (so it cannot drift by
+copying), checks both directions of the routing predicate, and asserts the four
+safety properties that fail **silently** if removed: no `skipWaiting` call,
+cross-origin dropped on the first line, a bounded navigation timeout, and every
+cache write inside `waitUntil`. It also pins `CACHE` against the app's
+`SW_CACHE` — two hand-copied strings in different files, where bumping one
+leaves "Work offline: off" unregistering the worker and stranding its cache.
+
+**Network-first was network-forever.** `fetch` only rejects when the browser
+gives up, which on a hung connection — an AP associated with no upstream, the
+exact condition this version's reconnect watchdog exists for — is 30s or more,
+with the cached shell sitting unused. The 10s boot watchdog would fire over a
+page that was still legitimately loading, teaching staff to distrust the
+recovery screen. The network now gets **3s** to win; the losing fetch is not
+aborted but left to refresh the cache in the background.
+
+Also: `activate`'s delete-all-caches is now documented as deliberate (it is what
+cleans a v17.4.0 leftover off a device that never saw the v17.4.1 kill switch —
+"do not fix it to match `unregisterAll`"); the offline page's inline `onclick`
+became `addEventListener`, matching the boot watchdog and its CSP reasoning;
+`applyServiceWorker` returns the real outcome while only the queue swallows
+failures; and `csp.test.js`'s dist comparison no longer silently skips.
+
+**355 tests.**
