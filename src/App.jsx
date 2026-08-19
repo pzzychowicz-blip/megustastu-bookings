@@ -37,7 +37,7 @@ import {
   checkInefficent, verifyClean, findConflicts,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
-  undoSnapshots, applyUndo
+  undoSnapshots, applyUndo, tableAssignSig
 } from "./lib/booking-logic";
 
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
@@ -1314,7 +1314,23 @@ function BookingApp({uid}){
       let next=prev;
       dirty.forEach(function(d){
         if(optimizerActiveFor(d,autoOptimizer)){
-          next=bookingsAfterAction(next,d,tableBlocks,null,false,autoOptimizer);changed=true;
+          // v17.10.2 — this branch used to assign unconditionally and set
+          // `changed`, which turned an UNRESOLVABLE clash into an infinite
+          // render loop. `applyOpt` copies a locked booking's tables through
+          // verbatim (booking-logic.js), so two _locked bookings clashing on one
+          // table cannot be separated by a reshuffle — and every walk-in and
+          // every drag-drop path sets `_locked`. The pass therefore produced a
+          // NEW array with identical content, `setBookings` saw a new reference,
+          // the effect's `bookings` dep changed, and it ran again. Forever.
+          //
+          // The manual branch below only ever survived this by ACCIDENT: when
+          // nothing is movable it breaks with `next` still === `prev`, and React
+          // bails out of an identical state. Making that explicit here is the
+          // fix — keep the ORIGINAL reference when the pass changed nothing, so
+          // the bail-out is a property of the code rather than of a lucky
+          // early-return. Do not "simplify" this back to a plain assignment.
+          const after=bookingsAfterAction(next,d,tableBlocks,null,false,autoOptimizer);
+          if(tableAssignSig(after,d)!==tableAssignSig(next,d)){next=after;changed=true;}
         }else{
           let guard=0;
           while(!verifyClean(next,d)&&guard++<20){

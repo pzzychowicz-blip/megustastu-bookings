@@ -19,7 +19,7 @@ import {
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
-  stayedMins, bookEnd, padEnd,
+  stayedMins, bookEnd, padEnd, tableAssignSig,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer } from "../src/lib/constants.js";
 
@@ -631,5 +631,81 @@ describe("optimizer invariants", () => {
     expect(inn[0].tables.every(isIn)).toBe(true);
     const out = applyOpt([mk({ id: "o", time: "13:00", size: 2, preference: "outdoor", tables: [] })], D, []);
     expect(out[0].tables.every((t) => !isIn(t))).toBe(true);
+  });
+});
+
+// ── tableAssignSig + the unresolvable-clash property (v17.10.2) ───────────────
+//
+// These pin the two halves of the reconciliation-loop fix. The effect in App.jsx
+// re-dispatches a date only when a reshuffle would actually MOVE something, and
+// it decides that by comparing signatures — so both the comparison and the
+// property it detects need to be nailed down here, where they are reachable.
+
+describe("tableAssignSig", () => {
+  it("is stable across array order — the same seating scores the same", () => {
+    const a = mk({ id: "a", tables: ["1A"] });
+    const b = mk({ id: "b", time: "18:00", tables: ["2"] });
+    expect(tableAssignSig([a, b], D)).toBe(tableAssignSig([b, a], D));
+  });
+  it("is stable across TABLE order within one booking", () => {
+    expect(tableAssignSig([mk({ id: "a", tables: ["5A", "5B"] })], D))
+      .toBe(tableAssignSig([mk({ id: "a", tables: ["5B", "5A"] })], D));
+  });
+  it("changes when a booking moves table", () => {
+    expect(tableAssignSig([mk({ id: "a", tables: ["1A"] })], D))
+      .not.toBe(tableAssignSig([mk({ id: "a", tables: ["2"] })], D));
+  });
+  it("ignores other dates entirely", () => {
+    const same = mk({ id: "a", tables: ["1A"] });
+    const other = mk({ id: "z", date: "2099-06-16", tables: ["6"] });
+    expect(tableAssignSig([same], D)).toBe(tableAssignSig([same, other], D));
+  });
+  it("ignores everything that is not the seating — name, size, status", () => {
+    expect(tableAssignSig([mk({ id: "a", tables: ["1A"], name: "X", size: 2, status: "confirmed" })], D))
+      .toBe(tableAssignSig([mk({ id: "a", tables: ["1A"], name: "Y", size: 4, status: "seated" })], D));
+  });
+  it("survives a missing/!array tables field rather than throwing", () => {
+    expect(() => tableAssignSig([{ id: "a", date: D }], D)).not.toThrow();
+    expect(tableAssignSig(null, D)).toBe("");
+  });
+});
+
+describe("an all-locked clash is unresolvable, which is why the loop existed", () => {
+  // Two _locked bookings overlapping on ONE table. Reachable by ordinary use:
+  // every walk-in is _manual + _locked, and every drag-drop path sets _locked.
+  const clash = () => [
+    mk({ id: "p", time: "20:00", tables: ["3"], _locked: true, _manual: true }),
+    mk({ id: "r", time: "20:30", tables: ["3"], _locked: true, _manual: true }),
+  ];
+
+  it("is genuinely a conflict, and findConflicts sees it", () => {
+    expect(verifyClean(clash(), D)).toBe(false);
+    expect(findConflicts(clash(), D).sort()).toEqual(["p", "r"]);
+  });
+
+  it("survives a reshuffle unchanged — applyOpt copies locked tables verbatim", () => {
+    const before = clash();
+    const after = bookingsAfterAction(before, D, [], null, false, true);
+    expect(tableAssignSig(after, D)).toBe(tableAssignSig(before, D));
+    expect(verifyClean(after, D)).toBe(false);   // still dirty, still unresolvable
+  });
+
+  it("returns a NEW array even though nothing changed — the loop's actual fuel", () => {
+    // This is the property that made an unresolvable clash spin forever: the
+    // reconciliation effect assigned this result unconditionally, React saw a
+    // new reference on a dep, and re-ran the effect. The fix compares
+    // signatures and keeps the ORIGINAL reference; do not "optimise" that away.
+    const before = clash();
+    expect(bookingsAfterAction(before, D, [], null, false, true)).not.toBe(before);
+  });
+
+  it("a clash the optimizer CAN fix does change the signature", () => {
+    const before = [
+      mk({ id: "p", time: "20:00", tables: ["3"], _locked: true, _manual: true }),
+      mk({ id: "r", time: "20:30", tables: ["3"] }),   // movable
+    ];
+    const after = bookingsAfterAction(before, D, [], null, false, true);
+    expect(tableAssignSig(after, D)).not.toBe(tableAssignSig(before, D));
+    expect(verifyClean(after, D)).toBe(true);
   });
 });

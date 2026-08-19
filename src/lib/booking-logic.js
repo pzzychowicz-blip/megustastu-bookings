@@ -879,3 +879,25 @@ export function daySummary(bookings,date,splitHour){
     upcoming:{count:upcomingCount}                  // v14.8.0 — confirmed (not yet seated)
   };
 }
+
+// tableAssignSig — v17.10.2. A content signature of one date's table assignment:
+// every booking's id paired with the tables it holds, sorted so the answer does
+// not depend on array order. Two lists with the same signature for a date are
+// interchangeable as far as that date's seating is concerned.
+//
+// It exists because `bookingsAfterAction` returns a NEW array whether or not the
+// pass changed anything, and the post-sync reconciliation effect (App.jsx) must
+// be able to tell the difference. Without it that effect re-dispatched an
+// identical snapshot on every commit whenever a date held a clash the optimizer
+// cannot resolve — two `_locked` bookings on one table, which `applyOpt` copies
+// through verbatim — and React re-ran the effect on the new reference forever.
+export function tableAssignSig(list,date){
+  if(!Array.isArray(list)) return "";
+  var out=[];
+  for(var i=0;i<list.length;i++){
+    var b=list[i];
+    if(!b||b.date!==date) continue;
+    out.push(b.id+":"+(Array.isArray(b.tables)?b.tables.slice().sort().join("+"):""));
+  }
+  return out.sort().join("|");
+}

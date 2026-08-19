@@ -10933,3 +10933,59 @@ stops the app's single-letter shortcuts from stealing them.
 
 **Verified live**: `l` still switches to List; `/` then typing `tp` puts "tp" in
 the search box and does **not** switch to Timeline or Plan behind it.
+
+### Commit 10 — an infinite render loop, shipped since v15.6.1
+
+**Files:** `src/App.jsx`, `src/lib/booking-logic.js`, `tests/booking-logic.test.js`.
+**Behavioural change:** yes — the app stops re-rendering forever on a date that
+holds an unresolvable table clash. **Not a review finding: found while verifying
+one.**
+
+Reloading the app on the review's seeded service day filled the console with
+
+> `Maximum update depth exceeded.`
+
+**and it reproduced identically at v17.10.1**, so it was not something this
+version introduced. It has been shipping since **v15.6.1**.
+
+**The mechanism.** The post-sync reconciliation effect collects dates that fail
+`verifyClean` and resolves them. Its optimizer branch assigned
+`bookingsAfterAction(...)` unconditionally — and `bookingsAfterAction` returns a
+**new array whether or not the pass changed anything**. `setBookings` therefore
+saw a new reference, the effect's `bookings` dep changed, and it ran again.
+Forever.
+
+That is only a loop if some date can never be cleaned, and one can: **two
+`_locked` bookings on one table.** `applyOpt` copies a locked booking's tables
+through verbatim (`booking-logic.js:491`, `:523`), so no reshuffle separates
+them. It is reachable by ordinary use — every walk-in is `_manual:true
+_locked:true` by definition and every drag-drop path sets `_locked:true` — which
+is the same reachability argument the review made about the clash being
+*invisible*. It is worse than invisible: it spins the tablet's CPU during
+service, and the interface looks perfectly normal while it does.
+
+The effect's own comment asserted the opposite — *"Self-stabilising: optimiser/
+relocate output is clean → next pass is a no-op (also breaks any Firebase echo
+loop)"* — which holds for every case except the one the sibling branch has an
+explicit escape for (`if(!movable.length) break; // only locked overlaps — leave
+as-is`). **The manual branch survived only by accident**: it breaks with `next`
+still `=== prev`, and React bails out of identical state. The optimizer branch
+had no such luck.
+
+**The fix makes that bail-out explicit rather than lucky.** A new pure
+`tableAssignSig(list, date)` — every booking's id paired with its sorted tables,
+sorted — lets the branch ask whether the pass actually moved anything, and keep
+the ORIGINAL reference when it did not. `changed` (and so the "Resolved a table
+conflict after syncing." toast, which was also re-firing) now means what it says.
+
+**Verified live**, same fixture that produced it: 0 `Maximum update depth` errors
+across view switches, and **0 DOM mutations in 4 seconds of idle** — where a
+spinning effect is in the thousands. Ten new tests pin both halves: the signature
+comparison, and the property it detects (an all-locked clash survives
+`bookingsAfterAction` with an identical signature but a **different array
+reference**). **378 tests.**
+
+**Why seven review passes missed it:** every one of them measured the rendered
+DOM, and the DOM is correct. Nothing on screen is wrong. The defect is only
+visible in the console — which is also how the bimodal-quality thesis at the top
+of this entry predicts it: nobody *saw* it fail.
