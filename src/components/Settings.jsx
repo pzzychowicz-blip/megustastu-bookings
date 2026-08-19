@@ -24,7 +24,7 @@
 // __APP_SIGNATURE__ edit in App.jsx; this file no longer needs touching
 // for version changes.
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useId } from "react";
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
@@ -156,6 +156,7 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }
 // remote save from another device). mkInp returns a STYLE OBJECT (Bookings
 // convention — no prop passthrough).
 function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
+  const fid = useId();
   const [draft, setDraft] = useState(value);
   useEffect(() => { setDraft(value); }, [value]);
   // v17.8.0 unsaved-changes guard: this field commits on BLUR, so closing
@@ -166,8 +167,9 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
   useEffect(() => () => { if (onDirty && dirtyId) onDirty(dirtyId, false); }, [onDirty, dirtyId]);
   return (
     <div>
-      <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
+      <label htmlFor={fid} style={{ display: "block", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</label>
       <input
+        id={fid}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => { if (draft !== value) onCommit(draft); }}

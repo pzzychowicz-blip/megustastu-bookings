@@ -157,8 +157,9 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
       <div style={{ fontSize: T.body, color: S.muted, marginBottom: 16 }}>{date}</div>
       <Section>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Fld label="From">
+          <Fld label="From">{(fid) => (
             <input
+              id={fid}
               type="time"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
@@ -167,9 +168,10 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               className="mgt-hover-scale"
               style={mkInp()}
             />
-          </Fld>
-          <Fld label="To">
+          )}</Fld>
+          <Fld label="To">{(fid) => (
             <input
+              id={fid}
               type="time"
               value={to}
               onChange={(e) => setTo(e.target.value)}
@@ -178,7 +180,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               className="mgt-hover-scale"
               style={mkInp()}
             />
-          </Fld>
+          )}</Fld>
         </div>
       </Section>
     </Overlay>

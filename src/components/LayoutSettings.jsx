@@ -406,7 +406,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <div key={t.id} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 {editing ? (
-                  <input value={editVal} autoFocus style={{ ...TXT_INP }}
+                  <input value={editVal} autoFocus aria-label={"Rename table " + t.id} style={{ ...TXT_INP }}
                     onChange={function (e) { setEditVal(e.target.value); }}
                     onKeyDown={function (e) { if (e.key === "Enter" && editValid) commitEdit(t.id); if (e.key === "Escape") cancelEdit(); }} />
                 ) : (
@@ -473,7 +473,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         {/* Add a table */}
         {adding ? (
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <input value={newId} autoFocus placeholder="id" style={{ ...TXT_INP }}
+            <input value={newId} autoFocus placeholder="id" aria-label="New table id" style={{ ...TXT_INP }}
               onChange={function (e) { setNewId(e.target.value); }}
               onKeyDown={function (e) { if (e.key === "Enter" && newIdValid) addTable(); if (e.key === "Escape") { setAdding(false); setNewId(""); } }} />
             <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>cap</span>
@@ -706,7 +706,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             const known = declared.some(function (d) { return d.key === r.key; });
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
-                <select value={r.key} onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
+                <select value={r.key} aria-label="Combo" onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
                   {known ? null : <option value={r.key}>{String(r.key).split("|").join(" + ")}</option>}
                   {declared.map(function (d) { return <option key={d.key} value={d.key}>{d.label}</option>; })}
                 </select>
@@ -771,7 +771,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>Free</span>
-                <select value={r.table} onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
+                <select value={r.table} aria-label="Table to free" onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
                   {tableIds.indexOf(r.table) >= 0 ? null : <option value={r.table}>{r.table}</option>}
                   {tableIds.map(function (id) { return <option key={id} value={id}>{id}</option>; })}
                 </select>

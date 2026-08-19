@@ -10689,3 +10689,74 @@ became `addEventListener`, matching the boot watchdog and its CSP reasoning;
 failures; and `csp.test.js`'s dist comparison no longer silently skips.
 
 **355 tests.**
+
+---
+
+## v17.10.2 — the one-line class, from the seven-pass review
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** copy and accessible-name changes only. No persisted-data
+change, no Firebase console step, no visual change.
+**Verification:** see each entry.
+
+The first of the versions staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`). Everything here is high value per unit
+of risk and needed no decision: nothing changes what the app *does*, only what it
+is *called* — by a screen reader, and by the person reading a dialog.
+
+The review's one structural finding is worth restating before the entries,
+because it explains why a version of one-liners was worth cutting at all. Quality
+in this app is bimodal along a single line: *did anyone ever see it fail*. What a
+sighted user meets measures excellently — six font sizes rendered, all six on the
+scale; one backdrop-blur of an allowed four; a 12.5:1 focus ring. What a screen
+reader meets was close to absent — zero landmarks, zero live regions, zero named
+form fields, zero keyboard-reachable bookings. That is not carelessness. Every
+rule in `CLAUDE.md` was earned by an *observed* failure, and an accessibility
+defect produces no incident, so it never entered the loop that produced all the
+other rules.
+
+### Commit 1 — every form field in the app was unnamed
+
+**Files:** `src/components/atoms.jsx`, `BookingFormModal.jsx`, `WalkinForm.jsx`,
+`BlockModal.jsx`, `ReminderEditor.jsx`, `SearchPanel.jsx`, `Settings.jsx`,
+`LayoutSettings.jsx`, `CustomersSettings.jsx`, `LoginScreen.jsx`, `src/App.jsx`.
+**Behavioural change:** no visual change; every control gains an accessible name.
+
+`Fld` rendered a real `<label>`, and then rendered the control as its **sibling**.
+Implicit association requires the control *inside* the label, and there was no
+`htmlFor`/`id` pair — so the atom produced markup that looks perfectly labelled
+and names nothing. Measured live in the booking form: **9 labels, 0 associated,
+7 of 7 fields unnamed.** WCAG 1.3.1 / 3.3.2 / 4.1.2, and corroborated by two
+independent passes (it is also why the design-system audit scored `Fld` 4/10 —
+the one atom in the file that is functionally incomplete).
+
+**The fix is two shapes, because half of these fields are not a single control.**
+Where there is one control, `children` is a **function** called with a generated
+`useId()`; the call site puts that id on its input and the label carries
+`htmlFor`. Where the field is a stepper pair, a chip row or a list of times,
+`children` stays elements and the wrapper becomes a `role="group"` named by the
+label instead.
+
+`htmlFor` is deliberately **not** rendered on the group path. A `for` aimed at an
+id that is not in the tree is a dangling reference, and the app already has the
+precedent for refusing that trade: `Overlay` resolves its own `aria-labelledby`
+from the DOM rather than taking it as a prop, on the grounds that pointing at a
+missing id leaves a dialog **nameless** — strictly worse than not trying.
+
+Nine controls live outside `Fld` and were named individually: the date navigator's
+date picker, both search boxes, Settings' `GsTextField` (whose label was a styled
+`<div>` — now a real `<label>`), LayoutSettings' rename / new-table boxes and its
+two priority selects, and the login screen's email and password. **A placeholder
+is not a name**: it disappears exactly when the field has content, which is when
+someone is most likely to need it. Each reminder time row gets its own index.
+
+The `*` on a required field is `aria-hidden` — a screen reader announcing "star"
+is noise — and the control says it properly, with `aria-required`.
+
+**Verified live** against the seeded service day: booking form **7/7 named**
+(both composite fields exposed as named groups), walk-in **2/2**, **0** dangling
+`for` references anywhere, and the name-autocomplete dropdown still opens on
+typing with the input keeping DOM focus (the v17.10.0 reopen fix, which this
+commit restructures the JSX around). Build, lint 0 errors, 355 tests,
+`check:style` OK.

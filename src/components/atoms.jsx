@@ -384,15 +384,45 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
   );
 }
 
-// ── Form field (label + child input) ─────────────────────────────────────────
+// ── Form field (label + child control) ───────────────────────────────────────
+// v17.10.2: the label is ASSOCIATED with its control. Before this, Fld rendered
+// a real <label> and then rendered the control as its SIBLING — which names
+// nothing: implicit association requires the control INSIDE the label, and
+// there was no htmlFor/id pair. Measured live, every one of the app's ~20 form
+// fields was unnamed to a screen reader while looking perfectly labelled.
+//
+// TWO shapes, because half of these fields are not a single control:
+//
+//   • children as a FUNCTION — called with a generated id, which the call site
+//     puts on its control. The label then carries `htmlFor`, so the control has
+//     a real accessible name. Use this shape whenever there IS one control.
+//
+//   • children as ELEMENTS — a stepper pair, a chip row, a list of times. There
+//     is no single control to point at, so the wrapper becomes a `role="group"`
+//     named by the label instead. `htmlFor` is deliberately NOT rendered on this
+//     path: a `for` aimed at an id that is not in the tree is a DANGLING
+//     reference, which is strictly worse than not trying — the same reasoning
+//     Overlay uses when it resolves its own `aria-labelledby` from the DOM
+//     rather than taking it as a prop.
+//
+// The `*` is `aria-hidden` — a screen reader announcing "star" is noise. Where a
+// field is genuinely required the CONTROL says so, via `aria-required`.
 export function Fld({ label, req, style, children }) {
+  const id = useId();
+  const single = typeof children === "function";
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, ...(style || {}) }}>
-      <label style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.semi, letterSpacing: "0.01em" }}>
+    <div
+      role={single ? undefined : "group"}
+      aria-labelledby={single ? undefined : id + "-l"}
+      style={{ display: "flex", flexDirection: "column", gap: 4, ...(style || {}) }}>
+      <label
+        id={id + "-l"}
+        htmlFor={single ? id : undefined}
+        style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.semi, letterSpacing: "0.01em" }}>
         {label}
-        {req ? <span style={{ color: "var(--text-required)" }}>*</span> : null}
+        {req ? <span aria-hidden="true" style={{ color: "var(--text-required)" }}>*</span> : null}
       </label>
-      {children}
+      {single ? children(id) : children}
     </div>
   );
 }

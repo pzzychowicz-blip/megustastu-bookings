@@ -266,7 +266,7 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.10.1",
+  version:"17.10.2",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -2887,6 +2887,7 @@ function BookingApp({uid}){
               title="Next day (→)"
               ><ChevronRightIcon size={IC.chrome} /></button><input
               type="date"
+              aria-label="Viewed date"
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
               className="mgt-hover-scale"

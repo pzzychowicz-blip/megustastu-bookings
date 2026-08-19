@@ -170,6 +170,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           ) : null}
         </div>
         <input
+          aria-label="Search customers by name or phone number"
           value={query}
           onChange={function (e) { setQuery(e.target.value); setOpenKey(null); setArmedKey(null); }}
           placeholder="Search by name or phone…"

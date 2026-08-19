@@ -656,7 +656,9 @@ export function BookingFormModal({
 
   // ── The form modal itself ──
   return (
-    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><div style={{position:"relative"}}><input
+    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}>{function(fid){return <div style={{position:"relative"}}><input
+            id={fid}
+            aria-required="true"
             value={form.name}
             /* v17.10.0: the dropdown reopens on TYPING and on CLICK, not only on
                focus. Picking a row calls preventDefault on mousedown so the input
@@ -671,7 +673,8 @@ export function BookingFormModal({
             onBlur={function(){setNameFocus(false);}}
             placeholder="Full name"
             className="mgt-hover-scale"
-            style={inp()} />{nameDropdown}</div></Fld><Fld label="Phone number"><div style={{position:"relative"}}><input
+            style={inp()} />{nameDropdown}</div>;}}</Fld><Fld label="Phone number">{function(fid){return <div style={{position:"relative"}}><input
+            id={fid}
             type="tel"
             value={form.phone}
             /* Same reopen fix as the name field above. */
@@ -681,23 +684,26 @@ export function BookingFormModal({
             onBlur={function(){setPhoneFocus(false);}}
             placeholder="+34 600 000 000"
             className="mgt-hover-scale"
-            style={inp()} />{phoneDropdown}</div></Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date"><input
+            style={inp()} />{phoneDropdown}</div>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date">{function(fid){return <input
+            id={fid}
             type="date"
             value={form.date}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}
             className="mgt-hover-scale"
-            style={inp()} /></Fld><Fld label="Time"><input
+            style={inp()} />;}}</Fld><Fld label="Time">{function(fid){return <input
+            id={fid}
             type="time"
             value={form.time}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});}}
             min={String(fh.open).padStart(2, "0") + ":00"}
             max={fh.close >= 24 ? "23:59" : String(fh.close).padStart(2, "0") + ":00"}
             className="mgt-hover-scale"
-            style={inp()} /></Fld><Fld label="Seating preference"><select
+            style={inp()} />;}}</Fld><Fld label="Seating preference">{function(fid){return <select
+            id={fid}
             value={form.preference}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{preference:e.target.value});});}}
             className="mgt-hover-scale"
-            style={mkSel()}><option value="auto">Auto (recommended)</option>{INDOOR.length>0?<option value="indoor">Indoor</option>:null}{OUTDOOR.length>0?<option value="outdoor">Outdoor</option>:null}</select></Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
+            style={mkSel()}><option value="auto">Auto (recommended)</option>{INDOOR.length>0?<option value="indoor">Indoor</option>:null}{OUTDOOR.length>0?<option value="outdoor">Outdoor</option>:null}</select>;}}</Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}}>-</button><span
@@ -711,13 +717,15 @@ export function BookingFormModal({
               style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{dur+" min"}</span><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
-              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal><Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes"><textarea
+              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal><Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes">{function(fid){return <textarea
+          id={fid}
           value={form.notes}
           onChange={function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});}}
           rows={2}
           placeholder="Allergies, special requests..."
           className="mgt-hover-scale"
-          style={mkArea()} /></Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none. */}<Fld label={"Deposit (" + (currency || "€") + ")"}><input
+          style={mkArea()} />;}}</Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none. */}<Fld label={"Deposit (" + (currency || "€") + ")"}>{function(fid){return <input
+          id={fid}
           type="number"
           min={0}
           step={5}
@@ -725,7 +733,7 @@ export function BookingFormModal({
           onChange={function(e){setForm(function(f){return Object.assign({},f,{deposit:e.target.value});});}}
           placeholder="0"
           className="mgt-hover-scale"
-          style={inp()} /></Fld></Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
+          style={inp()} />;}}</Fld></Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
         <Section>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <div style={{textAlign:"left"}}>

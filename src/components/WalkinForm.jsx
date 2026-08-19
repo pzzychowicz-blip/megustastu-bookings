@@ -358,8 +358,9 @@ export function WalkinForm({
           gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
           gap: 12
         }}>
-          <Fld label="Time">
+          <Fld label="Time">{(fid) => (
             <input
+              id={fid}
               type="time"
               value={wTime}
               // v17.1.1 review #3: a time edit discards the Plan pre-selection
@@ -371,7 +372,7 @@ export function WalkinForm({
               className="mgt-hover-scale"
               style={mkInp()}
             />
-          </Fld>
+          )}</Fld>
           <Fld label="Number of guests">
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <button
@@ -450,8 +451,9 @@ export function WalkinForm({
               ) : null}
             </div>
           </Fld>
-          <Fld label="Notes" style={{ marginTop: 12 }}>
+          <Fld label="Notes" style={{ marginTop: 12 }}>{(fid) => (
             <textarea
+              id={fid}
               value={wf.notes}
               onChange={(e) => setDraft({ ...wf, notes: e.target.value })}
               rows={2}
@@ -459,7 +461,7 @@ export function WalkinForm({
               className="mgt-hover-scale"
               style={mkArea()}
             />
-          </Fld>
+          )}</Fld>
         </div>
       </Section>
 

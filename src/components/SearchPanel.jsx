@@ -62,6 +62,7 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
       <ModalTitle background="var(--app-btn-grey-strong)">Find a booking</ModalTitle>
       <input
         ref={inputRef}
+        aria-label="Search bookings by name or phone number"
         value={query}
         onChange={function (e) { setQuery(e.target.value); }}
         placeholder="Search by name or phone, any date…"

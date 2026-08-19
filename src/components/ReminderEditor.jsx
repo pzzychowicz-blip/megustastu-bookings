@@ -125,8 +125,9 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           </div>
         </div>
 
-        <Fld label="Text" style={{ marginBottom: 12 }}>
+        <Fld label="Text" style={{ marginBottom: 12 }}>{(fid) => (
           <textarea
+            id={fid}
             value={draft.text}
             onChange={(e) => updText(e.target.value)}
             rows={2}
@@ -134,7 +135,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             className="mgt-hover-scale"
             style={mkArea()}
           />
-        </Fld>
+        )}</Fld>
 
         <Fld label="Times" style={{ marginBottom: 12 }}>
           <div>
@@ -142,6 +143,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
                 <input
                   type="time"
+                  aria-label={"Time " + (i + 1)}
                   value={t}
                   onChange={(e) => updTime(i, e.target.value)}
                   className="mgt-hover-scale"
@@ -188,8 +190,9 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         </Fld>
 
         {rec.type === "once" ? (
-          <Fld label="Date" style={{ marginBottom: 12 }}>
+          <Fld label="Date" style={{ marginBottom: 12 }}>{(fid) => (
             <input
+              id={fid}
               type="date"
               value={rec.date || ""}
               min={todayStr}
@@ -197,7 +200,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               className="mgt-hover-scale"
               style={mkInp()}
             />
-          </Fld>
+          )}</Fld>
         ) : null}
 
         {rec.type === "weekly" ? (
