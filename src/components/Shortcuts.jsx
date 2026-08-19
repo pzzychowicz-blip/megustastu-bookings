@@ -66,8 +66,8 @@ const SHORTCUT_SECTIONS = [
     { keys: ["="],       label: "Zoom in (unshifted — ⇧+ is app width)" },
     { keys: ["−"],       label: "Zoom out" },
     { keys: ["0"],       label: "Reset zoom to 1×" },
-    { keys: ["O"],       label: "Toggle Optimizer (today)" },
-    { keys: ["R"],       label: "Reshuffle (today, optimizer OFF)" },
+    { keys: ["O"],       label: "Toggle Optimiser (today)" },
+    { keys: ["R"],       label: "Reshuffle (today, optimiser OFF)" },
   ]},
   { title: "List view", rows: [
     { keys: ["↑", "↓"], label: "Select previous / next booking" },

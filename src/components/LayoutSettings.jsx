@@ -505,7 +505,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
       </Collapsible>
       <Collapsible
         title="Combos"
-        subtitle="Joined tables for larger parties. Edit a combo's seat count; the optimizer uses these caps."
+        subtitle="Joined tables for larger parties. Edit a combo's seat count; the optimiser uses these caps."
         summary={(autoCount + mega.length) + " combos"}
       >
         <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
@@ -649,7 +649,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
       </Collapsible>
       <Collapsible
         title="Table priorities"
-        subtitle="Which tables the optimizer picks first, per party size. Shared across all devices."
+        subtitle="Which tables the optimiser picks first, per party size. Shared across all devices."
         summary={priBands.length + (priBands.length === 1 ? " size rule · " : " size rules · ") + priRules.length + (priRules.length === 1 ? " combo rule" : " combo rules")}
       >
         <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
@@ -700,7 +700,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
           <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Combo preferences · {priRules.length}</div>
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
-            Which combo the optimizer reaches for first, by party size. Higher priority wins; “avoid” combos are used only when nothing else fits.
+            Which combo the optimiser reaches for first, by party size. Higher priority wins; “avoid” combos are used only when nothing else fits.
           </div>
           {priRules.map(function (r, i) {
             const known = declared.some(function (d) { return d.key === r.key; });
@@ -741,7 +741,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
           <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Cross-zone combos</div>
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
-            “Anchors” are ranked tables the optimizer favours inside a combo that spans indoor + outdoor.
+            “Anchors” are ranked tables the optimiser favours inside a combo that spans indoor + outdoor.
           </div>
           {chipRow("Anchors", priAnchors, true, "anchor", -1, function (l) { savePri({ anchors: l }); })}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 8 }}>

@@ -10866,3 +10866,21 @@ Three comments in `StatusToasts.jsx` *quoted* the old strings and were updated i
 the same commit — the v17.9.0 lesson that **copy describing a thing has to change
 when the thing does**, which the app has now been bitten by for glyphs and for
 prose.
+
+### Commit 6 — one spelling convention, in the four words staff read
+
+**Files:** `TimelineView.jsx`, `Shortcuts.jsx`, `Settings.jsx`,
+`LayoutSettings.jsx`, `PrefPickerModal.jsx`, `CustomersSettings.jsx`.
+**Behavioural change:** copy only.
+
+"**Optimizer**" (US) was the label on the timeline control and throughout
+Settings, while the dialogs said "re-**optimised**" (UK), the Customers tab said
+"recogni**s**ed" (UK) and "anonymi**z**ed" (US) — in the same sentence. British is
+already the majority in the app's prose, so it is British everywhere:
+Optimiser · re-optimised · recognised · anonymised.
+
+**Scope is strictly the words on screen.** Every identifier is untouched —
+`autoOptimizer`, `onSaveOptimizer`, `useOptimizerSettings`, the `settings/optimizer`
+node — and so is the persisted `anonymized: true` booking flag, which is a data
+field in the sanitize whitelist and renaming it would be a migration, not a copy
+change. Source comments about that code keep the code's spelling.

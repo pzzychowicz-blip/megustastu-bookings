@@ -242,7 +242,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
     hasPrefT
       ? { k: "pref", keep: 4, title: "Preferred tables: " + b.preferredTables.join(", "), icon: <StarIcon size={IC.control} /> } : null,
     isLocked(b)
-      ? { k: "lock", keep: 3, title: "Locked to these tables — the optimizer will not move it", icon: <LockIcon size={IC.control} /> } : null,
+      ? { k: "lock", keep: 3, title: "Locked to these tables — the optimiser will not move it", icon: <LockIcon size={IC.control} /> } : null,
     noShows >= 2
       ? { k: "ns", keep: 2, title: noShows + " past no-shows on this number", icon: <NoShowIcon size={IC.control} /> } : null,
     warn && warn.overdue
@@ -1377,7 +1377,7 @@ export const TimelineView = memo(function TimelineView({
           background: autoOptimizer ? "var(--app-walkin)" : "var(--app-btn-grey)"
         })}
       >
-        {"Optimizer: " + (autoOptimizer ? "ON" : "OFF")}
+        {"Optimiser: " + (autoOptimizer ? "ON" : "OFF")}
       </button>
       {/* v15.8.0: slides in L→R when Optimizer is toggled OFF, slides out →L when ON. */}
       <Presence show={!autoOptimizer} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span">
