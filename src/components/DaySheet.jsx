@@ -22,7 +22,12 @@ import { T, FW } from "../lib/constants";
 import { daySummary } from "../lib/booking-logic";
 
 const WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-function weekdayOf(dateStr) {
+// v17.10.2: was `weekdayOf`, which is ALSO exported from lib/constants.js — where
+// it returns the day NUMBER (0–6). Two functions, one name, incompatible return
+// types, one of them on the shared module. That is worse than a duplicate: it is
+// a trap for whoever tidies up the "copy", because importing the shared one here
+// silently prints a number in the print sheet's header instead of "Wednesday".
+function weekdayName(dateStr) {
   const d = new Date(dateStr);
   return isNaN(d) ? "" : WD[d.getUTCDay()] || "";
 }
@@ -59,7 +64,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
     <div className="mgt-print-sheet" style={{ color: "#000", background: "#fff", padding: 24, fontFamily: "-apple-system, system-ui, sans-serif" }}>
       <div style={{ borderBottom: "2px solid #000", paddingBottom: 8, marginBottom: 12 }}>
         <div style={{ fontSize: T.display, fontWeight: FW.bold }}>{(restaurantName || "Me Gustas Tú") + " — Day sheet"}</div>
-        <div style={{ fontSize: T.lead, marginTop: 2 }}>{weekdayOf(date) + " · " + date}</div>
+        <div style={{ fontSize: T.lead, marginTop: 2 }}>{weekdayName(date) + " · " + date}</div>
         <div style={{ fontSize: T.body, marginTop: 4 }}>
           {s.totalBookings + " booking" + (s.totalBookings !== 1 ? "s" : "") + " · " + s.totalCovers + " cover" + (s.totalCovers !== 1 ? "s" : "")
             + " · Afternoon " + s.afternoon.covers + " / Evening " + s.evening.covers}

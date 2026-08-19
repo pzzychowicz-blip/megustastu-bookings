@@ -10989,3 +10989,17 @@ reference**). **378 tests.**
 DOM, and the DOM is correct. Nothing on screen is wrong. The defect is only
 visible in the console — which is also how the bimodal-quality thesis at the top
 of this entry predicts it: nobody *saw* it fail.
+
+### Commit 11 — `weekdayOf` returned a number in one file and a name in another
+
+**File:** `src/components/DaySheet.jsx`. **Behavioural change:** none.
+
+`constants.js` exports `weekdayOf(dateStr)` returning **0–6**. `DaySheet.jsx`
+defined its own `weekdayOf(dateStr)` returning the weekday **name**.
+
+This is **not** a duplicate — the review checked, expecting one — and that makes
+it worse than a duplicate. Two functions, one name, incompatible return types,
+one of them exported from the shared module. Someone importing `weekdayOf` into
+`DaySheet` to "remove the copy" would silently print `3 · 2026-08-19` at the top
+of the day sheet the kitchen works from, and nothing would fail. `weekdayName`
+says what it returns.
