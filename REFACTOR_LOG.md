@@ -10824,3 +10824,14 @@ Worth naming, because the file is the app's single source of truth: **a source o
 truth that contradicts itself is worse than one that is merely incomplete**, since
 either half can be cited. The surviving paragraph now also keeps the part that is
 still true and load-bearing — consumers must handle `rawPhone: ""`.
+
+### Commit 4 — "5 no-show, unidentified"
+
+**File:** `src/components/CustomersSettings.jsx`. **Behavioural change:** copy only.
+
+The fourth totals tile was grammatically adrift and did not say what it counted.
+It counts **bookings** — `!identityKey(b) && isNoShow(b)` — which is a different
+unit from the tile beside it ("customers *with a no-show*"), so the label has to
+carry that difference. "no-shows with no phone" says both the count and the reason
+those rows are not in the list below it. CLAUDE.md already described the tile in
+almost these words; the screen had never been updated to match.

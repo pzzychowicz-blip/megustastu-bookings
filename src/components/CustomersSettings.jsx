@@ -165,7 +165,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           {phonelessNoShowCount > 0 ? (
             <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
               <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--warn-text)" }}>{phonelessNoShowCount}</div>
-              <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>no-show, unidentified</div>
+              <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>no-shows with no phone</div>
             </div>
           ) : null}
         </div>
