@@ -10884,3 +10884,33 @@ Optimiser · re-optimised · recognised · anonymised.
 node — and so is the persisted `anonymized: true` booking flag, which is a data
 field in the sanitize whitelist and renaming it would be a migration, not a copy
 change. Source comments about that code keep the code's spelling.
+
+### Commit 7 — `clampStep` lived twice, and the copy said so
+
+**Files:** `src/lib/clamp.js` (new), `useBookingDefaults.js`,
+`useGeneralSettings.js`, `tests/clamp.test.js` (new).
+**Behavioural change:** none.
+
+`useBookingDefaults.js` and `useGeneralSettings.js` each defined the same
+function, same signature, same body. What makes it worth moving rather than
+tolerating is the second copy's comment:
+
+> `// NaN check AFTER the round (see useBookingDefaults for the why).`
+
+The code already knew it was a copy and **pointed at the original instead of
+importing it** — the same condition as "a literal duplicate of a token is a token
+that cannot be fixed", one level up the stack. A third settings hook would have
+made a third copy.
+
+The ordering that comment protects is real and easy to tidy wrongly: a
+non-numeric `n` makes `Number(n)` NaN, which survives `Math.round(n / step) *
+step` — so the finite check has to run AFTER the round, or NaN escapes through
+`Math.max`/`Math.min` and a stepper renders "NaN min" and writes it back.
+
+**The test found something the move did not.** `Number(null)` and `Number("")`
+are both `0`, which is finite — so those do **not** take the fallback, they clamp
+to `min`. Shipped behaviour since v16.1.0, unchanged here, and unreachable from
+Firebase (RTDB cannot store null; writing null deletes the key, so an absent
+field arrives as `undefined` and correctly takes the default). It is pinned in
+`tests/clamp.test.js` so the next person to "fix" the guard sees the distinction
+before they move it. **368 tests.**
