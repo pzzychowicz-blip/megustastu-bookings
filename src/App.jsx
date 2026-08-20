@@ -37,7 +37,7 @@ import {
   checkInefficent, verifyClean, findConflicts,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
-  undoSnapshots, applyUndo, tableAssignSig
+  undoSnapshots, applyUndo, dayBookingsSig
 } from "./lib/booking-logic";
 
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
@@ -1329,8 +1329,13 @@ function BookingApp({uid}){
           // fix — keep the ORIGINAL reference when the pass changed nothing, so
           // the bail-out is a property of the code rather than of a lucky
           // early-return. Do not "simplify" this back to a plain assignment.
+          //
+          // The comparison is over the FULL persisted field set (dayBookingsSig
+          // reuses undoKey's), not tables alone: this pass also extends a seated
+          // party's duration via syncLiveDurations and sets `_conflict` via
+          // applyOpt, and a narrower signature silently discarded both.
           const after=bookingsAfterAction(next,d,tableBlocks,null,false,autoOptimizer);
-          if(tableAssignSig(after,d)!==tableAssignSig(next,d)){next=after;changed=true;}
+          if(dayBookingsSig(after,d)!==dayBookingsSig(next,d)){next=after;changed=true;}
         }else{
           let guard=0;
           while(!verifyClean(next,d)&&guard++<20){

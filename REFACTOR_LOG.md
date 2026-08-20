@@ -11046,3 +11046,52 @@ review reported 27 from a plain grep. The 27th hit is `constants.js`'s own
 written down with the number: grep for the marker **on a line that also carries
 an exempted property**. Counting the documentation as an instance of the thing it
 documents is how the figure drifts back in the other direction.
+
+### Commit 15 — /code-review fixes: the loop guard was narrower than the pass
+
+**Files:** `src/lib/booking-logic.js`, `src/App.jsx`, `tests/booking-logic.test.js`,
+`CLAUDE.md`. **Behavioural change:** the reconciliation effect no longer discards
+non-table updates on a dirty date.
+
+The review found the commit-10 guard wrong in two ways that share one fix.
+
+**It compared table assignment alone, and the pass changes more than that.**
+`bookingsAfterAction` runs `syncLiveDurations` first — which extends a seated
+party's `duration`/`customDur` — and `applyOpt` writes `_conflict` on every
+booking for the date. On a date that stays dirty, which is exactly the
+all-locked clash the guard exists for, both of those read as "no change" and
+were **thrown away**. A guard may not be narrower than the thing it gates.
+
+`dayBookingsSig(list, date)` replaces `tableAssignSig` and reuses **`undoKey`'s**
+field set — the same fields undo already trusts to decide whether a booking
+changed. That is the reuse the first version missed: `undoKey`/`UNDO_FIELDS`
+was sitting twenty lines away, and using it would have made the narrowing
+impossible.
+
+**Its separators were reachable from the data.** `undoKey` joined fields with
+`|` and arrays with `+`, and `idOk` (`LayoutSettings.jsx:79`) rejects only the
+empty string and `|` — so a venue naming a joined table **`1+2`** made
+`["1+2"]` and `["1","2"]` the same key, and `notes` is free text that can carry
+either. A collision reads as "nothing changed": for the new guard it discards a
+real reshuffle, and **for undo, which has used this key since v17.4.0, it means
+a snapshot is never taken.** Both now use ASCII control characters (unit /
+record / group / file), which no text field in the app can produce. The key is
+only ever compared — never stored, never displayed.
+
+**The widened signature caught a bad fixture on its first run**, which is the
+argument for widening it. `clash()` omitted `_conflict`, so `applyOpt` moved it
+`undefined → false` and the test saw a change the real app cannot: `sanitize`
+coerces `_conflict: !!b._conflict` and every booking reaches state through
+`sanitizeAll`. The fixture trap CLAUDE.md records for `ALL_TABLES`, one field
+along — **build fixtures to what `sanitize` guarantees, or the test measures the
+fixture instead of the code.**
+
+Five new tests pin what the narrow version missed: a duration extension with no
+table move, a `_conflict` flip, a status change, per-write metadata still
+correctly ignored, and both separator collisions. **383 tests.**
+
+Also from the review: `src/lib/clamp.js` and `src/lib/keyboard.js` were added to
+CLAUDE.md's file-structure block, and `dayBookingsSig` to the `booking-logic.js`
+entry — the file's own header requires it ("When a change adds a feature or makes
+a decision, record it here"), and a shared helper that is not in the block is a
+helper the next session writes a third copy of.
