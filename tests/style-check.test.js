@@ -19,7 +19,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, statSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -355,5 +355,70 @@ describe("check:style — the motion scale (v17.13.0)", () => {
   it("accepts /* @motion */ on the WAAPI escape hatch", () => {
     const r = run({ "a.js": 'const easeOut = "cubic-bezier(0.33, 1, 0.68, 1)";   /* @motion */\n' });
     expect(r.code).toBe(0);
+  });
+});
+
+// ── The weight ratchet (v17.13.0) ────────────────────────────────────────────
+//
+// The other half of v17.8.0's type change, and the half nothing was holding.
+// That version's reasoning: "There was no regular weight: 93 of 95 elements
+// were 500+. When everything is semibold, weight cannot carry emphasis, so size
+// carries all of it, so sizes multiply and crowd." The SIZE half is enforced by
+// Rule 3 and the live DOM renders exactly six sizes, all on the scale. The
+// weight half was enforced by nothing and had drifted back to 84% semibold-or-
+// bolder by the 2026-08-19 review.
+//
+// **This is deliberately an AGGREGATE ratchet, not a per-site rule**, and the
+// review that found the problem said so first: "this is not worth a lint rule".
+// It is right, and the reason is worth keeping. The criterion the v17.13.0 pass
+// actually applied — *text coloured as secondary must not also be weighted as
+// primary* — has real exceptions: a quiet section heading (muted colour, bold
+// weight, letterspaced) is a legitimate device, and there are about fifteen of
+// them. A rule with a 24% exemption rate teaches people to type the marker, not
+// to think, which is the opposite of what every other rule here does.
+//
+// So this holds the RATIO and judges no individual line — the same shape as
+// EXEMPT_FLOOR in tests/contrast.test.js: asserted against itself, so an
+// accepted position cannot quietly get worse. It counts source references
+// rather than rendered elements because CI cannot render; the two move
+// together, and the direction is what matters.
+describe("weight scale — the ratchet (v17.13.0)", () => {
+  const SRC_DIR = new URL("../src/", import.meta.url).pathname;
+
+  function weights() {
+    const files = [];
+    (function walk(d) {
+      for (const n of readdirSync(d)) {
+        const p = join(d, n);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.(js|jsx)$/.test(p)) files.push(p);
+      }
+    })(SRC_DIR);
+    const c = { regular: 0, medium: 0, semi: 0, bold: 0 };
+    for (const f of files) {
+      for (const m of readFileSync(f, "utf8").matchAll(/\bFW\.(regular|medium|semi|bold)\b/g)) c[m[1]]++;
+    }
+    return c;
+  }
+
+  it("at least a third of weight references are regular or medium", () => {
+    const c = weights();
+    const light = c.regular + c.medium;
+    const total = light + c.semi + c.bold;
+    const share = light / total;
+    expect(
+      +share.toFixed(3),
+      `regular+medium is ${light} of ${total} FW references (${Math.round(share * 100)}%). ` +
+      `v17.13.0's pass took it from 20% to 32% by demoting 46 runs that were ` +
+      `coloured secondary AND weighted primary. Below 30% the scale is sliding ` +
+      `back toward uniform bold, where weight can no longer carry emphasis and ` +
+      `size has to carry all of it — which is what produced thirteen font sizes ` +
+      `before v17.8.0. Demote descriptive text rather than lowering this floor.`
+    ).toBeGreaterThanOrEqual(0.3);
+  });
+
+  it("every weight reference is one of the four scale steps", () => {
+    const c = weights();
+    expect(c.regular + c.medium + c.semi + c.bold).toBeGreaterThan(300);
   });
 });

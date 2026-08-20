@@ -12991,3 +12991,57 @@ wall an hour earlier, so its line-by-line comment stripper moved out to
 made it worth a file rather than a helper.
 
 **Verification:** build ✓, lint 0 errors, **467 tests** (+24), `check:style` OK.
+
+### 6/n — the weight pass, and a ratchet to hold it
+
+**Files:** `src/components/{BookingFormModal,CustomersSettings,FloorPlanEditor,LayoutSettings,Settings,Summary,TimeAxis,WaitlistPanel,WalkinForm,WeekView,atoms}.jsx`,
+`tests/style-check.test.js`
+**Behavioural change:** none. 46 runs of descriptive text drop from semibold or
+bold to `FW.medium`.
+
+v17.8.0's type change had two halves and only one of them was ever enforced.
+Its own reasoning: "There was no regular weight: 93 of 95 elements were 500+.
+When everything is semibold, weight cannot carry emphasis, so size carries all
+of it, so sizes multiply and crowd." The SIZE half is Rule 3, and the live DOM
+now renders exactly six sizes, every one on the scale. The weight half was held
+by nothing and had drifted back to **84% semibold or bolder** by the review.
+
+**The criterion, which is what makes this a pass rather than 63 taste calls: a
+run coloured as secondary must not also be weighted as primary.** `--text-muted`
+/ `--text-secondary` / `--text-faint` and `FW.semi`/`FW.bold` co-occurred on 63
+lines. Colour is already saying "this is subordinate"; weight was saying the
+opposite on the same word.
+
+46 of those were plainly descriptive and moved: the connector words between
+Settings' steppers ("to", "party", "seats", "cap", "priority", "from a party
+of"), row labels in `Summary` and `WeekView`, the inspector labels in the floor
+plan, `Collapsible`'s collapsed summary, "waiting", "no phone", "Checking table
+availability…", and `Fld`'s label — which is the app-wide one, and reads
+markedly better: the value now dominates the field.
+
+**The other 17 were left, and they are why this is not a lint rule.** A quiet
+section heading — muted colour, bold weight, letterspaced — is a legitimate
+device, and `LayoutSettings` and `WeekView` are full of them; so is a disabled
+button's faint label and a 10px "This device" marker. A rule with a 24%
+exemption rate teaches people to type the marker rather than to think, which is
+the opposite of what every other rule in `check:style` does. The review that
+found the problem said "this is not worth a lint rule" and was right.
+
+**So the gate is an AGGREGATE ratchet instead**, in `tests/style-check.test.js`:
+regular+medium must stay at or above 30% of all `FW.` references. It judges no
+individual line — the same shape as `EXEMPT_FLOOR`, asserted against itself so
+an accepted position cannot quietly get worse. The pass took the source ratio
+from 20% to **32.5%** (58 regular + 60 medium against 104 semi + 141 bold).
+
+Measured live, rendered: the booking form went to **45%** heavy from a
+whole-app 84%, Settings to 56%, and the Timeline — where the remaining mass is
+legend chips, the hour ruler and table row identifiers, all of which
+legitimately carry weight — barely moved, which is the right outcome. The
+legend chips were considered and deliberately left: they are SOLID badges on
+`BLOCK_BG`, two of which are the recorded amber exemption, and demoting weight
+there would trade a hierarchy improvement for legibility on the app's
+worst-contrast fills.
+
+**Verification:** build ✓, lint 0 errors, **469 tests** (+2), `check:style` OK.
+Both themes walked in DEV; Settings, the booking form and the three views
+screenshotted after the change.

@@ -42,7 +42,7 @@ function Step({ label, value, fmt, onDec, onInc, disableDec, disableInc }){
   };
   return (
     <div>
-      <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
           style={{ ...btn, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
@@ -260,7 +260,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             disableDec={false} disableInc={false}
             onDec={function(){ patchTable(id, { rot: ((e.rot || 0) + 345) % 360 }); }} onInc={function(){ patchTable(id, { rot: ((e.rot || 0) + 15) % 360 }); }} />
         </div>
-        <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>
+        <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 6 }}>
           {e.shape === "round" ? "Chairs (spread evenly around)" : "Chairs per side"}
         </div>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
@@ -288,7 +288,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             onDec={function(){ patchDoor(i, { width: d.width - 10 }); }} onInc={function(){ patchDoor(i, { width: d.width + 10 }); }} />
           {/* v17.0.0 correction: which side the door opens toward (hinge side) */}
           <div>
-            <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 4 }}>Opens</div>
+            <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 4 }}>Opens</div>
             <div style={{ display: "flex", gap: 6 }}>
               {[["left", !d.flip], ["right", !!d.flip]].map(function(o){
                 return <button key={o[0]} onClick={function(){ patchDoor(i, { flip: o[0] === "right" }); }}

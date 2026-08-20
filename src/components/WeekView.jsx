@@ -192,7 +192,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
           {modeBtn("month", "Month")}
           {modeBtn("stats", "Stats")}
         </div>
-        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", marginTop: 8 }}>
+        <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", marginTop: 8 }}>
           {isWeek ? weekRangeLabel(weekDates(ref)) : monthLabel(ref)}
         </div>
       </div>
@@ -280,7 +280,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
     const bar = function(label, val, max, color){
       return (
         <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body, marginBottom: 4 }}>
-          <span style={{ color: "var(--text-secondary)", fontWeight: FW.semi, minWidth: 64, flexShrink: 0 }}>{label}</span>
+          <span style={{ color: "var(--text-secondary)", fontWeight: FW.medium, minWidth: 64, flexShrink: 0 }}>{label}</span>
           <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4,   /* @canvas */  overflow: "hidden", minWidth: 30 }}>
             <div style={{ width: ((val / max) * 100) + "%", height: "100%", background: color || "var(--accent)", opacity: 0.8, borderRadius: 4,   /* @canvas */ }} />
           </div>
@@ -328,7 +328,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
       <div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
           {WDS.map(function(w){ return (
-            <div key={w} style={{ textAlign: "center", fontSize: T.small, fontWeight: FW.bold, color: "var(--text-muted)" }}>{w}</div>
+            <div key={w} style={{ textAlign: "center", fontSize: T.small, fontWeight: FW.medium, color: "var(--text-muted)" }}>{w}</div>
           ); })}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -359,7 +359,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                     <div style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: intensity * 0.3, pointerEvents: "none" }} />
                     <div style={{ position: "relative" }}>
                       <div style={{ fontSize: T.body, fontWeight: FW.bold, color: isToday ? "var(--accent)" : "var(--text-primary)" }}>{dnum}</div>
-                      <div style={{ fontSize: T.micro, fontWeight: FW.semi, color: cov ? "var(--text-secondary)" : "var(--text-faint)", marginTop: 2 }}>
+                      <div style={{ fontSize: T.micro, fontWeight: FW.medium, color: cov ? "var(--text-secondary)" : "var(--text-faint)", marginTop: 2 }}>
                         {c.inMonth ? cov : ""}
                       </div>
                     </div>

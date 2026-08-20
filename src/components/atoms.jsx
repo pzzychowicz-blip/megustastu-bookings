@@ -456,7 +456,7 @@ export function Fld({ label, req, invalid, describedBy, style, children }) {
       <label
         id={id + "-l"}
         htmlFor={single ? id : undefined}
-        style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.semi, letterSpacing: "0.01em" }}>
+        style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.medium, letterSpacing: "0.01em" }}>
         {label}
         {req ? <span aria-hidden="true" style={{ color: "var(--text-required)" }}>*</span> : null}
       </label>
@@ -567,7 +567,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {!open && summary ? (
-            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
           ) : null}
           <span style={{
             fontSize: T.title, fontWeight: FW.bold, color: "var(--text-muted)", lineHeight: 1,

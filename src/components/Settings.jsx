@@ -126,7 +126,7 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }
   const display = fmt ? fmt(value) : hourLabel(value);
   return (
     <div>
-      <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <button
           onClick={onDec} disabled={disableDec}
@@ -167,7 +167,7 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
   useEffect(() => () => { if (onDirty && dirtyId) onDirty(dirtyId, false); }, [onDirty, dirtyId]);
   return (
     <div>
-      <label htmlFor={fid} style={{ display: "block", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</label>
+      <label htmlFor={fid} style={{ display: "block", fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</label>
       <input
         id={fid}
         value={draft}
@@ -224,7 +224,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <MiniStepper value={o} disableDec={o <= 6} disableInc={o >= c - 1}
             onDec={() => onChange({ open: o - 1 })} onInc={() => onChange({ open: o + 1 })} />
-          <span style={{ color: "var(--text-faint)", fontWeight: FW.bold }}>–</span>
+          <span style={{ color: "var(--text-faint)", fontWeight: FW.medium }}>–</span>
           <MiniStepper value={c} disableDec={c <= o + 1} disableInc={c >= 25}
             onDec={() => onChange({ close: c - 1 })} onInc={() => onChange({ close: c + 1 })} />
         </div>
@@ -773,12 +773,12 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
             looks. Revealed only while the feature is on. 5–60 min, 5-min steps. */}
         <AutoHeight>{bd.freeSoonEnabled !== false ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
-            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)" }}>Predict up to</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>Predict up to</span>
             <MiniStepper value={(bd.freeSoonWindow || 15)} fmt={(n) => n + " min"}
               disableDec={(bd.freeSoonWindow || 15) <= 5} disableInc={(bd.freeSoonWindow || 15) >= 60}
               onDec={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) - 5 })}
               onInc={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) + 5 })} />
-            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)" }}>ahead</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>ahead</span>
           </div>
         ) : null}</AutoHeight>
       </Section>
@@ -817,11 +817,11 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
                 );
               })}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)" }}>Generate ahead</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>Generate ahead</span>
                 <MiniStepper value={(recurring.horizonWeeks || 4)} fmt={(n) => String(n)}
                   disableDec={(recurring.horizonWeeks || 4) <= 1} disableInc={(recurring.horizonWeeks || 4) >= 12}
                   onDec={() => onSetRecurringHorizon((recurring.horizonWeeks || 4) - 1)} onInc={() => onSetRecurringHorizon((recurring.horizonWeeks || 4) + 1)} />
-                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)" }}>{"week" + ((recurring.horizonWeeks || 4) !== 1 ? "s" : "")}</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>{"week" + ((recurring.horizonWeeks || 4) !== 1 ? "s" : "")}</span>
               </div>
               <div style={{ fontSize: T.small, color: "var(--text-faint)", marginTop: 8 }}>Deleting a rule leaves already-created future bookings in place — cancel those individually if needed.</div>
             </div>
