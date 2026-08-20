@@ -11795,3 +11795,62 @@ appears on focus, which is a design decision rather than a defect fix. Noted in
 **Verification:** measured live in DEV after the change — `main` 1, `header` 1,
 `nav` 1, `h1` 1, `h1` computed `margin: 0px` at its unchanged 22px, header box
 identical at 16,16 708×40. Build ✓, 404 tests ✓.
+
+### 2/n · Live regions — the app says things out loud for the first time
+
+**Files:** `index.html`, `src/components/StatusToasts.jsx`,
+`src/components/NotificationStrip.jsx`, `src/App.jsx`
+**Behavioural change:** none visible. Transient toasts and changes to the
+notification set are now announced; the strip becomes a named landmark.
+
+**The finding (C4, and 4.1.3 Status Messages is Level AA).** **Zero**
+`aria-live`, `role="status"`, `role="alert"` or `<output>` anywhere in `src/`, on
+any screen, in any modal — in an app that is *built around* a notification
+architecture: the strip, nine priority toast slots, Late / Overlap / WaitAvail /
+Clash rows, offline and write-error banners, "Booking saved", the undo pill. A
+screen-reader user received none of it.
+
+**The two surfaces needed opposite treatments, and the reason is the pitfall
+that kills most live regions.** A live region has to already BE in the DOM when
+its content changes; if the region and its first message arrive together, the
+insertion is not announced.
+
+- **`StatusToasts` gets `role="status"` on its container** and works
+  immediately, because that container has been **always-mounted since v15.8.0** —
+  for a completely unrelated reason (each `Toast` self-manages its
+  out-animation, so the container must outlive it). The layer's one-slot model
+  also happens to match `role="status"`'s implicit `aria-atomic`: what is read is
+  whatever is in the slot.
+- **`NotificationStrip` has the opposite shape.** It is mounted only while
+  `notifSections` is non-empty, so it arrives *with* its first message every
+  time — a live region inside it would announce nothing. So the strip itself is
+  **`role="region" aria-label="Notifications"`** (persistent content, a landmark
+  to jump to) and the announcement is a composed sentence carried by an
+  always-mounted hidden region in `App`.
+
+**Why the announcement is composed rather than borrowed from the lid.** Two
+things rule the lid out, and both are consequences of decisions that are right on
+their own terms. Every mark in the strip is `aria-hidden` — correct, they are
+decorative — so the collapsed tally reads as bare numbers: *"Notifications 2 1"*.
+And with several sections the lid deliberately says the generic word, so going
+from one section to two would announce *"Notifications"*, which is **less than it
+knew before**. `notifAnnounce` is built from the same `title`/`count` the strip
+renders, so the two cannot drift, and it changes only when the notification set
+does. One section reads *"Notification: Double-booked."*; several read
+*"3 notifications: Double-booked; Running late, 2; Waitlist — table free."*
+
+**Why the pane is not itself live:** dismissing one row would re-read all of
+them. Persistent content is a region; the CHANGE is the message.
+
+**New utility, `.mgt-sr-only`** (`index.html`) — visually hidden, present to
+assistive technology. Not `display:none` and not `visibility:hidden`; both remove
+the node from the accessibility tree, which is the one thing it must not do. It
+is deliberately **not** in `tests/stylesheet.test.js`'s `CRITICAL_SELECTORS`:
+that list's entry criterion is "does the rule fail SILENTLY when missing", and
+this one fails by printing a stray sentence across the top of the view.
+
+**Verification:** measured live in DEV on the seeded 2026-08-19 fixture — live
+regions 0 → 2; the hidden region computed `position:absolute`, `1×1`,
+`clip-path: inset(50%)`, `overflow:hidden`, reading *"Notification:
+Double-booked."*; strip exposes `region`/"Notifications"; screenshot confirms
+nothing visible changed. Build ✓, 404 tests ✓, lint 0 errors, `check:style` OK.

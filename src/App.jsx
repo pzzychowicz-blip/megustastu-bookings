@@ -2787,6 +2787,34 @@ function BookingApp({uid}){
       title:"Waitlist — table free"+notifToday,count:waitBannerEntries.length,
       node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[]
   );
+  // v17.12.0: what a screen reader is TOLD when the strip changes.
+  //
+  // Three things forced this shape, and each of them rules out the obvious
+  // alternative:
+  //
+  //  1. It cannot live inside NotificationStrip. A live region has to already
+  //     BE in the DOM when its content changes, or the insertion goes
+  //     unannounced — and the strip is mounted only while `notifSections`
+  //     is non-empty, i.e. it arrives WITH its first message every time. This
+  //     region is always mounted, so the strip appearing is a content change
+  //     inside a region that was already there. (StatusToasts gets this for
+  //     free: its container has been always-mounted since v15.8.0.)
+  //
+  //  2. It cannot be the lid. Every mark in the strip is `aria-hidden` — which
+  //     is correct, they are decorative — so the collapsed tally reads as bare
+  //     numbers: "Notifications 2 1". And with several sections the lid's title
+  //     is the generic word, so going from one section to two would announce
+  //     "Notifications", which is less than it knew before.
+  //
+  //  3. The pane must not itself be live, or dismissing one row re-reads all of
+  //     them. Persistent content is a region; the CHANGE is the message.
+  //
+  // The string is derived from the same titles and counts the strip renders, so
+  // the two cannot drift, and it only changes when the notification set does —
+  // which is exactly when an announcement is wanted.
+  const notifAnnounce=notifSections.length===0?"":
+    (notifSections.length===1?"Notification: ":notifSections.length+" notifications: ")+
+    notifSections.map(function(s){return s.title+(s.count>1?", "+s.count:"");}).join("; ")+".";
   // ── v17.8.0: waitlist ghost blocks for the Timeline ─────────────────────────
   // waitAvail already knows, per waiting party, the exact tables + time that
   // would fit them — but that only ever surfaced as a banner row and the ⏳
@@ -3232,7 +3260,8 @@ function BookingApp({uid}){
                  card is the content box, so 4% padding is precisely enough at
                  any width. The negative margin puts the content back where it
                  was, so card width and position are unchanged from before. */
-              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}>{/* v17.12.0: always mounted — see notifAnnounce. Empty until
+              something fires, which announces nothing. */}<div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
                   children, so the pane fades out fully drawn instead of blanking a
                   frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} />:null}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}

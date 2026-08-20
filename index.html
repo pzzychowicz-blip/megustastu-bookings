@@ -997,6 +997,25 @@
       /* The ring is the only focus signal; never let a UA default double it. */
       :focus:not(:focus-visible) { outline: none; }
 
+      /* v17.12.0: visually hidden, but PRESENT to assistive technology — the
+         carrier for live-region text that has no on-screen equivalent. It is
+         not `display:none` and not `visibility:hidden`: both remove the node
+         from the accessibility tree, which is exactly the thing this must not
+         do. The clip pair is deliberate — `clip-path` is the modern rule and
+         `clip` the legacy one, and a 1px box with `overflow:hidden` is what
+         keeps a screen reader treating the text as rendered.
+
+         If this rule ever goes missing the text becomes VISIBLE, which is why
+         it is not in tests/stylesheet.test.js's CRITICAL_SELECTORS — that list
+         is for rules that fail SILENTLY, and a stray sentence across the top of
+         the timeline is the opposite of silent. */
+      .mgt-sr-only {
+        position: absolute; width: 1px; height: 1px;
+        padding: 0; margin: -1px; overflow: hidden;
+        clip: rect(0 0 0 0); clip-path: inset(50%);
+        white-space: nowrap; border: 0;
+      }
+
       /* v17.8.0: hairlines BETWEEN the notification strip's sections. An
          adjacent-sibling rule rather than a borderTop prop on each section, so
          a section never has to know its own position in the list — App builds
