@@ -523,24 +523,6 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
       className="mgt-hover-scale mgt-blk"
       data-flip-id={flipId || undefined}
       data-bk={b.id}
-      /* v17.12.0: reachable. Every block was a `div` with `cursor:pointer`,
-         `tabIndex -1` and no role — measured, the tab order held 21 chrome
-         controls and not one booking, in the one app here that is explicitly
-         keyboard-driven.
-         Enter and Space go through `handleClick`, so they inherit its
-         `didLong` guard for free and cannot fire the edit form on the tail of a
-         press-and-hold. Note this also switches on `index.html`'s
-         `[role="button"] { user-select: none }` rule for these blocks, which
-         until now matched nothing in the app — and is exactly what you want on
-         a block whose label is not text to select. */
-      role="button"
-      tabIndex={0}
-      aria-label={a11yLabel}
-      onKeyDown={(e) => {
-        if (e.key !== "Enter" && e.key !== " ") return;
-        e.preventDefault();
-        handleClick();
-      }}
       /* v17.12.0 fix: focusable by KEYBOARD, not by pointer. The browser
          focuses on mousedown and focusing scrolls the element into view — and
          this scroller is the TIMELINE, so the measured jump was 1000–2000px
@@ -631,6 +613,35 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
           Now the left is identity and never varies (time · name · size) and
           everything else is a fixed-width rail on the right. The name is the
           only element that shrinks, which is the correct thing to lose. */}
+      {/* v17.12.0 (/code-review): `role="button"` lives HERE, on everything
+          except the assign handle — not on the block itself.
+          ARIA makes a button's children PRESENTATIONAL, and this block CONTAINS
+          a control: the manual-assign handle below. Putting the role on the
+          outer element hid that control from assistive technology, which is the
+          precise rule this same version wrote into CLAUDE.md after refusing to
+          make the List card a button for the identical reason. The first pass
+          justified it with "its flags are decorative spans, not buttons" — true
+          of the flags, false of the handle four elements further down.
+          Splitting it costs nothing in layout: this wrapper takes the same
+          `1 1 0%` the name group used to take against the handle, and the name
+          group keeps that basis inside it, so the grow/shrink distribution is
+          arithmetically what it was. The absolutely-positioned children (the
+          status overlay, the note dog-ear) stay OUTSIDE it — they are painted
+          against the block's own box and have nothing to do with its name.
+          Enter and Space go through `handleClick`, so they inherit its
+          `didLong` guard and cannot fire the edit form on the tail of a
+          press-and-hold. */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={a11yLabel}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          handleClick();
+        }}
+        style={{ flex: "1 1 0%", minWidth: 0, height: "100%", display: "flex", alignItems: "center" }}
+      >
       {timeChip}
       {/* Name + size as ONE `flex: 1` group, and the `1 1 0%` basis is
           load-bearing rather than shorthand convenience. With a `0 1 auto`
@@ -735,18 +746,36 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
           (Patryk): at 1px against `--blk-rule`'s 0.3 white it disappeared into
           the saturated fills, so the handle read as part of the flag rail rather
           than as a separate control. */}
-      <span
+      </div>
+      {/* v17.12.0 (/code-review): a real <button>, and OUTSIDE the button-role
+          wrapper above. It was a bare `<span onClick>` — no role, no tab stop,
+          `title` its only name — so it has never been reachable or even
+          announced; moving the role off the block is what makes fixing that
+          possible at all. `type="button"` because this is not a form.
+          The reset (`background:none;border:0;font:inherit;color:inherit`) is
+          what keeps a UA button from repainting the handle: everything visual
+          here is unchanged from the span, `borderLeft` included. */}
+      <button
+        type="button"
         onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
         title="Assign tables"
+        aria-label={"Assign tables for " + b.name}
         style={{
           padding: "0 6px", cursor: "pointer", position: "relative",
           marginLeft: 4, flexShrink: 0,
-          borderLeft: "2px solid var(--blk-rule)",
+          background: "none", border: 0, borderLeft: "2px solid var(--blk-rule)",
+          font: "inherit", color: "inherit",
+          // A <button> resolves `min-width` against its BORDER box where the
+          // <span> resolved it against its content box, so without this the
+          // handle silently narrows from 42px to 28 — measured. `box-sizing` is
+          // the one property a UA button stylesheet changes that the visual
+          // reset above does not cover.
+          boxSizing: "content-box",
           height: "100%", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 28
         }}
       >
         <AssignIcon size={IC.control} />
-      </span>
+      </button>
     </div>
   );
 }

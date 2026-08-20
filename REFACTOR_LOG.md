@@ -12450,3 +12450,46 @@ button is still in the tab order, so the list stays enterable.
 completed booking selected and the fold open, that card holds the stop; closing
 the fold moves it to the first active card. Before the fix the same sequence left
 zero cards at `tabIndex 0`. Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (14/n) — `/code-review`: `role="button"` on a container of controls
+
+**Files:** `src/components/TimelineView.jsx`.
+
+The timeline block carries an interactive child — the manual-assign handle — and
+commit 5/n put `role="button"` on the block. ARIA makes a button's children
+**presentational**, so that hid the one control inside it. It is the exact rule
+this same version wrote into `CLAUDE.md` after refusing to make the List card a
+button for the identical reason, broken two files away, and the code comment
+justifying it ("its flags are decorative spans, not buttons") was true of the
+flags and false of the handle four elements further down.
+
+**The role moved down one level**, onto a wrapper holding everything except the
+handle. The handle is now a sibling of that wrapper and a **real `<button>`** —
+it had been a bare `<span onClick>` with `title` as its only name, so it has never
+been reachable or even announced; moving the role off the block is what made
+fixing that possible rather than merely non-harmful.
+
+Splitting it is arithmetically free: the wrapper takes the `1 1 0%` the name group
+used to take against the handle, and the name group keeps that basis inside it, so
+the grow/shrink distribution is unchanged. The absolutely-positioned children (the
+status overlay, the note dog-ear) stay OUTSIDE the wrapper — they are painted
+against the block's own box and have nothing to do with its name.
+
+**One measured trap on the way.** A `<button>` resolves `min-width` against its
+BORDER box where a `<span>` resolves it against its content box, so the handle
+silently narrowed from **42px to 28** — a third off a tap target, invisible in
+review and invisible in a screenshot. `boxSizing: "content-box"` restores it.
+`box-sizing` is the one property a UA button stylesheet changes that a visual
+reset (`background/border/font/color`) does not cover.
+
+**Verified live** against a geometry snapshot taken before the change: 12 of 14
+blocks byte-identical in child offsets and widths, and the other two differ only
+in that their note dog-ear is now enumerated outside the wrapper — its own
+position is unchanged at (0,0) with the pencil at (1,1). Handle back at 42px on
+every block. Functionally: Enter on a block opens **Edit booking**; the Assign
+button opens **Manual table assignment** and does not also open the form
+(`stopPropagation` intact); a real mouse click on a block leaves `scrollLeft` at
+1700 and `activeElement` on BODY, then opens the form. Build ✓, 406 tests ✓,
+lint 0 errors, `check:style` OK.
