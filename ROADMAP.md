@@ -73,6 +73,14 @@ figures are wrong in both directions).
 
 ### Follow-up from v17.12.0
 
+v17.12.0's own `/code-review` ran at xhigh and returned 10 findings; **all ten
+were fixed on the branch** (commits 12–20), so nothing from it is listed here.
+Three are worth remembering rather than re-deriving, and they live in `CLAUDE.md`
+now: `inert` marks the page behind the dialog and not `<main>` (which also holds
+the toast live region and the Undo pill); a `role` SUBSCRIBES an element to every
+shared rule written for that role; and a roving tab stop must be resolved against
+the elements actually rendered.
+
 - **A visible skip link.** v17.12.0 added the landmarks, which are the
   programmatic bypass and cost nothing visually; a skip link is new chrome that
   appears on focus, which is a design decision rather than a defect fix. Worth
@@ -85,6 +93,12 @@ figures are wrong in both directions).
   region over a 13-booking timeline would be unbearable, so this is a
   "the day changed to Thursday 21 August, 12 bookings" summary, not a region
   over the grid.
+
+- **A multi-table booking reads "5A and 5B and 6".** `describeBooking` joins with
+  `" and "`, which is right for two tables and wrong for three. Now that the
+  sentence has one source (`booking-logic.js`) this is a one-line change plus a
+  test — deliberately not made in the extraction commit, whose whole claim was
+  byte-identical output.
 
 - **`role="grid"` for the List, if the finished fold ever moves.** The cards are
   `role="listitem"` because a grid's children must be rows and the

@@ -12643,3 +12643,32 @@ the scrubber at 20:00 reads "Table 3, Pau Estévez, 20:00, 4 guests, confirmed" 
 the table named once. Six new tests pin the format, the singular, both
 no-table forms, the multi-table join and the `tables: false` path. Build ✓,
 **412 tests** ✓, lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (21/n) — `/code-review`: CLAUDE.md and ROADMAP for the review round
+
+**Files:** `CLAUDE.md`, `ROADMAP.md`.
+
+Doc-only. Three of the nine fixes contradicted paragraphs this same version had
+written, so the record has to move with the code or it becomes a false map:
+
+- **`inert` marks the page behind the dialog, not `<main>`.** The accessibility
+  section said `inert` goes on three siblings including `main`; it now says why
+  that was wrong and what the test actually is.
+- **The timeline block is not a leaf.** The `role="button"` rule claimed it was,
+  in the same paragraph that refused the role for the List card on identical
+  grounds. Corrected, with the general fix (role on an inner wrapper, nested
+  control as its sibling) and the new half nobody had written down: **a role
+  subscribes an element to every shared rule written for that role.**
+- **`Fld` carries validity on both shapes**, and `ListView`'s roving stop is
+  resolved against rendered cards.
+
+Plus `describeBooking` in the `booking-logic.js` entry, and the test count, which
+had drifted to 406 in the same session that took it to 412.
+
+`ROADMAP.md` records that all ten `/code-review` findings were fixed on the branch
+rather than deferred, and gains one genuinely new item: `describeBooking` joins
+tables with `" and "`, which is right for two and wrong for three — a one-line
+change now that the sentence has one source, and deliberately not made in the
+extraction commit, whose whole claim was byte-identical output.
