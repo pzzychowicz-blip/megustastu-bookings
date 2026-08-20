@@ -405,8 +405,14 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
 //     Overlay uses when it resolves its own `aria-labelledby` from the DOM
 //     rather than taking it as a prop.
 //
-// The `*` is `aria-hidden` — a screen reader announcing "star" is noise. Where a
-// field is genuinely required the CONTROL says so, via `aria-required`.
+// The `*` is `aria-hidden` — a screen reader announcing "star" is noise. The
+// CONTROL says it instead, via `aria-required`, and the ATOM applies that
+// (/code-review): the first version left it to the call site, which is a
+// convention with nothing enforcing it — one of twenty call sites actually did
+// it, and the next `<Fld req>` would have got a visible `*` that is hidden from
+// assistive technology and no programmatic signal at all, i.e. a field that
+// reads as OPTIONAL. On the function path the atom already hands the call site
+// an id, so it hands it the required flag the same way.
 export function Fld({ label, req, style, children }) {
   const id = useId();
   const single = typeof children === "function";
@@ -422,7 +428,7 @@ export function Fld({ label, req, style, children }) {
         {label}
         {req ? <span aria-hidden="true" style={{ color: "var(--text-required)" }}>*</span> : null}
       </label>
-      {single ? children(id) : children}
+      {single ? children(id, req ? { "aria-required": "true" } : null) : children}
     </div>
   );
 }

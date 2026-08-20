@@ -11095,3 +11095,28 @@ CLAUDE.md's file-structure block, and `dayBookingsSig` to the `booking-logic.js`
 entry — the file's own header requires it ("When a change adds a feature or makes
 a decision, record it here"), and a shared helper that is not in the block is a
 helper the next session writes a third copy of.
+
+### Commit 16 — `Fld` owns `aria-required`, instead of trusting the call site
+
+**Files:** `src/components/atoms.jsx`, `src/components/BookingFormModal.jsx`.
+**Behavioural change:** none visible.
+
+Commit 1 made the required `*` `aria-hidden` — a screen reader announcing "star"
+is noise — and left the real signal to the call site: *"Where a field is
+genuinely required the CONTROL says so, via `aria-required`."* That is a
+convention with nothing enforcing it, and **one of twenty call sites** actually
+did it. The next `<Fld req>` would have got a visible asterisk that assistive
+technology cannot see and no `aria-required` at all, i.e. a required field that
+reads as **optional** — a fresh instance of the exact defect this version exists
+to fix.
+
+The atom already hands the function-shaped call site an id; it now hands it the
+required attributes the same way (`children(id, reqAttrs)`), so the call site
+spreads them rather than remembering them. Verified live: the name field still
+reports `aria-required` on a form where every field is named.
+
+Three findings from the same review are deferred to ROADMAP rather than squeezed
+into a patch version: making `bookingsAfterAction` return its input array on a
+no-op (the deep fix for the loop class, but it changes a function **39 call
+sites** depend on), `dayBookingsSig`'s double scan, and the strip lid's 1px
+radius.

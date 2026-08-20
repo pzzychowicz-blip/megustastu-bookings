@@ -84,6 +84,30 @@ figures are wrong in both directions).
 
 ### Follow-up from v17.10.2
 
+- **Make `bookingsAfterAction` return its input array on a no-op.** From
+  v17.10.2's `/code-review` (altitude). That version fixed the infinite render
+  loop at ONE call site; the root cause — the function returning a fresh array
+  whether or not the pass changed anything — is untouched, so the sibling manual
+  branch still survives only because it happens to break with `next === prev`,
+  and the next `useEffect` that depends on `bookings` and calls it reintroduces
+  the same loop with no warning. Fixing it at the source removes the bug class
+  for every caller and makes the CLAUDE.md gotcha unnecessary. Deferred because
+  it changes a function **39 call sites** depend on — that is a version of its
+  own, and it belongs with the v17.12.0 App.jsx work.
+
+- **`dayBookingsSig` rescans the whole bookings array twice per dirty date.**
+  From the same review (efficiency). It filters one date out of all 513+
+  bookings, and the reconciliation pass calls it twice per dirty date. Hoisting
+  the `next` side where it has not been reassigned, or passing a pre-filtered
+  day slice, removes most of it. Low impact — `dirty` is empty on a clean
+  database — but it is in the effect that runs on every bookings change.
+
+- **The notification strip's lid radius ignores the pane's 1px border.** From the
+  same review (polish). The lid carries the pane's own 14px `R.card`, so the
+  geometrically correct inner radius is 13px and a sub-pixel sliver of pane can
+  show at the corners under the lid's hover veil. There is no token for "card
+  minus a border", so this needs either a `calc()` or a decision to accept it.
+
 - **Extract the post-sync reconciliation decision into `lib/`.** v17.10.2 fixed
   the infinite render loop it caused, but the decision itself still lives in a
   `useEffect` in App.jsx — which is exactly the shape the review's own rule
