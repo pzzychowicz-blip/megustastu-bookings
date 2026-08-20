@@ -13045,3 +13045,53 @@ worst-contrast fills.
 **Verification:** build ✓, lint 0 errors, **469 tests** (+2), `check:style` OK.
 Both themes walked in DEV; Settings, the booking form and the three views
 screenshotted after the change.
+
+### 7/n — `DESIGN.md`
+
+**Files:** `DESIGN.md` (new), `CLAUDE.md`
+**Behavioural change:** none — documentation.
+
+`CLAUDE.md` is auto-loaded into every session, and **57% of it had become the
+visual system**: 817 of 1,436 lines, across `### Style tokens` and everything
+from `## UI / style rules` through the motion sections. None of it is needed to
+answer "how does the optimizer pick a table" or "why was that write refused".
+It is now `DESIGN.md`, 901 lines, and `CLAUDE.md` is 686 — down 52%.
+
+**The split has exactly one hazard: a rule nobody loads is a rule nobody
+follows.** Three things answer it, and they are the reason this is a safe move
+rather than a tidy one.
+
+First, the non-negotiables stayed. Both extracted sections leave a stub that
+carries what ships a bug when unseen — the ≤4 blur limit, `Overlay` owning
+every modal, no colour literal, the four exemption markers and the fact that a
+marker in JSX children position renders as text, "a colour token may only sit
+on a surface that flips with it", and the three accessibility rules v17.12.0
+learned by shipping their violation.
+
+Second, and more to the point, **most of what moved is no longer held by a
+document at all**. Nine `check:style` rules, `tests/contrast.test.js`,
+`tests/stylesheet.test.js` and now `tests/a11y.test.js` hold the parts that can
+be held mechanically. `DESIGN.md` opens by saying so, and with the instruction
+that follows from it: if you find yourself writing a rule there that a test
+could hold instead, write the test.
+
+Third, the file explains how to read itself. Nearly every entry carries more
+history than a style guide normally would, because nearly every rule is the
+residue of a specific shipped defect — a light-mode fill at 1.8:1, a stray `*/`
+that deleted a CSS rule, a `scale(1.08)` on an 820px card that moved the button
+out from under the cursor. **The number and the story are what stop the rule
+being "simplified" back into the bug**, so the sections that look fussy are the
+ones to read rather than trim.
+
+Two cross-references in the file-structure block pointed at "the motion
+section" and "the accessibility section" and now name `DESIGN.md` — the same
+class of stale-copy defect this repo has recorded twice under "copy that
+describes a glyph has to change when the glyph does".
+
+v17.13.0's own additions were written into `DESIGN.md` rather than left in this
+log: the two rim tokens, Rules 7/8/9, the weight ratchet, and the accessibility
+gate.
+
+**Verification:** build ✓, 469 tests, `check:style` OK. Text moved verbatim —
+the extraction is a line-range move with the two headings re-levelled, not a
+rewrite, so nothing recorded was lost or paraphrased.
