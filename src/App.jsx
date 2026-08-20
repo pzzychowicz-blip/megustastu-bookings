@@ -432,6 +432,39 @@ function readSplit(){
   }catch{return null;}
 }
 
+// ── v17.11.0: a Timeline needs horizontal room, and a side-by-side split
+// halves exactly the dimension it needs most ────────────────────────────────
+// The `winW < 600` gate above already says "a view needs room, and a Timeline in
+// a ~180px pane is unusable". That reasoning is about the PANE and was only ever
+// applied to the WINDOW. Measured live at 1280px in a 50/50 side-by-side split:
+// the Timeline's own scroller is **371px against a 2896px grid — 13% of the
+// service visible at once**.
+//
+// Scrolling a timeline is normal; that is not the complaint. The complaint is
+// that a half-width Timeline can show you the whole day OR readable blocks and
+// never both, and the view exists to do both — "where does the evening stand" is
+// the question it answers.
+//
+// The number is derived, not chosen. Measured on the live DOM, a pane loses
+// ~124px to the table-label column (58) and the card's own padding and gutters
+// before the grid starts. On the reference 10-hour day a 90-minute booking is
+// 15% of the grid, and v17.9.1's own width budget says a block needs 138px
+// (NAME_MIN 55 + the assign handle 41 + the size ring 24 + v17.11.0's status
+// mark 18) before its guest name renders at all. 138 / 0.15 = 920px of grid,
+// + 124 = 1044. Rounded up to the divider-inclusive figure below.
+//
+// A STACKED split is always fine — it halves the height, and fewer visible table
+// rows is what scrolling is for.
+const MIN_TL_PANE=1050;
+const SPLIT_DIVIDER_PX=10;
+// `tlPane` is "a" or "b" — which side the Timeline is on. Pure, so the menu, the
+// view-switcher and the repair effect all ask the same question one way.
+function tlPaneOk(appW,dir,ratio,tlPane){
+  if(dir!=="v") return true;
+  const share=tlPane==="a"?ratio:1-ratio;
+  return (appW-SPLIT_DIVIDER_PX)*share>=MIN_TL_PANE;
+}
+
 // v17.2.0: per-device Timeline zoom/follow settings (theme pattern — key absent
 // = default). Four localStorage keys: mgt-tl-followzoom (zoom the Follow button
 // jumps to, was hard-coded 4), mgt-tl-defaultzoom (zoom on app open, was 1),
@@ -1106,6 +1139,23 @@ function BookingApp({uid}){
     if(isMobile&&split) applySplit(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[isMobile]);
+  // v17.11.0: the width the two panes actually divide — the app is clamped to
+  // the per-device App-width setting, so the WINDOW is not what a pane gets.
+  const shellW=Math.min(winW,appWidth);
+  const tlSide=split?(split.a==="timeline"?"a":split.b==="timeline"?"b":null):null;
+  const splitSideBySideOk=tlPaneOk(shellW,"v",0.5,"a");
+  // …and the repair: an existing side-by-side split whose Timeline pane has
+  // become too narrow — the window was resized, the divider dragged, or the App
+  // width setting lowered — turns STACKED rather than being torn down. The
+  // phone rule above collapses the split because a phone cannot host one at all;
+  // here the split is still perfectly viable, it is only this orientation that
+  // is not, so preserving the user's intent is the better repair.
+  useEffect(function(){
+    if(!split||!tlSide) return;
+    if(tlPaneOk(shellW,split.dir,split.ratio,tlSide)) return;
+    applySplit(Object.assign({},split,{dir:"h"}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[shellW,split,tlSide]);
   // ── v17.5.0: the fixed shell ────────────────────────────────────────────────
   // Normally <body> is the scrollport (see the mount effect near the top of
   // BookingApp) and the app is a plain `minHeight:100dvh` block that grows.
@@ -2887,7 +2937,13 @@ function BookingApp({uid}){
       const other=focusedPane==="a"?"b":"a";
       if(split[other]===v){applySplit(Object.assign({},split,{a:split.b,b:split.a}));setFocusedPane(other);return;}
       if(split[focusedPane]===v) return;
-      applySplit(Object.assign({},split,{[focusedPane]:v}));
+      // v17.11.0: tapping "Timeline" while a side-by-side pane is too narrow for
+      // one would drop it into exactly the layout the menu refuses to build. The
+      // split TURNS to stacked instead of refusing the tap: the user asked for
+      // the timeline, and the orientation is the part that does not fit.
+      const nextSplit=Object.assign({},split,{[focusedPane]:v});
+      if(v==="timeline"&&!tlPaneOk(shellW,nextSplit.dir,nextSplit.ratio,focusedPane)) nextSplit.dir="h";
+      applySplit(nextSplit);
       return;
     }
     if(v!==view) bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");
@@ -3165,6 +3221,7 @@ function BookingApp({uid}){
                 paneB={viewEl[split.b]} />:mainView}</SlideView></div></div>{splitMenuFor?<SplitMenu
               view={splitMenuFor}
               onConfirm={confirmSplit}
+              sideBySideOk={splitSideBySideOk}
               onClose={function(){setSplitMenuFor(null);}} />:null}<ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}

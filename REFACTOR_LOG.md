@@ -11522,3 +11522,57 @@ is the useful part: 760 minutes was written as rounding DOWN to 1×, and it roun
 to 1.5× — 1.267 is nearer 1.5 than 1. The code was correct and the expectation
 was not, which is the only reason to write the arithmetic down in a test at all.
 
+### 7/n · A Timeline may not take a side-by-side pane that is too narrow for it
+
+**Files:** `src/App.jsx`, `src/components/SplitMenu.jsx`
+**Behavioural change:** on a shell narrower than ~2110px, Split View will not put
+the Timeline beside another view. `Side by side` is offered but refused with the
+reason; an existing split that becomes too narrow turns STACKED rather than being
+torn down. A stacked split is never affected, and neither is any split without a
+Timeline in it.
+
+The `winW < 600` gate has always said "a Timeline in a ~180px pane is unusable" —
+that reasoning is about the PANE and was only ever applied to the WINDOW.
+Measured live at 1280px in a 50/50 side-by-side split: the Timeline's own
+scroller is **371px against a 2896px grid, 13% of the service visible at once**.
+
+Scrolling a timeline is normal and is not the complaint. The complaint is that a
+half-width Timeline can show you the whole day OR readable blocks and never both,
+and the view exists to do both — "where does the evening stand" is the question
+it answers.
+
+**The threshold is derived, not chosen.** Measured on the live DOM, a pane loses
+~124px to the table-label column (58) and the card's padding and gutters before
+the grid starts. On the reference 10-hour day a 90-minute booking is 15% of the
+grid, and the block's own width budget says it needs 138px (`NAME_MIN` 55 +
+assign handle 41 + size ring 24 + 2/n's status mark 18) before the guest name
+renders at all. 138 / 0.15 = 920px of grid, + 124 = 1044 → `MIN_TL_PANE` 1050.
+One pure `tlPaneOk(appW, dir, ratio, tlPane)`, so the menu, the view switcher and
+the repair effect all ask the question the same way.
+
+**Three enforcement points, three different right answers.**
+- The MENU refuses, and says why. The option is shown disabled rather than
+  hidden: a control that vanishes teaches nothing, and the answer depends on a
+  setting the user can change — hence the pointer to Settings → App width. It is
+  refused at whichever step the Timeline actually appears (step 1 when it is the
+  view you opened the menu on, step 2 when it would be the partner).
+- A view-button TAP turns the split stacked instead of refusing. The user asked
+  for the Timeline; the orientation is the part that does not fit.
+- An existing split that becomes too narrow — window resized, divider dragged,
+  App width lowered — also turns stacked. The phone rule beside it collapses the
+  split entirely because a phone cannot host one at all; here the split is still
+  perfectly viable and only this orientation is not, so preserving the user's
+  intent is the better repair.
+
+The width the panes divide is `min(winW, appWidth)`, not the window: the app is
+clamped to the per-device App-width setting, so a 2400px window with a 1000px app
+width still gives 495px panes.
+
+**Verification:** build ✓ · 393 tests ✓ · lint 0 · `check:style` OK. Both
+directions checked live. At 1280px: a stored side-by-side Timeline+List split was
+repaired to `dir: "h"` on load (read back out of localStorage), the Timeline
+keeping full width; the menu rendered `Side by side` disabled with the
+explanation. At 2400px with the App width raised to match: both direction buttons
+enabled, no warning — so this is a real threshold and not a blanket ban. Settings
+restored afterwards.
+
