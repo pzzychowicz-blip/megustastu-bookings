@@ -285,8 +285,14 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
             is 4% of the WIDEST control, a 145px "Assign <name>" button, not the
             36px ✕ it is tempting to size this against — plus 4px for the focus
             ring. Measured, not assumed; re-measure if a wider control is ever
-            added to a banner row. */}
-        <div className="mgt-notif" style={{ maxHeight: "40vh", overflowY: "auto" }}>
+            added to a banner row.
+            /code-review fix: `dvh`, not `vh`. The shell is `100dvh` in every
+            branch, and on a phone or tablet with a dynamic browser toolbar
+            `100vh` is the LARGER viewport — so a `40vh` cap is ~45–50% of what
+            is actually on screen, loosest on exactly the devices this exists to
+            protect. Matching the shell's unit is what makes "40% of the
+            viewport" true rather than approximately true. */}
+        <div className="mgt-notif" style={{ maxHeight: "40dvh", overflowY: "auto" }}>
           {orderedIds.map(function (id) {
             const s = byId[id];
             return (

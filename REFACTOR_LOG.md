@@ -11631,3 +11631,78 @@ with **no** personal controls and its service sections intact; the six tabs fit
 one row at 900px; arrow-key cycling reaches the new tab. Console clean, app
 serving 17.11.0.
 
+### 10–13/n · `/code-review` fixes
+
+**Files:** `index.html`, `src/components/TimelineView.jsx`, `src/App.jsx`,
+`src/components/NotificationStrip.jsx`, `tests/contrast.test.js`
+**Behavioural change:** the double-booked band is legible on every block fill;
+a dismissed clash re-arms when it recurs; the timeline stops re-rendering on
+every keystroke; the strip cap is measured against the real viewport.
+
+The review returned 12 findings. Patryk took the five substantive ones; the
+other seven (efficiency and naming cleanups) went to ROADMAP.
+
+**1 · The clash band did not contrast with the blocks it is drawn on.** Measured
+against the fills it actually paints on, the red bar is **1.02–1.63:1** across
+the four statuses in both themes — invisible on a seated block, 1.34 on a
+confirmed one. It is the ONE part of the treatment carrying information the
+border cannot (its right edge is the minute the painted-over booking really
+ends), so the feature's unique contribution was the part you could not see.
+
+**The token's own comment is what hid it.** It claimed the bar "sits in the 6px
+strip below the blocks where nothing competes with it" — describing the FIRST
+attempt, not the shipped `bottom: 7` geometry inside the block. That false claim
+is what justified shipping one opaque colour with no contrast check. Exactly the
+`SIZE_RING` lesson one element along: a marker given a single colour, documented
+as sitting somewhere safe, never measured against what it really sits on.
+
+The red keeps the meaning and a near-black **casing** carries the boundary, which
+is how a marker over a variable fill is normally done. It clears WCAG 1.4.11's
+3:1 on every block fill in both themes (min **3.48**, dark/completed). Guarded in
+`contrast.test.js` in its own block, for the two `SIZE_RING` reasons: `measure()`
+takes a fill/ink pair and there is no ink here, and **the registry's coverage
+guard matches `--tl-.*(pill|badge)`, so it structurally cannot see a
+`--tl-clash-*` token** — that blind spot, which the guard documents about itself,
+is why the band shipped unmeasured. A second assertion pins the core as still
+red, so collapsing the pair to one flat neutral (which would pass the casing
+test alone) does not go unnoticed.
+
+**2 · `setZoom` was defeating TimelineView's `React.memo`.** 6/n replaced a React
+state setter — stable across renders forever — with `setTimelineZoomManual`, a
+plain function declared in BookingApp's body, i.e. a new identity every render.
+CLAUDE.md's rule is explicit: function props on the memoized views must be App's
+stable `VA` wrappers, never inline closures. Every other one already was. The
+booking-form draft lives in BookingApp, so this re-ran the timeline's entire
+block layout on every keystroke — the exact failure recorded for `liveBookings`.
+Now `VA.onSetZoom`, stable by construction.
+
+**3 · A dismissed clash never re-armed.** The other two dismissal Sets get away
+with never pruning because their conditions are monotonic within a day: a late
+booking stays late. A double-booking is the opposite — it is the one
+notification whose whole point is that you go and FIX it, so it clears, and it
+can recur on the same pair. Until then the strip row, the only surface carrying
+the Assign action, never came back for that pair for the rest of the session
+while the block markers said the clash was live. `clashDismissed` is now pruned
+to the live pair ids, and only when the set actually shrinks, so it cannot
+re-enter.
+
+**4 · The strip cap used `vh` where the shell uses `dvh`.** The shell is `100dvh`
+in every branch; on a device with a dynamic browser toolbar `100vh` is the LARGER
+viewport, so a `40vh` cap is ~45–50% of what is on screen — loosest on exactly
+the tablets it exists to protect.
+
+**Verification:** build ✓ · **404 tests** ✓ (11 new on the band's casing) · lint
+0 · `check:style` OK. Live: casing measured at min 3.48:1 with the band clearing
+the label by 1.5px and the block border by 1px; zoom still 2× → minus → 1.5×
+surviving a date change; the dismiss → resolve → recur cycle driven through DEV
+end to end, with the section returning on recurrence; `40dvh` measured at 145px
+of a 363px viewport, still bounding 635px of content. All seeded test bookings
+deleted, DEV verified clean.
+
+One test-methodology trap worth carrying: the first dismiss→recur run read as a
+pass for the wrong reason. PATCHing a booking with `baseUpdatedAt: 0` is rejected
+by the per-`$id` CAS rule on an UPDATE (0 is only valid on a create), so nothing
+moved and every step of the cycle looked identical. **Read the stored
+`updatedAt` first** — a rejected write and an unchanged UI are indistinguishable
+from the outside.
+
