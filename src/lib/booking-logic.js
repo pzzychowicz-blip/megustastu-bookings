@@ -77,6 +77,35 @@ export function freeingSoon(bookings,todayStr,nowMins,windowMin){
   out.sort(function(a,b){return a.inMin-b.inMin;});
   return out;
 }
+// v17.12.0 (/code-review): what a booking SOUNDS like — the one source for every
+// spoken label in the app.
+//
+// It shipped as three hand-written copies: ListView's card, TimelineView's block
+// and PlanView's table, the first two byte-identical down to the
+// `size === 1 ? " guest" : " guests"` branch and the `"no table assigned"`
+// fallback. Adding a status, changing the pluralisation, or deciding a
+// three-table booking should not read "5A and 5B and 6" meant three edits, and
+// the app's own `STATUS_LABEL` note ("reuses the List card's vocabulary so the
+// two cannot drift") is the standing argument against that.
+//
+// PlanView is the reason for the option rather than a second function: its
+// subject is a TABLE, so it prefixes "Table 3, " and must not then repeat the
+// table at the end — but the rest of the sentence is this one exactly. That is a
+// parameter, not a different sentence; contrast `hourLabel`/`cutoffLabel` in
+// `time-grid.js`, which looked like copies and were genuinely two functions.
+//
+// Callers append their own state clauses (a block adds double-booked /
+// overstaying / running late) — those are properties of how a booking is being
+// DRAWN, not of the booking.
+export function describeBooking(b, opts){
+  const o=opts||{};
+  const out=[b.name, b.time, b.size+(b.size===1?" guest":" guests")];
+  // `tables: false` drops the clause entirely rather than saying "no table
+  // assigned" — on the floor plan the table is already the subject.
+  if(o.tables!==false) out.push(b.tables&&b.tables.length?"table "+b.tables.join(" and "):"no table assigned");
+  out.push(b.status);
+  return out.join(", ");
+}
 // v17.6.0: how long a COMPLETED party actually stayed, in minutes — or null when
 // that is not knowable. List renders the tag only when this is non-null.
 //

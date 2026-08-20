@@ -11706,3 +11706,969 @@ moved and every step of the cycle looked identical. **Read the stored
 `updatedAt` first** — a rejected write and an unchanged UI are indistinguishable
 from the outside.
 
+
+---
+
+## v17.12.0 — reachable and announced
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** see each entry. No persisted-data change and no Firebase
+console step for any of them.
+**Verification:** see each entry.
+
+The third version staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`; `01-accessibility.md` is the source of
+truth for every measurement quoted below). v17.10.2 took the findings that needed
+no decision and v17.11.0 the ones staff hit during service. This one takes the
+half of the app that has never been measured at all.
+
+**The framing that decides how to read these entries.** Quality here is bimodal,
+and the split falls exactly along *did anyone ever see it fail*. Measured on the
+same build, in the same moment: 6 of 6 rendered font sizes on the type scale, 1
+backdrop-blur of an allowed 4, 0 craft-detector findings, a 12.5:1 focus ring, no
+horizontal scroll at 320px — and 0 landmarks, 0 headings above `h2`, 0 live
+regions, 0 form fields with an accessible name, 0 bookings reachable by keyboard
+in any of the three views.
+
+That is not carelessness, and reading it that way produces the wrong fix. Every
+rule in `CLAUDE.md` was earned by an **observed** failure: a tablet froze, a
+sleeping laptop overwrote a night of bookings, a stray `*/` silently deleted a
+CSS rule. The method is exceptional at turning a visible defect into a permanent
+rule. Accessibility defects are the ones nobody sees — they cause no incident, so
+they generate no lesson, so they never entered the file that governs everything
+else. The fix is therefore not "be more careful"; it is to ship these and then
+**mechanise the standard**, which is what v17.14.0 exists to do.
+
+**Order note.** `ROADMAP.md` had this version and the modal stack the other way
+round, on the reasoning that `inert`, focus management and Escape would become
+properties of a stack entry and be added once rather than to fifteen
+hand-maintained lists. Re-checked against the code before branching, that
+coupling is weaker than it reads: `Overlay` already owns `role="dialog"`,
+`aria-modal`, the focus trap and focus restore (all four verified as passes by
+the review itself), the Escape chain is already correct — the stack would make it
+*maintainable*, not *correct* — and `inert` needs exactly one boolean, which
+already exists. So the accessibility work does not actually wait on the refactor,
+and it is the group with users behind it. Patryk confirmed the swap; the modal
+stack keeps its rationale intact as v17.13.0. The one piece of it that *is*
+genuinely entangled — `anyModal`, hand-written as a 17-term expression twice in
+`useKeyboardShortcuts.js`, which `inert` would have made a third copy of — comes
+forward into this version rather than being added to and then cleaned up.
+
+### 1/n · Landmarks, and the app's one `<h1>`
+
+**Files:** `src/App.jsx`
+**Behavioural change:** none visible. Four `<div>`s become `<header>`, `<nav>`,
+`<main>` and an `<h1>`; no style, no class and no layout changes.
+
+**The finding (M1, M2).** `main`, `header`, `nav`, `footer`, `section` and every
+equivalent `role`: **0 of each**, app-wide. So there was no skip mechanism and no
+programmatic regions — reaching the timeline meant traversing all the header
+chrome, every time, on every day change. Separately the app defined only `<h2>`,
+nine of them, all inside modals: the Timeline, List and Plan screens contained
+**zero headings**, and "MGT Bookings" was a styled `<div>`.
+
+The mapping is the whole change:
+
+- the header row → `<header>` (`banner`), which is the title block, the view
+  switcher, Walk-in / + New / Find and the connection dot;
+- the date stepper group → `<nav aria-label="Date">`, scoped to the three
+  controls that actually navigate (previous day, next day, the date field) and
+  deliberately **not** the whole row — Today, the waitlist badge and the summary
+  panel share that row and are not navigation;
+- the scroll region → `<main>`, which is the notification strip plus the view,
+  i.e. everything that is not pinned chrome. This is the one that pays for the
+  finding: it is a single jump past every control above it;
+- the restaurant name → `<h1>`.
+
+**The one trap.** `index.html` has no heading reset, so a bare `<h1>` would have
+arrived with UA margins and a UA font size. It carries `margin: 0` beside its
+existing inline `fontSize`/`fontWeight` for exactly the reason `ModalTitle`'s
+`<h2>` does — same problem, same answer, and worth keeping the two spellings
+identical.
+
+**Deliberately not done here:** a visible skip link. Landmarks are the
+programmatic bypass and cost nothing visually; a skip link is new chrome that
+appears on focus, which is a design decision rather than a defect fix. Noted in
+`ROADMAP.md` instead.
+
+**Verification:** measured live in DEV after the change — `main` 1, `header` 1,
+`nav` 1, `h1` 1, `h1` computed `margin: 0px` at its unchanged 22px, header box
+identical at 16,16 708×40. Build ✓, 404 tests ✓.
+
+### 2/n · Live regions — the app says things out loud for the first time
+
+**Files:** `index.html`, `src/components/StatusToasts.jsx`,
+`src/components/NotificationStrip.jsx`, `src/App.jsx`
+**Behavioural change:** none visible. Transient toasts and changes to the
+notification set are now announced; the strip becomes a named landmark.
+
+**The finding (C4, and 4.1.3 Status Messages is Level AA).** **Zero**
+`aria-live`, `role="status"`, `role="alert"` or `<output>` anywhere in `src/`, on
+any screen, in any modal — in an app that is *built around* a notification
+architecture: the strip, nine priority toast slots, Late / Overlap / WaitAvail /
+Clash rows, offline and write-error banners, "Booking saved", the undo pill. A
+screen-reader user received none of it.
+
+**The two surfaces needed opposite treatments, and the reason is the pitfall
+that kills most live regions.** A live region has to already BE in the DOM when
+its content changes; if the region and its first message arrive together, the
+insertion is not announced.
+
+- **`StatusToasts` gets `role="status"` on its container** and works
+  immediately, because that container has been **always-mounted since v15.8.0** —
+  for a completely unrelated reason (each `Toast` self-manages its
+  out-animation, so the container must outlive it). The layer's one-slot model
+  also happens to match `role="status"`'s implicit `aria-atomic`: what is read is
+  whatever is in the slot.
+- **`NotificationStrip` has the opposite shape.** It is mounted only while
+  `notifSections` is non-empty, so it arrives *with* its first message every
+  time — a live region inside it would announce nothing. So the strip itself is
+  **`role="region" aria-label="Notifications"`** (persistent content, a landmark
+  to jump to) and the announcement is a composed sentence carried by an
+  always-mounted hidden region in `App`.
+
+**Why the announcement is composed rather than borrowed from the lid.** Two
+things rule the lid out, and both are consequences of decisions that are right on
+their own terms. Every mark in the strip is `aria-hidden` — correct, they are
+decorative — so the collapsed tally reads as bare numbers: *"Notifications 2 1"*.
+And with several sections the lid deliberately says the generic word, so going
+from one section to two would announce *"Notifications"*, which is **less than it
+knew before**. `notifAnnounce` is built from the same `title`/`count` the strip
+renders, so the two cannot drift, and it changes only when the notification set
+does. One section reads *"Notification: Double-booked."*; several read
+*"3 notifications: Double-booked; Running late, 2; Waitlist — table free."*
+
+**Why the pane is not itself live:** dismissing one row would re-read all of
+them. Persistent content is a region; the CHANGE is the message.
+
+**New utility, `.mgt-sr-only`** (`index.html`) — visually hidden, present to
+assistive technology. Not `display:none` and not `visibility:hidden`; both remove
+the node from the accessibility tree, which is the one thing it must not do. It
+is deliberately **not** in `tests/stylesheet.test.js`'s `CRITICAL_SELECTORS`:
+that list's entry criterion is "does the rule fail SILENTLY when missing", and
+this one fails by printing a stray sentence across the top of the view.
+
+**Verification:** measured live in DEV on the seeded 2026-08-19 fixture — live
+regions 0 → 2; the hidden region computed `position:absolute`, `1×1`,
+`clip-path: inset(50%)`, `overflow:hidden`, reading *"Notification:
+Double-booked."*; strip exposes `region`/"Notifications"; screenshot confirms
+nothing visible changed. Build ✓, 404 tests ✓, lint 0 errors, `check:style` OK.
+
+### 3/n · Validation errors are announced, and attached to the field that caused them
+
+**Files:** `src/components/atoms.jsx`, `src/components/BookingFormModal.jsx`,
+`src/components/WalkinForm.jsx`, `src/App.jsx`
+**Behavioural change:** none visible. A save error is now announced, and the
+offending control carries `aria-invalid` pointing at the message.
+
+**The finding (C4's other half, plus 3.3.1).** Clicking Save on an empty booking
+form rendered "Customer name is required." — good, specific copy — with
+`role="alert"`, `aria-live`, `aria-invalid`, `aria-errormessage` and
+`aria-describedby` **all absent**, measured 0 of each. Nothing was spoken, and
+the invalid field was not marked. The review's own closing note on this: *the
+wiring is missing, not the writing.*
+
+**The alert region is always mounted.** An alert announces a change to its
+CONTENT, so a region that arrives already holding its first message is the same
+pitfall entry 2/n is about. `errorEl` is now an unconditional `<div
+role="alert">` whose child appears when there is an error — an empty div is a
+block box with no content, padding or margin, so it costs nothing in the footer
+fragment. Assertive rather than polite is right here: this fires in response to
+pressing Save, and the user is waiting on exactly this answer.
+
+**Attaching it to a field needed one new piece of state, and it is deliberately
+a sibling rather than a reshaped `error`.** `error` is read as a string at a
+dozen sites and passed to two components; which field it is about is additive
+information. `errorField` is set only inside `doSave`'s validation — five
+branches, three fields (`name`, `date`, `time`; the closed-day and outside-hours
+errors are about the date and the time respectively) — and **cleared at
+`doSave`'s entry**, so the form-level errors further down (capacity,
+displacement, "could not assign a table") leave it null without needing to say
+so. There is no field to point at for those, and claiming one would be worse
+than claiming none.
+
+**`Fld` carries it through the channel `req` already opened.** The atom's second
+callback argument grew from "the required attrs" to "the state attrs", so a call
+site that already spreads it gained validity for free and one that does not is
+untouched. Date and Time now spread it; Customer name already did.
+
+**The ordering inside `Fld` is the load-bearing part.** `aria-describedby` is
+emitted only alongside `aria-invalid`, and both only when the caller says the
+field is invalid — which in this form means the message is on screen, since
+`invalidField()` gates on `error` being truthy as well as on the name matching.
+A `describedby` aimed at an id that is not in the tree is a dangling reference,
+the exact failure `Overlay` refuses when it resolves its own accessible name
+from the DOM rather than taking a prop. Better no description than a broken one.
+
+`WalkinForm` gets the always-mounted alert wrapper and **no field marking** —
+its errors are all form-level (capacity, no table available), so there is
+nothing to point at.
+
+**Verification:** driven live in DEV. Before any error, the dialog already
+contained 1 `role="alert"` and 0 invalid fields — i.e. the region pre-exists its
+content, which is the property that makes it announce. Save with an empty name:
+alert reads "Customer name is required.", the name input carries
+`aria-invalid="true"` + `aria-describedby="mgt-form-error"`, and that id
+resolves to an element holding that exact text. Save with a name but no time:
+**exactly one** field invalid, and it is Time — so the discrimination is real
+and not "mark everything". Build ✓, 404 tests ✓, lint 0 errors, `check:style` OK.
+
+One process note: a booking was accidentally written to DEV during this
+verification, because a hot reload had reset `viewDate` to today between
+navigating to the fixture day and opening the form, so the draft's default date
+was not the one being looked at. Deleted through the app's own delete path and
+re-verified — 0 cards, 0 dialogs, nothing matching the test name anywhere in the
+document. The second test case was then chosen to be one that **cannot** save
+(an empty time), which is the right way to probe a validation path.
+
+### 4/n · The List's selection becomes real focus, and its cards become a list
+
+**Files:** `src/components/ListView.jsx`
+**Behavioural change:** ↑/↓ now moves DOM focus as well as the selection ring;
+Enter or Space on a focused card opens the edit form (matching the card's click
+and the existing `E` shortcut). One card is in the tab order at a time. Nothing
+moves on screen that did not move before.
+
+**The finding (C2, and List's half of C1) — and half of it was already good.**
+↑/↓ *did* move a selection and it *was* clearly drawn (a 3px accent ring,
+verified walking Marco Silva → Familia Delgado → Elena Prats). But
+`document.activeElement` stayed on `BODY` throughout, with no
+`aria-activedescendant` and no list semantics anywhere. So a sighted keyboard
+user was well served and a screen-reader user was told **nothing at all**: no
+focus moved, so nothing was announced. The pattern was 90% built.
+
+**Real focus, not `aria-activedescendant`.** The roadmap entry named the latter,
+but it is the wrong half of the pair here: `aria-activedescendant` requires a
+container that holds DOM focus and publishes which descendant is active, and
+this app's arrow keys are served by a **global window listener** that works with
+nothing focused at all. Moving actual focus fits the existing model exactly, needs
+no container to own anything, and is strictly more informative — the card is
+announced by the platform, with no ARIA relationship to keep in sync.
+
+**`role="listitem"`, and NOT `role="button"`.** This is the design decision in
+the entry. A button's children are **presentational** in ARIA, so labelling the
+card a button would hide Assign, the four status changers and Delete from
+assistive technology — trading one unreachable card for six unreachable
+controls, which is worse than the defect. `role="grid"`/`row` is the pattern
+built for rows-containing-controls, and it was the first choice, but a grid's
+children must be rows and the "Completed & cancelled" `Collapsible` sits between
+these cards and breaks that structure. So the card is a list item that happens to
+be focusable and operable, inside two real `role="list"` containers (two, because
+a list must contain its items directly and the finished cards live inside the
+Collapsible).
+
+**The accessible name is composed, not left to the DOM.** Read as raw text the
+card is a run of times, tags and button labels. It now announces
+*"Pau Estévez, 20:00, 4 guests, table 3, confirmed"* — the decision-shaped
+sentence. The status word is `b.status` itself, the same string `SBadge` prints
+two lines below, so spoken and printed vocabulary cannot drift.
+
+**One tab stop, not seventy.** Ten bookings × ~6 controls each would otherwise
+sit between the top of the list and anything after it, so the cards use a roving
+tab stop: the selected card holds it, or the first card when nothing is selected,
+so the list is always enterable. A closed fold is not a hazard — `Reveal`
+unmounts its children, so a finished card can never be an invisible tab stop.
+
+**Enter/Space is guarded by `e.target === e.currentTarget`**, which is the
+keyboard equivalent of the `stopped()` wrapper every control in this card already
+goes through. Without it, Enter on Assign would fire Assign *and* open the edit
+form — the exact failure mode v17.10.0 recorded when it made the card clickable.
+
+**A bug found in this change, worth recording because it is a documented lesson
+recurring.** Focus was first scheduled inside the same `requestAnimationFrame`
+as the scroll — and **rAF does not fire while a tab is hidden or occluded**,
+which CLAUDE.md already records from the Preview pane. The symptom was precise
+and confusing: the scroll worked (it also runs on 120/300/550/850ms timers) and
+the focus never did, on identical input. Focus is now attempted **synchronously**
+in the effect — the element exists by the time an effect runs — with one 120ms
+retry for a card still mounting behind a `SlideView` day change, and a `focused`
+flag so the scroll's repeat schedule cannot yank focus back four more times.
+**Anything gated on rAF needs a non-rAF path**, and "it works when I watch it" is
+exactly how this hides.
+
+**Verification:** driven live in DEV against the 12-booking 2026-08-19 fixture.
+`role="list"` "Bookings" with 8 items; **exactly 1** card in the tab order;
+labels composing correctly ("Grupo Ferrer, 19:00, 5 guests, table 1A and 1B,
+confirmed"). Two ↑/↓ presses: `document.activeElement` becomes the card `<div>`
+and tracks the selection (Jordi Lloret → Grupo Ferrer). Enter on the focused card
+opens **"Edit booking"** with that booking loaded. Enter on the nested Assign
+button opens **no** dialog, proving the guard. Screenshot confirms the 3px
+selection ring and centred scroll are unchanged. Build ✓, 404 tests ✓, lint 0
+errors, `check:style` OK.
+
+### 5/n · Timeline blocks and waitlist ghosts become real buttons
+
+**Files:** `src/components/TimelineView.jsx`
+**Behavioural change:** every block and ghost is now in the tab order and
+activates on Enter or Space. Nothing moves on screen.
+
+**The finding (C1, Timeline).** All 13 booking blocks and all 4 waitlist ghosts
+were `<div>` with `cursor: pointer`, `tabIndex -1` and no `role`. Measured, the
+tab order held **21 chrome controls and not one booking** — in the one app here
+that is explicitly keyboard-driven.
+
+**`role="button"` IS right here, unlike on the List card**, and the difference is
+worth stating because it is the same question with the opposite answer. ARIA
+makes a button's children presentational; the List card would have lost six real
+controls to that rule, but a timeline block is a **leaf** — its flags are
+decorative spans, and their meaning is folded into the accessible name instead.
+Nothing is lost.
+
+**The name carries the two states v17.11.0 made visible**, because they are the
+whole reason a host looks at a block twice: *"Pau Estévez, 20:00, 4 guests, table
+3, confirmed, double-booked"*. Colour, a border and a stripe say that to a
+sighted user; nothing said it at all otherwise. Overstaying and running-late are
+in there for the same reason. The waitlist ghost leads with **"Waiting:"** —
+dimming and a ⏳ are the only things separating it from a real booking, and
+neither survives being read aloud.
+
+**Enter and Space route through `handleClick`**, so they inherit its `didLong`
+guard for free and cannot fire the edit form on the tail of a press-and-hold.
+
+**This also closes finding m2 exactly as the review predicted it would.**
+`index.html`'s `button, [role="button"] { user-select: none }` matched nothing in
+the app, and the review's note was: *"if C1 is fixed by adding `role="button"` to
+blocks, this rule starts applying — which is what you'd want."* It does, and it
+is: measured `user-select: none` on the blocks now, which is correct for a
+surface whose label is not text anyone wants to select and which opens a popup
+under a finger that is still pressed.
+
+**Verification:** live in DEV — 14 blocks, all `role="button"`, all tabbable,
+labels composing correctly, and **both** halves of the seeded clash announcing
+"double-booked". Enter on a focused block opens "Edit booking" with that booking
+loaded. Focus-ring room measured against the nearest clipping ancestor (the
+horizontal scroller, `overflow: auto hidden`): 35px above, far more below,
+against the 4px the ring needs; horizontally the scroller scrolls rather than
+clips and carries the Fix-3 8px padding. Build ✓, 404 tests ✓, lint 0 errors.
+
+### 6/n · The floor plan becomes reachable — and needs its own focus ring
+
+**Files:** `src/components/FloorGlyphs.jsx`, `src/components/PlanView.jsx`,
+`index.html`, `src/App.jsx`, `tests/stylesheet.test.js`
+**Behavioural change:** every table on the Plan is now in the tab order, named,
+and activates on Enter or Space. A keyboard-focused table draws the app's focus
+ring; a tapped one does not.
+
+**The finding (C1, Plan).** 27 floor-plan shapes carried `cursor: pointer`, the
+`<svg>` had `tabIndex -1`, and there were **0** focusable descendants. The floor
+plan was pointer-only in its entirety.
+
+**Operability is gated on `onClick`, not on the existing `live` flag.** The
+editor passes `onPointerDown` to DRAG a table, and a drag has no keyboard
+equivalent to offer — announcing a button that does nothing on Enter is worse
+than staying silent. `live` (which is either handler) still governs the hover
+halo, where it is the right condition.
+
+**The name comes from the caller**, because the glyph knows a table id and a
+rectangle while only `PlanView` knows whether the table is free, blocked or
+holding a party — and on this view the FILL *is* the state, so without it a
+screen-reader user meets a room of identical "Table 5A" buttons. It describes the
+table at the SELECTED time, exactly like the fill it mirrors:
+*"Table 3, Pau Estévez, 20:00, 4 guests, confirmed"*.
+
+**Then the focus ring, which is the part worth reading.** Making something
+focusable without a visible focus indicator trades one WCAG failure for another,
+and SVG broke the app's single focus rule in **two** independent ways. Both were
+measured live; neither is inferable from the source:
+
+1. **A browser paints no `outline` on a `<g>`.** An inline
+   `outline: 2px solid #fff` on the group rendered nothing at all; the identical
+   declaration on its `<rect>` child rendered a clean ring. So the ring goes on
+   `.mgt-glyph-shape` — which is also where it belongs, on the table's
+   silhouette rather than around its chairs and label, and riding the rotation of
+   a rotated table because it is drawn in the shape's own coordinate space.
+2. **`:focus-visible` never matches an SVG element in Chrome.** Two consecutive
+   *real* Tab presses left the focused `<g>` matching `:focus` and **not**
+   `:focus-visible`, with `document.querySelectorAll(":focus-visible")` empty. A
+   rule keyed on it would never have fired — the worst kind of fix, one that
+   reads correctly in the source and does nothing on screen.
+
+Plain `:focus` was the obvious fallback and is wrong: a real mouse click **does**
+focus the group (verified), so every table tap during service would leave a white
+ring behind it. Hence **`data-kbd`**, a two-line `:focus-visible` stand-in — set
+on `Tab`/arrow keydown, cleared on `pointerdown`, both in the capture phase, and
+deliberately narrow (typing a letter into a field is not a request for focus
+rings). It lives in `App.jsx` rather than the boot script because that script is
+**pinned by a CSP hash**, and two lines there would silently kill it in
+production if the hash were not regenerated.
+
+`[data-kbd] .mgt-glyph:focus` is added to `tests/stylesheet.test.js`'s
+`CRITICAL_SELECTORS`: a missing focus ring is precisely that list's entry
+criterion — it fails silently, with no error and no visual hole.
+
+**Verification:** live in DEV. 13 tables, all `role="button"`, all `tabindex="0"`,
+all named; scrubbing the tape to 20:00 produced the occupied labels
+("Table 1A, Grupo Ferrer, 19:00, 5 guests, confirmed" ×2 for the joined pair,
+"Table 6, Nuria Bosch, 19:30, 2 guests, pending"), matching the fills in the same
+screenshot. A **real** Tab press set `data-kbd="1"` and put
+`outline: rgb(255,255,255) solid 2px` at `2px` offset on the focused shape —
+confirmed visually. A **real** click then cleared `data-kbd` and left **0**
+outlined shapes while the table still held DOM focus, which is exactly
+`:focus-visible`'s contract. Enter on a focused table opened that table's own
+popover ("Table 5A · No bookings on this table today · Walk-in here"). Build ✓,
+405 tests ✓ (1 new), lint 0 errors, `check:style` OK.
+
+### 7/n · `inert` behind a modal — and the one `anyModal` it needed
+
+**Files:** `src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`
+**Behavioural change:** while any modal is open, the header, the date-nav row and
+`<main>` are `inert` — unreachable by pointer, tab and screen-reader browse mode
+alike. Nothing changes visually.
+
+**The finding (M6).** With the booking form open there were 16 focusables inside
+it and **21 still outside**, `body` had no `aria-hidden` and `#root` no `inert`.
+The Tab trap was already correct (verified with a real key press — Tab from
+"Save booking" wrapped back inside), but a screen reader in **browse mode** does
+not use Tab: it walks the document, and the entire page behind the dialog was
+still there to be walked.
+
+**`inert` goes on three siblings, not one wrapper.** The modals render inline in
+`BookingApp`'s tree as siblings of `<main>` inside the width-clamp div, so there
+is no single ancestor that contains the app and excludes the dialogs. Wrapping
+the three chrome regions in a new div would have been the obvious move and is the
+wrong one: in the `shellFixed` layout that div is a flex column whose children
+carry `flexShrink: 0` / `flex: 1`, and inserting a wrapper re-parents all three.
+Three attributes, no structural change.
+
+**The announcer had to move out of `<main>` first, and this is the trap in this
+commit.** `inert` removes a subtree from the **accessibility tree** as well as
+from the tab order — so the live region added in 2/n would have gone SILENT for
+exactly as long as any modal was open. The things it announces (a failed write,
+the connection dropping, a double-booking appearing) are precisely the ones a
+modal must not suppress. It is now a sibling after `</main>`.
+
+**One `anyModal`, brought forward from v17.13.0.** The same 17-term expression
+was written out **twice** inside `useKeyboardShortcuts`, and `inert` would have
+made it a third copy — three hand-maintained lists that every new modal has to be
+added to, with nothing to catch the omission but the bug. It is now computed once
+in `App`, beside the state it reads, and passed in the ctx. Coerced to a real
+boolean deliberately: half these states hold an object or an id, and `inert` is a
+boolean DOM attribute. When the modal stack lands this becomes
+`stack.length > 0` and every reader is already pointed at one place — which is
+why doing it now was better than adding to the mess and cleaning it up after.
+
+It is declared **above** the `useKeyboardShortcuts` call, and the comment there
+says why: the ctx object is built mid-render, and a `const` read before its
+declaration is a TDZ `ReferenceError` that blanks the whole app behind a generic
+message. That has now happened twice in this codebase (v17.5.0's `activeView`,
+v17.11.0's `isViewToday`), and neither lint nor `npm run build` catches it.
+
+**Verification:** live in DEV. No modal: nothing inert. Booking form open: header,
+date-nav and `<main>` all carry `inert`; the dialog is **not** inside an inert
+subtree and still holds 16 focusables; the announcer is **not** inert. A
+background header button was asked to take focus while the modal was open and
+**could not**. Escape closed the dialog and removed `inert` from all three
+regions. Build ✓, 405 tests ✓, lint 0 errors, `check:style` OK.
+
+### 8/n · The connection dot announces its popover — and m1 was already fixed
+
+**Files:** `src/components/ConnectionStatus.jsx`
+**Behavioural change:** none visible. The dot reports that it has a popup and
+whether it is open; the popover is a named dialog.
+
+**The finding (M7).** The dot opens a popover holding the connection status, the
+signed-in email, the device list, "Reconnect now" and **Log out** — and carried
+`aria-expanded: null` **before and after opening**, with no `aria-haspopup`. To
+assistive technology, the one control that can sign you out looked like a
+decorative dot. Its `aria-label` already tracked the connection state and still
+does; this adds the disclosure half.
+
+`role="dialog"` with a name, and deliberately **no `aria-modal` and no focus
+trap** — it is a non-modal popover that closes on outside-click and Escape, and
+claiming a modality it does not enforce would be the same class of lie `Overlay`
+refuses when it resolves its accessible name from the DOM rather than taking a
+prop. The role sits on a wrapper inside `Presence`, which forwards only
+`className` and `style`.
+
+**m1 was checked and needed no work, which is the point of checking.** The review
+measured the notification lid's focus ring with **1px** of room inside its
+nearest `overflow` ancestor where it needs 4 — but that was measured against
+**v17.10.1**, and v17.10.2 removed the `overflow: hidden` from the strip pane for
+exactly this reason. Re-measured live now: the nearest clipping ancestor is the
+`<main>` scroller, and the lid has **13px above and 32.5px on each side**. Fixing
+it again would have meant inventing a defect. **A finding is a measurement with a
+date on it** — anything from a review that predates a release has to be re-run
+before it is acted on.
+
+**m2 needed no work either**, and was closed by 5/n rather than by a change of
+its own: `[role="button"] { user-select: none }` matched nothing in the app until
+the timeline blocks took that role.
+
+**Verification:** live in DEV — `aria-expanded` reads `"false"` closed and
+`"true"` open, `aria-haspopup="dialog"` on the trigger, the popover exposes
+`role="dialog"` named "Connection and account" with `aria-modal` absent. Lid
+focus-ring clearance re-measured as above. Build ✓, 405 tests ✓, lint 0 errors,
+`check:style` OK.
+
+### 9/n · CLAUDE.md and ROADMAP for the accessibility group
+
+**Files:** `CLAUDE.md`, `ROADMAP.md`
+**Behavioural change:** none — documentation.
+
+`CLAUDE.md` gains an **Accessibility** section under the UI rules, carrying the
+seven decisions this version had to make and the reasoning that is not
+recoverable from the diff: a live region must pre-exist its content;
+`role="button"` makes its children presentational so it must never sit on a
+container of controls; announce a selection by moving real focus rather than with
+`aria-activedescendant`, because this app's arrow keys are a global listener;
+SVG breaks the focus rule twice; `inert` removes a subtree from the
+accessibility tree, not just the tab order; `aria-describedby` must never dangle;
+and anything gated on rAF needs a non-rAF path. Five of the seven cost a
+measurement to discover and none is visible in source. Five matching rows were
+added to the Gotchas table, the file-structure block notes the nine changed
+files, and the test count moved to 405.
+
+`ROADMAP.md` records the order change (this version and the modal stack swapped,
+with the reasoning and Patryk's confirmation), renumbers the stack to v17.13.0
+with a note that `anyModal` already landed, and opens a **Follow-up from
+v17.12.0** section with the three things deliberately left out: a visible skip
+link (landmarks are the bypass; a skip link is new chrome and therefore a design
+decision), an announcement for the day's own content, and `role="grid"` for List
+if the finished fold is ever restructured.
+
+**One closing note on method, since it recurred in three of the eight commits.**
+Every defect this version fixed was found by *measuring the live DOM*, and three
+of the fixes were themselves wrong on first attempt in ways that source review
+could not catch: focus scheduled inside a rAF that never fires in a hidden tab;
+a focus ring keyed on a pseudo-class that never matches SVG; and a live region
+that would have gone silent inside `inert`. **In accessibility the failure mode
+is silence**, and silence looks exactly like success in a diff.
+
+### 10/n · Fix: content is focusable by KEYBOARD, not by pointer
+
+**Files:** `src/components/FloorGlyphs.jsx`, `src/components/TimelineView.jsx`,
+`CLAUDE.md`
+**Behavioural change:** tapping a floor-plan table or a timeline block no longer
+scrolls the view. Reported by Patryk against 6/n with a screen recording.
+
+**The regression this version shipped, and the mechanism.** Making the bookings
+focusable is the whole point of 5/n and 6/n — but a browser focuses an element on
+**mousedown**, and *scrolling it into view is part of focusing*. So the element
+travels out from under the finger between press and release: the `click` lands
+somewhere else, and the popover or the edit form never opens. Measured live:
+
+| Surface | Scroll caused by pressing one item |
+|---|---|
+| Plan table | **40px** vertical |
+| Timeline block | **1000–2000px** horizontal |
+| List card | 297px vertical |
+
+The Plan is the acute case and the one reported: 40px is more than half a table,
+so the pointer can land on a different table or on nothing, and the view lurches
+under the hand on every tap.
+
+**The fix is `onMouseDown` → `preventDefault()`**, which is precise about what it
+suppresses: **only the focus** (plus native drag-start and text selection,
+neither of which applies to a shape whose label is already `user-select: none`).
+It does **not** cancel the `click`, and it does **not** touch pointer events —
+`pointerdown` has already fired by then, so PlanView's pan, its touch long-press,
+and TimelineView's 6px mouse-drag threshold are all untouched. Keyboard focus is
+completely unaffected: Tab still reaches every block and table and still draws the
+ring.
+
+**`ListView`'s card deliberately does not get this.** `preventDefault` on
+mousedown also kills text selection, and staff select the phone number off that
+card to ring a party — the behaviour `endsASelection` exists to protect. Its click
+opens a modal that covers the scroll, and being left scrolled to the card you just
+edited is reasonable rather than wrong.
+
+**Why the review and the whole verification pass missed it: a synthetic click is
+not a finger.** The Browser tool's mousedown and mouseup are back-to-back, so the
+focus-scroll lands *after* the click and everything looks correct — the same
+family of trap as v17.10.1's `:active` measurements. It needs the ~100ms gap of a
+real press. What finally isolated it was not clicking at all: calling `.focus()`
+on a table and reading `main.scrollTop` before and after.
+
+**Verification:** live in DEV, real clicks. Plan — table popover opens with
+`scrollTop` delta **0** (was 40) and focus stays where it was. Timeline — the edit
+form opens for the clicked block with a horizontal scroll delta of **0** across
+five blocks (was 1000–2000). Keyboard unchanged: a real Tab press still walks
+table to table with `data-kbd` set and the 2px ring on the shape. Build ✓, 405
+tests ✓, lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (11/n) — fix: `role="button"` armed a rule that had matched nothing
+
+**Files:** `index.html` (the two press-feedback rules), `tests/stylesheet.test.js`.
+
+Patryk, on the same screen recording: *"In Plan this jumping move still exists.
+The fix didn't resolve the problem."* He was right, and 10/n was treating a
+different defect that happened to share a symptom. The focus-scroll it fixed is
+real and measured — it just is not what the video shows.
+
+**What the video actually shows, frame by frame at 50ms.** At 3.40s the pointer
+presses table 2, sitting in its slot. At 3.50s table 2 is at the **top-left corner
+of the plan**, clipped by the room's edge. At 3.60s it is halfway back. At 3.80s
+it is home and the pointer has moved on, with no popover ever opened. One table
+moves; its neighbours do not; it travels to the plan **origin** and returns, over
+about the length of one `--t-tap`.
+
+That trajectory is a signature, and CLAUDE.md already names it — in the note that
+exists to explain why `.mgt-glyph` had to be invented:
+
+> `.mgt-hover-scale` cannot be used AT ALL. It sets a CSS `transform`, and a CSS
+> transform on an element REPLACES its `transform` presentation attribute — the
+> glyph's own `translate(x,y) rotate(r)` — so the table would teleport to the
+> plan's origin.
+
+**The door it came through was `role="button"`.** Commit 6/n gave `TableGlyph`'s
+`<g>` a button role so the floor plan could be reached by keyboard. `index.html`
+holds three rules keyed on `[role="button"]`, and until this version **all three
+matched nothing whatsoever** — the seven-pass review recorded exactly that as
+finding **m2**, and read it as harmless housekeeping that would come good:
+
+> if C1 is fixed by adding `role="button"` to blocks, this rule starts applying —
+> which is what you'd want.
+
+For a `<div>` block that is true. For an SVG `<g>` two of the three are the
+teleport. `[role="button"]:active { transform: scale(0.96) }` does not shrink a
+table; it deletes the table's position. `button, [role="button"] { transition:
+transform }` is what makes it *fly* rather than jump, in both directions.
+
+Measured directly, with the presentation attribute intact and one CSS declaration
+applied: a table at **(554, 243)** settles at **(313, 176)**, and its computed
+transform reads `matrix(0.96, 0, 0, 0.96, 0, 0)` — a bare scale, the
+`translate(70,250)` gone. That is the video.
+
+It also explains the second half of the report cleanly, and better than 10/n did:
+the click target leaves from under the pointer *during the press*, so `click`
+resolves on the parent and the day-queue popover never opens. Left-click stops
+working on the floor plan for as long as the rule is armed — which is to say,
+always.
+
+**The fix is `:not(.mgt-glyph)` on the two transform rules**, and it is written
+into the selectors rather than onto the element. `.mgt-nopress` was the tempting
+one-word alternative and is the wrong word: it means *"this control is inert;
+animating a press would be a lie about what the tap did"*, and a plan table is
+neither inert nor without feedback — it has the halo on hover and the brightness
+dim on press, which is the entire reason `.mgt-glyph` exists as a third
+affordance. Putting the exclusion beside the rules it disarms is also where the
+next person giving an SVG element a button role will be reading.
+
+`user-select: none` — the third `[role="button"]` rule — is deliberately left
+applying. Suppressing an OS text selection under a long press is wanted on a
+floor-plan table for precisely the reason v17.10.1 wanted it on a timeline block.
+
+**Nothing else regressed on the specificity change.** `[role="button"]:not(
+.mgt-glyph):active:not(.mgt-nopress)` is (0,4,0) where it was (0,3,0), which now
+*ties* `.mgt-hover-scale:active:not(:disabled):not(.mgt-nopress)` instead of
+losing to it — and the hover-lift rule is declared later, so it still wins and a
+lifted button still presses from 1.08 to 1.02. Timeline blocks and waitlist ghosts
+carry both classes and are unchanged in both pointer modes.
+
+**A new stylesheet guard, shaped like the two v17.10.1 ones.** Any rule whose
+prelude contains `[role="button"]` and whose body sets `transform` — or a
+`transition` naming it — must exclude `.mgt-glyph`. It is a **declaration**
+assertion for the same reason those were: `[role="button"]` already appears in
+several preludes, so a selector-matching list cannot see the `:not()` half being
+"simplified" away. 406 tests.
+
+**Verification, and one honest limitation.** Live in DEV with gestures ON — which
+matters, because the whole of 10/n's verification ran with **Plan zoom & pan
+switched off** on this device, and that is a second reason it looked clean. A real
+click on a table now holds the glyph at exactly `(576, 197)` across **45
+consecutive `requestAnimationFrame` samples** spanning the entire press and
+release, and the popover opens. The limitation: the negative control could not be
+run. Re-injecting the offending rule and clicking again produced *no* movement
+either — because, per CLAUDE.md's own gotcha, **synthetic input does not set the
+UA `:active` state**, and CDP's `dispatchMouseEvent` is explicitly named there as
+one of the things that cannot. So the causal chain is: the selector matched the
+glyph before and does not now (verified against the live CSSOM), and the
+declaration it applied moves the table along exactly the path the recording shows
+(measured). The recording is the negative control. Build ✓, 406 tests ✓, lint 0
+errors, `check:style` OK.
+
+---
+
+### v17.12.0 (12/n) — `/code-review`: the toast live region was inert behind every modal
+
+**Files:** `src/App.jsx`.
+
+`inert` was on `<main>`, and `<main>` also contains `StatusToasts` — the app's
+live region for transient status, and the one this version had just designated as
+such. `inert` removes a subtree from the **accessibility tree** as well as from
+the tab order, so for as long as any modal was open every toast went unannounced:
+the connection dropping, a write failing, "⟳ Syncing the latest data…". Those are
+precisely the events App's own comment says a modal must not suppress — the note
+explaining why `notifAnnounce` sits *outside* `</main>`. The same finding, one
+level down, in the same commit that wrote the rule.
+
+It was not only silent. The **Undo pill lives in that layer**, so arming an undo
+and then opening Settings left a visible, unclickable Undo — a working control
+that stopped working, on this branch.
+
+**The fix moves `inert` off `<main>` and onto the two CONTENT children**: the
+notification strip's wrapper, and a new wrapper around `SlideView`. `<main>` is
+now just the scroll region it always was. The reasoning is the same one that
+placed `notifAnnounce`: a floating status layer pinned *above* the dialog is not
+"the page behind the dialog", which is the only thing `inert` describes.
+
+The `SlideView` wrapper carries `flex:1; minHeight:0; display:flex;
+flexDirection:column` in the `shellFixed` layout and is load-bearing there rather
+than decorative — `SlideView`'s own `fill` resolves against its PARENT, so a plain
+block in between would collapse the definite-height chain and the panes would size
+to content.
+
+**Verified live, both halves.** With Settings open: `main` no longer inert, the
+toast layer **not** inert, and the strip, the timeline blocks and the header all
+inert — i.e. exactly the intended split. Layout unchanged: with the strip open the
+Reveal measures 98px, the strip 88px at y=150, and the toast layer anchors at
+y=248 — 150 + 98, the same relationship as before. An A/B against the unmodified
+file in the identical state returned identical geometry. Build ✓, 406 tests ✓,
+lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (13/n) — `/code-review`: the roving tab stop could name an unmounted card
+
+**Files:** `src/components/ListView.jsx`.
+
+`rovingId` was resolved against `day` — every booking on the date — but the cards
+that actually EXIST are `active`, plus `finished` only while the "Completed &
+cancelled" fold is open, because `Collapsible` wraps its body in a `Reveal` and
+`Reveal` unmounts once shut. Name an unmounted card and every rendered card keeps
+`tabIndex={-1}`, so the List has **no tab stop at all** — the exact opposite of
+the guarantee the line was written to provide.
+
+Two keystrokes away: select a card with ↑/↓, press **C** to complete it, and the
+selection follows it into the closed fold. And reachable with none at all on a day
+whose bookings are all completed or cancelled — a state `ROADMAP` already records
+as real, under the empty-day inconsistency.
+
+The comment was half right and that is what hid it: it correctly reasoned that a
+closed fold cannot leave an *invisible tab stop*, and then stopped, without asking
+what happens to the only tab stop there is.
+
+`reachable = showFinished ? day : active` is the whole fix. When every booking is
+finished and the fold is shut, `reachable` is legitimately empty and `rovingId` is
+null — correct, because there is no card to point at, and the fold's own header
+button is still in the tab order, so the list stays enterable.
+
+**Verified live**, on the seeded 2026-08-19 fixture (8 active, 5 finished): with a
+completed booking selected and the fold open, that card holds the stop; closing
+the fold moves it to the first active card. Before the fix the same sequence left
+zero cards at `tabIndex 0`. Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (14/n) — `/code-review`: `role="button"` on a container of controls
+
+**Files:** `src/components/TimelineView.jsx`.
+
+The timeline block carries an interactive child — the manual-assign handle — and
+commit 5/n put `role="button"` on the block. ARIA makes a button's children
+**presentational**, so that hid the one control inside it. It is the exact rule
+this same version wrote into `CLAUDE.md` after refusing to make the List card a
+button for the identical reason, broken two files away, and the code comment
+justifying it ("its flags are decorative spans, not buttons") was true of the
+flags and false of the handle four elements further down.
+
+**The role moved down one level**, onto a wrapper holding everything except the
+handle. The handle is now a sibling of that wrapper and a **real `<button>`** —
+it had been a bare `<span onClick>` with `title` as its only name, so it has never
+been reachable or even announced; moving the role off the block is what made
+fixing that possible rather than merely non-harmful.
+
+Splitting it is arithmetically free: the wrapper takes the `1 1 0%` the name group
+used to take against the handle, and the name group keeps that basis inside it, so
+the grow/shrink distribution is unchanged. The absolutely-positioned children (the
+status overlay, the note dog-ear) stay OUTSIDE the wrapper — they are painted
+against the block's own box and have nothing to do with its name.
+
+**One measured trap on the way.** A `<button>` resolves `min-width` against its
+BORDER box where a `<span>` resolves it against its content box, so the handle
+silently narrowed from **42px to 28** — a third off a tap target, invisible in
+review and invisible in a screenshot. `boxSizing: "content-box"` restores it.
+`box-sizing` is the one property a UA button stylesheet changes that a visual
+reset (`background/border/font/color`) does not cover.
+
+**Verified live** against a geometry snapshot taken before the change: 12 of 14
+blocks byte-identical in child offsets and widths, and the other two differ only
+in that their note dog-ear is now enumerated outside the wrapper — its own
+position is unchanged at (0,0) with the pencil at (1,1). Handle back at 42px on
+every block. Functionally: Enter on a block opens **Edit booking**; the Assign
+button opens **Manual table assignment** and does not also open the form
+(`stopPropagation` intact); a real mouse click on a block leaves `scrollLeft` at
+1700 and `activeElement` on BODY, then opens the form. Build ✓, 406 tests ✓,
+lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (15/n) — `/code-review`: the error-clearing effect never watched the name
+
+**Files:** `src/App.jsx`.
+
+The effect that drops a stale save error depended on `time`, `size`, `date`,
+`preference` and `customDur` — every field except the one the app's most common
+error is about. So "Customer name is required." stayed on screen while the user
+typed a perfectly good name.
+
+Survivable while it was only a banner. Not once 3/n turned it into an **assertion
+about the control**: the field then keeps `aria-invalid="true"` and an
+`aria-describedby` aimed at that message for the entire time it is being
+corrected — and this is the one field where *required* is the only thing that can
+be wrong, so the assertion is guaranteed false the moment the first character
+lands. One word in a dependency array.
+
+**Verified live:** Save on an empty form gives `role="alert"` carrying "Customer
+name is required.", the name input `aria-invalid="true"` and
+`aria-describedby="mgt-form-error"` resolving to a real element, plus
+`aria-required="true"` and a properly associated label. Typing a single character
+clears all three, and the alert region stays mounted and empty — which is what
+lets the *next* error announce. Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (16/n) — `/code-review`: the List card's exemption traded one break for another
+
+**Files:** `src/components/ListView.jsx`.
+
+Timeline and Plan answer the focus-scroll with `preventDefault` on mousedown.
+10/n deliberately withheld it from the List card, because `preventDefault` also
+kills text selection and staff select the phone number off that card to ring a
+party — the behaviour `endsASelection` exists to protect.
+
+That reasoning is right about `preventDefault` and wrong about the conclusion. It
+left pointer focus enabled, so pressing on the phone number **scrolls the card up
+to 297px before the selection drag has begun** — the text travels out from under
+the finger, and the selection covers a different run or the press lands on
+another card. The exemption protected the feature from one break by handing it
+another.
+
+**Focusing the card OURSELVES, with `preventScroll`, has both.** The browser's
+focusing steps are a no-op on an element that is already focused, so its default
+action has nothing left to scroll; and because nothing is prevented, the selection
+drag proceeds exactly as before. Skipped when the press is on a nested control —
+those take their own focus and stealing it would break the button.
+
+**Verified live**, with the counterfactual measured rather than assumed. On a card
+sitting 32px below the fold: a plain `.focus()` scrolls **32px**,
+`focus({preventScroll:true})` scrolls **0**, and a real mouse press on the card's
+name leaves `scrollTop` at 0 at mousedown, at the next frame and at +80ms, then
+opens the edit form. Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (17/n) — `/code-review`: the focus guard latched on the attempt, not the result
+
+**Files:** `src/components/ListView.jsx`.
+
+`focusOnce` set `focused = true` immediately *before* calling `el.focus()`, so a
+focus that did not take disabled the 120ms retry that exists for exactly that
+case. The concrete one: a card inside an `inert` subtree, where `focus()` is a
+silent no-op — the old form turned that into a permanent one, and the failure is
+invisible, since the scroll still lands and only the announcement is missing.
+
+The `!el` branch two lines above already had the rule right, returning above the
+assignment. This is the same rule applied one line further down:
+`if (document.activeElement === el) focused = true`.
+
+Build ✓, 406 tests ✓.
+
+---
+
+### v17.12.0 (18/n) — `/code-review`: one card lookup, not two
+
+**Files:** `src/components/ListView.jsx`.
+
+`focusOnce` re-derived the selected card with the same
+`querySelector('[data-flip-id="…"]')` expression `go()` had built four lines
+above, so the contract "a card is identified by its flip id" was asserted twice in
+one effect — and the scroll and the focus could be pointed at different elements
+by a change to either copy. `data-bk`'s note in `TimelineView` is the precedent
+for that identity changing. One `findCard()` closure, two callers.
+
+Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (19/n) — `/code-review`: `Fld` ignored `invalid` on its composite path
+
+**Files:** `src/components/atoms.jsx`.
+
+`Fld` has two shapes — `children` as a function for a single control, `children`
+as elements for a composite one (a stepper pair, a chip row) — and 3/n built the
+state attributes only for the first. Passing `invalid` to a composite field was
+therefore **silently ignored**: no error, no lint warning, no test, and a field
+that reports VALID to assistive technology while a red banner sits above it.
+
+Nothing does that today, which is precisely why it had to be fixed now rather than
+found later — the props are on the public signature with nothing marking them
+single-only, so the next person wiring validation onto party size or preferred
+tables would have shipped it in good faith.
+
+On the group path they land on the wrapper, which is the element already carrying
+the role and the name; `aria-invalid` and `aria-describedby` are global, so a
+`group` may hold them. `aria-required` stays single-only on purpose — it belongs
+on a control rather than a wrapper, and that path already signals required with
+the `*` in its label.
+
+Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (20/n) — `/code-review`: one source for what a booking sounds like
+
+**Files:** `src/lib/booking-logic.js`, `src/components/ListView.jsx`,
+`src/components/TimelineView.jsx`, `src/components/PlanView.jsx`,
+`tests/booking-logic.test.js`.
+
+The spoken label shipped as three hand-written copies — the List card, the
+timeline block and the floor-plan table. The first two were byte-identical down to
+the `size === 1 ? " guest" : " guests"` branch and the `"no table assigned"`
+fallback, so adding a status or changing the pluralisation meant three edits, and
+the app's own `STATUS_LABEL` note ("reuses the List card's vocabulary so the two
+cannot drift") is the standing argument against exactly that.
+
+`describeBooking(b, opts)` in `booking-logic.js`. **PlanView is why it takes an
+option rather than becoming a second function**: its subject is a TABLE, so it
+prefixes `"Table 3, "` and must not then repeat the table at the end — but the
+rest of the sentence is this one exactly. That is a parameter, not a different
+sentence. Worth stating because `time-grid.js` records the opposite case, where
+`hourLabel` and Settings' `cutoffLabel` looked like copies and unifying them would
+have shipped a bug: **check whether the apparent copies are the same function
+before merging them, and whether the differences are parameters before splitting.**
+
+The state clauses stay at the call site, and correctly so — `double-booked`,
+`overstaying`, `running late` describe how a block is being DRAWN right now, not
+what the booking is.
+
+Deliberately **byte-identical output**, so the extraction is provably a no-op.
+Verified live on all three surfaces: List and Timeline match the strings captured
+before the change character for character (including the clash pair, which reads
+"Pau Estévez, 20:00, 4 guests, table 3, confirmed, double-booked"), and Plan with
+the scrubber at 20:00 reads "Table 3, Pau Estévez, 20:00, 4 guests, confirmed" —
+the table named once. Six new tests pin the format, the singular, both
+no-table forms, the multi-table join and the `tables: false` path. Build ✓,
+**412 tests** ✓, lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (21/n) — `/code-review`: CLAUDE.md and ROADMAP for the review round
+
+**Files:** `CLAUDE.md`, `ROADMAP.md`.
+
+Doc-only. Three of the nine fixes contradicted paragraphs this same version had
+written, so the record has to move with the code or it becomes a false map:
+
+- **`inert` marks the page behind the dialog, not `<main>`.** The accessibility
+  section said `inert` goes on three siblings including `main`; it now says why
+  that was wrong and what the test actually is.
+- **The timeline block is not a leaf.** The `role="button"` rule claimed it was,
+  in the same paragraph that refused the role for the List card on identical
+  grounds. Corrected, with the general fix (role on an inner wrapper, nested
+  control as its sibling) and the new half nobody had written down: **a role
+  subscribes an element to every shared rule written for that role.**
+- **`Fld` carries validity on both shapes**, and `ListView`'s roving stop is
+  resolved against rendered cards.
+
+Plus `describeBooking` in the `booking-logic.js` entry, and the test count, which
+had drifted to 406 in the same session that took it to 412.
+
+`ROADMAP.md` records that all ten `/code-review` findings were fixed on the branch
+rather than deferred, and gains one genuinely new item: `describeBooking` joins
+tables with `" and "`, which is right for two and wrong for three — a one-line
+change now that the sentence has one source, and deliberately not made in the
+extraction commit, whose whole claim was byte-identical output.

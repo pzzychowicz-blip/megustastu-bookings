@@ -54,6 +54,7 @@ const CRITICAL_SELECTORS = [
   ".mgt-dot-pulse",                   // the "busy" toast dot
   ".mgt-ac-row",                      // row/card/panel tint — AND their resting fill
   ".mgt-glyph",                       // floor-plan table hover halo + press dim
+  "[data-kbd] .mgt-glyph:focus",      // the plan table's keyboard ring (:focus-visible does not match SVG)
   ".mgt-tlghost",                     // the seated ghost's lockstep hover
   ".mgt-group-hover",                 // multi-table group lift
   ".mgt-ac-row:active",               // the touch tint on card/row/panel surfaces
@@ -214,5 +215,27 @@ describe("index.html stylesheet", () => {
       .map((m) => m[2]);
     expect(rooted.some((b) => /-webkit-tap-highlight-color:\s*transparent/.test(b)),
       "Android's blue tap-highlight rectangle is back (no :root/html suppression)").toBe(true);
+  });
+
+  // v17.12.0 — a DECLARATION-shaped guard again, for the same reason as the two
+  // above: `[role="button"]` is in CRITICAL_SELECTORS-adjacent territory and
+  // already appears in several preludes, so a selector list cannot see the
+  // `:not(.mgt-glyph)` half being "simplified" away.
+  //
+  // What it protects: a CSS `transform` REPLACES an SVG element's `transform`
+  // presentation attribute. `TableGlyph` positions every floor-plan table with
+  // `translate(x,y) rotate(r)` on a `<g>`, so a shared transform rule reaching
+  // it does not scale the table — it teleports the table to the plan origin and
+  // takes the click target out from under the pointer. Shipped for one commit
+  // in v17.12.0; measured at (554,243) -> (313,176).
+  it("keeps transform rules off the floor-plan glyph", () => {
+    const offenders = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
+      .filter((m) => m[1].includes('[role="button"]'))
+      .filter((m) => /(^|[;\s])transform\s*:/.test(m[2]) || /transition\s*:[^;]*transform/.test(m[2]))
+      .filter((m) => !m[1].includes(".mgt-glyph"))
+      .map((m) => m[1].trim().replace(/\s+/g, " "));
+    expect(offenders,
+      "a [role=\"button\"] rule applies a transform without excluding .mgt-glyph — " +
+      "this teleports every floor-plan table to the plan origin").toEqual([]);
   });
 });

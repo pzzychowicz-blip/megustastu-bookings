@@ -31,7 +31,7 @@
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC } from "../lib/constants";
-import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins, describeBooking } from "../lib/booking-logic";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
@@ -158,14 +158,63 @@ export const ListView = memo(function ListView({
   useEffect(function () {
     if (!focusReq || !selectedId) return;
     const behavior = document.documentElement.dataset.motion === "reduce" ? "auto" : "smooth";
-    function go() {
+    // /code-review: ONE lookup, used by both the scroll and the focus below.
+    // The `data-flip-id` selector was written out twice in this effect, so the
+    // contract "a card is identified by its flip id" was asserted in two places
+    // and a change to it could move the scroll and the focus to different
+    // elements. (`data-bk`'s note in TimelineView is the precedent for that
+    // identity changing.)
+    function findCard() {
       const root = rootRef.current;
-      const el = root ? root.querySelector('[data-flip-id="' + selectedId + '"]') : null;
+      return root ? root.querySelector('[data-flip-id="' + selectedId + '"]') : null;
+    }
+    function go() {
+      const el = findCard();
       if (el) el.scrollIntoView({ block: "center", behavior: behavior });
     }
+    // v17.12.0: the selection also takes REAL DOM focus, once, on the first
+    // pass. Before this, ↑/↓ moved a clearly-drawn 3px ring while
+    // `document.activeElement` stayed on BODY — so a sighted keyboard user was
+    // well served and a screen-reader user was told nothing at all: no focus
+    // moved, nothing was announced. Moving actual focus is what makes the card
+    // speak, and it needs no ARIA at all beyond the card being focusable.
+    //
+    // ONCE, not on the repeat schedule: those repeats exist to re-target a
+    // SCROLL through two animations, and re-focusing four more times would
+    // fight anything the user tabbed to in the meantime. Hence the flag.
+    //
+    // `preventScroll` because `go()` owns the scrolling — a browser's own
+    // focus scroll lands the card at the edge of the viewport, and `go()` wants
+    // it centred.
+    //
+    // NOT scheduled through the rAF below, and that is the point rather than a
+    // detail: rAF does not fire at all while the tab is hidden or occluded
+    // (CLAUDE.md's own gotcha, earned in the Preview pane), so hanging focus
+    // off it makes it silently conditional on the tab being visible. Caught
+    // exactly that way here — the scroll fired on its timers and the focus
+    // never did. The element exists by the time an effect runs, so the first
+    // attempt is synchronous; the 120ms retry covers a card that is still
+    // mounting behind a SlideView day-change.
+    let focused = false;
+    function focusOnce() {
+      if (focused) return;
+      const el = findCard();
+      if (!el || !el.focus) return;
+      el.focus({ preventScroll: true });
+      // /code-review: latch on SUCCESS, not on the attempt. `focused = true`
+      // used to be set BEFORE the call, which disabled the 120ms retry in
+      // exactly the case the retry is for — a focus that does not take. The
+      // `!el` path already got this right by returning above the assignment;
+      // this is the same rule one line further down. A card inside an `inert`
+      // subtree is the concrete case: `focus()` is a silent no-op there, and
+      // the old form turned that into a permanent one.
+      if (document.activeElement === el) focused = true;
+    }
+    focusOnce();
+    const focusRetry = setTimeout(focusOnce, 120);
     const raf = requestAnimationFrame(go);
     const timers = [120, 300, 550, 850].map(function (ms) { return setTimeout(go, ms); });
-    return function () { cancelAnimationFrame(raf); timers.forEach(clearTimeout); };
+    return function () { cancelAnimationFrame(raf); clearTimeout(focusRetry); timers.forEach(clearTimeout); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusReq]);
 
@@ -178,6 +227,29 @@ export const ListView = memo(function ListView({
   if (!day.length) {
     return <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={onWalkin} />;
   }
+
+  // v17.12.0: exactly ONE card is in the tab order at a time (the roving
+  // tab-stop pattern), because 10 bookings x ~6 controls each would otherwise
+  // put ~70 stops between the top of the list and anything after it. The
+  // selected card holds it; with nothing selected the first card does, so the
+  // list is always enterable from the keyboard.
+  //
+  // /code-review: resolved against the cards that are actually RENDERED, not
+  // against `day`. `Reveal` unmounts the "Completed & cancelled" fold once
+  // shut, so a finished booking is a real element only while `showFinished` is
+  // on — and naming an unmounted card leaves EVERY rendered card at -1, i.e.
+  // the list stops being reachable by keyboard at all. That is the exact
+  // opposite of what this line exists to guarantee, and it was two keystrokes
+  // away: select a card, press C to complete it, and the selection follows it
+  // into the closed fold. A day whose bookings are all completed or cancelled
+  // (ROADMAP already records that day as reachable) did it with no keystrokes.
+  //
+  // The early return above guarantees `day` is non-empty; `reachable` can still
+  // be empty, when every booking is finished and the fold is shut.
+  const reachable = showFinished ? day : active;
+  const rovingId = (selectedId && reachable.some(function (x) { return x.id === selectedId; }))
+    ? selectedId
+    : (reachable[0] ? reachable[0].id : null);
 
   function renderCard(b) {
         // v14 p1 (Issue 2 fix): end-time label is pinned to the scheduled plan
@@ -364,6 +436,64 @@ export const ListView = memo(function ListView({
                page under a finger that just tapped is the bug it was added to
                avoid. */
             onClick={(e) => { if (endsASelection(e.currentTarget)) return; onSelect(b.id); onEdit(b); }}
+            /* /code-review (v17.12.0): the card is focusable now, and the
+               browser focuses on mousedown — which SCROLLS the card into view,
+               measured at up to 297px. Timeline and Plan answer that with
+               `preventDefault`, and this card deliberately cannot: that also
+               kills text selection, and staff select the phone number off this
+               card to ring a party (the behaviour `endsASelection` exists to
+               protect). Which left the exemption trading one broken interaction
+               for another — press on the number to start a drag and the text
+               travels 297px out from under the pointer before the selection has
+               begun.
+               Focusing it OURSELVES with `preventScroll` is the way to have
+               both: the browser's focusing steps are a no-op on an element that
+               is already focused, so there is nothing left to scroll, and
+               mousedown's default action is untouched so the selection drag
+               proceeds normally.
+               Skipped when the press is on a nested control — those take their
+               own focus, and stealing it here would break the button. */
+            onMouseDown={(e) => {
+              if (e.target.closest("button")) return;
+              e.currentTarget.focus({ preventScroll: true });
+            }}
+            /* v17.12.0 — reachable and announced.
+
+               `role="listitem"`, NOT `role="button"`, and that is the whole
+               design decision. A button's children are PRESENTATIONAL in ARIA,
+               so labelling this card a button would hide Assign, the status
+               changers and Delete from assistive technology — trading an
+               unreachable card for six unreachable controls, which is strictly
+               worse than what it replaces. `role="grid"`/`row` is the pattern
+               built for rows-containing-controls, but a grid's children must be
+               rows, and the "Completed & cancelled" Collapsible sits between
+               these cards and breaks that structure. So the card stays a list
+               item that happens to be focusable and operable.
+
+               The accessible name is composed rather than left to the DOM: read
+               as raw text this card is a run of times, tags and button labels,
+               and "Marco Silva, 20:00, 4 guests, table 5A, seated" is what a
+               host actually needs to hear before deciding whether to act on it.
+               The status word is `b.status` itself — the same word SBadge
+               prints two lines below — so the spoken and printed vocabulary
+               cannot drift.
+
+               Enter and Space match the card's own click, and mirror the `E`
+               shortcut that has opened the edit form since v14.4.0. The
+               `target === currentTarget` guard is what keeps Enter on a nested
+               button (Assign, Delete) from ALSO opening the form — the keyboard
+               equivalent of the `stopped()` wrapper every control in here
+               already goes through. */
+            role="listitem"
+            tabIndex={rovingId === b.id ? 0 : -1}
+            aria-label={describeBooking(b)}
+            onKeyDown={(e) => {
+              if (e.target !== e.currentTarget) return;
+              if (e.key !== "Enter" && e.key !== " ") return;
+              e.preventDefault();
+              onSelect(b.id);
+              onEdit(b);
+            }}
             style={{
               /* The resting fill goes through a CUSTOM PROPERTY rather than
                  `background`, because an inline `background` beats a stylesheet
@@ -452,7 +582,10 @@ export const ListView = memo(function ListView({
 
   return (
     <div ref={rootRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div ref={flipRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* v17.12.0: a real list, so the cards are list items and the count is
+          announced. Two lists rather than one, because the finished cards live
+          inside the Collapsible and a `list` must contain its items directly. */}
+      <div ref={flipRef} role="list" aria-label="Bookings" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {active.map(renderCard)}
       </div>
       {finished.length > 0 ? (
@@ -463,7 +596,7 @@ export const ListView = memo(function ListView({
           onToggle={onToggleFinished}
           style={{ marginBottom: 0 }}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div role="list" aria-label="Completed and cancelled bookings" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {finished.map(renderCard)}
           </div>
         </Collapsible>

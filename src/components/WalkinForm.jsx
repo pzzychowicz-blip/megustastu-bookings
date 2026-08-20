@@ -305,18 +305,25 @@ export function WalkinForm({
   // kitchen-busy suggestion panel (wKitchenSection) stays in the scrolling body.
   const footerEl=(
     <>
-      {error ? (
-        <div style={{
-          color: "var(--danger-text)", fontSize: T.body,
-          padding: "10px 14px",
-          background: "var(--danger-bg)",
-          borderRadius: R.card,
-          border: "1px solid var(--danger-border)",
-          marginBottom: 14
-        }}>
-          {error}
-        </div>
-      ) : null}
+      {/* v17.12.0: always-mounted alert region — an alert announces a change to
+          its CONTENT, so a region that arrives already holding its message is
+          the live-region pitfall (see notifAnnounce in App). The walk-in form's
+          errors are all form-level (capacity, no table), so there is no field
+          to mark invalid here, unlike the booking form. */}
+      <div role="alert">
+        {error ? (
+          <div style={{
+            color: "var(--danger-text)", fontSize: T.body,
+            padding: "10px 14px",
+            background: "var(--danger-bg)",
+            borderRadius: R.card,
+            border: "1px solid var(--danger-border)",
+            marginBottom: 14
+          }}>
+            {error}
+          </div>
+        ) : null}
+      </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button
           className="mgt-hover-scale"

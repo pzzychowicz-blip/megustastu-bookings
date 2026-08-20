@@ -42,7 +42,7 @@ import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC } from "../lib/constants";
-import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
@@ -502,11 +502,37 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
     });
   }
 
+  // v17.12.0: what the block SAYS. Unlike the List card this is a leaf control
+  // — its flags are decorative spans, not buttons — so `role="button"` is both
+  // correct and safe here, and ARIA's children-presentational rule costs
+  // nothing because every mark's meaning is folded into this string instead.
+  //
+  // It carries the two states v17.11.0 made visible, since they are the whole
+  // reason a host looks at this block twice: a clash means two parties are
+  // already promised one table, and late is the prediction that leads to one.
+  // /code-review: the identity half comes from `describeBooking` — the one
+  // source ListView's card and PlanView's table read too. Only the STATE
+  // clauses are local, and correctly so: they describe how this block is being
+  // drawn right now, not what the booking is.
+  const a11yLabel =
+    describeBooking(b) +
+    (clash ? ", double-booked" : "") +
+    (warn ? ", overstaying" : "") +
+    (late === "warn" ? ", running late" : late === "noshow" ? ", not arrived" : "");
+
   return (
     <div
       className="mgt-hover-scale mgt-blk"
       data-flip-id={flipId || undefined}
       data-bk={b.id}
+      /* v17.12.0 fix: focusable by KEYBOARD, not by pointer. The browser
+         focuses on mousedown and focusing scrolls the element into view — and
+         this scroller is the TIMELINE, so the measured jump was 1000–2000px
+         SIDEWAYS on a single click. `preventDefault` here suppresses only the
+         focus; it does not cancel the click and does not touch pointer events,
+         so the 6px drag threshold and the touch hold are untouched (both are
+         armed on `pointerdown`, which has already fired). Tab still focuses. */
+      onMouseDown={(e) => { e.preventDefault(); }}
       onMouseEnter={() => setGroupHover(true)}
       onMouseLeave={() => setGroupHover(false)}
       onClick={handleClick}
@@ -589,6 +615,35 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
           Now the left is identity and never varies (time · name · size) and
           everything else is a fixed-width rail on the right. The name is the
           only element that shrinks, which is the correct thing to lose. */}
+      {/* v17.12.0 (/code-review): `role="button"` lives HERE, on everything
+          except the assign handle — not on the block itself.
+          ARIA makes a button's children PRESENTATIONAL, and this block CONTAINS
+          a control: the manual-assign handle below. Putting the role on the
+          outer element hid that control from assistive technology, which is the
+          precise rule this same version wrote into CLAUDE.md after refusing to
+          make the List card a button for the identical reason. The first pass
+          justified it with "its flags are decorative spans, not buttons" — true
+          of the flags, false of the handle four elements further down.
+          Splitting it costs nothing in layout: this wrapper takes the same
+          `1 1 0%` the name group used to take against the handle, and the name
+          group keeps that basis inside it, so the grow/shrink distribution is
+          arithmetically what it was. The absolutely-positioned children (the
+          status overlay, the note dog-ear) stay OUTSIDE it — they are painted
+          against the block's own box and have nothing to do with its name.
+          Enter and Space go through `handleClick`, so they inherit its
+          `didLong` guard and cannot fire the edit form on the tail of a
+          press-and-hold. */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={a11yLabel}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          handleClick();
+        }}
+        style={{ flex: "1 1 0%", minWidth: 0, height: "100%", display: "flex", alignItems: "center" }}
+      >
       {timeChip}
       {/* Name + size as ONE `flex: 1` group, and the `1 1 0%` basis is
           load-bearing rather than shorthand convenience. With a `0 1 auto`
@@ -693,18 +748,36 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
           (Patryk): at 1px against `--blk-rule`'s 0.3 white it disappeared into
           the saturated fills, so the handle read as part of the flag rail rather
           than as a separate control. */}
-      <span
+      </div>
+      {/* v17.12.0 (/code-review): a real <button>, and OUTSIDE the button-role
+          wrapper above. It was a bare `<span onClick>` — no role, no tab stop,
+          `title` its only name — so it has never been reachable or even
+          announced; moving the role off the block is what makes fixing that
+          possible at all. `type="button"` because this is not a form.
+          The reset (`background:none;border:0;font:inherit;color:inherit`) is
+          what keeps a UA button from repainting the handle: everything visual
+          here is unchanged from the span, `borderLeft` included. */}
+      <button
+        type="button"
         onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
         title="Assign tables"
+        aria-label={"Assign tables for " + b.name}
         style={{
           padding: "0 6px", cursor: "pointer", position: "relative",
           marginLeft: 4, flexShrink: 0,
-          borderLeft: "2px solid var(--blk-rule)",
+          background: "none", border: 0, borderLeft: "2px solid var(--blk-rule)",
+          font: "inherit", color: "inherit",
+          // A <button> resolves `min-width` against its BORDER box where the
+          // <span> resolved it against its content box, so without this the
+          // handle silently narrows from 42px to 28 — measured. `box-sizing` is
+          // the one property a UA button stylesheet changes that the visual
+          // reset above does not cover.
+          boxSizing: "content-box",
           height: "100%", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 28
         }}
       >
         <AssignIcon size={IC.control} />
-      </span>
+      </button>
     </div>
   );
 }
@@ -892,6 +965,21 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
       // that just appeared, not on the proposal it replaced.
       className="mgt-hover-scale mgt-appear mgt-blk"
       data-wg={g.id}
+      /* v17.12.0: a ghost is a proposal you can accept, so it is a button like
+         the blocks around it. Its name says WAITING first — the dimming and the
+         ⏳ are the only things separating it from a real booking visually, and
+         neither survives being read aloud. */
+      role="button"
+      tabIndex={0}
+      aria-label={"Waiting: " + g.name + ", " + g.size + (g.size === 1 ? " guest" : " guests")
+        + ", " + g.time + (g.resh ? ", fits after re-optimising" : "") + ". Book this table."}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        onBook(g.id);
+      }}
+      /* Same as TimelineBlock above: keyboard-focusable, not pointer-focusable. */
+      onMouseDown={(e) => { e.preventDefault(); }}
       onMouseEnter={() => setGroupHover(true)}
       onMouseLeave={() => setGroupHover(false)}
       onClick={() => onBook(g.id)}

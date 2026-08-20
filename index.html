@@ -880,6 +880,41 @@
       }
       .mgt-glyph:active { filter: brightness(0.86); }
 
+      /* v17.12.0: the focus ring for a floor-plan table. The glyph became
+         focusable this version (Plan was 27 shapes with `cursor: pointer` and
+         ZERO focusable descendants), and giving something focus without giving
+         it a visible ring trades one WCAG failure for another. Two things about
+         SVG made this different from every other control in the app, and both
+         were MEASURED live rather than assumed:
+
+         1. `outline` does not paint on a `<g>`. An inline
+            `outline: 2px solid #fff` on the group rendered nothing; the same
+            declaration on its `<rect>` child rendered a clean ring. So the ring
+            goes on `.mgt-glyph-shape` — which is also the better place for it,
+            landing on the table's silhouette rather than around its chairs and
+            label, and riding the rotation on a rotated table because it is
+            drawn in the shape's own coordinate space.
+
+         2. `:focus-visible` never matches an SVG element at all in Chrome. Two
+            consecutive REAL Tab presses left the focused `<g>` matching
+            `:focus` and not `:focus-visible`, with `document.querySelectorAll(
+            ":focus-visible")` empty. A rule keyed on it would simply never have
+            fired — the worst kind of fix, one that looks right in the source.
+
+         Hence `[data-kbd]`, a two-line stand-in for `:focus-visible` scoped to
+         this one case (set in App.jsx, not in the CSP-pinned boot script). Plain
+         `:focus` was the alternative and is wrong: a real mouse click DOES focus
+         the group — verified — so every table tap during service would leave a
+         white ring behind it.
+
+         Same colour, same 2px, same 2px offset as every other control: this is a
+         different PLACE for the ring, not a different ring. */
+      .mgt-glyph:focus { outline: none; }
+      :root[data-kbd] .mgt-glyph:focus .mgt-glyph-shape {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+
       /* ── v17.8.0: a timeline block's ink scheme ──────────────────────────────
          A block sets `color` inline from BLOCK_INK[status] and its text
          children inherit it. Every fill currently takes white (see index.html's
@@ -921,7 +956,36 @@
          glossy tablet screen. Paint-only, so it never reflows neighbours.
          The reduce-motion block below zeroes the transition (the scale still
          applies instantly, which is feedback without motion). */
-      button, [role="button"] {
+      /* ── v17.12.0 fix: NEITHER of these rules may reach a floor-plan table ──
+         `[role="button"]` matched NOTHING in this app until v17.12.0 gave
+         TableGlyph a button role for keyboard reach — the seven-pass review's
+         own finding m2 predicted precisely that ("if C1 is fixed by adding
+         role=button to blocks, this rule starts applying"), and read it as a
+         good thing. For a `<div>` block it is. For an SVG `<g>` it is the
+         v17.9.1 lesson arriving through a door nobody was watching.
+
+         A CSS `transform` REPLACES an SVG element's `transform` PRESENTATION
+         ATTRIBUTE. So `scale(0.96)` on a table does not shrink it — it deletes
+         its `translate(x,y) rotate(r)` and teleports it to the plan origin.
+         Measured: a table sitting at (554,243) jumped to (313,176), and the
+         `transition` here made it FLY there and back over 145ms, for as long
+         as the button was held. The click then resolved on the parent, because
+         its target had left from under the pointer. That is the whole reported
+         bug — the plan lurches and left-click stops working — and it is why
+         `.mgt-glyph` exists as a THIRD affordance in the first place (see its
+         block above: a halo on hover, a brightness dim on press, because
+         neither of the app's transform- and background-based answers can touch
+         an SVG shape).
+
+         `.mgt-nopress` is deliberately NOT the fix. That class means "this
+         control is inert; animating a press would be a lie about what the tap
+         did" — and a plan table is neither inert nor without feedback. The
+         exclusion lives HERE, on the rules it disarms, so the next person
+         giving an SVG element a button role meets it before they ship it.
+         `user-select: none` above deliberately still applies: suppressing a
+         long-press text selection is wanted on a table exactly as it is on a
+         timeline block. */
+      button, [role="button"]:not(.mgt-glyph) {
         /* Same duration AND same curve as .mgt-hover-scale's transform, so a
            button that has both reads as one material rather than two easings
            fighting. (The class wins this declaration on hover-scale elements
@@ -930,7 +994,7 @@
         transition: transform var(--t-tap) var(--ease-out);
       }
       button:active:not(:disabled):not(.mgt-nopress),
-      [role="button"]:active:not(.mgt-nopress) {
+      [role="button"]:not(.mgt-glyph):active:not(.mgt-nopress) {
         transform: scale(0.96);
       }
       /* A hover-lifted button presses from its lifted size, so the dip stays
@@ -996,6 +1060,25 @@
       }
       /* The ring is the only focus signal; never let a UA default double it. */
       :focus:not(:focus-visible) { outline: none; }
+
+      /* v17.12.0: visually hidden, but PRESENT to assistive technology — the
+         carrier for live-region text that has no on-screen equivalent. It is
+         not `display:none` and not `visibility:hidden`: both remove the node
+         from the accessibility tree, which is exactly the thing this must not
+         do. The clip pair is deliberate — `clip-path` is the modern rule and
+         `clip` the legacy one, and a 1px box with `overflow:hidden` is what
+         keeps a screen reader treating the text as rendered.
+
+         If this rule ever goes missing the text becomes VISIBLE, which is why
+         it is not in tests/stylesheet.test.js's CRITICAL_SELECTORS — that list
+         is for rules that fail SILENTLY, and a stray sentence across the top of
+         the timeline is the opposite of silent. */
+      .mgt-sr-only {
+        position: absolute; width: 1px; height: 1px;
+        padding: 0; margin: -1px; overflow: hidden;
+        clip: rect(0 0 0 0); clip-path: inset(50%);
+        white-space: nowrap; border: 0;
+      }
 
       /* v17.8.0: hairlines BETWEEN the notification strip's sections. An
          adjacent-sibling rule rather than a borderTop prop on each section, so

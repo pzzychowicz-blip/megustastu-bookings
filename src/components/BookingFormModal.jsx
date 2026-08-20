@@ -51,8 +51,15 @@ import { useDeferredCompute } from "../hooks/useDeferredCompute";
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+// v17.12.0: the id the error message renders under and the invalid field points
+// at. A module const, not an export — a plain const export from a component
+// file trips `react-refresh/only-export-components`, which is a lint ERROR and
+// a hard CI gate. Only one modal is ever mounted at a time, so a fixed id
+// cannot collide; useId() would be the answer if that stopped being true.
+const FORM_ERROR_ID = "mgt-form-error";
+
 export function BookingFormModal({
-  form, setForm, editId, error,
+  form, setForm, editId, error, errorField,
   bookings, liveBookings, tableBlocks,
   autoOptimizer, isMobile,
   onSave, onSavePending, onSaveConfirm, onClose, onClearSwap, onBookAgain,
@@ -578,8 +585,24 @@ export function BookingFormModal({
     );
   })();
 
-  const errorEl=error?<div
-    style={{color:"var(--danger-text)",fontSize: T.body,padding:"10px 14px",background:"var(--danger-bg)",borderRadius:R.card,border:"1px solid var(--danger-border)",marginBottom:14}}>{error}</div>:null;
+  // v17.12.0: the message is announced, and the field that caused it points at
+  // it. Two separate wirings, and they need opposite mount strategies.
+  //
+  // The `role="alert"` wrapper is ALWAYS rendered, even with no error. An alert
+  // is announced when its CONTENT changes, and a region that arrives already
+  // holding its first message is the live-region pitfall this version keeps
+  // running into (see notifAnnounce in App). An empty div is a block box with
+  // no content, padding or margin, so it costs nothing visually — verified
+  // against the footer layout, which is a fragment.
+  //
+  // Assertive rather than polite because this fires in response to pressing
+  // Save: the user is waiting on exactly this answer.
+  const errorEl=<div role="alert">{error?<div
+    id={FORM_ERROR_ID}
+    style={{color:"var(--danger-text)",fontSize: T.body,padding:"10px 14px",background:"var(--danger-bg)",borderRadius:R.card,border:"1px solid var(--danger-border)",marginBottom:14}}>{error}</div>:null}</div>;
+  // Gated on `error` as well as the field name, so the id handed to
+  // aria-describedby can only ever name an element that is on screen.
+  function invalidField(name){return !!error&&errorField===name;}
 
   const resetDurBtn=form.customDur?<button
     key="rd"
@@ -656,7 +679,7 @@ export function BookingFormModal({
 
   // ── The form modal itself ──
   return (
-    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}>{function(fid,reqAttrs){return <div style={{position:"relative"}}><input
+    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true} invalid={invalidField("name")} describedBy={FORM_ERROR_ID}>{function(fid,reqAttrs){return <div style={{position:"relative"}}><input
             id={fid}
             {...reqAttrs}
             value={form.name}
@@ -684,14 +707,16 @@ export function BookingFormModal({
             onBlur={function(){setPhoneFocus(false);}}
             placeholder="+34 600 000 000"
             className="mgt-hover-scale"
-            style={inp()} />{phoneDropdown}</div>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date">{function(fid){return <input
+            style={inp()} />{phoneDropdown}</div>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date" invalid={invalidField("date")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
             id={fid}
+            {...attrs}
             type="date"
             value={form.date}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}
             className="mgt-hover-scale"
-            style={inp()} />;}}</Fld><Fld label="Time">{function(fid){return <input
+            style={inp()} />;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
             id={fid}
+            {...attrs}
             type="time"
             value={form.time}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});}}

@@ -145,7 +145,14 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
   const ordered = orderedIds.map(function (id) { return byId[id]; }).filter(Boolean);
 
   return (
-    <div style={{
+    /* v17.12.0: a named region, so the strip is a landmark an assistive-tech
+       user can jump straight to instead of arrowing into it from the header.
+       It is deliberately NOT a live region: the strip is persistent content,
+       and marking the whole pane live would re-read every section each time one
+       is dismissed or the body is expanded. The announcement is a composed
+       one-sentence summary, carried by an always-mounted hidden region in App —
+       see notifAnnounce there for why it cannot live in this file. */
+    <div role="region" aria-label="Notifications" style={{
       backgroundColor: top.tint || "var(--app-overlap-bg)",
       // The strip is recoloured by whatever is WORST right now, so its tint and
       // tone change under the reader when a notification arrives or resolves —

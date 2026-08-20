@@ -267,7 +267,7 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.11.0",
+  version:"17.12.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -743,6 +743,19 @@ function BookingApp({uid}){
   const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
   const [error, setError] = useState("");
+  // v17.12.0: WHICH field the current error is about, or null for a form-level
+  // one (capacity, displacement, "could not assign a table"). It exists so the
+  // offending control can carry `aria-invalid` and point at the message with
+  // `aria-describedby` — the error copy in this app is already specific
+  // ("Customer name is required."), it simply was not attached to anything.
+  //
+  // A sibling state rather than a reshaped `error`: `error` is read as a string
+  // at a dozen sites and passed to two components, and the field is additive
+  // information. Set ONLY inside doSave's validation, cleared at its entry — so
+  // a form-level error later in the same pass correctly leaves it null. Every
+  // reader also gates on `error` being truthy, which makes a stale value
+  // unreachable rather than merely unlikely.
+  const [errorField, setErrorField] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
   const [confirmReshuffle, setConfirmReshuffle] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(null);
@@ -811,7 +824,16 @@ function BookingApp({uid}){
   const swAppliedRef = useRef(false);
   const [settingsTab, setSettingsTab] = useState("general");
   useEffect(function(){formRef.current=form;},[form]);
-  useEffect(function(){if(error) setError("");},[form.time,form.size,form.date,form.preference,form.customDur]);
+  // /code-review (v17.12.0): `form.name` belongs in this list and never was.
+  // The dep list is what clears a stale error, and the name field was missing
+  // from it — so after "Customer name is required." the banner stayed up while
+  // the user typed a perfectly good name. Survivable while it was only a
+  // banner; not once v17.12.0 turned it into an ASSERTION about the control,
+  // because the field then keeps `aria-invalid="true"` and an
+  // `aria-describedby` pointing at that message for the whole time it is being
+  // corrected, which is the one field where "required" is the only thing that
+  // can be wrong.
+  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.time,form.size,form.date,form.preference,form.customDur]);
   // ── Time tick hook ──────────────────────────────────────────────────────────
   // Real-time clock for seated duration. 15s tick. Drives liveBookings, the
   // overlapWarnings derivation, applySeatedShift inside doSave, updateStatus's
@@ -1178,6 +1200,41 @@ function BookingApp({uid}){
     document.body.style.overflow=shellFixed?"hidden":"auto";
     return function(){document.body.style.overflow="auto";};
   },[shellFixed]);
+  // v17.12.0: `data-kbd` — a two-line stand-in for `:focus-visible`, and ONLY
+  // for the floor plan's tables.
+  //
+  // Those became focusable this version, and two measured facts about SVG made
+  // the app's one focus rule unusable there: a browser paints no `outline` on a
+  // `<g>`, and `:focus-visible` never matches an SVG element in Chrome at all
+  // (two consecutive REAL Tab presses left the focused group matching `:focus`
+  // and not `:focus-visible`). Plain `:focus` is not the answer either — a mouse
+  // click focuses the group too, so every table tap during service would leave a
+  // white ring behind it.
+  //
+  // So the modality is tracked here and read by ONE rule in index.html. It lives
+  // in App rather than in the boot script because that script is pinned by a
+  // CSP hash, and adding two lines there would silently break the whole script
+  // in production if the hash were not regenerated (tests/csp.test.js exists
+  // because that has already happened once).
+  //
+  // Capture phase, so it records the modality before anything can stop
+  // propagation. Deliberately narrow: only the keys that MOVE focus set the
+  // flag — typing a letter into a form field is not a request for focus rings.
+  useEffect(function(){
+    const root=document.documentElement;
+    function onKey(e){
+      const k=e.key||"";
+      if(k==="Tab"||k.indexOf("Arrow")===0) root.dataset.kbd="1";
+    }
+    function onPointer(){ delete root.dataset.kbd; }
+    window.addEventListener("keydown",onKey,true);
+    window.addEventListener("pointerdown",onPointer,true);
+    return function(){
+      window.removeEventListener("keydown",onKey,true);
+      window.removeEventListener("pointerdown",onPointer,true);
+      delete root.dataset.kbd;
+    };
+  },[]);
   // v17.2.0: per-device Timeline zoom/follow settings (see readTlSettings above).
   // Stored one value per key; a value equal to its default removes the key.
   // Lowering maxZoom clamps followZoom/defaultZoom (and the live zoom) with it.
@@ -1969,18 +2026,21 @@ function BookingApp({uid}){
     // duration gate, flash condition) sees the effective status uniformly.
     const so=statusOverrideRef.current;
     const f=so?Object.assign({},formRef.current,{status:so}):formRef.current;
+    // v17.12.0: cleared here, set only by the field-specific branches below, so
+    // the form-level errors further down leave it null without having to say so.
+    setErrorField(null);
     try{
-      if(!f.name||!f.name.trim()){setError("Customer name is required.");return;}
+      if(!f.name||!f.name.trim()){setErrorField("name");setError("Customer name is required.");return;}
       // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
       // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
-      if(!f.date){setError("Please set a date.");return;}
-      if(!f.time){setError("Please set a time.");return;}
+      if(!f.date){setErrorField("date");setError("Please set a date.");return;}
+      if(!f.time){setErrorField("time");setError("Please set a time.");return;}
       const sm=toMins(f.time);
       // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
       // viewed day, and block a closed day outright.
       const fh=hoursFor(f.date);
-      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
-      if(sm<fh.open*60||sm>fh.close*60){setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
+      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setErrorField("date");setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
+      if(sm<fh.open*60||sm>fh.close*60){setErrorField("time");setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
       const size=Number(f.size)||2;
       const dur=f.customDur||getDur(size);
       const cleanPhone=cleanPhoneOf(f.phone);
@@ -2262,6 +2322,29 @@ function BookingApp({uid}){
     // skipDate just stops a REGENERATION it no longer needs to do.
     if(ok){flash();armUndo(undoDelta(bookings,postDel),id,"delete",false);}}
 
+  // ── v17.12.0: is ANY modal open? ───────────────────────────────────────────
+  // One derivation, in the component that owns all seventeen pieces of state.
+  // It existed before as a 17-term expression written out TWICE inside
+  // useKeyboardShortcuts, and `inert` would have made a third copy — three
+  // hand-maintained lists that a new modal has to be added to, with nothing to
+  // catch the omission except the bug it causes.
+  //
+  // Deliberately coerced to a real boolean: half these states hold an object or
+  // an id, and `inert` is a boolean DOM attribute — React renders `inert={0}`
+  // and `inert={null}` differently from `inert={false}`.
+  //
+  // This is the one piece of the v17.13.0 modal-stack work brought forward,
+  // because the alternative was to add to the mess and then clean it up. When
+  // the stack lands, this becomes `stack.length > 0` and every reader is
+  // already pointed at one place.
+  //
+  // MUST stay above the useKeyboardShortcuts call below: the ctx object is
+  // built mid-render, and a `const` read before its declaration is a TDZ
+  // ReferenceError that blanks the whole app with a generic message. That has
+  // happened twice in this codebase (v17.5.0's `activeView`, v17.11.0's
+  // `isViewToday`), and neither lint nor `npm run build` catches it.
+  const anyModal=!!(splitMenuFor||confirmDiscard||showForm||showWalkin||showWeek||showHistory||confirmDel||confirmReshuffle||confirmCancel||confirmKitchen||manualTarget||blockTarget||showPrefPicker||showSettings||showSearch||reminderEditor||confirmReminderDel);
+
   // v17.3.3: the global keyboard shortcuts (precedence rules, every key) and
   // the v17.3.1 neutral-space List-deselect mousedown listener were extracted
   // VERBATIM into hooks/useKeyboardShortcuts.js. This object is the hook's
@@ -2269,6 +2352,7 @@ function BookingApp({uid}){
   // the hook mounts its window listeners once and reads this through a ref).
   // Adding a shortcut = add the state/handler HERE and use it in the hook.
   useKeyboardShortcuts({
+    anyModal:anyModal,
     // v17.5.0: in a split, every view-sensitive shortcut (S/C status, ↑/↓ list
     // nav, the neutral-space and Esc list-deselect, the zoom keys) must act on
     // the FOCUSED pane, not on the stale single-view `view`. Passing activeView
@@ -2787,6 +2871,34 @@ function BookingApp({uid}){
       title:"Waitlist — table free"+notifToday,count:waitBannerEntries.length,
       node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[]
   );
+  // v17.12.0: what a screen reader is TOLD when the strip changes.
+  //
+  // Three things forced this shape, and each of them rules out the obvious
+  // alternative:
+  //
+  //  1. It cannot live inside NotificationStrip. A live region has to already
+  //     BE in the DOM when its content changes, or the insertion goes
+  //     unannounced — and the strip is mounted only while `notifSections`
+  //     is non-empty, i.e. it arrives WITH its first message every time. This
+  //     region is always mounted, so the strip appearing is a content change
+  //     inside a region that was already there. (StatusToasts gets this for
+  //     free: its container has been always-mounted since v15.8.0.)
+  //
+  //  2. It cannot be the lid. Every mark in the strip is `aria-hidden` — which
+  //     is correct, they are decorative — so the collapsed tally reads as bare
+  //     numbers: "Notifications 2 1". And with several sections the lid's title
+  //     is the generic word, so going from one section to two would announce
+  //     "Notifications", which is less than it knew before.
+  //
+  //  3. The pane must not itself be live, or dismissing one row re-reads all of
+  //     them. Persistent content is a region; the CHANGE is the message.
+  //
+  // The string is derived from the same titles and counts the strip renders, so
+  // the two cannot drift, and it only changes when the notification set does —
+  // which is exactly when an announcement is wanted.
+  const notifAnnounce=notifSections.length===0?"":
+    (notifSections.length===1?"Notification: ":notifSections.length+" notifications: ")+
+    notifSections.map(function(s){return s.title+(s.count>1?", "+s.count:"");}).join("; ")+".";
   // ── v17.8.0: waitlist ghost blocks for the Timeline ─────────────────────────
   // waitAvail already knows, per waiting party, the exact tables + time that
   // would fit them — but that only ever surfaced as a banner row and the ⏳
@@ -3114,7 +3226,9 @@ function BookingApp({uid}){
            whereas normally that lift just bleeds to the window edge. It was
            only ever belt-and-braces: html+body are already overflow:hidden in
            this mode (see the body effect above), so nothing can scroll here. */
-        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
+        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<header
+          /* v17.12.0: `inert` while a modal is open — see the <main> note below. */
+          inert={anyModal}
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
               beside it ARE the restaurant's configuration read back — its name,
               its table counts, its opening hours — and the control that edits
@@ -3124,7 +3238,7 @@ function BookingApp({uid}){
               title="Settings & keyboard shortcuts"
               aria-label="Settings & keyboard shortcuts"
               className="mgt-hover-scale"
-              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><div style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold}}>{generalSettings.restaurantName}</div><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
+              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -3151,7 +3265,7 @@ function BookingApp({uid}){
               style={CHROME_BTN}><SearchIcon size={IC.chrome} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
               It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
-              wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onReconnect={forceReconnect} onLogout={function(){signOut(auth);}} /></div></div><div
+              wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onReconnect={forceReconnect} onLogout={function(){signOut(auth);}} /></div></header><div
           /* v17.9.0 (Patryk): the date controls are 40px and the collapsed
              Summary card beside them is 58, so `flex-start` left them sitting
              flush against the top of the row with 18px of dead space beneath —
@@ -3169,7 +3283,8 @@ function BookingApp({uid}){
              `alignItems` re-resolved the position against whatever height the
              row happened to have in that one frame — which, on collapse, was
              still the open height. See DATE_CTRL_DROP for the numbers. */
-          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
+          inert={anyModal}
+          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
@@ -3187,7 +3302,7 @@ function BookingApp({uid}){
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
               className="mgt-hover-scale"
-              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
+              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
               onClick={function(){goToDate(new Date().toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
@@ -3216,7 +3331,7 @@ function BookingApp({uid}){
             several open at once (a 3+ row late banner) would eat the viewport.
             When shellFixed is off this div is a plain, style-less wrapper and
             the page scrolls exactly as it always did. */}
-            <div style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
+            <main style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
               /* With a split the panes own the scrolling, so this region must
                  NOT scroll — a flex:1 child of an overflowY:auto parent resolves
                  to CONTENT height, which would collapse a top/bottom split. The
@@ -3232,9 +3347,19 @@ function BookingApp({uid}){
                  card is the content box, so 4% padding is precisely enough at
                  any width. The negative margin puts the content back where it
                  was, so card width and position are unchanged from before. */
-              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}>{/* v17.12.0 (review fix): `inert` sits on the two CONTENT
+                  children rather than on <main> itself. It was on <main>, and
+                  <main> also contains StatusToasts — the app's live region for
+                  transient status. `inert` removes a subtree from the
+                  ACCESSIBILITY TREE as well as the tab order, so every toast
+                  went silent for as long as any modal was open, and the Undo
+                  pill inside it stopped being clickable. Both are wrong for
+                  the same reason: a floating status layer pinned ABOVE the
+                  dialog is not "the page behind the dialog", which is the only
+                  thing `inert` is meant to describe. This is the same finding
+                  as notifAnnounce living outside <main>, one level down. */}<div inert={anyModal}><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
                   children, so the pane fades out fully drawn instead of blanking a
-                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} />:null}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
+                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} />:null}</Reveal></div><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 loadStalled={loadStalled}
                 resyncing={resyncing}
@@ -3248,14 +3373,30 @@ function BookingApp({uid}){
                 reshuffled={reshuffled}
                 reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
                 loadShown={loadBannerShown}
-                loadMsg={"Connected to the server — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir} fill={shellFixed}>{split?<SplitLayout
+                loadMsg={"Connected to the server — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><div
+                /* v17.12.0 (review fix): the view — the actual "page behind the
+                   dialog" — is what goes inert, not <main>. See the note on the
+                   strip wrapper above for why the toast layer above this div
+                   must stay live.
+                   In the shellFixed layout this wrapper is load-bearing rather
+                   than decorative: SlideView takes `fill` and resolves its own
+                   flex:1/minHeight:0 against its PARENT, so an intervening plain
+                   block would collapse the chain and the panes would size to
+                   content. It therefore carries the same three properties. */
+                inert={anyModal}
+                style={shellFixed?{flex:1,minHeight:0,display:"flex",flexDirection:"column"}:undefined}><SlideView key={slide.k} dir={slide.dir} fill={shellFixed}>{split?<SplitLayout
                 dir={split.dir}
                 ratio={split.ratio}
                 onRatio={setSplitRatio}
                 focused={focusedPane}
                 onFocus={setFocusedPane}
                 paneA={viewEl[split.a]}
-                paneB={viewEl[split.b]} />:mainView}</SlideView></div></div>{splitMenuFor?<SplitMenu
+                paneB={viewEl[split.b]} />:mainView}</SlideView></div></div></main>{/* v17.12.0: the notification announcer sits OUTSIDE <main>, and that
+        is not tidiness. `inert` removes a subtree from the accessibility tree as
+        well as from the tab order, so a live region inside an inert region goes
+        SILENT — and the things this announces (a failed write, the connection
+        dropping, a double-booking appearing) are exactly the ones a modal must
+        not suppress. Always mounted; see notifAnnounce. */}<div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div>{splitMenuFor?<SplitMenu
               view={splitMenuFor}
               onConfirm={confirmSplit}
               sideBySideOk={splitSideBySideOk}
@@ -3264,6 +3405,7 @@ function BookingApp({uid}){
               setForm={setForm}
               editId={editId}
               error={error}
+              errorField={errorField}
               bookings={bookings}
               liveBookings={liveBookings}
               tableBlocks={tableBlocks}

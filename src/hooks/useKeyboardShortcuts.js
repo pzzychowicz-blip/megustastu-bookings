@@ -242,8 +242,10 @@ export function useKeyboardShortcuts(ctx){
         }
       }
       // ── Global shortcuts: suppressed while any modal is open ──
-      const anyModal=K.splitMenuFor||K.confirmDiscard||K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
-      if(anyModal) return;
+      // v17.12.0: ONE derivation, computed in App next to the state it reads.
+      // This was the same 17-term expression written out twice in this file, and
+      // `inert` would have made it three.
+      if(K.anyModal) return;
       // v16.3.0: "/" opens the global booking search (typing guard above keeps it
       // out of form fields; anyModal guard keeps it from re-firing while open).
       if(k==="/"){e.preventDefault();K.setShowSearch(true);return;}
@@ -332,8 +334,10 @@ export function useKeyboardShortcuts(ctx){
     function onDown(e){
       const K=kbRef.current;
       if(K.view!=="list"||!K.selectedListId) return;
-      const anyModal=K.splitMenuFor||K.confirmDiscard||K.showForm||K.showWalkin||K.showWeek||K.showHistory||K.confirmDel||K.confirmReshuffle||K.confirmCancel||K.confirmKitchen||K.manualTarget||K.blockTarget||K.showPrefPicker||K.showSettings||K.showSearch||K.reminderEditor||K.confirmReminderDel;
-      if(anyModal) return;
+      // v17.12.0: ONE derivation, computed in App next to the state it reads.
+      // This was the same 17-term expression written out twice in this file, and
+      // `inert` would have made it three.
+      if(K.anyModal) return;
       const t=e.target;
       if(t&&t.closest&&t.closest("[data-flip-id]")) return; // inside a card (incl. its buttons)
       K.setSelectedListId(null);
