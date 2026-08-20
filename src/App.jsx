@@ -2575,6 +2575,45 @@ function BookingApp({uid}){
     return map;
   },[clashPairs]);
 
+  // v17.11.0: "is the day on screen today?" — read by the strip's date
+  // qualifier below AND by the three views' empty-day prompt further down, so it
+  // is declared once, ABOVE the first of them. (A `const` read above its own
+  // declaration in a render body is a TDZ ReferenceError that blanks the app
+  // while build and lint both pass — CLAUDE.md's gotcha, and this is the second
+  // time in this one version that moving a line has been the fix.)
+  const isViewToday=viewDate===new Date().toISOString().slice(0,10);
+
+  // ── v17.11.0: naming the day, for the two sections that cross dates ────────
+  // The strip sits DIRECTLY under the date navigator, so a bare time in it reads
+  // as belonging to the day on screen. Measured in the review: viewing
+  // 15.09.2026 it advertised "Sofía Herrera · 2 pax — table free · 20:00", which
+  // is today's waitlist and today's 20:00.
+  //
+  // Date-scoping the strip was the other option and is the wrong one: it would
+  // hide a live problem behind an unrelated navigation. Someone browsing next
+  // Tuesday to take a booking still needs to know a reminder just fired. So the
+  // sections keep their scope and say what it is.
+  //
+  // EXACTLY TWO sections can be on screen while showing another day's business,
+  // and the first draft of this applied the suffix to four. `lateMap` and
+  // `overlapWarnings` both `return EMPTY_OBJ` when `viewDate !== today`, so
+  // their sections cannot render off-today at all and a qualifier there is dead
+  // code that tells the next reader they can. The two that genuinely cross are
+  // `waitBannerEntries`, which explicitly falls back to TODAY's waitlist when
+  // you navigate away, and the reminder banners, whose hook says outright they
+  // are "operational, not tied to the day being viewed".
+  //
+  // On the TITLE rather than on each row: one place per section, it covers rows
+  // carrying no time at all, and it survives collapse — where the lid shows the
+  // top section's own title.
+  //
+  // `Double-booked` takes no suffix because it IS scoped to the viewed date (see
+  // clashPairs), which is the day its markers are drawn on. AppBanners takes
+  // none either: offline / write-failed / load-failed are not about a day, and
+  // `Closed this day` and the inefficiency notice are already about the viewed
+  // one.
+  const notifToday=isViewToday?"":" · today";
+
   // ── v17.8.0: the ONE notification strip ────────────────────────────────────
   // Six banners could stack at once and, on a busy evening — exactly when
   // several fire together — they pushed the timeline off the bottom of the
@@ -2619,9 +2658,9 @@ function BookingApp({uid}){
       title:"Running late",count:Object.keys(lateBannerMap).length,
       node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
     reminderCount?[{id:"reminders",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:BellRingIcon,
-      title:reminderCount===1?"Reminder":"Reminders",count:reminderCount,node:reminderBanners}]:[],
+      title:(reminderCount===1?"Reminder":"Reminders")+notifToday,count:reminderCount,node:reminderBanners}]:[],
     hasWaitBanner?[{id:"wait",tone:"var(--success-text)",tint:"var(--suggest-bg-soft)",icon:WaitIcon,
-      title:"Waitlist — table free",count:waitBannerEntries.length,
+      title:"Waitlist — table free"+notifToday,count:waitBannerEntries.length,
       node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[]
   );
   // ── v17.8.0: waitlist ghost blocks for the Timeline ─────────────────────────
@@ -2702,7 +2741,6 @@ function BookingApp({uid}){
   // declaration in a render body is a TDZ ReferenceError that blanks the whole
   // app — which neither `npm run build` nor lint sees. Hit here exactly as
   // CLAUDE.md's gotcha describes, and caught by loading the page.
-  const isViewToday=viewDate===new Date().toISOString().slice(0,10);
   const emptyWalkin=isViewToday?VA.onWalkin:null;
   const dayClosed=hoursFor(viewDate).closed;
 

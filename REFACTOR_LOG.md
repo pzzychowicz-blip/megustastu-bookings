@@ -11429,3 +11429,42 @@ on a scratch date produced a 12-row `Double-bookings` section measuring
 (40vh of 760) and scrolling, with the timeline still visible below. Clearances
 measured on the live nodes. Seed deleted afterwards; DEV left as found.
 
+### 5/n · Name the day, for the two strip sections that cross dates
+
+**Files:** `src/App.jsx`
+**Behavioural change:** while the viewed date is not today, the `Waitlist — table
+free` and `Reminder(s)` section titles gain " · today". Nothing else changes.
+
+The strip sits DIRECTLY under the date navigator, so a bare time in it reads as
+belonging to the day on screen. Measured in the review: viewing 15.09.2026, it
+advertised "Sofía Herrera · 2 pax — table free · **20:00**" — today's waitlist,
+and today's 20:00.
+
+**Date-scoping the strip was the other option and is the wrong one.** It would
+hide a live problem behind an unrelated navigation: someone browsing next Tuesday
+to take a booking still needs to know a reminder just fired. The sections keep
+their scope and say what it is.
+
+**Exactly TWO sections can be on screen while showing another day's business, and
+the first draft of this applied the suffix to four.** `lateMap` and
+`overlapWarnings` both `return EMPTY_OBJ` when `viewDate !== today`, so their
+sections cannot render off-today at all — a qualifier there is dead code that
+tells the next reader they can. Caught by trying it live and watching the
+Running-late section disappear on navigation rather than gain a suffix. The two
+that genuinely cross are `waitBannerEntries`, which explicitly falls back to
+today's waitlist when you navigate away, and the reminder banners, whose hook
+says outright they are "operational, not tied to the day being viewed".
+
+On the TITLE rather than on each row: one place per section, it covers rows
+carrying no time at all, and it survives collapse — where the lid shows the top
+section's own title. `Double-booked` takes no suffix because it IS scoped to the
+viewed date (4/n), and `AppBanners` takes none because offline / write-failed /
+load-failed are not about a day while `Closed this day` and the inefficiency
+notice are already about the viewed one.
+
+**Verification:** build ✓ · 387 tests ✓ · lint 0 · `check:style` OK. Reproduced
+the review's exact case in DEV — a waitlist entry for today, viewed from
+15.09.2026 — and read the rendered title back as "Waitlist — table free · today"
+above the row "Sofia Test · 2 pax — table free · 21:00"; then confirmed the
+suffix is absent on today. Both seeds deleted; DEV left as found.
+
