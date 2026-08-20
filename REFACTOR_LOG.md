@@ -11468,3 +11468,57 @@ the review's exact case in DEV — a waitlist entry for today, viewed from
 above the row "Sofia Test · 2 pax — table free · 21:00"; then confirmed the
 suffix is absent on today. Both seeds deleted; DEV left as found.
 
+### 6/n · The opening timeline zoom follows the hours span
+
+**Files:** `src/lib/time-grid.js`, `src/App.jsx`, `tests/time-grid.test.js`
+**Behavioural change:** on a day whose OPEN→GRID_CLOSE span is longer than the
+reference 10 hours, the timeline opens zoomed in far enough to restore the
+reference density. A restaurant on the default 13:00–22:00 sees no change at all.
+
+A block's width is a fraction of the grid and the grid spans the day, so widening
+the day narrows every block, with nothing in between. Measured in the review: at
+the real 13:00–22:00 the average block is **192px**, 2 of 13 labels truncate and
+**8 of 13** show their start-time chip; at 06:00–01:00 it is **96px**, **10 of
+13** truncate and **none** shows a time. Settings permits open 6 through close
+25, so a restaurant reaches that through an entirely legitimate choice, and the
+view degrades to colour-and-position exactly when a long day means more bookings
+to tell apart.
+
+`spanZoom(gridMins, maxZoom)` lives in `time-grid.js` with the arithmetic tested,
+because it is a rule nobody can see by reading the render. `REFERENCE_GRID_MINS`
+is 600 — the MGT default day, 13:00 open through a 23:00 GRID_CLOSE — so the
+default configuration returns exactly 1× and is untouched by construction. It
+rounds to **0.5, the zoom control's own step**: a derived 1.83× would be a zoom
+the user cannot return to once they touch the buttons, which would make the reset
+control lie about what it resets to. It never returns below 1 (a short day is not
+a reason to shrink the app's baseline) and never above the device's `maxZoom`.
+
+**An effect, not the initial state, and the reasons are both real.** The hours
+arrive from the server after mount, so a lazy initializer would compute against
+the seeded default and never correct itself. And hours are PER WEEKDAY, so a
+Saturday closing at 01:00 needs a different answer from the Tuesday beside it.
+
+**It stops the moment the user touches the controls.** `setTimelineZoomManual`
+wraps every user-driven entry point — the +/- buttons, reset, Follow, the
+keyboard shortcuts — and sets `zoomTouchedRef`. The app choosing a starting zoom
+is help; the app re-choosing it under someone who has already zoomed is a fight
+they would lose on every date change. The `maxZoom` setting's own clamp
+deliberately does NOT count as a touch: it is a bound being applied, not a zoom
+being chosen. The effect returns the same value when it already matches, so it
+cannot re-enter — the v17.10.2 lesson about effects that write derived state.
+
+`defaultZoom` is a FLOOR, never a ceiling: a device set to open at 3× still opens
+at 3× on a short day and at max(3, span) on a long one. The setting says how
+close in you like to start; this says how much the day owes you.
+
+**Verification:** build ✓ · 393 tests ✓ (6 new on `spanZoom`) · lint 0 ·
+`check:style` OK. Live on DEV's 06:00–01:00 hours: the timeline opens at **2×**
+and **9 of 14 blocks show their start-time chip**, against the review's measured
+0 of 13 at 1×. Manual override checked end to end — zoomed to 1×, navigated to
+another date, zoom stayed 1×; reloaded, back to 2×.
+
+One test assertion in this commit was wrong before it was right, and the failure
+is the useful part: 760 minutes was written as rounding DOWN to 1×, and it rounds
+to 1.5× — 1.267 is nearer 1.5 than 1. The code was correct and the expectation
+was not, which is the only reason to write the arithmetic down in a test at all.
+

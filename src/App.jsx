@@ -42,7 +42,7 @@ import {
 
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
-import { hourLabel } from "./lib/time-grid";
+import { hourLabel, spanZoom } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
 // can be unit-tested (tests/waitlist-match.test.js).
 import { placeWaitlist } from "./lib/waitlist-match";
@@ -688,7 +688,20 @@ function BookingApp({uid}){
   // keeps ↑/↓ focus and the per-card shortcuts in lockstep with what's visible.
   const [showFinished, setShowFinished] = useState(false);
   // v17.2.0: initial zoom = the per-device "Default zoom" setting (was 1).
+  // v17.11.0: …raised to whatever the viewed day's HOURS SPAN needs, until the
+  // user touches the zoom controls. See the effect further down; `zoomTouched`
+  // is the "until".
   const [timelineZoom, setTimelineZoom] = useState(() => readTlSettings().defaultZoom);
+  const zoomTouchedRef = useRef(false);
+  // Every USER-driven zoom goes through this: the +/- buttons, the reset, the
+  // Follow button, the keyboard shortcuts. It is the only thing that
+  // distinguishes "the app picked this" from "the user picked this", and after
+  // the first user pick the app stops choosing — a view that re-zoomed itself
+  // on every date change would fight whoever was reading it.
+  function setTimelineZoomManual(z){
+    zoomTouchedRef.current = true;
+    setTimelineZoom(z);
+  }
   const timelineScrollRef=useRef(0);
   const [followNow, setFollowNow] = useState(false);
   const [blockTarget, setBlockTarget] = useState(null);
@@ -2212,7 +2225,7 @@ function BookingApp({uid}){
     // here means the whole hook is split-aware without touching each branch.
     view:activeView,setView:setView,goView:pickView,
     viewDate:viewDate,setViewDate:setViewDate,
-    timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoom,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
+    timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoomManual,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
     followNow:followNow,setFollowNow:setFollowNow,
     autoOptimizer:autoOptimizer,setAutoOptimizer:setAutoOptimizer,
     showForm:showForm,setShowForm:setShowForm,editId:editId,form:form,setForm:setForm,setSwapAffected:setSwapAffected,
@@ -2575,6 +2588,39 @@ function BookingApp({uid}){
     return map;
   },[clashPairs]);
 
+  // ── v17.11.0: the opening zoom follows the hours span ──────────────────────
+  // A block's width is a fraction of the grid and the grid spans the day, so
+  // widening the day narrows every block. Measured in the review: at the real
+  // 13:00–22:00 the average block is 192px and 8 of 13 carry a start-time chip;
+  // at 06:00–01:00 it is 96px, 10 of 13 names truncate and NO block shows a
+  // time. Settings permits open 6 through close 25, so that is reachable by an
+  // ordinary choice, and the view degrades to colour-and-position exactly when a
+  // long day means more bookings to tell apart. `spanZoom` (time-grid.js, with
+  // the arithmetic tested) returns the zoom that restores the reference density.
+  //
+  // An EFFECT, not the initial state, for two reasons. The hours arrive from the
+  // server after mount, so a lazy initializer would compute against the seed
+  // and never correct itself; and hours are PER WEEKDAY, so a Saturday that
+  // closes at 01:00 needs a different answer from the Tuesday beside it.
+  //
+  // It stops the moment the user touches the controls (`zoomTouchedRef`). The
+  // app choosing a sensible starting zoom is help; the app re-choosing it under
+  // someone who has already zoomed is a fight, and they would lose it on every
+  // date change.
+  //
+  // `defaultZoom` is a FLOOR, never a ceiling: a device set to open at 3× still
+  // opens at 3× on a short day, and at max(3, span) on a long one. The setting
+  // says how close in you like to start; this says how much the day owes you.
+  const viewHours=hoursFor(viewDate);
+  const viewGridMins=(viewHours.gridClose-viewHours.open)*60;
+  useEffect(function(){
+    if(zoomTouchedRef.current) return;
+    const want=Math.max(tlSettings.defaultZoom,spanZoom(viewGridMins,tlSettings.maxZoom));
+    // Return the SAME value when it already matches, so this cannot re-enter —
+    // the v17.10.2 lesson about effects that write derived state.
+    setTimelineZoom(function(cur){return cur===want?cur:want;});
+  },[viewGridMins,tlSettings.defaultZoom,tlSettings.maxZoom]);
+
   // v17.11.0: "is the day on screen today?" — read by the strip's date
   // qualifier below AND by the three views' empty-day prompt further down, so it
   // is declared once, ABOVE the first of them. (A `const` read above its own
@@ -2788,7 +2834,7 @@ function BookingApp({uid}){
     freeing={freeingMap}
     onNoShow={VA.onNoShow}
     zoom={timelineZoom}
-    setZoom={setTimelineZoom}
+    setZoom={setTimelineZoomManual}
     followZoom={tlSettings.followZoom}
     followLeadMins={tlSettings.followLead}
     maxZoom={tlSettings.maxZoom}
