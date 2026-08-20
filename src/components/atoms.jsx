@@ -426,20 +426,32 @@ export function Fld({ label, req, invalid, describedBy, style, children }) {
   // pointing at an id that is not in the tree is a dangling reference, the
   // exact failure Overlay refuses when it resolves its own name from the DOM
   // rather than taking a prop. Better no description than a broken one.
-  let attrs = null;
-  if (single) {
+  //
+  // /code-review: the state attrs are built for BOTH shapes. They used to be
+  // built only when `single`, so passing `invalid` to a composite field — a
+  // stepper pair, a chip row — was silently ignored: no error, no lint warning,
+  // no test, and a field that reports VALID to assistive technology while a red
+  // banner sits above it. Nothing does that today, which is exactly why it had
+  // to be fixed now rather than found later. On the group path they land on the
+  // wrapper, which is the element carrying the role and the name; both
+  // attributes are global, so a `group` may hold them. `aria-required` stays
+  // single-only on purpose — it belongs on a control, not on a wrapper, and the
+  // composite path already signals required with the `*` in its label.
+  const stateAttrs = (function () {
     const a = {};
-    if (req) a["aria-required"] = "true";
+    if (req && single) a["aria-required"] = "true";
     if (invalid) {
       a["aria-invalid"] = "true";
       if (describedBy) a["aria-describedby"] = describedBy;
     }
-    attrs = Object.keys(a).length ? a : null;
-  }
+    return Object.keys(a).length ? a : null;
+  })();
+  const attrs = single ? stateAttrs : null;
   return (
     <div
       role={single ? undefined : "group"}
       aria-labelledby={single ? undefined : id + "-l"}
+      {...(single ? null : stateAttrs)}
       style={{ display: "flex", flexDirection: "column", gap: 4, ...(style || {}) }}>
       <label
         id={id + "-l"}

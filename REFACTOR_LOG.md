@@ -12581,3 +12581,28 @@ by a change to either copy. `data-bk`'s note in `TimelineView` is the precedent
 for that identity changing. One `findCard()` closure, two callers.
 
 Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (19/n) — `/code-review`: `Fld` ignored `invalid` on its composite path
+
+**Files:** `src/components/atoms.jsx`.
+
+`Fld` has two shapes — `children` as a function for a single control, `children`
+as elements for a composite one (a stepper pair, a chip row) — and 3/n built the
+state attributes only for the first. Passing `invalid` to a composite field was
+therefore **silently ignored**: no error, no lint warning, no test, and a field
+that reports VALID to assistive technology while a red banner sits above it.
+
+Nothing does that today, which is precisely why it had to be fixed now rather than
+found later — the props are on the public signature with nothing marking them
+single-only, so the next person wiring validation onto party size or preferred
+tables would have shipped it in good faith.
+
+On the group path they land on the wrapper, which is the element already carrying
+the role and the name; `aria-invalid` and `aria-describedby` are global, so a
+`group` may hold them. `aria-required` stays single-only on purpose — it belongs
+on a control rather than a wrapper, and that path already signals required with
+the `*` in its label.
+
+Build ✓, 406 tests ✓, lint 0 errors.
