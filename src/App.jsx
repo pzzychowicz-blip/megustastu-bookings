@@ -1191,6 +1191,41 @@ function BookingApp({uid}){
     document.body.style.overflow=shellFixed?"hidden":"auto";
     return function(){document.body.style.overflow="auto";};
   },[shellFixed]);
+  // v17.12.0: `data-kbd` — a two-line stand-in for `:focus-visible`, and ONLY
+  // for the floor plan's tables.
+  //
+  // Those became focusable this version, and two measured facts about SVG made
+  // the app's one focus rule unusable there: a browser paints no `outline` on a
+  // `<g>`, and `:focus-visible` never matches an SVG element in Chrome at all
+  // (two consecutive REAL Tab presses left the focused group matching `:focus`
+  // and not `:focus-visible`). Plain `:focus` is not the answer either — a mouse
+  // click focuses the group too, so every table tap during service would leave a
+  // white ring behind it.
+  //
+  // So the modality is tracked here and read by ONE rule in index.html. It lives
+  // in App rather than in the boot script because that script is pinned by a
+  // CSP hash, and adding two lines there would silently break the whole script
+  // in production if the hash were not regenerated (tests/csp.test.js exists
+  // because that has already happened once).
+  //
+  // Capture phase, so it records the modality before anything can stop
+  // propagation. Deliberately narrow: only the keys that MOVE focus set the
+  // flag — typing a letter into a form field is not a request for focus rings.
+  useEffect(function(){
+    const root=document.documentElement;
+    function onKey(e){
+      const k=e.key||"";
+      if(k==="Tab"||k.indexOf("Arrow")===0) root.dataset.kbd="1";
+    }
+    function onPointer(){ delete root.dataset.kbd; }
+    window.addEventListener("keydown",onKey,true);
+    window.addEventListener("pointerdown",onPointer,true);
+    return function(){
+      window.removeEventListener("keydown",onKey,true);
+      window.removeEventListener("pointerdown",onPointer,true);
+      delete root.dataset.kbd;
+    };
+  },[]);
   // v17.2.0: per-device Timeline zoom/follow settings (see readTlSettings above).
   // Stored one value per key; a value equal to its default removes the key.
   // Lowering maxZoom clamps followZoom/defaultZoom (and the live zoom) with it.

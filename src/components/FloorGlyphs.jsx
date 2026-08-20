@@ -45,7 +45,7 @@ export function chairPositions(entry){
 // passes a fill/stroke transition so an occupancy change fades like the
 // timeline's Seated→Completed overlay, 360ms ease-out; the reduce-motion
 // kill-switch in index.html still zeroes it via !important).
-export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDasharray, labelSuffix = "", chairFill = "var(--bg-stepper)", children, onPointerDown, onClick, onContextMenu, style, shapeStyle }){
+export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDasharray, labelSuffix = "", chairFill = "var(--bg-stepper)", ariaLabel, children, onPointerDown, onClick, onContextMenu, style, shapeStyle }){
   const w = entry.w, h = entry.shape === "rect" ? entry.h : entry.w;
   const t = TBL[isIn(id) ? "ind" : "out"];
   const label = id + labelSuffix;
@@ -57,9 +57,31 @@ export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDas
   // off — a table you cannot act on must not claim you can. See index.html for
   // why this is neither .mgt-hover-scale nor .mgt-ac-row.
   const live = !!(onPointerDown || onClick);
+  // v17.12.0: keyboard reach. Measured, PlanView had 27 shapes with
+  // `cursor: pointer` and ZERO focusable descendants — the floor plan was
+  // pointer-only in its entirety.
+  //
+  // Gated on `onClick` rather than on `live`, which is the narrower and correct
+  // condition: the editor passes `onPointerDown` to DRAG a table, and a drag has
+  // no keyboard equivalent to offer. Announcing a button that does nothing on
+  // Enter would be worse than staying silent.
+  //
+  // `tabindex` and `role` on an SVG element are SVG2/HTML5 and work in every
+  // browser this app runs in. The accessible name comes from the caller,
+  // because only the caller knows whether the table is free, blocked or holding
+  // a party — the glyph itself knows a table id and a rectangle.
+  const activatable = !!onClick;
   return (
     <g transform={"translate(" + entry.x + "," + entry.y + ") rotate(" + (entry.rot || 0) + ")"}
       className={live ? "mgt-glyph" : undefined}
+      role={activatable ? "button" : undefined}
+      tabIndex={activatable ? 0 : undefined}
+      aria-label={activatable ? (ariaLabel || ("Table " + label)) : undefined}
+      onKeyDown={activatable ? function(e){
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        onClick(e);
+      } : undefined}
       onPointerDown={onPointerDown} onClick={onClick} onContextMenu={onContextMenu}
       style={{ cursor: onPointerDown ? "grab" : (onClick ? "pointer" : "default"), ...style }}>
       {chairPositions(entry).map(function(c, i){

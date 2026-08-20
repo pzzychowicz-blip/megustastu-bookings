@@ -880,6 +880,41 @@
       }
       .mgt-glyph:active { filter: brightness(0.86); }
 
+      /* v17.12.0: the focus ring for a floor-plan table. The glyph became
+         focusable this version (Plan was 27 shapes with `cursor: pointer` and
+         ZERO focusable descendants), and giving something focus without giving
+         it a visible ring trades one WCAG failure for another. Two things about
+         SVG made this different from every other control in the app, and both
+         were MEASURED live rather than assumed:
+
+         1. `outline` does not paint on a `<g>`. An inline
+            `outline: 2px solid #fff` on the group rendered nothing; the same
+            declaration on its `<rect>` child rendered a clean ring. So the ring
+            goes on `.mgt-glyph-shape` — which is also the better place for it,
+            landing on the table's silhouette rather than around its chairs and
+            label, and riding the rotation on a rotated table because it is
+            drawn in the shape's own coordinate space.
+
+         2. `:focus-visible` never matches an SVG element at all in Chrome. Two
+            consecutive REAL Tab presses left the focused `<g>` matching
+            `:focus` and not `:focus-visible`, with `document.querySelectorAll(
+            ":focus-visible")` empty. A rule keyed on it would simply never have
+            fired — the worst kind of fix, one that looks right in the source.
+
+         Hence `[data-kbd]`, a two-line stand-in for `:focus-visible` scoped to
+         this one case (set in App.jsx, not in the CSP-pinned boot script). Plain
+         `:focus` was the alternative and is wrong: a real mouse click DOES focus
+         the group — verified — so every table tap during service would leave a
+         white ring behind it.
+
+         Same colour, same 2px, same 2px offset as every other control: this is a
+         different PLACE for the ring, not a different ring. */
+      .mgt-glyph:focus { outline: none; }
+      :root[data-kbd] .mgt-glyph:focus .mgt-glyph-shape {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+
       /* ── v17.8.0: a timeline block's ink scheme ──────────────────────────────
          A block sets `color` inline from BLOCK_INK[status] and its text
          children inherit it. Every fill currently takes white (see index.html's

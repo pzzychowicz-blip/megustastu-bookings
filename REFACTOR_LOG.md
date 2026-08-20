@@ -12041,3 +12041,70 @@ loaded. Focus-ring room measured against the nearest clipping ancestor (the
 horizontal scroller, `overflow: auto hidden`): 35px above, far more below,
 against the 4px the ring needs; horizontally the scroller scrolls rather than
 clips and carries the Fix-3 8px padding. Build ✓, 404 tests ✓, lint 0 errors.
+
+### 6/n · The floor plan becomes reachable — and needs its own focus ring
+
+**Files:** `src/components/FloorGlyphs.jsx`, `src/components/PlanView.jsx`,
+`index.html`, `src/App.jsx`, `tests/stylesheet.test.js`
+**Behavioural change:** every table on the Plan is now in the tab order, named,
+and activates on Enter or Space. A keyboard-focused table draws the app's focus
+ring; a tapped one does not.
+
+**The finding (C1, Plan).** 27 floor-plan shapes carried `cursor: pointer`, the
+`<svg>` had `tabIndex -1`, and there were **0** focusable descendants. The floor
+plan was pointer-only in its entirety.
+
+**Operability is gated on `onClick`, not on the existing `live` flag.** The
+editor passes `onPointerDown` to DRAG a table, and a drag has no keyboard
+equivalent to offer — announcing a button that does nothing on Enter is worse
+than staying silent. `live` (which is either handler) still governs the hover
+halo, where it is the right condition.
+
+**The name comes from the caller**, because the glyph knows a table id and a
+rectangle while only `PlanView` knows whether the table is free, blocked or
+holding a party — and on this view the FILL *is* the state, so without it a
+screen-reader user meets a room of identical "Table 5A" buttons. It describes the
+table at the SELECTED time, exactly like the fill it mirrors:
+*"Table 3, Pau Estévez, 20:00, 4 guests, confirmed"*.
+
+**Then the focus ring, which is the part worth reading.** Making something
+focusable without a visible focus indicator trades one WCAG failure for another,
+and SVG broke the app's single focus rule in **two** independent ways. Both were
+measured live; neither is inferable from the source:
+
+1. **A browser paints no `outline` on a `<g>`.** An inline
+   `outline: 2px solid #fff` on the group rendered nothing at all; the identical
+   declaration on its `<rect>` child rendered a clean ring. So the ring goes on
+   `.mgt-glyph-shape` — which is also where it belongs, on the table's
+   silhouette rather than around its chairs and label, and riding the rotation of
+   a rotated table because it is drawn in the shape's own coordinate space.
+2. **`:focus-visible` never matches an SVG element in Chrome.** Two consecutive
+   *real* Tab presses left the focused `<g>` matching `:focus` and **not**
+   `:focus-visible`, with `document.querySelectorAll(":focus-visible")` empty. A
+   rule keyed on it would never have fired — the worst kind of fix, one that
+   reads correctly in the source and does nothing on screen.
+
+Plain `:focus` was the obvious fallback and is wrong: a real mouse click **does**
+focus the group (verified), so every table tap during service would leave a white
+ring behind it. Hence **`data-kbd`**, a two-line `:focus-visible` stand-in — set
+on `Tab`/arrow keydown, cleared on `pointerdown`, both in the capture phase, and
+deliberately narrow (typing a letter into a field is not a request for focus
+rings). It lives in `App.jsx` rather than the boot script because that script is
+**pinned by a CSP hash**, and two lines there would silently kill it in
+production if the hash were not regenerated.
+
+`[data-kbd] .mgt-glyph:focus` is added to `tests/stylesheet.test.js`'s
+`CRITICAL_SELECTORS`: a missing focus ring is precisely that list's entry
+criterion — it fails silently, with no error and no visual hole.
+
+**Verification:** live in DEV. 13 tables, all `role="button"`, all `tabindex="0"`,
+all named; scrubbing the tape to 20:00 produced the occupied labels
+("Table 1A, Grupo Ferrer, 19:00, 5 guests, confirmed" ×2 for the joined pair,
+"Table 6, Nuria Bosch, 19:30, 2 guests, pending"), matching the fills in the same
+screenshot. A **real** Tab press set `data-kbd="1"` and put
+`outline: rgb(255,255,255) solid 2px` at `2px` offset on the focused shape —
+confirmed visually. A **real** click then cleared `data-kbd` and left **0**
+outlined shapes while the table still held DOM focus, which is exactly
+`:focus-visible`'s contract. Enter on a focused table opened that table's own
+popover ("Table 5A · No bookings on this table today · Walk-in here"). Build ✓,
+405 tests ✓ (1 new), lint 0 errors, `check:style` OK.

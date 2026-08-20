@@ -480,8 +480,19 @@ export const PlanView = memo(function PlanView({
               if (!e) return null;
               const f = fillFor(t.id);
               const soon = freeSoonOf[t.id];
+              // v17.12.0: the spoken version of the fill. The colour of a table
+              // IS its state here, so without this a screen-reader user gets a
+              // room full of identical "Table 5A" buttons. It describes the
+              // table at the SELECTED time, exactly like the fill it mirrors.
+              const occ = occupying[t.id];
+              const a11yLabel = "Table " + t.id + ", " + (
+                isBlocked(t.id) ? "blocked"
+                  : occ ? occ.name + ", " + occ.time + ", " + occ.size + (occ.size === 1 ? " guest" : " guests") + ", " + occ.status
+                    : resetting[t.id] ? "free after turnaround"
+                      : "free"
+              ) + (soon != null ? ", free in about " + soon + " minutes" : "");
               return (
-                <TableGlyph key={t.id} id={t.id} entry={e}
+                <TableGlyph key={t.id} id={t.id} entry={e} ariaLabel={a11yLabel}
                   fill={f.fill} stroke={f.stroke} strokeWidth={2} strokeDasharray={f.dash}
                   // v17.1.1: occupancy colour changes fade with the timeline's
                   // Seated→Completed timing (.mgt-fade-overlay). CSS can't

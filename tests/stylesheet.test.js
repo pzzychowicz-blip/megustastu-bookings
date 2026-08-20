@@ -54,6 +54,7 @@ const CRITICAL_SELECTORS = [
   ".mgt-dot-pulse",                   // the "busy" toast dot
   ".mgt-ac-row",                      // row/card/panel tint — AND their resting fill
   ".mgt-glyph",                       // floor-plan table hover halo + press dim
+  "[data-kbd] .mgt-glyph:focus",      // the plan table's keyboard ring (:focus-visible does not match SVG)
   ".mgt-tlghost",                     // the seated ghost's lockstep hover
   ".mgt-group-hover",                 // multi-table group lift
   ".mgt-ac-row:active",               // the touch tint on card/row/panel surfaces
