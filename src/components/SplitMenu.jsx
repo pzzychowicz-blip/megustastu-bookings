@@ -35,7 +35,12 @@ import { SplitSideIcon, SplitStackIcon } from "./Icons";
 const LABEL = { timeline: "Timeline", list: "List", plan: "Plan" };
 const ORDER = ["timeline", "list", "plan"];
 
-export function SplitMenu({ view, onConfirm, onClose }) {
+// v17.11.0: `sideBySideOk` — is the shell wide enough that a Timeline would get
+// a usable pane side by side? (App owns the arithmetic; see MIN_TL_PANE there.)
+// When it is false the menu does not silently drop the option, it shows it
+// refused with the reason: a control that vanishes teaches nothing, and the
+// answer here depends on a setting the user can change.
+export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
   const [step, setStep] = useState(1);   // 1 = direction, 2 = second view
   const [dir, setDir] = useState(null);
   if (!view) return null;
@@ -43,6 +48,13 @@ export function SplitMenu({ view, onConfirm, onClose }) {
   const others = ORDER.filter((v) => v !== view);
   const title = step === 1 ? "How should it split?" : "Which view goes alongside?";
   const sub = step === 1 ? LABEL[view] + " plus one more." : LABEL[view] + " and…";
+  // A Timeline halved horizontally can show the whole day or readable blocks,
+  // never both. Refused at whichever step the Timeline actually appears: step 1
+  // when it is the view you opened the menu on, step 2 when it would be the
+  // partner you are choosing.
+  const noSide = !sideBySideOk && view === "timeline";
+  const tlBlocked = (v) => !sideBySideOk && dir === "v" && v === "timeline";
+  const showWhy = noSide || (step === 2 && others.some(tlBlocked));
 
   const row = { display: "flex", gap: 8, flexWrap: "wrap" };
   const btn = (extra) => mkBtn(Object.assign({ minHeight: 44, padding: "10px 16px", flex: "1 1 auto" }, extra));
@@ -75,19 +87,29 @@ export function SplitMenu({ view, onConfirm, onClose }) {
 
         {step === 1 ? (
           <div style={row}>
-            <button className="mgt-hover-scale" style={dirBtn({ background: "var(--app-btn-grey)" })}
-              onClick={() => { setDir("v"); setStep(2); }}><SplitSideIcon size={IC.chrome} />Side by side</button>
+            <button className={noSide ? "mgt-nopress" : "mgt-hover-scale"} disabled={noSide}
+              style={dirBtn({ background: "var(--app-btn-grey)", ...(noSide ? { opacity: 0.45, cursor: "default" } : null) })}
+              onClick={() => { if (!noSide) { setDir("v"); setStep(2); } }}><SplitSideIcon size={IC.chrome} />Side by side</button>
             <button className="mgt-hover-scale" style={dirBtn({ background: "var(--app-btn-grey)" })}
               onClick={() => { setDir("h"); setStep(2); }}><SplitStackIcon size={IC.chrome} />Top and bottom</button>
           </div>
         ) : (
           <div style={row}>
             {others.map((v) => (
-              <button key={v} className="mgt-hover-scale" style={btn({ background: S.accent })}
-                onClick={() => onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 })}>{LABEL[v]}</button>
+              <button key={v} className={tlBlocked(v) ? "mgt-nopress" : "mgt-hover-scale"} disabled={tlBlocked(v)}
+                style={btn({ background: S.accent, ...(tlBlocked(v) ? { opacity: 0.45, cursor: "default" } : null) })}
+                onClick={() => { if (!tlBlocked(v)) onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 }); }}>{LABEL[v]}</button>
             ))}
           </div>
         )}
+
+        {showWhy ? (
+          <div style={{ fontSize: T.small, color: "var(--warn-text)", marginTop: 10 }}>
+            This screen is too narrow to put the timeline beside another view — it
+            would show about two hours of the day. Top and bottom keeps its full
+            width. (Settings → App width.)
+          </div>
+        ) : null}
 
         <div style={{ fontSize: T.small, color: "var(--text-faint)", marginTop: 12, textAlign: "center" }}>
           tap outside or press Esc to close

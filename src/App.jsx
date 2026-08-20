@@ -34,7 +34,7 @@ import {
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
-  checkInefficent, verifyClean, findConflicts,
+  checkInefficent, verifyClean, findConflicts, findClashes, clashRowId,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
   undoSnapshots, applyUndo, dayBookingsSig
@@ -42,7 +42,7 @@ import {
 
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
-import { hourLabel } from "./lib/time-grid";
+import { hourLabel, spanZoom } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
 // can be unit-tested (tests/waitlist-match.test.js).
 import { placeWaitlist } from "./lib/waitlist-match";
@@ -124,7 +124,7 @@ import { Summary }      from "./components/Summary";
 // re-export. The re-export exists to keep the LAZY-Settings boundary intact for
 // importers that predate the move; App has no reason to go the long way round,
 // and Icons.jsx has no imports of its own to drag into the startup chunk.
-import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, CogIcon, LateIcon, OverlapIcon, SearchIcon, WaitIcon } from "./components/Icons";
+import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, ClashIcon, CogIcon, LateIcon, OverlapIcon, SearchIcon, WaitIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -134,6 +134,7 @@ import { SplitMenu }     from "./components/SplitMenu";
 const WeekView = lazyChunk(function(){return import("./components/WeekView").then(function(m){return {default:m.WeekView};});},"WeekView"); // v17.1.0: lazy (opened on demand)
 import { LateBanner }   from "./components/LateBanner";
 import { OverlapBanner } from "./components/OverlapBanner";
+import { ClashBanner } from "./components/ClashBanner";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 
 // ── Phase B5 (v15-refactor): Final modal & screen extraction ──────────────
@@ -266,7 +267,7 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.10.2",
+  version:"17.11.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -429,6 +430,39 @@ function readSplit(){
     const r=Number(s.ratio);
     return {a:s.a,b:s.b,dir:s.dir,ratio:Number.isFinite(r)&&r>=0.2&&r<=0.8?r:0.5};
   }catch{return null;}
+}
+
+// ── v17.11.0: a Timeline needs horizontal room, and a side-by-side split
+// halves exactly the dimension it needs most ────────────────────────────────
+// The `winW < 600` gate above already says "a view needs room, and a Timeline in
+// a ~180px pane is unusable". That reasoning is about the PANE and was only ever
+// applied to the WINDOW. Measured live at 1280px in a 50/50 side-by-side split:
+// the Timeline's own scroller is **371px against a 2896px grid — 13% of the
+// service visible at once**.
+//
+// Scrolling a timeline is normal; that is not the complaint. The complaint is
+// that a half-width Timeline can show you the whole day OR readable blocks and
+// never both, and the view exists to do both — "where does the evening stand" is
+// the question it answers.
+//
+// The number is derived, not chosen. Measured on the live DOM, a pane loses
+// ~124px to the table-label column (58) and the card's own padding and gutters
+// before the grid starts. On the reference 10-hour day a 90-minute booking is
+// 15% of the grid, and v17.9.1's own width budget says a block needs 138px
+// (NAME_MIN 55 + the assign handle 41 + the size ring 24 + v17.11.0's status
+// mark 18) before its guest name renders at all. 138 / 0.15 = 920px of grid,
+// + 124 = 1044. Rounded up to the divider-inclusive figure below.
+//
+// A STACKED split is always fine — it halves the height, and fewer visible table
+// rows is what scrolling is for.
+const MIN_TL_PANE=1050;
+const SPLIT_DIVIDER_PX=10;
+// `tlPane` is "a" or "b" — which side the Timeline is on. Pure, so the menu, the
+// view-switcher and the repair effect all ask the same question one way.
+function tlPaneOk(appW,dir,ratio,tlPane){
+  if(dir!=="v") return true;
+  const share=tlPane==="a"?ratio:1-ratio;
+  return (appW-SPLIT_DIVIDER_PX)*share>=MIN_TL_PANE;
 }
 
 // v17.2.0: per-device Timeline zoom/follow settings (theme pattern — key absent
@@ -687,7 +721,20 @@ function BookingApp({uid}){
   // keeps ↑/↓ focus and the per-card shortcuts in lockstep with what's visible.
   const [showFinished, setShowFinished] = useState(false);
   // v17.2.0: initial zoom = the per-device "Default zoom" setting (was 1).
+  // v17.11.0: …raised to whatever the viewed day's HOURS SPAN needs, until the
+  // user touches the zoom controls. See the effect further down; `zoomTouched`
+  // is the "until".
   const [timelineZoom, setTimelineZoom] = useState(() => readTlSettings().defaultZoom);
+  const zoomTouchedRef = useRef(false);
+  // Every USER-driven zoom goes through this: the +/- buttons, the reset, the
+  // Follow button, the keyboard shortcuts. It is the only thing that
+  // distinguishes "the app picked this" from "the user picked this", and after
+  // the first user pick the app stops choosing — a view that re-zoomed itself
+  // on every date change would fight whoever was reading it.
+  function setTimelineZoomManual(z){
+    zoomTouchedRef.current = true;
+    setTimelineZoom(z);
+  }
   const timelineScrollRef=useRef(0);
   const [followNow, setFollowNow] = useState(false);
   const [blockTarget, setBlockTarget] = useState(null);
@@ -1092,6 +1139,23 @@ function BookingApp({uid}){
     if(isMobile&&split) applySplit(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[isMobile]);
+  // v17.11.0: the width the two panes actually divide — the app is clamped to
+  // the per-device App-width setting, so the WINDOW is not what a pane gets.
+  const shellW=Math.min(winW,appWidth);
+  const tlSide=split?(split.a==="timeline"?"a":split.b==="timeline"?"b":null):null;
+  const splitSideBySideOk=tlPaneOk(shellW,"v",0.5,"a");
+  // …and the repair: an existing side-by-side split whose Timeline pane has
+  // become too narrow — the window was resized, the divider dragged, or the App
+  // width setting lowered — turns STACKED rather than being torn down. The
+  // phone rule above collapses the split because a phone cannot host one at all;
+  // here the split is still perfectly viable, it is only this orientation that
+  // is not, so preserving the user's intent is the better repair.
+  useEffect(function(){
+    if(!split||!tlSide) return;
+    if(tlPaneOk(shellW,split.dir,split.ratio,tlSide)) return;
+    applySplit(Object.assign({},split,{dir:"h"}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[shellW,split,tlSide]);
   // ── v17.5.0: the fixed shell ────────────────────────────────────────────────
   // Normally <body> is the scrollport (see the mount effect near the top of
   // BookingApp) and the app is a plain `minHeight:100dvh` block that grows.
@@ -1264,6 +1328,14 @@ function BookingApp({uid}){
   const [overlapDismissed,setOverlapDismissed]=useState(function(){return new Set();});
   function dismissOverlapRow(id){
     setOverlapDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
+  }
+  // v17.11.0 — the same ✕-dismiss mechanism for the double-booking rows. Keyed
+  // by the PAIR's row id (clashRowId), not a booking id: the row is about two
+  // bookings, and dismissing "Pau vs Rita" must not also silence "Rita vs a
+  // third party" if the day is bad enough to have both.
+  const [clashDismissed,setClashDismissed]=useState(function(){return new Set();});
+  function dismissClashRow(id){
+    setClashDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
   }
   // v16.3.0 — Table-turn prediction: today's seated bookings whose scheduled end
   // is within the next freeSoonWindow min (freeingSoon, booking-logic.js). Gated
@@ -2203,7 +2275,7 @@ function BookingApp({uid}){
     // here means the whole hook is split-aware without touching each branch.
     view:activeView,setView:setView,goView:pickView,
     viewDate:viewDate,setViewDate:setViewDate,
-    timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoom,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
+    timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoomManual,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
     followNow:followNow,setFollowNow:setFollowNow,
     autoOptimizer:autoOptimizer,setAutoOptimizer:setAutoOptimizer,
     showForm:showForm,setShowForm:setShowForm,editId:editId,form:form,setForm:setForm,setSwapAffected:setSwapAffected,
@@ -2505,6 +2577,167 @@ function BookingApp({uid}){
   function dismissWaitRow(id){setWaitNotifyDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});}
   const hasWaitBanner=waitBannerEntries.length>0;
 
+  // ── v17.11.0: double-bookings on the viewed day ────────────────────────────
+  // `findConflicts` has existed since v15.6.1 and was wired to exactly one
+  // consumer: the silent reconciliation effect, which relocates the newest
+  // NON-LOCKED booking and then gives up on the rest. So the clashes it cannot
+  // fix — the all-locked ones, which is every walk-in and every drag-drop —
+  // were detected, deliberately left alone, and never shown to anyone.
+  //
+  // Scoped to the VIEWED date rather than today, unlike late/overlap/waitlist.
+  // This is the one section whose rows correspond 1:1 to markers drawn on the
+  // view you are looking at, and whose action (assign tables) operates on that
+  // day. A clash section about today, sitting under a date navigator showing
+  // next Tuesday, next to blocks that carry no marker, would be three different
+  // days in one glance.
+  const clashPairs=useMemo(function(){return findClashes(bookings,viewDate);},[bookings,viewDate]);
+  const clashBannerPairs=useMemo(function(){
+    if(!clashPairs.length) return EMPTY_ARR;
+    if(clashDismissed.size===0) return clashPairs;
+    return clashPairs.filter(function(c){return !clashDismissed.has(clashRowId(c));});
+  },[clashPairs,clashDismissed]);
+  // /code-review fix: a dismissed clash must RE-ARM once it stops being true.
+  // The other two dismissal Sets get away with never pruning because their
+  // conditions are monotonic within a day — a late booking stays late, an
+  // overstay stays an overstay. A double-booking is the opposite: it is the one
+  // notification whose whole point is that you go and FIX it, so it clears, and
+  // it can then recur on the same pair (drag a booking back onto the table —
+  // every drag-drop sets `_locked`, so the reconciler will not undo it).
+  //
+  // Without this the strip row — the only surface carrying the Assign action —
+  // never came back for that pair, for the rest of the session, while the block
+  // markers said the clash was live. Dropping ids that are no longer clashing is
+  // what makes "dismiss" mean "I have seen THIS one" instead of "never mention
+  // these two again".
+  //
+  // Keyed on the live pair ids and set only when the set actually shrinks, so it
+  // cannot re-enter (the v17.10.2 lesson about effects that write derived state).
+  useEffect(function(){
+    if(clashDismissed.size===0) return;
+    const live=new Set(clashPairs.map(clashRowId));
+    setClashDismissed(function(prev){
+      let drop=false;
+      prev.forEach(function(id){if(!live.has(id)) drop=true;});
+      if(!drop) return prev;
+      const next=new Set();
+      prev.forEach(function(id){if(live.has(id)) next.add(id);});
+      return next;
+    });
+  },[clashPairs,clashDismissed]);
+  const hasClash=clashBannerPairs.length>0;
+  // The timeline's view of the same pairs: per booking, who it clashes with and
+  // where. Built from `clashPairs` and NOT from the dismiss-filtered list —
+  // dismissing a strip row quiets the row, it does not make the double-booking
+  // stop being true, and the block marker is the permanent record of it.
+  const clashMap=useMemo(function(){
+    if(!clashPairs.length) return EMPTY_OBJ;
+    const byId={};bookings.forEach(function(b){byId[b.id]=b;});
+    const map={};
+    function add(id,other,c){
+      if(!map[id]) map[id]={names:[],tables:[]};
+      if(other&&map[id].names.indexOf(other.name)<0) map[id].names.push(other.name);
+      c.tables.forEach(function(t){if(map[id].tables.indexOf(t)<0) map[id].tables.push(t);});
+    }
+    clashPairs.forEach(function(c){
+      const A=byId[c.a],B=byId[c.b];
+      if(!A||!B) return;
+      add(c.a,B,c);add(c.b,A,c);
+    });
+    return map;
+  },[clashPairs,bookings]);
+
+  // The same pairs seen per ROW: which minutes of which table are claimed
+  // twice. `findClashes` reports the shared window, so the band is drawn from
+  // the data rather than re-derived from two blocks' geometry.
+  //
+  // A pair whose `tables` is empty (the join-cluster case — see findClashes)
+  // contributes no band, because there is no single row it belongs on. The
+  // marker and the strip row still carry it; only the geometry has nowhere to
+  // go, which is the honest outcome rather than a band drawn on a guess.
+  const clashSpans=useMemo(function(){
+    if(!clashPairs.length) return EMPTY_OBJ;
+    const map={};
+    clashPairs.forEach(function(c){
+      c.tables.forEach(function(t){
+        if(!map[t]) map[t]=[];
+        map[t].push({from:c.from,to:c.to});
+      });
+    });
+    return map;
+  },[clashPairs]);
+
+  // ── v17.11.0: the opening zoom follows the hours span ──────────────────────
+  // A block's width is a fraction of the grid and the grid spans the day, so
+  // widening the day narrows every block. Measured in the review: at the real
+  // 13:00–22:00 the average block is 192px and 8 of 13 carry a start-time chip;
+  // at 06:00–01:00 it is 96px, 10 of 13 names truncate and NO block shows a
+  // time. Settings permits open 6 through close 25, so that is reachable by an
+  // ordinary choice, and the view degrades to colour-and-position exactly when a
+  // long day means more bookings to tell apart. `spanZoom` (time-grid.js, with
+  // the arithmetic tested) returns the zoom that restores the reference density.
+  //
+  // An EFFECT, not the initial state, for two reasons. The hours arrive from the
+  // server after mount, so a lazy initializer would compute against the seed
+  // and never correct itself; and hours are PER WEEKDAY, so a Saturday that
+  // closes at 01:00 needs a different answer from the Tuesday beside it.
+  //
+  // It stops the moment the user touches the controls (`zoomTouchedRef`). The
+  // app choosing a sensible starting zoom is help; the app re-choosing it under
+  // someone who has already zoomed is a fight, and they would lose it on every
+  // date change.
+  //
+  // `defaultZoom` is a FLOOR, never a ceiling: a device set to open at 3× still
+  // opens at 3× on a short day, and at max(3, span) on a long one. The setting
+  // says how close in you like to start; this says how much the day owes you.
+  const viewHours=hoursFor(viewDate);
+  const viewGridMins=(viewHours.gridClose-viewHours.open)*60;
+  useEffect(function(){
+    if(zoomTouchedRef.current) return;
+    const want=Math.max(tlSettings.defaultZoom,spanZoom(viewGridMins,tlSettings.maxZoom));
+    // Return the SAME value when it already matches, so this cannot re-enter —
+    // the v17.10.2 lesson about effects that write derived state.
+    setTimelineZoom(function(cur){return cur===want?cur:want;});
+  },[viewGridMins,tlSettings.defaultZoom,tlSettings.maxZoom]);
+
+  // v17.11.0: "is the day on screen today?" — read by the strip's date
+  // qualifier below AND by the three views' empty-day prompt further down, so it
+  // is declared once, ABOVE the first of them. (A `const` read above its own
+  // declaration in a render body is a TDZ ReferenceError that blanks the app
+  // while build and lint both pass — CLAUDE.md's gotcha, and this is the second
+  // time in this one version that moving a line has been the fix.)
+  const isViewToday=viewDate===new Date().toISOString().slice(0,10);
+
+  // ── v17.11.0: naming the day, for the two sections that cross dates ────────
+  // The strip sits DIRECTLY under the date navigator, so a bare time in it reads
+  // as belonging to the day on screen. Measured in the review: viewing
+  // 15.09.2026 it advertised "Sofía Herrera · 2 pax — table free · 20:00", which
+  // is today's waitlist and today's 20:00.
+  //
+  // Date-scoping the strip was the other option and is the wrong one: it would
+  // hide a live problem behind an unrelated navigation. Someone browsing next
+  // Tuesday to take a booking still needs to know a reminder just fired. So the
+  // sections keep their scope and say what it is.
+  //
+  // EXACTLY TWO sections can be on screen while showing another day's business,
+  // and the first draft of this applied the suffix to four. `lateMap` and
+  // `overlapWarnings` both `return EMPTY_OBJ` when `viewDate !== today`, so
+  // their sections cannot render off-today at all and a qualifier there is dead
+  // code that tells the next reader they can. The two that genuinely cross are
+  // `waitBannerEntries`, which explicitly falls back to TODAY's waitlist when
+  // you navigate away, and the reminder banners, whose hook says outright they
+  // are "operational, not tied to the day being viewed".
+  //
+  // On the TITLE rather than on each row: one place per section, it covers rows
+  // carrying no time at all, and it survives collapse — where the lid shows the
+  // top section's own title.
+  //
+  // `Double-booked` takes no suffix because it IS scoped to the viewed date (see
+  // clashPairs), which is the day its markers are drawn on. AppBanners takes
+  // none either: offline / write-failed / load-failed are not about a day, and
+  // `Closed this day` and the inefficiency notice are already about the viewed
+  // one.
+  const notifToday=isViewToday?"":" · today";
+
   // ── v17.8.0: the ONE notification strip ────────────────────────────────────
   // Six banners could stack at once and, on a busy evening — exactly when
   // several fire together — they pushed the timeline off the bottom of the
@@ -2515,7 +2748,10 @@ function BookingApp({uid}){
   // ORDER IS SEVERITY, and it lives here rather than in the strip because it
   // is a judgement about THIS app's operations, next to the flags that produce
   // it: a failed write can lose a booking; offline is degraded but safe;
-  // overlap means two parties are on one table; late is a guest problem;
+  // a double-booking means two parties are ALREADY on one table and one of them
+  // will be turned away; overlap is the softer version of the same sentence —
+  // a seated party predicted to run into the next booking; late is a guest
+  // problem;
   // reminders are scheduled prompts; the waitlist is an opportunity, not a
   // problem, so it sits last and stays green. The strip shows the first entry
   // as its collapsed summary, which makes "worst thing first" load-bearing.
@@ -2536,6 +2772,9 @@ function BookingApp({uid}){
       hasConnected:hasConnected,
       dayClosed:hoursFor(viewDate).closed
     }),
+    hasClash?[{id:"clash",tone:"var(--danger-text)",tint:"var(--danger-bg)",icon:ClashIcon,
+      title:clashBannerPairs.length===1?"Double-booked":"Double-bookings",count:clashBannerPairs.length,
+      node:<ClashBanner pairs={clashBannerPairs} bookings={bookings} onAssign={setManualTarget} onDismiss={dismissClashRow} />}]:[],
     hasOverlap?[{id:"overlap",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:OverlapIcon,
       title:"Overlap warnings",count:Object.keys(overlapBannerMap).length,
       node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
@@ -2543,9 +2782,9 @@ function BookingApp({uid}){
       title:"Running late",count:Object.keys(lateBannerMap).length,
       node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
     reminderCount?[{id:"reminders",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:BellRingIcon,
-      title:reminderCount===1?"Reminder":"Reminders",count:reminderCount,node:reminderBanners}]:[],
+      title:(reminderCount===1?"Reminder":"Reminders")+notifToday,count:reminderCount,node:reminderBanners}]:[],
     hasWaitBanner?[{id:"wait",tone:"var(--success-text)",tint:"var(--suggest-bg-soft)",icon:WaitIcon,
-      title:"Waitlist — table free",count:waitBannerEntries.length,
+      title:"Waitlist — table free"+notifToday,count:waitBannerEntries.length,
       node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[]
   );
   // ── v17.8.0: waitlist ghost blocks for the Timeline ─────────────────────────
@@ -2586,7 +2825,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -2609,12 +2848,35 @@ function BookingApp({uid}){
       // hand the whole entry to the existing bookFromWaitlist (which prefills
       // the booking form from it + its waitAvail time).
       onBookWait:function(id){const A=R.current;const w=(A.waitlist||[]).find(function(x){return x&&x.id===id;});if(w) A.bookFromWaitlist(w);},
+      // /code-review fix: the zoom setter has to come through VA like every
+      // other function prop on the memoized views. It replaced `setTimelineZoom`
+      // — a React state setter, which is stable across renders forever — with a
+      // plain function declared in BookingApp's body, i.e. a NEW identity every
+      // render, which busts TimelineView's React.memo unconditionally. The
+      // booking-form draft lives in BookingApp, so that re-ran the timeline's
+      // whole block layout on every keystroke: the exact failure CLAUDE.md
+      // records for `liveBookings`.
+      onSetZoom:function(z){R.current.setTimelineZoomManual(z);},
       onPrint:function(){window.print();}
     };
   });
 
   // v17.0.0: the Plan (floor) view — reads settings/layout.floorPlan via the
   // `layout` state; quick-status + edit + walk-in ride the existing handlers.
+  // v17.11.0: the empty-day prompt's three inputs, computed ONCE so the three
+  // views cannot disagree about when a day is empty or what you may do with it.
+  // The walk-in rule is List's, generalised: a walk-in is a party standing at
+  // the door now, so offering it on any day but today opens a form for the wrong
+  // date.
+  //
+  // Declared ABOVE the three view elements, not next to the first one that
+  // reads them: `planView` is built first, and a `const` used above its
+  // declaration in a render body is a TDZ ReferenceError that blanks the whole
+  // app — which neither `npm run build` nor lint sees. Hit here exactly as
+  // CLAUDE.md's gotcha describes, and caught by loading the page.
+  const emptyWalkin=isViewToday?VA.onWalkin:null;
+  const dayClosed=hoursFor(viewDate).closed;
+
   const planView=<PlanView
     bookings={bookings}
     date={viewDate}
@@ -2629,6 +2891,9 @@ function BookingApp({uid}){
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
     turnBuffer={turnBuffer}
+    onNew={VA.onNew}
+    emptyWalkin={emptyWalkin}
+    dayClosed={dayClosed}
     hoursSig={weekHours} />;
   // v17.1.0 perf note: hoursSig / layoutSig are identity-only props — the views
   // read OPEN/GRID_CLOSE/QUARTER_HOURS/TIMELINE_TABLES/TOTAL_SEATS as LIVE
@@ -2650,11 +2915,13 @@ function BookingApp({uid}){
     onBlock={VA.onBlock}
     nowMins={nowMins}
     warnings={overlapWarnings}
+    clashes={clashMap}
+    clashSpans={clashSpans}
     late={lateMap}
     freeing={freeingMap}
     onNoShow={VA.onNoShow}
     zoom={timelineZoom}
-    setZoom={setTimelineZoom}
+    setZoom={VA.onSetZoom}
     followZoom={tlSettings.followZoom}
     followLeadMins={tlSettings.followLead}
     maxZoom={tlSettings.maxZoom}
@@ -2669,6 +2936,9 @@ function BookingApp({uid}){
     onBookWait={VA.onBookWait}
     hoursSig={weekHours}
     layoutSig={layout}
+    onNew={VA.onNew}
+    onWalkin={emptyWalkin}
+    dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const listEl=<ListView
     bookings={bookings}
@@ -2687,9 +2957,8 @@ function BookingApp({uid}){
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
     onNew={VA.onNew}
-    // Walk-in only on TODAY: a walk-in is a party standing at the door now, so
-    // offering it on a future day would open a form for the wrong date.
-    onWalkin={viewDate===new Date().toISOString().slice(0,10)?VA.onWalkin:null}
+    onWalkin={emptyWalkin}
+    dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const viewEl={timeline:timelineEl,list:listEl,plan:planView};
   const mainView=viewEl[view];
@@ -2705,7 +2974,13 @@ function BookingApp({uid}){
       const other=focusedPane==="a"?"b":"a";
       if(split[other]===v){applySplit(Object.assign({},split,{a:split.b,b:split.a}));setFocusedPane(other);return;}
       if(split[focusedPane]===v) return;
-      applySplit(Object.assign({},split,{[focusedPane]:v}));
+      // v17.11.0: tapping "Timeline" while a side-by-side pane is too narrow for
+      // one would drop it into exactly the layout the menu refuses to build. The
+      // split TURNS to stacked instead of refusing the tap: the user asked for
+      // the timeline, and the orientation is the part that does not fit.
+      const nextSplit=Object.assign({},split,{[focusedPane]:v});
+      if(v==="timeline"&&!tlPaneOk(shellW,nextSplit.dir,nextSplit.ratio,focusedPane)) nextSplit.dir="h";
+      applySplit(nextSplit);
       return;
     }
     if(v!==view) bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");
@@ -2983,6 +3258,7 @@ function BookingApp({uid}){
                 paneB={viewEl[split.b]} />:mainView}</SlideView></div></div>{splitMenuFor?<SplitMenu
               view={splitMenuFor}
               onConfirm={confirmSplit}
+              sideBySideOk={splitSideBySideOk}
               onClose={function(){setSplitMenuFor(null);}} />:null}<ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}

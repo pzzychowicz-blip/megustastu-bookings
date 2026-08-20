@@ -15,13 +15,13 @@ import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
   comboCap, comboCapBest, sanitize, sanitizeAll, diffBooking,
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
-  verifyClean, findConflicts, canAssign, getBusy, getBlockSlots,
+  verifyClean, findConflicts, findClashes, canAssign, getBusy, getBlockSlots,
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
   stayedMins, bookEnd, padEnd, dayBookingsSig,
 } from "../src/lib/booking-logic.js";
-import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer } from "../src/lib/constants.js";
+import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
 const today = new Date().toISOString().slice(0, 10);
@@ -728,6 +728,33 @@ describe("an all-locked clash is unresolvable, which is why the loop existed", (
     expect(findConflicts(clash(), D).sort()).toEqual(["p", "r"]);
   });
 
+  it("findClashes names the PAIR, the shared table and the shared minutes", () => {
+    // The half findConflicts throws away. "p and r" is what a strip row is
+    // about; "table 3" and "20:30–21:30" are what the row and the block title
+    // say. None of it is recoverable from the id set.
+    const out = findClashes(clash(), D);
+    expect(out.length).toBe(1);
+    expect(out[0].a).toBe("p");
+    expect(out[0].b).toBe("r");
+    expect(out[0].tables).toEqual(["3"]);
+    expect(out[0].from).toBe(toMins("20:30"));  // later start
+    expect(out[0].to).toBe(toMins("21:30"));    // earlier end (p: 20:00 + 90)
+  });
+
+  it("findConflicts is exactly findClashes deduped — the contract did not move", () => {
+    const pairs = findClashes(clash(), D);
+    const ids = new Set(pairs.flatMap((c) => [c.a, c.b]));
+    expect(findConflicts(clash(), D).sort()).toEqual([...ids].sort());
+  });
+
+  it("a clean day yields no pairs", () => {
+    const ok = [
+      mk({ id: "p", time: "20:00", tables: ["3"] }),
+      mk({ id: "r", time: "20:00", tables: ["4"] }),
+    ];
+    expect(findClashes(ok, D)).toEqual([]);
+  });
+
   it("survives a reshuffle unchanged — applyOpt copies locked tables verbatim", () => {
     const before = clash();
     const after = bookingsAfterAction(before, D, [], null, false, true);
@@ -752,5 +779,31 @@ describe("an all-locked clash is unresolvable, which is why the loop existed", (
     const after = bookingsAfterAction(before, D, [], null, false, true);
     expect(dayBookingsSig(after, D)).not.toBe(dayBookingsSig(before, D));
     expect(verifyClean(after, D)).toBe(true);
+  });
+});
+
+describe("findClashes: the clash with NO shared table", () => {
+  // canAssign rejects a pair for a SECOND reason: each booking taking two or
+  // more tables from the same join cluster (they would need the same physical
+  // join). Those two sets need not intersect — which callers must handle,
+  // because "both on table N" is then a sentence with no N in it.
+  //
+  // Unreachable in the DEFAULT layout by pigeonhole: its biggest cluster is
+  // three tables, and two 2-subsets of a 3-set always share a member. It takes
+  // a join group of FOUR, which Settings → Layout permits.
+  afterEach(() => setLayout(DEFAULT_LAYOUT));
+
+  it("reports the pair with an empty `tables`", () => {
+    setLayout(Object.assign({}, DEFAULT_LAYOUT, {
+      joinGroups: [["2", "3", "4", "5A"]],
+    }));
+    const day = [
+      mk({ id: "p", time: "20:00", size: 4, tables: ["2", "3"], _locked: true }),
+      mk({ id: "r", time: "20:00", size: 4, tables: ["4", "5A"], _locked: true }),
+    ];
+    const out = findClashes(day, D);
+    expect(out.length).toBe(1);
+    expect(out[0].tables).toEqual([]);          // nothing to name
+    expect(findConflicts(day, D).sort()).toEqual(["p", "r"]);
   });
 });

@@ -70,3 +70,35 @@ export function hourLabelAt(mins) {
 export function isHourMark(mins) {
   return mins % 60 === 0;
 }
+
+// ── Zoom that compensates for the hours span (v17.11.0) ──────────────────────
+// The timeline's legibility was coupled to a Settings value with nothing in
+// between. A block's width is a fraction of the grid, and the grid spans the
+// day, so widening the day narrows every block — measured in the review: at the
+// restaurant's real 13:00–22:00 the average block is 192px, 2 of 13 labels
+// truncate and 8 of 13 show their start-time chip; at 06:00–01:00 it is 96px,
+// 10 of 13 truncate and NO block shows a time. Settings permits open 6 through
+// close 25, so a restaurant can walk into that through an ordinary, legitimate
+// choice, and the view degrades to colour-and-position exactly when a long day
+// means more bookings to tell apart.
+//
+// The fix is one derived number: open at a zoom that restores the reference
+// day's density. `REFERENCE_GRID_MINS` is the MGT default — 13:00 open, 22:00
+// close, so a GRID_CLOSE of 23:00 and a 600-minute grid. At 06:00–01:00 the grid
+// is 1200 minutes and this returns 2×, which puts blocks back at ~192px.
+export const REFERENCE_GRID_MINS = 600;
+
+/**
+ * @param {number} gridMins  the viewed day's OPEN→GRID_CLOSE span, in minutes
+ * @param {number} maxZoom   the device's configured ceiling (Settings)
+ * @returns {number} a zoom on the control's own 0.5 step, never below 1
+ */
+export function spanZoom(gridMins, maxZoom) {
+  const cap = Number.isFinite(maxZoom) && maxZoom >= 1 ? maxZoom : 1;
+  if (!Number.isFinite(gridMins) || gridMins <= 0) return 1;
+  // Rounded to 0.5 because that is the +/- buttons' step. A derived 1.83× would
+  // be a zoom the user cannot get back to after touching the controls once,
+  // which makes the reset button lie about what it resets to.
+  const q = Math.round((gridMins / REFERENCE_GRID_MINS) * 2) / 2;
+  return Math.min(cap, Math.max(1, q));
+}

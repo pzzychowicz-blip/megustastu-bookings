@@ -11120,3 +11120,589 @@ into a patch version: making `bookingsAfterAction` return its input array on a
 no-op (the deep fix for the loop class, but it changes a function **39 call
 sites** depend on), `dayBookingsSig`'s double scan, and the strip lid's 1px
 radius.
+
+---
+
+## v17.11.0 — what staff hit during service
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** see each entry. No persisted-data change and no Firebase
+console step for any of them.
+**Verification:** see each entry.
+
+The second version staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`). v17.10.2 took the findings that needed
+no decision; this one takes the findings that show up *during service*, on the
+three views a host is actually looking at while parties arrive.
+
+One of them is different in kind from everything else in the review, and it is
+worth saying why before the entries. Almost every finding in all seven passes is
+an OMISSION — a name a screen reader cannot hear, a state with no text
+alternative, a control that keyboard focus cannot reach. The double-booking is
+not an omission. The app detects the clash correctly, decides correctly that it
+cannot resolve it, and then **draws it as something that is not true**: two
+parties promised one table render as two tidy consecutive sittings, because the
+later block paints over the earlier one and nothing says so. That is the only
+place in this app where the interface asserts something false, which is why it
+leads the version.
+
+### 1/n · Draw the double-booking
+
+**Files:** `src/lib/booking-logic.js`, `src/components/ClashBanner.jsx` (new),
+`src/components/Icons.jsx`, `src/components/TimelineView.jsx`, `src/App.jsx`,
+`index.html`, `tests/booking-logic.test.js`
+**Behavioural change:** a same-table clash on the viewed day now draws a red
+border and a marker on both blocks, a stripe across the contested minutes, and a
+`Double-booked` section in the notification strip. Detection logic is unchanged —
+`findClashes` is `findConflicts`' own pair-scan with the pairing kept.
+
+**The gap.** `overlapWarnings` (App.jsx) is an OVERSTAY detector: it iterates
+`seated` bookings and warns when one runs into the next booking's slot. Two
+*confirmed* bookings on one table never reach it. `findConflicts`, which does see
+them, had exactly one consumer since v15.6.1 — the post-sync reconciliation
+effect, which relocates the newest NON-LOCKED booking and then stops:
+`if(!movable.length) break; // only locked overlaps — leave as-is`. So an
+all-locked clash was detected, deliberately left alone, and never shown to
+anybody. `_conflict` is never set `true` anywhere in `src/`; it is only cleared
+or read.
+
+It is reachable by completely ordinary use — every walk-in is `_manual:true
+_locked:true` by definition, and every drag-drop path sets `_locked:true`.
+Measured live on the seeded review day: the two blocks sat on one row and
+overlapped by 288px, the later painting over the earlier.
+
+**`findClashes`.** The pairs behind `findConflicts`: who clashes with whom, on
+which tables, over which minutes. The id set was enough for the reconciler, which
+picks one booking out of it and does not care what it collided with; a block that
+must say "double-booked with Rita Camps on table 3" and a strip row that is
+*about a pair* can recover neither from `["p","r"]`. `findConflicts` is now
+derived from it — one loop instead of two, and its existing tests are what prove
+the contract did not move. `verifyClean` deliberately keeps its own copy: it
+short-circuits at the first clash and runs over every active date on every
+settled snapshot, so building a pair list it would throw away is a real cost.
+
+Unbuffered, like the two functions whose loop it replaces — turning the
+turnaround setting on must never make an already-booked day start reporting
+clashes (the v17.6.0 scope rule).
+
+`tables` is the INTERSECTION, and the tests pin the case where it is **empty**:
+`canAssign` also rejects a pair when each booking takes two or more tables from
+the same join cluster, since they would need the same physical join, and those
+two sets need not intersect. Unreachable in the default layout by pigeonhole —
+its biggest cluster is three tables and two 2-subsets of a 3-set always share a
+member — but a join group of FOUR is a legitimate Settings → Layout edit. Callers
+must handle it: "both on table N" is otherwise a sentence with no N in it, and
+`ClashBanner` says "tables that cannot both be joined" instead.
+
+**Three surfaces, one source.** The block marker, the stripe and the strip
+section all read the same `findClashes` output, so they cannot disagree about
+what is clashing.
+
+- **The block** takes a 3px danger-red border, outranking both the overstay
+  warning and the late timer — those are predictions, this is the schedule
+  already being wrong. It reuses the overstay's red rather than adding a sixth
+  block-border colour; the two are told apart by the marker and the stripe, not
+  by hue, because making the border the distinguishing signal is the
+  colour-only-status mistake this release exists to fix.
+- **The marker** is part of the block's FIXED width cost, not a rail flag, so it
+  can never be dropped. `block-layout.js`'s ladder sheds informational flags
+  first and exception flags last; a double-booking is not on that scale at all.
+  A seated block starts a few pixels wide and grows, so anything droppable is
+  invisible for the first stretch of every visit — which for this marker would
+  mean it disappears exactly while a host is deciding where to seat the party
+  who just walked in. `chipRoomFor` gained the same term, so the day-wide
+  start-time-chip rule still knows what a block really costs.
+- **`ClashBand`** is a 5px stripe across the minutes both bookings claim, and it
+  is the one part that carries information the border cannot: it runs from the
+  later booking's start to the EARLIER one's end, so its right-hand edge is the
+  exact minute the earlier booking finishes — the fact the later block is
+  painting over. Verified live: it ends at Pau's right edge, 72px short of
+  Rita's, on a pair where Pau is otherwise invisible past 20:30.
+
+**The stripe was a full-height hatch first, and that was wrong.** At 0.55 opacity
+across the row it marked the span correctly and sat directly on the later
+booking's name and start-time chip — "20:30 Rita Ca…" behind diagonal stripes. A
+marker that obscures the label it is warning about has traded one unreadable
+block for another, which is this whole change's own complaint. No opacity fixes
+it: anything faint enough to read through is too faint to be the alarm. It moved
+to a stripe inside the block, low enough to clear the vertically-centred label
+and high enough to clear the block's own border — that second gap is the point,
+since the border is also danger red and a stripe flush against it just read as a
+thicker border. The row's own gutter (5px, from the blocks' `top: 3` /
+`ROW_H - 8` inset) was tried and is not enough to separate them.
+
+**`ClashIcon`** — two overlapping rounded squares. It could NOT reuse
+`OverlapIcon`, even though that icon's own comment ("two blocks sharing a span,
+which is literally the fault") describes a clash at least as well as the overstay
+it was drawn for: the strip lists an icon + count PER SECTION in its collapsed
+tally, so two sections wearing one mark would render "⧉2 ⧉1" and say nothing. An
+icon there is an identity, not a decoration. The two marks split along what the
+sections mean — offset bars are a TIME fault, overlapping squares an ASSIGNMENT
+fault.
+
+Chosen by rasterising six candidates at the 14px it ships at and magnifying, per
+the `DepositIcon` lesson. **Four failed there and would all have looked fine at
+24**: two arrowheads facing each other merged into a pair of plus signs; a
+bar-with-dots merged into one blob; two chevrons facing made a BOWTIE, which at
+14px is `WaitIcon`'s hourglass — the mark of the waitlist section, sitting in the
+same tally row; and two bars on one baseline read as a single long bar with holes
+punched in it, a domino rather than a collision.
+
+**The banner's action is Assign, not Reassign**, and copying `OverlapBanner`'s
+row would have shipped a button that can only ever fail. `reassignBooking`
+refuses a locked booking outright — and a clash that survived the reconciler is
+locked BY DEFINITION, since being locked is the exact condition under which the
+reconciler leaves it. The row opens the manual assign modal instead. It offers
+the LATER booking: both are equally "wrong", but the earlier party may already be
+at the table, and the reconciler's own tie-break (newest first) points the same
+way, so the automatic path and the manual one propose the same move rather than
+fighting over it.
+
+**Scoped to the VIEWED date**, unlike late/overlap/waitlist which are today-only.
+This is the one section whose rows correspond 1:1 to markers drawn on the view
+you are looking at, and whose action operates on that day. A clash section about
+today, sitting under a date navigator showing next Tuesday, beside blocks
+carrying no marker, would be three different days in one glance.
+
+The dismissal Set is keyed by PAIR (`clashRowId`), not by booking, so dismissing
+"Pau vs Rita" does not also silence "Rita vs a third party". The block marker
+reads the UNFILTERED pairs — dismissing a strip row quiets the row; it does not
+make the double-booking stop being true.
+
+**Two traps hit while building it, both recorded at their sites.**
+`clashRowId`'s separator is an ASCII control character for the reason `undoKey`
+learned in v17.10.2 (a separator reachable from the data is a collision waiting
+to happen; `"_"` and `"-"` are already spoken for by recurring occurrence ids) —
+but written as the `\u001f` ESCAPE and never as the raw byte, which is invisible
+in every editor, grep and diff. And it lives in `booking-logic.js` rather than in
+`ClashBanner`, because a component file that also exports a plain function trips
+`react-refresh/only-export-components`, a lint ERROR and a hard CI gate — the
+trap `Icons.jsx`'s `StatusIcon` note already records, walked into anyway. It
+belongs there on the merits too: the id of a clash is a property of the clash,
+not of the banner listing it.
+
+**Verification:** build ✓ · 387 tests ✓ (4 new on `findClashes`, incl. the
+empty-intersection case under a custom 4-table join group) · lint 0 errors ·
+`check:style` OK. Live on the seeded fixture in **both themes**: both blocks
+measured at `3px rgb(220, 38, 38)`, the stripe measured spanning exactly
+`ritaLeft → pauRight`, the strip section rendering "Pau Estévez (20:00) and Rita
+Camps (20:30) are both on table 3." with Assign and dismiss. Console clean; 3 DOM
+mutations in 5s idle (the 15s clock tick), i.e. no render loop.
+
+### 2/n · `StatusIcon` on the timeline block
+
+**Files:** `src/components/TimelineView.jsx`
+**Behavioural change:** every timeline block now carries its status as a mark as
+well as a fill, and the status reaches the accessibility tree. The legend chips
+carry the same mark.
+
+A block's status was `BLOCK_BG[b.status]` and nothing else — no text, no mark. A
+WCAG **1.4.1** failure (use of colour), found independently by three of the
+review's seven passes, and the legend at the bottom of the view does not answer
+it: a legend is a lookup rather than an in-context indicator, and it does nothing
+at all for a screen reader. `StatusIcon` shipped in v17.10.0 for exactly this
+reason and went onto buttons only.
+
+It also closes the consistency gap the design-critique pass named: List states
+the status in a solid badge ("Seated", "Confirmed"), Plan uses occupancy fills,
+and Timeline said it in colour alone — three views, three languages for the app's
+most important attribute. `STATUS_LABEL` here is the LIST CARD's vocabulary
+rather than a new one, so the mark's accessible name and the badge agree.
+
+**It leads the rail, and it is not a flag.** The flags say what is unusual about
+a booking; this says what the booking IS. It is fixed width cost rather than a
+`railFlags` entry, for the same reason as the clash marker: a seated block is
+drawn at its LIVE duration, so it starts a few pixels wide and grows, and a
+droppable status mark would be missing from every block for the first stretch of
+every visit — while the party is being seated, which is when the status just
+changed. `role="img"` + `aria-label` come free from `BlockFlag`.
+
+**The clash marker moved to the END of the marker run in the same commit.**
+v17.9.0's rail order is facts first and exception states last (deposit,
+preferred, then locked / repeat-no-show / overstaying). 1/n put the clash marker
+at the head because it is the most severe; with the status mark taking the lead
+position on its own merits, following the established order costs nothing and
+keeps one rule instead of two.
+
+**The width cost is real and was checked rather than assumed.** Every block now
+reserves an extra 18px, which also enters `chipRoomFor`, so the day-wide
+start-time-chip threshold rises from 162px to 180px. At the restaurant's real
+13:00–22:00 hours a block averages 192px, so chips stay on; at the DEV
+06:00–01:00 they average 96px and were already off — which is the legibility
+cliff 5/n is about, not something this adds.
+
+**Verification:** build ✓ · lint 0 · `check:style` OK. Live: blocks measured
+carrying `aria-label` "Confirmed" / "Pending — awaiting confirmation" /
+"Completed", and the two clashing blocks carrying both their status label and
+"Double-booked with …". Legend measured with 5 of 5 status chips rendering an
+icon. Console clean.
+
+### 3/n · Share the empty-day prompt with Timeline and Plan
+
+**Files:** `src/components/EmptyDay.jsx` (new), `src/components/ListView.jsx`,
+`src/components/TimelineView.jsx`, `src/components/PlanView.jsx`, `src/App.jsx`
+**Behavioural change:** an empty day now prompts in all three views instead of
+one. A CLOSED empty day stops prompting at all — including in List, where it
+previously offered two buttons the app refuses.
+
+v17.8.0 wrote a proper empty state for List and it never left. Timeline drew an
+empty grid, Plan drew an empty room: the same condition answered three ways, one
+of them useful.
+
+**The shared thing is the prompt and its position, not "blank the view".** One
+rule for all three — the prompt sits at the top of the view's content. In List
+that IS the whole body, because a list of nothing has nothing else to draw, so
+List's behaviour is byte-for-byte what v17.8.0 shipped. In Timeline and Plan it
+sits above a canvas that is still worth drawing: the grid and the floor plan are
+pictures of the ROOM, an empty room is exactly what you want to see on an empty
+day, and both carry affordances that have nothing to do with bookings (tapping a
+table label to block it, reading the layout). Replacing them would have taken
+those away to deliver a sentence.
+
+**The closed day is not this, and List had it wrong.** On a closed day List
+offered "New booking" and "Walk-in" and the app refuses both — a prompt whose
+only outcome is a refusal. `EmptyDay` renders nothing when `closed`, because the
+strip's own `Closed this day` section is the empty state for that case and has
+appeared above all three views since v17.8.0's strip audit. Verified live by
+closing Tuesday in DEV settings and restoring it after: the closed day shows the
+strip's notice and no prompt, in both List and Timeline.
+
+App computes `isViewToday` / `emptyWalkin` / `dayClosed` ONCE and passes them to
+all three, so the views cannot disagree about when a day is empty or what may be
+done with it. The walk-in rule is List's own, generalised: a walk-in is a party
+standing at the door now, so offering it on any day but today opens a form for
+the wrong date. `PlanView` keeps `emptyWalkin` as a SEPARATE prop from its
+existing `onWalkin` — that one is the per-table handler and is always present,
+and folding them together would have put a Walk-in button on next month's plan.
+
+**The TDZ gotcha, hit exactly as CLAUDE.md describes it.** The three consts were
+first declared next to `timelineEl`, the first element that reads them — but
+`planView` is built earlier in the same body, so it read them above their
+declaration. That is a ReferenceError which blanks the whole app behind a generic
+"An error occurred in `<BookingApp>`", and **both `npm run build` and lint passed
+on it**. Only loading the page catches this. They are declared above all three
+now, with the reason at the site.
+
+**Verification:** build ✓ · 387 tests ✓ · lint 0 · `check:style` OK. Live in DEV
+on an empty future day: the prompt renders in all three views, with Walk-in
+correctly withheld (not today) and New booking present; List unchanged; the
+closed-day case checked by toggling the setting and restoring it. Console clean.
+
+### 4/n · Bound the expanded notification strip
+
+**Files:** `src/components/NotificationStrip.jsx`
+**Behavioural change:** the expanded strip body is capped at 40vh and scrolls
+inside itself. Collapsed behaviour, the lid and the tally are untouched.
+
+v17.8.0's whole point was that the COLLAPSED height is one row however many
+notifications fire — "the cost of a bad evening stops scaling with how bad it
+is". Expanding was left unbounded, and measured live the expanded strip took
+**305px of an 860px viewport (35%) with only two of six sections up**. Six late
+bookings plus a waitlist would have pushed the timeline off the tablet again:
+the exact failure the strip was built to prevent, moved one tap away.
+
+**The cap goes on the BODY, never on the pane.** The lid is a sibling and must
+stay put — which is also what makes this work, because v17.8.0 had already
+decided the collapsed tally survives expansion "because the sections scroll and
+the lid doesn't". That sentence described an intent the code had not implemented;
+this is it. A reader halfway down a scrolled body still has a fixed icon+count
+summary above it.
+
+`Reveal`'s inner track goes `overflow: visible` once open and settled, so the cap
+belongs on a scroller INSIDE it rather than on the Reveal — otherwise the two
+would fight over the same property and the open/close ease would clip wrongly.
+
+**No `padding-inline` gutter, and that is a measurement rather than an
+oversight.** CLAUDE.md's rule is that a scroll container clips its children's
+hover lift and focus ring at the padding box, and `overflow-y: auto` makes the
+other axis clip too per spec. These rows already carry their own inset from
+`BannerRows`: measured live at **14px of right clearance against a 5.8px worst
+case** — 4% of the WIDEST control, a 145px "Assign &lt;name&gt;" button, not the
+36px ✕ it is tempting to size against — plus 4px for the focus ring. Noted at the
+site to re-measure if a wider control is ever added to a banner row.
+
+**Verification:** build ✓ · 387 tests ✓ · lint 0 · `check:style` OK. Proven with
+real content rather than by reading the CSS: 12 clashing bookings seeded into DEV
+on a scratch date produced a 12-row `Double-bookings` section measuring
+`scrollHeight` **635px** — 84% of the viewport — bounded to `clientHeight` 304px
+(40vh of 760) and scrolling, with the timeline still visible below. Clearances
+measured on the live nodes. Seed deleted afterwards; DEV left as found.
+
+### 5/n · Name the day, for the two strip sections that cross dates
+
+**Files:** `src/App.jsx`
+**Behavioural change:** while the viewed date is not today, the `Waitlist — table
+free` and `Reminder(s)` section titles gain " · today". Nothing else changes.
+
+The strip sits DIRECTLY under the date navigator, so a bare time in it reads as
+belonging to the day on screen. Measured in the review: viewing 15.09.2026, it
+advertised "Sofía Herrera · 2 pax — table free · **20:00**" — today's waitlist,
+and today's 20:00.
+
+**Date-scoping the strip was the other option and is the wrong one.** It would
+hide a live problem behind an unrelated navigation: someone browsing next Tuesday
+to take a booking still needs to know a reminder just fired. The sections keep
+their scope and say what it is.
+
+**Exactly TWO sections can be on screen while showing another day's business, and
+the first draft of this applied the suffix to four.** `lateMap` and
+`overlapWarnings` both `return EMPTY_OBJ` when `viewDate !== today`, so their
+sections cannot render off-today at all — a qualifier there is dead code that
+tells the next reader they can. Caught by trying it live and watching the
+Running-late section disappear on navigation rather than gain a suffix. The two
+that genuinely cross are `waitBannerEntries`, which explicitly falls back to
+today's waitlist when you navigate away, and the reminder banners, whose hook
+says outright they are "operational, not tied to the day being viewed".
+
+On the TITLE rather than on each row: one place per section, it covers rows
+carrying no time at all, and it survives collapse — where the lid shows the top
+section's own title. `Double-booked` takes no suffix because it IS scoped to the
+viewed date (4/n), and `AppBanners` takes none because offline / write-failed /
+load-failed are not about a day while `Closed this day` and the inefficiency
+notice are already about the viewed one.
+
+**Verification:** build ✓ · 387 tests ✓ · lint 0 · `check:style` OK. Reproduced
+the review's exact case in DEV — a waitlist entry for today, viewed from
+15.09.2026 — and read the rendered title back as "Waitlist — table free · today"
+above the row "Sofia Test · 2 pax — table free · 21:00"; then confirmed the
+suffix is absent on today. Both seeds deleted; DEV left as found.
+
+### 6/n · The opening timeline zoom follows the hours span
+
+**Files:** `src/lib/time-grid.js`, `src/App.jsx`, `tests/time-grid.test.js`
+**Behavioural change:** on a day whose OPEN→GRID_CLOSE span is longer than the
+reference 10 hours, the timeline opens zoomed in far enough to restore the
+reference density. A restaurant on the default 13:00–22:00 sees no change at all.
+
+A block's width is a fraction of the grid and the grid spans the day, so widening
+the day narrows every block, with nothing in between. Measured in the review: at
+the real 13:00–22:00 the average block is **192px**, 2 of 13 labels truncate and
+**8 of 13** show their start-time chip; at 06:00–01:00 it is **96px**, **10 of
+13** truncate and **none** shows a time. Settings permits open 6 through close
+25, so a restaurant reaches that through an entirely legitimate choice, and the
+view degrades to colour-and-position exactly when a long day means more bookings
+to tell apart.
+
+`spanZoom(gridMins, maxZoom)` lives in `time-grid.js` with the arithmetic tested,
+because it is a rule nobody can see by reading the render. `REFERENCE_GRID_MINS`
+is 600 — the MGT default day, 13:00 open through a 23:00 GRID_CLOSE — so the
+default configuration returns exactly 1× and is untouched by construction. It
+rounds to **0.5, the zoom control's own step**: a derived 1.83× would be a zoom
+the user cannot return to once they touch the buttons, which would make the reset
+control lie about what it resets to. It never returns below 1 (a short day is not
+a reason to shrink the app's baseline) and never above the device's `maxZoom`.
+
+**An effect, not the initial state, and the reasons are both real.** The hours
+arrive from the server after mount, so a lazy initializer would compute against
+the seeded default and never correct itself. And hours are PER WEEKDAY, so a
+Saturday closing at 01:00 needs a different answer from the Tuesday beside it.
+
+**It stops the moment the user touches the controls.** `setTimelineZoomManual`
+wraps every user-driven entry point — the +/- buttons, reset, Follow, the
+keyboard shortcuts — and sets `zoomTouchedRef`. The app choosing a starting zoom
+is help; the app re-choosing it under someone who has already zoomed is a fight
+they would lose on every date change. The `maxZoom` setting's own clamp
+deliberately does NOT count as a touch: it is a bound being applied, not a zoom
+being chosen. The effect returns the same value when it already matches, so it
+cannot re-enter — the v17.10.2 lesson about effects that write derived state.
+
+`defaultZoom` is a FLOOR, never a ceiling: a device set to open at 3× still opens
+at 3× on a short day and at max(3, span) on a long one. The setting says how
+close in you like to start; this says how much the day owes you.
+
+**Verification:** build ✓ · 393 tests ✓ (6 new on `spanZoom`) · lint 0 ·
+`check:style` OK. Live on DEV's 06:00–01:00 hours: the timeline opens at **2×**
+and **9 of 14 blocks show their start-time chip**, against the review's measured
+0 of 13 at 1×. Manual override checked end to end — zoomed to 1×, navigated to
+another date, zoom stayed 1×; reloaded, back to 2×.
+
+One test assertion in this commit was wrong before it was right, and the failure
+is the useful part: 760 minutes was written as rounding DOWN to 1×, and it rounds
+to 1.5× — 1.267 is nearer 1.5 than 1. The code was correct and the expectation
+was not, which is the only reason to write the arithmetic down in a test at all.
+
+### 7/n · A Timeline may not take a side-by-side pane that is too narrow for it
+
+**Files:** `src/App.jsx`, `src/components/SplitMenu.jsx`
+**Behavioural change:** on a shell narrower than ~2110px, Split View will not put
+the Timeline beside another view. `Side by side` is offered but refused with the
+reason; an existing split that becomes too narrow turns STACKED rather than being
+torn down. A stacked split is never affected, and neither is any split without a
+Timeline in it.
+
+The `winW < 600` gate has always said "a Timeline in a ~180px pane is unusable" —
+that reasoning is about the PANE and was only ever applied to the WINDOW.
+Measured live at 1280px in a 50/50 side-by-side split: the Timeline's own
+scroller is **371px against a 2896px grid, 13% of the service visible at once**.
+
+Scrolling a timeline is normal and is not the complaint. The complaint is that a
+half-width Timeline can show you the whole day OR readable blocks and never both,
+and the view exists to do both — "where does the evening stand" is the question
+it answers.
+
+**The threshold is derived, not chosen.** Measured on the live DOM, a pane loses
+~124px to the table-label column (58) and the card's padding and gutters before
+the grid starts. On the reference 10-hour day a 90-minute booking is 15% of the
+grid, and the block's own width budget says it needs 138px (`NAME_MIN` 55 +
+assign handle 41 + size ring 24 + 2/n's status mark 18) before the guest name
+renders at all. 138 / 0.15 = 920px of grid, + 124 = 1044 → `MIN_TL_PANE` 1050.
+One pure `tlPaneOk(appW, dir, ratio, tlPane)`, so the menu, the view switcher and
+the repair effect all ask the question the same way.
+
+**Three enforcement points, three different right answers.**
+- The MENU refuses, and says why. The option is shown disabled rather than
+  hidden: a control that vanishes teaches nothing, and the answer depends on a
+  setting the user can change — hence the pointer to Settings → App width. It is
+  refused at whichever step the Timeline actually appears (step 1 when it is the
+  view you opened the menu on, step 2 when it would be the partner).
+- A view-button TAP turns the split stacked instead of refusing. The user asked
+  for the Timeline; the orientation is the part that does not fit.
+- An existing split that becomes too narrow — window resized, divider dragged,
+  App width lowered — also turns stacked. The phone rule beside it collapses the
+  split entirely because a phone cannot host one at all; here the split is still
+  perfectly viable and only this orientation is not, so preserving the user's
+  intent is the better repair.
+
+The width the panes divide is `min(winW, appWidth)`, not the window: the app is
+clamped to the per-device App-width setting, so a 2400px window with a 1000px app
+width still gives 495px panes.
+
+**Verification:** build ✓ · 393 tests ✓ · lint 0 · `check:style` OK. Both
+directions checked live. At 1280px: a stored side-by-side Timeline+List split was
+repaired to `dir: "h"` on load (read back out of localStorage), the Timeline
+keeping full width; the menu rendered `Side by side` disabled with the
+explanation. At 2400px with the App width raised to match: both direction buttons
+enabled, no warning — so this is a real threshold and not a blanket ban. Settings
+restored afterwards.
+
+### 8/n · Split Settings → General into service rules and an App tab
+
+**Files:** `src/components/SettingsChrome.jsx`, `src/components/Settings.jsx`
+**Behavioural change:** a 6th Settings tab, **App**, holding the eight controls
+that make the app comfortable on your screen. General keeps the restaurant's
+operating rules. No setting changed, moved node, or altered its meaning.
+
+Settings → General held **47 controls** against 12 in Layout, 25 in Reminders,
+10 in Customers and 6 in Shortcuts. It had become the tab for everything that was
+not obviously somewhere else: dark mode, hours, optimiser, shifts, duration
+tiers, late thresholds, turnaround, motion, gestures, nav lock, split view, zoom
+steppers, party-size defaults.
+
+**The split is by AUDIENCE, not by count**, which is why the line falls where it
+does. The App tab is read by whoever is holding the device, usually once, to make
+the app comfortable on their screen. General is the RESTAURANT'S rules — when it
+opens, how long a booking runs, when the optimiser stops — set by whoever runs
+the place and shared with everyone. Two different people, two different
+occasions, and until now one scroll.
+
+The moved JSX is the ex-General block VERBATIM, **including the intro line**,
+which belongs with it: "Settings follow your account on every device, except
+where noted" is a statement about exactly those controls, and the two marked
+"This device only" are the exceptions it names. Left behind it would have been a
+rule with nothing left to govern.
+
+`SETTINGS_TABS` is still the ONE list — the TabBar renders it and App's ←/→ nav
+derives its cycle from it, so adding the tab in one place was the whole wiring.
+Verified live by cycling the arrows through all six. Ordered General · Layout ·
+Customers · Reminders · **App** · Shortcuts: what the restaurant IS, then what it
+HOLDS, then how you look at it, then reference.
+
+**Two things the split exposed, both fixed here.** The v14.2.0 dark-mode comment
+stayed behind in General, describing a control that was no longer under it —
+re-homed above the row it documents. And **twelve** sections carried "Shared
+across all devices." in their subtitle; with the tab now entirely restaurant-wide
+that is the rule rather than the exception, so it is stated once at the top and
+removed from all twelve. That is v17.8.0's own lesson applied to the other half
+of the same split — it deleted five copies of "Follows your account on every
+device" for burying the only fact a reader needs, and left the converse in place
+because it was, at the time, the exception. A rule repeated on every row is
+wallpaper.
+
+**Naming is the one easily-changed decision here.** "App" was chosen over
+"Device" (five of the eight follow the ACCOUNT since v17.6.0, not the device),
+over "Preferences" (already a Collapsible inside General) and over renaming
+General to "Service" (which would move Opening hours, the most-visited setting in
+the app, away from where staff already look).
+
+**Verification:** build ✓ · 393 tests ✓ · lint 0 · `check:style` OK. Live: the
+App tab renders all eight controls under the moved intro line; General measured
+with **no** personal controls and its service sections intact; the six tabs fit
+one row at 900px; arrow-key cycling reaches the new tab. Console clean, app
+serving 17.11.0.
+
+### 10–13/n · `/code-review` fixes
+
+**Files:** `index.html`, `src/components/TimelineView.jsx`, `src/App.jsx`,
+`src/components/NotificationStrip.jsx`, `tests/contrast.test.js`
+**Behavioural change:** the double-booked band is legible on every block fill;
+a dismissed clash re-arms when it recurs; the timeline stops re-rendering on
+every keystroke; the strip cap is measured against the real viewport.
+
+The review returned 12 findings. Patryk took the five substantive ones; the
+other seven (efficiency and naming cleanups) went to ROADMAP.
+
+**1 · The clash band did not contrast with the blocks it is drawn on.** Measured
+against the fills it actually paints on, the red bar is **1.02–1.63:1** across
+the four statuses in both themes — invisible on a seated block, 1.34 on a
+confirmed one. It is the ONE part of the treatment carrying information the
+border cannot (its right edge is the minute the painted-over booking really
+ends), so the feature's unique contribution was the part you could not see.
+
+**The token's own comment is what hid it.** It claimed the bar "sits in the 6px
+strip below the blocks where nothing competes with it" — describing the FIRST
+attempt, not the shipped `bottom: 7` geometry inside the block. That false claim
+is what justified shipping one opaque colour with no contrast check. Exactly the
+`SIZE_RING` lesson one element along: a marker given a single colour, documented
+as sitting somewhere safe, never measured against what it really sits on.
+
+The red keeps the meaning and a near-black **casing** carries the boundary, which
+is how a marker over a variable fill is normally done. It clears WCAG 1.4.11's
+3:1 on every block fill in both themes (min **3.48**, dark/completed). Guarded in
+`contrast.test.js` in its own block, for the two `SIZE_RING` reasons: `measure()`
+takes a fill/ink pair and there is no ink here, and **the registry's coverage
+guard matches `--tl-.*(pill|badge)`, so it structurally cannot see a
+`--tl-clash-*` token** — that blind spot, which the guard documents about itself,
+is why the band shipped unmeasured. A second assertion pins the core as still
+red, so collapsing the pair to one flat neutral (which would pass the casing
+test alone) does not go unnoticed.
+
+**2 · `setZoom` was defeating TimelineView's `React.memo`.** 6/n replaced a React
+state setter — stable across renders forever — with `setTimelineZoomManual`, a
+plain function declared in BookingApp's body, i.e. a new identity every render.
+CLAUDE.md's rule is explicit: function props on the memoized views must be App's
+stable `VA` wrappers, never inline closures. Every other one already was. The
+booking-form draft lives in BookingApp, so this re-ran the timeline's entire
+block layout on every keystroke — the exact failure recorded for `liveBookings`.
+Now `VA.onSetZoom`, stable by construction.
+
+**3 · A dismissed clash never re-armed.** The other two dismissal Sets get away
+with never pruning because their conditions are monotonic within a day: a late
+booking stays late. A double-booking is the opposite — it is the one
+notification whose whole point is that you go and FIX it, so it clears, and it
+can recur on the same pair. Until then the strip row, the only surface carrying
+the Assign action, never came back for that pair for the rest of the session
+while the block markers said the clash was live. `clashDismissed` is now pruned
+to the live pair ids, and only when the set actually shrinks, so it cannot
+re-enter.
+
+**4 · The strip cap used `vh` where the shell uses `dvh`.** The shell is `100dvh`
+in every branch; on a device with a dynamic browser toolbar `100vh` is the LARGER
+viewport, so a `40vh` cap is ~45–50% of what is on screen — loosest on exactly
+the tablets it exists to protect.
+
+**Verification:** build ✓ · **404 tests** ✓ (11 new on the band's casing) · lint
+0 · `check:style` OK. Live: casing measured at min 3.48:1 with the band clearing
+the label by 1.5px and the block border by 1px; zoom still 2× → minus → 1.5×
+surviving a date change; the dismiss → resolve → recur cycle driven through DEV
+end to end, with the section returning on recurrence; `40dvh` measured at 145px
+of a 363px viewport, still bounding 635px of content. All seeded test bookings
+deleted, DEV verified clean.
+
+One test-methodology trap worth carrying: the first dismiss→recur run read as a
+pass for the wrong reason. PATCHing a booking with `baseUpdatedAt: 0` is rejected
+by the per-`$id` CAS rule on an UPDATE (0 is only valid on a create), so nothing
+moved and every step of the cycle looked identical. **Read the stored
+`updatedAt` first** — a rejected write and an unchanged UI are indistinguishable
+from the outside.
+

@@ -18,8 +18,8 @@ session and keeping it in sync.
 
 Source of truth for any individual finding: `MGT_Bookings_SevenReview_2026-08-19/`
 in the context folder (`_synthesis.md` for the inventory, `01-…07-` for
-locations and measurements). **v17.10.2 shipped group A**; what follows is the
-rest, in the agreed order.
+locations and measurements). **v17.10.2 shipped group A and v17.11.0 the service-visible
+group**; what follows is the rest, in the agreed order.
 
 **Do not re-flag these five — they were checked and dismissed during the review:**
 the 44px "target size failure" (that is WCAG 2.5.5, Level **AAA**; the AA bar is
@@ -31,18 +31,6 @@ header" (a mid-animation artifact of `Reveal`'s cached children) · impeccable's
 the suppression) · contrast numbers measured from `backgroundColor` alone (must
 composite the real paint stack — gradients and per-element opacity — or the
 figures are wrong in both directions).
-
-- **v17.11.0 — what staff hit during service.** Draw the double-booking (the
-  only place the interface actively misleads: measured 288px of overlap painted
-  over, rendering a clash as two consecutive sittings) · `StatusIcon` on the
-  timeline block (closes a corroborated S1 and WCAG 1.4.1; the component already
-  ships) · share the List empty state into Timeline and Plan · bound the expanded
-  strip (305px of an 860px viewport with two of six sections live) and
-  date-scope it or qualify its times · derive the default timeline zoom from the
-  hours span (at 06:00–01:00, 10 of 13 labels truncate and no block shows its
-  time) · refuse Timeline as a split partner below a pane-width threshold ·
-  split Settings → General (47 controls) into service rules vs personal
-  preferences.
 
 - **v17.12.0 — the modal stack.** Replace App.jsx's 15 modal-visibility booleans
   with one ordered stack, each entry carrying its own `onClose`. Patryk signed
@@ -81,6 +69,46 @@ figures are wrong in both directions).
   number) and Firebase email/password signup is on by default. Plus `sanitizeKey`
   applied to `phoneKey` at the `_lib/rtdb.js` boundary, where it is already
   applied to message ids beside it. Neither blocks the sandbox as it stands.
+
+### Follow-up from v17.11.0's `/code-review`
+
+Seven findings Patryk deferred; the five substantive ones shipped in v17.11.0.
+
+- **The empty-day prompt still disagrees on a cancelled-only day.** ListView's
+  `day` includes cancelled bookings while Timeline's and Plan's exclude them, so
+  on a day whose bookings were all cancelled Timeline and Plan show "Nothing
+  booked for this day yet." while List renders its card list — which with
+  `showFinished` off is a nearly blank screen with no prompt and no New-booking
+  button, i.e. the v17.8.0 defect `EmptyDay` was written to fix. Compute one
+  shared `isEmpty` in App, the way `dayClosed` and `emptyWalkin` already are.
+
+- **`findConflicts` allocates pair objects it discards, inside the
+  reconciliation loop.** It delegates to `findClashes`, which builds an object
+  and runs an `Array.filter` intersection per clashing pair — for data
+  `findConflicts` throws away — and the reconciler calls it up to 20 times per
+  dirty date. An `idsOnly` flag, or letting `findConflicts` keep its own tight
+  loop, removes it.
+
+- **`hoursFor(viewDate)` is evaluated four times per App render** (`viewHours`,
+  the notifSections `dayClosed`, the `dayClosed` const, and the header). One
+  value, four names.
+
+- **`clashSpans` emits one band per PAIR rather than per distinct span**, so
+  three mutually-clashing bookings on one table draw three coincident bands.
+  Merge overlapping intervals per table first.
+
+- **The EmptyDay walk-in prop is `onWalkin` in TimelineView and `emptyWalkin` in
+  PlanView.** One input, two names; the next surface will guess wrong and get a
+  silently missing button.
+
+- **`pickView`'s swap branch skips `tlPaneOk` and does not invert `ratio`.** It
+  can drop the Timeline into a too-narrow pane and rely on the repair effect to
+  reorient the split a render later, so a plain view tap visibly flips the
+  layout. `swapSides` already inverts the ratio; this branch should too.
+
+- **`clashRowId` has no test** despite its comment making the `\u001f` escape
+  (never the raw byte) load-bearing — and `"_"`/`"-"` are reachable from
+  recurring occurrence ids, the exact collision it warns about.
 
 ### Follow-up from v17.10.2
 

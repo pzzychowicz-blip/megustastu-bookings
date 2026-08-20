@@ -7,7 +7,7 @@
 // real timeline — it is not a theoretical input.
 
 import { describe, it, expect } from "vitest";
-import { hourLabel, hourLabelAt, isHourMark } from "../src/lib/time-grid.js";
+import { hourLabel, hourLabelAt, isHourMark, spanZoom, REFERENCE_GRID_MINS } from "../src/lib/time-grid.js";
 
 describe("hourLabel", () => {
   it("pads to two digits", () => {
@@ -63,5 +63,47 @@ describe("isHourMark", () => {
     expect(isHourMark(13 * 60 + 15)).toBe(false);
     expect(isHourMark(13 * 60 + 30)).toBe(false);
     expect(isHourMark(13 * 60 + 45)).toBe(false);
+  });
+});
+
+describe("spanZoom — the hours span decides the opening zoom", () => {
+  it("is 1x on the reference day, so the MGT default is untouched", () => {
+    // 13:00 open → 23:00 GRID_CLOSE = 600 minutes. The whole point is that a
+    // restaurant on the default hours sees byte-for-byte what it saw before.
+    expect(spanZoom(REFERENCE_GRID_MINS, 5)).toBe(1);
+  });
+
+  it("is 2x on the DEV 06:00–01:00 day, restoring the reference density", () => {
+    // open 6 → gridClose 26 = 1200 minutes, twice the reference.
+    expect(spanZoom(1200, 5)).toBe(2);
+  });
+
+  it("lands on the zoom control's own 0.5 step", () => {
+    // 900 min = 1.5x exactly. The in-between values round to the NEAREST step
+    // in both directions, so nothing off-step ever reaches the control: 800 min
+    // is 1.333 → 1.5, and 700 min is 1.167 → 1.
+    expect(spanZoom(900, 5)).toBe(1.5);
+    expect(spanZoom(800, 5)).toBe(1.5);
+    expect(spanZoom(700, 5)).toBe(1);
+  });
+
+  it("never zooms OUT below 1x on a short day", () => {
+    // A restaurant open 18:00–22:00 has a 300-minute grid. Half the reference
+    // density is not a reason to shrink the app's baseline.
+    expect(spanZoom(300, 5)).toBe(1);
+  });
+
+  it("respects the device's configured ceiling", () => {
+    expect(spanZoom(6000, 2)).toBe(2);
+    expect(spanZoom(6000, 5)).toBe(5);
+  });
+
+  it("falls back to 1x on nonsense rather than propagating it", () => {
+    // A closed day's fallback range, a mid-load seed, a hand-edited setting.
+    expect(spanZoom(0, 5)).toBe(1);
+    expect(spanZoom(-600, 5)).toBe(1);
+    expect(spanZoom(NaN, 5)).toBe(1);
+    expect(spanZoom(600, NaN)).toBe(1);
+    expect(spanZoom(1200, 0.5)).toBe(1);   // a ceiling below 1 is not a floor
   });
 });

@@ -260,8 +260,39 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
       <Reveal show={open}>
         {/* .mgt-notif draws the hairlines between sections (index.html). A CSS
             adjacent-sibling rule rather than a per-section borderTop prop, so a
-            section never has to know its own position in the list. */}
-        <div className="mgt-notif">
+            section never has to know its own position in the list.
+
+            v17.11.0: the expanded body is BOUNDED and scrolls. Collapsed height
+            has been one row however many notifications fire since v17.8.0 —
+            that was the whole point — but expanding was unbounded, and measured
+            live it took 305px of an 860px viewport with only TWO of six sections
+            up. Six late bookings and a waitlist would have pushed the timeline
+            off the tablet again, which is the failure the strip exists to
+            prevent, merely moved one tap away.
+
+            The cap is on the BODY, never on the pane: the lid is a sibling and
+            must stay put, which is also what makes this work — v17.8.0 already
+            decided the collapsed tally survives expansion "because the sections
+            scroll and the lid doesn't". That sentence described an intent the
+            code had not yet implemented; this is it.
+
+            No `padding-inline` gutter here, unlike the app's other scrollers.
+            The rule (CLAUDE.md) is that a scroll container clips its children's
+            hover lift and focus ring at the padding box, and `overflow-y: auto`
+            makes the OTHER axis clip too, per spec. But these rows already carry
+            their own inset from BannerRows, and it is enough: measured live at
+            14px of clearance on the right against a worst case of 5.8px — that
+            is 4% of the WIDEST control, a 145px "Assign <name>" button, not the
+            36px ✕ it is tempting to size this against — plus 4px for the focus
+            ring. Measured, not assumed; re-measure if a wider control is ever
+            added to a banner row.
+            /code-review fix: `dvh`, not `vh`. The shell is `100dvh` in every
+            branch, and on a phone or tablet with a dynamic browser toolbar
+            `100vh` is the LARGER viewport — so a `40vh` cap is ~45–50% of what
+            is actually on screen, loosest on exactly the devices this exists to
+            protect. Matching the shell's unit is what makes "40% of the
+            viewport" true rather than approximately true. */}
+        <div className="mgt-notif" style={{ maxHeight: "40dvh", overflowY: "auto" }}>
           {orderedIds.map(function (id) {
             const s = byId[id];
             return (
