@@ -11921,3 +11921,78 @@ was not the one being looked at. Deleted through the app's own delete path and
 re-verified — 0 cards, 0 dialogs, nothing matching the test name anywhere in the
 document. The second test case was then chosen to be one that **cannot** save
 (an empty time), which is the right way to probe a validation path.
+
+### 4/n · The List's selection becomes real focus, and its cards become a list
+
+**Files:** `src/components/ListView.jsx`
+**Behavioural change:** ↑/↓ now moves DOM focus as well as the selection ring;
+Enter or Space on a focused card opens the edit form (matching the card's click
+and the existing `E` shortcut). One card is in the tab order at a time. Nothing
+moves on screen that did not move before.
+
+**The finding (C2, and List's half of C1) — and half of it was already good.**
+↑/↓ *did* move a selection and it *was* clearly drawn (a 3px accent ring,
+verified walking Marco Silva → Familia Delgado → Elena Prats). But
+`document.activeElement` stayed on `BODY` throughout, with no
+`aria-activedescendant` and no list semantics anywhere. So a sighted keyboard
+user was well served and a screen-reader user was told **nothing at all**: no
+focus moved, so nothing was announced. The pattern was 90% built.
+
+**Real focus, not `aria-activedescendant`.** The roadmap entry named the latter,
+but it is the wrong half of the pair here: `aria-activedescendant` requires a
+container that holds DOM focus and publishes which descendant is active, and
+this app's arrow keys are served by a **global window listener** that works with
+nothing focused at all. Moving actual focus fits the existing model exactly, needs
+no container to own anything, and is strictly more informative — the card is
+announced by the platform, with no ARIA relationship to keep in sync.
+
+**`role="listitem"`, and NOT `role="button"`.** This is the design decision in
+the entry. A button's children are **presentational** in ARIA, so labelling the
+card a button would hide Assign, the four status changers and Delete from
+assistive technology — trading one unreachable card for six unreachable
+controls, which is worse than the defect. `role="grid"`/`row` is the pattern
+built for rows-containing-controls, and it was the first choice, but a grid's
+children must be rows and the "Completed & cancelled" `Collapsible` sits between
+these cards and breaks that structure. So the card is a list item that happens to
+be focusable and operable, inside two real `role="list"` containers (two, because
+a list must contain its items directly and the finished cards live inside the
+Collapsible).
+
+**The accessible name is composed, not left to the DOM.** Read as raw text the
+card is a run of times, tags and button labels. It now announces
+*"Pau Estévez, 20:00, 4 guests, table 3, confirmed"* — the decision-shaped
+sentence. The status word is `b.status` itself, the same string `SBadge` prints
+two lines below, so spoken and printed vocabulary cannot drift.
+
+**One tab stop, not seventy.** Ten bookings × ~6 controls each would otherwise
+sit between the top of the list and anything after it, so the cards use a roving
+tab stop: the selected card holds it, or the first card when nothing is selected,
+so the list is always enterable. A closed fold is not a hazard — `Reveal`
+unmounts its children, so a finished card can never be an invisible tab stop.
+
+**Enter/Space is guarded by `e.target === e.currentTarget`**, which is the
+keyboard equivalent of the `stopped()` wrapper every control in this card already
+goes through. Without it, Enter on Assign would fire Assign *and* open the edit
+form — the exact failure mode v17.10.0 recorded when it made the card clickable.
+
+**A bug found in this change, worth recording because it is a documented lesson
+recurring.** Focus was first scheduled inside the same `requestAnimationFrame`
+as the scroll — and **rAF does not fire while a tab is hidden or occluded**,
+which CLAUDE.md already records from the Preview pane. The symptom was precise
+and confusing: the scroll worked (it also runs on 120/300/550/850ms timers) and
+the focus never did, on identical input. Focus is now attempted **synchronously**
+in the effect — the element exists by the time an effect runs — with one 120ms
+retry for a card still mounting behind a `SlideView` day change, and a `focused`
+flag so the scroll's repeat schedule cannot yank focus back four more times.
+**Anything gated on rAF needs a non-rAF path**, and "it works when I watch it" is
+exactly how this hides.
+
+**Verification:** driven live in DEV against the 12-booking 2026-08-19 fixture.
+`role="list"` "Bookings" with 8 items; **exactly 1** card in the tab order;
+labels composing correctly ("Grupo Ferrer, 19:00, 5 guests, table 1A and 1B,
+confirmed"). Two ↑/↓ presses: `document.activeElement` becomes the card `<div>`
+and tracks the selection (Jordi Lloret → Grupo Ferrer). Enter on the focused card
+opens **"Edit booking"** with that booking loaded. Enter on the nested Assign
+button opens **no** dialog, proving the guard. Screenshot confirms the 3px
+selection ring and centred scroll are unchanged. Build ✓, 404 tests ✓, lint 0
+errors, `check:style` OK.
