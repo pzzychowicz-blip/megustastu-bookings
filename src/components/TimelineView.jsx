@@ -596,7 +596,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
         <>
           <div style={{
             position: "absolute", top: 0, left: 0, width: 0, height: 0,
-            borderTop: "14px solid rgba(255,255,255,0.95)",
+            borderTop: "14px solid rgba(255,255,255,0.95)",  /* @fixed-fill */
             borderRight: "14px solid transparent",
             pointerEvents: "none"
           }} />
@@ -605,7 +605,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
           }}>
             <path
               d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
-              fill="#1f2937"
+              fill={"#1f2937" /* @fixed-fill */}
             />
           </svg>
         </>
@@ -1643,7 +1643,7 @@ export const TimelineView = memo(function TimelineView({
         key={s}
         style={{
           fontSize: T.small, padding: "2px 8px", borderRadius: R.pill,
-          background: BLOCK_BG[s] || "#999",
+          background: BLOCK_BG[s] || BLOCK_BG.confirmed,
           color: BLOCK_INK[s] || "var(--text-on-accent)",
           border: RIM_SOLID,
           fontWeight: FW.semi, textTransform: "capitalize",

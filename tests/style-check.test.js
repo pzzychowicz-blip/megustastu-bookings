@@ -72,9 +72,15 @@ describe("check:style — shadow literals (v17.10.1)", () => {
   });
 
   // A zero blur is a ring however it is spelled, including `0px`.
+  //
+  // v17.13.0: asserted on the RULE, not on the exit code. The rgba spelling is
+  // the point of the fixture, and the colour rule added in this version reports
+  // it — correctly, since a ring in this app takes a token. Weakening either
+  // rule to keep one `toBe(0)` would have been the wrong trade; naming the rule
+  // each fixture is about is what it should always have done.
   it("leaves a 0px-blur ring alone", () => {
     const r = run({ "a.jsx": 'const x = <div style={{ boxShadow: "0 0 0px 2px rgba(0,122,255,0.4)" }} />;\n' });
-    expect(r.code).toBe(0);
+    expect(r.out).not.toMatch(/shadow-literal/);
   });
 
   // The colour alternation now accepts a bare identifier, so prove it does not
@@ -99,7 +105,7 @@ describe("check:style — shadow literals (v17.10.1)", () => {
     const r = run({ "a.jsx":
       'const a = <div style={{ boxShadow: "0 0 0 3px var(--accent)" }} />;\n'
       + 'const b = <div style={{ boxShadow: "0 0 0 2px rgba(0,122,255,0.4)" }} />;\n' });
-    expect(r.code).toBe(0);
+    expect(r.out).not.toMatch(/shadow-literal/);   // see the 0px-blur fixture
   });
 
   it("leaves a token and a marked one-off alone", () => {
@@ -187,5 +193,96 @@ describe("check:style — the v17.8.0 rules still bite", () => {
     const r = run({ "a.jsx": "const x = <div style={{ borderRadius: 4 }} />   /* @canvas */;\n" });
     expect(r.code).toBe(1);
     expect(r.out).toMatch(/marker-placement/);
+  });
+});
+
+describe("check:style — colour literals (v17.13.0)", () => {
+  it.each([
+    ["rgba()", 'background: "rgba(180,180,190,0.4)"'],
+    ["rgb()",  'background: "rgb(249,115,22)"'],
+    ["6-digit hex", 'color: "#1f2937"'],
+    ["3-digit hex", 'color: "#fff"'],
+  ])("catches a bare %s", (_label, decl) => {
+    const r = run({ "a.jsx": `const x = <div style={{ ${decl} }} />;\n` });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/colour-literal/);
+  });
+
+  it("catches a colour hiding behind a const", () => {
+    const r = run({ "a.jsx": 'const ink = "#166534";\nconst x = <div style={{ color: ink }} />;\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/colour-literal/);
+  });
+
+  // The composed-token idiom — `rgba(var(--tbl-out-rgb), 0.8)` in constants.js —
+  // is a token reference, not a literal. If this ever reports, every fill in
+  // STATUS_COLORS and TBL lights up and the rule gets muted, which is how a
+  // noisy check dies.
+  it("leaves a token reference alone", () => {
+    const r = run({
+      "a.jsx": 'const x = <div style={{ background: "rgba(var(--tbl-out-rgb),0.8)", color: "var(--text-on-accent)" }} />;\n',
+    });
+    expect(r.code).toBe(0);
+  });
+
+  it("accepts /* @fixed-fill */ on a deliberate literal", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ background: "#fef9c3", /* @fixed-fill */ color: "#854d0e" }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  // @shadow blesses the colour inside the shadow it already blesses; requiring
+  // both markers on one line would teach nothing.
+  it("accepts /* @shadow */ on a shadow literal's colour", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ boxShadow: "0 10px 24px rgba(0,0,0,0.3)" /* @shadow */ }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  // Half of this repo's apparent colour literals are PROSE about colours — the
+  // SIZE_RING note, the v17.8.0 lessons, the `rgba(0,0,0,0)` a class measured
+  // at. A `startsWith("//")` test is not enough: a JSX block comment's
+  // continuation lines start with ordinary words.
+  it("ignores a colour named in a comment, including a block continuation line", () => {
+    const r = run({
+      "a.jsx": [
+        "// The old value was rgba(255,255,255,0.2) and it was wrong.",
+        "/* An open comment",
+        "   whose second line says #1f2937 with no leading marker,",
+        "   and mentions rgba(0,0,0,0) too. */",
+        "const x = <div />;",
+        "",
+      ].join("\n"),
+    });
+    expect(r.code).toBe(0);
+  });
+
+  // Devtools `%c` styling is a CSS declaration list handed to console.log — not
+  // app UI and not themed. Rule 4 faced the same site and its comment says why
+  // marking it would be the wrong fix.
+  it("ignores devtools %c styling", () => {
+    const r = run({
+      "a.js": 'console.log("%cMGT", "color:#60a5fa;font-size:18px;font-weight:500;");\n',
+    });
+    expect(r.code).toBe(0);
+  });
+
+  // The false negative that shipped in this rule's first draft, and the reason
+  // the devtools test reads a quoted string's CONTENTS rather than scanning the
+  // whole line: on dense JSX the old pattern started at a CLOSING quote and ran
+  // through the markup to the STATEMENT's trailing `;`, so a real literal read
+  // as console styling and was silently not reported.
+  it("still catches a literal on a JSX line whose statement ends in a semicolon", () => {
+    const r = run({
+      "a.jsx": 'const x = <span style={{ border: "1.5px solid rgba(220,38,38,0.4)", flexShrink: 0 }}>Kitchen busy</span>;\n',
+    });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/colour-literal/);
+  });
+
+  // An HTML entity is not a colour. The app drew its nav chevrons as
+  // `&#8249;`/`&#8250;` until v17.9.0, and "an entity is invisible to a glyph
+  // grep" is already a recorded lesson — this is that fact pointed the other way.
+  it("does not read an HTML entity as a hex colour", () => {
+    const r = run({ "a.jsx": 'const x = <span dangerouslySetInnerHTML={{ __html: "&#8249;" }} />;\n' });
+    expect(r.code).toBe(0);
   });
 });

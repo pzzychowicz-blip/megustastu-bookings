@@ -158,7 +158,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   // TableGrid's swap cells use, so the panel and the cells it describes finally
   // agree; the rim goes neutral per the solid-label convention.
   const swapBg = swapBusy ? "var(--app-warn-solid)" : S.bg;
-  const swapBrd = "1px solid " + (swapBusy ? "var(--border-glass)" : "rgba(255,255,255,0.5)");
+  const swapBrd = "1px solid " + (swapBusy ? "var(--border-glass)" : "rgba(255,255,255,0.5)");  /* @fixed-fill */
   const swapTitleClr = swapBusy ? "var(--text-on-accent)" : S.text;
   const swapSubClr = swapBusy ? "var(--text-on-accent)" : S.text;
 

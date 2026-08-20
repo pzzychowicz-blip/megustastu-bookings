@@ -146,7 +146,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                   <span>{t.id}</span>
                   <span style={{
                     fontSize: T.micro, fontWeight: FW.medium,
-                    color: isPref ? "rgba(255,255,255,0.8)" : S.text
+                    color: isPref ? "rgba(255,255,255,0.8)" : S.text  /* @fixed-fill */
                   }}>
                     {"cap " + t.cap}
                   </span>

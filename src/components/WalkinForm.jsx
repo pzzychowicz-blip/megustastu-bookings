@@ -55,7 +55,7 @@ import { useDeferredCompute } from "../hooks/useDeferredCompute";
 // The token sweep briefly used --success-text / --status-pending-text here,
 // which invert between themes and left light-green text on a pale-green chip in
 // dark mode. A token may only be used where the surface under it flips as well.
-const KTXT_OK = "#166534", KTXT_TIGHT = "#854d0e";
+const KTXT_OK = "#166534", KTXT_TIGHT = "#854d0e";   /* @fixed-fill */
 
 export function WalkinForm({
   draft, setDraft,
@@ -199,9 +199,9 @@ export function WalkinForm({
         style={{
           cursor: "pointer", padding: "2px 8px", borderRadius: R.pill,
           fontWeight: FW.semi, fontSize: T.body,
-          background: r.hasTables ? "rgba(220,252,231,0.8)" : "rgba(254,249,195,0.8)",
+          background: r.hasTables ? "rgba(220,252,231,0.8)" : "rgba(254,249,195,0.8)",  /* @fixed-fill */
           color: r.hasTables ? KTXT_OK : KTXT_TIGHT,
-          border: "1px solid " + (r.hasTables ? "rgba(134,239,172,0.5)" : "rgba(253,230,138,0.5)"),
+          border: "1px solid " + (r.hasTables ? "rgba(134,239,172,0.5)" : "rgba(253,230,138,0.5)"),  /* @fixed-fill */
           boxShadow: "var(--shadow-flat)"
         }}
       >
@@ -214,14 +214,14 @@ export function WalkinForm({
     <div style={{ marginTop: 8 }}>
       <div style={{ fontSize: T.small, color: S.muted, marginBottom: 6 }}>
         <span style={{
-          background: "rgba(220,252,231,0.8)", color: KTXT_OK,
+          background: "rgba(220,252,231,0.8)", /* @fixed-fill */ color: KTXT_OK,
           padding: "2px 6px", borderRadius: R.pill, fontSize: T.micro, fontWeight: FW.semi
         }}>
           green
         </span>
         {" = tables available  "}
         <span style={{
-          background: "rgba(254,249,195,0.8)", color: KTXT_TIGHT,
+          background: "rgba(254,249,195,0.8)", /* @fixed-fill */ color: KTXT_TIGHT,
           padding: "2px 6px", borderRadius: R.pill, fontSize: T.micro, fontWeight: FW.semi
         }}>
           yellow
@@ -270,7 +270,7 @@ export function WalkinForm({
           <span style={{
             fontWeight: FW.bold, color: "var(--text-required)", fontSize: T.body,
             padding: "4px 12px", borderRadius: R.pill,
-            border: "1.5px solid rgba(220,38,38,0.4)",
+            border: "1.5px solid rgba(220,38,38,0.4)",  /* @fixed-fill */
             flexShrink: 0
           }}>
             Kitchen busy

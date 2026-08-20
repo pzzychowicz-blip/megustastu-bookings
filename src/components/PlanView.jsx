@@ -328,7 +328,7 @@ export const PlanView = memo(function PlanView({
     // clearly not offerable either.
     if (!b && resetting[id]) return { fill: FREE_FILL, stroke: "var(--text-muted)", dash: "4 3" };
     if (!b) return { fill: FREE_FILL, stroke: FREE_STROKE, dash: undefined };
-    return { fill: BLOCK_BG[b.status] || BLOCK_BG.confirmed, stroke: "rgba(255,255,255,0.5)", dash: undefined };
+    return { fill: BLOCK_BG[b.status] || BLOCK_BG.confirmed, stroke: "rgba(255,255,255,0.5)", /* @fixed-fill */ dash: undefined };
   }
 
   // ── Table-tap popover: the day's queue on this table ────────────────────────

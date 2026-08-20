@@ -12773,3 +12773,67 @@ The remaining literals are deliberate and are marked at their sites in 2/n.
 **416 tests** (+4: the two new fills × two themes), `check:style` OK. Both themes
 walked in the running app; the history-panel numbers above are measured from the
 live paint stack, not computed from the tokens.
+
+### 2/n — the colour rule itself
+
+**Files:** `scripts/check-style-invariants.mjs`, `tests/style-check.test.js`,
+`src/components/{BookingFormModal,WalkinForm,DaySheet,ManualModal,PlanView,PrefPickerModal,TableGrid,TimelineView}.jsx`
+**Behavioural change:** none — 22 exemption markers and one fallback that stops
+being a literal.
+
+`check:style` Rule 7. It flags an `rgb()`/`rgba()` with a NUMERIC first argument
+(so `rgba(var(--tbl-out-rgb),0.8)`, the composed-token idiom, is not a literal)
+or a `#` hex, anywhere under `src/`, unless the line carries `/* @fixed-fill */`
+or `/* @shadow */`.
+
+**The marker is `@fixed-fill`, shared with Rule 2, deliberately.** Rule 2 asks
+whether the surface under a white inset is theme-invariant; Rule 7 asks whether
+the surface under a colour is. That is one question about one line, and
+inventing a second word for it is exactly how "two names for one concept" let
+`--app-btn-grey` hide from a check written around the `--btn-*` prefix. The
+coupling is real — a marker added for a colour also blesses a white inset on
+that line — and is stated in the script.
+
+**Two things it must not see, and both are structural rather than marked.**
+Comments, because half this repo's apparent colour literals are prose ABOUT
+colour literals, including ones a previous version removed; a
+`startsWith("//")` test does not cover a JSX block comment's continuation lines,
+so the file is scanned once tracking block and string state and each line is
+judged on its code only. And devtools `%c` styling — `firebase.js`'s DEV/PROD
+badge, `App.jsx`'s boot banner — which is a CSS declaration list handed to
+`console.log`, not app UI. Rule 4 met the same site and its comment already says
+why marking it would be the wrong fix: the rule would keep mis-firing on the
+next piece of console styling anyone writes.
+
+**The first draft of that second exclusion was a false negative, and it is the
+reason this entry exists in this shape.** It was one regex across the whole line
+— quote, anything, `prop:`, anything, `;` — and on dense JSX it started at a
+CLOSING quote and ran through the markup to the STATEMENT's trailing semicolon.
+So `border:"1.5px solid rgba(220,38,38,0.4)"` in `BookingFormModal` read as
+console styling and was silently not reported, while the rule printed a
+confident 21 findings. It was caught by diffing the rule's output against a
+plain `grep` — this repo's most-repeated checker defect, blind exactly where it
+was meant to bite. It now tests the CONTENTS of each quoted string, and
+`tests/style-check.test.js` pins that exact line shape.
+
+The 23 remaining literals are all deliberate and now say so at their sites: the
+kitchen-suggestion chips in both forms (the fills are theme-invariant precisely
+so the hex ink on them cannot invert — the v17.8.0 decision, unchanged), the
+print sheet (paper has no theme), and white on a saturated block or badge.
+`TimelineView`'s legend swatch was the one that did not deserve a marker — its
+`BLOCK_BG[s] || "#999"` fallback is now `|| BLOCK_BG.confirmed`, which is the
+same defensive default `PlanView` already spells five lines from the same data.
+
+Two pre-existing shadow fixtures moved from `expect(r.code).toBe(0)` to
+`expect(r.out).not.toMatch(/shadow-literal/)`. Both use an rgba ring on purpose,
+which the colour rule reports — correctly, since a ring in this app takes a
+token — and naming the rule a fixture is about is what it should always have
+done. Weakening either rule to preserve an exit code would have been the wrong
+trade.
+
+**Verification:** build ✓, lint 0 errors, **428 tests** (+12 fixtures for this
+rule: four literal shapes, a literal behind a `const`, the composed-token
+idiom, both markers, block-comment continuation lines, devtools styling, the
+false-negative line shape, and an HTML entity not being read as a hex colour),
+`check:style` OK. App reloaded in DEV: no console errors, and no marker text
+rendered anywhere (Rule 0's failure mode, checked live rather than assumed).

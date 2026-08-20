@@ -32,8 +32,8 @@ function weekdayName(dateStr) {
   return isNaN(d) ? "" : WD[d.getUTCDay()] || "";
 }
 // Inline light-only styles (no tokens — print stays light).
-const cell = { border: "1px solid #999", padding: "4px 6px", fontSize: T.body, textAlign: "left", verticalAlign: "top", color: "#000" };
-const th = Object.assign({}, cell, { fontWeight: FW.bold, background: "#eee" });
+const cell = { border: "1px solid #999", /* @fixed-fill */ padding: "4px 6px", fontSize: T.body, textAlign: "left", verticalAlign: "top", color: "#000" };
+const th = Object.assign({}, cell, { fontWeight: FW.bold, background: "#eee" /* @fixed-fill */ });
 
 // v17.1.0 perf: React.memo — always-mounted (print-only DOM) so it used to
 // re-render on every BookingApp render; props are state objects + primitives.
@@ -61,8 +61,8 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
   }, [waitlist, date]);
 
   return createPortal(
-    <div className="mgt-print-sheet" style={{ color: "#000", background: "#fff", padding: 24, fontFamily: "-apple-system, system-ui, sans-serif" }}>
-      <div style={{ borderBottom: "2px solid #000", paddingBottom: 8, marginBottom: 12 }}>
+    <div className="mgt-print-sheet" style={{ color: "#000", /* @fixed-fill */ background: "#fff", padding: 24, fontFamily: "-apple-system, system-ui, sans-serif" }}>
+      <div style={{ borderBottom: "2px solid #000", /* @fixed-fill */ paddingBottom: 8, marginBottom: 12 }}>
         <div style={{ fontSize: T.display, fontWeight: FW.bold }}>{(restaurantName || "Me Gustas Tú") + " — Day sheet"}</div>
         <div style={{ fontSize: T.lead, marginTop: 2 }}>{weekdayName(date) + " · " + date}</div>
         <div style={{ fontSize: T.body, marginTop: 4 }}>
@@ -120,7 +120,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
         </div>
       ) : null}
 
-      <div style={{ marginTop: 18, fontSize: T.micro, color: "#666" }}>{(restaurantName || "Me Gustas Tú") + " Booking System"}</div>
+      <div style={{ marginTop: 18, fontSize: T.micro, color: "#666" /* @fixed-fill */ }}>{(restaurantName || "Me Gustas Tú") + " Booking System"}</div>
     </div>,
     document.body
   );
