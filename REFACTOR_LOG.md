@@ -12234,3 +12234,55 @@ could not catch: focus scheduled inside a rAF that never fires in a hidden tab;
 a focus ring keyed on a pseudo-class that never matches SVG; and a live region
 that would have gone silent inside `inert`. **In accessibility the failure mode
 is silence**, and silence looks exactly like success in a diff.
+
+### 10/n · Fix: content is focusable by KEYBOARD, not by pointer
+
+**Files:** `src/components/FloorGlyphs.jsx`, `src/components/TimelineView.jsx`,
+`CLAUDE.md`
+**Behavioural change:** tapping a floor-plan table or a timeline block no longer
+scrolls the view. Reported by Patryk against 6/n with a screen recording.
+
+**The regression this version shipped, and the mechanism.** Making the bookings
+focusable is the whole point of 5/n and 6/n — but a browser focuses an element on
+**mousedown**, and *scrolling it into view is part of focusing*. So the element
+travels out from under the finger between press and release: the `click` lands
+somewhere else, and the popover or the edit form never opens. Measured live:
+
+| Surface | Scroll caused by pressing one item |
+|---|---|
+| Plan table | **40px** vertical |
+| Timeline block | **1000–2000px** horizontal |
+| List card | 297px vertical |
+
+The Plan is the acute case and the one reported: 40px is more than half a table,
+so the pointer can land on a different table or on nothing, and the view lurches
+under the hand on every tap.
+
+**The fix is `onMouseDown` → `preventDefault()`**, which is precise about what it
+suppresses: **only the focus** (plus native drag-start and text selection,
+neither of which applies to a shape whose label is already `user-select: none`).
+It does **not** cancel the `click`, and it does **not** touch pointer events —
+`pointerdown` has already fired by then, so PlanView's pan, its touch long-press,
+and TimelineView's 6px mouse-drag threshold are all untouched. Keyboard focus is
+completely unaffected: Tab still reaches every block and table and still draws the
+ring.
+
+**`ListView`'s card deliberately does not get this.** `preventDefault` on
+mousedown also kills text selection, and staff select the phone number off that
+card to ring a party — the behaviour `endsASelection` exists to protect. Its click
+opens a modal that covers the scroll, and being left scrolled to the card you just
+edited is reasonable rather than wrong.
+
+**Why the review and the whole verification pass missed it: a synthetic click is
+not a finger.** The Browser tool's mousedown and mouseup are back-to-back, so the
+focus-scroll lands *after* the click and everything looks correct — the same
+family of trap as v17.10.1's `:active` measurements. It needs the ~100ms gap of a
+real press. What finally isolated it was not clicking at all: calling `.focus()`
+on a table and reading `main.scrollTop` before and after.
+
+**Verification:** live in DEV, real clicks. Plan — table popover opens with
+`scrollTop` delta **0** (was 40) and focus stays where it was. Timeline — the edit
+form opens for the clicked block with a horizontal scroll delta of **0** across
+five blocks (was 1000–2000). Keyboard unchanged: a real Tab press still walks
+table to table with `data-kbd` set and the 2px ring on the shape. Build ✓, 405
+tests ✓, lint 0 errors, `check:style` OK.

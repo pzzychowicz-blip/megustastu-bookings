@@ -541,6 +541,14 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
         e.preventDefault();
         handleClick();
       }}
+      /* v17.12.0 fix: focusable by KEYBOARD, not by pointer. The browser
+         focuses on mousedown and focusing scrolls the element into view — and
+         this scroller is the TIMELINE, so the measured jump was 1000–2000px
+         SIDEWAYS on a single click. `preventDefault` here suppresses only the
+         focus; it does not cancel the click and does not touch pointer events,
+         so the 6px drag threshold and the touch hold are untouched (both are
+         armed on `pointerdown`, which has already fired). Tab still focuses. */
+      onMouseDown={(e) => { e.preventDefault(); }}
       onMouseEnter={() => setGroupHover(true)}
       onMouseLeave={() => setGroupHover(false)}
       onClick={handleClick}
@@ -939,6 +947,8 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
         e.preventDefault();
         onBook(g.id);
       }}
+      /* Same as TimelineBlock above: keyboard-focusable, not pointer-focusable. */
+      onMouseDown={(e) => { e.preventDefault(); }}
       onMouseEnter={() => setGroupHover(true)}
       onMouseLeave={() => setGroupHover(false)}
       onClick={() => onBook(g.id)}

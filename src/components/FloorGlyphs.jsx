@@ -82,6 +82,20 @@ export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDas
         e.preventDefault();
         onClick(e);
       } : undefined}
+      /* v17.12.0 fix: focusable by KEYBOARD, not by pointer.
+         Making these focusable is what the tab order needed — but the browser
+         also focuses on mousedown, and focusing an element scrolls it into
+         view. Measured here: pressing a table scrolled the view 40px, moving
+         the table out from under the finger between press and release, so the
+         click landed somewhere else and the popover never opened. On a table
+         near the edge of the scrollport it never opens at all.
+         `preventDefault` on mousedown suppresses ONLY the focus (and the native
+         drag/selection, neither of which applies to a shape whose label is
+         `user-select: none`). It does NOT cancel the click, and it does not
+         touch pointer events — `pointerdown` has already fired by then, so the
+         pan and the touch long-press are untouched.
+         Keyboard focus is unaffected: Tab still lands here and still rings. */
+      onMouseDown={activatable ? function(e){ e.preventDefault(); } : undefined}
       onPointerDown={onPointerDown} onClick={onClick} onContextMenu={onContextMenu}
       style={{ cursor: onPointerDown ? "grab" : (onClick ? "pointer" : "default"), ...style }}>
       {chairPositions(entry).map(function(c, i){
