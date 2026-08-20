@@ -14,11 +14,18 @@
 // Add or reorder tabs HERE ONLY — a hand-copied id list elsewhere is exactly
 // how the "arrow keys skip the new Customers tab" bug happened when the 5th
 // tab shipped. Never duplicate this list.
+// v17.11.0: `app` is the 6th tab — the eight controls that make the app
+// comfortable on YOUR screen, split out of a General tab that had reached 47
+// controls. Ordered after the restaurant's own configuration and its data, and
+// before Shortcuts: General and Layout are what the restaurant is, Customers and
+// Reminders are what it holds, App is how you look at it, and Shortcuts is
+// reference rather than settings at all.
 export const SETTINGS_TABS = [
   { id: "general",   label: "General" },
   { id: "layout",    label: "Layout" },
   { id: "customers", label: "Customers" },
   { id: "reminders", label: "Reminders" },
+  { id: "app",       label: "App" },
   { id: "shortcuts", label: "Shortcuts" },
 ];
 

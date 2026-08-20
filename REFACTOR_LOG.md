@@ -11576,3 +11576,58 @@ explanation. At 2400px with the App width raised to match: both direction button
 enabled, no warning — so this is a real threshold and not a blanket ban. Settings
 restored afterwards.
 
+### 8/n · Split Settings → General into service rules and an App tab
+
+**Files:** `src/components/SettingsChrome.jsx`, `src/components/Settings.jsx`
+**Behavioural change:** a 6th Settings tab, **App**, holding the eight controls
+that make the app comfortable on your screen. General keeps the restaurant's
+operating rules. No setting changed, moved node, or altered its meaning.
+
+Settings → General held **47 controls** against 12 in Layout, 25 in Reminders,
+10 in Customers and 6 in Shortcuts. It had become the tab for everything that was
+not obviously somewhere else: dark mode, hours, optimiser, shifts, duration
+tiers, late thresholds, turnaround, motion, gestures, nav lock, split view, zoom
+steppers, party-size defaults.
+
+**The split is by AUDIENCE, not by count**, which is why the line falls where it
+does. The App tab is read by whoever is holding the device, usually once, to make
+the app comfortable on their screen. General is the RESTAURANT'S rules — when it
+opens, how long a booking runs, when the optimiser stops — set by whoever runs
+the place and shared with everyone. Two different people, two different
+occasions, and until now one scroll.
+
+The moved JSX is the ex-General block VERBATIM, **including the intro line**,
+which belongs with it: "Settings follow your account on every device, except
+where noted" is a statement about exactly those controls, and the two marked
+"This device only" are the exceptions it names. Left behind it would have been a
+rule with nothing left to govern.
+
+`SETTINGS_TABS` is still the ONE list — the TabBar renders it and App's ←/→ nav
+derives its cycle from it, so adding the tab in one place was the whole wiring.
+Verified live by cycling the arrows through all six. Ordered General · Layout ·
+Customers · Reminders · **App** · Shortcuts: what the restaurant IS, then what it
+HOLDS, then how you look at it, then reference.
+
+**Two things the split exposed, both fixed here.** The v14.2.0 dark-mode comment
+stayed behind in General, describing a control that was no longer under it —
+re-homed above the row it documents. And **twelve** sections carried "Shared
+across all devices." in their subtitle; with the tab now entirely restaurant-wide
+that is the rule rather than the exception, so it is stated once at the top and
+removed from all twelve. That is v17.8.0's own lesson applied to the other half
+of the same split — it deleted five copies of "Follows your account on every
+device" for burying the only fact a reader needs, and left the converse in place
+because it was, at the time, the exception. A rule repeated on every row is
+wallpaper.
+
+**Naming is the one easily-changed decision here.** "App" was chosen over
+"Device" (five of the eight follow the ACCOUNT since v17.6.0, not the device),
+over "Preferences" (already a Collapsible inside General) and over renaming
+General to "Service" (which would move Opening hours, the most-visited setting in
+the app, away from where staff already look).
+
+**Verification:** build ✓ · 393 tests ✓ · lint 0 · `check:style` OK. Live: the
+App tab renders all eight controls under the moved intro line; General measured
+with **no** personal controls and its service sections intact; the six tabs fit
+one row at 900px; arrow-key cycling reaches the new tab. Console clean, app
+serving 17.11.0.
+
