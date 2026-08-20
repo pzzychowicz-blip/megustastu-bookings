@@ -12108,3 +12108,55 @@ outlined shapes while the table still held DOM focus, which is exactly
 `:focus-visible`'s contract. Enter on a focused table opened that table's own
 popover ("Table 5A · No bookings on this table today · Walk-in here"). Build ✓,
 405 tests ✓ (1 new), lint 0 errors, `check:style` OK.
+
+### 7/n · `inert` behind a modal — and the one `anyModal` it needed
+
+**Files:** `src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`
+**Behavioural change:** while any modal is open, the header, the date-nav row and
+`<main>` are `inert` — unreachable by pointer, tab and screen-reader browse mode
+alike. Nothing changes visually.
+
+**The finding (M6).** With the booking form open there were 16 focusables inside
+it and **21 still outside**, `body` had no `aria-hidden` and `#root` no `inert`.
+The Tab trap was already correct (verified with a real key press — Tab from
+"Save booking" wrapped back inside), but a screen reader in **browse mode** does
+not use Tab: it walks the document, and the entire page behind the dialog was
+still there to be walked.
+
+**`inert` goes on three siblings, not one wrapper.** The modals render inline in
+`BookingApp`'s tree as siblings of `<main>` inside the width-clamp div, so there
+is no single ancestor that contains the app and excludes the dialogs. Wrapping
+the three chrome regions in a new div would have been the obvious move and is the
+wrong one: in the `shellFixed` layout that div is a flex column whose children
+carry `flexShrink: 0` / `flex: 1`, and inserting a wrapper re-parents all three.
+Three attributes, no structural change.
+
+**The announcer had to move out of `<main>` first, and this is the trap in this
+commit.** `inert` removes a subtree from the **accessibility tree** as well as
+from the tab order — so the live region added in 2/n would have gone SILENT for
+exactly as long as any modal was open. The things it announces (a failed write,
+the connection dropping, a double-booking appearing) are precisely the ones a
+modal must not suppress. It is now a sibling after `</main>`.
+
+**One `anyModal`, brought forward from v17.13.0.** The same 17-term expression
+was written out **twice** inside `useKeyboardShortcuts`, and `inert` would have
+made it a third copy — three hand-maintained lists that every new modal has to be
+added to, with nothing to catch the omission but the bug. It is now computed once
+in `App`, beside the state it reads, and passed in the ctx. Coerced to a real
+boolean deliberately: half these states hold an object or an id, and `inert` is a
+boolean DOM attribute. When the modal stack lands this becomes
+`stack.length > 0` and every reader is already pointed at one place — which is
+why doing it now was better than adding to the mess and cleaning it up after.
+
+It is declared **above** the `useKeyboardShortcuts` call, and the comment there
+says why: the ctx object is built mid-render, and a `const` read before its
+declaration is a TDZ `ReferenceError` that blanks the whole app behind a generic
+message. That has now happened twice in this codebase (v17.5.0's `activeView`,
+v17.11.0's `isViewToday`), and neither lint nor `npm run build` catches it.
+
+**Verification:** live in DEV. No modal: nothing inert. Booking form open: header,
+date-nav and `<main>` all carry `inert`; the dialog is **not** inside an inert
+subtree and still holds 16 focusables; the announcer is **not** inert. A
+background header button was asked to take focus while the modal was open and
+**could not**. Escape closed the dialog and removed `inert` from all three
+regions. Build ✓, 405 tests ✓, lint 0 errors, `check:style` OK.

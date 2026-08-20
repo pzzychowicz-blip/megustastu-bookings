@@ -2313,6 +2313,29 @@ function BookingApp({uid}){
     // skipDate just stops a REGENERATION it no longer needs to do.
     if(ok){flash();armUndo(undoDelta(bookings,postDel),id,"delete",false);}}
 
+  // ── v17.12.0: is ANY modal open? ───────────────────────────────────────────
+  // One derivation, in the component that owns all seventeen pieces of state.
+  // It existed before as a 17-term expression written out TWICE inside
+  // useKeyboardShortcuts, and `inert` would have made a third copy — three
+  // hand-maintained lists that a new modal has to be added to, with nothing to
+  // catch the omission except the bug it causes.
+  //
+  // Deliberately coerced to a real boolean: half these states hold an object or
+  // an id, and `inert` is a boolean DOM attribute — React renders `inert={0}`
+  // and `inert={null}` differently from `inert={false}`.
+  //
+  // This is the one piece of the v17.13.0 modal-stack work brought forward,
+  // because the alternative was to add to the mess and then clean it up. When
+  // the stack lands, this becomes `stack.length > 0` and every reader is
+  // already pointed at one place.
+  //
+  // MUST stay above the useKeyboardShortcuts call below: the ctx object is
+  // built mid-render, and a `const` read before its declaration is a TDZ
+  // ReferenceError that blanks the whole app with a generic message. That has
+  // happened twice in this codebase (v17.5.0's `activeView`, v17.11.0's
+  // `isViewToday`), and neither lint nor `npm run build` catches it.
+  const anyModal=!!(splitMenuFor||confirmDiscard||showForm||showWalkin||showWeek||showHistory||confirmDel||confirmReshuffle||confirmCancel||confirmKitchen||manualTarget||blockTarget||showPrefPicker||showSettings||showSearch||reminderEditor||confirmReminderDel);
+
   // v17.3.3: the global keyboard shortcuts (precedence rules, every key) and
   // the v17.3.1 neutral-space List-deselect mousedown listener were extracted
   // VERBATIM into hooks/useKeyboardShortcuts.js. This object is the hook's
@@ -2320,6 +2343,7 @@ function BookingApp({uid}){
   // the hook mounts its window listeners once and reads this through a ref).
   // Adding a shortcut = add the state/handler HERE and use it in the hook.
   useKeyboardShortcuts({
+    anyModal:anyModal,
     // v17.5.0: in a split, every view-sensitive shortcut (S/C status, ↑/↓ list
     // nav, the neutral-space and Esc list-deselect, the zoom keys) must act on
     // the FOCUSED pane, not on the stale single-view `view`. Passing activeView
@@ -3194,6 +3218,8 @@ function BookingApp({uid}){
            only ever belt-and-braces: html+body are already overflow:hidden in
            this mode (see the body effect above), so nothing can scroll here. */
         shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<header
+          /* v17.12.0: `inert` while a modal is open — see the <main> note below. */
+          inert={anyModal}
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
               beside it ARE the restaurant's configuration read back — its name,
               its table counts, its opening hours — and the control that edits
@@ -3248,6 +3274,7 @@ function BookingApp({uid}){
              `alignItems` re-resolved the position against whatever height the
              row happened to have in that one frame — which, on collapse, was
              still the open height. See DATE_CTRL_DROP for the numbers. */
+          inert={anyModal}
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
@@ -3295,7 +3322,7 @@ function BookingApp({uid}){
             several open at once (a 3+ row late banner) would eat the viewport.
             When shellFixed is off this div is a plain, style-less wrapper and
             the page scrolls exactly as it always did. */}
-            <main style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
+            <main inert={anyModal} style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
               /* With a split the panes own the scrolling, so this region must
                  NOT scroll — a flex:1 child of an overflowY:auto parent resolves
                  to CONTENT height, which would collapse a top/bottom split. The
@@ -3311,8 +3338,7 @@ function BookingApp({uid}){
                  card is the content box, so 4% padding is precisely enough at
                  any width. The negative margin puts the content back where it
                  was, so card width and position are unchanged from before. */
-              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}>{/* v17.12.0: always mounted — see notifAnnounce. Empty until
-              something fires, which announces nothing. */}<div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
                   children, so the pane fades out fully drawn instead of blanking a
                   frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} />:null}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
@@ -3335,7 +3361,12 @@ function BookingApp({uid}){
                 focused={focusedPane}
                 onFocus={setFocusedPane}
                 paneA={viewEl[split.a]}
-                paneB={viewEl[split.b]} />:mainView}</SlideView></div></main>{splitMenuFor?<SplitMenu
+                paneB={viewEl[split.b]} />:mainView}</SlideView></div></main>{/* v17.12.0: the notification announcer sits OUTSIDE <main>, and that
+        is not tidiness. `inert` removes a subtree from the accessibility tree as
+        well as from the tab order, so a live region inside an inert region goes
+        SILENT — and the things this announces (a failed write, the connection
+        dropping, a double-booking appearing) are exactly the ones a modal must
+        not suppress. Always mounted; see notifAnnounce. */}<div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div>{splitMenuFor?<SplitMenu
               view={splitMenuFor}
               onConfirm={confirmSplit}
               sideBySideOk={splitSideBySideOk}
