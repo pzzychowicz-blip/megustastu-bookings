@@ -53,7 +53,15 @@
 // round caps and joins. `strokeWidth` scales down as the icon does, or a 14px
 // icon at stroke-2 reads heavier than a 20px one.
 
-function Svg({ size = 20, stroke, children }) {
+// v17.13.0: the three `size = 20` defaults in this file are now IC.chrome. They
+// were the only numeric icon sizes left anywhere — off the IC scale (12/14/18)
+// and reachable by any caller that omits the prop. All 31 exports are currently
+// called with an explicit size, so nothing on screen moves; what changes is that
+// the fallback is a member of the scale rather than a fourth value. Enforced by
+// check:style Rule 8.
+import { IC } from "../lib/constants";
+
+function Svg({ size = IC.chrome, stroke, children }) {
   return (
     <svg
       width={size} height={size} viewBox="0 0 24 24"
@@ -104,7 +112,7 @@ export function CheckIcon(props) {
 // The preferred-tables marker. FILLED, unlike every other icon here, because it
 // replaces ★ (U+2605, the solid star) rather than ☆ — and because it is a flag
 // on a saturated block where an outline star at 10px closes up into a blob.
-export function StarIcon({ size = 20 }) {
+export function StarIcon({ size = IC.chrome }) {
   return (
     <svg
       width={size} height={size} viewBox="0 0 24 24"
@@ -201,7 +209,7 @@ export function SwapIcon(props) {
 // names, so the icon is a diagram of the resulting layout rather than a symbol
 // to memorise. Filled with currentColor at low opacity, which the stroke-only
 // Svg wrapper can't express, hence the local <svg>.
-function SplitGlyph({ size = 20, vertical }) {
+function SplitGlyph({ size = IC.chrome, vertical }) {
   return (
     <svg
       width={size} height={size} viewBox="0 0 24 24"

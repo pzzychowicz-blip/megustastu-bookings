@@ -695,7 +695,7 @@ export var M={
   resize:"var(--t-shift) linear",
   // Raw values — WAAPI only. Keep identical to index.html's :root.
   dur:{tap:145,move:240,shift:385},
-  easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"
+  easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"   /* @motion */
 };
 
 // v17.10.0: `guestId` is the phone-less customer identity carried by the draft

@@ -85,9 +85,16 @@ describe("check:style — shadow literals (v17.10.1)", () => {
 
   // The colour alternation now accepts a bare identifier, so prove it does not
   // reach into ordinary multi-length properties.
+  //
+  // v17.13.0: scoped to this rule, like the two ring fixtures above. The
+  // transition value is a hand-written duration/curve, which Rule 9 now reports
+  // — correctly. Twice in one version an added rule collided with a fixture
+  // asserting `code === 0`, which is the lesson: **a fixture should assert on
+  // the rule it is about.** `toBe(0)` quietly means "and no future rule may ever
+  // have an opinion about this line", which is not what any of them meant.
   it("leaves padding and transition values alone", () => {
     const r = run({ "a.jsx": 'const x = <div style={{ padding: "0 2px 6px 8px", transition: "transform 240ms ease" }} />;\n' });
-    expect(r.code).toBe(0);
+    expect(r.out).not.toMatch(/shadow-literal/);
   });
 
   it("catches an inset groove", () => {
@@ -283,6 +290,70 @@ describe("check:style — colour literals (v17.13.0)", () => {
   // grep" is already a recorded lesson — this is that fact pointed the other way.
   it("does not read an HTML entity as a hex colour", () => {
     const r = run({ "a.jsx": 'const x = <span dangerouslySetInnerHTML={{ __html: "&#8249;" }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+});
+
+describe("check:style — the icon scale (v17.13.0)", () => {
+  it("catches a numeric size on an icon call site", () => {
+    const r = run({ "a.jsx": 'const x = <CogIcon size={20} />;\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/icon-scale/);
+  });
+
+  it("catches a numeric destructured default", () => {
+    const r = run({ "a.jsx": 'function Svg({ size = 20 }) { return <svg width={size} />; }\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/icon-scale/);
+  });
+
+  it("leaves an IC reference alone", () => {
+    const r = run({ "a.jsx": 'const x = <CogIcon size={IC.chrome} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  // THE reason this rule is JSX-position only. `size: <number>` in this app is
+  // overwhelmingly a PARTY size — EMPTY_FORM, every booking, every waitlist
+  // entry. A rule that fires on a booking's guest count gets muted within a day,
+  // and it would be right to mute it.
+  it("does not touch a booking's party size", () => {
+    const r = run({ "a.js": 'export var EMPTY_FORM = { name: "", size: 2, status: "confirmed" };\n' });
+    expect(r.code).toBe(0);
+  });
+
+  it("accepts /* @canvas */ on a drawn-in-place marker", () => {
+    const r = run({ "a.jsx": 'const x = <Dogear size={8} />;   /* @canvas */\n' });
+    expect(r.code).toBe(0);
+  });
+});
+
+describe("check:style — the motion scale (v17.13.0)", () => {
+  it.each([
+    ["cubic-bezier", 'transition: "opacity 240ms cubic-bezier(0.33,1,0.68,1)"'],
+    ["ms + ease",    'transition: "transform 240ms ease-out"'],
+    ["s + linear",   'transition: "height 0.4s linear"'],
+  ])("catches a hand-written %s", (_label, decl) => {
+    const r = run({ "a.jsx": `const x = <div style={{ ${decl} }} />;\n` });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/motion-scale/);
+  });
+
+  it("leaves an M reference alone", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ transition: "transform " + M.move }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  // M.resize is `var(--t-shift) linear` — a TOKEN composition, and the documented
+  // linear exception. Requiring a time before the keyword is what separates it
+  // from a hand-written pair; without that this rule would report the scale's own
+  // member and there would be no way to write M at all.
+  it("leaves a token composition with a bare keyword alone", () => {
+    const r = run({ "a.js": 'export var M = { resize: "var(--t-shift) linear" };\n' });
+    expect(r.code).toBe(0);
+  });
+
+  it("accepts /* @motion */ on the WAAPI escape hatch", () => {
+    const r = run({ "a.js": 'const easeOut = "cubic-bezier(0.33, 1, 0.68, 1)";   /* @motion */\n' });
     expect(r.code).toBe(0);
   });
 });

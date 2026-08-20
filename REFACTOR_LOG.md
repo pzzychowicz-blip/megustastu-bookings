@@ -12887,5 +12887,55 @@ element is below the bar at once. `ROADMAP.md` carries it as a design question
 with the numbers attached, the way the waitlist-amber decision was put in
 v17.10.0.
 
-**Verification:** build ✓, lint 0 errors, **436 tests** (+8), `check:style` OK.
-Guard proven against known-bad input rather than assumed.
+**Verification:** build ✓, lint 0 errors, **432 tests** (+4 cases, each
+asserting name, chip and ring), `check:style` OK. Guard proven against
+known-bad input rather than assumed.
+
+### 4/n — the two free rules: the icon scale and the motion scale
+
+**Files:** `scripts/check-style-invariants.mjs`, `tests/style-check.test.js`,
+`src/components/Icons.jsx`, `src/lib/constants.js`
+**Behavioural change:** none — nothing on screen moves (see the icon defaults).
+
+`CLAUDE.md` states both as rules — "No new numeric `size={n}` on an icon", and
+`grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back empty apart
+from `M`'s own WAAPI values — and neither was enforced by anything. They are
+`check:style` Rules 8 and 9 now.
+
+**They were added precisely because compliance is already 100%**, which is the
+whole argument for doing it in this version rather than any earlier one. A rule
+adopted at zero debt costs nothing and guards the next edit; a rule adopted
+against a backlog gets muted, and muting it is the rational response. That
+asymmetry is why these waited for a version with nothing to clear.
+
+**Rule 8 is JSX-attribute and destructured-default position only** — `size={14}`
+and `{ size = 20 }` — and deliberately not `size: <number>` in an object, which
+in this app is overwhelmingly a *party* size: `EMPTY_FORM`, every booking, every
+waitlist entry. A rule that fires on a booking's guest count would be muted
+within a day and would deserve it. There is a fixture for that exact case.
+
+It found three sites, all in `Icons.jsx`: `Svg`, `StarIcon` and `SplitGlyph`
+defaulted to `size = 20`, a fourth value beside the scale's 12/14/18 and
+reachable by any caller that omits the prop. Every one of the 31 icon exports is
+currently called with an explicit size — checked, not assumed — so nothing on
+screen moves; what changes is that the fallback is now a member of the scale.
+
+**Rule 9 requires a TIME before the easing keyword**, and that is load-bearing
+rather than incidental: `M.resize` is `"var(--t-shift) linear"`, the documented
+linear exception, and a rule matching a bare keyword would report the scale's
+own member — leaving no way to write `M` at all. The one genuine escape hatch,
+`M.easeOut` (useFlip drives WAAPI, which cannot read a CSS var and silently runs
+linear if you try), is marked `/* @motion */`.
+
+**One lesson from the fixtures, and it cost three of them.** Adding two rules
+broke three pre-existing tests that asserted `expect(r.code).toBe(0)` on lines
+containing an rgba ring or a `240ms ease` transition. Each was written about ONE
+rule, but `toBe(0)` quietly asserts "and no future rule may ever have an opinion
+about this line", which is not what any of them meant. All three now assert on
+the rule they are about. **A fixture should name its own rule** — otherwise
+every new rule looks like a regression in the old ones.
+
+**Verification:** build ✓, lint 0 errors, **443 tests** (+11 fixtures across the
+two rules, including the party-size false positive and the token-composition
+one), `check:style` OK. Also corrects the test count stated in 3/n above, which
+said 436 where the run says 432 — four cases, each asserting three parts.

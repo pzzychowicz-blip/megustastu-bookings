@@ -106,6 +106,32 @@
 // structural — a quoted `prop: value;` list, which a JSX style VALUE never is,
 // because inline style values hold no semicolons.
 
+// ── Rules 8 & 9: the icon scale and the motion scale ────────────────────────
+// v17.13.0. CLAUDE.md states both as rules — "No new numeric `size={n}` on an
+// icon", and `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back
+// empty apart from M's own WAAPI values — and neither was enforced by anything.
+//
+// They are added here precisely BECAUSE compliance is already 100%: 0 numeric
+// icon sizes at 31 icon exports' call sites, and every motion match in `src/`
+// inside a comment save one. A rule adopted at 100% costs nothing and guards
+// the next edit; a rule adopted against a backlog gets muted. That asymmetry is
+// why these two waited for a version with no debt to clear rather than shipping
+// alongside the axes that had some.
+//
+// Rule 8 is JSX-attribute and destructured-default position only — `size={14}`
+// and `{ size = 20 }`. NOT `size: <number>` in an object, which in this app is
+// overwhelmingly a PARTY size (`EMPTY_FORM`, every booking, every waitlist
+// entry). A rule that fires on a booking's guest count would be muted within a
+// day, and it would be right to mute it.
+//
+// Rule 9 flags a `cubic-bezier(` or a CSS time followed by an easing keyword.
+// `M.resize`'s `"var(--t-shift) linear"` is deliberately NOT caught: it is a
+// token composition, and the thing this guards is a hand-written duration/curve
+// pair. The one genuine escape hatch — `M.easeOut`, which useFlip needs as a
+// literal because WAAPI cannot read a CSS var — is marked:
+//
+//     easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"   /* @motion */
+
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -195,6 +221,13 @@ function styleValue(line, key) {
 // v17.9.0, and an entity being invisible to a glyph grep is already one of the
 // recorded lessons — this is the same fact pointed the other way.
 const COLOUR_LITERAL = /\brgba?\(\s*[\d.]|(?<![&\w])#[0-9a-fA-F]{3,8}\b/;
+
+// Rule 8: a numeric icon size, in the two positions an icon's size is written.
+const ICON_SIZE = /\bsize=\{\s*-?\d|\bsize\s*=\s*-?\d/;
+
+// Rule 9: a hand-written duration/curve. `var(--t-shift) linear` is a token
+// composition and must not match, so a TIME is required before the keyword.
+const MOTION_LITERAL = /cubic-bezier\s*\(|\b\d+(?:\.\d+)?m?s\s+(?:ease|linear|steps)\b/;
 
 // A quoted CSS DECLARATION LIST — `prop: value;` — i.e. devtools `%c` styling.
 // A JSX inline style VALUE never contains a semicolon, which is what makes this
@@ -467,6 +500,27 @@ for (const file of walk(SRC)) {
       });
     }
 
+    // ── Rule 8 ──────────────────────────────────────────────────────────────
+    if (ICON_SIZE.test(code) && !/@canvas/.test(line)) {
+      problems.push({
+        file: rel, line: i + 1, rule: "icon-scale",
+        text: line.trim().slice(0, 90),
+        hint: "numeric icon size — use the IC scale (IC.inline 12 / IC.control 14 / "
+              + "IC.chrome 18), or mark a drawn-in-place marker /* @canvas */",
+      });
+    }
+
+    // ── Rule 9 ──────────────────────────────────────────────────────────────
+    if (MOTION_LITERAL.test(code) && !/@motion/.test(line)) {
+      problems.push({
+        file: rel, line: i + 1, rule: "motion-scale",
+        text: line.trim().slice(0, 90),
+        hint: "hand-written duration/curve — use the M scale (M.tap/move/shift/"
+              + "status/exit, M.resize for AutoHeight only), or mark the WAAPI "
+              + "escape hatch /* @motion */",
+      });
+    }
+
     // ── Rule 6 ──────────────────────────────────────────────────────────────
     const bare = line.trim();
     const isComment = bare.startsWith("//") || bare.startsWith("*") || bare.startsWith("/*");
@@ -484,7 +538,8 @@ for (const file of walk(SRC)) {
 
 if (problems.length === 0) {
   console.log("style invariants: OK (radius + type + spacing + height scales, "
-            + "white-inset-over-fixed-fill, shadow + colour literals, marker placement)");
+            + "white-inset-over-fixed-fill, shadow + colour literals, icon + motion "
+            + "scales, marker placement)");
   process.exit(0);
 }
 
