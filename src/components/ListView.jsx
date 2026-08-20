@@ -421,6 +421,27 @@ export const ListView = memo(function ListView({
                page under a finger that just tapped is the bug it was added to
                avoid. */
             onClick={(e) => { if (endsASelection(e.currentTarget)) return; onSelect(b.id); onEdit(b); }}
+            /* /code-review (v17.12.0): the card is focusable now, and the
+               browser focuses on mousedown — which SCROLLS the card into view,
+               measured at up to 297px. Timeline and Plan answer that with
+               `preventDefault`, and this card deliberately cannot: that also
+               kills text selection, and staff select the phone number off this
+               card to ring a party (the behaviour `endsASelection` exists to
+               protect). Which left the exemption trading one broken interaction
+               for another — press on the number to start a drag and the text
+               travels 297px out from under the pointer before the selection has
+               begun.
+               Focusing it OURSELVES with `preventScroll` is the way to have
+               both: the browser's focusing steps are a no-op on an element that
+               is already focused, so there is nothing left to scroll, and
+               mousedown's default action is untouched so the selection drag
+               proceeds normally.
+               Skipped when the press is on a nested control — those take their
+               own focus, and stealing it here would break the button. */
+            onMouseDown={(e) => {
+              if (e.target.closest("button")) return;
+              e.currentTarget.focus({ preventScroll: true });
+            }}
             /* v17.12.0 — reachable and announced.
 
                `role="listitem"`, NOT `role="button"`, and that is the whole

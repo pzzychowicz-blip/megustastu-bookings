@@ -12518,3 +12518,33 @@ name is required.", the name input `aria-invalid="true"` and
 `aria-required="true"` and a properly associated label. Typing a single character
 clears all three, and the alert region stays mounted and empty — which is what
 lets the *next* error announce. Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (16/n) — `/code-review`: the List card's exemption traded one break for another
+
+**Files:** `src/components/ListView.jsx`.
+
+Timeline and Plan answer the focus-scroll with `preventDefault` on mousedown.
+10/n deliberately withheld it from the List card, because `preventDefault` also
+kills text selection and staff select the phone number off that card to ring a
+party — the behaviour `endsASelection` exists to protect.
+
+That reasoning is right about `preventDefault` and wrong about the conclusion. It
+left pointer focus enabled, so pressing on the phone number **scrolls the card up
+to 297px before the selection drag has begun** — the text travels out from under
+the finger, and the selection covers a different run or the press lands on
+another card. The exemption protected the feature from one break by handing it
+another.
+
+**Focusing the card OURSELVES, with `preventScroll`, has both.** The browser's
+focusing steps are a no-op on an element that is already focused, so its default
+action has nothing left to scroll; and because nothing is prevented, the selection
+drag proceeds exactly as before. Skipped when the press is on a nested control —
+those take their own focus and stealing it would break the button.
+
+**Verified live**, with the counterfactual measured rather than assumed. On a card
+sitting 32px below the fold: a plain `.focus()` scrolls **32px**,
+`focus({preventScroll:true})` scrolls **0**, and a real mouse press on the card's
+name leaves `scrollTop` at 0 at mousedown, at the next frame and at +80ms, then
+opens the edit form. Build ✓, 406 tests ✓, lint 0 errors.
