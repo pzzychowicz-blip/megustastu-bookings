@@ -12493,3 +12493,28 @@ button opens **Manual table assignment** and does not also open the form
 (`stopPropagation` intact); a real mouse click on a block leaves `scrollLeft` at
 1700 and `activeElement` on BODY, then opens the form. Build ✓, 406 tests ✓,
 lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (15/n) — `/code-review`: the error-clearing effect never watched the name
+
+**Files:** `src/App.jsx`.
+
+The effect that drops a stale save error depended on `time`, `size`, `date`,
+`preference` and `customDur` — every field except the one the app's most common
+error is about. So "Customer name is required." stayed on screen while the user
+typed a perfectly good name.
+
+Survivable while it was only a banner. Not once 3/n turned it into an **assertion
+about the control**: the field then keeps `aria-invalid="true"` and an
+`aria-describedby` aimed at that message for the entire time it is being
+corrected — and this is the one field where *required* is the only thing that can
+be wrong, so the assertion is guaranteed false the moment the first character
+lands. One word in a dependency array.
+
+**Verified live:** Save on an empty form gives `role="alert"` carrying "Customer
+name is required.", the name input `aria-invalid="true"` and
+`aria-describedby="mgt-form-error"` resolving to a real element, plus
+`aria-required="true"` and a properly associated label. Typing a single character
+clears all three, and the alert region stays mounted and empty — which is what
+lets the *next* error announce. Build ✓, 406 tests ✓, lint 0 errors.

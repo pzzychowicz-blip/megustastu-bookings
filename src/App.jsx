@@ -824,7 +824,16 @@ function BookingApp({uid}){
   const swAppliedRef = useRef(false);
   const [settingsTab, setSettingsTab] = useState("general");
   useEffect(function(){formRef.current=form;},[form]);
-  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.time,form.size,form.date,form.preference,form.customDur]);
+  // /code-review (v17.12.0): `form.name` belongs in this list and never was.
+  // The dep list is what clears a stale error, and the name field was missing
+  // from it — so after "Customer name is required." the banner stayed up while
+  // the user typed a perfectly good name. Survivable while it was only a
+  // banner; not once v17.12.0 turned it into an ASSERTION about the control,
+  // because the field then keeps `aria-invalid="true"` and an
+  // `aria-describedby` pointing at that message for the whole time it is being
+  // corrected, which is the one field where "required" is the only thing that
+  // can be wrong.
+  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.time,form.size,form.date,form.preference,form.customDur]);
   // ── Time tick hook ──────────────────────────────────────────────────────────
   // Real-time clock for seated duration. 15s tick. Drives liveBookings, the
   // overlapWarnings derivation, applySeatedShift inside doSave, updateStatus's
