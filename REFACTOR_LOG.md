@@ -11290,3 +11290,51 @@ measured at `3px rgb(220, 38, 38)`, the stripe measured spanning exactly
 Camps (20:30) are both on table 3." with Assign and dismiss. Console clean; 3 DOM
 mutations in 5s idle (the 15s clock tick), i.e. no render loop.
 
+### 2/n · `StatusIcon` on the timeline block
+
+**Files:** `src/components/TimelineView.jsx`
+**Behavioural change:** every timeline block now carries its status as a mark as
+well as a fill, and the status reaches the accessibility tree. The legend chips
+carry the same mark.
+
+A block's status was `BLOCK_BG[b.status]` and nothing else — no text, no mark. A
+WCAG **1.4.1** failure (use of colour), found independently by three of the
+review's seven passes, and the legend at the bottom of the view does not answer
+it: a legend is a lookup rather than an in-context indicator, and it does nothing
+at all for a screen reader. `StatusIcon` shipped in v17.10.0 for exactly this
+reason and went onto buttons only.
+
+It also closes the consistency gap the design-critique pass named: List states
+the status in a solid badge ("Seated", "Confirmed"), Plan uses occupancy fills,
+and Timeline said it in colour alone — three views, three languages for the app's
+most important attribute. `STATUS_LABEL` here is the LIST CARD's vocabulary
+rather than a new one, so the mark's accessible name and the badge agree.
+
+**It leads the rail, and it is not a flag.** The flags say what is unusual about
+a booking; this says what the booking IS. It is fixed width cost rather than a
+`railFlags` entry, for the same reason as the clash marker: a seated block is
+drawn at its LIVE duration, so it starts a few pixels wide and grows, and a
+droppable status mark would be missing from every block for the first stretch of
+every visit — while the party is being seated, which is when the status just
+changed. `role="img"` + `aria-label` come free from `BlockFlag`.
+
+**The clash marker moved to the END of the marker run in the same commit.**
+v17.9.0's rail order is facts first and exception states last (deposit,
+preferred, then locked / repeat-no-show / overstaying). 1/n put the clash marker
+at the head because it is the most severe; with the status mark taking the lead
+position on its own merits, following the established order costs nothing and
+keeps one rule instead of two.
+
+**The width cost is real and was checked rather than assumed.** Every block now
+reserves an extra 18px, which also enters `chipRoomFor`, so the day-wide
+start-time-chip threshold rises from 162px to 180px. At the restaurant's real
+13:00–22:00 hours a block averages 192px, so chips stay on; at the DEV
+06:00–01:00 they average 96px and were already off — which is the legibility
+cliff 5/n is about, not something this adds.
+
+**Verification:** build ✓ · lint 0 · `check:style` OK. Live: blocks measured
+carrying `aria-label` "Confirmed" / "Pending — awaiting confirmation" /
+"Completed", and the two clashing blocks carrying both their status label and
+"Double-booked with …". Legend measured with 5 of 5 status chips rendering an
+icon. Console clean.
+

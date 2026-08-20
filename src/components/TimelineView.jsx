@@ -47,7 +47,7 @@ import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
-import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon } from "./Icons";
+import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
@@ -123,6 +123,7 @@ const RING_PX = 24;      // the party-size ring + its margin (v17.9.0)
 const FLAG_PX = 18;      // one IC.control (14px) flag icon + its 4px margin (v17.9.1)
 const FREE_PX = 36;      // the "~Nm" table-turn pill + its margin (v17.9.1)
 const CLASH_PX = 18;     // the double-booked marker + its margin (v17.11.0)
+const STATUS_PX = 18;    // the status mark + its margin (v17.11.0) — on EVERY block
 const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
 
 function chipRoomFor(b, noShows, warn, clash) {
@@ -131,7 +132,7 @@ function chipRoomFor(b, noShows, warn, clash) {
     + (isLocked(b) ? 1 : 0)
     + (noShows >= 2 ? 1 : 0)
     + (warn && warn.overdue ? 1 : 0);
-  return CHIP_PX + HANDLE_PX + RING_PX + NAME_MIN_PX + (clash ? CLASH_PX : 0) + FLAG_PX * flags;
+  return CHIP_PX + HANDLE_PX + RING_PX + NAME_MIN_PX + STATUS_PX + (clash ? CLASH_PX : 0) + FLAG_PX * flags;
 }
 
 // v17.9.1: what a block can afford to show at its current width is decided by
@@ -152,6 +153,19 @@ function chipRoomFor(b, noShows, warn, clash) {
 // module scope is safe; entries are keyed by booking id and expire by timestamp.
 let __prevStatus = null;
 const __statusAnims = {};
+
+// v17.11.0: the word for each status, for the status mark's accessible name and
+// hover title. It is the LIST CARD's vocabulary, not a new one — the badge there
+// has always said "Seated" / "Confirmed", and the whole point of putting a mark
+// on the block is that the two views stop describing one attribute two ways.
+// `cancelled` is here for completeness; the timeline filters those out.
+const STATUS_LABEL = {
+  pending: "Pending — awaiting confirmation",
+  confirmed: "Confirmed",
+  seated: "Seated",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
 
 // ── TimelineBlock — one booking block (v15.8.0: hoisted to module scope) ───────
 // Previously an inline component inside TimelineView, which made React remount it
@@ -280,7 +294,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
   const { showRing, flags: railFlags } = visibleRail(
     d * pxPerMin,
     HANDLE_PX + NAME_MIN_PX + (showChip ? CHIP_PX : 0) + (freeMin != null ? FREE_PX : 0)
-      + (clash ? CLASH_PX : 0),
+      + STATUS_PX + (clash ? CLASH_PX : 0),
     RING_PX, FLAG_PX, allFlags
   );
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
@@ -616,19 +630,48 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
           Assign handle. All flexShrink:0 — the name truncates, these survive.
           v17.9.1: …up to the point where they stop fitting, at which they are
           dropped rather than clipped on top of each other. See blockBudget. */}
-      {/* v17.11.0: the double-booked marker leads the rail, ahead of the flags
-          it outranks, and outside `railFlags` because it is never dropped. The
-          title names the other party — which is the question anyone who sees
-          this marker asks next, and the one thing the hatched band cannot say. */}
+      {/* v17.11.0: the STATUS mark leads the rail — on every block, never
+          dropped, and the one marker here that is not conditional.
+
+          A block's status was `BLOCK_BG[b.status]` and nothing else: no text,
+          no mark, a WCAG 1.4.1 failure that three of the review's seven passes
+          found independently. The legend at the bottom of the view is a lookup,
+          not an in-context indicator, and it does nothing at all for a screen
+          reader. `StatusIcon` shipped in v17.10.0 for exactly this and went
+          onto buttons only.
+
+          It leads because it is not a flag: the flags say what is unusual about
+          a booking, and this says what the booking IS. It is also the only part
+          of the rail that answers the question the three views used to answer
+          three different ways — List names the status in a badge, Plan uses
+          occupancy fills, and Timeline said it in colour alone.
+
+          Fixed cost, like the clash marker, for the same reason: a seated block
+          is drawn at its LIVE duration, so it starts a few pixels wide and
+          grows, and a droppable status mark would be missing from every block
+          for the first stretch of every visit — i.e. exactly while the party is
+          being seated. `role="img"` + `aria-label` come from BlockFlag, so the
+          status finally reaches the accessibility tree too. */}
+      <BlockFlag title={STATUS_LABEL[b.status] || b.status}>
+        <StatusIcon status={b.status} size={IC.control} />
+      </BlockFlag>
+      {railFlags.map((f) => (
+        <BlockFlag key={f.k} title={f.title}>{f.icon}</BlockFlag>
+      ))}
+      {/* The double-booked marker sits LAST among the markers, nearest the
+          handle. v17.9.0's rail order is facts first, exception states last
+          (deposit, preferred, then locked / repeat-no-show / overstaying), and
+          a clash is the most severe exception of all — so it takes the end of
+          that run rather than jumping the queue to the front. Outside
+          `railFlags` because it is never dropped; the title names the other
+          party, which is the question anyone who sees this marker asks next and
+          the one thing the stripe cannot say. */}
       {clash ? (
         <BlockFlag title={"Double-booked with " + clash.names.join(", ")
           + (clash.tables.length ? " on " + (clash.tables.length === 1 ? "table " : "tables ") + clash.tables.join(", ") : "")}>
           <ClashIcon size={IC.control} />
         </BlockFlag>
       ) : null}
-      {railFlags.map((f) => (
-        <BlockFlag key={f.k} title={f.title}>{f.icon}</BlockFlag>
-      ))}
       {/* v16.3.0: table-turn countdown pill — a seated block within ~15 min of
           its scheduled end shows "~Nm" (translucent, like the start-time chip).
           Flex item before the assign handle (no absolute overlap of the name); the
@@ -1500,9 +1543,15 @@ export const TimelineView = memo(function TimelineView({
           color: BLOCK_INK[s] || "var(--text-on-accent)",
           border: "1px solid rgba(255,255,255,0.2)",
           fontWeight: FW.semi, textTransform: "capitalize",
-          boxShadow: "var(--shadow-flat)"
+          boxShadow: "var(--shadow-flat)",
+          display: "inline-flex", alignItems: "center", gap: 4
         }}
       >
+        {/* v17.11.0: the legend chip carries the MARK as well as the colour and
+            the word, so it teaches the pairing a block now uses. A legend that
+            listed only colours while the blocks had gained a second encoding
+            would explain the half that never needed explaining. */}
+        <StatusIcon status={s} size={IC.inline} />
         {s}
       </span>
     );
