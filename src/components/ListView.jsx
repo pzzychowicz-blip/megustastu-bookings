@@ -219,12 +219,22 @@ export const ListView = memo(function ListView({
   // selected card holds it; with nothing selected the first card does, so the
   // list is always enterable from the keyboard.
   //
-  // A closed "Completed & cancelled" fold is not a hazard here: `Reveal`
-  // unmounts its children once shut, so a finished card cannot be an invisible
-  // tab stop.
-  const rovingId = (selectedId && day.some(function (x) { return x.id === selectedId; }))
+  // /code-review: resolved against the cards that are actually RENDERED, not
+  // against `day`. `Reveal` unmounts the "Completed & cancelled" fold once
+  // shut, so a finished booking is a real element only while `showFinished` is
+  // on — and naming an unmounted card leaves EVERY rendered card at -1, i.e.
+  // the list stops being reachable by keyboard at all. That is the exact
+  // opposite of what this line exists to guarantee, and it was two keystrokes
+  // away: select a card, press C to complete it, and the selection follows it
+  // into the closed fold. A day whose bookings are all completed or cancelled
+  // (ROADMAP already records that day as reachable) did it with no keystrokes.
+  //
+  // The early return above guarantees `day` is non-empty; `reachable` can still
+  // be empty, when every booking is finished and the fold is shut.
+  const reachable = showFinished ? day : active;
+  const rovingId = (selectedId && reachable.some(function (x) { return x.id === selectedId; }))
     ? selectedId
-    : (day[0] ? day[0].id : null);
+    : (reachable[0] ? reachable[0].id : null);
 
   function renderCard(b) {
         // v14 p1 (Issue 2 fix): end-time label is pinned to the scheduled plan

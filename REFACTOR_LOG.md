@@ -12418,3 +12418,35 @@ Reveal measures 98px, the strip 88px at y=150, and the toast layer anchors at
 y=248 — 150 + 98, the same relationship as before. An A/B against the unmodified
 file in the identical state returned identical geometry. Build ✓, 406 tests ✓,
 lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (13/n) — `/code-review`: the roving tab stop could name an unmounted card
+
+**Files:** `src/components/ListView.jsx`.
+
+`rovingId` was resolved against `day` — every booking on the date — but the cards
+that actually EXIST are `active`, plus `finished` only while the "Completed &
+cancelled" fold is open, because `Collapsible` wraps its body in a `Reveal` and
+`Reveal` unmounts once shut. Name an unmounted card and every rendered card keeps
+`tabIndex={-1}`, so the List has **no tab stop at all** — the exact opposite of
+the guarantee the line was written to provide.
+
+Two keystrokes away: select a card with ↑/↓, press **C** to complete it, and the
+selection follows it into the closed fold. And reachable with none at all on a day
+whose bookings are all completed or cancelled — a state `ROADMAP` already records
+as real, under the empty-day inconsistency.
+
+The comment was half right and that is what hid it: it correctly reasoned that a
+closed fold cannot leave an *invisible tab stop*, and then stopped, without asking
+what happens to the only tab stop there is.
+
+`reachable = showFinished ? day : active` is the whole fix. When every booking is
+finished and the fold is shut, `reachable` is legitimately empty and `rovingId` is
+null — correct, because there is no card to point at, and the fold's own header
+button is still in the tab order, so the list stays enterable.
+
+**Verified live**, on the seeded 2026-08-19 fixture (8 active, 5 finished): with a
+completed booking selected and the fold open, that card holds the stop; closing
+the fold moves it to the first active card. Before the fix the same sequence left
+zero cards at `tabIndex 0`. Build ✓, 406 tests ✓, lint 0 errors.
