@@ -3322,7 +3322,7 @@ function BookingApp({uid}){
             several open at once (a 3+ row late banner) would eat the viewport.
             When shellFixed is off this div is a plain, style-less wrapper and
             the page scrolls exactly as it always did. */}
-            <main inert={anyModal} style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
+            <main style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
               /* With a split the panes own the scrolling, so this region must
                  NOT scroll — a flex:1 child of an overflowY:auto parent resolves
                  to CONTENT height, which would collapse a top/bottom split. The
@@ -3338,9 +3338,19 @@ function BookingApp({uid}){
                  card is the content box, so 4% padding is precisely enough at
                  any width. The negative margin puts the content back where it
                  was, so card width and position are unchanged from before. */
-              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}>{/* v17.12.0 (review fix): `inert` sits on the two CONTENT
+                  children rather than on <main> itself. It was on <main>, and
+                  <main> also contains StatusToasts — the app's live region for
+                  transient status. `inert` removes a subtree from the
+                  ACCESSIBILITY TREE as well as the tab order, so every toast
+                  went silent for as long as any modal was open, and the Undo
+                  pill inside it stopped being clickable. Both are wrong for
+                  the same reason: a floating status layer pinned ABOVE the
+                  dialog is not "the page behind the dialog", which is the only
+                  thing `inert` is meant to describe. This is the same finding
+                  as notifAnnounce living outside <main>, one level down. */}<div inert={anyModal}><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
                   children, so the pane fades out fully drawn instead of blanking a
-                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} />:null}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
+                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} />:null}</Reveal></div><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 loadStalled={loadStalled}
                 resyncing={resyncing}
@@ -3354,14 +3364,25 @@ function BookingApp({uid}){
                 reshuffled={reshuffled}
                 reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
                 loadShown={loadBannerShown}
-                loadMsg={"Connected to the server — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir} fill={shellFixed}>{split?<SplitLayout
+                loadMsg={"Connected to the server — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><div
+                /* v17.12.0 (review fix): the view — the actual "page behind the
+                   dialog" — is what goes inert, not <main>. See the note on the
+                   strip wrapper above for why the toast layer above this div
+                   must stay live.
+                   In the shellFixed layout this wrapper is load-bearing rather
+                   than decorative: SlideView takes `fill` and resolves its own
+                   flex:1/minHeight:0 against its PARENT, so an intervening plain
+                   block would collapse the chain and the panes would size to
+                   content. It therefore carries the same three properties. */
+                inert={anyModal}
+                style={shellFixed?{flex:1,minHeight:0,display:"flex",flexDirection:"column"}:undefined}><SlideView key={slide.k} dir={slide.dir} fill={shellFixed}>{split?<SplitLayout
                 dir={split.dir}
                 ratio={split.ratio}
                 onRatio={setSplitRatio}
                 focused={focusedPane}
                 onFocus={setFocusedPane}
                 paneA={viewEl[split.a]}
-                paneB={viewEl[split.b]} />:mainView}</SlideView></div></main>{/* v17.12.0: the notification announcer sits OUTSIDE <main>, and that
+                paneB={viewEl[split.b]} />:mainView}</SlideView></div></div></main>{/* v17.12.0: the notification announcer sits OUTSIDE <main>, and that
         is not tidiness. `inert` removes a subtree from the accessibility tree as
         well as from the tab order, so a live region inside an inert region goes
         SILENT — and the things this announces (a failed write, the connection

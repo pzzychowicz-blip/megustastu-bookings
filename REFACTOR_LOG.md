@@ -12379,3 +12379,42 @@ glyph before and does not now (verified against the live CSSOM), and the
 declaration it applied moves the table along exactly the path the recording shows
 (measured). The recording is the negative control. Build ✓, 406 tests ✓, lint 0
 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (12/n) — `/code-review`: the toast live region was inert behind every modal
+
+**Files:** `src/App.jsx`.
+
+`inert` was on `<main>`, and `<main>` also contains `StatusToasts` — the app's
+live region for transient status, and the one this version had just designated as
+such. `inert` removes a subtree from the **accessibility tree** as well as from
+the tab order, so for as long as any modal was open every toast went unannounced:
+the connection dropping, a write failing, "⟳ Syncing the latest data…". Those are
+precisely the events App's own comment says a modal must not suppress — the note
+explaining why `notifAnnounce` sits *outside* `</main>`. The same finding, one
+level down, in the same commit that wrote the rule.
+
+It was not only silent. The **Undo pill lives in that layer**, so arming an undo
+and then opening Settings left a visible, unclickable Undo — a working control
+that stopped working, on this branch.
+
+**The fix moves `inert` off `<main>` and onto the two CONTENT children**: the
+notification strip's wrapper, and a new wrapper around `SlideView`. `<main>` is
+now just the scroll region it always was. The reasoning is the same one that
+placed `notifAnnounce`: a floating status layer pinned *above* the dialog is not
+"the page behind the dialog", which is the only thing `inert` describes.
+
+The `SlideView` wrapper carries `flex:1; minHeight:0; display:flex;
+flexDirection:column` in the `shellFixed` layout and is load-bearing there rather
+than decorative — `SlideView`'s own `fill` resolves against its PARENT, so a plain
+block in between would collapse the definite-height chain and the panes would size
+to content.
+
+**Verified live, both halves.** With Settings open: `main` no longer inert, the
+toast layer **not** inert, and the strip, the timeline blocks and the header all
+inert — i.e. exactly the intended split. Layout unchanged: with the strip open the
+Reveal measures 98px, the strip 88px at y=150, and the toast layer anchors at
+y=248 — 150 + 98, the same relationship as before. An A/B against the unmodified
+file in the identical state returned identical geometry. Build ✓, 406 tests ✓,
+lint 0 errors, `check:style` OK.
