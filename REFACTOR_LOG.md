@@ -12939,3 +12939,55 @@ every new rule looks like a regression in the old ones.
 two rules, including the party-size false positive and the token-composition
 one), `check:style` OK. Also corrects the test count stated in 3/n above, which
 said 436 where the run says 432 — four cases, each asserting three parts.
+
+### 5/n — the accessibility gate
+
+**Files:** `tests/a11y.test.js` (new), `scripts/strip-comments.mjs` (new),
+`scripts/check-style-invariants.mjs`
+**Behavioural change:** none.
+
+The reason this version exists. v17.12.0 shipped roughly forty individually
+correct accessibility decisions, and **every one of them is invisible when it is
+removed**: delete the `<main>` landmark, the `role="status"` on the toast layer,
+the `htmlFor` in `Fld`, the roving tab stop in `ListView` — the app looks
+identical, behaves identically to a mouse user, passes every other test here,
+and ships. That is the same property that let all of it be missing for seventeen
+versions.
+
+**What it claims, and what it must not be read as claiming.** It reads SOURCE,
+so it cannot say the app is accessible. What it asserts is narrower and worth
+more: the specific wirings v17.12.0 established are still present, and the three
+rules that version had to *learn* — two of them by shipping their violation —
+have not been undone. Live measurement remains the method for anything new;
+v17.12.0's own entry records two SVG facts that source review provably cannot
+catch (a browser paints no `outline` on a `<g>`; `:focus-visible` never matches
+an SVG element in Chrome).
+
+24 assertions in seven groups: landmarks and exactly one `<h1>`; the three live
+regions and **where each one has to live** (a live region must already be in the
+DOM when its content changes, which is why `StatusToasts` can own its own and
+the strip cannot); `inert` never on `<main>`; `Fld`'s label association on both
+shapes, with `aria-required` on the control and `aria-describedby` emitted only
+where it cannot dangle; bookings reachable in all three views; the List card
+explicitly NOT a button; pointer-focus suppression on the two surfaces that
+scroll under a finger; and the connection popover claiming `haspopup` but not
+`aria-modal`.
+
+**Every assertion goes through `has()` / `hasnt()`, which throw on a pattern
+matching nothing**, so a check cannot rot into a tautology when a file is
+renamed or a shape rewritten — and three of them run the helpers against
+known-bad strings, for the reason `tests/style-check.test.js` exists. Proven the
+same way: `role="status"` was removed from `StatusToasts` and `inert` put back
+on `<main>`, both were caught, both reverted.
+
+**The gate's first run produced two false positives, and both were comments.**
+`ConnectionStatus.jsx` explains in prose that the popover is "NOT `aria-modal`
+and no focus trap" — so a grep for `aria-modal` read a sentence as the opposite
+of what it says — and `ListView.jsx`'s card carries "`role="listitem"`, NOT
+`role="button"`". In a codebase commented this heavily, **a source check that
+reads comments is measuring the documentation.** Rule 7 had hit the identical
+wall an hour earlier, so its line-by-line comment stripper moved out to
+`scripts/strip-comments.mjs` and both now share it — the second consumer is what
+made it worth a file rather than a helper.
+
+**Verification:** build ✓, lint 0 errors, **467 tests** (+24), `check:style` OK.

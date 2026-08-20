@@ -136,6 +136,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
+import { stripComments } from "./strip-comments.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // An explicit directory argument exists so the checker can be pointed at a
@@ -259,39 +260,6 @@ function quotedStrings(line) {
   return out;
 }
 const isDevtoolsCss = (line) => quotedStrings(line).some((str) => DECL_LIST.test(str));
-
-// Each line with its COMMENT text blanked out, tracking `/* */` across lines and
-// `//` to end of line, and skipping over string literals so a `//` inside a URL
-// or a `/*` inside a regex is not read as a comment. Rule 7 judges code only —
-// this repo's comments are full of prose about colours, including the exact
-// literals a previous version removed.
-function stripComments(text) {
-  const out = [];
-  let block = false;
-  for (const line of text.split("\n")) {
-    let res = "", quote = null, i = 0;
-    while (i < line.length) {
-      const c = line[i], d = line[i + 1];
-      if (block) {
-        if (c === "*" && d === "/") { block = false; i += 2; } else i++;
-        continue;
-      }
-      if (quote) {
-        res += c;
-        if (c === "\\") { res += d === undefined ? "" : d; i += 2; continue; }
-        if (c === quote) quote = null;
-        i++;
-        continue;
-      }
-      if (c === '"' || c === "'" || c === "`") { quote = c; res += c; i++; continue; }
-      if (c === "/" && d === "/") break;
-      if (c === "/" && d === "*") { block = true; i += 2; continue; }
-      res += c; i++;
-    }
-    out.push(res);
-  }
-  return out;
-}
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
