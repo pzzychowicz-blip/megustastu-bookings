@@ -158,7 +158,7 @@ export function Overlay({ onClose, children, footer }) {
   // v15.8.0: symmetric open/close animation. `leaving` comes from the wrapping
   // <ModalPresence> (default false when there's no provider → enter-only). Mobile
   // = slide-up/down sheet; desktop = scrim fade + card fade/scale. See index.html.
-  const { leaving } = usePresence();
+  const { leaving } = useModalPresence();
   const sheetCls = leaving ? "mgt-sheet-out" : "mgt-sheet-in";
   const scrimCls = leaving ? "mgt-scrim-out" : "mgt-scrim-in";
   const cardCls = leaving ? "mgt-card-out" : "mgt-card-in";
@@ -384,15 +384,51 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
   );
 }
 
-// ── Form field (label + child input) ─────────────────────────────────────────
+// ── Form field (label + child control) ───────────────────────────────────────
+// v17.10.2: the label is ASSOCIATED with its control. Before this, Fld rendered
+// a real <label> and then rendered the control as its SIBLING — which names
+// nothing: implicit association requires the control INSIDE the label, and
+// there was no htmlFor/id pair. Measured live, every one of the app's ~20 form
+// fields was unnamed to a screen reader while looking perfectly labelled.
+//
+// TWO shapes, because half of these fields are not a single control:
+//
+//   • children as a FUNCTION — called with a generated id, which the call site
+//     puts on its control. The label then carries `htmlFor`, so the control has
+//     a real accessible name. Use this shape whenever there IS one control.
+//
+//   • children as ELEMENTS — a stepper pair, a chip row, a list of times. There
+//     is no single control to point at, so the wrapper becomes a `role="group"`
+//     named by the label instead. `htmlFor` is deliberately NOT rendered on this
+//     path: a `for` aimed at an id that is not in the tree is a DANGLING
+//     reference, which is strictly worse than not trying — the same reasoning
+//     Overlay uses when it resolves its own `aria-labelledby` from the DOM
+//     rather than taking it as a prop.
+//
+// The `*` is `aria-hidden` — a screen reader announcing "star" is noise. The
+// CONTROL says it instead, via `aria-required`, and the ATOM applies that
+// (/code-review): the first version left it to the call site, which is a
+// convention with nothing enforcing it — one of twenty call sites actually did
+// it, and the next `<Fld req>` would have got a visible `*` that is hidden from
+// assistive technology and no programmatic signal at all, i.e. a field that
+// reads as OPTIONAL. On the function path the atom already hands the call site
+// an id, so it hands it the required flag the same way.
 export function Fld({ label, req, style, children }) {
+  const id = useId();
+  const single = typeof children === "function";
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, ...(style || {}) }}>
-      <label style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.semi, letterSpacing: "0.01em" }}>
+    <div
+      role={single ? undefined : "group"}
+      aria-labelledby={single ? undefined : id + "-l"}
+      style={{ display: "flex", flexDirection: "column", gap: 4, ...(style || {}) }}>
+      <label
+        id={id + "-l"}
+        htmlFor={single ? id : undefined}
+        style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.semi, letterSpacing: "0.01em" }}>
         {label}
-        {req ? <span style={{ color: "var(--text-required)" }}>*</span> : null}
+        {req ? <span aria-hidden="true" style={{ color: "var(--text-required)" }}>*</span> : null}
       </label>
-      {children}
+      {single ? children(id, req ? { "aria-required": "true" } : null) : children}
     </div>
   );
 }
@@ -1090,7 +1126,12 @@ export function Toast({ show, children, style }) {
 // card/sheet to the *-out keyframe before unmounting. No wrapper element is
 // rendered, so the modal's own fixed/overlay positioning is untouched.
 export const PresenceContext = createContext({ leaving: false });
-export function usePresence() { return useContext(PresenceContext); }
+// v17.10.2: was `usePresence`, which collided with the Firebase device-presence
+// hook in src/hooks/usePresence.js — two exported, importable functions of that
+// name sharing nothing but a good word. Importing the wrong one gave a confusing
+// RUNTIME failure, not a build error. This is the narrower, purely-local concern,
+// so it takes the specific name, and it now pairs with its own provider.
+export function useModalPresence() { return useContext(PresenceContext); }
 
 export function ModalPresence({ show, children, outMs = 200 }) {
   const last = useRef(null);

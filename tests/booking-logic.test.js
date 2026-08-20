@@ -19,7 +19,7 @@ import {
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
-  stayedMins, bookEnd, padEnd,
+  stayedMins, bookEnd, padEnd, dayBookingsSig,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer } from "../src/lib/constants.js";
 
@@ -631,5 +631,126 @@ describe("optimizer invariants", () => {
     expect(inn[0].tables.every(isIn)).toBe(true);
     const out = applyOpt([mk({ id: "o", time: "13:00", size: 2, preference: "outdoor", tables: [] })], D, []);
     expect(out[0].tables.every((t) => !isIn(t))).toBe(true);
+  });
+});
+
+// ── dayBookingsSig + the unresolvable-clash property (v17.10.2) ─────────────
+//
+// These pin the two halves of the reconciliation-loop fix. The effect in App.jsx
+// re-dispatches a date only when a pass would actually CHANGE something, and it
+// decides that by comparing signatures — so both the comparison and the property
+// it detects need to be nailed down here, where they are reachable.
+
+describe("dayBookingsSig", () => {
+  it("is stable across array order — the same day scores the same", () => {
+    const a = mk({ id: "a", tables: ["1A"] });
+    const b = mk({ id: "b", time: "18:00", tables: ["2"] });
+    expect(dayBookingsSig([a, b], D)).toBe(dayBookingsSig([b, a], D));
+  });
+  it("is stable across TABLE order within one booking", () => {
+    expect(dayBookingsSig([mk({ id: "a", tables: ["5A", "5B"] })], D))
+      .toBe(dayBookingsSig([mk({ id: "a", tables: ["5B", "5A"] })], D));
+  });
+  it("changes when a booking moves table", () => {
+    expect(dayBookingsSig([mk({ id: "a", tables: ["1A"] })], D))
+      .not.toBe(dayBookingsSig([mk({ id: "a", tables: ["2"] })], D));
+  });
+  it("ignores other dates entirely", () => {
+    const same = mk({ id: "a", tables: ["1A"] });
+    const other = mk({ id: "z", date: "2099-06-16", tables: ["6"] });
+    expect(dayBookingsSig([same], D)).toBe(dayBookingsSig([same, other], D));
+  });
+  it("survives a missing/!array tables field rather than throwing", () => {
+    expect(() => dayBookingsSig([{ id: "a", date: D }], D)).not.toThrow();
+    expect(dayBookingsSig(null, D)).toBe("");
+  });
+});
+
+describe("dayBookingsSig covers what the pass can change, not just tables", () => {
+  // /code-review: the first version compared `id:tables` alone. But
+  // `bookingsAfterAction` ALSO runs syncLiveDurations (extending a seated
+  // party's duration) and applyOpt sets `_conflict` — so on a date that stays
+  // dirty, a tables-only signature read those as "no change" and the guard
+  // discarded them. Each case below failed against that version.
+  const base = mk({ id: "s", tables: ["1A"], status: "seated", duration: 90 });
+
+  it("sees a live duration extension with no table move", () => {
+    const extended = Object.assign({}, base, { duration: 150, customDur: 150 });
+    expect(dayBookingsSig([base], D)).not.toBe(dayBookingsSig([extended], D));
+  });
+  it("sees a _conflict flip with no table move", () => {
+    const flagged = Object.assign({}, base, { _conflict: true });
+    expect(dayBookingsSig([base], D)).not.toBe(dayBookingsSig([flagged], D));
+  });
+  it("sees a status change with no table move", () => {
+    expect(dayBookingsSig([base], D))
+      .not.toBe(dayBookingsSig([Object.assign({}, base, { status: "completed" })], D));
+  });
+  it("still ignores per-write metadata, so a server echo is not a change", () => {
+    const echoed = Object.assign({}, base, { updatedAt: Date.now(), baseUpdatedAt: 1, history: [{ a: 1 }] });
+    expect(dayBookingsSig([base], D)).toBe(dayBookingsSig([echoed], D));
+  });
+});
+
+describe("dayBookingsSig separators are not reachable from the data", () => {
+  // /code-review: `idOk` (LayoutSettings.jsx) rejects only "" and "|", so a
+  // table id may contain "+" — and "+"/"|" were the array/field separators.
+  // A venue naming a joined table "1+2" collapsed ["1+2"] and ["1","2"] onto
+  // one key, which reads as "nothing changed" and discards a real reshuffle.
+  it("distinguishes a table named with the old array separator", () => {
+    expect(dayBookingsSig([mk({ id: "x", tables: ["1+2"] })], D))
+      .not.toBe(dayBookingsSig([mk({ id: "x", tables: ["1", "2"] })], D));
+  });
+  it("distinguishes notes containing the old field separator", () => {
+    expect(dayBookingsSig([mk({ id: "x", notes: "a|b", preference: "auto" })], D))
+      .not.toBe(dayBookingsSig([mk({ id: "x", notes: "a", preference: "b|auto" })], D));
+  });
+});
+
+describe("an all-locked clash is unresolvable, which is why the loop existed", () => {
+  // Two _locked bookings overlapping on ONE table. Reachable by ordinary use:
+  // every walk-in is _manual + _locked, and every drag-drop path sets _locked.
+  //
+  // `_conflict: false` is not decoration. `applyOpt` writes `_conflict` on every
+  // booking for the date, so a fixture that omits it moves undefined → false and
+  // the (correctly widened) signature reports a change that the real app can
+  // never see: `sanitize` coerces `_conflict: !!b._conflict`, and every booking
+  // reaches state through `sanitizeAll`. The fixture trap CLAUDE.md records for
+  // ALL_TABLES, one field along — build fixtures to what `sanitize` guarantees,
+  // or the test measures the fixture instead of the code.
+  const clash = () => [
+    mk({ id: "p", time: "20:00", tables: ["3"], _locked: true, _manual: true, _conflict: false }),
+    mk({ id: "r", time: "20:30", tables: ["3"], _locked: true, _manual: true, _conflict: false }),
+  ];
+
+  it("is genuinely a conflict, and findConflicts sees it", () => {
+    expect(verifyClean(clash(), D)).toBe(false);
+    expect(findConflicts(clash(), D).sort()).toEqual(["p", "r"]);
+  });
+
+  it("survives a reshuffle unchanged — applyOpt copies locked tables verbatim", () => {
+    const before = clash();
+    const after = bookingsAfterAction(before, D, [], null, false, true);
+    expect(dayBookingsSig(after, D)).toBe(dayBookingsSig(before, D));
+    expect(verifyClean(after, D)).toBe(false);   // still dirty, still unresolvable
+  });
+
+  it("returns a NEW array even though nothing changed — the loop's actual fuel", () => {
+    // This is the property that made an unresolvable clash spin forever: the
+    // reconciliation effect assigned this result unconditionally, React saw a
+    // new reference on a dep, and re-ran the effect. The fix compares
+    // signatures and keeps the ORIGINAL reference; do not "optimise" that away.
+    const before = clash();
+    expect(bookingsAfterAction(before, D, [], null, false, true)).not.toBe(before);
+  });
+
+  it("a clash the optimizer CAN fix does change the signature", () => {
+    const before = [
+      mk({ id: "p", time: "20:00", tables: ["3"], _locked: true, _manual: true, _conflict: false }),
+      mk({ id: "r", time: "20:30", tables: ["3"], _conflict: false }),   // movable
+    ];
+    const after = bookingsAfterAction(before, D, [], null, false, true);
+    expect(dayBookingsSig(after, D)).not.toBe(dayBookingsSig(before, D));
+    expect(verifyClean(after, D)).toBe(true);
   });
 });

@@ -116,7 +116,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
             <div style={{ fontSize: T.body, fontWeight: FW.bold, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
             {historyRows}
             <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-              {armed ? <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymized as “Data removed” for statistics. Tap again to confirm.</span> : null}
+              {armed ? <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.</span> : null}
               <button
                 className="mgt-hover-scale mgt-press"
                 style={mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.del, opacity: armed ? 1 : 0.85 })}
@@ -165,11 +165,12 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           {phonelessNoShowCount > 0 ? (
             <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
               <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--warn-text)" }}>{phonelessNoShowCount}</div>
-              <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>no-show, unidentified</div>
+              <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>no-shows with no phone</div>
             </div>
           ) : null}
         </div>
         <input
+          aria-label="Search customers by name or phone number"
           value={query}
           onChange={function (e) { setQuery(e.target.value); setOpenKey(null); setArmedKey(null); }}
           placeholder="Search by name or phone…"
@@ -197,9 +198,9 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
             </span>
           ) : null}
         </div>
-        <div style={{ fontSize: T.small, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number, or — for guests who never gave one — by having been linked to each other from the name suggestions on a booking. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymized as “Data removed” for statistics.</div>
+        <div style={{ fontSize: T.small, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number, or — for guests who never gave one — by having been linked to each other from the name suggestions on a booking. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymised as “Data removed” for statistics.</div>
       </Section>
-      {rows.length ? rows : <div style={{ textAlign: "center", padding: "18px 0", color: S.muted, fontSize: T.body }}>{query.trim() ? "No customers match." : "No customers yet — bookings with a phone number appear here."}</div>}
+      {rows.length ? rows : <div style={{ textAlign: "center", padding: "18px 0", color: S.muted, fontSize: T.body }}>{query.trim() ? "No customers match." : "No customers yet — they appear here once a booking has a phone number, or once you link a guest from the name suggestions."}</div>}
     </div>
   );
 }

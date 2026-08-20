@@ -34,6 +34,7 @@ import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
+import { clampStep } from "../lib/clamp";
 import { dbError } from "../lib/dbError";
 
 export const DEFAULT_GENERAL_SETTINGS = {
@@ -72,13 +73,6 @@ export function readCachedRestaurantName(){
     if(typeof v === "string" && v.trim()) return v.trim().slice(0, 60);
   }catch{/* private mode / storage disabled */}
   return DEFAULT_GENERAL_SETTINGS.restaurantName;
-}
-
-function clampStep(n, def, min, max, step){
-  // NaN check AFTER the round (see useBookingDefaults for the why).
-  let v = Math.round(Number(n) / step) * step;
-  if(!Number.isFinite(v)) v = def;
-  return Math.max(min, Math.min(max, v));
 }
 
 // Short free-text fields: trim, cap length, fall back to the default when

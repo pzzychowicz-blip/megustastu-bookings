@@ -20,7 +20,7 @@
 
 import { S, BTN, R, T, FW, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
-import { Fld, Toggle, mkBtn, mkInp, mkArea, usePresence, AutoHeight } from "./atoms";
+import { Fld, Toggle, mkBtn, mkInp, mkArea, useModalPresence, AutoHeight } from "./atoms";
 import { CloseIcon } from "./Icons";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
@@ -35,7 +35,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
   const rec = draft.recurrence || {};
   const todayStr = new Date().toISOString().slice(0, 10);
   // v15.8.0: symmetric open/close animation via the wrapping <ModalPresence>.
-  const { leaving } = usePresence();
+  const { leaving } = useModalPresence();
 
   // ── Field updaters ──────────────────────────────────────────────────────
   // Each one returns a new draft via spread; never mutates the existing one.
@@ -125,8 +125,9 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           </div>
         </div>
 
-        <Fld label="Text" style={{ marginBottom: 12 }}>
+        <Fld label="Text" style={{ marginBottom: 12 }}>{(fid) => (
           <textarea
+            id={fid}
             value={draft.text}
             onChange={(e) => updText(e.target.value)}
             rows={2}
@@ -134,7 +135,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             className="mgt-hover-scale"
             style={mkArea()}
           />
-        </Fld>
+        )}</Fld>
 
         <Fld label="Times" style={{ marginBottom: 12 }}>
           <div>
@@ -142,6 +143,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
                 <input
                   type="time"
+                  aria-label={"Time " + (i + 1)}
                   value={t}
                   onChange={(e) => updTime(i, e.target.value)}
                   className="mgt-hover-scale"
@@ -188,8 +190,9 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         </Fld>
 
         {rec.type === "once" ? (
-          <Fld label="Date" style={{ marginBottom: 12 }}>
+          <Fld label="Date" style={{ marginBottom: 12 }}>{(fid) => (
             <input
+              id={fid}
               type="date"
               value={rec.date || ""}
               min={todayStr}
@@ -197,7 +200,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               className="mgt-hover-scale"
               style={mkInp()}
             />
-          </Fld>
+          )}</Fld>
         ) : null}
 
         {rec.type === "weekly" ? (
@@ -252,9 +255,9 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           <button
             onClick={onCancel}
             className="mgt-hover-scale"
-            style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.cancel })}
+            style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })}
           >
-            Cancel
+            Back
           </button>
           <button
             onClick={() => { if (!err) onSave(); }}

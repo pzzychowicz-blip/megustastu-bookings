@@ -37,7 +37,7 @@ import {
   checkInefficent, verifyClean, findConflicts,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
-  undoSnapshots, applyUndo
+  undoSnapshots, applyUndo, dayBookingsSig
 } from "./lib/booking-logic";
 
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
@@ -266,7 +266,7 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.10.1",
+  version:"17.10.2",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1314,7 +1314,28 @@ function BookingApp({uid}){
       let next=prev;
       dirty.forEach(function(d){
         if(optimizerActiveFor(d,autoOptimizer)){
-          next=bookingsAfterAction(next,d,tableBlocks,null,false,autoOptimizer);changed=true;
+          // v17.10.2 — this branch used to assign unconditionally and set
+          // `changed`, which turned an UNRESOLVABLE clash into an infinite
+          // render loop. `applyOpt` copies a locked booking's tables through
+          // verbatim (booking-logic.js), so two _locked bookings clashing on one
+          // table cannot be separated by a reshuffle — and every walk-in and
+          // every drag-drop path sets `_locked`. The pass therefore produced a
+          // NEW array with identical content, `setBookings` saw a new reference,
+          // the effect's `bookings` dep changed, and it ran again. Forever.
+          //
+          // The manual branch below only ever survived this by ACCIDENT: when
+          // nothing is movable it breaks with `next` still === `prev`, and React
+          // bails out of an identical state. Making that explicit here is the
+          // fix — keep the ORIGINAL reference when the pass changed nothing, so
+          // the bail-out is a property of the code rather than of a lucky
+          // early-return. Do not "simplify" this back to a plain assignment.
+          //
+          // The comparison is over the FULL persisted field set (dayBookingsSig
+          // reuses undoKey's), not tables alone: this pass also extends a seated
+          // party's duration via syncLiveDurations and sets `_conflict` via
+          // applyOpt, and a narrower signature silently discarded both.
+          const after=bookingsAfterAction(next,d,tableBlocks,null,false,autoOptimizer);
+          if(dayBookingsSig(after,d)!==dayBookingsSig(next,d)){next=after;changed=true;}
         }else{
           let guard=0;
           while(!verifyClean(next,d)&&guard++<20){
@@ -2739,11 +2760,11 @@ function BookingApp({uid}){
 
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
-        onClick={function(){setConfirmDel(null);}}>Cancel</button><button
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+        onClick={function(){setConfirmDel(null);}}>Back</button><button
         onClick={function(){delBooking(confirmDel);}}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
+        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This can't be undone. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence>;
 
   // v17.5.0: the ONE discard confirm, shared by the booking form, the walk-in
   // form and ManualModal (requestClose* raise it; doDiscard commits).
@@ -2887,6 +2908,7 @@ function BookingApp({uid}){
               title="Next day (→)"
               ><ChevronRightIcon size={IC.chrome} /></button><input
               type="date"
+              aria-label="Viewed date"
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
               className="mgt-hover-scale"
@@ -2951,7 +2973,7 @@ function BookingApp({uid}){
                 reshuffled={reshuffled}
                 reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
                 loadShown={loadBannerShown}
-                loadMsg={"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir} fill={shellFixed}>{split?<SplitLayout
+                loadMsg={"Connected to the server — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir} fill={shellFixed}>{split?<SplitLayout
                 dir={split.dir}
                 ratio={split.ratio}
                 onRatio={setSplitRatio}
@@ -3001,7 +3023,7 @@ function BookingApp({uid}){
               style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>No show</button><button
               onClick={function(){doCancelBooking(confirmCancel,false);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>The booking stays on the day, marked cancelled. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button

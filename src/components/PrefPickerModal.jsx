@@ -100,7 +100,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       <AutoHeight>
       <ModalTitle marginBottom={4} background="var(--btn-tables)">Preferred table</ModalTitle>
       <div style={{ fontSize: T.body, color: S.text, marginBottom: 14, textAlign: "center" }}>
-        Soft hint — optimizer tries this first, falls back if unavailable.
+        Soft hint — the optimiser tries this first, falls back if unavailable.
       </div>
       <div style={{
         marginBottom: 14, padding: "10px 14px", borderRadius: R.card,

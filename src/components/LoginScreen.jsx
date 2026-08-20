@@ -111,6 +111,8 @@ export function LoginScreen() {
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <input
             type="email"
+            aria-label="Email"
+            autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onKeyDown={handleKey}
@@ -120,6 +122,8 @@ export function LoginScreen() {
           />
           <input
             type="password"
+            aria-label="Password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={handleKey}

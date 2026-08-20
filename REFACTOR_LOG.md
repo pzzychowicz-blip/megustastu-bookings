@@ -10689,3 +10689,434 @@ became `addEventListener`, matching the boot watchdog and its CSP reasoning;
 failures; and `csp.test.js`'s dist comparison no longer silently skips.
 
 **355 tests.**
+
+---
+
+## v17.10.2 — the one-line class, from the seven-pass review
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** copy and accessible-name changes only. No persisted-data
+change, no Firebase console step, no visual change.
+**Verification:** see each entry.
+
+The first of the versions staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`). Everything here is high value per unit
+of risk and needed no decision: nothing changes what the app *does*, only what it
+is *called* — by a screen reader, and by the person reading a dialog.
+
+The review's one structural finding is worth restating before the entries,
+because it explains why a version of one-liners was worth cutting at all. Quality
+in this app is bimodal along a single line: *did anyone ever see it fail*. What a
+sighted user meets measures excellently — six font sizes rendered, all six on the
+scale; one backdrop-blur of an allowed four; a 12.5:1 focus ring. What a screen
+reader meets was close to absent — zero landmarks, zero live regions, zero named
+form fields, zero keyboard-reachable bookings. That is not carelessness. Every
+rule in `CLAUDE.md` was earned by an *observed* failure, and an accessibility
+defect produces no incident, so it never entered the loop that produced all the
+other rules.
+
+### Commit 1 — every form field in the app was unnamed
+
+**Files:** `src/components/atoms.jsx`, `BookingFormModal.jsx`, `WalkinForm.jsx`,
+`BlockModal.jsx`, `ReminderEditor.jsx`, `SearchPanel.jsx`, `Settings.jsx`,
+`LayoutSettings.jsx`, `CustomersSettings.jsx`, `LoginScreen.jsx`, `src/App.jsx`.
+**Behavioural change:** no visual change; every control gains an accessible name.
+
+`Fld` rendered a real `<label>`, and then rendered the control as its **sibling**.
+Implicit association requires the control *inside* the label, and there was no
+`htmlFor`/`id` pair — so the atom produced markup that looks perfectly labelled
+and names nothing. Measured live in the booking form: **9 labels, 0 associated,
+7 of 7 fields unnamed.** WCAG 1.3.1 / 3.3.2 / 4.1.2, and corroborated by two
+independent passes (it is also why the design-system audit scored `Fld` 4/10 —
+the one atom in the file that is functionally incomplete).
+
+**The fix is two shapes, because half of these fields are not a single control.**
+Where there is one control, `children` is a **function** called with a generated
+`useId()`; the call site puts that id on its input and the label carries
+`htmlFor`. Where the field is a stepper pair, a chip row or a list of times,
+`children` stays elements and the wrapper becomes a `role="group"` named by the
+label instead.
+
+`htmlFor` is deliberately **not** rendered on the group path. A `for` aimed at an
+id that is not in the tree is a dangling reference, and the app already has the
+precedent for refusing that trade: `Overlay` resolves its own `aria-labelledby`
+from the DOM rather than taking it as a prop, on the grounds that pointing at a
+missing id leaves a dialog **nameless** — strictly worse than not trying.
+
+Nine controls live outside `Fld` and were named individually: the date navigator's
+date picker, both search boxes, Settings' `GsTextField` (whose label was a styled
+`<div>` — now a real `<label>`), LayoutSettings' rename / new-table boxes and its
+two priority selects, and the login screen's email and password. **A placeholder
+is not a name**: it disappears exactly when the field has content, which is when
+someone is most likely to need it. Each reminder time row gets its own index.
+
+The `*` on a required field is `aria-hidden` — a screen reader announcing "star"
+is noise — and the control says it properly, with `aria-required`.
+
+**Verified live** against the seeded service day: booking form **7/7 named**
+(both composite fields exposed as named groups), walk-in **2/2**, **0** dangling
+`for` references anywhere, and the name-autocomplete dropdown still opens on
+typing with the input keeping DOM focus (the v17.10.0 reopen fix, which this
+commit restructures the JSX around). Build, lint 0 errors, 355 tests,
+`check:style` OK.
+
+### Commit 2 — "Cancel" was the dismiss button, in an app where Cancel is a status
+
+**Files:** `src/App.jsx`, `BookingFormModal.jsx`, `WalkinForm.jsx`,
+`BlockModal.jsx`, `ManualModal.jsx`, `ReminderEditor.jsx`.
+**Behavioural change:** wording and one button colour; no logic.
+
+The **Delete booking?** dialog's dismiss read `Cancel` and wore the RED
+`BTN.cancel`. One tap away, on the same card, `Cancel booking` performs a
+destructive domain action — and that dialog's dismiss already read `Back` in
+slate, correctly. So the same word meant both "abort this dialog" and "cancel
+the reservation" on adjacent surfaces, and the delete footer rendered as two red
+buttons.
+
+CLAUDE.md already reasons about exactly this, at the colour level: *"`BTN.cancel`
+is RED — in this app 'cancel' means cancel the BOOKING… do NOT reach for it as a
+generic dialog 'go back'."* The rule was applied to the token and missed on the
+word.
+
+**The review measured the two dialogs; the grep found five more.** v17.8.0 fixed
+`BookingFormModal`'s footer and wrote the comment explaining why — and left
+`ManualModal`, `BlockModal` (×2), `WalkinForm` and `ReminderEditor` on the red
+`BTN.cancel`, four of them also labelled "Cancel". That is this repo's own
+recorded lesson recurring: *fixing one copy of a literal does not fix the
+literal.* All are now `--app-btn-slate`, the documented neutral dialog secondary,
+and every surface-dismissing control in the app says **Back**.
+
+`BTN.cancel` is left with exactly one user — `WaitlistPanel`'s two-tap Remove —
+which is genuinely destructive, so the token now means what CLAUDE.md says it
+means. The one control still labelled "Cancel" is `LayoutSettings`' inline table
+rename, and that is deliberate: **"Back" dismisses a surface, "Cancel" abandons
+an inline edit.** You are not going back anywhere when you abandon a rename, and
+there is no booking in sight in the Layout tab.
+
+**And the permanence clause is only true of one of them.** The review asked for
+"this can't be undone" on both destructive dialogs. Delete gets it — there are no
+backups on the free plan. Cancel does **not**: a cancelled booking stays on the
+day and v17.6.0's edit form can walk it back to pending, so claiming permanence
+there would be a new copy defect in place of the old one. It states what actually
+happens instead: *"The booking stays on the day, marked cancelled."*
+
+### Commit 3 — the Customers rule was stale in two places, from one root cause
+
+**Files:** `src/components/CustomersSettings.jsx`, `CLAUDE.md`.
+**Behavioural change:** copy only.
+
+Shipped empty state: *"No customers yet — bookings with a phone number appear
+here."* True before v17.10.0; not true after. `customerIndex` keys on
+`identityKey`, so a phone-less guest who has been **joined** from the name
+suggestions is a customer with `phone: ""` — and the tab's own explanatory
+paragraph two lines away already said so correctly.
+
+The same stale rule had also been left in `CLAUDE.md`, which asserted **both**
+that a joined guest *is* a customer in Settings → Customers (the `customers.js`
+file-structure line) and that joined phone-less guests *do not appear* there. The
+code settles it — `const key = phone || alias[b.guestId] || b.guestId` — and the
+second statement described the design as it stood before v17.10.0's
+`/code-review` alias fix. Two independent passes found the two halves separately;
+they are one defect.
+
+Worth naming, because the file is the app's single source of truth: **a source of
+truth that contradicts itself is worse than one that is merely incomplete**, since
+either half can be cited. The surviving paragraph now also keeps the part that is
+still true and load-bearing — consumers must handle `rawPhone: ""`.
+
+### Commit 4 — "5 no-show, unidentified"
+
+**File:** `src/components/CustomersSettings.jsx`. **Behavioural change:** copy only.
+
+The fourth totals tile was grammatically adrift and did not say what it counted.
+It counts **bookings** — `!identityKey(b) && isNoShow(b)` — which is a different
+unit from the tile beside it ("customers *with a no-show*"), so the label has to
+carry that difference. "no-shows with no phone" says both the count and the reason
+those rows are not in the list below it. CLAUDE.md already described the tile in
+almost these words; the screen had never been updated to match.
+
+### Commit 5 — one user-facing noun for the thing the app talks to
+
+**Files:** `src/App.jsx`, `ConnectionStatus.jsx`, `AppBanners.jsx`,
+`StatusToasts.jsx`, `usePersistence.js`, `useWaitlist.js`, `useReminders.jsx`,
+`useRecurring.js`. **Behavioural change:** copy only.
+
+Staff were told about **"Firebase"** and **"the Realtime Database"** — products
+they have no reason to know — and the same thing was named three ways, sometimes
+two of them on one screen:
+
+- "Connected to Firebase" · "Connecting to Firebase…" · "Firebase connected — N
+  bookings loaded." · "Firebase connection lost"
+- "Realtime Database is connected." · "Establishing the first connection to the
+  Realtime Database…" · "Lost connection to the Realtime Database…"
+- "Can't reach the database…" · "Refused to write: Firebase not yet connected."
+
+All of it is **"the server"** now. Patryk chose the noun over the alternative of
+making the sentence about the app ("Connected", "Connection lost"), on the
+grounds that a noun says *what* is failing — useful when the wifi is the usual
+suspect.
+
+**"Firebase" stays in the console**, where it is the correct and genuinely useful
+name: `usePersistence`'s reconnect-backoff log still says so, and every
+`Firebase-shared (settings/…)` source comment is untouched. The distinction is
+audience, not vocabulary hygiene.
+
+Three comments in `StatusToasts.jsx` *quoted* the old strings and were updated in
+the same commit — the v17.9.0 lesson that **copy describing a thing has to change
+when the thing does**, which the app has now been bitten by for glyphs and for
+prose.
+
+### Commit 6 — one spelling convention, in the four words staff read
+
+**Files:** `TimelineView.jsx`, `Shortcuts.jsx`, `Settings.jsx`,
+`LayoutSettings.jsx`, `PrefPickerModal.jsx`, `CustomersSettings.jsx`.
+**Behavioural change:** copy only.
+
+"**Optimizer**" (US) was the label on the timeline control and throughout
+Settings, while the dialogs said "re-**optimised**" (UK), the Customers tab said
+"recogni**s**ed" (UK) and "anonymi**z**ed" (US) — in the same sentence. British is
+already the majority in the app's prose, so it is British everywhere:
+Optimiser · re-optimised · recognised · anonymised.
+
+**Scope is strictly the words on screen.** Every identifier is untouched —
+`autoOptimizer`, `onSaveOptimizer`, `useOptimizerSettings`, the `settings/optimizer`
+node — and so is the persisted `anonymized: true` booking flag, which is a data
+field in the sanitize whitelist and renaming it would be a migration, not a copy
+change. Source comments about that code keep the code's spelling.
+
+### Commit 7 — `clampStep` lived twice, and the copy said so
+
+**Files:** `src/lib/clamp.js` (new), `useBookingDefaults.js`,
+`useGeneralSettings.js`, `tests/clamp.test.js` (new).
+**Behavioural change:** none.
+
+`useBookingDefaults.js` and `useGeneralSettings.js` each defined the same
+function, same signature, same body. What makes it worth moving rather than
+tolerating is the second copy's comment:
+
+> `// NaN check AFTER the round (see useBookingDefaults for the why).`
+
+The code already knew it was a copy and **pointed at the original instead of
+importing it** — the same condition as "a literal duplicate of a token is a token
+that cannot be fixed", one level up the stack. A third settings hook would have
+made a third copy.
+
+The ordering that comment protects is real and easy to tidy wrongly: a
+non-numeric `n` makes `Number(n)` NaN, which survives `Math.round(n / step) *
+step` — so the finite check has to run AFTER the round, or NaN escapes through
+`Math.max`/`Math.min` and a stepper renders "NaN min" and writes it back.
+
+**The test found something the move did not.** `Number(null)` and `Number("")`
+are both `0`, which is finite — so those do **not** take the fallback, they clamp
+to `min`. Shipped behaviour since v16.1.0, unchanged here, and unreachable from
+Firebase (RTDB cannot store null; writing null deletes the key, so an absent
+field arrives as `undefined` and correctly takes the default). It is pinned in
+`tests/clamp.test.js` so the next person to "fix" the guard sees the distinction
+before they move it. **368 tests.**
+
+### Commit 8 — `isTyping`, the keyboard guard, in two places
+
+**Files:** `src/lib/keyboard.js` (new), `useKeyboardShortcuts.js`,
+`ManualModal.jsx`. **Behavioural change:** none.
+
+Both the global shortcut handler and `ManualModal`'s local S / C / Enter handling
+defined their own copy of "is focus inside something the user is typing into". One
+concern, two implementations — and the failure mode of a drift between them is the
+kind that costs a service: a key correctly ignored while typing on one surface and
+silently swallowing a keystroke on the other.
+
+The shared version records the one thing about it that looks like a mistake:
+`SELECT` is in the list even though you do not type into a dropdown. A `<select>`
+handles its own letter keys for type-ahead, so treating it as a text field is what
+stops the app's single-letter shortcuts from stealing them.
+
+**Verified live**: `l` still switches to List; `/` then typing `tp` puts "tp" in
+the search box and does **not** switch to Timeline or Plan behind it.
+
+### Commit 10 — an infinite render loop, shipped since v15.6.1
+
+**Files:** `src/App.jsx`, `src/lib/booking-logic.js`, `tests/booking-logic.test.js`.
+**Behavioural change:** yes — the app stops re-rendering forever on a date that
+holds an unresolvable table clash. **Not a review finding: found while verifying
+one.**
+
+Reloading the app on the review's seeded service day filled the console with
+
+> `Maximum update depth exceeded.`
+
+**and it reproduced identically at v17.10.1**, so it was not something this
+version introduced. It has been shipping since **v15.6.1**.
+
+**The mechanism.** The post-sync reconciliation effect collects dates that fail
+`verifyClean` and resolves them. Its optimizer branch assigned
+`bookingsAfterAction(...)` unconditionally — and `bookingsAfterAction` returns a
+**new array whether or not the pass changed anything**. `setBookings` therefore
+saw a new reference, the effect's `bookings` dep changed, and it ran again.
+Forever.
+
+That is only a loop if some date can never be cleaned, and one can: **two
+`_locked` bookings on one table.** `applyOpt` copies a locked booking's tables
+through verbatim (`booking-logic.js:491`, `:523`), so no reshuffle separates
+them. It is reachable by ordinary use — every walk-in is `_manual:true
+_locked:true` by definition and every drag-drop path sets `_locked:true` — which
+is the same reachability argument the review made about the clash being
+*invisible*. It is worse than invisible: it spins the tablet's CPU during
+service, and the interface looks perfectly normal while it does.
+
+The effect's own comment asserted the opposite — *"Self-stabilising: optimiser/
+relocate output is clean → next pass is a no-op (also breaks any Firebase echo
+loop)"* — which holds for every case except the one the sibling branch has an
+explicit escape for (`if(!movable.length) break; // only locked overlaps — leave
+as-is`). **The manual branch survived only by accident**: it breaks with `next`
+still `=== prev`, and React bails out of identical state. The optimizer branch
+had no such luck.
+
+**The fix makes that bail-out explicit rather than lucky.** A new pure
+`tableAssignSig(list, date)` — every booking's id paired with its sorted tables,
+sorted — lets the branch ask whether the pass actually moved anything, and keep
+the ORIGINAL reference when it did not. `changed` (and so the "Resolved a table
+conflict after syncing." toast, which was also re-firing) now means what it says.
+
+**Verified live**, same fixture that produced it: 0 `Maximum update depth` errors
+across view switches, and **0 DOM mutations in 4 seconds of idle** — where a
+spinning effect is in the thousands. Ten new tests pin both halves: the signature
+comparison, and the property it detects (an all-locked clash survives
+`bookingsAfterAction` with an identical signature but a **different array
+reference**). **378 tests.**
+
+**Why seven review passes missed it:** every one of them measured the rendered
+DOM, and the DOM is correct. Nothing on screen is wrong. The defect is only
+visible in the console — which is also how the bimodal-quality thesis at the top
+of this entry predicts it: nobody *saw* it fail.
+
+### Commit 11 — `weekdayOf` returned a number in one file and a name in another
+
+**File:** `src/components/DaySheet.jsx`. **Behavioural change:** none.
+
+`constants.js` exports `weekdayOf(dateStr)` returning **0–6**. `DaySheet.jsx`
+defined its own `weekdayOf(dateStr)` returning the weekday **name**.
+
+This is **not** a duplicate — the review checked, expecting one — and that makes
+it worse than a duplicate. Two functions, one name, incompatible return types,
+one of them exported from the shared module. Someone importing `weekdayOf` into
+`DaySheet` to "remove the copy" would silently print `3 · 2026-08-19` at the top
+of the day sheet the kitchen works from, and nothing would fail. `weekdayName`
+says what it returns.
+
+### Commit 12 — the notification strip clipped its own focus ring
+
+**File:** `src/components/NotificationStrip.jsx`. **Behavioural change:** none
+visible; a keyboard-focused lid now shows its full ring.
+
+The strip's lid had **1px** of room inside its nearest `overflow` ancestor; the
+focus ring needs **4** (2px offset + 2px width). Exactly the clipping trap
+CLAUDE.md documents for the hover lift, recurring at a new site — and this is the
+one app here that is explicitly keyboard-driven.
+
+The `overflow: hidden` was on the strip's own pane and was only ever protecting
+its rounded corners from the lid's full-bleed hover tint, so **the child takes a
+radius and the parent stops clipping**. The lid's bottom corners go square while
+the body is open — it is then the top of a taller surface, not the whole of it.
+Nothing else in the pane needs a clip: the body's rows are transparent with
+hairline separators, and `Reveal` already manages its own overflow while it
+animates.
+
+**It was clipping something the review did not report, too.** Every button in the
+expanded body — Book, Reassign, each ✕ — sits inside that same pane, so their
+hover lifts were being clipped by it as well. Measured after the change: the lid
+has **13px** of room above (was 1) and the Book button 55px, against 4 needed for
+the ring and 1.4 for the lift.
+
+### Commit 13 — the `@canvas` exemption list had drifted 17 → 26
+
+**File:** `CLAUDE.md`. **Behavioural change:** none — documentation.
+
+CLAUDE.md listed "the 17 genuine exceptions". The code carries **26**. Ten were
+added without the documented list being updated, and each may be individually
+justified — the marker is at its site, which was the point — but *an exemption
+list that drifts is how a rule quietly stops meaning anything*. The refreshed
+entry names all 26 by group rather than giving a bare number, so the next drift
+is visible as a category that is missing rather than as an integer nobody can
+check.
+
+**One correction to the finding, which the count itself demonstrates.** The
+review reported 27 from a plain grep. The 27th hit is `constants.js`'s own
+*prose about* the marker, not an exemption — so the rule for checking this is
+written down with the number: grep for the marker **on a line that also carries
+an exempted property**. Counting the documentation as an instance of the thing it
+documents is how the figure drifts back in the other direction.
+
+### Commit 15 — /code-review fixes: the loop guard was narrower than the pass
+
+**Files:** `src/lib/booking-logic.js`, `src/App.jsx`, `tests/booking-logic.test.js`,
+`CLAUDE.md`. **Behavioural change:** the reconciliation effect no longer discards
+non-table updates on a dirty date.
+
+The review found the commit-10 guard wrong in two ways that share one fix.
+
+**It compared table assignment alone, and the pass changes more than that.**
+`bookingsAfterAction` runs `syncLiveDurations` first — which extends a seated
+party's `duration`/`customDur` — and `applyOpt` writes `_conflict` on every
+booking for the date. On a date that stays dirty, which is exactly the
+all-locked clash the guard exists for, both of those read as "no change" and
+were **thrown away**. A guard may not be narrower than the thing it gates.
+
+`dayBookingsSig(list, date)` replaces `tableAssignSig` and reuses **`undoKey`'s**
+field set — the same fields undo already trusts to decide whether a booking
+changed. That is the reuse the first version missed: `undoKey`/`UNDO_FIELDS`
+was sitting twenty lines away, and using it would have made the narrowing
+impossible.
+
+**Its separators were reachable from the data.** `undoKey` joined fields with
+`|` and arrays with `+`, and `idOk` (`LayoutSettings.jsx:79`) rejects only the
+empty string and `|` — so a venue naming a joined table **`1+2`** made
+`["1+2"]` and `["1","2"]` the same key, and `notes` is free text that can carry
+either. A collision reads as "nothing changed": for the new guard it discards a
+real reshuffle, and **for undo, which has used this key since v17.4.0, it means
+a snapshot is never taken.** Both now use ASCII control characters (unit /
+record / group / file), which no text field in the app can produce. The key is
+only ever compared — never stored, never displayed.
+
+**The widened signature caught a bad fixture on its first run**, which is the
+argument for widening it. `clash()` omitted `_conflict`, so `applyOpt` moved it
+`undefined → false` and the test saw a change the real app cannot: `sanitize`
+coerces `_conflict: !!b._conflict` and every booking reaches state through
+`sanitizeAll`. The fixture trap CLAUDE.md records for `ALL_TABLES`, one field
+along — **build fixtures to what `sanitize` guarantees, or the test measures the
+fixture instead of the code.**
+
+Five new tests pin what the narrow version missed: a duration extension with no
+table move, a `_conflict` flip, a status change, per-write metadata still
+correctly ignored, and both separator collisions. **383 tests.**
+
+Also from the review: `src/lib/clamp.js` and `src/lib/keyboard.js` were added to
+CLAUDE.md's file-structure block, and `dayBookingsSig` to the `booking-logic.js`
+entry — the file's own header requires it ("When a change adds a feature or makes
+a decision, record it here"), and a shared helper that is not in the block is a
+helper the next session writes a third copy of.
+
+### Commit 16 — `Fld` owns `aria-required`, instead of trusting the call site
+
+**Files:** `src/components/atoms.jsx`, `src/components/BookingFormModal.jsx`.
+**Behavioural change:** none visible.
+
+Commit 1 made the required `*` `aria-hidden` — a screen reader announcing "star"
+is noise — and left the real signal to the call site: *"Where a field is
+genuinely required the CONTROL says so, via `aria-required`."* That is a
+convention with nothing enforcing it, and **one of twenty call sites** actually
+did it. The next `<Fld req>` would have got a visible asterisk that assistive
+technology cannot see and no `aria-required` at all, i.e. a required field that
+reads as **optional** — a fresh instance of the exact defect this version exists
+to fix.
+
+The atom already hands the function-shaped call site an id; it now hands it the
+required attributes the same way (`children(id, reqAttrs)`), so the call site
+spreads them rather than remembering them. Verified live: the name field still
+reports `aria-required` on a form where every field is named.
+
+Three findings from the same review are deferred to ROADMAP rather than squeezed
+into a patch version: making `bookingsAfterAction` return its input array on a
+no-op (the deep fix for the loop class, but it changes a function **39 call
+sites** depend on), `dayBookingsSig`'s double scan, and the strip lid's 1px
+radius.

@@ -156,8 +156,17 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
       border: "1px solid var(--border-card)",
       borderRadius: R.card,
       marginBottom: 10,
-      boxShadow: "var(--shadow-soft)",
-      overflow: "hidden"
+      boxShadow: "var(--shadow-soft)"
+      // v17.10.2: `overflow: "hidden"` is GONE from here. It was clipping the
+      // lid's focus ring to 1px of the 4 it needs (2px offset + 2px width) —
+      // exactly the trap CLAUDE.md documents, recurring at a new site — and,
+      // unreported, the hover lift of every button in the expanded body.
+      //
+      // It was only ever protecting this pane's rounded corners from the lid's
+      // full-bleed hover tint, so the lid carries its own radius instead (below)
+      // and nothing needs a clip: the body's rows are transparent with hairline
+      // separators, and `Reveal` already manages its own overflow while it
+      // animates. Do not add it back to fix a corner — round the child.
     }}>
       <button
         onClick={function () { setOpen(!open); }}
@@ -181,6 +190,10 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
           "--row-bg-hover": "var(--bg-veil)",
           display: "flex", alignItems: "center", gap: NOTIF_GAP, width: "100%",
           border: "none", cursor: "pointer",
+          // Its own radius, since the pane no longer clips. Bottom corners go
+          // square while the body is open — the lid is then the TOP of a taller
+          // surface, not the whole of it.
+          borderRadius: open ? R.card + " " + R.card + " 0 0" : R.card,
           padding: "10px " + NOTIF_PAD_X + "px", textAlign: "left"
         }}>
         {/* v17.8.0: an ICON, not the 8px dot. The dot said "something is

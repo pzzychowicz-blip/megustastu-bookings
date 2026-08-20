@@ -24,7 +24,7 @@
 // __APP_SIGNATURE__ edit in App.jsx; this file no longer needs touching
 // for version changes.
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useId } from "react";
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
@@ -156,6 +156,7 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }
 // remote save from another device). mkInp returns a STYLE OBJECT (Bookings
 // convention — no prop passthrough).
 function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
+  const fid = useId();
   const [draft, setDraft] = useState(value);
   useEffect(() => { setDraft(value); }, [value]);
   // v17.8.0 unsaved-changes guard: this field commits on BLUR, so closing
@@ -166,8 +167,9 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
   useEffect(() => () => { if (onDirty && dirtyId) onDirty(dirtyId, false); }, [onDirty, dirtyId]);
   return (
     <div>
-      <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
+      <label htmlFor={fid} style={{ display: "block", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</label>
       <input
+        id={fid}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => { if (draft !== value) onCommit(draft); }}
@@ -311,9 +313,9 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
   const restFrom = (tiers.length ? tiers[tiers.length - 1].max : 0) + 1;
   const durSummary = tiers.map((t) => t.dur).concat([bd.restDur]).join(" / ") + " min";
   const cutoffNote =
-    oc >= 24 ? "Optimizer keeps reshuffling all day, then resets at the start of the next day."
-    : oc <= 0 ? "Optimizer stays off all day; resume it manually (timeline control or the “o” key)."
-    : "Optimizer stops reshuffling today's bookings at " + cutoffLabel(oc) + "; resumes at the start of the next day.";
+    oc >= 24 ? "Optimiser keeps reshuffling all day, then resets at the start of the next day."
+    : oc <= 0 ? "Optimiser stays off all day; resume it manually (timeline control or the “o” key)."
+    : "Optimiser stops reshuffling today's bookings at " + cutoffLabel(oc) + "; resumes at the start of the next day.";
   // Compact collapsed summary for the Opening-hours disclosure: a shared window if
   // every open day matches, else "Varies", plus a count of closed days.
   const dayCfgs = [0, 1, 2, 3, 4, 5, 6].map((d) => wh[d]);
@@ -549,7 +551,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Auto-optimizer</div>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Auto-optimiser</div>
             <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
               Automatically stops reshuffling at a daily cutoff and resumes overnight. Shared across all devices.
             </div>
@@ -569,7 +571,7 @@ export function GeneralTabContent({ appVersion, isDark, onToggleDark, appWidth =
           </div>
         ) : (
           <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)", marginTop: 12 }}>
-            Manual only — the optimizer changes only when you toggle it (timeline control or the “o” key).
+            Manual only — the optimiser changes only when you toggle it (timeline control or the “o” key).
           </div>
         )}</AutoHeight>
       </Section>

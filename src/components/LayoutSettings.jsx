@@ -406,7 +406,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <div key={t.id} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 {editing ? (
-                  <input value={editVal} autoFocus style={{ ...TXT_INP }}
+                  <input value={editVal} autoFocus aria-label={"Rename table " + t.id} style={{ ...TXT_INP }}
                     onChange={function (e) { setEditVal(e.target.value); }}
                     onKeyDown={function (e) { if (e.key === "Enter" && editValid) commitEdit(t.id); if (e.key === "Escape") cancelEdit(); }} />
                 ) : (
@@ -473,7 +473,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         {/* Add a table */}
         {adding ? (
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <input value={newId} autoFocus placeholder="id" style={{ ...TXT_INP }}
+            <input value={newId} autoFocus placeholder="id" aria-label="New table id" style={{ ...TXT_INP }}
               onChange={function (e) { setNewId(e.target.value); }}
               onKeyDown={function (e) { if (e.key === "Enter" && newIdValid) addTable(); if (e.key === "Escape") { setAdding(false); setNewId(""); } }} />
             <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>cap</span>
@@ -505,7 +505,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
       </Collapsible>
       <Collapsible
         title="Combos"
-        subtitle="Joined tables for larger parties. Edit a combo's seat count; the optimizer uses these caps."
+        subtitle="Joined tables for larger parties. Edit a combo's seat count; the optimiser uses these caps."
         summary={(autoCount + mega.length) + " combos"}
       >
         <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
@@ -649,7 +649,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
       </Collapsible>
       <Collapsible
         title="Table priorities"
-        subtitle="Which tables the optimizer picks first, per party size. Shared across all devices."
+        subtitle="Which tables the optimiser picks first, per party size. Shared across all devices."
         summary={priBands.length + (priBands.length === 1 ? " size rule · " : " size rules · ") + priRules.length + (priRules.length === 1 ? " combo rule" : " combo rules")}
       >
         <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
@@ -700,13 +700,13 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
           <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Combo preferences · {priRules.length}</div>
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
-            Which combo the optimizer reaches for first, by party size. Higher priority wins; “avoid” combos are used only when nothing else fits.
+            Which combo the optimiser reaches for first, by party size. Higher priority wins; “avoid” combos are used only when nothing else fits.
           </div>
           {priRules.map(function (r, i) {
             const known = declared.some(function (d) { return d.key === r.key; });
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
-                <select value={r.key} onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
+                <select value={r.key} aria-label="Combo" onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
                   {known ? null : <option value={r.key}>{String(r.key).split("|").join(" + ")}</option>}
                   {declared.map(function (d) { return <option key={d.key} value={d.key}>{d.label}</option>; })}
                 </select>
@@ -741,7 +741,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
           <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Cross-zone combos</div>
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
-            “Anchors” are ranked tables the optimizer favours inside a combo that spans indoor + outdoor.
+            “Anchors” are ranked tables the optimiser favours inside a combo that spans indoor + outdoor.
           </div>
           {chipRow("Anchors", priAnchors, true, "anchor", -1, function (l) { savePri({ anchors: l }); })}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
@@ -771,7 +771,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>Free</span>
-                <select value={r.table} onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
+                <select value={r.table} aria-label="Table to free" onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
                   {tableIds.indexOf(r.table) >= 0 ? null : <option value={r.table}>{r.table}</option>}
                   {tableIds.map(function (id) { return <option key={id} value={id}>{id}</option>; })}
                 </select>

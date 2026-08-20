@@ -85,7 +85,7 @@ export function useReminders({ nowMins, setWriteWarning }){
   function saveReminders(next,isSilent){
     if(!remindersLoaded.current){
       console.warn("[SAFE] Refused to write reminders — initial read has not completed yet.");
-      if(!isSilent) setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
+      if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
       return;
     }
     const computed=typeof next==="function"?next(remindersRef.current):next;

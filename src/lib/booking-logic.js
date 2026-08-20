@@ -674,12 +674,21 @@ var UNDO_FIELDS=["name","phone","date","time","scheduledTime","size","duration",
   "originalDuration","customDur","preference","notes","deposit","status","noShow",
   "tables","_manual","_locked","_conflict","preferredTables","returnOf",
   "recurringId","recurringDate","anonymized"];
+// v17.10.2 (/code-review): the separators are ASCII control characters, not "|"
+// and "+". Those were reachable FROM THE DATA — a table id only has to avoid
+// "|" (`idOk` in LayoutSettings.jsx), so a venue naming a joined table "1+2"
+// made `["1+2"]` and `["1","2"]` the same key, and `notes` is free text that can
+// contain either. A collision reads as "nothing changed": for undo that means a
+// snapshot is never taken, for `dayBookingsSig` below that a real reshuffle is
+// discarded. No text field in the app can produce a control character, and the
+// key is only ever compared — never stored, never shown.
+var K_ARR="\u001f", K_FLD="\u001e", K_REC="\u001d", K_LST="\u001c";
 function undoKey(b){
   return UNDO_FIELDS.map(function(k){
     var v=b[k];
-    if(Array.isArray(v)) return v.slice().sort().join("+");
+    if(Array.isArray(v)) return v.slice().sort().join(K_ARR);
     return (v===undefined||v===null)?"":String(v);
-  }).join("|");
+  }).join(K_FLD);
 }
 export function undoSnapshots(prev,next){
   var nextById={};
@@ -878,4 +887,35 @@ export function daySummary(bookings,date,splitHour){
     seated:{count:seatedCount,covers:seatedCovers}, // v14.8.0 — live occupancy
     upcoming:{count:upcomingCount}                  // v14.8.0 — confirmed (not yet seated)
   };
+}
+
+// dayBookingsSig — v17.10.2. A content signature of ONE DATE's bookings: each
+// booking's id paired with its `undoKey`, sorted so the answer does not depend
+// on array order. Two lists with the same signature for a date are, as far as
+// anything the app persists is concerned, the same day.
+//
+// It exists because `bookingsAfterAction` returns a NEW array whether or not the
+// pass changed anything, and the post-sync reconciliation effect (App.jsx) must
+// be able to tell the difference. Without it that effect re-dispatched an
+// identical snapshot on every commit whenever a date held a clash the optimizer
+// cannot resolve — two `_locked` bookings on one table, which `applyOpt` copies
+// through verbatim — and React re-ran the effect on the new reference forever.
+//
+// **It reuses `undoKey`'s field set deliberately, and the first version did not.**
+// That version compared `id:tables` alone, which is wrong in a way that is easy
+// to miss: `bookingsAfterAction` also runs `syncLiveDurations` (extending a
+// seated party's `duration`/`customDur`) and `applyOpt` sets `_conflict` on
+// every booking for the date. On a date that stays dirty — the all-locked clash
+// this guard exists for — a tables-only comparison read those as "no change" and
+// the effect DISCARDED them. Comparing the same fields undo already trusts means
+// the guard cannot be narrower than the thing it is gating.
+export function dayBookingsSig(list,date){
+  if(!Array.isArray(list)) return "";
+  var out=[];
+  for(var i=0;i<list.length;i++){
+    var b=list[i];
+    if(!b||b.date!==date) continue;
+    out.push(b.id+K_REC+undoKey(b));
+  }
+  return out.sort().join(K_LST);
 }

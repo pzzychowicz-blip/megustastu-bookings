@@ -40,7 +40,7 @@ export function useWaitlist({ setWriteWarning }){
   function saveWaitlist(next,isSilent){
     if(!waitlistLoaded.current){
       console.warn("[SAFE] Refused to write waitlist — initial read has not completed yet.");
-      if(!isSilent) setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
+      if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
       return;
     }
     const computed=typeof next==="function"?next(waitlistRef.current):next;

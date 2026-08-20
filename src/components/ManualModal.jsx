@@ -30,6 +30,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { S, BTN, R, M, T, FW } from "../lib/constants";
+import { isTyping } from "../lib/keyboard";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
 } from "../lib/booking-logic";
@@ -166,11 +167,6 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   // — the listener gets re-registered, but that's the existing behaviour
   // and changing it is out of scope for the structural extraction.
   useEffect(() => {
-    function isTyping(el) {
-      if (!el) return false;
-      const t = el.tagName;
-      return t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || el.isContentEditable;
-    }
     function handler(ev) {
       // v17.4.0 /code-review: bail when there is no booking. The null guard sits
       // BELOW this effect (moving it above would change the hook count — the
@@ -212,10 +208,10 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
       <button
         className="mgt-hover-scale"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
         onClick={onClose}
       >
-        Cancel
+        Back
       </button>
       <button
         disabled={!ok}

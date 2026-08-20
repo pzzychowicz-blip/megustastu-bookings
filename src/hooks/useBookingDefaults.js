@@ -34,6 +34,7 @@ import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
+import { clampStep } from "../lib/clamp";
 import { setDurTiers, setTurnBuffer } from "../lib/constants";
 import { dbError } from "../lib/dbError";
 
@@ -64,16 +65,8 @@ export const DEFAULT_BOOKING_DEFAULTS = {
   turnaroundMin: 15
 };
 
-// Clamp helpers. Durations snap to the 15-min grid (the app's quarter-hour
-// resolution); late thresholds to 5-min steps.
-function clampStep(n, def, min, max, step){
-  // A non-numeric/absent `n` makes Number(n) NaN, which propagates through
-  // Math.round(...) * step as NaN; Number.isFinite then catches it and falls
-  // back to `def`. (This is why the NaN check sits AFTER the round, not before.)
-  let v = Math.round(Number(n) / step) * step;
-  if(!Number.isFinite(v)) v = def;
-  return Math.max(min, Math.min(max, v));
-}
+// Durations snap to the 15-min grid (the app's quarter-hour resolution); late
+// thresholds to 5-min steps. `clampStep` itself is shared — see src/lib/clamp.js.
 
 // Tier list: clamp each entry, sort ascending by `max`, drop duplicate maxes
 // (first wins), cap the count. An empty/absent list is VALID (all parties →
