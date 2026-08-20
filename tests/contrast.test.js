@@ -473,3 +473,58 @@ describe("party-size ring — the boundary over each block, as rendered", () => 
     }
   }
 });
+
+// ── The double-booked band's casing — the other NON-TEXT boundary (v17.11.0) ──
+// Found by /code-review, and it is the SIZE_RING lesson recurring one element
+// along: a marker was given a single opaque colour, documented as sitting
+// somewhere "where nothing competes with it", and never measured against what
+// it actually paints on. It paints on BLOCK_BG. Measured, the red core is
+// 1.02–1.63:1 across the four statuses in both themes — invisible on a seated
+// block — and this bar is the one part of the double-booking treatment carrying
+// information the block border cannot (it runs from the later booking's start
+// to the EARLIER one's end, so its right edge is the minute the hidden booking
+// really finishes).
+//
+// Unlike SIZE_RING this is NOT an exemption: a near-black casing clears 3:1
+// everywhere, so the bar is asserted against the real bar. The red keeps the
+// meaning; the casing carries the boundary.
+//
+// It needs its own block for two reasons. `measure()` takes a fill/ink pair and
+// there is no ink here — the same reason the size ring has one. And the
+// registry's coverage guard matches `--tl-.*(pill|badge)`, so it cannot see a
+// `--tl-clash-*` token at all: this family is exactly the blind spot that guard
+// documents itself as having, which is why the band shipped unmeasured.
+describe("double-booked band — the casing over each block, as rendered", () => {
+  for (const theme of ["light", "dark"]) {
+    for (const blockTok of BLOCK_FILLS) {
+      it(`${blockTok} clash-band casing is visible in ${theme}`, () => {
+        const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+        const block = over(parse(vars[blockTok]), BASE[theme]);
+        const edge = over(parse(vars["--tl-clash-edge"]), block);
+        const got = +ratio(edge, block).toFixed(2);
+        expect(
+          got,
+          `clash-band casing on ${blockTok} in ${theme}: ${got}:1, needs 3:1 ` +
+          `(WCAG 1.4.11, non-text boundary). The band's own red is 1.02–1.63:1 ` +
+          `on these fills — if the casing is dropped, the one marker that says ` +
+          `WHERE the two bookings collide becomes invisible on a seated block.`
+        ).toBeGreaterThanOrEqual(3);
+      });
+    }
+  }
+
+  // The core is not asserted against 3:1 — it cannot meet it and does not need
+  // to, because the casing is the boundary. It IS asserted to still be a
+  // distinguishable red, so "simplifying" the pair down to one flat neutral
+  // (which would pass the casing test on its own) does not go unnoticed.
+  it("the band core is still a red, distinct from its casing", () => {
+    for (const theme of ["light", "dark"]) {
+      const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+      const core = parse(vars["--tl-clash-a"]);
+      const edge = parse(vars["--tl-clash-edge"]);
+      expect(core.r, `clash core in ${theme} is not red-dominant`).toBeGreaterThan(core.g + 60);
+      expect(core.r, `clash core in ${theme} is not red-dominant`).toBeGreaterThan(core.b + 60);
+      expect(+ratio(core, edge).toFixed(2), `core vs casing in ${theme}`).toBeGreaterThanOrEqual(2);
+    }
+  });
+});

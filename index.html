@@ -281,13 +281,23 @@
            blocks, where amber reads fine). */
         --tl-block-late: #fde047;                        /* running-late border (yellow-300) */
         /* v17.11.0: the double-booked underline — the bar drawn under the
-           minutes two bookings both claim. Theme-invariant, like every other
-           --tl-* here, because it paints against BLOCK_BG fills which are
-           themselves the same in both themes. Opaque, because it is an alarm
-           and it sits in the 6px strip below the blocks where nothing competes
-           with it; the first version washed the whole row at 0.55 and covered
-           the later booking's own name. */
+           minutes two bookings both claim.
+           /code-review fix: it sits INSIDE the block, over BLOCK_BG, and the
+           first version of this comment claimed the opposite ("in the strip
+           below the blocks where nothing competes with it"). That false claim
+           is what justified shipping a single opaque red with no contrast
+           check — and measured against the fills it actually paints on, red is
+           1.02–1.63:1 across the four statuses in both themes: invisible on a
+           seated block, and this bar is the ONE thing carrying information the
+           block border cannot.
+           So the red keeps the meaning and a near-black CASING carries the
+           boundary contrast, which is how a marker over a variable fill is
+           normally done. The edge clears WCAG 1.4.11's 3:1 on every block fill
+           in both themes (min 3.48, dark/completed) and is asserted in
+           tests/contrast.test.js — the registry's own coverage guard matches
+           `--tl-.*(pill|badge)` and so cannot see this one. */
         --tl-clash-a: rgb(220, 38, 38);                  /* double-booked underline */
+        --tl-clash-edge: rgb(18, 18, 21);                /* …and its casing */
         --tl-blocked-a: #991b1b;                          /* table-block stripe colours */
         --tl-blocked-b: #7f1d1d;
         --tl-blocked-badge: rgba(153, 27, 27, 0.85);     /* "blocked" label-col badge bg */

@@ -784,9 +784,16 @@ function ClashBand({ from, to, totalMins }) {
   const w = Math.max(((to - from) / totalMins) * 100, 0.5) + "%";
   return (
     <div aria-hidden="true" style={{
-      position: "absolute", bottom: 7, height: 5,   /* @canvas */
+      position: "absolute", bottom: 8, height: 4,   /* @canvas */
       left, width: w,
       background: "var(--tl-clash-a)",
+      // /code-review fix: a 1px casing, because the red core does NOT contrast
+      // with the fills it is drawn on — 1.02:1 on a seated block, 1.34 on a
+      // confirmed one. A zero-blur ring is not a drop shadow (check:style's
+      // rule 6 matches non-zero blur by construction) and it is the standard
+      // way to make a marker read over a variable background: the boundary
+      // carries 1.4.11's 3:1, the fill carries the meaning.
+      boxShadow: "0 0 0 1px var(--tl-clash-edge)",
       borderRadius: R.pill,
       pointerEvents: "none"
     }} />
