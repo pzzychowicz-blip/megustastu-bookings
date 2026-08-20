@@ -11706,3 +11706,92 @@ moved and every step of the cycle looked identical. **Read the stored
 `updatedAt` first** — a rejected write and an unchanged UI are indistinguishable
 from the outside.
 
+
+---
+
+## v17.12.0 — reachable and announced
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** see each entry. No persisted-data change and no Firebase
+console step for any of them.
+**Verification:** see each entry.
+
+The third version staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`; `01-accessibility.md` is the source of
+truth for every measurement quoted below). v17.10.2 took the findings that needed
+no decision and v17.11.0 the ones staff hit during service. This one takes the
+half of the app that has never been measured at all.
+
+**The framing that decides how to read these entries.** Quality here is bimodal,
+and the split falls exactly along *did anyone ever see it fail*. Measured on the
+same build, in the same moment: 6 of 6 rendered font sizes on the type scale, 1
+backdrop-blur of an allowed 4, 0 craft-detector findings, a 12.5:1 focus ring, no
+horizontal scroll at 320px — and 0 landmarks, 0 headings above `h2`, 0 live
+regions, 0 form fields with an accessible name, 0 bookings reachable by keyboard
+in any of the three views.
+
+That is not carelessness, and reading it that way produces the wrong fix. Every
+rule in `CLAUDE.md` was earned by an **observed** failure: a tablet froze, a
+sleeping laptop overwrote a night of bookings, a stray `*/` silently deleted a
+CSS rule. The method is exceptional at turning a visible defect into a permanent
+rule. Accessibility defects are the ones nobody sees — they cause no incident, so
+they generate no lesson, so they never entered the file that governs everything
+else. The fix is therefore not "be more careful"; it is to ship these and then
+**mechanise the standard**, which is what v17.14.0 exists to do.
+
+**Order note.** `ROADMAP.md` had this version and the modal stack the other way
+round, on the reasoning that `inert`, focus management and Escape would become
+properties of a stack entry and be added once rather than to fifteen
+hand-maintained lists. Re-checked against the code before branching, that
+coupling is weaker than it reads: `Overlay` already owns `role="dialog"`,
+`aria-modal`, the focus trap and focus restore (all four verified as passes by
+the review itself), the Escape chain is already correct — the stack would make it
+*maintainable*, not *correct* — and `inert` needs exactly one boolean, which
+already exists. So the accessibility work does not actually wait on the refactor,
+and it is the group with users behind it. Patryk confirmed the swap; the modal
+stack keeps its rationale intact as v17.13.0. The one piece of it that *is*
+genuinely entangled — `anyModal`, hand-written as a 17-term expression twice in
+`useKeyboardShortcuts.js`, which `inert` would have made a third copy of — comes
+forward into this version rather than being added to and then cleaned up.
+
+### 1/n · Landmarks, and the app's one `<h1>`
+
+**Files:** `src/App.jsx`
+**Behavioural change:** none visible. Four `<div>`s become `<header>`, `<nav>`,
+`<main>` and an `<h1>`; no style, no class and no layout changes.
+
+**The finding (M1, M2).** `main`, `header`, `nav`, `footer`, `section` and every
+equivalent `role`: **0 of each**, app-wide. So there was no skip mechanism and no
+programmatic regions — reaching the timeline meant traversing all the header
+chrome, every time, on every day change. Separately the app defined only `<h2>`,
+nine of them, all inside modals: the Timeline, List and Plan screens contained
+**zero headings**, and "MGT Bookings" was a styled `<div>`.
+
+The mapping is the whole change:
+
+- the header row → `<header>` (`banner`), which is the title block, the view
+  switcher, Walk-in / + New / Find and the connection dot;
+- the date stepper group → `<nav aria-label="Date">`, scoped to the three
+  controls that actually navigate (previous day, next day, the date field) and
+  deliberately **not** the whole row — Today, the waitlist badge and the summary
+  panel share that row and are not navigation;
+- the scroll region → `<main>`, which is the notification strip plus the view,
+  i.e. everything that is not pinned chrome. This is the one that pays for the
+  finding: it is a single jump past every control above it;
+- the restaurant name → `<h1>`.
+
+**The one trap.** `index.html` has no heading reset, so a bare `<h1>` would have
+arrived with UA margins and a UA font size. It carries `margin: 0` beside its
+existing inline `fontSize`/`fontWeight` for exactly the reason `ModalTitle`'s
+`<h2>` does — same problem, same answer, and worth keeping the two spellings
+identical.
+
+**Deliberately not done here:** a visible skip link. Landmarks are the
+programmatic bypass and cost nothing visually; a skip link is new chrome that
+appears on focus, which is a design decision rather than a defect fix. Noted in
+`ROADMAP.md` instead.
+
+**Verification:** measured live in DEV after the change — `main` 1, `header` 1,
+`nav` 1, `h1` 1, `h1` computed `margin: 0px` at its unchanged 22px, header box
+identical at 16,16 708×40. Build ✓, 404 tests ✓.
