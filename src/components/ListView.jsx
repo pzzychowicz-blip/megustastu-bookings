@@ -31,7 +31,7 @@
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC } from "../lib/constants";
-import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins, describeBooking } from "../lib/booking-logic";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
@@ -486,11 +486,7 @@ export const ListView = memo(function ListView({
                already goes through. */
             role="listitem"
             tabIndex={rovingId === b.id ? 0 : -1}
-            aria-label={
-              b.name + ", " + b.time + ", " + b.size + (b.size === 1 ? " guest" : " guests") +
-              (b.tables && b.tables.length ? ", table " + b.tables.join(" and ") : ", no table assigned") +
-              ", " + b.status
-            }
+            aria-label={describeBooking(b)}
             onKeyDown={(e) => {
               if (e.target !== e.currentTarget) return;
               if (e.key !== "Enter" && e.key !== " ") return;

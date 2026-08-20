@@ -12606,3 +12606,40 @@ on a control rather than a wrapper, and that path already signals required with
 the `*` in its label.
 
 Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (20/n) — `/code-review`: one source for what a booking sounds like
+
+**Files:** `src/lib/booking-logic.js`, `src/components/ListView.jsx`,
+`src/components/TimelineView.jsx`, `src/components/PlanView.jsx`,
+`tests/booking-logic.test.js`.
+
+The spoken label shipped as three hand-written copies — the List card, the
+timeline block and the floor-plan table. The first two were byte-identical down to
+the `size === 1 ? " guest" : " guests"` branch and the `"no table assigned"`
+fallback, so adding a status or changing the pluralisation meant three edits, and
+the app's own `STATUS_LABEL` note ("reuses the List card's vocabulary so the two
+cannot drift") is the standing argument against exactly that.
+
+`describeBooking(b, opts)` in `booking-logic.js`. **PlanView is why it takes an
+option rather than becoming a second function**: its subject is a TABLE, so it
+prefixes `"Table 3, "` and must not then repeat the table at the end — but the
+rest of the sentence is this one exactly. That is a parameter, not a different
+sentence. Worth stating because `time-grid.js` records the opposite case, where
+`hourLabel` and Settings' `cutoffLabel` looked like copies and unifying them would
+have shipped a bug: **check whether the apparent copies are the same function
+before merging them, and whether the differences are parameters before splitting.**
+
+The state clauses stay at the call site, and correctly so — `double-booked`,
+`overstaying`, `running late` describe how a block is being DRAWN right now, not
+what the booking is.
+
+Deliberately **byte-identical output**, so the extraction is provably a no-op.
+Verified live on all three surfaces: List and Timeline match the strings captured
+before the change character for character (including the clash pair, which reads
+"Pau Estévez, 20:00, 4 guests, table 3, confirmed, double-booked"), and Plan with
+the scrubber at 20:00 reads "Table 3, Pau Estévez, 20:00, 4 guests, confirmed" —
+the table named once. Six new tests pin the format, the singular, both
+no-table forms, the multi-table join and the `tables: false` path. Build ✓,
+**412 tests** ✓, lint 0 errors, `check:style` OK.

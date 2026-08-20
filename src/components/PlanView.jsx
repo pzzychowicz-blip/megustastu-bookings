@@ -33,7 +33,7 @@
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BLOCK_INK, hoursFor, R, M, T, FW } from "../lib/constants";
-import { toMins, toTime, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
+import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
@@ -485,9 +485,13 @@ export const PlanView = memo(function PlanView({
               // room full of identical "Table 5A" buttons. It describes the
               // table at the SELECTED time, exactly like the fill it mirrors.
               const occ = occupying[t.id];
+              // /code-review: the occupant clause is `describeBooking` with the
+              // table dropped — the table is already the subject of this
+              // sentence. Same source as the List card and the timeline block,
+              // so the three cannot word a booking differently.
               const a11yLabel = "Table " + t.id + ", " + (
                 isBlocked(t.id) ? "blocked"
-                  : occ ? occ.name + ", " + occ.time + ", " + occ.size + (occ.size === 1 ? " guest" : " guests") + ", " + occ.status
+                  : occ ? describeBooking(occ, { tables: false })
                     : resetting[t.id] ? "free after turnaround"
                       : "free"
               ) + (soon != null ? ", free in about " + soon + " minutes" : "");

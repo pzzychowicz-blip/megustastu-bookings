@@ -19,7 +19,7 @@ import {
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
-  stayedMins, bookEnd, padEnd, dayBookingsSig,
+  stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 
@@ -805,5 +805,46 @@ describe("findClashes: the clash with NO shared table", () => {
     expect(out.length).toBe(1);
     expect(out[0].tables).toEqual([]);          // nothing to name
     expect(findConflicts(day, D).sort()).toEqual(["p", "r"]);
+  });
+});
+
+// ── describeBooking (v17.12.0) ───────────────────────────────────────────────
+// The one source for every spoken label in the app. It replaced three
+// hand-written copies, so what these pin is that the extraction did not change a
+// single character of what the three views already said — and that the one
+// PARAMETER exists for a reason PlanView actually has.
+describe("describeBooking", () => {
+  const b = { name: "Pau Estévez", time: "20:00", size: 4, tables: ["3"], status: "confirmed" };
+
+  it("reads as the List card and the timeline block always did", () => {
+    expect(describeBooking(b)).toBe("Pau Estévez, 20:00, 4 guests, table 3, confirmed");
+  });
+
+  it("says `guest` for a party of one", () => {
+    // The pluralisation was written out three times before this; a size of 1 is
+    // the only input that told the three copies apart from each other.
+    expect(describeBooking({ ...b, size: 1 })).toBe("Pau Estévez, 20:00, 1 guest, table 3, confirmed");
+  });
+
+  it("names an unassigned booking as unassigned rather than trailing off", () => {
+    expect(describeBooking({ ...b, tables: [] })).toBe("Pau Estévez, 20:00, 4 guests, no table assigned, confirmed");
+    expect(describeBooking({ ...b, tables: undefined })).toBe("Pau Estévez, 20:00, 4 guests, no table assigned, confirmed");
+  });
+
+  it("joins a multi-table booking", () => {
+    expect(describeBooking({ ...b, tables: ["5A", "5B"] })).toBe("Pau Estévez, 20:00, 4 guests, table 5A and 5B, confirmed");
+  });
+
+  it("drops the table clause entirely for PlanView, rather than saying none", () => {
+    // On the floor plan the table IS the subject ("Table 3, …"), so repeating it
+    // would be redundant and "no table assigned" would be false — the booking is
+    // on the very table doing the asking.
+    expect(describeBooking(b, { tables: false })).toBe("Pau Estévez, 20:00, 4 guests, confirmed");
+    expect(describeBooking({ ...b, tables: [] }, { tables: false })).toBe("Pau Estévez, 20:00, 4 guests, confirmed");
+  });
+
+  it("treats any other option object as the default", () => {
+    expect(describeBooking(b, {})).toBe(describeBooking(b));
+    expect(describeBooking(b, null)).toBe(describeBooking(b));
   });
 });

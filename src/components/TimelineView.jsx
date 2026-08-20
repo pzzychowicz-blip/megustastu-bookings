@@ -42,7 +42,7 @@ import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC } from "../lib/constants";
-import { toMins, toTime, isLocked, isIn, pct, liveBarDur } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
@@ -510,10 +510,12 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
   // It carries the two states v17.11.0 made visible, since they are the whole
   // reason a host looks at this block twice: a clash means two parties are
   // already promised one table, and late is the prediction that leads to one.
+  // /code-review: the identity half comes from `describeBooking` — the one
+  // source ListView's card and PlanView's table read too. Only the STATE
+  // clauses are local, and correctly so: they describe how this block is being
+  // drawn right now, not what the booking is.
   const a11yLabel =
-    b.name + ", " + b.time + ", " + b.size + (b.size === 1 ? " guest" : " guests") +
-    (b.tables && b.tables.length ? ", table " + b.tables.join(" and ") : ", no table assigned") +
-    ", " + b.status +
+    describeBooking(b) +
     (clash ? ", double-booked" : "") +
     (warn ? ", overstaying" : "") +
     (late === "warn" ? ", running late" : late === "noshow" ? ", not arrived" : "");
