@@ -11389,3 +11389,43 @@ on an empty future day: the prompt renders in all three views, with Walk-in
 correctly withheld (not today) and New booking present; List unchanged; the
 closed-day case checked by toggling the setting and restoring it. Console clean.
 
+### 4/n · Bound the expanded notification strip
+
+**Files:** `src/components/NotificationStrip.jsx`
+**Behavioural change:** the expanded strip body is capped at 40vh and scrolls
+inside itself. Collapsed behaviour, the lid and the tally are untouched.
+
+v17.8.0's whole point was that the COLLAPSED height is one row however many
+notifications fire — "the cost of a bad evening stops scaling with how bad it
+is". Expanding was left unbounded, and measured live the expanded strip took
+**305px of an 860px viewport (35%) with only two of six sections up**. Six late
+bookings plus a waitlist would have pushed the timeline off the tablet again:
+the exact failure the strip was built to prevent, moved one tap away.
+
+**The cap goes on the BODY, never on the pane.** The lid is a sibling and must
+stay put — which is also what makes this work, because v17.8.0 had already
+decided the collapsed tally survives expansion "because the sections scroll and
+the lid doesn't". That sentence described an intent the code had not implemented;
+this is it. A reader halfway down a scrolled body still has a fixed icon+count
+summary above it.
+
+`Reveal`'s inner track goes `overflow: visible` once open and settled, so the cap
+belongs on a scroller INSIDE it rather than on the Reveal — otherwise the two
+would fight over the same property and the open/close ease would clip wrongly.
+
+**No `padding-inline` gutter, and that is a measurement rather than an
+oversight.** CLAUDE.md's rule is that a scroll container clips its children's
+hover lift and focus ring at the padding box, and `overflow-y: auto` makes the
+other axis clip too per spec. These rows already carry their own inset from
+`BannerRows`: measured live at **14px of right clearance against a 5.8px worst
+case** — 4% of the WIDEST control, a 145px "Assign &lt;name&gt;" button, not the
+36px ✕ it is tempting to size against — plus 4px for the focus ring. Noted at the
+site to re-measure if a wider control is ever added to a banner row.
+
+**Verification:** build ✓ · 387 tests ✓ · lint 0 · `check:style` OK. Proven with
+real content rather than by reading the CSS: 12 clashing bookings seeded into DEV
+on a scratch date produced a 12-row `Double-bookings` section measuring
+`scrollHeight` **635px** — 84% of the viewport — bounded to `clientHeight` 304px
+(40vh of 760) and scrolling, with the timeline still visible below. Clearances
+measured on the live nodes. Seed deleted afterwards; DEV left as found.
+
