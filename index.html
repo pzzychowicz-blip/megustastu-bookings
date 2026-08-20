@@ -956,7 +956,36 @@
          glossy tablet screen. Paint-only, so it never reflows neighbours.
          The reduce-motion block below zeroes the transition (the scale still
          applies instantly, which is feedback without motion). */
-      button, [role="button"] {
+      /* ── v17.12.0 fix: NEITHER of these rules may reach a floor-plan table ──
+         `[role="button"]` matched NOTHING in this app until v17.12.0 gave
+         TableGlyph a button role for keyboard reach — the seven-pass review's
+         own finding m2 predicted precisely that ("if C1 is fixed by adding
+         role=button to blocks, this rule starts applying"), and read it as a
+         good thing. For a `<div>` block it is. For an SVG `<g>` it is the
+         v17.9.1 lesson arriving through a door nobody was watching.
+
+         A CSS `transform` REPLACES an SVG element's `transform` PRESENTATION
+         ATTRIBUTE. So `scale(0.96)` on a table does not shrink it — it deletes
+         its `translate(x,y) rotate(r)` and teleports it to the plan origin.
+         Measured: a table sitting at (554,243) jumped to (313,176), and the
+         `transition` here made it FLY there and back over 145ms, for as long
+         as the button was held. The click then resolved on the parent, because
+         its target had left from under the pointer. That is the whole reported
+         bug — the plan lurches and left-click stops working — and it is why
+         `.mgt-glyph` exists as a THIRD affordance in the first place (see its
+         block above: a halo on hover, a brightness dim on press, because
+         neither of the app's transform- and background-based answers can touch
+         an SVG shape).
+
+         `.mgt-nopress` is deliberately NOT the fix. That class means "this
+         control is inert; animating a press would be a lie about what the tap
+         did" — and a plan table is neither inert nor without feedback. The
+         exclusion lives HERE, on the rules it disarms, so the next person
+         giving an SVG element a button role meets it before they ship it.
+         `user-select: none` above deliberately still applies: suppressing a
+         long-press text selection is wanted on a table exactly as it is on a
+         timeline block. */
+      button, [role="button"]:not(.mgt-glyph) {
         /* Same duration AND same curve as .mgt-hover-scale's transform, so a
            button that has both reads as one material rather than two easings
            fighting. (The class wins this declaration on hover-scale elements
@@ -965,7 +994,7 @@
         transition: transform var(--t-tap) var(--ease-out);
       }
       button:active:not(:disabled):not(.mgt-nopress),
-      [role="button"]:active:not(.mgt-nopress) {
+      [role="button"]:not(.mgt-glyph):active:not(.mgt-nopress) {
         transform: scale(0.96);
       }
       /* A hover-lifted button presses from its lifted size, so the dip stays

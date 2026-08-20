@@ -984,6 +984,25 @@ something is dirty; browsers ignore any custom message string.
   SHAPE so chairs and the id pill stay flat, plus `.mgt-press`'s dim on `:active`.
   It is applied INSIDE `TableGlyph`, gated on the table being interactive, which is
   what makes PlanView and the plan editor agree without either knowing about it.
+  **v17.12.0 shipped that exact teleport for one commit, through a door nobody was
+  watching: `role="button"`.** `index.html` holds three rules keyed on
+  `[role="button"]`, and until v17.12.0 all three matched NOTHING — the seven-pass
+  review recorded that as finding m2 and read it as housekeeping that would come
+  good when blocks became buttons. It does come good for a `<div>`. Two of the
+  three are the teleport for a `<g>`: `:active { transform: scale(0.96) }` deletes
+  the table's position, and the shared `transition: transform` makes it FLY to the
+  origin and back for as long as the button is held — measured, (554,243) →
+  (313,176), computed transform `matrix(0.96,0,0,0.96,0,0)` — taking the click
+  target out from under the pointer, so left-click stops working on the floor plan
+  entirely. Both rules now carry `:not(.mgt-glyph)`, in the SELECTOR rather than as
+  a class on the element: `.mgt-nopress` means "this control is inert and a press
+  animation would be a lie", which a plan table is not. `user-select: none`, the
+  third rule, deliberately still applies. Guarded by a DECLARATION assertion in
+  `tests/stylesheet.test.js` — `[role="button"]` appears in several preludes, so a
+  selector list cannot see the `:not()` half being simplified away.
+  **The rule to carry: giving an SVG element an ARIA role subscribes it to every
+  shared rule written for that role, and a shared rule in this app is usually a
+  transform.** Check what the role already matches before adding it.
   **Why not `brightness()` for the hover, when the press uses exactly that:
   `brightness` multiplies channels, which is hue-safe only until one CLIPS, and a
   saturated fill clips almost at once.** Measured on the blocked-table orange: 1.35
@@ -1127,6 +1146,15 @@ also has timers — worked. It is synchronous now, with one 120ms retry.
 items needed no code at all: m1's clipped focus ring was fixed by v17.10.2 before
 the fix was attempted, and m2 was closed by giving timeline blocks `role="button"`.
 Re-run anything measured against an older release before acting on it.
+
+**And m2 was not only closed by that — it was a warning.** "`[role="button"]`
+matches nothing" is the same sentence as "no element in this app is currently
+subscribed to those three rules", and the review's own note said so: *if C1 is
+fixed by adding `role="button"` to blocks, this rule starts applying*. It read as
+a benefit and it is one for a `<div>`. For the floor plan's `<g>` it shipped the
+v17.9.1 teleport — see the `.mgt-glyph` note in the hover section. **A dormant
+rule is a rule whose behaviour has never been observed**; treat "this selector
+matches nothing yet" as a thing to go and read, not as a footnote.
 
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip
@@ -1331,6 +1359,7 @@ tell what moves by reading it. Name the properties.
 | A qualifier on a state that cannot occur | v17.11.0: the strip's " · today" suffix was first applied to FOUR sections, and `lateMap`/`overlapWarnings` both `return EMPTY_OBJ` when `viewDate !== today` — so two of them can never render off-today and the qualifier there was dead code telling the next reader they can. Same family as v17.10.2's loop guard being NARROWER than the pass it gated: **when you add a conditional, check the condition is reachable for every case you applied it to.** Reading the call sites suggested four; watching the Running-late section DISAPPEAR on navigation rather than gain a suffix is what settled it |
 | A `const` moved to fix a TDZ can create another | v17.11.0 hit the documented TDZ blank-screen twice in one version, the second time while FIXING the first: `isViewToday` was declared with the empty-day block, then read by the notification strip's date qualifier 130 lines ABOVE it. Both times build and lint passed. When you hoist a `const` to satisfy one consumer, grep for every other reader before assuming you are done |
 | Making an element focusable (`tabIndex`) | The browser focuses it on **mousedown** and scrolling it into view is part of focusing — so the element moves out from under the finger between press and release and the `click` is lost. Measured v17.12.0: 40px on a plan table, **1000–2000px sideways** on a timeline block, 297px on a List card. Fix: `onMouseDown` → `preventDefault()`, which suppresses only focus (not the click, not pointer events, so drags and holds are safe). Not applied to the List card — it would kill the phone-number text selection. **A synthetic click cannot reproduce it**: its mousedown/mouseup are back-to-back, so the scroll lands after the click |
+| Giving an SVG element an ARIA `role` | It subscribes the element to every shared rule written for that role — and in this app a shared rule is usually a `transform`. A CSS `transform` REPLACES an SVG `transform` PRESENTATION ATTRIBUTE, so `[role="button"]:active { transform: scale(0.96) }` does not shrink a floor-plan table, it deletes `translate(x,y) rotate(r)` and teleports it to the plan origin (measured v17.12.0: (554,243) → (313,176)), with the shared `transition: transform` making it fly there and back while the button is held — so the click target leaves from under the pointer and left-click stops working. Shipped for one commit. Both rules now carry `:not(.mgt-glyph)`; `.mgt-nopress` is the WRONG opt-out (it means "inert control"). **Check what a role already matches before adding it** — the review had recorded `[role="button"]` matching nothing as harmless housekeeping |
 | A live region added together with its first message | Announces NOTHING. A live region must already be in the DOM when its content CHANGES, so a region that is mounted holding its message is silent. Decides where each one lives (v17.12.0): `StatusToasts` can own its `role="status"` because its container is always-mounted; `NotificationStrip` cannot, so the strip is a `role="region"` and `notifAnnounce` (an always-mounted hidden region in App) does the talking. `role="alert"` in the two forms is likewise permanently in the tree with only its child conditional |
 | `role="button"` on a container of controls | ARIA makes a button's children **presentational**, so every control inside it disappears from assistive technology. The List card holds six; labelling it a button would have traded one unreachable card for six unreachable buttons. Leaf controls (timeline blocks) are fine. `role="grid"`/`row` is the pattern for rows-with-controls but needs rows as direct children, which the "Completed & cancelled" Collapsible breaks |
 | `inert` and live regions | `inert` removes a subtree from the **accessibility tree**, not just the tab order — a live region inside one goes silent. `notifAnnounce` sits OUTSIDE `<main>` for that reason. Also: modals render inline as siblings of `<main>`, so `inert` goes on three siblings; a wrapper div would re-parent the `shellFixed` flex column |
@@ -1358,7 +1387,7 @@ tell what moves by reading it. Name the properties.
 
 - **Multi-tenancy** — single-restaurant app; no plans to generalise.
 - **Mobile app** — web-only; mobile is responsive layout (`useWinW` → `isMobile`).
-- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS — `booking-logic` · `customers` · `drafts` · `waitlist-match` · `presence-state` · `stylesheet` · `contrast` · `time-grid` · `style-check` · **`csp`**, **405 tests** as of v17.12.0 (`npm test`). CI gates build + test + **lint (0 errors, hard)** + **`npm run check:style`** on every PR via `.github/workflows/ci.yml`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
+- ~~**Tests** — no test suite~~ **STALE since v17.3.2**: a Vitest suite EXISTS — `booking-logic` · `customers` · `drafts` · `waitlist-match` · `presence-state` · `stylesheet` · `contrast` · `time-grid` · `style-check` · **`csp`**, **406 tests** as of v17.12.0 (`npm test`). CI gates build + test + **lint (0 errors, hard)** + **`npm run check:style`** on every PR via `.github/workflows/ci.yml`. No UI/component tests — UI verification is still AST audits + manual DEV QA.
   **The rule v17.8.0 added: logic that decides something the restaurant acts on does not live in a `useEffect`.** `placeWaitlist` and `presenceState` were both extracted for that reason — a double-booking fix had shipped on "it looked right in DEV". If a behaviour is worth a REFACTOR_LOG paragraph it is worth being reachable by a test: put the pure core in `lib/`, leave the hook its subscription, refs and setState.
   **Fixture trap:** `ALL_TABLES` holds `{id, capacity}` OBJECTS, not ids. A "fill every table" fixture built straight from it silently occupies nothing, and the failures point at the code. Use `ALL_TABLES.map(t => t.id)`.
   **`tests/stylesheet.test.js` guards `index.html`'s `<style>`** — a stylesheet has no syntax errors, only rules that silently don't exist (v17.8.0 lost `.mgt-press:active` to a stray `*/` and nothing noticed). It checks comment hygiene, brace balance, a CRITICAL_SELECTORS list, and — added after the same defect recurred one scope deeper — **loose prose inside a DECLARATION block**, which eats the declaration *after* it rather than the rule after it. That version made `--tbl-out-rgb` resolve to empty, which would have rendered nine table badges transparent, while every existing test passed. Entry criterion for CRITICAL_SELECTORS: does the rule fail SILENTLY when missing?

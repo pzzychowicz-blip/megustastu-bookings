@@ -12286,3 +12286,96 @@ form opens for the clicked block with a horizontal scroll delta of **0** across
 five blocks (was 1000–2000). Keyboard unchanged: a real Tab press still walks
 table to table with `data-kbd` set and the 2px ring on the shape. Build ✓, 405
 tests ✓, lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (11/n) — fix: `role="button"` armed a rule that had matched nothing
+
+**Files:** `index.html` (the two press-feedback rules), `tests/stylesheet.test.js`.
+
+Patryk, on the same screen recording: *"In Plan this jumping move still exists.
+The fix didn't resolve the problem."* He was right, and 10/n was treating a
+different defect that happened to share a symptom. The focus-scroll it fixed is
+real and measured — it just is not what the video shows.
+
+**What the video actually shows, frame by frame at 50ms.** At 3.40s the pointer
+presses table 2, sitting in its slot. At 3.50s table 2 is at the **top-left corner
+of the plan**, clipped by the room's edge. At 3.60s it is halfway back. At 3.80s
+it is home and the pointer has moved on, with no popover ever opened. One table
+moves; its neighbours do not; it travels to the plan **origin** and returns, over
+about the length of one `--t-tap`.
+
+That trajectory is a signature, and CLAUDE.md already names it — in the note that
+exists to explain why `.mgt-glyph` had to be invented:
+
+> `.mgt-hover-scale` cannot be used AT ALL. It sets a CSS `transform`, and a CSS
+> transform on an element REPLACES its `transform` presentation attribute — the
+> glyph's own `translate(x,y) rotate(r)` — so the table would teleport to the
+> plan's origin.
+
+**The door it came through was `role="button"`.** Commit 6/n gave `TableGlyph`'s
+`<g>` a button role so the floor plan could be reached by keyboard. `index.html`
+holds three rules keyed on `[role="button"]`, and until this version **all three
+matched nothing whatsoever** — the seven-pass review recorded exactly that as
+finding **m2**, and read it as harmless housekeeping that would come good:
+
+> if C1 is fixed by adding `role="button"` to blocks, this rule starts applying —
+> which is what you'd want.
+
+For a `<div>` block that is true. For an SVG `<g>` two of the three are the
+teleport. `[role="button"]:active { transform: scale(0.96) }` does not shrink a
+table; it deletes the table's position. `button, [role="button"] { transition:
+transform }` is what makes it *fly* rather than jump, in both directions.
+
+Measured directly, with the presentation attribute intact and one CSS declaration
+applied: a table at **(554, 243)** settles at **(313, 176)**, and its computed
+transform reads `matrix(0.96, 0, 0, 0.96, 0, 0)` — a bare scale, the
+`translate(70,250)` gone. That is the video.
+
+It also explains the second half of the report cleanly, and better than 10/n did:
+the click target leaves from under the pointer *during the press*, so `click`
+resolves on the parent and the day-queue popover never opens. Left-click stops
+working on the floor plan for as long as the rule is armed — which is to say,
+always.
+
+**The fix is `:not(.mgt-glyph)` on the two transform rules**, and it is written
+into the selectors rather than onto the element. `.mgt-nopress` was the tempting
+one-word alternative and is the wrong word: it means *"this control is inert;
+animating a press would be a lie about what the tap did"*, and a plan table is
+neither inert nor without feedback — it has the halo on hover and the brightness
+dim on press, which is the entire reason `.mgt-glyph` exists as a third
+affordance. Putting the exclusion beside the rules it disarms is also where the
+next person giving an SVG element a button role will be reading.
+
+`user-select: none` — the third `[role="button"]` rule — is deliberately left
+applying. Suppressing an OS text selection under a long press is wanted on a
+floor-plan table for precisely the reason v17.10.1 wanted it on a timeline block.
+
+**Nothing else regressed on the specificity change.** `[role="button"]:not(
+.mgt-glyph):active:not(.mgt-nopress)` is (0,4,0) where it was (0,3,0), which now
+*ties* `.mgt-hover-scale:active:not(:disabled):not(.mgt-nopress)` instead of
+losing to it — and the hover-lift rule is declared later, so it still wins and a
+lifted button still presses from 1.08 to 1.02. Timeline blocks and waitlist ghosts
+carry both classes and are unchanged in both pointer modes.
+
+**A new stylesheet guard, shaped like the two v17.10.1 ones.** Any rule whose
+prelude contains `[role="button"]` and whose body sets `transform` — or a
+`transition` naming it — must exclude `.mgt-glyph`. It is a **declaration**
+assertion for the same reason those were: `[role="button"]` already appears in
+several preludes, so a selector-matching list cannot see the `:not()` half being
+"simplified" away. 406 tests.
+
+**Verification, and one honest limitation.** Live in DEV with gestures ON — which
+matters, because the whole of 10/n's verification ran with **Plan zoom & pan
+switched off** on this device, and that is a second reason it looked clean. A real
+click on a table now holds the glyph at exactly `(576, 197)` across **45
+consecutive `requestAnimationFrame` samples** spanning the entire press and
+release, and the popover opens. The limitation: the negative control could not be
+run. Re-injecting the offending rule and clicking again produced *no* movement
+either — because, per CLAUDE.md's own gotcha, **synthetic input does not set the
+UA `:active` state**, and CDP's `dispatchMouseEvent` is explicitly named there as
+one of the things that cannot. So the causal chain is: the selector matched the
+glyph before and does not now (verified against the live CSSOM), and the
+declaration it applied moves the table along exactly the path the recording shows
+(measured). The recording is the negative control. Build ✓, 406 tests ✓, lint 0
+errors, `check:style` OK.
