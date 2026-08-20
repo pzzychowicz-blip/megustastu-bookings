@@ -12200,3 +12200,37 @@ the timeline blocks took that role.
 `role="dialog"` named "Connection and account" with `aria-modal` absent. Lid
 focus-ring clearance re-measured as above. Build ✓, 405 tests ✓, lint 0 errors,
 `check:style` OK.
+
+### 9/n · CLAUDE.md and ROADMAP for the accessibility group
+
+**Files:** `CLAUDE.md`, `ROADMAP.md`
+**Behavioural change:** none — documentation.
+
+`CLAUDE.md` gains an **Accessibility** section under the UI rules, carrying the
+seven decisions this version had to make and the reasoning that is not
+recoverable from the diff: a live region must pre-exist its content;
+`role="button"` makes its children presentational so it must never sit on a
+container of controls; announce a selection by moving real focus rather than with
+`aria-activedescendant`, because this app's arrow keys are a global listener;
+SVG breaks the focus rule twice; `inert` removes a subtree from the
+accessibility tree, not just the tab order; `aria-describedby` must never dangle;
+and anything gated on rAF needs a non-rAF path. Five of the seven cost a
+measurement to discover and none is visible in source. Five matching rows were
+added to the Gotchas table, the file-structure block notes the nine changed
+files, and the test count moved to 405.
+
+`ROADMAP.md` records the order change (this version and the modal stack swapped,
+with the reasoning and Patryk's confirmation), renumbers the stack to v17.13.0
+with a note that `anyModal` already landed, and opens a **Follow-up from
+v17.12.0** section with the three things deliberately left out: a visible skip
+link (landmarks are the bypass; a skip link is new chrome and therefore a design
+decision), an announcement for the day's own content, and `role="grid"` for List
+if the finished fold is ever restructured.
+
+**One closing note on method, since it recurred in three of the eight commits.**
+Every defect this version fixed was found by *measuring the live DOM*, and three
+of the fixes were themselves wrong on first attempt in ways that source review
+could not catch: focus scheduled inside a rAF that never fires in a hidden tab;
+a focus ring keyed on a pseudo-class that never matches SVG; and a live region
+that would have gone silent inside `inert`. **In accessibility the failure mode
+is silence**, and silence looks exactly like success in a diff.

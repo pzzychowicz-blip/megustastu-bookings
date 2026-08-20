@@ -18,8 +18,17 @@ session and keeping it in sync.
 
 Source of truth for any individual finding: `MGT_Bookings_SevenReview_2026-08-19/`
 in the context folder (`_synthesis.md` for the inventory, `01-…07-` for
-locations and measurements). **v17.10.2 shipped group A and v17.11.0 the service-visible
-group**; what follows is the rest, in the agreed order.
+locations and measurements). **v17.10.2 shipped group A, v17.11.0 the service-visible
+group and v17.12.0 the accessibility retrofit**; what follows is the rest.
+
+**Note the order changed at v17.12.0.** The modal stack had been staged first, on
+the reasoning that `inert`, focus management and Escape would become properties of
+a stack entry. Re-checked against the code before branching, that coupling was
+weaker than it read — `Overlay` already owned `role="dialog"`, `aria-modal`, the
+focus trap and focus restore; the Escape chain was already correct (the stack
+makes it *maintainable*, not *correct*); and `inert` needed exactly one boolean.
+Patryk confirmed the swap. The one genuinely entangled piece, `anyModal`, was
+brought forward INTO v17.12.0 rather than added to and cleaned up after.
 
 **Do not re-flag these five — they were checked and dismissed during the review:**
 the 44px "target size failure" (that is WCAG 2.5.5, Level **AAA**; the AA bar is
@@ -32,24 +41,16 @@ the suppression) · contrast numbers measured from `backgroundColor` alone (must
 composite the real paint stack — gradients and per-element opacity — or the
 figures are wrong in both directions).
 
-- **v17.12.0 — the modal stack.** Replace App.jsx's 15 modal-visibility booleans
-  with one ordered stack, each entry carrying its own `onClose`. Patryk signed
-  this off and put it BEFORE the accessibility work deliberately: `inert`, focus
-  management and Escape then become properties of a stack entry, added once
-  instead of to 15 hand-maintained lists. It retires the two recurring bug
-  classes CLAUDE.md documents ("the Esc chain bypasses every `onClose`",
-  "adding a new drafting surface = three wirings, not one") rather than adding a
-  16th entry to each. Fold in the three dismissal Sets (`lateDismissed`,
-  `overlapDismissed`, `waitNotifyDismissed`) and the eight preference states
-  mirrored one at a time, both of which are the same shape.
-
-- **v17.13.0 — reachable and announced.** Live regions on the strip, toasts and
-  form errors, plus `aria-invalid` / `aria-describedby` (4.1.3 is **Level AA**
-  and the app has zero of them) · `role` / `tabIndex` / Enter-Space on timeline
-  blocks, plan tables and list cards (zero bookings are keyboard-reachable in any
-  view) · `aria-activedescendant` and real focus for List's roving selection,
-  which is 90% built and needs the ARIA half · landmarks, one `<h1>`, and `inert`
-  on the background while a modal is open.
+- **v17.13.0 — the modal stack.** Replace App.jsx's 15 modal-visibility booleans
+  with one ordered stack, each entry carrying its own `onClose`. It retires the
+  two recurring bug classes CLAUDE.md documents ("the Esc chain bypasses every
+  `onClose`", "adding a new drafting surface = three wirings, not one") rather
+  than adding a 16th entry to each. Fold in the three dismissal Sets
+  (`lateDismissed`, `overlapDismissed`, `waitNotifyDismissed`) and the eight
+  preference states mirrored one at a time, both of which are the same shape.
+  **`anyModal` already landed in v17.12.0** — one derivation in App, replacing
+  the 17-term expression that was written out twice — so the stack's first move
+  is to make that `stack.length > 0` and every reader is already pointed at it.
 
 - **v17.14.0 — close the gate behind it.** A colour-literal rule in
   `check:style` (the last unguarded axis: 79 literals, 26 of them one value,
@@ -69,6 +70,28 @@ figures are wrong in both directions).
   number) and Firebase email/password signup is on by default. Plus `sanitizeKey`
   applied to `phoneKey` at the `_lib/rtdb.js` boundary, where it is already
   applied to message ids beside it. Neither blocks the sandbox as it stands.
+
+### Follow-up from v17.12.0
+
+- **A visible skip link.** v17.12.0 added the landmarks, which are the
+  programmatic bypass and cost nothing visually; a skip link is new chrome that
+  appears on focus, which is a design decision rather than a defect fix. Worth
+  doing for sighted keyboard users — the app is explicitly keyboard-driven — but
+  it needs a look, not just a wiring.
+
+- **`aria-live` on the day's own content.** Changing the viewed date, or a
+  booking's status changing under you, is announced by nothing. The strip and
+  the toasts now speak; the views themselves still do not. Needs care: a live
+  region over a 13-booking timeline would be unbearable, so this is a
+  "the day changed to Thursday 21 August, 12 bookings" summary, not a region
+  over the grid.
+
+- **`role="grid"` for the List, if the finished fold ever moves.** The cards are
+  `role="listitem"` because a grid's children must be rows and the
+  "Completed & cancelled" `Collapsible` sits between them. If that fold is ever
+  restructured, `grid`/`row`/`gridcell` is the better fit for rows that contain
+  their own controls, and would make ↑/↓ semantically correct rather than merely
+  functional.
 
 ### Follow-up from v17.11.0's `/code-review`
 
