@@ -18,10 +18,11 @@ session and keeping it in sync.
 
 Source of truth for any individual finding: `MGT_Bookings_SevenReview_2026-08-19/`
 in the context folder (`_synthesis.md` for the inventory, `01-…07-` for
-locations and measurements). **v17.10.2 shipped group A, v17.11.0 the service-visible
-group and v17.12.0 the accessibility retrofit**; what follows is the rest.
+locations and measurements). **v17.10.2 shipped group A, v17.11.0 the
+service-visible group, v17.12.0 the accessibility retrofit and v17.13.0 the
+gate behind all three**; what follows is the rest.
 
-**Note the order changed at v17.12.0.** The modal stack had been staged first, on
+**Note the order changed twice.** At v17.12.0 the modal stack had been staged first, on
 the reasoning that `inert`, focus management and Escape would become properties of
 a stack entry. Re-checked against the code before branching, that coupling was
 weaker than it read — `Overlay` already owned `role="dialog"`, `aria-modal`, the
@@ -29,6 +30,15 @@ focus trap and focus restore; the Escape chain was already correct (the stack
 makes it *maintainable*, not *correct*); and `inert` needed exactly one boolean.
 Patryk confirmed the swap. The one genuinely entangled piece, `anyModal`, was
 brought forward INTO v17.12.0 rather than added to and cleaned up after.
+
+**And again at v17.13.0**, which Patryk moved ahead of the modal stack. The
+reasoning holds either way and is worth stating: v17.12.0 shipped roughly forty
+individually-correct decisions that nothing in CI could see, and every one of
+them is invisible when removed — the app looks and behaves identically to a
+mouse user without them, which is the same property that let them be missing for
+seventeen versions. A fix with no gate behind it has a half-life. The modal
+stack, by contrast, is a refactor whose defects announce themselves the moment
+you press Escape.
 
 **Do not re-flag these five — they were checked and dismissed during the review:**
 the 44px "target size failure" (that is WCAG 2.5.5, Level **AAA**; the AA bar is
@@ -41,7 +51,7 @@ the suppression) · contrast numbers measured from `backgroundColor` alone (must
 composite the real paint stack — gradients and per-element opacity — or the
 figures are wrong in both directions).
 
-- **v17.13.0 — the modal stack.** Replace App.jsx's 15 modal-visibility booleans
+- **v17.14.0 — the modal stack.** Replace App.jsx's 15 modal-visibility booleans
   with one ordered stack, each entry carrying its own `onClose`. It retires the
   two recurring bug classes CLAUDE.md documents ("the Esc chain bypasses every
   `onClose`", "adding a new drafting surface = three wirings, not one") rather
@@ -52,17 +62,6 @@ figures are wrong in both directions).
   the 17-term expression that was written out twice — so the stack's first move
   is to make that `stack.length > 0` and every reader is already pointed at it.
 
-- **v17.14.0 — close the gate behind it.** A colour-literal rule in
-  `check:style` (the last unguarded axis: 79 literals, 26 of them one value,
-  in the category with the longest defect history) · the waitlist ghost's
-  composites in `contrast.test.js` with their own floors (its guest name is
-  1.50:1, the worst text in the app, and it sits in the one gap the registry
-  declares it has) · icon-size and motion rules, free since compliance is already
-  100% · an accessibility gate asserting landmarks, `<h1>`, label association,
-  live regions and "every interactive element is focusable" · a weight pass over
-  secondary text (84% is still semibold or bolder) · extract the visual system
-  out of `CLAUDE.md` into a `DESIGN.md` it links to.
-
 - **WhatsApp sandbox, before it ever points at PROD or goes `WA_SEND_MODE=live`.**
   A uid/email allow-list in `verifyStaffToken` — `verifyIdToken` proves a valid
   token for the project and nothing more, while the backend grants abilities the
@@ -70,6 +69,29 @@ figures are wrong in both directions).
   number) and Firebase email/password signup is on by default. Plus `sanitizeKey`
   applied to `phoneKey` at the `_lib/rtdb.js` boundary, where it is already
   applied to message ids beside it. Neither blocks the sandbox as it stands.
+
+### Follow-up from v17.13.0
+
+Two contrast numbers this version MEASURED and deliberately did not answer. Both
+are design calls with a visual trade-off, both are recorded in
+`tests/contrast.test.js` with floors so they cannot get worse, and both were
+left out of a gate-closing commit on purpose — the amber exemption was decided
+this way in v17.10.0, with the numbers and the pixels in front of Patryk.
+
+- **The disabled primary button's label is not dim, it is gone.**
+  `--btn-disabled` under white ink measures **1.31:1** in light. WCAG 1.4.3
+  exempts inactive components, so this is not a violation — but a staff member
+  who has not picked a date sees an empty grey pill where "Save booking" should
+  be, in the two form footers, `ReminderEditor` and `ManualModal`. Options are a
+  darker fill, or muted ink instead of white; both are one token.
+
+- **The waitlist ghost's guest name is the lowest text contrast in the app.**
+  1.39:1 light / 1.82:1 dark at the shipped 0.55 opacity, and 1.27 / 1.63 for a
+  reshuffle-only match at 0.4. The amber exemption's justification does not
+  reach it: that argument rests on the one piece of INFORMATION moving onto an
+  opaque chip, and a ghost's chip is inside the ghost and dims with it. Raising
+  the opacity erodes the "this is a proposal, not a booking" signal, which is
+  the ghost's entire job — so this is a genuine trade, not an oversight to fix.
 
 ### Follow-up from v17.12.0
 
