@@ -2596,6 +2596,34 @@ function BookingApp({uid}){
     if(clashDismissed.size===0) return clashPairs;
     return clashPairs.filter(function(c){return !clashDismissed.has(clashRowId(c));});
   },[clashPairs,clashDismissed]);
+  // /code-review fix: a dismissed clash must RE-ARM once it stops being true.
+  // The other two dismissal Sets get away with never pruning because their
+  // conditions are monotonic within a day — a late booking stays late, an
+  // overstay stays an overstay. A double-booking is the opposite: it is the one
+  // notification whose whole point is that you go and FIX it, so it clears, and
+  // it can then recur on the same pair (drag a booking back onto the table —
+  // every drag-drop sets `_locked`, so the reconciler will not undo it).
+  //
+  // Without this the strip row — the only surface carrying the Assign action —
+  // never came back for that pair, for the rest of the session, while the block
+  // markers said the clash was live. Dropping ids that are no longer clashing is
+  // what makes "dismiss" mean "I have seen THIS one" instead of "never mention
+  // these two again".
+  //
+  // Keyed on the live pair ids and set only when the set actually shrinks, so it
+  // cannot re-enter (the v17.10.2 lesson about effects that write derived state).
+  useEffect(function(){
+    if(clashDismissed.size===0) return;
+    const live=new Set(clashPairs.map(clashRowId));
+    setClashDismissed(function(prev){
+      let drop=false;
+      prev.forEach(function(id){if(!live.has(id)) drop=true;});
+      if(!drop) return prev;
+      const next=new Set();
+      prev.forEach(function(id){if(live.has(id)) next.add(id);});
+      return next;
+    });
+  },[clashPairs,clashDismissed]);
   const hasClash=clashBannerPairs.length>0;
   // The timeline's view of the same pairs: per booking, who it clashes with and
   // where. Built from `clashPairs` and NOT from the dismiss-filtered list —
