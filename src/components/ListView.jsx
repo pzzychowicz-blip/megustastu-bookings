@@ -192,8 +192,15 @@ export const ListView = memo(function ListView({
       const root = rootRef.current;
       const el = root ? root.querySelector('[data-flip-id="' + selectedId + '"]') : null;
       if (!el || !el.focus) return;
-      focused = true;
       el.focus({ preventScroll: true });
+      // /code-review: latch on SUCCESS, not on the attempt. `focused = true`
+      // used to be set BEFORE the call, which disabled the 120ms retry in
+      // exactly the case the retry is for — a focus that does not take. The
+      // `!el` path already got this right by returning above the assignment;
+      // this is the same rule one line further down. A card inside an `inert`
+      // subtree is the concrete case: `focus()` is a silent no-op there, and
+      // the old form turned that into a permanent one.
+      if (document.activeElement === el) focused = true;
     }
     focusOnce();
     const focusRetry = setTimeout(focusOnce, 120);

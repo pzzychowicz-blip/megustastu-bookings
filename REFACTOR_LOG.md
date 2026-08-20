@@ -12548,3 +12548,21 @@ sitting 32px below the fold: a plain `.focus()` scrolls **32px**,
 `focus({preventScroll:true})` scrolls **0**, and a real mouse press on the card's
 name leaves `scrollTop` at 0 at mousedown, at the next frame and at +80ms, then
 opens the edit form. Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (17/n) — `/code-review`: the focus guard latched on the attempt, not the result
+
+**Files:** `src/components/ListView.jsx`.
+
+`focusOnce` set `focused = true` immediately *before* calling `el.focus()`, so a
+focus that did not take disabled the 120ms retry that exists for exactly that
+case. The concrete one: a card inside an `inert` subtree, where `focus()` is a
+silent no-op — the old form turned that into a permanent one, and the failure is
+invisible, since the scroll still lands and only the announcement is missing.
+
+The `!el` branch two lines above already had the rule right, returning above the
+assignment. This is the same rule applied one line further down:
+`if (document.activeElement === el) focused = true`.
+
+Build ✓, 406 tests ✓.
