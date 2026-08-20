@@ -38,6 +38,7 @@ import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extrac
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
 import { mkBtn } from "./atoms";
+import { EmptyDay } from "./EmptyDay";
 
 // Neutral (free) table fill — theme tokens, matches the editor's look.
 const FREE_FILL = "var(--bg-card)";
@@ -52,6 +53,13 @@ export const PlanView = memo(function PlanView({
   bookings, date, layout, blocks = [],
   nowMins = 0, late = {}, freeing = {},
   onEdit, onStatus, onNoShow, onWalkin = () => {},
+  // v17.11.0: the empty-day prompt (EmptyDay.jsx), which shipped in List only.
+  // `emptyWalkin` is separate from `onWalkin` above: that one is this view's own
+  // per-table handler and is always present, while the prompt's button must
+  // disappear on any day but today — so they are different questions with
+  // different answers, and folding them into one prop would have made the
+  // Walk-in button appear on next month's empty plan.
+  onNew = null, emptyWalkin = null, dayClosed = false,
   // v17.1.2: per-device master switch for zoom/pan/double-tap-reset (Settings →
   // General "Plan zoom & pan", localStorage-backed in App — scalar, memo-safe).
   gesturesEnabled = true,
@@ -401,6 +409,10 @@ export const PlanView = memo(function PlanView({
       borderRadius: R.sheet, border: "1px solid var(--tl-card-border)",
       padding: "10px 12px", boxShadow: "var(--shadow-soft)"
     }}>
+      {/* v17.11.0: the empty-day prompt, above the floor rather than instead of
+          it — the plan is a picture of the room, and an empty room is precisely
+          what you want to see on an empty day. See EmptyDay.jsx. */}
+      {day.length === 0 ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}
       {/* v17.5.0: Now + selected time + legend on one row, the ruler directly
           below it. The ruler is a SIBLING above the <svg>, so it sits outside
           the svg's touchAction:"none" and never fights the plan's pan/pinch

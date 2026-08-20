@@ -32,6 +32,7 @@
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins } from "../lib/booking-logic";
+import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
 import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
 import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon } from "./Icons";
@@ -76,6 +77,10 @@ export const ListView = memo(function ListView({
   selectedId = null, onSelect = () => {}, focusReq = 0,
   showFinished = false, onToggleFinished = () => {},
   onNew = null, onWalkin = null,
+  // v17.11.0: the viewed day is a closed day. EmptyDay renders nothing then —
+  // the strip's `Closed this day` section is the empty state for that case, and
+  // offering two buttons the app refuses is worse than offering none.
+  dayClosed = false,
   currency = "€"
 }) {
   // v17.0.0 round 8 (Patryk): the 🔍/⚙ pair moved OUT to App's date-nav row
@@ -164,32 +169,14 @@ export const ListView = memo(function ListView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusReq]);
 
-  // v17.8.0: an empty day used to be one grey sentence centred in ~500px of
-  // nothing, with the only useful action (+ New) at the far top of the screen.
-  // A first-shift host learned nothing from it. It now says what the day is and
-  // offers the two things you can actually do with an empty one — the same two
-  // actions the header carries, put where the user is already looking.
+  // v17.8.0's empty-day prompt, moved to EmptyDay.jsx in v17.11.0 so Timeline
+  // and Plan share it — the same condition used to get three different answers,
+  // and only this one was useful. A list of nothing has nothing else to draw, so
+  // here it is still the whole body; the other two render it above a canvas that
+  // is worth keeping. `dayClosed` is new: this used to offer "New booking" and
+  // "Walk-in" on a closed day, both of which the app refuses.
   if (!day.length) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "32px 16px" }}>
-        <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: S.text }}>Nothing booked for this day yet.</div>
-        <div style={{ fontSize: T.body, color: S.muted, textAlign: "center", maxWidth: 340 }}>
-          Take a reservation, or seat someone who has just walked in.
-        </div>
-        {onNew || onWalkin ? (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 2 }}>
-            {onNew ? (
-              <button className="mgt-hover-scale" onClick={onNew}
-                style={mkBtn({ background: "var(--accent)", padding: "8px 18px" })}>New booking</button>
-            ) : null}
-            {onWalkin ? (
-              <button className="mgt-hover-scale" onClick={function () { onWalkin(null); }}
-                style={mkBtn({ background: "var(--app-walkin)", padding: "8px 18px" })}>Walk-in</button>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-    );
+    return <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={onWalkin} />;
   }
 
   function renderCard(b) {

@@ -49,6 +49,7 @@ import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 // and the notification strip's Overlap section render the same `warnings` entry.
 import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
+import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
 
@@ -960,6 +961,8 @@ export const TimelineView = memo(function TimelineView({
   // and which MINUTES of which ROW are double-claimed. Deriving one from the
   // other here would mean re-running the pair scan in the render path.
   clashes = {}, clashSpans = {},
+  // v17.11.0: the empty-day prompt (EmptyDay.jsx), which shipped in List only.
+  onNew = null, onWalkin = null, dayClosed = false,
   late = {}, freeing = {}, onNoShow = () => {},
   zoom = 1, setZoom,
   // v17.2.0: per-device Timeline settings (App's tlSettings — scalars, memo-safe).
@@ -1605,6 +1608,11 @@ export const TimelineView = memo(function TimelineView({
           NotificationStrip. It was a day-level fact drawn per-view — here and,
           differently worded, in PlanView — while List had none. One section now
           says it once, above whichever view is showing. */}
+      {/* v17.11.0: the empty-day prompt, which until now existed only in List.
+          ABOVE the grid rather than instead of it — the grid is a picture of the
+          room and an empty room is what you want to see on an empty day, plus
+          the label column still lets you block a table. See EmptyDay.jsx. */}
+      {day.length === 0 ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={onWalkin} /> : null}
       <div style={{ display: "flex" }}>
         {labelCol}
         {gridCol}

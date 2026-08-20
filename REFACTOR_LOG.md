@@ -11338,3 +11338,54 @@ carrying `aria-label` "Confirmed" / "Pending — awaiting confirmation" /
 "Double-booked with …". Legend measured with 5 of 5 status chips rendering an
 icon. Console clean.
 
+### 3/n · Share the empty-day prompt with Timeline and Plan
+
+**Files:** `src/components/EmptyDay.jsx` (new), `src/components/ListView.jsx`,
+`src/components/TimelineView.jsx`, `src/components/PlanView.jsx`, `src/App.jsx`
+**Behavioural change:** an empty day now prompts in all three views instead of
+one. A CLOSED empty day stops prompting at all — including in List, where it
+previously offered two buttons the app refuses.
+
+v17.8.0 wrote a proper empty state for List and it never left. Timeline drew an
+empty grid, Plan drew an empty room: the same condition answered three ways, one
+of them useful.
+
+**The shared thing is the prompt and its position, not "blank the view".** One
+rule for all three — the prompt sits at the top of the view's content. In List
+that IS the whole body, because a list of nothing has nothing else to draw, so
+List's behaviour is byte-for-byte what v17.8.0 shipped. In Timeline and Plan it
+sits above a canvas that is still worth drawing: the grid and the floor plan are
+pictures of the ROOM, an empty room is exactly what you want to see on an empty
+day, and both carry affordances that have nothing to do with bookings (tapping a
+table label to block it, reading the layout). Replacing them would have taken
+those away to deliver a sentence.
+
+**The closed day is not this, and List had it wrong.** On a closed day List
+offered "New booking" and "Walk-in" and the app refuses both — a prompt whose
+only outcome is a refusal. `EmptyDay` renders nothing when `closed`, because the
+strip's own `Closed this day` section is the empty state for that case and has
+appeared above all three views since v17.8.0's strip audit. Verified live by
+closing Tuesday in DEV settings and restoring it after: the closed day shows the
+strip's notice and no prompt, in both List and Timeline.
+
+App computes `isViewToday` / `emptyWalkin` / `dayClosed` ONCE and passes them to
+all three, so the views cannot disagree about when a day is empty or what may be
+done with it. The walk-in rule is List's own, generalised: a walk-in is a party
+standing at the door now, so offering it on any day but today opens a form for
+the wrong date. `PlanView` keeps `emptyWalkin` as a SEPARATE prop from its
+existing `onWalkin` — that one is the per-table handler and is always present,
+and folding them together would have put a Walk-in button on next month's plan.
+
+**The TDZ gotcha, hit exactly as CLAUDE.md describes it.** The three consts were
+first declared next to `timelineEl`, the first element that reads them — but
+`planView` is built earlier in the same body, so it read them above their
+declaration. That is a ReferenceError which blanks the whole app behind a generic
+"An error occurred in `<BookingApp>`", and **both `npm run build` and lint passed
+on it**. Only loading the page catches this. They are declared above all three
+now, with the reason at the site.
+
+**Verification:** build ✓ · 387 tests ✓ · lint 0 · `check:style` OK. Live in DEV
+on an empty future day: the prompt renders in all three views, with Walk-in
+correctly withheld (not today) and New booking present; List unchanged; the
+closed-day case checked by toggling the setting and restoring it. Console clean.
+

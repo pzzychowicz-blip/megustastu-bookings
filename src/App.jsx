@@ -2691,6 +2691,21 @@ function BookingApp({uid}){
 
   // v17.0.0: the Plan (floor) view — reads settings/layout.floorPlan via the
   // `layout` state; quick-status + edit + walk-in ride the existing handlers.
+  // v17.11.0: the empty-day prompt's three inputs, computed ONCE so the three
+  // views cannot disagree about when a day is empty or what you may do with it.
+  // The walk-in rule is List's, generalised: a walk-in is a party standing at
+  // the door now, so offering it on any day but today opens a form for the wrong
+  // date.
+  //
+  // Declared ABOVE the three view elements, not next to the first one that
+  // reads them: `planView` is built first, and a `const` used above its
+  // declaration in a render body is a TDZ ReferenceError that blanks the whole
+  // app — which neither `npm run build` nor lint sees. Hit here exactly as
+  // CLAUDE.md's gotcha describes, and caught by loading the page.
+  const isViewToday=viewDate===new Date().toISOString().slice(0,10);
+  const emptyWalkin=isViewToday?VA.onWalkin:null;
+  const dayClosed=hoursFor(viewDate).closed;
+
   const planView=<PlanView
     bookings={bookings}
     date={viewDate}
@@ -2705,6 +2720,9 @@ function BookingApp({uid}){
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
     turnBuffer={turnBuffer}
+    onNew={VA.onNew}
+    emptyWalkin={emptyWalkin}
+    dayClosed={dayClosed}
     hoursSig={weekHours} />;
   // v17.1.0 perf note: hoursSig / layoutSig are identity-only props — the views
   // read OPEN/GRID_CLOSE/QUARTER_HOURS/TIMELINE_TABLES/TOTAL_SEATS as LIVE
@@ -2747,6 +2765,9 @@ function BookingApp({uid}){
     onBookWait={VA.onBookWait}
     hoursSig={weekHours}
     layoutSig={layout}
+    onNew={VA.onNew}
+    onWalkin={emptyWalkin}
+    dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const listEl=<ListView
     bookings={bookings}
@@ -2765,9 +2786,8 @@ function BookingApp({uid}){
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
     onNew={VA.onNew}
-    // Walk-in only on TODAY: a walk-in is a party standing at the door now, so
-    // offering it on a future day would open a form for the wrong date.
-    onWalkin={viewDate===new Date().toISOString().slice(0,10)?VA.onWalkin:null}
+    onWalkin={emptyWalkin}
+    dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const viewEl={timeline:timelineEl,list:listEl,plan:planView};
   const mainView=viewEl[view];
