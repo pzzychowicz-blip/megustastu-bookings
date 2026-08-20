@@ -11854,3 +11854,70 @@ regions 0 → 2; the hidden region computed `position:absolute`, `1×1`,
 `clip-path: inset(50%)`, `overflow:hidden`, reading *"Notification:
 Double-booked."*; strip exposes `region`/"Notifications"; screenshot confirms
 nothing visible changed. Build ✓, 404 tests ✓, lint 0 errors, `check:style` OK.
+
+### 3/n · Validation errors are announced, and attached to the field that caused them
+
+**Files:** `src/components/atoms.jsx`, `src/components/BookingFormModal.jsx`,
+`src/components/WalkinForm.jsx`, `src/App.jsx`
+**Behavioural change:** none visible. A save error is now announced, and the
+offending control carries `aria-invalid` pointing at the message.
+
+**The finding (C4's other half, plus 3.3.1).** Clicking Save on an empty booking
+form rendered "Customer name is required." — good, specific copy — with
+`role="alert"`, `aria-live`, `aria-invalid`, `aria-errormessage` and
+`aria-describedby` **all absent**, measured 0 of each. Nothing was spoken, and
+the invalid field was not marked. The review's own closing note on this: *the
+wiring is missing, not the writing.*
+
+**The alert region is always mounted.** An alert announces a change to its
+CONTENT, so a region that arrives already holding its first message is the same
+pitfall entry 2/n is about. `errorEl` is now an unconditional `<div
+role="alert">` whose child appears when there is an error — an empty div is a
+block box with no content, padding or margin, so it costs nothing in the footer
+fragment. Assertive rather than polite is right here: this fires in response to
+pressing Save, and the user is waiting on exactly this answer.
+
+**Attaching it to a field needed one new piece of state, and it is deliberately
+a sibling rather than a reshaped `error`.** `error` is read as a string at a
+dozen sites and passed to two components; which field it is about is additive
+information. `errorField` is set only inside `doSave`'s validation — five
+branches, three fields (`name`, `date`, `time`; the closed-day and outside-hours
+errors are about the date and the time respectively) — and **cleared at
+`doSave`'s entry**, so the form-level errors further down (capacity,
+displacement, "could not assign a table") leave it null without needing to say
+so. There is no field to point at for those, and claiming one would be worse
+than claiming none.
+
+**`Fld` carries it through the channel `req` already opened.** The atom's second
+callback argument grew from "the required attrs" to "the state attrs", so a call
+site that already spreads it gained validity for free and one that does not is
+untouched. Date and Time now spread it; Customer name already did.
+
+**The ordering inside `Fld` is the load-bearing part.** `aria-describedby` is
+emitted only alongside `aria-invalid`, and both only when the caller says the
+field is invalid — which in this form means the message is on screen, since
+`invalidField()` gates on `error` being truthy as well as on the name matching.
+A `describedby` aimed at an id that is not in the tree is a dangling reference,
+the exact failure `Overlay` refuses when it resolves its own accessible name
+from the DOM rather than taking a prop. Better no description than a broken one.
+
+`WalkinForm` gets the always-mounted alert wrapper and **no field marking** —
+its errors are all form-level (capacity, no table available), so there is
+nothing to point at.
+
+**Verification:** driven live in DEV. Before any error, the dialog already
+contained 1 `role="alert"` and 0 invalid fields — i.e. the region pre-exists its
+content, which is the property that makes it announce. Save with an empty name:
+alert reads "Customer name is required.", the name input carries
+`aria-invalid="true"` + `aria-describedby="mgt-form-error"`, and that id
+resolves to an element holding that exact text. Save with a name but no time:
+**exactly one** field invalid, and it is Time — so the discrimination is real
+and not "mark everything". Build ✓, 404 tests ✓, lint 0 errors, `check:style` OK.
+
+One process note: a booking was accidentally written to DEV during this
+verification, because a hot reload had reset `viewDate` to today between
+navigating to the fixture day and opening the form, so the draft's default date
+was not the one being looked at. Deleted through the app's own delete path and
+re-verified — 0 cards, 0 dialogs, nothing matching the test name anywhere in the
+document. The second test case was then chosen to be one that **cannot** save
+(an empty time), which is the right way to probe a validation path.

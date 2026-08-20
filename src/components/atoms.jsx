@@ -413,9 +413,29 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
 // assistive technology and no programmatic signal at all, i.e. a field that
 // reads as OPTIONAL. On the function path the atom already hands the call site
 // an id, so it hands it the required flag the same way.
-export function Fld({ label, req, style, children }) {
+export function Fld({ label, req, invalid, describedBy, style, children }) {
   const id = useId();
   const single = typeof children === "function";
+  // v17.12.0: the second callback argument grew from "the required attrs" into
+  // "the state attrs" — same channel, so a call site that already spreads it
+  // gets validity for free and one that doesn't is unaffected.
+  //
+  // `aria-describedby` is emitted ONLY alongside `aria-invalid`, and both only
+  // when the caller says the field is invalid — which in practice means an
+  // error message is on screen. That ordering is deliberate: a describedby
+  // pointing at an id that is not in the tree is a dangling reference, the
+  // exact failure Overlay refuses when it resolves its own name from the DOM
+  // rather than taking a prop. Better no description than a broken one.
+  let attrs = null;
+  if (single) {
+    const a = {};
+    if (req) a["aria-required"] = "true";
+    if (invalid) {
+      a["aria-invalid"] = "true";
+      if (describedBy) a["aria-describedby"] = describedBy;
+    }
+    attrs = Object.keys(a).length ? a : null;
+  }
   return (
     <div
       role={single ? undefined : "group"}
@@ -428,7 +448,7 @@ export function Fld({ label, req, style, children }) {
         {label}
         {req ? <span aria-hidden="true" style={{ color: "var(--text-required)" }}>*</span> : null}
       </label>
-      {single ? children(id, req ? { "aria-required": "true" } : null) : children}
+      {single ? children(id, attrs) : children}
     </div>
   );
 }

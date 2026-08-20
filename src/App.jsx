@@ -743,6 +743,19 @@ function BookingApp({uid}){
   const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
   const [error, setError] = useState("");
+  // v17.12.0: WHICH field the current error is about, or null for a form-level
+  // one (capacity, displacement, "could not assign a table"). It exists so the
+  // offending control can carry `aria-invalid` and point at the message with
+  // `aria-describedby` — the error copy in this app is already specific
+  // ("Customer name is required."), it simply was not attached to anything.
+  //
+  // A sibling state rather than a reshaped `error`: `error` is read as a string
+  // at a dozen sites and passed to two components, and the field is additive
+  // information. Set ONLY inside doSave's validation, cleared at its entry — so
+  // a form-level error later in the same pass correctly leaves it null. Every
+  // reader also gates on `error` being truthy, which makes a stale value
+  // unreachable rather than merely unlikely.
+  const [errorField, setErrorField] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
   const [confirmReshuffle, setConfirmReshuffle] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(null);
@@ -811,7 +824,7 @@ function BookingApp({uid}){
   const swAppliedRef = useRef(false);
   const [settingsTab, setSettingsTab] = useState("general");
   useEffect(function(){formRef.current=form;},[form]);
-  useEffect(function(){if(error) setError("");},[form.time,form.size,form.date,form.preference,form.customDur]);
+  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.time,form.size,form.date,form.preference,form.customDur]);
   // ── Time tick hook ──────────────────────────────────────────────────────────
   // Real-time clock for seated duration. 15s tick. Drives liveBookings, the
   // overlapWarnings derivation, applySeatedShift inside doSave, updateStatus's
@@ -1969,18 +1982,21 @@ function BookingApp({uid}){
     // duration gate, flash condition) sees the effective status uniformly.
     const so=statusOverrideRef.current;
     const f=so?Object.assign({},formRef.current,{status:so}):formRef.current;
+    // v17.12.0: cleared here, set only by the field-specific branches below, so
+    // the form-level errors further down leave it null without having to say so.
+    setErrorField(null);
     try{
-      if(!f.name||!f.name.trim()){setError("Customer name is required.");return;}
+      if(!f.name||!f.name.trim()){setErrorField("name");setError("Customer name is required.");return;}
       // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
       // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
-      if(!f.date){setError("Please set a date.");return;}
-      if(!f.time){setError("Please set a time.");return;}
+      if(!f.date){setErrorField("date");setError("Please set a date.");return;}
+      if(!f.time){setErrorField("time");setError("Please set a time.");return;}
       const sm=toMins(f.time);
       // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
       // viewed day, and block a closed day outright.
       const fh=hoursFor(f.date);
-      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
-      if(sm<fh.open*60||sm>fh.close*60){setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
+      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setErrorField("date");setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
+      if(sm<fh.open*60||sm>fh.close*60){setErrorField("time");setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
       const size=Number(f.size)||2;
       const dur=f.customDur||getDur(size);
       const cleanPhone=cleanPhoneOf(f.phone);
@@ -3293,6 +3309,7 @@ function BookingApp({uid}){
               setForm={setForm}
               editId={editId}
               error={error}
+              errorField={errorField}
               bookings={bookings}
               liveBookings={liveBookings}
               tableBlocks={tableBlocks}
