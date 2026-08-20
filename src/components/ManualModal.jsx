@@ -29,7 +29,7 @@
 // source. The duplicate in WalkinForm has been replaced with the same import.
 
 import { useState, useEffect, useRef } from "react";
-import { S, BTN, R, M, T, FW } from "../lib/constants";
+import { S, BTN, R, M, T, FW, RIM_SOLID } from "../lib/constants";
 import { isTyping } from "../lib/keyboard";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
@@ -218,8 +218,8 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         onClick={() => { if (ok) onSave(selected, true, isSwapping ? affectedBookings : null); }}
         className="mgt-hover-scale"
         style={{
-          background: ok ? (isSwapping ? BTN.orange : S.accent) : "rgba(180,180,190,0.4)",
-          border: "1px solid rgba(255,255,255,0.2)",
+          background: ok ? (isSwapping ? BTN.orange : S.accent) : "var(--btn-disabled)",
+          border: RIM_SOLID,
           borderRadius: R.pill, padding: "10px 18px",
           cursor: ok ? "pointer" : "not-allowed",
           fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,

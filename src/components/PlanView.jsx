@@ -32,7 +32,7 @@
 
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
-import { S, BLOCK_BG, BLOCK_INK, hoursFor, R, M, T, FW } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, hoursFor, R, M, T, FW, RIM_SOLID } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
@@ -399,7 +399,7 @@ export const PlanView = memo(function PlanView({
 
   // ── Legend + slider row ─────────────────────────────────────────────────────
   const legend = ["seated", "confirmed", "pending"].map((s) => (
-    <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi, textTransform: "capitalize" }}>{s}</span>
+    <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi, textTransform: "capitalize" }}>{s}</span>
   ));
 
   return (
@@ -519,7 +519,7 @@ export const PlanView = memo(function PlanView({
                   {soon != null ? (
                     <g transform="translate(0,-22)">
                       <rect x={-22} y={-9} width={44} height={16} rx={8} fill="var(--tl-block-warn-soon)" />
-                      <text x={0} y={3} textAnchor="middle" fontSize={10} fontWeight={700} fill="#fff" style={{ pointerEvents: "none" }}>{"~" + soon + "m"}</text>
+                      <text x={0} y={3} textAnchor="middle" fontSize={10} fontWeight={700} fill="var(--text-on-accent)" style={{ pointerEvents: "none" }}>{"~" + soon + "m"}</text>
                     </g>
                   ) : null}
                 </TableGlyph>

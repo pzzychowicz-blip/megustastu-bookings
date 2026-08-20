@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC } from "../lib/constants";
+import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC, RIM_SOLID } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
@@ -337,8 +337,8 @@ export function WalkinForm({
           disabled={!wOk}
           className="mgt-hover-scale"
           style={{
-            background: wOk ? "var(--app-success-solid)" : "rgba(180,180,190,0.4)",
-            border: "1px solid rgba(255,255,255,0.2)",
+            background: wOk ? "var(--app-success-solid)" : "var(--btn-disabled)",
+            border: RIM_SOLID,
             borderRadius: R.pill, padding: "10px 18px",
             cursor: wOk ? "pointer" : "not-allowed",
             fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,

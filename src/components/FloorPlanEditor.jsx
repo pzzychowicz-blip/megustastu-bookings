@@ -401,11 +401,11 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
               <g key="wsel">
                 {/* v17.0.0 correction: draggable endpoint handles (round 9:
                     each visible r=9 dot gets an invisible r=24 hit circle) */}
-                <circle cx={wl.x1} cy={wl.y1} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2} />
+                <circle cx={wl.x1} cy={wl.y1} r={9} fill="var(--accent)" stroke="var(--text-on-accent)" strokeWidth={2} />
                 <circle cx={wl.x1} cy={wl.y1} r={24} fill="transparent" pointerEvents="fill"
                   style={{ cursor: "move" }}
                   onPointerDown={function(e){ startDrag(e, "wallA", i, { x: wl0.x1, y: wl0.y1 }); }} />
-                <circle cx={wl.x2} cy={wl.y2} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2} />
+                <circle cx={wl.x2} cy={wl.y2} r={9} fill="var(--accent)" stroke="var(--text-on-accent)" strokeWidth={2} />
                 <circle cx={wl.x2} cy={wl.y2} r={24} fill="transparent" pointerEvents="fill"
                   style={{ cursor: "move" }}
                   onPointerDown={function(e){ startDrag(e, "wallB", i, { x: wl0.x2, y: wl0.y2 }); }} />

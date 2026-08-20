@@ -185,6 +185,22 @@
         --border-input: rgba(255, 255, 255, 0.4);
         --border-kbd: rgba(180, 190, 210, 0.55);
         --border-glass: rgba(255, 255, 255, 0.3);      /* white rim on filled btns / Toggle */
+        /* v17.13.0 — the hairline rim on a THEME-INVARIANT solid fill, and the
+           reason it is not --border-glass: that token flips (0.3 light / 0.14
+           dark) because it rims controls sitting on the themed sheet. These two
+           rim a saturated BLOCK_BG / --app-*-solid / BTN.* fill, which is the
+           same colour in both themes, so the rim on it must be too — the
+           v17.8.0 white-inset rule, one property along. They are therefore
+           declared here ONLY and deliberately NOT repeated in the dark block.
+           `solid` was 26 hand-written copies of one value across 12 files, the
+           single most-duplicated literal in the app; `strong` is the party-size
+           ring and the waitlist ghost's dashed edge, and its 0.55 is a RECORDED
+           MEASUREMENT (see SIZE_RING in TimelineView.jsx — at --blk-rule's 0.3
+           the ring does not render at all on the amber fills). Retuning either
+           is a change to every block in the app; tests/contrast.test.js reads
+           `strong` back out of here and floors it per status. */
+        --rim-solid: rgba(255, 255, 255, 0.2);
+        --rim-solid-strong: rgba(255, 255, 255, 0.55);
         /* Scrim + toggle */
         --scrim: rgba(0, 0, 0, 0.25);                  /* modal backdrop */
         --toggle-on: rgba(0, 122, 255, 0.7);
@@ -340,6 +356,20 @@
         /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
         --app-btn-grey: rgba(58, 62, 72, 0.55);  --app-btn-grey-strong: rgba(105, 114, 131, 0.75);
         --app-btn-slate: #64748b;                 /* dialog secondary buttons */
+        /* v17.13.0 — two fills that were hand-written literals, i.e. invisible
+           to tests/contrast.test.js, which enumerates TOKENS. Both carry white
+           text, which is exactly the pairing that file exists to measure.
+           --app-btn-dark is the timeline Follow button while it is FOLLOWING
+           (it was `rgba(0,0,0,0.6)`, eight lines under a comment about this
+           very bug class); --btn-disabled is the greyed-out primary in the two
+           form footers, the reminder editor and ManualModal, whose old literal
+           was a copy of --toggle-off's LIGHT value that never flipped. Both are
+           :root-only: they composite toward whatever is behind them, so one
+           declaration lands correctly in both themes — the alpha is doing the
+           theming, which is legitimate here because the value is a FILL, not a
+           rim on an invariant surface. */
+        --app-btn-dark: rgba(0, 0, 0, 0.6);
+        --btn-disabled: rgba(180, 180, 190, 0.4);
         /* v17.8.0: the three popovers (QuickStatus, SplitMenu, Plan's day queue)
            all carried the same hand-written `0 8px 32px rgba(0,0,0,0.14)`, which
            never deepened for dark mode the way every --shadow-* token does. */

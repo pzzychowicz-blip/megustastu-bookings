@@ -492,6 +492,15 @@ export var BLOCK_INK={confirmed:"var(--ink-confirmed)",pending:"var(--ink-pendin
 // families (BLOCK_BG, BTN) are direct tokens. Block/table/button tokens are
 // theme-invariant (saturated fills read on both themes); only status-chip
 // *text* flips light in dark. `S.bg` stays the literal "transparent".
+// v17.13.0 — the hairline rim on a theme-INVARIANT solid fill, as a whole
+// border declaration because that is the shape all 26 call sites had:
+// `border:"1px solid rgba(255,255,255,0.2)"`, hand-written in twelve files.
+// One value repeated 26 times is a token that cannot be fixed — the app's
+// most-repeated lesson, and the last colour to still be living it. The token
+// itself is declared in index.html's :root ONLY (not the dark block) and the
+// comment there says why. A rim that needs a different width or style takes
+// `var(--rim-solid)` / `var(--rim-solid-strong)` inline instead.
+export var RIM_SOLID="1px solid var(--rim-solid)";
 export var S={bg:"transparent",card:"var(--bg-card)",border:"var(--border-card)",muted:"var(--text-muted)",text:"var(--text-primary)",accent:"var(--accent)"};
 export var TBL={out:{bg:"rgba(var(--tbl-out-rgb),0.8)",text:"var(--text-on-accent)",border:"rgba(var(--tbl-out-rgb),0.5)"},ind:{bg:"rgba(var(--tbl-ind-rgb),0.8)",text:"var(--text-on-accent)",border:"rgba(var(--tbl-ind-rgb),0.5)"}};
 // ── Corner-radius tokens (v17.7.0) ───────────────────────────────────────────

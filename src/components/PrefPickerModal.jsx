@@ -134,7 +134,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                     width: 64, height: 52,   /* @canvas */ padding: 0, borderRadius: R.pill,
                     border: "2px solid " + (isPref ? "var(--accent)" : tc.bg),
                     background: isPref ? "var(--btn-tables)" : "var(--bg-input)",
-                    color: isPref ? "#fff" : S.text,
+                    color: isPref ? "var(--text-on-accent)" : S.text,
                     fontWeight: FW.semi, fontSize: T.lead,
                     cursor: "pointer",
                     display: "flex", flexDirection: "column",

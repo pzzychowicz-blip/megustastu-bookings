@@ -12,7 +12,7 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC } from "../lib/constants";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, RIM_SOLID } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 import { ChevronRightIcon } from "./Icons";
 
@@ -377,7 +377,7 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
         fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
         display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
         background, margin: 0,
-        border: "1px solid rgba(255,255,255,0.2)",
+        border: RIM_SOLID,
         boxShadow: "var(--shadow-btn)"
       }}>{children}</h2>
     </div>
@@ -1183,7 +1183,7 @@ export function SBadge({ status }) {
     <span style={{
       fontSize: T.body, padding: "4px 10px", borderRadius: R.pill,
       background: BLOCK_BG[status] || BLOCK_BG.confirmed,
-      color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: "1px solid rgba(255,255,255,0.2)",
+      color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: RIM_SOLID,
       fontWeight: FW.semi, textTransform: "capitalize",
       display: "inline-block",
       boxShadow: "var(--shadow-flat)"

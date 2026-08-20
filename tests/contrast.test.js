@@ -152,6 +152,23 @@ const FILLS = [
   { fill: "--app-btn-slate", alpha: null, ink: "--text-on-accent", role: "button", what: "dialog secondary" },
   { fill: "--app-btn-slate-dim", alpha: null, ink: "--text-on-accent", role: "button", what: "write-warning dismiss" },
 
+  // v17.13.0 — two fills that reached this file only because the colour rule
+  // in check:style forced them out of the components. Both carried white text
+  // as hand-written literals, i.e. in the one form this file cannot see: it
+  // enumerates TOKENS, and "an audit that enumerates tokens has a blind spot
+  // exactly the size of the literals."
+  { fill: "--app-btn-dark", alpha: null, ink: "--text-on-accent", role: "button", what: "timeline Follow, while following" },
+  // The greyed-out primary in both form footers, ReminderEditor and ManualModal.
+  // It is `exempt` and the reason is the standard's, not this app's: WCAG 1.4.3
+  // exempts inactive user-interface components, and every one of these buttons
+  // is `disabled` when it wears this fill. What the number still says is worth
+  // knowing — at 1.31:1 in light the label is not dim, it is GONE, so a staff
+  // member who has not filled the date sees an empty pill rather than a
+  // greyed-out "Save booking". Recorded here, floored so it cannot get worse,
+  // and left as a design question rather than answered inside a gate-closing
+  // commit (ROADMAP.md).
+  { fill: "--btn-disabled", alpha: null, ink: "--text-on-accent", role: "exempt", what: "disabled primary button" },
+
   // The two PRIMARY header buttons. Named --app-* rather than --btn-*, which is
   // the only reason they were not in the first draft of this list.
   { fill: "--app-new", alpha: null, ink: "--text-on-accent", role: "button", what: "+ New" },
@@ -215,7 +232,8 @@ const NEED = { label: 4.5, button: 3 };
 // chose this one, informed, after seeing the numbers and the pixels. It is
 // recorded here rather than argued away: the floors below still gate a
 // regression, and an accepted contrast is not a licence to keep going.
-const EXEMPT_FLOOR = { "--block-confirmed": 2.8, "--block-pending": 1.75, "--block-completed": 2.1 };
+const EXEMPT_FLOOR = { "--block-confirmed": 2.8, "--block-pending": 1.75, "--block-completed": 2.1,
+                       "--btn-disabled": 1.3 };
 
 function measure(entry, theme) {
   const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
@@ -442,12 +460,30 @@ function ringAlpha() {
     );
   }
   for (let k = start; k < Math.min(start + 12, lines.length); k++) {
+    // v17.13.0: the ring's rim became `--rim-solid-strong` when the 26 copies of
+    // its 0.2 sibling were tokenised, so this resolves the token out of
+    // index.html rather than reading a number out of the component. That is
+    // strictly what this guard was already trying to be — the number the test
+    // uses is the number the app renders — and it now catches a retune of the
+    // TOKEN as well as a retune of the call site. A raw rgba is still accepted,
+    // because reverting to one must not silently disable the guard.
+    const tok = lines[k].match(/border:\s*"[^"]*var\((--[a-z0-9-]+)\)/);
+    if (tok) {
+      const raw = LIGHT_VARS[tok[1]];
+      if (!raw) {
+        throw new Error(
+          "contrast.test: SIZE_RING's border names " + tok[1] +
+          ", which is not declared in index.html's :root."
+        );
+      }
+      return parse(raw).a;
+    }
     const m = lines[k].match(/border:\s*"[^"]*rgba\(255,\s*255,\s*255,\s*([\d.]+)\)/);
     if (m) return parseFloat(m[1]);
     if (/^\};/.test(lines[k]) && k > start) break;
   }
   throw new Error(
-    "contrast.test: no white rgba border found inside the SIZE_RING declaration. " +
+    "contrast.test: no white rule found inside the SIZE_RING declaration. " +
     "If the ring stopped being a white rule, this guard needs rewriting, not removing."
   );
 }

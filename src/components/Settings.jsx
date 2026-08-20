@@ -215,7 +215,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
       <span style={{ width: 40, fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", flexShrink: 0 }}>{label}</span>
       <button onClick={() => onChange({ closed: !closed })} className="mgt-hover-scale"
-        style={{ ...pill, background: closed ? "var(--bg-stepper)" : "rgba(52,199,89,0.16)", color: closed ? "var(--text-muted)" : "var(--success-text)" }}>
+        style={{ ...pill, background: closed ? "var(--bg-stepper)" : "var(--suggest-bg)", color: closed ? "var(--text-muted)" : "var(--success-text)" }}>
         {closed ? "Closed" : "Open"}
       </button>
       {closed ? (

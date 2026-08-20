@@ -12672,3 +12672,104 @@ rather than deferred, and gains one genuinely new item: `describeBooking` joins
 tables with `" and "`, which is right for two and wrong for three — a one-line
 change now that the sentence has one source, and deliberately not made in the
 extraction commit, whose whole claim was byte-identical output.
+
+---
+
+## v17.13.0 — close the gate behind it
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** see each entry. No persisted-data change and no Firebase
+console step for any of them.
+**Verification:** see each entry.
+
+The fourth and last version staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`; `04-design-system.md` is the source of
+truth for the figures quoted here). v17.10.2 took the findings that needed no
+decision, v17.11.0 the ones staff hit during service, v17.12.0 the half of the
+app nobody had ever measured. This one stops all three from drifting back.
+
+**Note the ordering.** The ROADMAP staged this as v17.14.0 behind the modal
+stack; Patryk moved it forward. The reasoning holds either way and is worth
+stating: v17.12.0 shipped roughly forty individually-correct decisions that
+nothing in CI can see. Landmarks, a live region, a label association and a
+roving tab stop are all *invisible* when they are removed — the app looks and
+behaves identically to a sighted mouse user — which is the same property that
+let them be missing for seventeen versions. A fix with no gate behind it is a
+fix with a half-life. The modal stack, by contrast, is a refactor whose defects
+announce themselves the moment you press Escape.
+
+### 1/n — the colour rule's first half: stop hand-writing colours
+
+**Files:** `index.html`, `src/lib/constants.js`, `src/App.jsx`,
+`src/components/{TimelineView,BookingFormModal,WalkinForm,ReminderEditor,ManualModal,BlockModal,PlanView,PrefPickerModal,FloorPlanEditor,HistoryPopup,Shortcuts,Settings,atoms}.jsx`,
+`tests/contrast.test.js`
+**Behavioural change:** one measured fix (below); everything else is
+byte-identical rendering.
+
+`check:style` has seven rules — radius, marker placement, type, spacing, height,
+white-inset, shadow — and **none of them looks at a colour**, in a codebase whose
+recorded history is a series of colour-literal defects. The rule itself is 2/n.
+This entry is the debt it would otherwise report: 76 literal colours across
+twelve files, of which the design-system pass named three groups.
+
+**The 26 copies of one value.** `border: "1px solid rgba(255,255,255,0.2)"` — the
+hairline rim on a solid-fill button or block — hand-written twenty-six times in
+twelve files, the single most-duplicated literal in the app and the exact
+condition of "a literal duplicate of a token is a token that cannot be fixed".
+It is now `RIM_SOLID` (`constants.js`) over `--rim-solid`.
+
+**Why not `--border-glass`, which already exists for "white rim on filled
+btns".** Because that token FLIPS — 0.3 light, 0.14 dark — and these rims sit on
+`BLOCK_BG` / `--app-*-solid` / `BTN.*` fills, which are deliberately the same
+colour in both themes. A rim on an invariant surface must be invariant too; that
+is the v17.8.0 white-inset rule one property along. So `--rim-solid` and
+`--rim-solid-strong` are declared in `:root` **only** and deliberately not
+repeated in the dark block, exactly as `BLOCK_BG` is.
+
+**And that is what the old comment at `SIZE_RING` got wrong.** It said the alpha
+was a literal "because BLOCK_BG is theme-invariant" — which is a reason not to
+use `--border-glass`, and was read as a reason not to use a token at all. A
+`:root`-only token has the property that sentence was reaching for. `SIZE_RING`
+and the waitlist ghost's dashed edge now take `--rim-solid-strong`, and
+`tests/contrast.test.js`'s `ringAlpha()` resolves the token out of `index.html`
+instead of reading a number out of the component — strictly what that guard was
+already trying to be, and it now catches a retune of the token as well as of the
+call site. A raw rgba is still accepted there, so reverting cannot silently
+disable it.
+
+**Two fills that were hiding from the contrast registry**, which is the v17.8.0
+lesson recurring: that file enumerates TOKENS, so a literal is invisible to it.
+The timeline Follow button's active fill was `rgba(0,0,0,0.6)` — eight lines
+below a comment about this very bug class, left behind by the sweep that wrote
+it — and is now `--app-btn-dark`. The greyed-out primary in both form footers,
+`ReminderEditor` and `ManualModal` was `rgba(180,180,190,0.4)`, a copy of
+`--toggle-off`'s LIGHT value that never flipped; it is now `--btn-disabled`.
+Both are registered, and the coverage guard is what forced them in — adding the
+tokens failed the build until they were.
+
+`--btn-disabled` is recorded as an exemption rather than fixed, and the reason is
+the standard's rather than this app's: WCAG 1.4.3 exempts inactive components,
+and every button wearing this fill is `disabled`. What the number says is still
+worth knowing — at **1.31:1** in light the label is not dim, it is gone — so a
+staff member who has not picked a date sees an empty pill rather than a
+greyed-out "Save booking". Floored so it cannot get worse, and left in
+`ROADMAP.md` as a design question rather than answered inside a gate-closing
+commit.
+
+**One measured live fix.** `HistoryPopup`'s scroll panel was a hard-coded
+`rgba(255,255,255,0.35)` — a white wash — while its rows take `--text-muted`,
+which INVERTS. In dark mode that is light grey text on a light grey panel:
+measured in the running app at **1.70:1**. On `--bg-input` it is **4.03:1** dark
+and **5.42:1** light (was 5.25 — light never showed the defect, which is why it
+survived). The same file's two hairlines and `Shortcuts`' row rule were
+undocumented greys and are now `--border-soft`; `Settings`' "Open" day pill was
+`rgba(52,199,89,0.16)` and is now `--suggest-bg`, the app's existing chip-weight
+positive wash, which composites within a couple of levels of it in both themes.
+
+The remaining literals are deliberate and are marked at their sites in 2/n.
+
+**Verification:** build ✓ (201.91 kB gz, +0.00 vs v17.12.0), lint 0 errors,
+**416 tests** (+4: the two new fills × two themes), `check:style` OK. Both themes
+walked in the running app; the history-panel numbers above are measured from the
+live paint stack, not computed from the tokens.

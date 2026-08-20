@@ -41,7 +41,7 @@ import { useState, useRef, useEffect, useMemo, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
-  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC } from "../lib/constants";
+  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
@@ -103,12 +103,18 @@ const HOUR_PILL = {
 // achievable white, number recorded. The DIGIT inside is `--text-on-accent` at
 // the name's own contrast, which is what has to be legible.
 //
-// A literal rather than a token because BLOCK_BG is theme-invariant — the same
-// reason the block's own `1px solid rgba(255,255,255,0.2)` border is one.
+// v17.13.0: `--rim-solid-strong`, not a literal. The old comment here said the
+// alpha was hand-written "because BLOCK_BG is theme-invariant", which is a
+// reason not to use --border-glass (that token FLIPS) and was read as a reason
+// not to use a token at all — so the same white rim ended up written out 26
+// times across twelve files at 0.2 and twice more at 0.55. A token declared in
+// :root ONLY is theme-invariant too, which is the property that was wanted.
+// The 0.55 above is still the recorded measurement; it now lives beside its
+// sibling in index.html, and tests/contrast.test.js resolves it from there.
 const SIZE_RING = {
   flexShrink: 0, boxSizing: "border-box",
   width: 18, height: 18, borderRadius: R.pill,
-  border: "1px solid rgba(255,255,255,0.55)", background: "transparent",
+  border: "1px solid var(--rim-solid-strong)", background: "transparent",
   display: "flex", alignItems: "center", justifyContent: "center",
   fontSize: T.micro, fontWeight: FW.semi, lineHeight: 1,
   fontVariantNumeric: "tabular-nums", position: "relative"
@@ -555,7 +561,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
         color: BLOCK_INK[b.status] || BLOCK_INK.confirmed,
         display: "flex", alignItems: "center", boxSizing: "border-box",
         cursor: dragDy != null ? "grabbing" : "pointer",
-        border: border || "1px solid rgba(255,255,255,0.2)",
+        border: border || RIM_SOLID,
         WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
         // v17.0.0 round 7 (Android fix): without this, the browser claims any
         // vertical touch movement on a block for page scroll and fires
@@ -995,7 +1001,7 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
         // block and left its own ghost white-on-yellow.
         color: BLOCK_INK.pending,
         display: "flex", alignItems: "center", boxSizing: "border-box",
-        border: g.resh ? "1px dashed rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.2)",
+        border: g.resh ? "1px dashed var(--rim-solid-strong)" : RIM_SOLID,
         boxShadow: "var(--shadow-btn-solid)",
         cursor: "pointer",
         // The one deliberate difference from a real block. A reshuffle-only match
@@ -1549,7 +1555,7 @@ export const TimelineView = memo(function TimelineView({
         // left this one at 1.82:1 — the lowest on the screen, on the control
         // that follows the clock during service. A literal duplicate of a token
         // is a token that cannot be fixed.
-        background: followNow ? "rgba(0,0,0,0.6)" : "var(--app-btn-grey)"
+        background: followNow ? "var(--app-btn-dark)" : "var(--app-btn-grey)"
       })}
     >
       {followNow ? "Following" : "Follow"}
@@ -1639,7 +1645,7 @@ export const TimelineView = memo(function TimelineView({
           fontSize: T.small, padding: "2px 8px", borderRadius: R.pill,
           background: BLOCK_BG[s] || "#999",
           color: BLOCK_INK[s] || "var(--text-on-accent)",
-          border: "1px solid rgba(255,255,255,0.2)",
+          border: RIM_SOLID,
           fontWeight: FW.semi, textTransform: "capitalize",
           boxShadow: "var(--shadow-flat)",
           display: "inline-flex", alignItems: "center", gap: 4
@@ -1655,17 +1661,17 @@ export const TimelineView = memo(function TimelineView({
     );
   });
   legendEls.push(
-    <span key="in" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
+    <span key="in" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi }}>
       indoor
     </span>
   );
   legendEls.push(
-    <span key="out" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
+    <span key="out" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi }}>
       outdoor
     </span>
   );
   legendEls.push(
-    <span key="blocked" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi }}>
+    <span key="blocked" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi }}>
       blocked
     </span>
   );

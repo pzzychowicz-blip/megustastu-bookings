@@ -16,7 +16,7 @@
 // original.
 
 import { useState, useEffect } from "react";
-import { S, BTN, TBL, OPEN, GRID_CLOSE, R, T, FW } from "../lib/constants";
+import { S, BTN, TBL, OPEN, GRID_CLOSE, R, T, FW, RIM_SOLID } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
 import { hourLabel } from "../lib/time-grid";
 import { Overlay, Section, Fld, mkBtn, mkInp } from "./atoms";
@@ -131,7 +131,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           // service rather than saving a booking. Tokenized onto the app's
           // solid danger fill instead of a one-off literal.
           background: "var(--app-danger-solid)",
-          border: "1px solid rgba(255,255,255,0.2)",
+          border: RIM_SOLID,
           borderRadius: R.pill, padding: "10px 18px", cursor: "pointer",
           fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
           boxShadow: "var(--shadow-btn-solid)"
