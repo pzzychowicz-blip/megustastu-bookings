@@ -158,9 +158,18 @@ export const ListView = memo(function ListView({
   useEffect(function () {
     if (!focusReq || !selectedId) return;
     const behavior = document.documentElement.dataset.motion === "reduce" ? "auto" : "smooth";
-    function go() {
+    // /code-review: ONE lookup, used by both the scroll and the focus below.
+    // The `data-flip-id` selector was written out twice in this effect, so the
+    // contract "a card is identified by its flip id" was asserted in two places
+    // and a change to it could move the scroll and the focus to different
+    // elements. (`data-bk`'s note in TimelineView is the precedent for that
+    // identity changing.)
+    function findCard() {
       const root = rootRef.current;
-      const el = root ? root.querySelector('[data-flip-id="' + selectedId + '"]') : null;
+      return root ? root.querySelector('[data-flip-id="' + selectedId + '"]') : null;
+    }
+    function go() {
+      const el = findCard();
       if (el) el.scrollIntoView({ block: "center", behavior: behavior });
     }
     // v17.12.0: the selection also takes REAL DOM focus, once, on the first
@@ -189,8 +198,7 @@ export const ListView = memo(function ListView({
     let focused = false;
     function focusOnce() {
       if (focused) return;
-      const root = rootRef.current;
-      const el = root ? root.querySelector('[data-flip-id="' + selectedId + '"]') : null;
+      const el = findCard();
       if (!el || !el.focus) return;
       el.focus({ preventScroll: true });
       // /code-review: latch on SUCCESS, not on the attempt. `focused = true`

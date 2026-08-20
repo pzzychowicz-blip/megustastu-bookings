@@ -12566,3 +12566,18 @@ assignment. This is the same rule applied one line further down:
 `if (document.activeElement === el) focused = true`.
 
 Build ✓, 406 tests ✓.
+
+---
+
+### v17.12.0 (18/n) — `/code-review`: one card lookup, not two
+
+**Files:** `src/components/ListView.jsx`.
+
+`focusOnce` re-derived the selected card with the same
+`querySelector('[data-flip-id="…"]')` expression `go()` had built four lines
+above, so the contract "a card is identified by its flip id" was asserted twice in
+one effect — and the scroll and the focus could be pointed at different elements
+by a change to either copy. `data-bk`'s note in `TimelineView` is the precedent
+for that identity changing. One `findCard()` closure, two callers.
+
+Build ✓, 406 tests ✓, lint 0 errors.
