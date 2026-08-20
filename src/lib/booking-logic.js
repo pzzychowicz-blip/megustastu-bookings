@@ -724,15 +724,78 @@ export function verifyClean(bookings,date){
   for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){var a=day[i],b=day[j];var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;if(!overlaps(as,ae,bs,be)) continue;if(!canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)) return false;}}
   return true;
 }
+// v17.11.0: the PAIRS behind findConflicts — who clashes with WHOM, on which
+// tables, over which minutes. This is the same pair-scan verifyClean and
+// findConflicts already ran; it just stops throwing away the pairing.
+//
+// The id SET was enough for the only consumer there had ever been — the
+// reconciliation effect picks one booking out of the set and relocates it, and
+// does not care what it collided with. Drawing the clash needs the other half:
+// a block must say "double-booked with Rita Camps on table 3", and a strip row
+// is about a PAIR, not about a booking. Neither sentence is recoverable from
+// `["p","r"]`.
+//
+// Unbuffered, deliberately, like the two functions it replaces the loop of —
+// turning the turnaround setting on must never make an already-booked day
+// start reporting clashes (see the v17.6.0 scope note above).
+//
+// `tables` is the INTERSECTION, which is the shared table in the ordinary case
+// and EMPTY in the other one: canAssign also rejects a pair when each booking
+// takes two or more tables from the same join cluster, since they would need
+// the same physical join, and those two sets need not intersect. That case is
+// unreachable in the DEFAULT layout by pigeonhole — its biggest cluster is
+// three tables and two 2-subsets of a 3-set always share a member — but a join
+// group of FOUR is a legitimate Settings → Layout edit, so it is reachable in a
+// custom layout and pinned in the tests. Callers must handle an empty array
+// rather than assume there is always a table id to name: "both on table N" is
+// otherwise a sentence with no N in it. See ClashBanner's fallback wording.
+export function findClashes(bookings,date){
+  var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&(b.tables||[]).length>0;});
+  var out=[];
+  for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){
+    var a=day[i],b=day[j];
+    var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;
+    if(!overlaps(as,ae,bs,be)) continue;
+    if(canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)) continue;
+    var bt=b.tables||[];
+    var shared=(a.tables||[]).filter(function(t){return bt.indexOf(t)>=0;});
+    out.push({a:a.id,b:b.id,tables:shared,from:Math.max(as,bs),to:Math.min(ae,be)});
+  }}
+  return out;
+}
+// The stable identity of ONE clash pair, for anything that has to remember a
+// particular clash across renders — today that is the strip's per-row dismissal
+// Set, which is keyed by pair rather than by booking so that dismissing
+// "Pau vs Rita" does not also silence "Rita vs a third party".
+//
+// The separator is a control character, not "|" or "+", for the reason `undoKey`
+// learned in v17.10.2: a separator reachable FROM THE DATA is a collision
+// waiting to happen. Booking ids are `[0-9a-z]` from `genId`, but a recurring
+// occurrence id is `"r" + ruleId + "_" + date`, so "_" and "-" are already
+// spoken for and the next id format is not something this function gets to know
+// about. Written as the ESCAPE and never as the raw byte: a literal 0x1F in
+// source is invisible in every editor, grep and diff — the same class of trap
+// as the HTML entity that hid from v17.9.0's glyph sweep.
+//
+// It lives HERE and not in ClashBanner because a component file that also
+// exports a plain function trips `react-refresh/only-export-components`, which
+// is a lint ERROR and a hard CI gate — the trap Icons.jsx's StatusIcon note
+// already records. It also belongs here on the merits: the id of a clash is a
+// property of the clash, not of the banner that happens to list it.
+export function clashRowId(c){return c.a+"\u001f"+c.b;}
 // v15.6.1: the ids version of verifyClean's pair-scan — returns every booking
 // involved in a same-table overlap on `date` (active, assigned-tables only).
 // Used by App.jsx's post-sync reconciliation to pick which booking to relocate
-// when the optimiser is OFF. Mirrors verifyClean's loop exactly; collects ids
-// instead of short-circuiting to a boolean.
+// when the optimiser is OFF.
+// v17.11.0: derived from findClashes rather than repeating its loop a third
+// time. The contract is unchanged (a deduped id array) and its tests are what
+// prove that. verifyClean keeps its own copy on purpose — it short-circuits at
+// the first clash, and it runs over every active date on every settled
+// snapshot, so making it build a pair list it then throws away would be a real
+// cost for no gain.
 export function findConflicts(bookings,date){
-  var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&(b.tables||[]).length>0;});
   var hit={};
-  for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){var a=day[i],b=day[j];var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;if(!overlaps(as,ae,bs,be)) continue;if(!canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)){hit[a.id]=true;hit[b.id]=true;}}}
+  findClashes(bookings,date).forEach(function(c){hit[c.a]=true;hit[c.b]=true;});
   return Object.keys(hit);
 }
 export function checkInefficent(bookings,date){

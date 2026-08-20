@@ -287,6 +287,39 @@ export function OverlapIcon(props) {
   );
 }
 
+// Double-booked (v17.11.0) — two overlapping rounded squares: the same slot
+// claimed twice, which is exactly the fault.
+//
+// It could NOT reuse OverlapIcon, even though that icon's own comment ("two
+// blocks sharing a span, which is literally the fault") describes a clash at
+// least as well as it describes the overstay it was drawn for. The strip lists
+// an icon + count PER SECTION in its collapsed tally, so two sections wearing
+// one mark would render "⧉2 ⧉1" and say nothing. An icon there is an identity,
+// not a decoration.
+//
+// The two marks split along what the two sections actually mean: OverlapIcon's
+// offset bars are a TIME fault (one booking running into the next), and this is
+// an ASSIGNMENT fault (two bookings holding one table). Squares rather than
+// block-proportioned rectangles on purpose — made wider and offset diagonally
+// they converge on OverlapIcon's silhouette, which is the one shape in the set
+// this must not be confused with.
+//
+// Chosen by rasterising six candidates at the 14px it ships at and magnifying,
+// per the DepositIcon lesson. Four failed there and would have looked fine at
+// 24: two arrowheads facing each other merged into a pair of plus signs; a
+// bar-with-dots merged into one blob; two chevrons facing made a BOWTIE, which
+// at 14px is WaitIcon's hourglass — the mark of the waitlist section sitting in
+// the same tally row; and two bars on one baseline read as a single long bar
+// with holes punched in it, a domino rather than a collision.
+export function ClashIcon(props) {
+  return (
+    <Svg {...props}>
+      <rect x="2.5" y="7.5" width="12" height="12" rx="2.5" />
+      <rect x="9.5" y="4.5" width="12" height="12" rx="2.5" />
+    </Svg>
+  );
+}
+
 // Working offline — a struck-through cloud. The slash is the load-bearing part
 // (a cloud alone reads as "syncing"), and it runs corner to corner so it stays
 // legible at 14px where the cloud's own outline is nearly closed.

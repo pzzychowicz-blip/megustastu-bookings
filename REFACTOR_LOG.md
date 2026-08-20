@@ -11120,3 +11120,173 @@ into a patch version: making `bookingsAfterAction` return its input array on a
 no-op (the deep fix for the loop class, but it changes a function **39 call
 sites** depend on), `dayBookingsSig`'s double scan, and the strip lid's 1px
 radius.
+
+---
+
+## v17.11.0 — what staff hit during service
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** see each entry. No persisted-data change and no Firebase
+console step for any of them.
+**Verification:** see each entry.
+
+The second version staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`). v17.10.2 took the findings that needed
+no decision; this one takes the findings that show up *during service*, on the
+three views a host is actually looking at while parties arrive.
+
+One of them is different in kind from everything else in the review, and it is
+worth saying why before the entries. Almost every finding in all seven passes is
+an OMISSION — a name a screen reader cannot hear, a state with no text
+alternative, a control that keyboard focus cannot reach. The double-booking is
+not an omission. The app detects the clash correctly, decides correctly that it
+cannot resolve it, and then **draws it as something that is not true**: two
+parties promised one table render as two tidy consecutive sittings, because the
+later block paints over the earlier one and nothing says so. That is the only
+place in this app where the interface asserts something false, which is why it
+leads the version.
+
+### 1/n · Draw the double-booking
+
+**Files:** `src/lib/booking-logic.js`, `src/components/ClashBanner.jsx` (new),
+`src/components/Icons.jsx`, `src/components/TimelineView.jsx`, `src/App.jsx`,
+`index.html`, `tests/booking-logic.test.js`
+**Behavioural change:** a same-table clash on the viewed day now draws a red
+border and a marker on both blocks, a stripe across the contested minutes, and a
+`Double-booked` section in the notification strip. Detection logic is unchanged —
+`findClashes` is `findConflicts`' own pair-scan with the pairing kept.
+
+**The gap.** `overlapWarnings` (App.jsx) is an OVERSTAY detector: it iterates
+`seated` bookings and warns when one runs into the next booking's slot. Two
+*confirmed* bookings on one table never reach it. `findConflicts`, which does see
+them, had exactly one consumer since v15.6.1 — the post-sync reconciliation
+effect, which relocates the newest NON-LOCKED booking and then stops:
+`if(!movable.length) break; // only locked overlaps — leave as-is`. So an
+all-locked clash was detected, deliberately left alone, and never shown to
+anybody. `_conflict` is never set `true` anywhere in `src/`; it is only cleared
+or read.
+
+It is reachable by completely ordinary use — every walk-in is `_manual:true
+_locked:true` by definition, and every drag-drop path sets `_locked:true`.
+Measured live on the seeded review day: the two blocks sat on one row and
+overlapped by 288px, the later painting over the earlier.
+
+**`findClashes`.** The pairs behind `findConflicts`: who clashes with whom, on
+which tables, over which minutes. The id set was enough for the reconciler, which
+picks one booking out of it and does not care what it collided with; a block that
+must say "double-booked with Rita Camps on table 3" and a strip row that is
+*about a pair* can recover neither from `["p","r"]`. `findConflicts` is now
+derived from it — one loop instead of two, and its existing tests are what prove
+the contract did not move. `verifyClean` deliberately keeps its own copy: it
+short-circuits at the first clash and runs over every active date on every
+settled snapshot, so building a pair list it would throw away is a real cost.
+
+Unbuffered, like the two functions whose loop it replaces — turning the
+turnaround setting on must never make an already-booked day start reporting
+clashes (the v17.6.0 scope rule).
+
+`tables` is the INTERSECTION, and the tests pin the case where it is **empty**:
+`canAssign` also rejects a pair when each booking takes two or more tables from
+the same join cluster, since they would need the same physical join, and those
+two sets need not intersect. Unreachable in the default layout by pigeonhole —
+its biggest cluster is three tables and two 2-subsets of a 3-set always share a
+member — but a join group of FOUR is a legitimate Settings → Layout edit. Callers
+must handle it: "both on table N" is otherwise a sentence with no N in it, and
+`ClashBanner` says "tables that cannot both be joined" instead.
+
+**Three surfaces, one source.** The block marker, the stripe and the strip
+section all read the same `findClashes` output, so they cannot disagree about
+what is clashing.
+
+- **The block** takes a 3px danger-red border, outranking both the overstay
+  warning and the late timer — those are predictions, this is the schedule
+  already being wrong. It reuses the overstay's red rather than adding a sixth
+  block-border colour; the two are told apart by the marker and the stripe, not
+  by hue, because making the border the distinguishing signal is the
+  colour-only-status mistake this release exists to fix.
+- **The marker** is part of the block's FIXED width cost, not a rail flag, so it
+  can never be dropped. `block-layout.js`'s ladder sheds informational flags
+  first and exception flags last; a double-booking is not on that scale at all.
+  A seated block starts a few pixels wide and grows, so anything droppable is
+  invisible for the first stretch of every visit — which for this marker would
+  mean it disappears exactly while a host is deciding where to seat the party
+  who just walked in. `chipRoomFor` gained the same term, so the day-wide
+  start-time-chip rule still knows what a block really costs.
+- **`ClashBand`** is a 5px stripe across the minutes both bookings claim, and it
+  is the one part that carries information the border cannot: it runs from the
+  later booking's start to the EARLIER one's end, so its right-hand edge is the
+  exact minute the earlier booking finishes — the fact the later block is
+  painting over. Verified live: it ends at Pau's right edge, 72px short of
+  Rita's, on a pair where Pau is otherwise invisible past 20:30.
+
+**The stripe was a full-height hatch first, and that was wrong.** At 0.55 opacity
+across the row it marked the span correctly and sat directly on the later
+booking's name and start-time chip — "20:30 Rita Ca…" behind diagonal stripes. A
+marker that obscures the label it is warning about has traded one unreadable
+block for another, which is this whole change's own complaint. No opacity fixes
+it: anything faint enough to read through is too faint to be the alarm. It moved
+to a stripe inside the block, low enough to clear the vertically-centred label
+and high enough to clear the block's own border — that second gap is the point,
+since the border is also danger red and a stripe flush against it just read as a
+thicker border. The row's own gutter (5px, from the blocks' `top: 3` /
+`ROW_H - 8` inset) was tried and is not enough to separate them.
+
+**`ClashIcon`** — two overlapping rounded squares. It could NOT reuse
+`OverlapIcon`, even though that icon's own comment ("two blocks sharing a span,
+which is literally the fault") describes a clash at least as well as the overstay
+it was drawn for: the strip lists an icon + count PER SECTION in its collapsed
+tally, so two sections wearing one mark would render "⧉2 ⧉1" and say nothing. An
+icon there is an identity, not a decoration. The two marks split along what the
+sections mean — offset bars are a TIME fault, overlapping squares an ASSIGNMENT
+fault.
+
+Chosen by rasterising six candidates at the 14px it ships at and magnifying, per
+the `DepositIcon` lesson. **Four failed there and would all have looked fine at
+24**: two arrowheads facing each other merged into a pair of plus signs; a
+bar-with-dots merged into one blob; two chevrons facing made a BOWTIE, which at
+14px is `WaitIcon`'s hourglass — the mark of the waitlist section, sitting in the
+same tally row; and two bars on one baseline read as a single long bar with holes
+punched in it, a domino rather than a collision.
+
+**The banner's action is Assign, not Reassign**, and copying `OverlapBanner`'s
+row would have shipped a button that can only ever fail. `reassignBooking`
+refuses a locked booking outright — and a clash that survived the reconciler is
+locked BY DEFINITION, since being locked is the exact condition under which the
+reconciler leaves it. The row opens the manual assign modal instead. It offers
+the LATER booking: both are equally "wrong", but the earlier party may already be
+at the table, and the reconciler's own tie-break (newest first) points the same
+way, so the automatic path and the manual one propose the same move rather than
+fighting over it.
+
+**Scoped to the VIEWED date**, unlike late/overlap/waitlist which are today-only.
+This is the one section whose rows correspond 1:1 to markers drawn on the view
+you are looking at, and whose action operates on that day. A clash section about
+today, sitting under a date navigator showing next Tuesday, beside blocks
+carrying no marker, would be three different days in one glance.
+
+The dismissal Set is keyed by PAIR (`clashRowId`), not by booking, so dismissing
+"Pau vs Rita" does not also silence "Rita vs a third party". The block marker
+reads the UNFILTERED pairs — dismissing a strip row quiets the row; it does not
+make the double-booking stop being true.
+
+**Two traps hit while building it, both recorded at their sites.**
+`clashRowId`'s separator is an ASCII control character for the reason `undoKey`
+learned in v17.10.2 (a separator reachable from the data is a collision waiting
+to happen; `"_"` and `"-"` are already spoken for by recurring occurrence ids) —
+but written as the `\u001f` ESCAPE and never as the raw byte, which is invisible
+in every editor, grep and diff. And it lives in `booking-logic.js` rather than in
+`ClashBanner`, because a component file that also exports a plain function trips
+`react-refresh/only-export-components`, a lint ERROR and a hard CI gate — the
+trap `Icons.jsx`'s `StatusIcon` note already records, walked into anyway. It
+belongs there on the merits too: the id of a clash is a property of the clash,
+not of the banner listing it.
+
+**Verification:** build ✓ · 387 tests ✓ (4 new on `findClashes`, incl. the
+empty-intersection case under a custom 4-table join group) · lint 0 errors ·
+`check:style` OK. Live on the seeded fixture in **both themes**: both blocks
+measured at `3px rgb(220, 38, 38)`, the stripe measured spanning exactly
+`ritaLeft → pauRight`, the strip section rendering "Pau Estévez (20:00) and Rita
+Camps (20:30) are both on table 3." with Assign and dismiss. Console clean; 3 DOM
+mutations in 5s idle (the 15s clock tick), i.e. no render loop.
+

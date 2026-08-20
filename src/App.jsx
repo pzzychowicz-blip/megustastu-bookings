@@ -34,7 +34,7 @@ import {
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
-  checkInefficent, verifyClean, findConflicts,
+  checkInefficent, verifyClean, findConflicts, findClashes, clashRowId,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
   undoSnapshots, applyUndo, dayBookingsSig
@@ -124,7 +124,7 @@ import { Summary }      from "./components/Summary";
 // re-export. The re-export exists to keep the LAZY-Settings boundary intact for
 // importers that predate the move; App has no reason to go the long way round,
 // and Icons.jsx has no imports of its own to drag into the startup chunk.
-import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, CogIcon, LateIcon, OverlapIcon, SearchIcon, WaitIcon } from "./components/Icons";
+import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, ClashIcon, CogIcon, LateIcon, OverlapIcon, SearchIcon, WaitIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -134,6 +134,7 @@ import { SplitMenu }     from "./components/SplitMenu";
 const WeekView = lazyChunk(function(){return import("./components/WeekView").then(function(m){return {default:m.WeekView};});},"WeekView"); // v17.1.0: lazy (opened on demand)
 import { LateBanner }   from "./components/LateBanner";
 import { OverlapBanner } from "./components/OverlapBanner";
+import { ClashBanner } from "./components/ClashBanner";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 
 // ── Phase B5 (v15-refactor): Final modal & screen extraction ──────────────
@@ -266,7 +267,7 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.10.2",
+  version:"17.11.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1264,6 +1265,14 @@ function BookingApp({uid}){
   const [overlapDismissed,setOverlapDismissed]=useState(function(){return new Set();});
   function dismissOverlapRow(id){
     setOverlapDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
+  }
+  // v17.11.0 — the same ✕-dismiss mechanism for the double-booking rows. Keyed
+  // by the PAIR's row id (clashRowId), not a booking id: the row is about two
+  // bookings, and dismissing "Pau vs Rita" must not also silence "Rita vs a
+  // third party" if the day is bad enough to have both.
+  const [clashDismissed,setClashDismissed]=useState(function(){return new Set();});
+  function dismissClashRow(id){
+    setClashDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
   }
   // v16.3.0 — Table-turn prediction: today's seated bookings whose scheduled end
   // is within the next freeSoonWindow min (freeingSoon, booking-logic.js). Gated
@@ -2505,6 +2514,67 @@ function BookingApp({uid}){
   function dismissWaitRow(id){setWaitNotifyDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});}
   const hasWaitBanner=waitBannerEntries.length>0;
 
+  // ── v17.11.0: double-bookings on the viewed day ────────────────────────────
+  // `findConflicts` has existed since v15.6.1 and was wired to exactly one
+  // consumer: the silent reconciliation effect, which relocates the newest
+  // NON-LOCKED booking and then gives up on the rest. So the clashes it cannot
+  // fix — the all-locked ones, which is every walk-in and every drag-drop —
+  // were detected, deliberately left alone, and never shown to anyone.
+  //
+  // Scoped to the VIEWED date rather than today, unlike late/overlap/waitlist.
+  // This is the one section whose rows correspond 1:1 to markers drawn on the
+  // view you are looking at, and whose action (assign tables) operates on that
+  // day. A clash section about today, sitting under a date navigator showing
+  // next Tuesday, next to blocks that carry no marker, would be three different
+  // days in one glance.
+  const clashPairs=useMemo(function(){return findClashes(bookings,viewDate);},[bookings,viewDate]);
+  const clashBannerPairs=useMemo(function(){
+    if(!clashPairs.length) return EMPTY_ARR;
+    if(clashDismissed.size===0) return clashPairs;
+    return clashPairs.filter(function(c){return !clashDismissed.has(clashRowId(c));});
+  },[clashPairs,clashDismissed]);
+  const hasClash=clashBannerPairs.length>0;
+  // The timeline's view of the same pairs: per booking, who it clashes with and
+  // where. Built from `clashPairs` and NOT from the dismiss-filtered list —
+  // dismissing a strip row quiets the row, it does not make the double-booking
+  // stop being true, and the block marker is the permanent record of it.
+  const clashMap=useMemo(function(){
+    if(!clashPairs.length) return EMPTY_OBJ;
+    const byId={};bookings.forEach(function(b){byId[b.id]=b;});
+    const map={};
+    function add(id,other,c){
+      if(!map[id]) map[id]={names:[],tables:[]};
+      if(other&&map[id].names.indexOf(other.name)<0) map[id].names.push(other.name);
+      c.tables.forEach(function(t){if(map[id].tables.indexOf(t)<0) map[id].tables.push(t);});
+    }
+    clashPairs.forEach(function(c){
+      const A=byId[c.a],B=byId[c.b];
+      if(!A||!B) return;
+      add(c.a,B,c);add(c.b,A,c);
+    });
+    return map;
+  },[clashPairs,bookings]);
+
+  // The same pairs seen per ROW: which minutes of which table are claimed
+  // twice. `findClashes` reports the shared window, so the band is drawn from
+  // the data rather than re-derived from two blocks' geometry.
+  //
+  // A pair whose `tables` is empty (the join-cluster case — see findClashes)
+  // contributes no band, because there is no single row it belongs on. The
+  // marker and the strip row still carry it; only the geometry has nowhere to
+  // go, which is the honest outcome rather than a band drawn on a guess.
+  const clashSpans=useMemo(function(){
+    if(!clashPairs.length) return EMPTY_OBJ;
+    const map={};
+    clashPairs.forEach(function(c){
+      c.tables.forEach(function(t){
+        if(!map[t]) map[t]=[];
+        map[t].push({from:c.from,to:c.to});
+      });
+    });
+    return map;
+  },[clashPairs]);
+
   // ── v17.8.0: the ONE notification strip ────────────────────────────────────
   // Six banners could stack at once and, on a busy evening — exactly when
   // several fire together — they pushed the timeline off the bottom of the
@@ -2515,7 +2585,10 @@ function BookingApp({uid}){
   // ORDER IS SEVERITY, and it lives here rather than in the strip because it
   // is a judgement about THIS app's operations, next to the flags that produce
   // it: a failed write can lose a booking; offline is degraded but safe;
-  // overlap means two parties are on one table; late is a guest problem;
+  // a double-booking means two parties are ALREADY on one table and one of them
+  // will be turned away; overlap is the softer version of the same sentence —
+  // a seated party predicted to run into the next booking; late is a guest
+  // problem;
   // reminders are scheduled prompts; the waitlist is an opportunity, not a
   // problem, so it sits last and stays green. The strip shows the first entry
   // as its collapsed summary, which makes "worst thing first" load-bearing.
@@ -2536,6 +2609,9 @@ function BookingApp({uid}){
       hasConnected:hasConnected,
       dayClosed:hoursFor(viewDate).closed
     }),
+    hasClash?[{id:"clash",tone:"var(--danger-text)",tint:"var(--danger-bg)",icon:ClashIcon,
+      title:clashBannerPairs.length===1?"Double-booked":"Double-bookings",count:clashBannerPairs.length,
+      node:<ClashBanner pairs={clashBannerPairs} bookings={bookings} onAssign={setManualTarget} onDismiss={dismissClashRow} />}]:[],
     hasOverlap?[{id:"overlap",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:OverlapIcon,
       title:"Overlap warnings",count:Object.keys(overlapBannerMap).length,
       node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
@@ -2650,6 +2726,8 @@ function BookingApp({uid}){
     onBlock={VA.onBlock}
     nowMins={nowMins}
     warnings={overlapWarnings}
+    clashes={clashMap}
+    clashSpans={clashSpans}
     late={lateMap}
     freeing={freeingMap}
     onNoShow={VA.onNoShow}

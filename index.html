@@ -280,6 +280,14 @@
            the overstay "due soon" border stays amber (it paints on SEATED/green
            blocks, where amber reads fine). */
         --tl-block-late: #fde047;                        /* running-late border (yellow-300) */
+        /* v17.11.0: the double-booked underline — the bar drawn under the
+           minutes two bookings both claim. Theme-invariant, like every other
+           --tl-* here, because it paints against BLOCK_BG fills which are
+           themselves the same in both themes. Opaque, because it is an alarm
+           and it sits in the 6px strip below the blocks where nothing competes
+           with it; the first version washed the whole row at 0.55 and covered
+           the later booking's own name. */
+        --tl-clash-a: rgb(220, 38, 38);                  /* double-booked underline */
         --tl-blocked-a: #991b1b;                          /* table-block stripe colours */
         --tl-blocked-b: #7f1d1d;
         --tl-blocked-badge: rgba(153, 27, 27, 0.85);     /* "blocked" label-col badge bg */

@@ -47,7 +47,7 @@ import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
-import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, AssignIcon } from "./Icons";
+import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
@@ -122,15 +122,16 @@ const HANDLE_PX = 41;    // the assign handle (28 min-width + padding + rule)
 const RING_PX = 24;      // the party-size ring + its margin (v17.9.0)
 const FLAG_PX = 18;      // one IC.control (14px) flag icon + its 4px margin (v17.9.1)
 const FREE_PX = 36;      // the "~Nm" table-turn pill + its margin (v17.9.1)
+const CLASH_PX = 18;     // the double-booked marker + its margin (v17.11.0)
 const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
 
-function chipRoomFor(b, noShows, warn) {
+function chipRoomFor(b, noShows, warn, clash) {
   const flags = ((Number(b.deposit) || 0) > 0 ? 1 : 0)
     + ((b.preferredTables && b.preferredTables.length) ? 1 : 0)
     + (isLocked(b) ? 1 : 0)
     + (noShows >= 2 ? 1 : 0)
     + (warn && warn.overdue ? 1 : 0);
-  return CHIP_PX + HANDLE_PX + RING_PX + NAME_MIN_PX + FLAG_PX * flags;
+  return CHIP_PX + HANDLE_PX + RING_PX + NAME_MIN_PX + (clash ? CLASH_PX : 0) + FLAG_PX * flags;
 }
 
 // v17.9.1: what a block can afford to show at its current width is decided by
@@ -185,7 +186,7 @@ function BlockFlag({ title, children }) {
   );
 }
 
-function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
+function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
   const d = liveBarDur(b, nowMins);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -195,9 +196,21 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // v16.1.0: running-late amber border (confirmed booking past its time — the
   // `late` prop is "warn"/"noshow" from App's lateMap). Seated-overstay
   // warnings keep precedence (they carry the more urgent red tier).
-  const border = warn
-    ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
-    : (late ? "3px solid var(--tl-block-late)" : "none");
+  // v17.11.0: a DOUBLE-BOOKING outranks both. It is not a prediction like the
+  // overstay warning or the late timer — it is the schedule already being
+  // wrong, and one of these two parties is going to be turned away.
+  //
+  // It reuses the overstay's danger red rather than introducing a sixth block
+  // border colour. The two are told apart by the things that carry the meaning:
+  // the ClashIcon on the rail, and the hatched band drawn across the minutes
+  // both bookings claim. Adding a red-adjacent hue here would have made the
+  // border the distinguishing signal, which is the colour-only-status mistake
+  // this release exists to fix.
+  const border = clash
+    ? "3px solid var(--tl-block-warn)"
+    : warn
+      ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
+      : (late ? "3px solid var(--tl-block-late)" : "none");
   const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
@@ -256,9 +269,18 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
   // so on a 60-minute booking with a 60-minute window it is on screen from the
   // first minute of the visit, when a seated block is a few pixels wide. Leaving
   // it out reproduced the exact pile-up this budget exists to prevent.
+  // v17.11.0: the clash marker is part of the FIXED cost, not a rail flag, so
+  // it can never be dropped. The ladder in block-layout.js sheds informational
+  // flags first and exception flags last, and a double-booking is not on that
+  // scale at all: it is the one marker that says this booking's table is
+  // already promised to somebody else. A seated block starts a few pixels wide
+  // and grows, so anything droppable is invisible for the first stretch of
+  // every visit — which for this marker would mean it disappears exactly while
+  // a host is deciding where to put the party who just walked in.
   const { showRing, flags: railFlags } = visibleRail(
     d * pxPerMin,
-    HANDLE_PX + NAME_MIN_PX + (showChip ? CHIP_PX : 0) + (freeMin != null ? FREE_PX : 0),
+    HANDLE_PX + NAME_MIN_PX + (showChip ? CHIP_PX : 0) + (freeMin != null ? FREE_PX : 0)
+      + (clash ? CLASH_PX : 0),
     RING_PX, FLAG_PX, allFlags
   );
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
@@ -594,6 +616,16 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, late = n
           Assign handle. All flexShrink:0 — the name truncates, these survive.
           v17.9.1: …up to the point where they stop fitting, at which they are
           dropped rather than clipped on top of each other. See blockBudget. */}
+      {/* v17.11.0: the double-booked marker leads the rail, ahead of the flags
+          it outranks, and outside `railFlags` because it is never dropped. The
+          title names the other party — which is the question anyone who sees
+          this marker asks next, and the one thing the hatched band cannot say. */}
+      {clash ? (
+        <BlockFlag title={"Double-booked with " + clash.names.join(", ")
+          + (clash.tables.length ? " on " + (clash.tables.length === 1 ? "table " : "tables ") + clash.tables.join(", ") : "")}>
+          <ClashIcon size={IC.control} />
+        </BlockFlag>
+      ) : null}
       {railFlags.map((f) => (
         <BlockFlag key={f.k} title={f.title}>{f.icon}</BlockFlag>
       ))}
@@ -662,6 +694,58 @@ function GridLines() {
         borderLeft: "2px solid var(--tl-gridline-hour)"
       }} />
     </div>
+  );
+}
+
+// ── ClashBand (v17.11.0) — the minutes two bookings both claim ───────────────
+// The review's finding was not that a double-booking is unlabelled; it is that
+// the timeline actively DRAWS IT AS SOMETHING ELSE. The two blocks share a row,
+// the later one paints over the earlier, and what is left on screen is two tidy
+// consecutive sittings. Measured on a seeded day: 288px of overlap, hidden.
+//
+// A marker on each block says "this booking is in a clash". Only a band across
+// the shared span says WHICH MINUTES are double-claimed, which is the thing the
+// painting-over destroyed and the thing a host needs to decide what to move.
+//
+// Drawn AFTER the blocks, so it paints on top of whichever one is hiding the
+// other — being underneath would reproduce the very problem.
+//
+// It is an UNDERLINE, not a wash, and the first version was the wash. Full
+// height at 0.55 with a hatch, it marked the span correctly and sat directly on
+// the later booking's name and start-time chip: "20:30 Rita Ca…" went behind
+// diagonal stripes. A marker that obscures the label it is warning about has
+// traded one unreadable block for another, which is the same defect this whole
+// change is about — and there is no opacity that fixes it, because anything
+// faint enough to read through is too faint to be the alarm.
+//
+// So it is a 5px stripe INSIDE the block, low enough to clear the label (which
+// is vertically centred, measured to end ~4px above it) and high enough to
+// clear the block's own 3px border. That gap is the whole point of the
+// placement: the border is ALSO danger red, so a stripe flush against it just
+// read as a thicker border and added nothing. Tried at the row's bottom edge
+// first, where the 5px of gutter left by the blocks' `top: 3` / `ROW_H - 8`
+// inset is not enough to separate them.
+//
+// Solid rather than the blocked bar's hatch: at 5px a 45° stripe reads as
+// noise, and the two bands mean different things anyway — blocked is a table
+// taken out of service, this is two parties promised the same minutes.
+//
+// What it is actually FOR, which the border cannot do: the stripe runs from the
+// later booking's start to the EARLIER one's end, so its right-hand edge is the
+// exact minute the earlier booking finishes — the fact the later block is
+// painting over. Verified live: the stripe ends at Pau's right edge, 72px short
+// of Rita's, on a pair where Pau is otherwise invisible past 20:30.
+function ClashBand({ from, to, totalMins }) {
+  const left = pct(from);
+  const w = Math.max(((to - from) / totalMins) * 100, 0.5) + "%";
+  return (
+    <div aria-hidden="true" style={{
+      position: "absolute", bottom: 7, height: 5,   /* @canvas */
+      left, width: w,
+      background: "var(--tl-clash-a)",
+      borderRadius: R.pill,
+      pointerEvents: "none"
+    }} />
   );
 }
 
@@ -826,6 +910,13 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
 export const TimelineView = memo(function TimelineView({
   bookings, date, onEdit, onManual, onStatus,
   blocks = [], onBlock, nowMins = 0, warnings = {},
+  // v17.11.0: double-bookings on the viewed day, from App's findClashes memo.
+  //   clashes    {bookingId: {names:[…], tables:[…]}} — the block's marker/border
+  //   clashSpans {tableId: [{from,to}…]}              — the hatched overlap bands
+  // Two shapes because they answer two questions: which BOOKINGS are in a clash,
+  // and which MINUTES of which ROW are double-claimed. Deriving one from the
+  // other here would mean re-running the pair scan in the render path.
+  clashes = {}, clashSpans = {},
   late = {}, freeing = {}, onNoShow = () => {},
   zoom = 1, setZoom,
   // v17.2.0: per-device Timeline settings (App's tlSettings — scalars, memo-safe).
@@ -948,7 +1039,7 @@ export const TimelineView = memo(function TimelineView({
   // the per-block part is only what each block needs, and the worst one decides.
   const confirmedDay = day.filter((b) => b.status === "confirmed" || b.status === "pending");
   const chipsOn = confirmedDay.length > 0 && confirmedDay.every(function (b) {
-    return liveBarDur(b, nowMins) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id]);
+    return liveBarDur(b, nowMins) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id], !!clashes[b.id]);
   });
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
@@ -1210,10 +1301,15 @@ export const TimelineView = memo(function TimelineView({
             <Fragment key={b.id}>
               {tail}
               {ghost}
-              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
+              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
             </Fragment>
           );
         })}
+        {/* LAST in the row, so it paints over the blocks — the whole point is
+            that it marks the span the later block is hiding the earlier one on. */}
+        {(clashSpans[id] || []).map((sp, i) => (
+          <ClashBand key={"cb" + i} from={sp.from} to={sp.to} totalMins={totalMins} />
+        ))}
       </div>
     );
   });
@@ -1226,7 +1322,7 @@ export const TimelineView = memo(function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
     </div>
   ) : null;
 
