@@ -564,3 +564,118 @@ describe("double-booked band — the casing over each block, as rendered", () =>
     }
   });
 });
+
+// ── The waitlist ghost — a DIMMED copy of the worst fill in the app (v17.13.0)
+//
+// This is the gap the file above declares it has, and the design-system pass
+// went and measured it: the ghost's guest name renders at **1.50:1**, the
+// lowest text contrast in the application, on a fill (`--block-pending`) that
+// is ALREADY this registry's worst recorded exemption at 1.82:1.
+//
+// It arrived through the same door as the v17.9.0 hour-pill defect, one level
+// further along. `chipOpacity()` above is anchored on `const timeChip` — a
+// deliberate /code-review fix, and correct for what it set out to do — and its
+// own comment names the three `...HOUR_PILL` spreads and says only the first is
+// measured. `WaitGhost` is the second. So the component that dims an exempt
+// fill by a further 45% was, by construction, outside everything this file
+// looks at. **A token's number is not the screen's number wherever that token
+// is reused over something else** — and an element-level `opacity` is exactly
+// such a reuse, invisible to a registry that reads `index.html`.
+//
+// Asserted against ITSELF, like SIZE_RING and unlike the clash band: a 0.55
+// dimming cannot reach 4.5:1 over any fill this app owns, so a 4.5 bar here
+// would be a permanently red test, which is a muted test. The floors are the
+// values measured at the shipped opacities. What they buy is that the dimming
+// cannot deepen, and that raising it shows up as a number rather than a
+// feeling.
+//
+// **The 1.50 is recorded, not endorsed.** The amber exemption's justification —
+// a block's meaning is carried by colour, position and width, and the one part
+// that is INFORMATION moved onto an opaque chip — does not reach here: the
+// chip is inside the ghost and dims with it, so on a ghost every element is
+// below the bar at once. See ROADMAP.md.
+//
+// Both opacities are read out of the component for `chipOpacity()`'s reason: a
+// guard that names the thing it guards and then uses a number typed into the
+// test is not guarding it.
+function ghostOpacity() {
+  const lines = TIMELINE_SRC.split("\n");
+  const start = lines.findIndex((l) => /function\s+WaitGhost\s*\(/.test(l));
+  if (start < 0) {
+    throw new Error(
+      "contrast.test: could not find `function WaitGhost` in TimelineView.jsx. " +
+      "The waitlist ghost was renamed or moved — re-anchor ghostOpacity() on it " +
+      "rather than deleting this guard."
+    );
+  }
+  for (let k = start; k < lines.length; k++) {
+    // `opacity: g.resh ? 0.4 : 0.55` — the reshuffle-only match is turned down
+    // further because it can sit over a table that is visibly occupied now.
+    const m = lines[k].match(/opacity:\s*g\.resh\s*\?\s*([\d.]+)\s*:\s*([\d.]+)/);
+    if (m) return { resh: parseFloat(m[1]), plain: parseFloat(m[2]) };
+    if (/^}/.test(lines[k]) && k > start) break;
+  }
+  throw new Error(
+    "contrast.test: no `opacity: g.resh ? … : …` inside WaitGhost. If the ghost " +
+    "stopped being drawn by element opacity, this guard needs rewriting, not removing."
+  );
+}
+
+// Measured at the shipped 0.55 / 0.4. Everything on a ghost is dimmed together,
+// so all three are below the bar at once — which is the finding, not a rounding.
+//
+// The review measured the light guest name at 1.50:1 from the live DOM and this
+// file computes 1.39. Both are right and the gap is the BASE: this registry
+// takes the extreme of each theme (pure white / the darkest sheet) as the worst
+// case for washout, while the timeline row has its own faint tint under the
+// ghost. Recording the stricter of the two is the point of choosing an extreme.
+const GHOST_FLOOR = {
+  light: { plain: { name: 1.39, chip: 2.22, ring: 1.2 }, resh: { name: 1.27, chip: 1.74, ring: 1.14 } },
+  dark:  { plain: { name: 1.82, chip: 3.12, ring: 1.39 }, resh: { name: 1.63, chip: 2.41, ring: 1.3 } },
+};
+
+describe("waitlist ghost — the dimmed block, as rendered", () => {
+  for (const theme of ["light", "dark"]) {
+    for (const kind of ["plain", "resh"]) {
+      it(`${kind} ghost stays at or above its recorded floors in ${theme}`, () => {
+        const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+        const a = ghostOpacity()[kind];
+        const base = BASE[theme];
+        // Element opacity composites the already-painted element back over the
+        // page, so fill, chip and ink all fade together — the same shape as the
+        // start-time-chip block above, with the block itself as the thing faded.
+        const fillFull = over(parse(vars["--block-pending"]), base);
+        const fill = over({ ...fillFull, a }, base);
+
+        const nameFull = over(parse(vars["--ink-pending"]), fillFull);
+        const name = over({ ...nameFull, a }, base);
+
+        const chipFull = over(parse(vars["--tl-hour-pill"]), fillFull);
+        const chip = over({ ...chipFull, a }, base);
+        const chipInkFull = over(parse(vars["--text-on-accent"]), chipFull);
+        const chipInk = over({ ...chipInkFull, a }, base);
+
+        const ringFull = over({ r: 255, g: 255, b: 255, a: ringAlpha() }, fillFull);
+        const ring = over({ ...ringFull, a }, base);
+
+        const got = {
+          name: +ratio(name, fill).toFixed(2),
+          chip: +ratio(chipInk, chip).toFixed(2),
+          ring: +ratio(ring, fill).toFixed(2),
+        };
+        const floor = GHOST_FLOOR[theme][kind];
+        for (const part of ["name", "chip", "ring"]) {
+          expect(
+            got[part],
+            `waitlist ghost ${part} (${kind}, ${theme}): ${got[part]}:1, recorded ` +
+            `floor ${floor[part]}:1. These are BELOW the bar by design of the ` +
+            `dimming and are asserted against themselves so they cannot get ` +
+            `worse — an accepted contrast is not a licence to keep going. If the ` +
+            `opacity was turned down further, the guest name on a proposal is no ` +
+            `longer readable at all.`
+          ).toBeGreaterThanOrEqual(floor[part]);
+        }
+      });
+    }
+  }
+});

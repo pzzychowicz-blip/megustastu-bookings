@@ -12837,3 +12837,55 @@ idiom, both markers, block-comment continuation lines, devtools styling, the
 false-negative line shape, and an HTML entity not being read as a hex colour),
 `check:style` OK. App reloaded in DEV: no console errors, and no marker text
 rendered anywhere (Rule 0's failure mode, checked live rather than assumed).
+
+### 3/n — the waitlist ghost, measured at last
+
+**Files:** `tests/contrast.test.js`
+**Behavioural change:** none — a guard over an existing element.
+
+The contrast registry declares its own gap in a comment: `chipOpacity()` is
+anchored on `const timeChip`, and that comment names the three `...HOUR_PILL`
+spreads in `TimelineView.jsx` and says only the first is measured. **`WaitGhost`
+is the second.** So the one component in the app that takes an already-exempt
+fill and dims it a further 45% was, by construction, outside everything this
+file looks at.
+
+The design-system pass went and measured what that costs: the ghost's guest name
+renders at **1.50:1**, the lowest text contrast in the application, on
+`--block-pending` — which is already this registry's worst recorded exemption at
+1.82:1. It is the v17.9.0 hour-pill defect one level further along, and it
+arrived through the same door: **a token's number is not the screen's number
+wherever that token is reused over something else**, and an element-level
+`opacity` is exactly such a reuse — invisible to a registry that reads
+`index.html`.
+
+Eight new cases: name, chip and size ring, at both shipped opacities (0.55, and
+0.4 for a reshuffle-only match), in both themes. Both opacities are read out of
+`WaitGhost` rather than typed here, for `chipOpacity()`'s reason — a guard that
+names the thing it guards and then uses a number typed into the test is not
+guarding it — and the anchor throws with a message rather than silently
+measuring a default.
+
+Asserted against ITSELF, like `SIZE_RING` and unlike the clash band. A 0.55
+dimming cannot reach 4.5:1 over any fill this app owns, so a 4.5 bar here would
+be a permanently red test, which is a muted test. What the floors buy is that
+the dimming cannot deepen without saying so — verified by turning the ghost down
+to 0.45/0.3, which fails four of the eight, then reverting.
+
+Two numbers worth keeping. The registry computes **1.39:1** for the light guest
+name where the live measurement said 1.50, and both are right: this file takes
+the extreme of each theme as the worst case for washout, while the real timeline
+row has a faint tint under the ghost. And the dark side is *worse than it looks*
+relative to its neighbours — 1.82 plain, 1.63 reshuffle-only.
+
+**The number is recorded, not endorsed**, and that distinction is the whole
+reason the `exempt` machinery exists here. The amber exemption's justification —
+a block's meaning is carried by colour, position and width, and the one part
+that is INFORMATION moved onto an opaque chip — does not reach the ghost,
+because the chip is *inside* the ghost and dims with it. On a ghost, every
+element is below the bar at once. `ROADMAP.md` carries it as a design question
+with the numbers attached, the way the waitlist-amber decision was put in
+v17.10.0.
+
+**Verification:** build ✓, lint 0 errors, **436 tests** (+8), `check:style` OK.
+Guard proven against known-bad input rather than assumed.
