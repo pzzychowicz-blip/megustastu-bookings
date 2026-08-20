@@ -502,11 +502,45 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
     });
   }
 
+  // v17.12.0: what the block SAYS. Unlike the List card this is a leaf control
+  // — its flags are decorative spans, not buttons — so `role="button"` is both
+  // correct and safe here, and ARIA's children-presentational rule costs
+  // nothing because every mark's meaning is folded into this string instead.
+  //
+  // It carries the two states v17.11.0 made visible, since they are the whole
+  // reason a host looks at this block twice: a clash means two parties are
+  // already promised one table, and late is the prediction that leads to one.
+  const a11yLabel =
+    b.name + ", " + b.time + ", " + b.size + (b.size === 1 ? " guest" : " guests") +
+    (b.tables && b.tables.length ? ", table " + b.tables.join(" and ") : ", no table assigned") +
+    ", " + b.status +
+    (clash ? ", double-booked" : "") +
+    (warn ? ", overstaying" : "") +
+    (late === "warn" ? ", running late" : late === "noshow" ? ", not arrived" : "");
+
   return (
     <div
       className="mgt-hover-scale mgt-blk"
       data-flip-id={flipId || undefined}
       data-bk={b.id}
+      /* v17.12.0: reachable. Every block was a `div` with `cursor:pointer`,
+         `tabIndex -1` and no role — measured, the tab order held 21 chrome
+         controls and not one booking, in the one app here that is explicitly
+         keyboard-driven.
+         Enter and Space go through `handleClick`, so they inherit its
+         `didLong` guard for free and cannot fire the edit form on the tail of a
+         press-and-hold. Note this also switches on `index.html`'s
+         `[role="button"] { user-select: none }` rule for these blocks, which
+         until now matched nothing in the app — and is exactly what you want on
+         a block whose label is not text to select. */
+      role="button"
+      tabIndex={0}
+      aria-label={a11yLabel}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        handleClick();
+      }}
       onMouseEnter={() => setGroupHover(true)}
       onMouseLeave={() => setGroupHover(false)}
       onClick={handleClick}
@@ -892,6 +926,19 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
       // that just appeared, not on the proposal it replaced.
       className="mgt-hover-scale mgt-appear mgt-blk"
       data-wg={g.id}
+      /* v17.12.0: a ghost is a proposal you can accept, so it is a button like
+         the blocks around it. Its name says WAITING first — the dimming and the
+         ⏳ are the only things separating it from a real booking visually, and
+         neither survives being read aloud. */
+      role="button"
+      tabIndex={0}
+      aria-label={"Waiting: " + g.name + ", " + g.size + (g.size === 1 ? " guest" : " guests")
+        + ", " + g.time + (g.resh ? ", fits after re-optimising" : "") + ". Book this table."}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        onBook(g.id);
+      }}
       onMouseEnter={() => setGroupHover(true)}
       onMouseLeave={() => setGroupHover(false)}
       onClick={() => onBook(g.id)}

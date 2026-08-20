@@ -11996,3 +11996,48 @@ opens **"Edit booking"** with that booking loaded. Enter on the nested Assign
 button opens **no** dialog, proving the guard. Screenshot confirms the 3px
 selection ring and centred scroll are unchanged. Build ✓, 404 tests ✓, lint 0
 errors, `check:style` OK.
+
+### 5/n · Timeline blocks and waitlist ghosts become real buttons
+
+**Files:** `src/components/TimelineView.jsx`
+**Behavioural change:** every block and ghost is now in the tab order and
+activates on Enter or Space. Nothing moves on screen.
+
+**The finding (C1, Timeline).** All 13 booking blocks and all 4 waitlist ghosts
+were `<div>` with `cursor: pointer`, `tabIndex -1` and no `role`. Measured, the
+tab order held **21 chrome controls and not one booking** — in the one app here
+that is explicitly keyboard-driven.
+
+**`role="button"` IS right here, unlike on the List card**, and the difference is
+worth stating because it is the same question with the opposite answer. ARIA
+makes a button's children presentational; the List card would have lost six real
+controls to that rule, but a timeline block is a **leaf** — its flags are
+decorative spans, and their meaning is folded into the accessible name instead.
+Nothing is lost.
+
+**The name carries the two states v17.11.0 made visible**, because they are the
+whole reason a host looks at a block twice: *"Pau Estévez, 20:00, 4 guests, table
+3, confirmed, double-booked"*. Colour, a border and a stripe say that to a
+sighted user; nothing said it at all otherwise. Overstaying and running-late are
+in there for the same reason. The waitlist ghost leads with **"Waiting:"** —
+dimming and a ⏳ are the only things separating it from a real booking, and
+neither survives being read aloud.
+
+**Enter and Space route through `handleClick`**, so they inherit its `didLong`
+guard for free and cannot fire the edit form on the tail of a press-and-hold.
+
+**This also closes finding m2 exactly as the review predicted it would.**
+`index.html`'s `button, [role="button"] { user-select: none }` matched nothing in
+the app, and the review's note was: *"if C1 is fixed by adding `role="button"` to
+blocks, this rule starts applying — which is what you'd want."* It does, and it
+is: measured `user-select: none` on the blocks now, which is correct for a
+surface whose label is not text anyone wants to select and which opens a popup
+under a finger that is still pressed.
+
+**Verification:** live in DEV — 14 blocks, all `role="button"`, all tabbable,
+labels composing correctly, and **both** halves of the seeded clash announcing
+"double-booked". Enter on a focused block opens "Edit booking" with that booking
+loaded. Focus-ring room measured against the nearest clipping ancestor (the
+horizontal scroller, `overflow: auto hidden`): 35px above, far more below,
+against the 4px the ring needs; horizontally the scroller scrolls rather than
+clips and carries the Fix-3 8px padding. Build ✓, 404 tests ✓, lint 0 errors.
