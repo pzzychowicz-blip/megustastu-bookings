@@ -111,6 +111,14 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
         type="button"
         className="mgt-hover-scale"
         onClick={toggleOpen}
+        /* v17.12.0: the trigger announces that it HAS a popup and whether that
+           popup is open. It carried neither before — measured `aria-expanded:
+           null` both before and after opening — so the one control that holds
+           the device list, "Reconnect now" and Log out looked like a decorative
+           dot to assistive technology. `aria-label` already changed with the
+           connection state and still does; this adds the disclosure half. */
+        aria-haspopup="dialog"
+        aria-expanded={open}
         title={connecting ? "Connecting to the server…" : connected ? "Connected to the server" : "Lost connection to the server"}
         aria-label={connecting ? "Connecting to the server" : connected ? "Connected to the server" : "Lost connection to the server"}
         style={{
@@ -190,7 +198,14 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
         }}
       >
         {open ? (
-          <>
+          /* v17.12.0: a real dialog, like every other surface in the app that
+             holds controls. NOT `aria-modal` and no focus trap — it is a
+             non-modal popover that closes on outside-click and Escape, and
+             claiming modality it does not enforce would be a lie of exactly the
+             kind `Overlay` refuses when it resolves its name from the DOM.
+             The role goes on this wrapper rather than on `Presence`, which
+             forwards only `className` and `style`. */
+          <div role="dialog" aria-label="Connection and account">
           {/* v17.8.0: Log out moved OFF the header row and in here, right-aligned
               on the status line. It belongs with the identity this popover
               already shows ("Signed in as" sits two rows below), and the header
@@ -302,7 +317,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
               </div>
             </div>
           ) : null}
-          </>
+          </div>
         ) : null}
       </Presence>
     </div>

@@ -12160,3 +12160,43 @@ subtree and still holds 16 focusables; the announcer is **not** inert. A
 background header button was asked to take focus while the modal was open and
 **could not**. Escape closed the dialog and removed `inert` from all three
 regions. Build ✓, 405 tests ✓, lint 0 errors, `check:style` OK.
+
+### 8/n · The connection dot announces its popover — and m1 was already fixed
+
+**Files:** `src/components/ConnectionStatus.jsx`
+**Behavioural change:** none visible. The dot reports that it has a popup and
+whether it is open; the popover is a named dialog.
+
+**The finding (M7).** The dot opens a popover holding the connection status, the
+signed-in email, the device list, "Reconnect now" and **Log out** — and carried
+`aria-expanded: null` **before and after opening**, with no `aria-haspopup`. To
+assistive technology, the one control that can sign you out looked like a
+decorative dot. Its `aria-label` already tracked the connection state and still
+does; this adds the disclosure half.
+
+`role="dialog"` with a name, and deliberately **no `aria-modal` and no focus
+trap** — it is a non-modal popover that closes on outside-click and Escape, and
+claiming a modality it does not enforce would be the same class of lie `Overlay`
+refuses when it resolves its accessible name from the DOM rather than taking a
+prop. The role sits on a wrapper inside `Presence`, which forwards only
+`className` and `style`.
+
+**m1 was checked and needed no work, which is the point of checking.** The review
+measured the notification lid's focus ring with **1px** of room inside its
+nearest `overflow` ancestor where it needs 4 — but that was measured against
+**v17.10.1**, and v17.10.2 removed the `overflow: hidden` from the strip pane for
+exactly this reason. Re-measured live now: the nearest clipping ancestor is the
+`<main>` scroller, and the lid has **13px above and 32.5px on each side**. Fixing
+it again would have meant inventing a defect. **A finding is a measurement with a
+date on it** — anything from a review that predates a release has to be re-run
+before it is acted on.
+
+**m2 needed no work either**, and was closed by 5/n rather than by a change of
+its own: `[role="button"] { user-select: none }` matched nothing in the app until
+the timeline blocks took that role.
+
+**Verification:** live in DEV — `aria-expanded` reads `"false"` closed and
+`"true"` open, `aria-haspopup="dialog"` on the trigger, the popover exposes
+`role="dialog"` named "Connection and account" with `aria-modal` absent. Lid
+focus-ring clearance re-measured as above. Build ✓, 405 tests ✓, lint 0 errors,
+`check:style` OK.
