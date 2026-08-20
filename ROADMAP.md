@@ -18,8 +18,8 @@ session and keeping it in sync.
 
 Source of truth for any individual finding: `MGT_Bookings_SevenReview_2026-08-19/`
 in the context folder (`_synthesis.md` for the inventory, `01-…07-` for
-locations and measurements). **v17.10.2 shipped group A**; what follows is the
-rest, in the agreed order.
+locations and measurements). **v17.10.2 shipped group A and v17.11.0 the service-visible
+group**; what follows is the rest, in the agreed order.
 
 **Do not re-flag these five — they were checked and dismissed during the review:**
 the 44px "target size failure" (that is WCAG 2.5.5, Level **AAA**; the AA bar is
@@ -31,18 +31,6 @@ header" (a mid-animation artifact of `Reveal`'s cached children) · impeccable's
 the suppression) · contrast numbers measured from `backgroundColor` alone (must
 composite the real paint stack — gradients and per-element opacity — or the
 figures are wrong in both directions).
-
-- **v17.11.0 — what staff hit during service.** Draw the double-booking (the
-  only place the interface actively misleads: measured 288px of overlap painted
-  over, rendering a clash as two consecutive sittings) · `StatusIcon` on the
-  timeline block (closes a corroborated S1 and WCAG 1.4.1; the component already
-  ships) · share the List empty state into Timeline and Plan · bound the expanded
-  strip (305px of an 860px viewport with two of six sections live) and
-  date-scope it or qualify its times · derive the default timeline zoom from the
-  hours span (at 06:00–01:00, 10 of 13 labels truncate and no block shows its
-  time) · refuse Timeline as a split partner below a pane-width threshold ·
-  split Settings → General (47 controls) into service rules vs personal
-  preferences.
 
 - **v17.12.0 — the modal stack.** Replace App.jsx's 15 modal-visibility booleans
   with one ordered stack, each entry carrying its own `onClose`. Patryk signed
