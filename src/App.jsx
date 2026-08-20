@@ -2797,7 +2797,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -2820,6 +2820,15 @@ function BookingApp({uid}){
       // hand the whole entry to the existing bookFromWaitlist (which prefills
       // the booking form from it + its waitAvail time).
       onBookWait:function(id){const A=R.current;const w=(A.waitlist||[]).find(function(x){return x&&x.id===id;});if(w) A.bookFromWaitlist(w);},
+      // /code-review fix: the zoom setter has to come through VA like every
+      // other function prop on the memoized views. It replaced `setTimelineZoom`
+      // — a React state setter, which is stable across renders forever — with a
+      // plain function declared in BookingApp's body, i.e. a NEW identity every
+      // render, which busts TimelineView's React.memo unconditionally. The
+      // booking-form draft lives in BookingApp, so that re-ran the timeline's
+      // whole block layout on every keystroke: the exact failure CLAUDE.md
+      // records for `liveBookings`.
+      onSetZoom:function(z){R.current.setTimelineZoomManual(z);},
       onPrint:function(){window.print();}
     };
   });
@@ -2884,7 +2893,7 @@ function BookingApp({uid}){
     freeing={freeingMap}
     onNoShow={VA.onNoShow}
     zoom={timelineZoom}
-    setZoom={setTimelineZoomManual}
+    setZoom={VA.onSetZoom}
     followZoom={tlSettings.followZoom}
     followLeadMins={tlSettings.followLead}
     maxZoom={tlSettings.maxZoom}
