@@ -232,8 +232,18 @@ const NEED = { label: 4.5, button: 3 };
 // chose this one, informed, after seeing the numbers and the pixels. It is
 // recorded here rather than argued away: the floors below still gate a
 // regression, and an accepted contrast is not a licence to keep going.
+// /code-review: PER-THEME for --btn-disabled. The block exemptions share one
+// number because their two themes land within ~0.4 of each other; this fill
+// measures 1.30:1 in light and 6.42:1 in dark, so a single 1.3 floor leaves five
+// points of slack in the theme where it currently works and could not see a
+// dark-mode regression at all. A number may be a scalar (both themes) or a
+// {light, dark} pair.
 const EXEMPT_FLOOR = { "--block-confirmed": 2.8, "--block-pending": 1.75, "--block-completed": 2.1,
-                       "--btn-disabled": 1.3 };
+                       "--btn-disabled": { light: 1.3, dark: 6.3 } };
+const exemptFloor = (fill, theme) => {
+  const f = EXEMPT_FLOOR[fill];
+  return typeof f === "number" ? f : f[theme];
+};
 
 function measure(entry, theme) {
   const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
@@ -351,7 +361,7 @@ describe("fill/ink contrast — every text-bearing fill, both themes", () => {
         if (entry.role === "exempt") {
           // Not asserted against the bar — asserted against ITSELF, so the
           // exemption cannot quietly rot into something worse.
-          const floor = EXEMPT_FLOOR[entry.fill];
+          const floor = exemptFloor(entry.fill, theme);
           expect(
             got,
             `${entry.what} in ${theme} is a recorded exemption at ${got}:1, but it ` +
@@ -476,7 +486,22 @@ function ringAlpha() {
           ", which is not declared in index.html's :root."
         );
       }
-      return parse(raw).a;
+      // /code-review: the rgba branch below matches `rgba(255,255,255,…)`
+      // explicitly, so a ring that stopped being WHITE threw. The token branch
+      // returned only the alpha and let the caller composite a hard-coded white,
+      // which silently accepts any colour — the guard would then report a white
+      // ring that is not on screen. This function's own throw message promises
+      // otherwise ("If the ring stopped being a white rule, this guard needs
+      // rewriting, not removing"), so the token has to prove it is white too.
+      const c = parse(raw);
+      if (c.r !== 255 || c.g !== 255 || c.b !== 255) {
+        throw new Error(
+          "contrast.test: SIZE_RING's border resolves to " + raw + " via " + tok[1] +
+          ", which is not white. The ring stopped being a white rule — this guard " +
+          "needs rewriting (it composites pure white), not removing."
+        );
+      }
+      return c.a;
     }
     const m = lines[k].match(/border:\s*"[^"]*rgba\(255,\s*255,\s*255,\s*([\d.]+)\)/);
     if (m) return parseFloat(m[1]);
