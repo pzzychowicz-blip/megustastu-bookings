@@ -40,7 +40,13 @@ import {
   validateReminderDraft
 } from "../lib/reminders";
 
-export function useReminders({ nowMins, setWriteWarning }){
+// v17.14.0: `reminderEditor` and `confirmReminderDel` are now OWNED BY APP and
+// passed in, because they are two entries in the app's one modal stack — the
+// same "legitimately shared" arrangement `confirmKitchen` has with `useWalkin`.
+// Everything else about this hook is unchanged; the editor's baseline, dirty
+// flag and save path still live here, because they are about REMINDERS rather
+// than about which surface is on top.
+export function useReminders({ nowMins, setWriteWarning, reminderEditor, setReminderEditor, setConfirmReminderDel }){
   // v14 p7 deployment: same write-guard pattern as bookings/tableBlocks.
   const remindersLoaded=useRef(false);
   const reminderFiresLoaded=useRef(false);
@@ -49,22 +55,18 @@ export function useReminders({ nowMins, setWriteWarning }){
   //   reminderFires    — map of slot-key → {status, until?, at?} for dismissed
   //                      or snoozed fire slots. Scoped per-day via slot-key.
   //   reminderEditor   — null = editor closed; {id, draft} = editing/creating.
-  //                      Sits on top of Settings (z=250) when open.
+  //                      Sits on top of Settings (z=250) when open. PASSED IN
+  //                      since v17.14.0 — it is an entry in App's modal stack.
   //   setReminderTick  — unused readback; 30s interval bumps this so banners
   //                      re-evaluate even between nowMins minute-boundary
   //                      updates (catches snooze expiry and time-arrivals).
   const [reminders, setReminders] = useState([]);
   const [reminderFires, setReminderFires] = useState({});
-  const [reminderEditor, setReminderEditor] = useState(null);
   // v17.8.0 unsaved-changes guard: the draft the editor was OPENED with. Set
   // ONLY by openNewReminder / openEditReminder — the two doors — so every other
   // setReminderEditor is a user edit and correctly reads as dirty. State rather
   // than a ref: it feeds a value derived during render.
   const [reminderBaseline, setReminderBaseline] = useState(null);
-  // v14 p7 fix: in-app confirmation for reminder deletion — window.confirm is
-  // blocked in sandboxed / embedded preview environments, so it never showed
-  // the dialog. Matches the confirmDel / confirmCancel pattern used elsewhere.
-  const [confirmReminderDel, setConfirmReminderDel] = useState(null);
   const [, setReminderTick] = useState(0);
   // v14 p7 deployment: Firebase-persisted reminder writes, write-guarded.
   //   `reminders` uses the same empty-array safety guard as bookings: if the
@@ -264,9 +266,7 @@ export function useReminders({ nowMins, setWriteWarning }){
 
   return {
     reminders,
-    reminderEditor, setReminderEditor,
     reminderDirty,
-    confirmReminderDel, setConfirmReminderDel,
     saveReminderFromEditor,
     doDeleteReminder,
     openNewReminder, openEditReminder,

@@ -663,7 +663,7 @@ export function BookingFormModal({
             disabled={!canSave}
             onClick={onSave}
             className="mgt-hover-scale"
-            style={{background:canSave?S.accent:"var(--btn-disabled)",border:RIM_SOLID,borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"var(--shadow-btn-accent)":"none"}}>Save booking</button>
+            style={{background:canSave?S.accent:"var(--btn-disabled)",border:RIM_SOLID,borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:canSave?"var(--text-on-accent)":"var(--btn-disabled-ink)",minHeight:44,boxShadow:canSave?"var(--shadow-btn-accent)":"none"}}>Save booking</button>
         );
       })()}{origPendingBooking?(
         <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" outMs={190} tag="span">
@@ -671,7 +671,7 @@ export function BookingFormModal({
             disabled={!form.date}
             onClick={onSaveConfirm}
             className="mgt-hover-scale"
-            style={{background:form.date?"var(--app-success-solid)":"var(--btn-disabled)",border:RIM_SOLID,borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"var(--shadow-btn-success)":"none"}}>Save&confirm</button>
+            style={{background:form.date?"var(--app-success-solid)":"var(--btn-disabled)",border:RIM_SOLID,borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:form.date?"var(--text-on-accent)":"var(--btn-disabled-ink)",minHeight:44,boxShadow:form.date?"var(--shadow-btn-success)":"none"}}>Save&confirm</button>
         </Presence>
       ):null}</div></div>
     </>

@@ -341,7 +341,9 @@ export function WalkinForm({
             border: RIM_SOLID,
             borderRadius: R.pill, padding: "10px 18px",
             cursor: wOk ? "pointer" : "not-allowed",
-            fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
+            fontSize: T.lead, fontWeight: FW.semi, minHeight: 44,
+            // v17.14.0: muted ink while disabled — see index.html.
+            color: wOk ? "var(--text-on-accent)" : "var(--btn-disabled-ink)",
             boxShadow: wOk ? "var(--shadow-btn-success)" : "none"
           }}
         >

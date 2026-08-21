@@ -67,6 +67,42 @@ export const DEFAULT_USER_PREFS = {
   splitEnabled: null    // boolean | null
 };
 
+// ── v17.14.0: the four boolean prefs, described once ────────────────────────
+// App had these written out three times each — a `useState` initializer reading
+// localStorage, a toggle handler writing it, and a branch of the seeding effect
+// doing both again — twelve near-identical blocks differing only in a key name
+// and in which way round the default goes.
+//
+// `store` is that second difference, and it is the house convention rather than
+// an accident: only the NON-DEFAULT value is ever written, so an absent key
+// means the default. `"whenOn"` is the default-OFF shape (store "1" when true),
+// `"whenOff"` the default-ON one (store "0" when false).
+//
+// `clears` is a second localStorage key to drop when the pref goes false —
+// turning Split View off must also forget the saved split layout, or it comes
+// back the moment the feature is re-enabled.
+//
+// `theme` is deliberately NOT here. It is a tri-state string with a `?theme=`
+// override that must skip both the apply and the seed branches, and folding
+// those into a table would hide the one pref whose special cases have bitten.
+export const PREF_SPEC = {
+  reduceMotion: { ls: "mgt-reduce-motion",  store: "whenOn"  },
+  planGestures: { ls: "mgt-plan-gestures",  store: "whenOff" },
+  navLocked:    { ls: "mgt-nav-lock",       store: "whenOn"  },
+  splitEnabled: { ls: "mgt-split-enabled",  store: "whenOff", clears: "mgt-split" },
+};
+export const PREF_NAMES = Object.keys(PREF_SPEC);
+
+// What a stored string means. Absent (null) is the default, which is the whole
+// point of storing only the non-default value.
+export function readPrefValue(store,raw){
+  return store === "whenOn" ? raw === "1" : raw !== "0";
+}
+// What to store for a value: a string, or null meaning "remove the key".
+export function prefLocalValue(store,v){
+  return store === "whenOn" ? (v ? "1" : null) : (v ? null : "0");
+}
+
 // Tri-state: true / false / null. Anything that isn't a real boolean reads as
 // null ("not set"), never as false — see the device-fallback note.
 function triBool(v){

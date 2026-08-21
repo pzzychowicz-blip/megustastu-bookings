@@ -34,12 +34,15 @@ import {
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
-  checkInefficent, verifyClean, findConflicts, findClashes, clashRowId,
+  checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
-  undoSnapshots, applyUndo, dayBookingsSig
+  undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
+import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
+import { useDismissals } from "./hooks/useDismissals";
+import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -207,7 +210,7 @@ import { useGeneralSettings } from "./hooks/useGeneralSettings";
 // v17.6.0: per-user preferences (settings/users/{uid}/prefs) — the first
 // settings node that is NOT restaurant-wide. See useUserPrefs.js for what
 // syncs, what stays per-device, and why the localStorage mirror stays.
-import { useUserPrefs } from "./hooks/useUserPrefs";
+import { useUserPrefs, PREF_SPEC, PREF_NAMES, readPrefValue, prefLocalValue } from "./hooks/useUserPrefs";
 import { useLayout } from "./hooks/useLayout";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
@@ -267,7 +270,7 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
-  version:"17.13.0",
+  version:"17.14.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -350,6 +353,10 @@ const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400;
 // React.memo for zero visual change; these shared consts keep it stable.
 const EMPTY_OBJ=Object.freeze({});
 const EMPTY_ARR=Object.freeze([]);
+// v17.14.0: the ✕-dismissal Sets emptied on a day change. "clash" is absent on
+// purpose — it prunes against its own live pairs, which covers the date change
+// too (see useDismissals.js).
+const DAY_DISMISS_KEYS=Object.freeze(["late","overlap","wait"]);
 
 // ── The two chrome icon buttons (v17.9.0) ────────────────────────────────────
 // Find-a-booking and Settings. v17.0.0 round 8 put them in ONE pair in the
@@ -410,7 +417,16 @@ function readAppWidth(){
 // v17.5.0: the persisted Split View, per device. Restored on load so a split
 // survives a reload/redeploy — losing your layout on every refresh would make
 // the feature not worth setting up.
-const SPLIT_KEY="mgt-split";
+const SPLIT_KEY="mgt-split";   // also PREF_SPEC.splitEnabled.clears — keep in step
+// v17.14.0: read one of the four boolean prefs off this device, per its
+// PREF_SPEC convention. The try/catch is the same one the four initializers
+// each carried; the default on a throw is the pref's own default, which is
+// exactly what an absent key means.
+function readPrefLS(name){
+  const spec=PREF_SPEC[name];
+  try{return readPrefValue(spec.store,localStorage.getItem(spec.ls));}
+  catch{return readPrefValue(spec.store,null);}
+}
 // The canonical view order — drives the slide direction on a view switch AND
 // validates a restored split. useKeyboardShortcuts keeps its own VIEW_ORD for
 // the same purpose; keep the two identical if a view is ever added.
@@ -421,7 +437,8 @@ const VIEW_ORD=["timeline","list","plan"];
 // (timelineZoom / selectedListId / showFinished).
 function readSplit(){
   try{
-    if(localStorage.getItem("mgt-split-enabled")==="0") return null;   // master switch off
+    if(!readPrefLS("splitEnabled")) return null;   // master switch off — v17.14.0: was a
+    // second hand-written read of the same key, which is the drift PREF_SPEC exists to stop.
     if(typeof window!=="undefined"&&window.innerWidth<600) return null; // tablet/desktop only
     const s=JSON.parse(localStorage.getItem(SPLIT_KEY)||"null");
     if(!s||typeof s!=="object") return null;
@@ -737,9 +754,39 @@ function BookingApp({uid}){
   }
   const timelineScrollRef=useRef(0);
   const [followNow, setFollowNow] = useState(false);
-  const [blockTarget, setBlockTarget] = useState(null);
+  // ── v17.14.0: the modal stack ───────────────────────────────────────────────
+  // ONE ordered stack (src/hooks/useModalStack.js) replacing eighteen
+  // independent visibility booleans. The names below are DERIVATIONS off it, so
+  // every mount site, payload read and setter call in this file is unchanged —
+  // what moved is who knows the SET of open surfaces and their ORDER.
+  //
+  // That was previously spread across eighteen `useState` calls, a hand-written
+  // descending Escape chain, a second hand-written chain for Enter, a
+  // hand-written `topLayer` expression and a seventeen-term `anyModal`. Nothing
+  // held them in step, and `showWaitlist` was missing from four of the five —
+  // the waitlist Overlay could not be closed with Esc, did not suppress the
+  // single-letter shortcuts, and did not mark the page behind it `inert`.
+  //
+  // Adding a modal is now: one id in MODAL_Z, one derived name here, one entry
+  // in the Escape table in useKeyboardShortcuts. Leaving any of them out is
+  // visible; leaving out an Esc branch used to be invisible.
+  const { stack: modalStack, setModal } = useModalStack();
+  const modalOpen = useMemo(function(){return modalMap(modalStack);},[modalStack]);
+  // /code-review: ONE memo holding all eighteen setters, derived from MODAL_Z —
+  // not a factory called from eighteen separate `useMemo`s, which was 36 hook
+  // slots per render to produce eighteen stable closures. Building them from the
+  // z-order list also makes "every modal id has a setter" structural instead of
+  // eighteen hand-written lines a test has to police.
+  const setModalFns = useMemo(function(){
+    const m={};
+    MODAL_Z.forEach(function(id){ m[id]=function(v){ setModal(id,v); }; });
+    return m;
+  },[setModal]);
+  const blockTarget = modalOpen.block || null;
+  const setBlockTarget = setModalFns.block;
   const [viewDate, setViewDate] = useState(new Date().toISOString().slice(0,10));
-  const [showForm, setShowForm] = useState(false);
+  const showForm = !!modalOpen.form;
+  const setShowForm = setModalFns.form;
   const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
   const [error, setError] = useState("");
@@ -756,9 +803,12 @@ function BookingApp({uid}){
   // reader also gates on `error` being truthy, which makes a stale value
   // unreachable rather than merely unlikely.
   const [errorField, setErrorField] = useState(null);
-  const [confirmDel, setConfirmDel] = useState(null);
-  const [confirmReshuffle, setConfirmReshuffle] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(null);
+  const confirmDel = modalOpen.del || null;
+  const setConfirmDel = setModalFns.del;
+  const confirmReshuffle = !!modalOpen.reshuffle;
+  const setConfirmReshuffle = setModalFns.reshuffle;
+  const confirmCancel = modalOpen.cancel || null;
+  const setConfirmCancel = setModalFns.cancel;
   const [reshuffled, setReshuffled] = useState(false);
   // v15.6.1: transient banner shown when the post-sync reconciliation resolves
   // a same-table overlap that arrived via an offline multi-device merge.
@@ -766,7 +816,8 @@ function BookingApp({uid}){
   // v17.0.0 correction: drag&drop feedback toast — {text, good} or null.
   const [dragMsg, setDragMsg] = useState(null);
   const dragMsgTimer = useRef(null);
-  const [manualTarget, setManualTarget] = useState(null);
+  const manualTarget = modalOpen.manual || null;
+  const setManualTarget = setModalFns.manual;
   const [dismissedIneff, setDismissedIneff] = useState(null);
   const formRef=useRef(EMPTY_FORM);
   // ── v17.5.0: unsaved-changes guard ──────────────────────────────────────────
@@ -783,7 +834,8 @@ function BookingApp({uid}){
   // Which surface the discard confirm is asking about: "form" | "walkin" |
   // "manual" | "reminder" | "block" | "settings" | null. One shared modal, six
   // callers as of v17.8.0.
-  const [confirmDiscard, setConfirmDiscard] = useState(null);
+  const confirmDiscard = modalOpen.discard || null;
+  const setConfirmDiscard = setModalFns.discard;
   // ManualModal owns its table-pick state internally, so it reports dirtiness
   // up rather than App reaching in (see its onDirty prop). v17.8.0: BlockModal
   // and Settings do the same — their drafts are component-local too.
@@ -796,13 +848,18 @@ function BookingApp({uid}){
   // call doSave() with no args after the modal round-trip.
   const statusOverrideRef=useRef(null);
   const [swapAffected, setSwapAffected] = useState(null);
-  const [confirmKitchen, setConfirmKitchen] = useState(null);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showPrefPicker, setShowPrefPicker] = useState(false);
+  const confirmKitchen = modalOpen.kitchen || null;
+  const setConfirmKitchen = setModalFns.kitchen;
+  const showHistory = !!modalOpen.history;
+  const setShowHistory = setModalFns.history;
+  const showPrefPicker = !!modalOpen.prefpicker;
+  const setShowPrefPicker = setModalFns.prefpicker;
   // v14 preview 3: Settings / keyboard-shortcuts modal. Toggled by the cog
   // icon in TimelineView's legend row and by the `?` keyboard shortcut.
-  const [showSettings, setShowSettings] = useState(false);
-  const [showSearch, setShowSearch] = useState(false); // v16.3.0: global booking search panel
+  const showSettings = !!modalOpen.settings;
+  const setShowSettings = setModalFns.settings;
+  const showSearch = !!modalOpen.search; // v16.3.0: global booking search panel
+  const setShowSearch = setModalFns.search;
   const pendingSelectRef = useRef(null); // v16.3.0: booking id to focus in the List after a search-jump changes the day
   // v17.3.1: scroll-into-view REQUEST counter for the List's focused card. A
   // plain click on a card must NOT scroll the page, so ListView scrolls on this
@@ -813,7 +870,8 @@ function BookingApp({uid}){
   // v14.6.0: Summary panel expand/collapse (toggled by click or the g shortcut).
   const [summaryOpen, setSummaryOpen] = useState(false);
   // v14.7.0: Week View popover (opened from the Summary panel's Week button).
-  const [showWeek, setShowWeek] = useState(false);
+  const showWeek = !!modalOpen.week;
+  const setShowWeek = setModalFns.week;
   // Settings tab state — which tab is active in the Settings modal.
   // Resets to 'general' on modal close so reopens start fresh. Belongs to
   // the Settings subsystem; lived inside the reminder state block pre-D2
@@ -927,22 +985,34 @@ function BookingApp({uid}){
   // (from usePersistence above) lets reminder save-refusals share the same
   // banner as booking save-refusals. Phase D2 (v14.1.9).
   // See ./hooks/useReminders.jsx.
+  // v17.14.0: the editor and its delete-confirm are two entries in App's modal
+  // stack, so App owns them and passes them in — the `confirmKitchen` /
+  // `useWalkin` arrangement. Everything about REMINDERS still lives in the hook.
+  const reminderEditor = modalOpen.reminder || null;
+  const setReminderEditor = setModalFns.reminder;
+  const confirmReminderDel = modalOpen.reminderdel || null;
+  const setConfirmReminderDel = setModalFns.reminderdel;
   const {
     reminders,
-    reminderEditor, setReminderEditor,
     reminderDirty,
-    confirmReminderDel, setConfirmReminderDel,
     saveReminderFromEditor,
     doDeleteReminder,
     openNewReminder, openEditReminder,
     deleteReminder, toggleReminderActive,
     reminderBanners, reminderCount,
-  } = useReminders({ nowMins, setWriteWarning });
+  } = useReminders({ nowMins, setWriteWarning, reminderEditor, setReminderEditor, setConfirmReminderDel });
   // ── v16.0.0: Waitlist state ─────────────────────────────────────────────────
   const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
   const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
-  const [showWaitlist, setShowWaitlist] = useState(false);
+  // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
+  // suppression and `inert` — all three of which it had silently never had.
+  const showWaitlist = !!modalOpen.waitlist;
+  const setShowWaitlist = setModalFns.waitlist;
+  // v17.14.0: the walk-in form's VISIBILITY is a stack entry; its draft, its
+  // baseline and its dirty flag stay in useWalkin, which takes these two.
+  const showWalkin = !!modalOpen.walkin;
+  const setShowWalkin = setModalFns.walkin;
   // waitAvail: {entryId: {tables, time}} for entries a table CURRENTLY fits
   // (recomputed by an effect below — deliberately state, not a render-time
   // derivation, so the trialFits scans run only when the inputs change, not
@@ -953,7 +1023,14 @@ function BookingApp({uid}){
   // scan budget cut its pass short, instead of blinking the banner row.
   const waitAvailRef = useRef({});
   const [waitAddedShown, setWaitAddedShown] = useState(false);
-  const [waitNotifyDismissed, setWaitNotifyDismissed] = useState(function(){return new Set();}); // v16.3.0: session-only ✕-dismissed waitlist-free rows
+  // ── v17.14.0: the four ✕-dismissal Sets, one mechanism ──────────────────────
+  // `late` · `overlap` · `wait` · `clash` — see src/hooks/useDismissals.js for
+  // the two lifecycles (three are emptied on a day change; `clash` prunes
+  // against its live pairs instead, which is not the drift it looks like).
+  // Untouched Sets keep their identity, so `[dismissed.late]` is still a stable
+  // memo dep when an overlap row is dismissed.
+  const { sets: dismissed, dismiss: dismissRow, prune: pruneDismissed, reset: resetDismissed } = useDismissals();
+  const waitNotifyDismissed = dismissed.wait; // v16.3.0: session-only ✕-dismissed waitlist-free rows
   const [undoInfo, setUndoInfo] = useState(null);   // v17.4.0: {snapshot, kind:"cancel"|"delete"|"edit", noShow} — general undo (was cancel/no-show-only, v16.3.0)
   const undoTimerRef = useRef(null);                // 10s auto-clear timer for the undo toast
   const pendingWaitlistRef = useRef(null); // entry id being converted via Book
@@ -1003,9 +1080,7 @@ function BookingApp({uid}){
   // the no-flash script in index.html reads the SAME key pre-mount, the CSS
   // kill-switch keys on the attribute, and atoms.jsx's useFlip checks it for
   // WAAPI animations. Keep all three in sync.
-  const [reduceMotion,setReduceMotion]=useState(function(){
-    try{return localStorage.getItem("mgt-reduce-motion")==="1";}catch{return false;}
-  });
+  const [reduceMotion,setReduceMotion]=useState(function(){return readPrefLS("reduceMotion");});
   // v17.10.1: per-device offline shell. localStorage ONLY — deliberately not
   // saveUserPrefs'd: clearing site data is the last-resort escape from a bad
   // worker, and a synced flag would come straight back down and re-enable it.
@@ -1016,67 +1091,64 @@ function BookingApp({uid}){
                                // apart from the writer above, which is a name
                                // that only tells you it is not the other one.
   }
-  function onToggleReduceMotion(){
-    const next=!reduceMotion;
+  // ── v17.14.0: the four boolean prefs, driven by PREF_SPEC ───────────────────
+  // The localStorage convention (which value is stored, which key is dropped)
+  // lives once in useUserPrefs.js; these two functions are the only place that
+  // TOUCHES localStorage for them, and they are shared by the initializers, the
+  // toggles and the seeding effect below.
+  //
+  // `theme` stays written out in full above: it is a tri-state string with a
+  // `?theme=` override that must skip both branches, and hiding that in a table
+  // is how it would get broken.
+  function writePref(name,v){
+    const spec=PREF_SPEC[name];
+    const str=prefLocalValue(spec.store,v);
     try{
-      if(next) localStorage.setItem("mgt-reduce-motion","1");
-      else localStorage.removeItem("mgt-reduce-motion");
+      if(str===null) localStorage.removeItem(spec.ls); else localStorage.setItem(spec.ls,str);
+      if(spec.clears&&!v) localStorage.removeItem(spec.clears);
     }catch{/* ignore */}
-    if(next) document.documentElement.dataset.motion="reduce";
-    else delete document.documentElement.dataset.motion;
-    setReduceMotion(next);
-    saveUserPrefs({reduceMotion:next});   // v17.6.0: follows the account
+    // The one DOM side effect any of them has: index.html's boot script reads
+    // this attribute, and the motion rules key off it.
+    if(name==="reduceMotion"){
+      if(v) document.documentElement.dataset.motion="reduce";
+      else delete document.documentElement.dataset.motion;
+    }
   }
+  // Flip a pref: write it locally, set the state, sync it to the account.
+  // Returns the new value so a caller can hang its own React side effect off it
+  // (only splitEnabled has one — see below).
+  function togglePref(name,cur,set){
+    const next=!cur;
+    writePref(name,next);
+    set(next);
+    saveUserPrefs({[name]:next});   // v17.6.0: follows the account
+    return next;
+  }
+  function onToggleReduceMotion(){togglePref("reduceMotion",reduceMotion,setReduceMotion);}
   // v17.1.2: per-device "Plan zoom & pan" (Settings → General). Theme pattern:
   // localStorage["mgt-plan-gestures"]="0" only when OFF (absent = on, the
   // default) — gates PlanView's wheel/pinch zoom, drag pan and double-tap reset.
-  const [planGestures,setPlanGestures]=useState(function(){
-    try{return localStorage.getItem("mgt-plan-gestures")!=="0";}catch{return true;}
-  });
-  function onTogglePlanGestures(){
-    const next=!planGestures;
-    try{
-      if(next) localStorage.removeItem("mgt-plan-gestures");
-      else localStorage.setItem("mgt-plan-gestures","0");
-    }catch{/* ignore */}
-    setPlanGestures(next);
-    saveUserPrefs({planGestures:next});   // v17.6.0: follows the account
-  }
+  const [planGestures,setPlanGestures]=useState(function(){return readPrefLS("planGestures");});
+  function onTogglePlanGestures(){togglePref("planGestures",planGestures,setPlanGestures);}
   // v17.5.0: per-device "Lock navigation" (Settings → General). Theme pattern,
   // but INVERTED vs planGestures because the default is OFF — only the non-
   // default value is ever stored, so localStorage["mgt-nav-lock"]="1" means on
   // and an absent key means off. Drives the `shellFixed` layout below.
-  const [navLocked,setNavLocked]=useState(function(){
-    try{return localStorage.getItem("mgt-nav-lock")==="1";}catch{return false;}
-  });
-  function onToggleNavLock(){
-    const next=!navLocked;
-    try{
-      if(next) localStorage.setItem("mgt-nav-lock","1");
-      else localStorage.removeItem("mgt-nav-lock");
-    }catch{/* ignore */}
-    setNavLocked(next);
-    saveUserPrefs({navLocked:next});      // v17.6.0: follows the account
-  }
+  const [navLocked,setNavLocked]=useState(function(){return readPrefLS("navLocked");});
+  function onToggleNavLock(){togglePref("navLocked",navLocked,setNavLocked);}
   // v17.5.0: per-device Split View master switch (Settings → General).
   // v17.5.0 correction: default ON (was off), so the RMB / press-and-hold
   // gesture works out of the box. That puts it back on the house convention —
   // key absent = default, only the non-default "0" is stored — same shape as
   // planGestures. (navLocked stays inverted; its default really is off.)
   // While off, the gesture on a view button does nothing at all.
-  const [splitEnabled,setSplitEnabled]=useState(function(){
-    try{return localStorage.getItem("mgt-split-enabled")!=="0";}catch{return true;}
-  });
+  const [splitEnabled,setSplitEnabled]=useState(function(){return readPrefLS("splitEnabled");});
   function onToggleSplitEnabled(){
-    const next=!splitEnabled;
-    try{
-      if(next) localStorage.removeItem("mgt-split-enabled");
-      else{localStorage.setItem("mgt-split-enabled","0");localStorage.removeItem(SPLIT_KEY);}
-    }catch{/* ignore */}
-    setSplitEnabled(next);
-    saveUserPrefs({splitEnabled:next});   // v17.6.0: the SWITCH syncs; the saved
-    // split LAYOUT (which two views + ratio) stays per-device, see useUserPrefs.
-    if(!next) setSplit(null); // turning the feature off must also leave any active split
+    // Only the SWITCH syncs; the saved split LAYOUT (which two views + ratio)
+    // stays per-device — PREF_SPEC drops that key, see useUserPrefs.js.
+    if(!togglePref("splitEnabled",splitEnabled,setSplitEnabled)) setSplit(null);
+    // ^ turning the feature off must also leave any active split. React state,
+    //   so it stays here rather than in the table.
   }
   // The active split, or null for a single view. Restored per-device.
   const [split,setSplit]=useState(readSplit);
@@ -1092,6 +1164,15 @@ function BookingApp({uid}){
   // hook resets it when the path changes), and re-running on every later
   // snapshot would fight the user's own toggles. Reading the current local
   // values here without depending on them is the point, not an oversight.
+  // The current value + setter for each of the four, so the seeding loop below
+  // can read "what is this device using" and "how do I change it" by name.
+  // Rebuilt per render and read only inside the once-per-uid effect.
+  const prefState={
+    reduceMotion:{value:reduceMotion,set:setReduceMotion},
+    planGestures:{value:planGestures,set:setPlanGestures},
+    navLocked:{value:navLocked,set:setNavLocked},
+    splitEnabled:{value:splitEnabled,set:setSplitEnabled},
+  };
   const seededPrefsRef=useRef(false);
   useEffect(function(){
     if(!prefsLoaded||seededPrefsRef.current) return;
@@ -1113,33 +1194,28 @@ function BookingApp({uid}){
       // freeze the user to whatever the OS happened to say at first login.
       seed.theme=themePref?"dark":"light";
     }
-    if(userPrefs.reduceMotion!==null){
-      const v=userPrefs.reduceMotion;
-      try{ if(v) localStorage.setItem("mgt-reduce-motion","1"); else localStorage.removeItem("mgt-reduce-motion"); }catch{/* ignore */}
-      if(v) document.documentElement.dataset.motion="reduce"; else delete document.documentElement.dataset.motion;
-      setReduceMotion(v);
-    }else seed.reduceMotion=reduceMotion;
-    if(userPrefs.planGestures!==null){
-      const v=userPrefs.planGestures;
-      try{ if(v) localStorage.removeItem("mgt-plan-gestures"); else localStorage.setItem("mgt-plan-gestures","0"); }catch{/* ignore */}
-      setPlanGestures(v);
-    }else seed.planGestures=planGestures;
-    if(userPrefs.navLocked!==null){
-      const v=userPrefs.navLocked;
-      try{ if(v) localStorage.setItem("mgt-nav-lock","1"); else localStorage.removeItem("mgt-nav-lock"); }catch{/* ignore */}
-      setNavLocked(v);
-    }else seed.navLocked=navLocked;
-    if(userPrefs.splitEnabled!==null){
-      const v=userPrefs.splitEnabled;
-      try{ if(v) localStorage.removeItem("mgt-split-enabled"); else{localStorage.setItem("mgt-split-enabled","0");localStorage.removeItem(SPLIT_KEY);} }catch{/* ignore */}
-      setSplitEnabled(v);
-      if(!v) setSplit(null);
-    }else seed.splitEnabled=splitEnabled;
+    // v17.14.0: the four booleans, one loop over PREF_SPEC. The TRI-STATE
+    // semantics are untouched and are the reason this cannot be simplified
+    // further: `null` means "this user has never chosen", and a sanitize that
+    // returned `false` for an absent field would reset every configured device
+    // on first login. Only a real boolean takes the apply branch.
+    PREF_NAMES.forEach(function(name){
+      const saved=userPrefs[name];
+      const st=prefState[name];
+      if(saved===true||saved===false){
+        writePref(name,saved);
+        st.set(saved);
+      }else seed[name]=st.value;
+    });
+    // The one React side effect the table does not carry, for the same reason
+    // the toggle keeps it: leaving an active split is state, not storage.
+    if(userPrefs.splitEnabled===false) setSplit(null);
     if(Object.keys(seed).length) saveUserPrefs(seed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[prefsLoaded]);
   const [focusedPane,setFocusedPane]=useState("a");
-  const [splitMenuFor,setSplitMenuFor]=useState(null); // which view's SplitMenu is open
+  const splitMenuFor = modalOpen.splitmenu || null; // which view's SplitMenu is open
+  const setSplitMenuFor = setModalFns.splitmenu;
   // Which view the keyboard acts on: the focused pane's in a split, else `view`.
   // Declared HERE, not next to the split handlers further down, because
   // useKeyboardShortcuts' ctx object is built mid-render and a `const` used
@@ -1306,7 +1382,7 @@ function BookingApp({uid}){
     }else{
       setSelectedListId(null);setShowFinished(false);
     }
-    setLateDismissed(function(prev){return prev.size?new Set():prev;});setOverlapDismissed(function(prev){return prev.size?new Set():prev;});setWaitNotifyDismissed(function(prev){return prev.size?new Set():prev;});
+    resetDismissed(DAY_DISMISS_KEYS);   // NOT "clash" — it prunes itself, see useDismissals.js
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[viewDate]);
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
@@ -1370,30 +1446,24 @@ function BookingApp({uid}){
   // Reveal must collapse once the last row is dismissed. lateMap itself stays
   // UNFILTERED — the list/timeline amber highlights keep showing for a dismissed
   // row; only the banner (lateBannerMap) hides it. Reset on day change (below).
-  const [lateDismissed,setLateDismissed]=useState(function(){return new Set();});
+  const lateDismissed=dismissed.late;
   const lateBannerMap=useMemo(function(){
     if(lateDismissed.size===0) return lateMap;
     const map={};
     Object.keys(lateMap).forEach(function(id){if(!lateDismissed.has(id)) map[id]=lateMap[id];});
     return map;
   },[lateMap,lateDismissed]);
-  function dismissLateRow(id){
-    setLateDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
-  }
+  function dismissLateRow(id){dismissRow("late",id);}
   // v17.0.0 round 7 — same ✕-dismiss mechanism for the Overlap banner (the
   // Running-late pattern applied app-wide). Session-only; keyed by seated id.
-  const [overlapDismissed,setOverlapDismissed]=useState(function(){return new Set();});
-  function dismissOverlapRow(id){
-    setOverlapDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
-  }
+  const overlapDismissed=dismissed.overlap;
+  function dismissOverlapRow(id){dismissRow("overlap",id);}
   // v17.11.0 — the same ✕-dismiss mechanism for the double-booking rows. Keyed
   // by the PAIR's row id (clashRowId), not a booking id: the row is about two
   // bookings, and dismissing "Pau vs Rita" must not also silence "Rita vs a
   // third party" if the day is bad enough to have both.
-  const [clashDismissed,setClashDismissed]=useState(function(){return new Set();});
-  function dismissClashRow(id){
-    setClashDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
-  }
+  const clashDismissed=dismissed.clash;
+  function dismissClashRow(id){dismissRow("clash",id);}
   // v16.3.0 — Table-turn prediction: today's seated bookings whose scheduled end
   // is within the next freeSoonWindow min (freeingSoon, booking-logic.js). Gated
   // on the settings/bookingDefaults master switch (freeSoonEnabled). Two shapes:
@@ -1417,65 +1487,28 @@ function BookingApp({uid}){
   function flashSyncFix(){setSyncFix(true);setTimeout(function(){setSyncFix(false);},4000);}
 
   // v15.6.1 — Post-sync conflict reconciliation.
-  // Two devices adding bookings OFFLINE to a table that was free at creation
-  // time merge (v15.5.0 per-node) into BOTH bookings on the same table — but
-  // neither device's optimiser saw the other, so they overlap once synced. The
-  // sync path (onValue/resync) stores merged data verbatim with no optimiser
-  // pass, so the overlap persisted until a later edit happened to re-run it.
-  // Here we react to settled snapshots: detect overlapping dates via verifyClean
-  // and resolve only those. When the optimiser is active for the date → full
-  // reshuffle; when OFF (manual mode) → relocate ONLY the newest non-locked
-  // conflicting booking (forceReassign), leaving manual arrangements intact.
-  // Self-stabilising: optimiser/relocate output is clean → next pass is a no-op
-  // (also breaks any Firebase echo loop). Cross-device double-writes settle via
-  // the v15.5.0 per-$id updatedAt CAS; the "newest" pick is deterministic
-  // (updatedAt desc, id tiebreaker) so every device chooses the same booking.
+  // v17.14.0: the DECISION moved to `src/lib/reconcile.js` — which dates are
+  // dirty (`dirtyDates`) and what to do about each (`reconcile`) — leaving here
+  // only what is genuinely React: the gates, the dispatch and the toast. The
+  // rule is v17.8.0's, the one that produced `placeWaitlist` and
+  // `presenceState`: logic that decides something the restaurant acts on does
+  // not live in a useEffect. This one decides which booking gets MOVED TO
+  // ANOTHER TABLE after two devices' offline edits merge, and until now only
+  // its `dayBookingsSig` compare was reachable by a test — the rest was found
+  // to be spinning forever, in v17.10.2, by reading the console.
+  //
   // Silent write (auto-effect, no red refusal banner); gated on !resyncing so it
   // waits out the post-sleep stale window and re-runs once fresh data arrives.
   useEffect(function(){
     if(resyncing||firstLoadCount.current===null) return;
     const today=new Date().toISOString().slice(0,10);
-    const dates=Array.from(new Set(bookings.filter(function(b){return b.date>=today&&(b.tables||[]).length>0;}).map(function(b){return b.date;})));
-    const dirty=dates.filter(function(d){return !verifyClean(bookings,d);});
+    const dirty=dirtyDates(bookings,today);
     if(!dirty.length) return;
     let changed=false;
     const ok=saveBookings(function(prev){
-      let next=prev;
-      dirty.forEach(function(d){
-        if(optimizerActiveFor(d,autoOptimizer)){
-          // v17.10.2 — this branch used to assign unconditionally and set
-          // `changed`, which turned an UNRESOLVABLE clash into an infinite
-          // render loop. `applyOpt` copies a locked booking's tables through
-          // verbatim (booking-logic.js), so two _locked bookings clashing on one
-          // table cannot be separated by a reshuffle — and every walk-in and
-          // every drag-drop path sets `_locked`. The pass therefore produced a
-          // NEW array with identical content, `setBookings` saw a new reference,
-          // the effect's `bookings` dep changed, and it ran again. Forever.
-          //
-          // The manual branch below only ever survived this by ACCIDENT: when
-          // nothing is movable it breaks with `next` still === `prev`, and React
-          // bails out of an identical state. Making that explicit here is the
-          // fix — keep the ORIGINAL reference when the pass changed nothing, so
-          // the bail-out is a property of the code rather than of a lucky
-          // early-return. Do not "simplify" this back to a plain assignment.
-          //
-          // The comparison is over the FULL persisted field set (dayBookingsSig
-          // reuses undoKey's), not tables alone: this pass also extends a seated
-          // party's duration via syncLiveDurations and sets `_conflict` via
-          // applyOpt, and a narrower signature silently discarded both.
-          const after=bookingsAfterAction(next,d,tableBlocks,null,false,autoOptimizer);
-          if(dayBookingsSig(after,d)!==dayBookingsSig(next,d)){next=after;changed=true;}
-        }else{
-          let guard=0;
-          while(!verifyClean(next,d)&&guard++<20){
-            const ids=findConflicts(next,d);
-            const movable=next.filter(function(b){return ids.indexOf(b.id)>=0&&!isLocked(b);}).sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0)||(a.id<b.id?1:-1);});
-            if(!movable.length) break; // only locked overlaps — leave as-is
-            next=bookingsAfterAction(next,d,tableBlocks,movable[0].id,true,autoOptimizer);changed=true;
-          }
-        }
-      });
-      return next;
+      const r=reconcile(prev,dirty,tableBlocks,autoOptimizer);
+      changed=r.changed;
+      return r.next;   // === prev when nothing moved, so React bails out
     },true);
     if(ok&&changed) flashSyncFix();
   },[bookings,tableBlocks,autoOptimizer,resyncing]);
@@ -1751,7 +1784,6 @@ function BookingApp({uid}){
   // call time); hoisting keeps the textual order valid. Phase D4 (v14.1.11).
   // See ./hooks/useWalkin.js.
   const {
-    showWalkin, setShowWalkin,
     walkinForm, setWalkinForm,
     walkinError, walkinDirty,
     getNextWalkinNum,
@@ -1760,6 +1792,7 @@ function BookingApp({uid}){
     bookings, saveBookings,
     setViewDate, getUser,
     confirmKitchen, setConfirmKitchen,
+    showWalkin, setShowWalkin,   // v17.14.0: an entry in App's modal stack
     defaultWalkinSize: generalSettings.defaultWalkinSize,
   });
 
@@ -2333,17 +2366,27 @@ function BookingApp({uid}){
   // an id, and `inert` is a boolean DOM attribute — React renders `inert={0}`
   // and `inert={null}` differently from `inert={false}`.
   //
-  // This is the one piece of the v17.13.0 modal-stack work brought forward,
-  // because the alternative was to add to the mess and then clean it up. When
-  // the stack lands, this becomes `stack.length > 0` and every reader is
-  // already pointed at one place.
+  // v17.12.0 brought this derivation forward from the modal-stack work rather
+  // than adding an eighteenth term to an expression written out twice.
+  // **v17.14.0 finishes it**: the seventeen-term expression is
+  // `modalStack.length > 0`, and every reader was already pointed here.
+  //
+  // The term it had been missing all along is `showWaitlist`, which is exactly
+  // the point — a hand-written list of every open surface is a list that will
+  // be one short, and nothing about being one short is visible.
+  //
+  // `topModalId` is the other half: the visually topmost open surface, from the
+  // declared z-order rather than from a hand-ordered chain. It replaces the
+  // `topLayer` expression that used to gate the form's letter shortcuts (a
+  // ten-term list that omitted the discard confirm, so A/P/B/H fired behind it).
   //
   // MUST stay above the useKeyboardShortcuts call below: the ctx object is
   // built mid-render, and a `const` read before its declaration is a TDZ
   // ReferenceError that blanks the whole app with a generic message. That has
   // happened twice in this codebase (v17.5.0's `activeView`, v17.11.0's
   // `isViewToday`), and neither lint nor `npm run build` catches it.
-  const anyModal=!!(splitMenuFor||confirmDiscard||showForm||showWalkin||showWeek||showHistory||confirmDel||confirmReshuffle||confirmCancel||confirmKitchen||manualTarget||blockTarget||showPrefPicker||showSettings||showSearch||reminderEditor||confirmReminderDel);
+  const anyModal=modalStack.length>0;
+  const topModalId=topModal(modalStack);
 
   // v17.3.3: the global keyboard shortcuts (precedence rules, every key) and
   // the v17.3.1 neutral-space List-deselect mousedown listener were extracted
@@ -2353,6 +2396,12 @@ function BookingApp({uid}){
   // Adding a shortcut = add the state/handler HERE and use it in the hook.
   useKeyboardShortcuts({
     anyModal:anyModal,
+    // v17.14.0: the modal stack. `modalOpen` is {id: payload} for what is open;
+    // `topModalId` is the visually topmost, from the declared z-order. Escape
+    // acts on `topModalId` and Enter walks MODAL_ENTER_ORDER — both used to be
+    // hand-written chains here, kept in step with the mount sites by nothing.
+    modalOpen:modalOpen,
+    topModalId:topModalId,
     // v17.5.0: in a split, every view-sensitive shortcut (S/C status, ↑/↓ list
     // nav, the neutral-space and Esc list-deselect, the zoom keys) must act on
     // the FOCUSED pane, not on the stale single-view `view`. Passing activeView
@@ -2393,6 +2442,13 @@ function BookingApp({uid}){
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
     showWeek:showWeek,setShowWeek:setShowWeek,
+    // v17.14.0 (/code-review): the waitlist panel's Escape close. It is here and
+    // not merely in `escapeAction` because the OLD chain had no waitlist branch,
+    // so this setter had never been needed in the ctx — adding the `case` without
+    // adding the key made Esc on that panel throw `K.setShowWaitlist is not a
+    // function`, i.e. shipped the exact defect the stack was written to remove.
+    // A `case` in escapeAction is only half a wiring; the other half is here.
+    setShowWaitlist:setShowWaitlist,
     save:save,doSave:doSave,saveWalkin:saveWalkin,doSaveWalkin:doSaveWalkin,
     forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain,
     // v15.8.0 cont.4: keyboard nav routes through the same slide path as the buttons.
@@ -2658,7 +2714,7 @@ function BookingApp({uid}){
     return (viewDate===todayStr2?dayWaiting:waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===todayStr2;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);}))
       .filter(function(w){return !!waitAvail[w.id]&&!waitNotifyDismissed.has(w.id);});
   },[dayWaiting,waitlist,viewDate,waitAvail,waitNotifyDismissed]);
-  function dismissWaitRow(id){setWaitNotifyDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});}
+  function dismissWaitRow(id){dismissRow("wait",id);}
   const hasWaitBanner=waitBannerEntries.length>0;
 
   // ── v17.11.0: double-bookings on the viewed day ────────────────────────────
@@ -2698,16 +2754,8 @@ function BookingApp({uid}){
   // cannot re-enter (the v17.10.2 lesson about effects that write derived state).
   useEffect(function(){
     if(clashDismissed.size===0) return;
-    const live=new Set(clashPairs.map(clashRowId));
-    setClashDismissed(function(prev){
-      let drop=false;
-      prev.forEach(function(id){if(!live.has(id)) drop=true;});
-      if(!drop) return prev;
-      const next=new Set();
-      prev.forEach(function(id){if(live.has(id)) next.add(id);});
-      return next;
-    });
-  },[clashPairs,clashDismissed]);
+    pruneDismissed("clash",new Set(clashPairs.map(clashRowId)));
+  },[clashPairs,clashDismissed,pruneDismissed]);
   const hasClash=clashBannerPairs.length>0;
   // The timeline's view of the same pairs: per booking, who it clashes with and
   // where. Built from `clashPairs` and NOT from the dismiss-filtered list —
@@ -2747,6 +2795,12 @@ function BookingApp({uid}){
         map[t].push({from:c.from,to:c.to});
       });
     });
+    // v17.14.0 (/code-review follow-up): one band per distinct SPAN, not per
+    // pair. Three bookings all clashing on one table produced three coincident
+    // bands on the same pixels — three times the paint for one fact, and a
+    // three-way clash would have rendered differently from a two-way one the
+    // moment the band grew any transparency.
+    Object.keys(map).forEach(function(t){map[t]=mergeSpans(map[t]);});
     return map;
   },[clashPairs]);
 
@@ -2773,7 +2827,25 @@ function BookingApp({uid}){
   // `defaultZoom` is a FLOOR, never a ceiling: a device set to open at 3× still
   // opens at 3× on a short day, and at max(3, span) on a long one. The setting
   // says how close in you like to start; this says how much the day owes you.
+  // v17.14.0 (/code-review follow-up): ONE value, four names. `hoursFor(viewDate)`
+  // was evaluated four times per App render — here, inside the notifSections
+  // memo, again for the three views, and again in the header line — each one
+  // re-deriving the same weekday lookup. `dayClosed` is declared here rather
+  // than beside its first reader for the reason the comment down at the view
+  // elements already gives: a `const` used above its declaration in a render
+  // body is a TDZ ReferenceError that blanks the whole app, and this file has
+  // hit that twice.
   const viewHours=hoursFor(viewDate);
+  const dayClosed=viewHours.closed;
+  // v17.14.0 (/code-review follow-up): ONE answer to "is this day empty",
+  // shared by all three views the way `dayClosed` and `emptyWalkin` already are.
+  // It used to be each view's own `day.length === 0`, and List's `day` includes
+  // cancelled bookings while Timeline's and Plan's exclude them — so a day whose
+  // bookings had all been cancelled showed the prompt in two views and a nearly
+  // blank card list in the third. A cancelled booking is not a booked table.
+  const isEmptyDay=useMemo(function(){
+    return !bookings.some(function(b){return b&&b.date===viewDate&&b.status!=="cancelled";});
+  },[bookings,viewDate]);
   const viewGridMins=(viewHours.gridClose-viewHours.open)*60;
   useEffect(function(){
     if(zoomTouchedRef.current) return;
@@ -2854,7 +2926,7 @@ function BookingApp({uid}){
       loadFailed:!bookingsReady&&loadStalled,
       readError:readError,
       hasConnected:hasConnected,
-      dayClosed:hoursFor(viewDate).closed
+      dayClosed:dayClosed
     }),
     hasClash?[{id:"clash",tone:"var(--danger-text)",tint:"var(--danger-bg)",icon:ClashIcon,
       title:clashBannerPairs.length===1?"Double-booked":"Double-bookings",count:clashBannerPairs.length,
@@ -2896,6 +2968,75 @@ function BookingApp({uid}){
   // The string is derived from the same titles and counts the strip renders, so
   // the two cannot drift, and it only changes when the notification set does —
   // which is exactly when an announcement is wanted.
+  // ── v17.14.0: the day announcer ─────────────────────────────────────────────
+  // Changing the viewed date was announced by nothing. The strip and the toasts
+  // have spoken since v17.12.0; the VIEW itself still did not, so ←/→ moved a
+  // screen-reader user through the week in silence — and the date input is a
+  // control whose own value change says only the date, not what is on it.
+  //
+  // A SUMMARY, deliberately not a live region over the grid: thirteen bookings
+  // re-read on every status change would be unusable, and this needs to say the
+  // one thing navigation actually changed.
+  //
+  // On the DATE only. Not on view switches (T/L/P already announce on
+  // activation, so it would repeat what the button just said) and not on status
+  // changes, which arrive from other devices too — on a busy evening that region
+  // would never stop talking.
+  //
+  // Computed in an effect keyed on `viewDate` ALONE, reading a ref mirror of the
+  // bookings. That is what makes "date change only" literal rather than
+  // approximate: a `useMemo` over `bookings` would recompute on every write, and
+  // a write that changes the COUNT — cancelling a booking, taking a walk-in —
+  // would re-announce the whole day summary at a moment nobody navigated.
+  //
+  // **It says nothing on the first pass, and that is the fix for two things at
+  // once** (/code-review). `bookings` starts as `[]` and the hours start at
+  // their seed, so a mount-time announcement said "Nothing booked" on a day with
+  // twelve, and "open" on a day the loaded schedule closes — then never
+  // corrected, because `viewDate` had not changed. And it was wrong in principle
+  // anyway: nothing had CHANGED, which is the only thing this region is for.
+  // `announcedDateRef` is SEEDED with the mount date, so the date the app opens
+  // on is recorded without being spoken for; the first real navigation is the
+  // first utterance, by which time the snapshot has landed.
+  //
+  // Seeded with the date rather than with `null` and a first-run flag, because
+  // that flag is wrong under StrictMode: React re-invokes the effect on the
+  // simulated remount while REFS SURVIVE, so the flag was already consumed and
+  // the second run announced. Measured in DEV — the region held
+  // "Friday 21 August. Nothing booked." at mount with the flag version.
+  // Comparing the ref to `viewDate` is idempotent under any number of re-runs,
+  // which is the property actually wanted: announce when the DATE changed, not
+  // when the effect ran.
+  const [dayAnnounce,setDayAnnounce]=useState("");
+  const bookingsForAnnounceRef=useRef(bookings);
+  const announcedDateRef=useRef(viewDate);
+  // The mirror is refreshed in a DEP-LESS effect, not during render — the
+  // convention `useKeyboardShortcuts` adopted in v17.3.3 for its own ctx ref,
+  // for the reason recorded there (a render can be discarded or replayed, so a
+  // ref written mid-render can hold a value from a commit that never happened).
+  // Declared ABOVE the announce effect so it has already run when that fires.
+  useEffect(function(){bookingsForAnnounceRef.current=bookings;});
+  useEffect(function(){
+    if(announcedDateRef.current===viewDate) return;   // mounting is not navigating
+    announcedDateRef.current=viewDate;
+    const d=new Date(viewDate+"T00:00:00Z");
+    // en-GB + UTC, matching the app's date convention throughout — a local
+    // getDay against a UTC date string shifts a day in UTC+ zones (the v14.7.0
+    // Week-view lesson, recorded at `weekdayOf`).
+    const label=Number.isFinite(d.getTime())
+      ? d.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",timeZone:"UTC"})
+      : viewDate;
+    // `hoursFor(viewDate)`, not the `dayClosed` const above, and not by accident
+    // (/code-review — commit 9/n of this version collapsed four such calls into
+    // one). Two reasons it is right HERE: the value must be for the date being
+    // announced, read at effect time; and `dayClosed` in the dep array would
+    // re-announce the whole day every time someone saves Opening hours.
+    if(hoursFor(viewDate).closed){setDayAnnounce(label+". Closed.");return;}
+    const n=bookingsForAnnounceRef.current.reduce(function(acc,b){
+      return acc+((b&&b.date===viewDate&&b.status!=="cancelled")?1:0);
+    },0);
+    setDayAnnounce(label+". "+(n===0?"Nothing booked":n+(n===1?" booking":" bookings"))+".");
+  },[viewDate]);
   const notifAnnounce=notifSections.length===0?"":
     (notifSections.length===1?"Notification: ":notifSections.length+" notifications: ")+
     notifSections.map(function(s){return s.title+(s.count>1?", "+s.count:"");}).join("; ")+".";
@@ -2987,7 +3128,6 @@ function BookingApp({uid}){
   // app — which neither `npm run build` nor lint sees. Hit here exactly as
   // CLAUDE.md's gotcha describes, and caught by loading the page.
   const emptyWalkin=isViewToday?VA.onWalkin:null;
-  const dayClosed=hoursFor(viewDate).closed;
 
   const planView=<PlanView
     bookings={bookings}
@@ -3005,6 +3145,7 @@ function BookingApp({uid}){
     turnBuffer={turnBuffer}
     onNew={VA.onNew}
     emptyWalkin={emptyWalkin}
+    isEmpty={isEmptyDay}
     dayClosed={dayClosed}
     hoursSig={weekHours} />;
   // v17.1.0 perf note: hoursSig / layoutSig are identity-only props — the views
@@ -3049,7 +3190,8 @@ function BookingApp({uid}){
     hoursSig={weekHours}
     layoutSig={layout}
     onNew={VA.onNew}
-    onWalkin={emptyWalkin}
+    emptyWalkin={emptyWalkin}
+    isEmpty={isEmptyDay}
     dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const listEl=<ListView
@@ -3069,7 +3211,8 @@ function BookingApp({uid}){
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
     onNew={VA.onNew}
-    onWalkin={emptyWalkin}
+    emptyWalkin={emptyWalkin}
+    isEmpty={isEmptyDay}
     dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const viewEl={timeline:timelineEl,list:listEl,plan:planView};
@@ -3084,19 +3227,35 @@ function BookingApp({uid}){
   function pickView(v){
     if(split){
       const other=focusedPane==="a"?"b":"a";
-      if(split[other]===v){applySplit(Object.assign({},split,{a:split.b,b:split.a}));setFocusedPane(other);return;}
+      // Tapping the view that is already in the OTHER pane swaps the two.
+      // v17.14.0 (/code-review follow-up): the swap now INVERTS THE RATIO, like
+      // `swapSides` beside it, so each view keeps its own size across the swap
+      // instead of inheriting the size of the pane it moved into. That was the
+      // only difference between these two lines and `swapSides`' — one of them
+      // was simply missing it.
+      if(split[other]===v){applySplit(fitTimeline(Object.assign({},split,{a:split.b,b:split.a,ratio:1-split.ratio})));setFocusedPane(other);return;}
       if(split[focusedPane]===v) return;
       // v17.11.0: tapping "Timeline" while a side-by-side pane is too narrow for
       // one would drop it into exactly the layout the menu refuses to build. The
       // split TURNS to stacked instead of refusing the tap: the user asked for
       // the timeline, and the orientation is the part that does not fit.
-      const nextSplit=Object.assign({},split,{[focusedPane]:v});
-      if(v==="timeline"&&!tlPaneOk(shellW,nextSplit.dir,nextSplit.ratio,focusedPane)) nextSplit.dir="h";
-      applySplit(nextSplit);
+      applySplit(fitTimeline(Object.assign({},split,{[focusedPane]:v})));
       return;
     }
     if(v!==view) bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");
     setView(v);
+  }
+  // v17.14.0: turn a split stacked when the pane holding the Timeline is too
+  // narrow for one. Shared by BOTH branches of pickView above — the swap branch
+  // used to skip this check entirely and lean on the repair effect to reorient
+  // the layout a render later, which the user sees as the split visibly
+  // flipping after a plain view tap. Asks where the timeline actually ENDS UP,
+  // rather than assuming it is the view that was tapped: a swap moves both.
+  function fitTimeline(next){
+    const tlPane=next.a==="timeline"?"a":next.b==="timeline"?"b":null;
+    if(!tlPane) return next;
+    if(tlPaneOk(shellW,next.dir,next.ratio,tlPane)) return next;
+    return Object.assign({},next,{dir:"h"});
   }
   function confirmSplit(next){
     setSplitMenuFor(null);
@@ -3226,7 +3385,31 @@ function BookingApp({uid}){
            whereas normally that lift just bleeds to the window edge. It was
            only ever belt-and-braces: html+body are already overflow:hidden in
            this mode (see the body effect above), so nothing can scroll here. */
-        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<header
+        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}
+          {/* v17.14.0: the skip link. v17.12.0 added the landmarks, which are the
+              programmatic bypass and cost nothing visually; this is the one for
+              sighted keyboard users, in an app that is explicitly keyboard-driven
+              — the header is a cog, a title block, three view buttons, two
+              primary actions, a search and a connection dot before you reach a
+              booking, and on every date change you land back at the top of it.
+
+              FIRST in the DOM, because a bypass that is not the first thing you
+              reach is not a bypass. It is hidden by being translated off the top
+              rather than by `display:none`, which would make it unfocusable and
+              so unreachable — the whole rule is in index.html (`.mgt-skip`), and
+              it is in CRITICAL_SELECTORS because losing it fails silently in
+              both directions: the link either never appears or never hides.
+
+              `<main>` carries `tabIndex={-1}`: following a fragment link moves
+              focus to the target only if the target can hold it, and without
+              that the browser scrolls but the next Tab starts from the header
+              again — which looks like the link working and is exactly the bug
+              this is meant to remove. It is NOT in the tab order (-1, not 0).
+
+              It is deliberately outside <header>, so `inert` while a modal is
+              open does not reach it — a skip link inside an inert subtree is
+              silently unfocusable, the same trap as a live region in one. */}
+          <a className="mgt-skip" href="#mgt-main">Skip to bookings</a><header
           /* v17.12.0: `inert` while a modal is open — see the <main> note below. */
           inert={anyModal}
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
@@ -3238,7 +3421,7 @@ function BookingApp({uid}){
               title="Settings & keyboard shortcuts"
               aria-label="Settings & keyboard shortcuts"
               className="mgt-hover-scale"
-              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
+              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(dayClosed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -3331,7 +3514,7 @@ function BookingApp({uid}){
             several open at once (a 3+ row late banner) would eat the viewport.
             When shellFixed is off this div is a plain, style-less wrapper and
             the page scrolls exactly as it always did. */}
-            <main style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
+            <main id="mgt-main" tabIndex={-1} style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
               /* With a split the panes own the scrolling, so this region must
                  NOT scroll — a flex:1 child of an overflowY:auto parent resolves
                  to CONTENT height, which would collapse a top/bottom split. The
@@ -3396,7 +3579,11 @@ function BookingApp({uid}){
         well as from the tab order, so a live region inside an inert region goes
         SILENT — and the things this announces (a failed write, the connection
         dropping, a double-booking appearing) are exactly the ones a modal must
-        not suppress. Always mounted; see notifAnnounce. */}<div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div>{splitMenuFor?<SplitMenu
+        not suppress. Always mounted; see notifAnnounce. */}<div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div>{/* v17.14.0: the DAY announcer, a second region rather than a share of the
+        one above. They answer different questions and can change in the same
+        commit — a date change that also brings a clash into view would have one
+        overwrite the other inside a single region, and whichever won would be
+        arbitrary. Same placement rules: always mounted, outside <main>. */}<div className="mgt-sr-only" role="status" aria-live="polite">{dayAnnounce}</div>{splitMenuFor?<SplitMenu
               view={splitMenuFor}
               onConfirm={confirmSplit}
               sideBySideOk={splitSideBySideOk}

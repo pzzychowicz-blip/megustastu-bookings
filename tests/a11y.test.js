@@ -62,6 +62,11 @@ const Strip = read("components/NotificationStrip.jsx");
 const BookingForm = read("components/BookingFormModal.jsx");
 const Walkin = read("components/WalkinForm.jsx");
 const Connection = read("components/ConnectionStatus.jsx");
+// v17.14.0: the skip link is half markup and half stylesheet, and the CSS half
+// is where it can fail invisibly (hidden in a way that also makes it
+// unfocusable). Read RAW — stripComments is for JS/JSX, and the point here is
+// the declarations, not the prose around them.
+const HTML = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "index.html"), "utf8");
 
 // Assert a source shape is present, with a message saying what breaks without
 // it. `why` is not decoration: a failure here is always someone tidying, and
@@ -124,6 +129,68 @@ describe("landmarks and headings (WCAG 1.3.1, 2.4.1)", () => {
   });
 });
 
+// v17.14.0. The landmarks are the PROGRAMMATIC bypass; this is the one a sighted
+// keyboard user can take. Every assertion here is about a way the link can be
+// present and useless — which is the whole risk with a control nobody sees.
+describe("the skip link (WCAG 2.4.1)", () => {
+  it("exists, and points at the main landmark", () => {
+    has(App, "skip link", /className="mgt-skip"\s+href="#mgt-main"/,
+      "the bypass a sighted keyboard user takes past the header");
+    has(App, "<main id>", /<main\s+id="mgt-main"/, "the link's target");
+  });
+
+  it("<main> can HOLD focus, or the link only scrolls", () => {
+    // Following a fragment link moves focus to the target only if the target is
+    // focusable. Without this the page scrolls and the next Tab starts from the
+    // header again — which looks exactly like the link working.
+    has(App, "<main tabIndex={-1}>", /<main[^>]*tabIndex=\{-1\}/,
+      "-1, not 0: the landmark must be able to RECEIVE focus without joining " +
+      "the tab order");
+  });
+
+  it("is the FIRST thing in the shell, before <header>", () => {
+    const skip = App.indexOf('className="mgt-skip"');
+    const header = App.indexOf("<header");
+    expect(skip, "the skip link must be in App").toBeGreaterThan(-1);
+    expect(header, "App must render a <header>").toBeGreaterThan(-1);
+    expect(skip, "a bypass that is not the first thing you reach is not a bypass")
+      .toBeLessThan(header);
+  });
+
+  it("is OUTSIDE the subtree that goes inert with a modal", () => {
+    // A skip link inside an inert subtree is silently unfocusable — the same
+    // trap as a live region in one.
+    //
+    // /code-review: this was a fixed 400-character window sliced backwards from
+    // the link, which is the guard shape v17.13.0's own review condemned ("the
+    // <main>-never-inert guard read a fixed 400-char window of a 316-char
+    // opening tag") — and it could not fail, because moving the link inside
+    // <header inert={anyModal}> puts markup between the two that the regex
+    // stops at. STRUCTURAL instead: every `inert={anyModal}` in the file is on
+    // the header or inside <main>, so the link is outside all of them exactly
+    // when its index precedes the first one. That comparison moves when the
+    // markup moves.
+    const skip = App.indexOf('className="mgt-skip"');
+    const firstInert = App.indexOf("inert={anyModal}");
+    expect(skip, "the skip link must be in App").toBeGreaterThan(-1);
+    expect(firstInert, "App must mark something inert while a modal is open").toBeGreaterThan(-1);
+    expect(skip, "the skip link must come before every inert-marked element")
+      .toBeLessThan(firstInert);
+  });
+
+  it("is hidden by TRANSLATION, not by display/visibility", () => {
+    // `display:none` and `visibility:hidden` both make an element unfocusable,
+    // so the link could never be reached while looking correct in the source.
+    const rule = HTML.slice(HTML.indexOf(".mgt-skip {"), HTML.indexOf(".mgt-skip:focus"));
+    expect(rule.length, "could not find the .mgt-skip rule").toBeGreaterThan(50);
+    expect(rule, "hidden by transform, so the link stays focusable").toMatch(/transform:\s*translateY\(-/);
+    expect(rule).not.toMatch(/display:\s*none/);
+    expect(rule).not.toMatch(/visibility:\s*hidden/);
+    has(HTML, ".mgt-skip:focus reveals it", /\.mgt-skip:focus\s*\{[^}]*transform:\s*translateY\(0\)/,
+      "focus is what brings it back");
+  });
+});
+
 describe("live regions (WCAG 4.1.3)", () => {
   // THE rule, and the reason each of these lives where it does: a live region
   // must ALREADY be in the DOM when its content changes. One that arrives
@@ -167,6 +234,67 @@ describe("live regions (WCAG 4.1.3)", () => {
         "announced by nothing; the wrapper is always rendered and only its " +
         "CHILD is conditional, or it announces nothing on the first error");
     }
+  });
+});
+
+// v17.14.0. The strip and the toasts have spoken since v17.12.0; the VIEW did
+// not, so arrow-key navigation moved a screen-reader user through the week in
+// silence.
+describe("the day announcer (WCAG 4.1.3)", () => {
+  it("is a THIRD region, not a share of the notification one", () => {
+    // They answer different questions and can change in the same commit — a date
+    // change that also brings a clash into view. One region would have had the
+    // two overwrite each other, with the winner decided by render order.
+    expect(
+      count(App, /className="mgt-sr-only" role="status" aria-live="polite"/g),
+      "App must mount both hidden live regions"
+    ).toBe(2);
+    has(App, "dayAnnounce region", /aria-live="polite">\{dayAnnounce\}/,
+      "the day summary needs its own region");
+  });
+
+  it("is keyed on the DATE alone, through a ref mirror", () => {
+    // A memo over `bookings` would recompute on every write, and a write that
+    // changes the COUNT — a cancellation, a walk-in — would re-announce the whole
+    // day at a moment nobody navigated. The ref is what makes "date change only"
+    // literal rather than approximate.
+    const at = App.indexOf("const [dayAnnounce");
+    expect(at, "dayAnnounce must exist").toBeGreaterThan(-1);
+    const body = App.slice(at, at + 1400);
+    has(body, "ref mirror", /bookingsForAnnounceRef\.current/,
+      "the count is read from a ref, not from a dependency");
+    has(body, "[viewDate] only", /\},\s*\[viewDate\]\);/,
+      "the effect must depend on viewDate and nothing else");
+  });
+
+  it("says what navigation changed: the day, and what is on it", () => {
+    const at = App.indexOf("const [dayAnnounce");
+    expect(at, "dayAnnounce must exist").toBeGreaterThan(-1);
+    const body = App.slice(at, at + 1400);
+    has(body, "weekday + date", /weekday:\s*"long"/, "the weekday is the part you navigate by");
+    has(body, "UTC", /timeZone:\s*"UTC"/,
+      "a local weekday against a UTC date string shifts a day in UTC+ zones");
+    has(body, "closed days", /Closed/, "a closed day is what the summary must say");
+    has(body, "empty days", /Nothing booked/, "…and so is an empty one");
+  });
+});
+
+// v17.14.0 (/code-review). The empty-day prompt and the list container are
+// siblings, so on a cancelled-only day the second contradicts the first.
+describe("an empty list does not announce itself", () => {
+  it("ListView's Bookings role is conditional on there being bookings", () => {
+    has(List, "conditional list role", /role=\{active\.length \? "list" : undefined\}/,
+      "an empty role=\"list\" under \"Nothing booked for this day yet\" announces " +
+      "\"Bookings, list, 0 items\" — a contradiction, not information");
+    has(List, "conditional list name", /aria-label=\{active\.length \? "Bookings" : undefined\}/,
+      "a name on a list with no items is the same defect one attribute along");
+  });
+
+  it("…but the element stays mounted, because useFlip needs the container", () => {
+    // `useFlip`'s layout effect returns early on a null container, so unmounting
+    // this div would silently kill the list-reorder animation.
+    has(List, "flipRef still on a mounted div", /<div ref=\{flipRef\} role=/,
+      "the role is what is conditional, not the element");
   });
 });
 

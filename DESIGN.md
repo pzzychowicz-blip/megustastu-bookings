@@ -670,7 +670,9 @@ That is not carelessness and reading it that way produces the wrong fix. Every
 rule in this file was earned by an **observed** failure. Accessibility defects
 are the ones nobody sees: they cause no incident, so they generate no lesson, so
 they never entered the loop that produced everything else here. The answer is to
-ship the fixes and then **mechanise the standard**, which is v17.14.0's job.
+ship the fixes and then **mechanise the standard**, which is what
+`tests/a11y.test.js` does — it landed in v17.13.0, not v17.14.0 as this line
+said, because Patryk moved the gate ahead of the modal stack.
 
 **A live region must already exist in the DOM when its content changes.** A
 region that arrives *holding* its first message announces nothing. This decides
@@ -805,6 +807,45 @@ a benefit and it is one for a `<div>`. For the floor plan's `<g>` it shipped the
 v17.9.1 teleport — see the `.mgt-glyph` note in the hover section. **A dormant
 rule is a rule whose behaviour has never been observed**; treat "this selector
 matches nothing yet" as a thing to go and read, not as a footnote.
+
+**The skip link (v17.14.0).** v17.12.0's landmarks are the *programmatic*
+bypass; this is the one a sighted keyboard user can take, and it needed a look
+rather than only a wiring. It is a focus-revealed pill in the app's own chrome
+vocabulary (`--r-pill`, `--accent`, `--text-on-accent`, `--shadow-btn-accent`)
+pinned to the viewport corner, invisible until Tab reaches it — the only new
+chrome in this version, and it costs nothing on screen until someone needs it.
+
+Three of its rules are about a control that can be **present and useless**, and
+none of them is visible in review:
+
+- **Hide it by TRANSLATION.** `display:none` and `visibility:hidden` both make
+  an element unfocusable, so the link could never be reached while looking
+  perfectly correct in the source.
+- **The target must be able to hold focus.** Following a fragment link moves
+  focus to the target only if it can take it, so `<main>` carries
+  `tabIndex={-1}` — `-1`, so it never joins the tab order. Without it the
+  browser scrolls and the next Tab starts from the header again, which looks
+  exactly like the link working.
+- **It sits outside anything that goes `inert`.** A skip link inside an inert
+  subtree is silently unfocusable, one element along from the live-region rule
+  above.
+
+`main:focus { outline: none }` because the ring belongs on the link you pressed,
+not as a browser default drawn around a full-width region — which reads as the
+whole page being selected. Both `.mgt-skip` selectors are in
+`CRITICAL_SELECTORS`: losing either fails silently in opposite directions.
+
+**A disabled control still has to say what it is (v17.14.0).** WCAG 1.4.3
+exempts inactive components, and this app used that exemption to ship a
+"Save booking" label at **1.30:1** — not dim, gone: an empty grey pill. The
+exemption is about not forcing a *contrast bar* on a disabled control; it is not
+a licence to delete the label. `--btn-disabled-ink` is per-theme, and the reason
+is the general one: **`--btn-disabled` is `:root`-only and composites toward
+whatever is behind it, so its effective colour flips with the theme even though
+its declaration does not.** An ink that inverts the same way the composite does
+(`--text-muted` was the obvious candidate) does not fix that — it swaps which
+theme is broken: 4.59:1 light but 2.30:1 dark, against white's 1.30 / 6.42.
+Measured live at 5.14:1 light and 4.60:1 dark, so it is no longer an exemption.
 
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip

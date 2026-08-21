@@ -1,21 +1,22 @@
 // src/hooks/useWalkin.js
 //
 // Phase D4 (v14.1.11): Walk-in subsystem extracted from BookingApp.
-// Owns the three walk-in state slots (showWalkin, walkinForm,
-// walkinError), the today-scoped "Walk-in N" numbering helper, and the
-// three handlers (openWalkin / doSaveWalkin / saveWalkin).
+// Owns the walk-in draft slots (walkinForm, walkinError), the today-scoped
+// "Walk-in N" numbering helper, and the three handlers (openWalkin /
+// doSaveWalkin / saveWalkin). v17.14.0: `showWalkin` moved OUT — it is an entry
+// in App's modal stack and is passed in, like `confirmKitchen`.
 //
 // Hook signature:
 //   const {
-//     showWalkin, setShowWalkin,
 //     walkinForm, setWalkinForm,
-//     walkinError,
+//     walkinError, walkinDirty,
 //     getNextWalkinNum,
 //     openWalkin, saveWalkin, doSaveWalkin,
 //   } = useWalkin({
 //     bookings, saveBookings,
 //     setViewDate, getUser,
 //     confirmKitchen, setConfirmKitchen,
+//     showWalkin, setShowWalkin,
 //   });
 //
 // `setWalkinError` stays internal — nothing outside the hook writes to
@@ -53,13 +54,18 @@ import {
   getDur, genId, histEntry, nowTime, getKitchenLoad
 } from "../lib/booking-logic";
 
+// v17.14.0: `showWalkin` is now OWNED BY APP and passed in — it is one entry in
+// the app's single modal stack, the same "legitimately shared" arrangement
+// `confirmKitchen` already had with this hook. The walk-in DRAFT, its baseline
+// and its dirty flag stay here; only "is this surface on screen" moved, because
+// that is a fact about the stack rather than about walk-ins.
 export function useWalkin({
   bookings, saveBookings,
   setViewDate, getUser,
   confirmKitchen, setConfirmKitchen,
+  showWalkin, setShowWalkin,
   defaultWalkinSize = 2, // v17.2.0: settings/general starting party size
 }){
-  const [showWalkin, setShowWalkin] = useState(false);
   const [walkinForm, setWalkinForm] = useState({size:defaultWalkinSize,notes:"",tables:[],time:""});
   const [walkinError, setWalkinError] = useState("");
   // Today-scoped "Walk-in N" numbering. Scans bookings for names
@@ -130,7 +136,6 @@ export function useWalkin({
   const walkinDirty=showWalkin&&!sameDraft(walkinForm,walkinBaseline);
 
   return {
-    showWalkin, setShowWalkin,
     walkinForm, setWalkinForm,
     walkinError, walkinDirty,
     getNextWalkinNum,

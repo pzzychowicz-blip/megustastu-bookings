@@ -41,7 +41,11 @@ import { S, T, FW } from "../lib/constants";
  * @param {Function} onNew   open the new-booking form (omit to hide the button)
  * @param {Function} onWalkin open the walk-in form (omit to hide the button;
  *                   App already passes null on any day but today, because a
- *                   walk-in is a party standing at the door now)
+ *                   walk-in is a party standing at the door now).
+ *                   v17.14.0: the three VIEWS pass this as `emptyWalkin`, the
+ *                   name that tells it apart from PlanView's own per-table
+ *                   `onWalkin(tableId)`. Here there is nothing to tell it apart
+ *                   from, so it keeps the plain `on*` handler convention.
  */
 export function EmptyDay({ closed = false, onNew, onWalkin }) {
   if (closed) return null;

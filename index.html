@@ -370,6 +370,35 @@
            rim on an invariant surface. */
         --app-btn-dark: rgba(0, 0, 0, 0.6);
         --btn-disabled: rgba(180, 180, 190, 0.4);
+        /* v17.14.0: the INK on --btn-disabled, and unlike the fill it must be
+           declared per theme. v17.13.0 measured the disabled primary's white
+           label at 1.30:1 in light — not dim, gone: a staff member who has not
+           picked a date saw an empty grey pill where "Save booking" should be.
+           WCAG 1.4.3 exempts inactive components, so this was recorded as a
+           design question rather than fixed inside a gate-closing commit.
+           Patryk's answer: muted ink, fill unchanged.
+
+           It cannot be --text-muted, and that is the whole reason this token
+           exists. The FILL is :root-only and composites toward whatever is
+           behind it, so its effective colour flips WITH the theme — light grey
+           in light, mid-dark in dark — which means white is invisible in one
+           theme and correct in the other (6.42:1 dark). --text-muted inverts the
+           same way the composite does, so it would have swapped which theme was
+           broken: measured 4.59:1 light but 2.30:1 dark, replacing an exempt
+           failure with a worse one (white is 1.30:1 light / 6.42:1 dark — the
+           same asymmetry, the other way up).
+
+           The light value is a step darker than --text-muted, and the reason is
+           worth carrying: tests/contrast.test.js composites over the THEME
+           EXTREME (pure white here) and calls that the worst case — which is
+           true for WHITE ink and false for dark ink. The real modal sheet is a
+           translucent panel over a tinted app background, so this fill
+           composites to rgb(211,211,217) live against the registry's
+           rgb(225,225,229), and a dark ink therefore measures LOWER in the app
+           than in the file: --text-muted's own value read 4.59 there and 4.02
+           on screen. Measured in the running app, both themes: 5.14:1 light,
+           4.60:1 dark. Both clear AA, so this is no longer an exemption. */
+        --btn-disabled-ink: #4a5464;
         /* v17.8.0: the three popovers (QuickStatus, SplitMenu, Plan's day queue)
            all carried the same hand-written `0 8px 32px rgba(0,0,0,0.14)`, which
            never deepened for dark mode the way every --shadow-* token does. */
@@ -479,6 +508,10 @@
         --border-card: rgba(255, 255, 255, 0.10);
         --text-primary: #f2f2f7;
         --text-muted: #9a9aa0;
+        /* v17.14.0: see --btn-disabled-ink in :root. Lighter than --text-muted
+           because the disabled fill composites DARK here, and dimmer than white
+           so the pill still reads as inactive. 4.70:1 on the composite. */
+        --btn-disabled-ink: #dcdce0;
         --accent: #0a84ff;
         --focus-ring: #ffffff;
         /* Status chip text -> light variants for dark surfaces. */
@@ -1057,6 +1090,52 @@
       @media (hover: none), (pointer: coarse) {
         .mgt-blk:active:not(.mgt-nopress) { transform: scale(0.96); }
       }
+
+      /* ── v17.14.0: the skip link ────────────────────────────────────────────
+         v17.12.0 added the landmarks, which are the programmatic bypass and cost
+         nothing visually. This is the one a SIGHTED keyboard user can take, in
+         an app that is explicitly keyboard-driven: the header holds a cog, a
+         title block, three view buttons, two primary actions, a search and a
+         connection dot before the first booking, and every date change puts you
+         back at the top of it.
+
+         Hidden by TRANSLATION, never `display:none` or `visibility:hidden` —
+         both make an element unfocusable, so the link could never be reached and
+         the whole feature would be inert while looking correct in the source.
+         `position: fixed` so it lands at the viewport corner in both layouts
+         (the app is a normal scrolling page by default and a 100dvh flex shell
+         under nav-lock / split view, and an absolutely-positioned link would
+         resolve against a different box in each).
+
+         z-index sits above the header and below the modal layer (z=250+): a
+         dialog owns the whole screen while it is open, and a skip link floating
+         over one would be a bypass to something the user cannot reach.
+
+         The transition is the token pair, so the reduce-motion kill-switch
+         below neutralises it like everything else. */
+      .mgt-skip {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        z-index: 200;
+        padding: 10px 18px;
+        border-radius: var(--r-pill);
+        background: var(--accent);
+        color: var(--text-on-accent);
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: var(--shadow-btn-accent);
+        transform: translateY(-300%);
+        transition: transform var(--t-move) var(--ease-out);
+      }
+      .mgt-skip:focus { transform: translateY(0); }
+      /* The target of the link. It takes tabIndex={-1} in App.jsx so it can hold
+         focus when the fragment is followed; without a ring rule it would show
+         the browser default outline on a full-width region, which reads as the
+         whole page being selected. The ring belongs on the link you pressed, not
+         on the landmark you arrived at. */
+      main:focus { outline: none; }
 
       /* ── v17.8.0: the keyboard focus ring ───────────────────────────────────
          The app had NO :focus or :focus-visible rule anywhere, so a focused

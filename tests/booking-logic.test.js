@@ -11,6 +11,7 @@
 // syncLiveDurations (seated-today only) never perturbs the fixtures.
 
 import { describe, it, expect, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
   comboCap, comboCapBest, sanitize, sanitizeAll, diffBooking,
@@ -19,7 +20,7 @@ import {
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
-  stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking,
+  stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 
@@ -294,6 +295,41 @@ describe("optimise / applyOpt / bookingsAfterAction", () => {
     const b = mk({ date: today, status: "confirmed", tables: ["7"], size: 4 });
     const out = bookingsAfterAction([b], today, [], null, false, false);
     expect(out[0].tables).toEqual(["7"]);
+  });
+
+  // ── v17.14.0: the no-op identity contract ─────────────────────────────────
+  // The OFF path used to clone every booking; the ON path built a fresh array
+  // from applyOpt. Both now hand back the input when the pass moved nothing,
+  // which is what lets a caller ask "did this change anything" with `===`.
+  it("OFF-path no-op returns the input array itself", () => {
+    const list = [mk({ date: today, status: "confirmed", tables: ["7"], size: 4, _conflict: false })];
+    expect(bookingsAfterAction(list, today, [], null, false, false)).toBe(list);
+  });
+
+  it("ON-path no-op returns the input array itself", () => {
+    // Already optimally placed, so applyOpt reproduces the same assignment.
+    const list = applyOpt([mk({ id: "a", size: 4 }), mk({ id: "b", time: "20:00", size: 2 })], D, []);
+    expect(bookingsAfterAction(list, D, [], null, false, true)).toBe(list);
+  });
+
+  it("still returns a NEW array when the pass actually moves something", () => {
+    // Deliberately mis-assigned: table 7 for a party of 4 that the optimizer
+    // places elsewhere. The identity contract must not swallow a real change.
+    const list = [mk({ id: "a", size: 4, tables: [], _conflict: true })];
+    const out = bookingsAfterAction(list, D, [], null, false, true);
+    expect(out).not.toBe(list);
+    expect(out[0].tables.length).toBeGreaterThan(0);
+  });
+
+  it("a seated party past its duration is a change, not a no-op", () => {
+    // syncLiveDurations extends `duration`/`customDur`. Both are in the compared
+    // field set on purpose — a narrower compare would report "no change" and the
+    // extension would be discarded, which is the v17.10.2 lesson this reuses.
+    const start = "00:00";
+    const list = [mk({ id: "s", date: today, status: "seated", time: start, duration: 1, customDur: 1, tables: ["7"], _conflict: false })];
+    const out = bookingsAfterAction(list, today, [], null, false, false);
+    expect(out).not.toBe(list);
+    expect(out[0].duration).toBeGreaterThan(1);
   });
 });
 
@@ -762,13 +798,18 @@ describe("an all-locked clash is unresolvable, which is why the loop existed", (
     expect(verifyClean(after, D)).toBe(false);   // still dirty, still unresolvable
   });
 
-  it("returns a NEW array even though nothing changed — the loop's actual fuel", () => {
-    // This is the property that made an unresolvable clash spin forever: the
-    // reconciliation effect assigned this result unconditionally, React saw a
-    // new reference on a dep, and re-ran the effect. The fix compares
-    // signatures and keeps the ORIGINAL reference; do not "optimise" that away.
+  it("returns the INPUT array when nothing changed — v17.14.0 inverted this", () => {
+    // Until v17.14.0 this returned a fresh array either way, and that was the
+    // fuel: the reconciliation effect assigned the result unconditionally,
+    // React saw a new reference on a dep, and re-ran the effect forever. The
+    // v17.10.2 fix compared signatures at that ONE call site; v17.14.0 fixes it
+    // at the source, so every caller can compare identity.
+    //
+    // This assertion is the exact reverse of the one it replaces. That is the
+    // point of the change, not a regression — the old test's "do not optimise
+    // that away" was guarding the call-site fix, which still stands.
     const before = clash();
-    expect(bookingsAfterAction(before, D, [], null, false, true)).not.toBe(before);
+    expect(bookingsAfterAction(before, D, [], null, false, true)).toBe(before);
   });
 
   it("a clash the optimizer CAN fix does change the signature", () => {
@@ -779,6 +820,93 @@ describe("an all-locked clash is unresolvable, which is why the loop existed", (
     const after = bookingsAfterAction(before, D, [], null, false, true);
     expect(dayBookingsSig(after, D)).not.toBe(dayBookingsSig(before, D));
     expect(verifyClean(after, D)).toBe(true);
+  });
+});
+
+// v17.14.0: clashRowId had no test, despite its comment making the separator
+// load-bearing and naming the exact collision it exists to avoid. It is the key
+// of the notification strip's per-clash dismissal Set, so a collision does not
+// throw — it silently dismisses a DIFFERENT double-booking than the one the ✕
+// was pressed on, which is the failure mode nobody would report as a bug.
+describe("mergeSpans", () => {
+  // v17.14.0. clashSpans emitted one band per PAIR, so three bookings clashing
+  // on one table drew three coincident bands on the same pixels.
+  const sp = (from, to) => ({ from, to });
+
+  it("leaves a single span, or none, alone", () => {
+    expect(mergeSpans([])).toEqual([]);
+    expect(mergeSpans([sp(10, 20)])).toEqual([sp(10, 20)]);
+    expect(mergeSpans(undefined)).toEqual([]);
+  });
+
+  it("merges identical spans - the three-way clash case", () => {
+    expect(mergeSpans([sp(1200, 1290), sp(1200, 1290), sp(1200, 1290)]))
+      .toEqual([sp(1200, 1290)]);
+  });
+
+  it("merges overlapping spans into their union", () => {
+    expect(mergeSpans([sp(1200, 1290), sp(1260, 1350)])).toEqual([sp(1200, 1350)]);
+  });
+
+  it("merges a span fully contained in another", () => {
+    expect(mergeSpans([sp(1200, 1400), sp(1250, 1300)])).toEqual([sp(1200, 1400)]);
+  });
+
+  it("merges spans that merely TOUCH", () => {
+    // Two clashes meeting at 20:30 are one continuously-contested stretch of the
+    // row; two bands separated by a zero-width seam is a rendering artefact.
+    expect(mergeSpans([sp(1200, 1230), sp(1230, 1260)])).toEqual([sp(1200, 1260)]);
+  });
+
+  it("keeps genuinely separate spans apart, in order", () => {
+    expect(mergeSpans([sp(1300, 1400), sp(1200, 1250)]))
+      .toEqual([sp(1200, 1250), sp(1300, 1400)]);
+  });
+
+  it("does not mutate its input", () => {
+    const input = [sp(1200, 1290), sp(1260, 1350)];
+    const copy = input.map((x) => ({ ...x }));
+    mergeSpans(input);
+    expect(input).toEqual(copy);
+  });
+});
+
+describe("clashRowId", () => {
+  it("is stable and ordered — a pair has ONE id", () => {
+    expect(clashRowId({ a: "p", b: "r" })).toBe(clashRowId({ a: "p", b: "r" }));
+  });
+
+  it("keys by PAIR, not by booking — dismissing p·r does not key p·x", () => {
+    // The reason the Set is pair-keyed at all: silencing "Pau vs Rita" must not
+    // silence "Rita vs a third party".
+    expect(clashRowId({ a: "p", b: "r" })).not.toBe(clashRowId({ a: "p", b: "x" }));
+    expect(clashRowId({ a: "p", b: "r" })).not.toBe(clashRowId({ a: "x", b: "r" }));
+  });
+
+  it("does not collide on ids that WOULD collide under \"_\"", () => {
+    // A recurring occurrence id is "r" + ruleId + "_" + date, so "_" is already
+    // spoken for by the data — exactly the class of separator the comment warns
+    // about. Under "_" both of these pairs render "rA_2026-08-21_x".
+    const one = clashRowId({ a: "rA_2026-08-21", b: "x" });
+    const two = clashRowId({ a: "rA", b: "2026-08-21_x" });
+    expect(one).not.toBe(two);
+    // split/join, not a regex: a control character in a regex literal is a lint
+    // ERROR here (no-control-regex) and lint is a hard CI gate.
+    const asUnderscore = (k) => k.split("\u001f").join("_");
+    expect(asUnderscore(one)).toBe(asUnderscore(two));  // proves the premise
+  });
+
+  it("does not collide on ids containing a hyphen", () => {
+    expect(clashRowId({ a: "r1-2", b: "3" })).not.toBe(clashRowId({ a: "r1", b: "2-3" }));
+  });
+
+  it("the SOURCE writes the separator as an escape, never as a raw byte", () => {
+    // A literal 0x1F in source is invisible in every editor, grep and diff — the
+    // same class of trap as the HTML entity that hid from v17.9.0's glyph sweep.
+    // Asserted over the whole module, so it also covers undoKey's four keys.
+    const src = readFileSync(new URL("../src/lib/booking-logic.js", import.meta.url), "utf8");
+    expect(src).toMatch(/\\u001f/);
+    expect(src.includes("\u001f")).toBe(false);
   });
 });
 
@@ -831,8 +959,20 @@ describe("describeBooking", () => {
     expect(describeBooking({ ...b, tables: undefined })).toBe("Pau Estévez, 20:00, 4 guests, no table assigned, confirmed");
   });
 
-  it("joins a multi-table booking", () => {
-    expect(describeBooking({ ...b, tables: ["5A", "5B"] })).toBe("Pau Estévez, 20:00, 4 guests, table 5A and 5B, confirmed");
+  it("joins a two-table booking, and pluralises the noun", () => {
+    expect(describeBooking({ ...b, tables: ["5A", "5B"] })).toBe("Pau Estévez, 20:00, 4 guests, tables 5A and 5B, confirmed");
+  });
+
+  it("joins THREE tables as a list, not as a chain of \"and\"", () => {
+    // v17.14.0. The extraction commit joined with " and " throughout, which gave
+    // "5A and 5B and 6". A three- or four-table mega-combo is an ordinary
+    // Settings → Layout configuration, so this is reachable rather than theoretical.
+    expect(describeBooking({ ...b, tables: ["5A", "5B", "6"] })).toBe("Pau Estévez, 20:00, 4 guests, tables 5A, 5B and 6, confirmed");
+    expect(describeBooking({ ...b, tables: ["1A", "1B", "2", "3"] })).toBe("Pau Estévez, 20:00, 4 guests, tables 1A, 1B, 2 and 3, confirmed");
+  });
+
+  it("a single table keeps the singular noun and no join", () => {
+    expect(describeBooking({ ...b, tables: ["3"] })).toBe("Pau Estévez, 20:00, 4 guests, table 3, confirmed");
   });
 
   it("drops the table clause entirely for PlanView, rather than saying none", () => {

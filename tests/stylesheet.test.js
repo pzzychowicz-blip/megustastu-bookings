@@ -60,6 +60,8 @@ const CRITICAL_SELECTORS = [
   ".mgt-ac-row:active",               // the touch tint on card/row/panel surfaces
   ".mgt-blk:active",                  // the timeline block/ghost press dip
   ".mgt-plan-headrow",                // Plan header grid (has a media fallback)
+  ".mgt-skip",                        // the skip link is hidden BY this rule
+  ".mgt-skip:focus",                  // …and revealed by this one
   ".mgt-detent",                      // TimeAxis snap
   "@media print",                     // DaySheet is print-only; nothing else shows it
 ];

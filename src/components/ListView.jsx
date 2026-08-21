@@ -76,7 +76,10 @@ export const ListView = memo(function ListView({
   late = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {}, focusReq = 0,
   showFinished = false, onToggleFinished = () => {},
-  onNew = null, onWalkin = null,
+  // v17.14.0: `emptyWalkin` — one name across all three views, see TimelineView.
+  // `isEmpty` comes from App too: the three views used to answer "is this day
+  // empty" three ways, and List's answer was the odd one out. See its use below.
+  onNew = null, emptyWalkin = null, isEmpty = false,
   // v17.11.0: the viewed day is a closed day. EmptyDay renders nothing then —
   // the strip's `Closed this day` section is the empty state for that case, and
   // offering two buttons the app refuses is worse than offering none.
@@ -219,13 +222,29 @@ export const ListView = memo(function ListView({
   }, [focusReq]);
 
   // v17.8.0's empty-day prompt, moved to EmptyDay.jsx in v17.11.0 so Timeline
-  // and Plan share it — the same condition used to get three different answers,
-  // and only this one was useful. A list of nothing has nothing else to draw, so
-  // here it is still the whole body; the other two render it above a canvas that
-  // is worth keeping. `dayClosed` is new: this used to offer "New booking" and
-  // "Walk-in" on a closed day, both of which the app refuses.
-  if (!day.length) {
-    return <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={onWalkin} />;
+  // and Plan share it. A list of nothing has nothing else to draw, so here it is
+  // still the whole body; the other two render it above a canvas that is worth
+  // keeping. `dayClosed`: this used to offer "New booking" and "Walk-in" on a
+  // closed day, both of which the app refuses.
+  //
+  // v17.14.0 (/code-review follow-up): the CONDITION comes from App now. This
+  // used to be `!day.length`, and `day` here includes cancelled bookings while
+  // Timeline's and Plan's exclude them — so on a day whose bookings were all
+  // cancelled those two showed the prompt and List rendered its card list,
+  // which with the finished fold closed is a nearly blank screen with no prompt
+  // and no New-booking button: exactly the defect EmptyDay was written to fix.
+  // A cancelled booking is not a booked table, so `isEmpty` takes the other two
+  // views' reading.
+  //
+  // But it returns EARLY only when there is genuinely nothing to draw. A
+  // cancelled-only day still has cards, and replacing the whole body with the
+  // prompt would make them unreachable — no reopen, no undo, no record of who
+  // cancelled — which trades one blank screen for a worse one. So the prompt
+  // goes ABOVE the fold instead, which is exactly what Timeline and Plan do
+  // with their canvases: the day is empty AND there is still something worth
+  // showing. (Measured live: without this the fold does not render at all.)
+  if (isEmpty && day.length === 0) {
+    return <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} />;
   }
 
   // v17.12.0: exactly ONE card is in the tab order at a time (the roving
@@ -582,10 +601,27 @@ export const ListView = memo(function ListView({
 
   return (
     <div ref={rootRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* v17.14.0: a cancelled-only day — empty by the shared reading, but the
+          cards below are still worth reaching. See the note at the early
+          return above. */}
+      {isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}
       {/* v17.12.0: a real list, so the cards are list items and the count is
           announced. Two lists rather than one, because the finished cards live
-          inside the Collapsible and a `list` must contain its items directly. */}
-      <div ref={flipRef} role="list" aria-label="Bookings" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          inside the Collapsible and a `list` must contain its items directly.
+
+          v17.14.0 (/code-review): the ROLE is conditional, the element is not.
+          On a cancelled-only day `active` is empty and this rendered as an empty
+          `role="list"` directly under the empty-day prompt, so a screen reader
+          heard "Nothing booked for this day yet" and then "Bookings, list, 0
+          items" — an announcement contradicting the one before it. Dropping the
+          role leaves a plain div, which announces nothing. The element itself
+          must stay mounted either way: it carries `flipRef`, and `useFlip`'s
+          layout effect bails out entirely on a null container, so unmounting it
+          would silently disable the list-reorder animation for the rest of the
+          session. */}
+      <div ref={flipRef} role={active.length ? "list" : undefined}
+        aria-label={active.length ? "Bookings" : undefined}
+        style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {active.map(renderCard)}
       </div>
       {finished.length > 0 ? (
