@@ -12751,7 +12751,7 @@ tokens failed the build until they were.
 `--btn-disabled` is recorded as an exemption rather than fixed, and the reason is
 the standard's rather than this app's: WCAG 1.4.3 exempts inactive components,
 and every button wearing this fill is `disabled`. What the number says is still
-worth knowing — at **1.31:1** in light the label is not dim, it is gone — so a
+worth knowing — at **1.30:1** in light the label is not dim, it is gone — so a
 staff member who has not picked a date sees an empty pill rather than a
 greyed-out "Save booking". Floored so it cannot get worse, and left in
 `ROADMAP.md` as a design question rather than answered inside a gate-closing
@@ -13095,3 +13095,78 @@ gate.
 **Verification:** build ✓, 469 tests, `check:style` OK. Text moved verbatim —
 the extraction is a line-range move with the two headings re-levelled, not a
 rewrite, so nothing recorded was lost or paraphrased.
+
+### 8/n — `/code-review max`: 13 findings, all fixed
+
+**Files:** `src/components/{ManualModal,BookingFormModal,WeekView,HistoryPopup}.jsx`,
+`scripts/{check-style-invariants,strip-comments}.mjs`,
+`tests/{contrast,style-check,a11y}.test.js`, `DESIGN.md`
+**Behavioural change:** three restored font weights and one border token; the
+rest are guards.
+
+None met the "fix without asking" bar — no data loss, no crash, no security, no
+broken build — so all thirteen went to Patryk in one question. He chose all
+thirteen. **Nine of them are this version's own new machinery failing in the
+way it was written to prevent**, which is the finding worth keeping.
+
+**The one that matters most.** The colour rule's first pass marked
+`ManualModal`'s idle swap-panel rim `/* @fixed-fill */` — an assertion that the
+surface under it is theme-invariant. It is not: `swapBg` is `S.bg`, i.e.
+`"transparent"`, so the idle panel shows the modal sheet, which flips. That
+white 0.5 rim measures **1.00–1.04:1 against the light sheet** and 4.69:1
+against the dark one. The rim was already wrong; what this version added was a
+marker that would have certified it forever and stopped Rule 7 ever reporting
+the line again. It now takes `--border-soft`, the token `Section` uses, because
+that is what this panel is.
+
+**Why it happened, which is the transferable part.** `@fixed-fill` was being
+applied to mean "I looked and it is fine" rather than its literal definition.
+Applied literally — *is the surface under this theme-invariant?* — `S.bg` fails
+at the point of writing. Three other new markers carry the same looseness
+harmlessly (the "Kitchen busy" border sits on `--warn-bg`/`--bg-soft`, both
+theme tokens; `TableGrid`'s white ink sits on `--accent`, which is redefined for
+dark) — and that looseness is exactly what let the one real case through.
+`DESIGN.md` now states the test as a question to answer rather than a label to
+apply.
+
+**The mechanical sweep over-reached in three places**, and the mechanism is
+worth recording: the weight pass matched a muted colour and a heavy weight
+within ±140 characters of each other, which on dense JSX reaches across element
+boundaries. It demoted the autocomplete "N visits" chip while its SIBLING "N
+no-shows" chip on the same row kept `FW.bold` — two chips of identical size,
+shape, padding and role at different weights — plus the "no phone" chip and
+`WeekView`'s month-grid weekday header, a structural column header that dropped
+two steps. All three restored; the ratchet still holds, since the pass was 46
+sites and this is 3.
+
+**Four guards had stopped guarding, three of them written in this version.**
+`ringAlpha()`'s new token branch returned an alpha and let the caller composite
+a hard-coded white, so a non-white ring would pass while the function's own
+throw message promised otherwise. `EXEMPT_FLOOR["--btn-disabled"]` was one
+number for two themes measuring 1.30 and 6.42, so it could not see a dark-mode
+regression at all. The weight ratchet's second test was named "every weight
+reference is one of the four scale steps" and asserted `total > 300` — a
+tautology, since the counter only ever counted those four names. And the
+`<main>`-is-never-inert guard read a fixed 400-character window of a
+316-character opening tag: one more style branch and it would have stopped
+covering the end of the tag that attribute gets added to. **Every fix was proven
+against known-bad input**, not asserted.
+
+**Two blind spots in the checkers.** `stripComments` claimed in its header that
+a `/*` inside a regex is not read as a comment, and did no such thing — a regex
+is not a string literal, so it truncated the line (and would have swallowed
+lines on a `/*`). It handles regex literals now, distinguishing them from
+division by what precedes the slash. And Rule 8's destructured-default arm
+matched any `size = <number>`, including `let size = 20` and `o.size = 4`,
+contrary to its own documented scope.
+
+Two smaller ones: the ratchet counted `FW.` references inside comments — in the
+version that established comment-stripping twice, with the shared module
+already one import away — and walked `src/` once per test; and `HistoryPopup`
+had taken `--bg-input` ("text inputs / selects") for a read-only scroll panel.
+
+**Verification:** build ✓, lint 0 errors, **473 tests** (+4: two `openingTag`
+self-tests and two Rule 8 fixtures; the contrast fixes strengthened existing
+cases rather than adding any), `check:style` OK. The swap panel re-measured in
+the running app: transparent background confirmed, rim now resolving to
+`--border-soft`.

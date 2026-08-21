@@ -108,6 +108,17 @@ explaining why is usually the one to read.
   remain and each says so at its site: the kitchen chips in both forms, the
   print sheet, and white on a saturated block or badge.
 
+- **`@fixed-fill` is a QUESTION, not a label (v17.13.0 `/code-review`).** Before
+  marking a line, answer it literally: *what is the fill directly under this
+  colour, and is that fill the same in both themes?* Marking to mean "I looked
+  and it seems fine" is how the first use of the rule went wrong —
+  `ManualModal`'s idle swap panel is `S.bg`, i.e. `"transparent"`, so the rim
+  sits on the modal sheet and flips; the white 0.5 literal measures 1.00:1
+  against the light sheet and the marker would have certified it forever. Where
+  the fill is behind a ternary, read BOTH branches. Where it is a token, check
+  whether that token is redeclared in the dark block. If the answer is "it
+  flips", the fix is a token that flips with it, not a marker.
+
 - **The icon and motion rules (v17.13.0), Rules 8 and 9.** No numeric
   `size={n}` or `{ size = n }` on an icon — but never `size: <number>` in an
   object, which in this app is a PARTY size. No hand-written duration/curve; a

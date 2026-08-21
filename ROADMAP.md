@@ -79,7 +79,8 @@ left out of a gate-closing commit on purpose — the amber exemption was decided
 this way in v17.10.0, with the numbers and the pixels in front of Patryk.
 
 - **The disabled primary button's label is not dim, it is gone.**
-  `--btn-disabled` under white ink measures **1.31:1** in light. WCAG 1.4.3
+  `--btn-disabled` under white ink measures **1.30:1** in light (6.42:1 dark,
+  floored per theme). WCAG 1.4.3
   exempts inactive components, so this is not a violation — but a staff member
   who has not picked a date sees an empty grey pill where "Save booking" should
   be, in the two form footers, `ReminderEditor` and `ManualModal`. Options are a
