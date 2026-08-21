@@ -13613,3 +13613,36 @@ use and why.
 
 **Verification:** build OK (203.00 kB gz, unchanged), lint 0 errors,
 **526 tests**, `check:style` OK.
+
+### 12/n — one shared answer to "is this day empty"
+
+**Files:** `src/App.jsx`, `src/components/{TimelineView,ListView,PlanView}.jsx`
+**Behavioural change:** a cancelled-only day now shows the empty-day prompt in
+List too, above its cards rather than instead of them.
+
+Each view derived its own `day.length === 0`, and **List's `day` includes
+cancelled bookings while Timeline's and Plan's exclude them.** So on a day whose
+bookings had all been cancelled, two views said "Nothing booked for this day
+yet." and the third rendered its card list — which with the finished fold shut
+is a nearly blank screen with no prompt and no New-booking button, i.e. exactly
+the defect `EmptyDay` was written in v17.8.0 to fix, surviving in the one view
+it originally shipped in.
+
+`isEmptyDay` is derived once in App and passed down, the way `dayClosed` and
+`emptyWalkin` already are. A cancelled booking is not a booked table, so the
+other two views' reading wins.
+
+**The live check changed the design, which is why it was worth running.** With
+List simply returning `EmptyDay` on `isEmpty`, the cancelled cards stopped
+rendering at all — no reopen, no undo, no record of who cancelled — trading one
+blank screen for a worse one. The early return now fires only when there is
+genuinely nothing to draw (`day.length === 0`), and a cancelled-only day gets
+the prompt ABOVE the fold. That is precisely what Timeline and Plan do with
+their canvases: the day is empty AND there is still something worth showing.
+
+**Verification:** build OK (203.08 kB gz, +0.08), lint 0 errors, **526 tests**,
+`check:style` OK. Round-tripped in DEV on an otherwise-empty future date:
+booking created (prompt gone in all three), cancelled (prompt back in all three,
+List also showing "Completed & cancelled · 1 booking"), fold opened, booking
+deleted, prompt alone again. Both the earlier cases re-checked too — a day with
+live bookings shows no prompt anywhere.

@@ -2817,6 +2817,15 @@ function BookingApp({uid}){
   // hit that twice.
   const viewHours=hoursFor(viewDate);
   const dayClosed=viewHours.closed;
+  // v17.14.0 (/code-review follow-up): ONE answer to "is this day empty",
+  // shared by all three views the way `dayClosed` and `emptyWalkin` already are.
+  // It used to be each view's own `day.length === 0`, and List's `day` includes
+  // cancelled bookings while Timeline's and Plan's exclude them — so a day whose
+  // bookings had all been cancelled showed the prompt in two views and a nearly
+  // blank card list in the third. A cancelled booking is not a booked table.
+  const isEmptyDay=useMemo(function(){
+    return !bookings.some(function(b){return b&&b.date===viewDate&&b.status!=="cancelled";});
+  },[bookings,viewDate]);
   const viewGridMins=(viewHours.gridClose-viewHours.open)*60;
   useEffect(function(){
     if(zoomTouchedRef.current) return;
@@ -3047,6 +3056,7 @@ function BookingApp({uid}){
     turnBuffer={turnBuffer}
     onNew={VA.onNew}
     emptyWalkin={emptyWalkin}
+    isEmpty={isEmptyDay}
     dayClosed={dayClosed}
     hoursSig={weekHours} />;
   // v17.1.0 perf note: hoursSig / layoutSig are identity-only props — the views
@@ -3092,6 +3102,7 @@ function BookingApp({uid}){
     layoutSig={layout}
     onNew={VA.onNew}
     emptyWalkin={emptyWalkin}
+    isEmpty={isEmptyDay}
     dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const listEl=<ListView
@@ -3112,6 +3123,7 @@ function BookingApp({uid}){
     onToggleFinished={VA.onToggleFinished}
     onNew={VA.onNew}
     emptyWalkin={emptyWalkin}
+    isEmpty={isEmptyDay}
     dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const viewEl={timeline:timelineEl,list:listEl,plan:planView};

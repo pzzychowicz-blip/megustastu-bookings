@@ -1067,7 +1067,7 @@ export const TimelineView = memo(function TimelineView({
   // `onWalkin(tableId)` of its own for its table popover, so the empty-day
   // callback had two names across three views and the next surface would have
   // guessed wrong and got a silently missing button. One input, one name.
-  onNew = null, emptyWalkin = null, dayClosed = false,
+  onNew = null, emptyWalkin = null, dayClosed = false, isEmpty = false,
   late = {}, freeing = {}, onNoShow = () => {},
   zoom = 1, setZoom,
   // v17.2.0: per-device Timeline settings (App's tlSettings — scalars, memo-safe).
@@ -1717,7 +1717,7 @@ export const TimelineView = memo(function TimelineView({
           ABOVE the grid rather than instead of it — the grid is a picture of the
           room and an empty room is what you want to see on an empty day, plus
           the label column still lets you block a table. See EmptyDay.jsx. */}
-      {day.length === 0 ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}
+      {isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}
       <div style={{ display: "flex" }}>
         {labelCol}
         {gridCol}
