@@ -57,13 +57,31 @@ describe("PREF_SPEC agrees with everything that depends on it", () => {
     expect(PREF_SPEC.theme).toBeUndefined();
   });
 
-  it("every localStorage key it names is the one App reads", () => {
-    // The keys are also read by index.html's pre-mount script and written by
-    // hand nowhere else; a rename here that missed a reader would flip the
-    // affected pref back to its default on every device.
+  it("App touches these keys ONLY through readPrefLS / writePref", () => {
+    // /code-review: this was a negative assertion only — "App does not contain
+    // localStorage.getItem(<key>)" — which passes vacuously against an App that
+    // never mentions PREF_SPEC at all, and never looked at the WRITE side, so a
+    // hand-written setItem was invisible to it. That is the exact drift this
+    // commit found in `readSplit` (a second hand-written read of
+    // "mgt-split-enabled"), so the guard has to see both directions.
     const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+    const offenders = [];
     PREF_NAMES.forEach((name) => {
-      expect(app, name).not.toContain('localStorage.getItem("' + PREF_SPEC[name].ls + '")');
+      const key = PREF_SPEC[name].ls;
+      // Any localStorage call naming one of these keys directly, anywhere in App.
+      const direct = new RegExp("localStorage\\.(getItem|setItem|removeItem)\\(\\s*[\"']" + key + "[\"']", "g");
+      const hits = app.match(direct);
+      if (hits) offenders.push(key + " x" + hits.length);
+    });
+    expect(offenders, "App must reach these keys only via readPrefLS/writePref: " + offenders.join(", "))
+      .toEqual([]);
+
+    // …and the positive half, so the test cannot pass on an App that dropped
+    // the mechanism entirely.
+    expect(app, "App must read the four prefs through readPrefLS").toContain("readPrefLS(");
+    expect(app, "App must write them through writePref").toContain("function writePref(");
+    PREF_NAMES.forEach((name) => {
+      expect(app, name + " must be read through readPrefLS").toContain('readPrefLS("' + name + '")');
     });
   });
 

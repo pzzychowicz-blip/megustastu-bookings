@@ -48,6 +48,19 @@ describe("applyModal", () => {
     expect(modalMap(next).reminder.id).toBe("r1");
   });
 
+  it("a FALSY payload closes — 0 and \"\" are not usable as payloads", () => {
+    // /code-review: the semantics the eighteen booleans already had (every mount
+    // site read `!!confirmDel`), preserved rather than chosen — but silent, so
+    // it is pinned. A future modal keyed on a numeric id would call
+    // `setModalFns.x(0)` and simply never appear, with nothing to grep for.
+    const open = applyModal([], "manual", "t1");
+    expect(applyModal(open, "manual", 0)).toEqual([]);
+    expect(applyModal(open, "manual", "")).toEqual([]);
+    expect(applyModal(open, "manual", NaN)).toEqual([]);
+    // The documented workaround: wrap it.
+    expect(modalMap(applyModal([], "manual", { id: 0 })).manual).toEqual({ id: 0 });
+  });
+
   it("an updater returning null closes", () => {
     const s = open([], "reminder", { id: "r1" });
     expect(applyModal(s, "reminder", () => null)).toEqual([]);
@@ -101,15 +114,52 @@ describe("topModal — the declared z-order, not the push order", () => {
 });
 
 describe("MODAL_Z covers every surface App can open", () => {
-  it("every setModalFor(\"…\") id in App.jsx has a place in the order", () => {
+  it("every modal id App reads has a place in the order, and vice versa", () => {
     // The property the eighteen booleans could not have: `showWaitlist` was
     // missing from the Escape chain, from `anyModal`, from the shortcut
-    // suppression and from `inert`, and nothing anywhere said so. Now a surface
+    // suppression and from `inert`, and nothing anywhere said so. A surface
     // without a rank fails here.
+    //
+    // /code-review, twice over. The id pattern was `[a-z]+`, so an id with a
+    // digit or a dash ("block2", "pref-picker") escaped the very check it exists
+    // for — the `showWaitlist` failure again, in the guard against it. And it
+    // scraped `setModalFor("x")`, which no longer exists now that the setters
+    // are generated FROM MODAL_Z; generated setters make that direction
+    // tautological, so the check that still bites is the READ side:
+    // `modalOpen.<id>` with no rank yields no setter and no Escape action.
     const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
-    const ids = [...app.matchAll(/setModalFor\("([a-z]+)"\)/g)].map((m) => m[1]);
-    expect(ids.length).toBeGreaterThan(10);       // the pattern still matches
-    expect([...new Set(ids)].sort()).toEqual([...MODAL_Z].sort());
+    const ids = new Set([
+      ...[...app.matchAll(/\bmodalOpen\.([A-Za-z0-9_$]+)/g)].map((m) => m[1]),
+      ...[...app.matchAll(/\bsetModalFns\.([A-Za-z0-9_$]+)/g)].map((m) => m[1]),
+    ]);
+    expect(ids.size, "the modalOpen/setModalFns patterns still match").toBeGreaterThan(10);
+    expect([...ids].sort()).toEqual([...MODAL_Z].sort());
+  });
+
+  it("every K.* the keyboard hook reads is actually in App's ctx", () => {
+    // /code-review: adding `case "waitlist"` to escapeAction without adding
+    // `setShowWaitlist` to the ctx made Escape on that panel throw
+    // `K.setShowWaitlist is not a function` — the exact defect the stack exists
+    // to remove, shipped in the commit that removes it. It survived because the
+    // OLD chain had no waitlist branch, so the setter had never been needed.
+    //
+    // A `case` in escapeAction is only half a wiring. This is the other half,
+    // and it is checkable: every property the hook reads off `K` must appear as
+    // a key of the object App passes in. Nothing else in the app cross-checks
+    // those two lists, which is why one of them was short.
+    const kb = readFileSync(new URL("../src/hooks/useKeyboardShortcuts.js", import.meta.url), "utf8");
+    const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+    const used = [...new Set([...kb.matchAll(/\bK\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]))];
+    expect(used.length, "the K.* pattern still matches").toBeGreaterThan(20);
+
+    const call = app.slice(app.indexOf("useKeyboardShortcuts({"));
+    const ctxEnd = call.indexOf("\n  });");
+    expect(ctxEnd, "could not find the end of App's ctx object").toBeGreaterThan(0);
+    const ctx = call.slice(0, ctxEnd);
+    const provided = new Set([...ctx.matchAll(/([A-Za-z_$][\w$]*)\s*:/g)].map((m) => m[1]));
+
+    const missing = used.filter((k) => !provided.has(k));
+    expect(missing, "read off K but never passed by App: " + missing.join(", ")).toEqual([]);
   });
 
   it("every id in MODAL_Z has an Escape action", () => {

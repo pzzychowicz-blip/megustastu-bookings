@@ -159,13 +159,23 @@ describe("the skip link (WCAG 2.4.1)", () => {
 
   it("is OUTSIDE the subtree that goes inert with a modal", () => {
     // A skip link inside an inert subtree is silently unfocusable — the same
-    // trap as a live region in one. It sits before <header>, which takes
-    // `inert`, so the check is that no `inert` appears between the shell's
-    // opening and the link.
+    // trap as a live region in one.
+    //
+    // /code-review: this was a fixed 400-character window sliced backwards from
+    // the link, which is the guard shape v17.13.0's own review condemned ("the
+    // <main>-never-inert guard read a fixed 400-char window of a 316-char
+    // opening tag") — and it could not fail, because moving the link inside
+    // <header inert={anyModal}> puts markup between the two that the regex
+    // stops at. STRUCTURAL instead: every `inert={anyModal}` in the file is on
+    // the header or inside <main>, so the link is outside all of them exactly
+    // when its index precedes the first one. That comparison moves when the
+    // markup moves.
     const skip = App.indexOf('className="mgt-skip"');
-    const before = App.slice(App.lastIndexOf("<div", skip - 400), skip);
-    expect(before, "the skip link must not sit inside an inert-marked element")
-      .not.toMatch(/inert=\{anyModal\}[^<]*$/);
+    const firstInert = App.indexOf("inert={anyModal}");
+    expect(skip, "the skip link must be in App").toBeGreaterThan(-1);
+    expect(firstInert, "App must mark something inert while a modal is open").toBeGreaterThan(-1);
+    expect(skip, "the skip link must come before every inert-marked element")
+      .toBeLessThan(firstInert);
   });
 
   it("is hidden by TRANSLATION, not by display/visibility", () => {
@@ -266,6 +276,25 @@ describe("the day announcer (WCAG 4.1.3)", () => {
       "a local weekday against a UTC date string shifts a day in UTC+ zones");
     has(body, "closed days", /Closed/, "a closed day is what the summary must say");
     has(body, "empty days", /Nothing booked/, "…and so is an empty one");
+  });
+});
+
+// v17.14.0 (/code-review). The empty-day prompt and the list container are
+// siblings, so on a cancelled-only day the second contradicts the first.
+describe("an empty list does not announce itself", () => {
+  it("ListView's Bookings role is conditional on there being bookings", () => {
+    has(List, "conditional list role", /role=\{active\.length \? "list" : undefined\}/,
+      "an empty role=\"list\" under \"Nothing booked for this day yet\" announces " +
+      "\"Bookings, list, 0 items\" — a contradiction, not information");
+    has(List, "conditional list name", /aria-label=\{active\.length \? "Bookings" : undefined\}/,
+      "a name on a list with no items is the same defect one attribute along");
+  });
+
+  it("…but the element stays mounted, because useFlip needs the container", () => {
+    // `useFlip`'s layout effect returns early on a null container, so unmounting
+    // this div would silently kill the list-reorder animation.
+    has(List, "flipRef still on a mounted div", /<div ref=\{flipRef\} role=/,
+      "the role is what is conditional, not the element");
   });
 });
 

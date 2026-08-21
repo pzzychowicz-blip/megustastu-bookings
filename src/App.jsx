@@ -11,7 +11,7 @@
  * Author:  Patryk Zychowicz
  * Contact: pz.zychowicz@gmail.com
  */
-import { useState, useRef, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
+import { useState, useRef, useEffect, useMemo, lazy, Suspense } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 
@@ -40,7 +40,7 @@ import {
   undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
-import { useModalStack, modalMap, topModal } from "./hooks/useModalStack";
+import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
@@ -772,14 +772,21 @@ function BookingApp({uid}){
   // visible; leaving out an Esc branch used to be invisible.
   const { stack: modalStack, setModal } = useModalStack();
   const modalOpen = useMemo(function(){return modalMap(modalStack);},[modalStack]);
-  const setModalFor = useCallback(function(id){
-    return function(v){ setModal(id,v); };
+  // /code-review: ONE memo holding all eighteen setters, derived from MODAL_Z —
+  // not a factory called from eighteen separate `useMemo`s, which was 36 hook
+  // slots per render to produce eighteen stable closures. Building them from the
+  // z-order list also makes "every modal id has a setter" structural instead of
+  // eighteen hand-written lines a test has to police.
+  const setModalFns = useMemo(function(){
+    const m={};
+    MODAL_Z.forEach(function(id){ m[id]=function(v){ setModal(id,v); }; });
+    return m;
   },[setModal]);
   const blockTarget = modalOpen.block || null;
-  const setBlockTarget = useMemo(function(){return setModalFor("block");},[setModalFor]);
+  const setBlockTarget = setModalFns.block;
   const [viewDate, setViewDate] = useState(new Date().toISOString().slice(0,10));
   const showForm = !!modalOpen.form;
-  const setShowForm = useMemo(function(){return setModalFor("form");},[setModalFor]);
+  const setShowForm = setModalFns.form;
   const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
   const [error, setError] = useState("");
@@ -797,11 +804,11 @@ function BookingApp({uid}){
   // unreachable rather than merely unlikely.
   const [errorField, setErrorField] = useState(null);
   const confirmDel = modalOpen.del || null;
-  const setConfirmDel = useMemo(function(){return setModalFor("del");},[setModalFor]);
+  const setConfirmDel = setModalFns.del;
   const confirmReshuffle = !!modalOpen.reshuffle;
-  const setConfirmReshuffle = useMemo(function(){return setModalFor("reshuffle");},[setModalFor]);
+  const setConfirmReshuffle = setModalFns.reshuffle;
   const confirmCancel = modalOpen.cancel || null;
-  const setConfirmCancel = useMemo(function(){return setModalFor("cancel");},[setModalFor]);
+  const setConfirmCancel = setModalFns.cancel;
   const [reshuffled, setReshuffled] = useState(false);
   // v15.6.1: transient banner shown when the post-sync reconciliation resolves
   // a same-table overlap that arrived via an offline multi-device merge.
@@ -810,7 +817,7 @@ function BookingApp({uid}){
   const [dragMsg, setDragMsg] = useState(null);
   const dragMsgTimer = useRef(null);
   const manualTarget = modalOpen.manual || null;
-  const setManualTarget = useMemo(function(){return setModalFor("manual");},[setModalFor]);
+  const setManualTarget = setModalFns.manual;
   const [dismissedIneff, setDismissedIneff] = useState(null);
   const formRef=useRef(EMPTY_FORM);
   // ── v17.5.0: unsaved-changes guard ──────────────────────────────────────────
@@ -828,7 +835,7 @@ function BookingApp({uid}){
   // "manual" | "reminder" | "block" | "settings" | null. One shared modal, six
   // callers as of v17.8.0.
   const confirmDiscard = modalOpen.discard || null;
-  const setConfirmDiscard = useMemo(function(){return setModalFor("discard");},[setModalFor]);
+  const setConfirmDiscard = setModalFns.discard;
   // ManualModal owns its table-pick state internally, so it reports dirtiness
   // up rather than App reaching in (see its onDirty prop). v17.8.0: BlockModal
   // and Settings do the same — their drafts are component-local too.
@@ -842,17 +849,17 @@ function BookingApp({uid}){
   const statusOverrideRef=useRef(null);
   const [swapAffected, setSwapAffected] = useState(null);
   const confirmKitchen = modalOpen.kitchen || null;
-  const setConfirmKitchen = useMemo(function(){return setModalFor("kitchen");},[setModalFor]);
+  const setConfirmKitchen = setModalFns.kitchen;
   const showHistory = !!modalOpen.history;
-  const setShowHistory = useMemo(function(){return setModalFor("history");},[setModalFor]);
+  const setShowHistory = setModalFns.history;
   const showPrefPicker = !!modalOpen.prefpicker;
-  const setShowPrefPicker = useMemo(function(){return setModalFor("prefpicker");},[setModalFor]);
+  const setShowPrefPicker = setModalFns.prefpicker;
   // v14 preview 3: Settings / keyboard-shortcuts modal. Toggled by the cog
   // icon in TimelineView's legend row and by the `?` keyboard shortcut.
   const showSettings = !!modalOpen.settings;
-  const setShowSettings = useMemo(function(){return setModalFor("settings");},[setModalFor]);
+  const setShowSettings = setModalFns.settings;
   const showSearch = !!modalOpen.search; // v16.3.0: global booking search panel
-  const setShowSearch = useMemo(function(){return setModalFor("search");},[setModalFor]);
+  const setShowSearch = setModalFns.search;
   const pendingSelectRef = useRef(null); // v16.3.0: booking id to focus in the List after a search-jump changes the day
   // v17.3.1: scroll-into-view REQUEST counter for the List's focused card. A
   // plain click on a card must NOT scroll the page, so ListView scrolls on this
@@ -864,7 +871,7 @@ function BookingApp({uid}){
   const [summaryOpen, setSummaryOpen] = useState(false);
   // v14.7.0: Week View popover (opened from the Summary panel's Week button).
   const showWeek = !!modalOpen.week;
-  const setShowWeek = useMemo(function(){return setModalFor("week");},[setModalFor]);
+  const setShowWeek = setModalFns.week;
   // Settings tab state — which tab is active in the Settings modal.
   // Resets to 'general' on modal close so reopens start fresh. Belongs to
   // the Settings subsystem; lived inside the reminder state block pre-D2
@@ -982,9 +989,9 @@ function BookingApp({uid}){
   // stack, so App owns them and passes them in — the `confirmKitchen` /
   // `useWalkin` arrangement. Everything about REMINDERS still lives in the hook.
   const reminderEditor = modalOpen.reminder || null;
-  const setReminderEditor = useMemo(function(){return setModalFor("reminder");},[setModalFor]);
+  const setReminderEditor = setModalFns.reminder;
   const confirmReminderDel = modalOpen.reminderdel || null;
-  const setConfirmReminderDel = useMemo(function(){return setModalFor("reminderdel");},[setModalFor]);
+  const setConfirmReminderDel = setModalFns.reminderdel;
   const {
     reminders,
     reminderDirty,
@@ -1001,11 +1008,11 @@ function BookingApp({uid}){
   // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
   // suppression and `inert` — all three of which it had silently never had.
   const showWaitlist = !!modalOpen.waitlist;
-  const setShowWaitlist = useMemo(function(){return setModalFor("waitlist");},[setModalFor]);
+  const setShowWaitlist = setModalFns.waitlist;
   // v17.14.0: the walk-in form's VISIBILITY is a stack entry; its draft, its
   // baseline and its dirty flag stay in useWalkin, which takes these two.
   const showWalkin = !!modalOpen.walkin;
-  const setShowWalkin = useMemo(function(){return setModalFor("walkin");},[setModalFor]);
+  const setShowWalkin = setModalFns.walkin;
   // waitAvail: {entryId: {tables, time}} for entries a table CURRENTLY fits
   // (recomputed by an effect below — deliberately state, not a render-time
   // derivation, so the trialFits scans run only when the inputs change, not
@@ -1208,7 +1215,7 @@ function BookingApp({uid}){
   },[prefsLoaded]);
   const [focusedPane,setFocusedPane]=useState("a");
   const splitMenuFor = modalOpen.splitmenu || null; // which view's SplitMenu is open
-  const setSplitMenuFor = useMemo(function(){return setModalFor("splitmenu");},[setModalFor]);
+  const setSplitMenuFor = setModalFns.splitmenu;
   // Which view the keyboard acts on: the focused pane's in a split, else `view`.
   // Declared HERE, not next to the split handlers further down, because
   // useKeyboardShortcuts' ctx object is built mid-render and a `const` used
@@ -2435,6 +2442,13 @@ function BookingApp({uid}){
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
     showWeek:showWeek,setShowWeek:setShowWeek,
+    // v17.14.0 (/code-review): the waitlist panel's Escape close. It is here and
+    // not merely in `escapeAction` because the OLD chain had no waitlist branch,
+    // so this setter had never been needed in the ctx — adding the `case` without
+    // adding the key made Esc on that panel throw `K.setShowWaitlist is not a
+    // function`, i.e. shipped the exact defect the stack was written to remove.
+    // A `case` in escapeAction is only half a wiring; the other half is here.
+    setShowWaitlist:setShowWaitlist,
     save:save,doSave:doSave,saveWalkin:saveWalkin,doSaveWalkin:doSaveWalkin,
     forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain,
     // v15.8.0 cont.4: keyboard nav routes through the same slide path as the buttons.
@@ -2970,15 +2984,41 @@ function BookingApp({uid}){
   // would never stop talking.
   //
   // Computed in an effect keyed on `viewDate` ALONE, reading a ref mirror of the
-  // bookings — the ref-mirror shape this codebase already uses, and here it is
-  // what makes "date change only" literal rather than approximate. A `useMemo`
-  // over `bookings` would recompute on every write, and a write that changes the
-  // COUNT — cancelling a booking, taking a walk-in — would re-announce the whole
-  // day summary at a moment nobody navigated.
+  // bookings. That is what makes "date change only" literal rather than
+  // approximate: a `useMemo` over `bookings` would recompute on every write, and
+  // a write that changes the COUNT — cancelling a booking, taking a walk-in —
+  // would re-announce the whole day summary at a moment nobody navigated.
+  //
+  // **It says nothing on the first pass, and that is the fix for two things at
+  // once** (/code-review). `bookings` starts as `[]` and the hours start at
+  // their seed, so a mount-time announcement said "Nothing booked" on a day with
+  // twelve, and "open" on a day the loaded schedule closes — then never
+  // corrected, because `viewDate` had not changed. And it was wrong in principle
+  // anyway: nothing had CHANGED, which is the only thing this region is for.
+  // `announcedDateRef` is SEEDED with the mount date, so the date the app opens
+  // on is recorded without being spoken for; the first real navigation is the
+  // first utterance, by which time the snapshot has landed.
+  //
+  // Seeded with the date rather than with `null` and a first-run flag, because
+  // that flag is wrong under StrictMode: React re-invokes the effect on the
+  // simulated remount while REFS SURVIVE, so the flag was already consumed and
+  // the second run announced. Measured in DEV — the region held
+  // "Friday 21 August. Nothing booked." at mount with the flag version.
+  // Comparing the ref to `viewDate` is idempotent under any number of re-runs,
+  // which is the property actually wanted: announce when the DATE changed, not
+  // when the effect ran.
   const [dayAnnounce,setDayAnnounce]=useState("");
   const bookingsForAnnounceRef=useRef(bookings);
-  bookingsForAnnounceRef.current=bookings;
+  const announcedDateRef=useRef(viewDate);
+  // The mirror is refreshed in a DEP-LESS effect, not during render — the
+  // convention `useKeyboardShortcuts` adopted in v17.3.3 for its own ctx ref,
+  // for the reason recorded there (a render can be discarded or replayed, so a
+  // ref written mid-render can hold a value from a commit that never happened).
+  // Declared ABOVE the announce effect so it has already run when that fires.
+  useEffect(function(){bookingsForAnnounceRef.current=bookings;});
   useEffect(function(){
+    if(announcedDateRef.current===viewDate) return;   // mounting is not navigating
+    announcedDateRef.current=viewDate;
     const d=new Date(viewDate+"T00:00:00Z");
     // en-GB + UTC, matching the app's date convention throughout — a local
     // getDay against a UTC date string shifts a day in UTC+ zones (the v14.7.0
@@ -2986,6 +3026,11 @@ function BookingApp({uid}){
     const label=Number.isFinite(d.getTime())
       ? d.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",timeZone:"UTC"})
       : viewDate;
+    // `hoursFor(viewDate)`, not the `dayClosed` const above, and not by accident
+    // (/code-review — commit 9/n of this version collapsed four such calls into
+    // one). Two reasons it is right HERE: the value must be for the date being
+    // announced, read at effect time; and `dayClosed` in the dep array would
+    // re-announce the whole day every time someone saves Opening hours.
     if(hoursFor(viewDate).closed){setDayAnnounce(label+". Closed.");return;}
     const n=bookingsForAnnounceRef.current.reduce(function(acc,b){
       return acc+((b&&b.date===viewDate&&b.status!=="cancelled")?1:0);

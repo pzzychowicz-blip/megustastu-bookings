@@ -13880,3 +13880,99 @@ theme has one.
 
 **Verification:** build OK (203.33 kB gz, unchanged), lint 0 errors,
 **544 tests**, `check:style` OK.
+
+### 19/n — `/code-review xhigh`: 11 findings, all fixed
+
+**Files:** `src/App.jsx`, `src/components/ListView.jsx`,
+`src/hooks/{useModalStack,useKeyboardShortcuts}.js`,
+`tests/{modal-stack,a11y,prefs}.test.js`
+**Behavioural change:** three (below). The rest are guards that could not fail,
+and shape.
+
+Bundled as one commit rather than eleven, on this repo's own
+`"/code-review fixes"` precedent: the edits interleave in `App.jsx` and
+`modal-stack.test.js`, and splitting them would mean partial staging with
+broken intermediates — the opposite of what commit separability buys.
+
+**1. The critical one: `K.setShowWaitlist` was never in the keyboard ctx.**
+`escapeAction` gained a `waitlist` case; the setter it calls was not added
+beside it, because the OLD chain had no waitlist branch and so had never needed
+the key. Pressing Escape on the waitlist panel threw
+`TypeError: K.setShowWaitlist is not a function` and left it open — **the exact
+defect this version exists to remove, shipped in the commit that removes it.**
+It escaped the live walk because the DEV database had no waiting entries, so
+the panel could not be opened; it was found by diffing every `K.*` reference in
+the hook against the ctx keys.
+
+Proven both ways in the running app, by temporarily forcing the panel open:
+with the key removed, `TypeError` in the console and the panel stays; with it
+present, Escape closes it and the console is clean.
+
+**The fix is the guard, not the key.** `tests/modal-stack.test.js` now extracts
+every `K.<prop>` the hook reads and every key App passes, and fails on the
+difference — the two lists had nothing checking them against each other, which
+is why one was short. Verified by deleting the key and watching it fail. This is
+the same lesson as the eighteen booleans, one level up: **a `case` in
+`escapeAction` is only half a wiring.**
+
+**2. The day announcer spoke at mount, against no data.** `bookings` starts as
+`[]` and the hours start at their seed, so a day with twelve bookings announced
+"Nothing booked" and a closed day announced as open — then never corrected,
+because the dep array is `[viewDate]`. It was also wrong in principle: nothing
+had changed, which is the only thing that region is for. It now records the
+mount date without speaking for it.
+
+**And the first attempt at that was wrong in a way only DEV showed.** A
+`null` + first-run flag is consumed by StrictMode's simulated remount — refs
+survive it — so the second invocation announced anyway, measured live. Seeding
+the ref with `viewDate` and comparing is idempotent under any number of
+re-runs, which is the property actually wanted: announce when the DATE changed,
+not when the effect ran.
+
+**3. An empty `role="list"` announced itself.** On a cancelled-only day the
+Bookings list rendered with zero items directly under "Nothing booked for this
+day yet", so a screen reader heard a contradiction. The ROLE is now conditional
+and the element is not — it carries `flipRef`, and `useFlip` bails out on a
+null container, so unmounting it would have silently disabled the list-reorder
+animation for the session.
+
+**Two guards that could not fail, both reintroductions of a recorded lesson:**
+
+- The skip link's "outside the inert subtree" assertion sliced a **fixed
+  400-character window** — exactly what v17.13.0's review condemned ("the
+  `<main>`-never-inert guard read a fixed 400-char window of a 316-char opening
+  tag"). Moving the link inside `<header inert={anyModal}>` left markup the
+  regex stopped at, so it passed. Structural now: the link's index must precede
+  the first `inert={anyModal}` in the file. Verified by making that move.
+- The `MODAL_Z` coverage guard matched ids with `[a-z]+`, so `"block2"` or
+  `"pref-picker"` escaped the check written against exactly that failure. It
+  also scraped `setModalFor("x")`, which the simplification below deletes —
+  and generated setters make that direction tautological anyway, so it now
+  checks the READ side (`modalOpen.<id>`), which is where a missing rank still
+  bites.
+- `tests/prefs.test.js`'s key check was **negative only** — "App does not
+  contain `getItem(<key>)`" passes against an App that never mentions
+  `PREF_SPEC`, and never looked at writes. Both directions now, verified by
+  restoring the `readSplit` drift this version fixed.
+
+**Two simplifications.** `setModalFor` was a factory called from eighteen
+separate `useMemo`s — 36 hook slots per render to produce eighteen stable
+closures. One memo builds them all **from `MODAL_Z`**, which also makes "every
+id has a setter" structural instead of eighteen lines a test has to police. And
+`enterAction` was an `if`-chain ten lines below `escapeAction`'s `switch`; two
+shapes for one dispatch problem in one file, now one.
+
+**Two contracts written down rather than changed.** `applyModal` closes on any
+falsy payload — the semantics the eighteen booleans already had — which makes
+`0` and `""` unusable and would silently never open a numerically-keyed modal;
+stated at the boundary and pinned. And the `dayAnnounce` effect's
+`hoursFor(viewDate)` is deliberately not the `dayClosed` const that commit 9/n
+introduced: it must read the value for the date being announced at effect time,
+and `dayClosed` in the dep array would re-announce the day on every Opening
+hours save.
+
+**Verification:** build OK (203.33 kB gz, −0.00), lint 0 errors, **548 tests**
+(+4), `check:style` OK. Every new guard proven against known-bad input rather
+than asserted. In the running app: the waitlist panel closes on Escape with a
+clean console, the day region is empty at mount and correct after one
+navigation, and no console output on load.

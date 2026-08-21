@@ -72,33 +72,39 @@ function escapeAction(K,id){
 // one down, which is what the old `if` chain did by simply not mentioning it.
 const MODAL_ENTER_ORDER=["discard","reminder","reminderdel","manual","kitchen",
   "reshuffle","del","prefpicker","walkin","form"];
+// /code-review: a `switch`, like escapeAction above. These two solve the same
+// dispatch problem ten lines apart and were written in two different shapes,
+// which leaves the next person adding a modal choosing which to copy.
 function enterAction(K,id,e){
-  if(id==="discard"){e.preventDefault();K.doDiscard();return;}
-  if(id==="reminder"){
-    // Save only a valid draft; an invalid one swallows the key rather than
-    // letting it reach the surface underneath.
-    if(!validateReminderDraft(K.reminderEditor.draft)){e.preventDefault();K.saveReminderFromEditor();}
-    return;
-  }
-  if(id==="reminderdel"){e.preventDefault();K.doDeleteReminder(K.confirmReminderDel);return;}
-  // ManualModal handles its own Enter — this SWALLOWS the key rather than
-  // falling through. Quick-status popup is ambiguous, so it has no entry.
-  if(id==="manual") return;
-  if(id==="kitchen"){
-    const isW=K.confirmKitchen==="walkin";
-    e.preventDefault();
-    K.setConfirmKitchen(null);
-    if(isW) K.doSaveWalkin(); else K.doSave();
-    return;
-  }
-  if(id==="reshuffle"){e.preventDefault();K.setConfirmReshuffle(false);K.forceReshuffle();return;}
-  if(id==="del"){e.preventDefault();K.delBooking(K.confirmDel);return;}
-  if(id==="prefpicker"){e.preventDefault();K.setShowPrefPicker(false);return;}
-  if(id==="walkin"){e.preventDefault();K.saveWalkin();return;}
-  if(id==="form"){
-    // Save is disabled when the date is empty → mirror that, and swallow.
-    if(K.form&&K.form.date){e.preventDefault();K.save();}
-    return;
+  switch(id){
+    case "discard":     e.preventDefault();K.doDiscard();return;
+    case "reminder":
+      // Save only a valid draft; an invalid one swallows the key rather than
+      // letting it reach the surface underneath.
+      if(!validateReminderDraft(K.reminderEditor.draft)){e.preventDefault();K.saveReminderFromEditor();}
+      return;
+    case "reminderdel": e.preventDefault();K.doDeleteReminder(K.confirmReminderDel);return;
+    // ManualModal handles its own Enter — this SWALLOWS the key rather than
+    // falling through. Quick-status popup is ambiguous, so it has no entry.
+    case "manual":      return;
+    case "kitchen": {
+      const isW=K.confirmKitchen==="walkin";
+      e.preventDefault();
+      K.setConfirmKitchen(null);
+      if(isW) K.doSaveWalkin(); else K.doSave();
+      return;
+    }
+    case "reshuffle":   e.preventDefault();K.setConfirmReshuffle(false);K.forceReshuffle();return;
+    case "del":         e.preventDefault();K.delBooking(K.confirmDel);return;
+    case "prefpicker":  e.preventDefault();K.setShowPrefPicker(false);return;
+    case "walkin":      e.preventDefault();K.saveWalkin();return;
+    case "form":
+      // Save is disabled when the date is empty → mirror that, and swallow.
+      if(K.form&&K.form.date){e.preventDefault();K.save();}
+      return;
+    // An id absent from MODAL_ENTER_ORDER never reaches here; one present with
+    // no case would swallow the key, which is why the two lists sit together.
+    default:            return;
   }
 }
 

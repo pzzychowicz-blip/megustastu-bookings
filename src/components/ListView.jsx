@@ -607,8 +607,21 @@ export const ListView = memo(function ListView({
       {isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}
       {/* v17.12.0: a real list, so the cards are list items and the count is
           announced. Two lists rather than one, because the finished cards live
-          inside the Collapsible and a `list` must contain its items directly. */}
-      <div ref={flipRef} role="list" aria-label="Bookings" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          inside the Collapsible and a `list` must contain its items directly.
+
+          v17.14.0 (/code-review): the ROLE is conditional, the element is not.
+          On a cancelled-only day `active` is empty and this rendered as an empty
+          `role="list"` directly under the empty-day prompt, so a screen reader
+          heard "Nothing booked for this day yet" and then "Bookings, list, 0
+          items" — an announcement contradicting the one before it. Dropping the
+          role leaves a plain div, which announces nothing. The element itself
+          must stay mounted either way: it carries `flipRef`, and `useFlip`'s
+          layout effect bails out entirely on a null container, so unmounting it
+          would silently disable the list-reorder animation for the rest of the
+          session. */}
+      <div ref={flipRef} role={active.length ? "list" : undefined}
+        aria-label={active.length ? "Bookings" : undefined}
+        style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {active.map(renderCard)}
       </div>
       {finished.length > 0 ? (

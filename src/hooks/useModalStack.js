@@ -64,6 +64,16 @@ const EMPTY_STACK=[];
 // The one writer. `v` is the modal's payload: falsy closes, an updater function
 // is applied to the current payload, anything else opens or replaces.
 //
+// **FALSY closes, which makes `0` and `""` unusable as payloads** (/code-review).
+// That is the semantics the eighteen booleans already had — every mount site
+// read `!!confirmDel` — so it is preserved rather than chosen, and no modal
+// today carries a falsy-but-meaningful payload: ids are non-empty strings and
+// the plain booleans are `true`. It is stated here and pinned in
+// tests/modal-stack.test.js because the failure mode is silent: a future modal
+// keyed on a numeric id would call `setModalFns.x(0)` and simply never appear,
+// with nothing to grep for. A payload that can be falsy must be wrapped
+// (`{id: 0}`), not passed bare.
+//
 // Re-opening an ALREADY-OPEN modal replaces its payload IN PLACE rather than
 // moving it to the top — `setManualTarget(other)` while the picker is open is
 // a payload change, not a new layer.
