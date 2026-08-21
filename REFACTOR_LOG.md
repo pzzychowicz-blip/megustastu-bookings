@@ -13300,8 +13300,14 @@ in the same pass, and it is the half a value test structurally cannot see: a raw
 control character is invisible in every editor, grep and diff, so the code would
 keep working while becoming unmaintainable.
 
-**Verification:** build OK (201.91 kB gz, unchanged), lint 0 errors,
-**482 tests** (+5), `check:style` OK.
+**Verification:** build OK (201.91 kB gz, unchanged), **482 tests** (+5),
+`check:style` OK. Lint needed a follow-up commit: the premise assertion was
+written as `k.replace(/\u001f/g, "_")`, and a control character in a regex
+literal is `no-control-regex` — an ESLint **error**, i.e. a hard CI gate. It is
+`split(...).join(...)` now. Worth recording because of how it was missed: `npm
+run lint` was read as passing off its "0 errors and 1 warning potentially
+fixable" tail line, which reports what `--fix` could handle, not the error
+count. Read the `problems` line.
 
 ### 4/n — a multi-table booking no longer reads "5A and 5B and 6"
 

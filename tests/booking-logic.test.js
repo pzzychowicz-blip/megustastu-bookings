@@ -847,7 +847,10 @@ describe("clashRowId", () => {
     const one = clashRowId({ a: "rA_2026-08-21", b: "x" });
     const two = clashRowId({ a: "rA", b: "2026-08-21_x" });
     expect(one).not.toBe(two);
-    expect(one.replace(/\u001f/g, "_")).toBe(two.replace(/\u001f/g, "_"));  // proves the premise
+    // split/join, not a regex: a control character in a regex literal is a lint
+    // ERROR here (no-control-regex) and lint is a hard CI gate.
+    const asUnderscore = (k) => k.split("\u001f").join("_");
+    expect(asUnderscore(one)).toBe(asUnderscore(two));  // proves the premise
   });
 
   it("does not collide on ids containing a hyphen", () => {
