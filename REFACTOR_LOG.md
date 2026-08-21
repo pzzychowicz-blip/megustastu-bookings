@@ -13170,3 +13170,80 @@ self-tests and two Rule 8 fixtures; the contrast fixes strengthened existing
 cases rather than adding any), `check:style` OK. The swap panel re-measured in
 the running app: transparent background confirmed, rim now resolving to
 `--border-soft`.
+
+---
+
+## v17.14.0 — the modal stack, and the end of the Deferred list
+
+**Date:** 2026-08-21
+**Files:** see each entry.
+**Behavioural change:** see each entry. No persisted-data change and no Firebase
+console step for any of them.
+**Verification:** see each entry.
+
+`ROADMAP.md`'s **Deferred** section had reached 19 items across five headings:
+the modal-stack refactor the last three versions were staged behind, two
+contrast trade-offs v17.13.0 measured and deliberately left open, four
+accessibility follow-ups from v17.12.0, seven `/code-review` findings deferred
+at v17.11.0 and four more from v17.10.2. Patryk's instruction for this version
+was that **all of it lands** — one version that empties the file rather than
+another pass taking the easy half.
+
+**One item is excluded and stays.** The WhatsApp sandbox hardening (a uid/email
+allow-list in `verifyStaffToken`, `sanitizeKey` at the `_lib/rtdb.js` boundary)
+targets code that exists only on the `wa-sandbox` branch — neither symbol is on
+`main`. It is annotated as branch-scoped rather than silently carried.
+
+**Two items are closed as decisions rather than shipped as fixes**, both design
+calls with the numbers in front of Patryk, the way the v17.10.0 amber exemption
+was settled: the waitlist ghost's guest name stays at its shipped opacity (the
+dimming IS the "proposal, not booking" signal, and the ⏳ marker and dashed edge
+carry the meaning independently of the text), and the List keeps `list` /
+`listitem` semantics because the "Completed & cancelled" fold is not being
+restructured, so a `grid` whose children must be rows would be the wrong shape.
+
+### 1/n — `bookingsAfterAction` returns its input array on a no-op
+
+**Files:** `src/App.jsx` (version bump), `src/lib/booking-logic.js`,
+`tests/booking-logic.test.js`
+**Behavioural change:** none visible. One reference-identity contract, at the
+source of a bug class that had been fixed at exactly one call site.
+
+v17.10.2 fixed an infinite render loop in the post-sync reconciliation effect by
+comparing `dayBookingsSig` before dispatching. The **root cause** was untouched:
+`bookingsAfterAction` returned a fresh array whether or not the pass changed
+anything, so any `useEffect` that depends on `bookings` and calls it was one
+line away from reintroducing the same loop with no warning. Its sibling manual
+branch survived only by accident — it happens to break with `next === prev`, and
+React bails out of identical state.
+
+The transform is unchanged and now lives in a private `computeAfterAction`;
+`bookingsAfterAction` runs it and hands back `updatedBks` when nothing moved.
+
+**The compare is `undoKey`'s field set, and that is the load-bearing part.**
+v17.10.2's own lesson is that a gate NARROWER than the pass it guards silently
+discards work — its first version compared `id:tables` alone and threw away both
+the `duration` extension `syncLiveDurations` writes and the `_conflict` flag
+`applyOpt` writes. Every field either of those two touches is in `UNDO_FIELDS`,
+which is what makes this compare exactly as wide as the transform rather than
+approximately as wide.
+
+Order differences count as a change. Nothing in the module reorders, so the
+branch is unreachable today; treating it as changed is the conservative
+direction if something ever does.
+
+**Callers must keep treating the result as immutable** — the returned array may
+now BE the caller's own input. All 29 call sites were read: every one goes
+through `map` / `filter` / `find`, none writes into the result.
+
+The one existing test asserting the opposite (`"returns a NEW array even though
+nothing changed — the loop's actual fuel"`, whose comment said *do not optimise
+that away*) is inverted, with the reversal explained at the site. It was
+guarding the call-site fix, which still stands — `dayBookingsSig` stays, because
+identity answers "did THIS pass change anything" while a signature answers "are
+these two lists the same day", and the reconciliation loop needs the second.
+
+**Verification:** build ✓ (201.92 kB gz, +0.01 vs v17.13.0), lint 0 errors,
+**476 tests** (+4: OFF-path no-op, ON-path no-op, a real move still returning a
+new array, and a seated party past its duration proving the compare is not
+narrower than `syncLiveDurations`), `check:style` OK.

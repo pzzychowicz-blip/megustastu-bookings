@@ -295,6 +295,41 @@ describe("optimise / applyOpt / bookingsAfterAction", () => {
     const out = bookingsAfterAction([b], today, [], null, false, false);
     expect(out[0].tables).toEqual(["7"]);
   });
+
+  // ── v17.14.0: the no-op identity contract ─────────────────────────────────
+  // The OFF path used to clone every booking; the ON path built a fresh array
+  // from applyOpt. Both now hand back the input when the pass moved nothing,
+  // which is what lets a caller ask "did this change anything" with `===`.
+  it("OFF-path no-op returns the input array itself", () => {
+    const list = [mk({ date: today, status: "confirmed", tables: ["7"], size: 4, _conflict: false })];
+    expect(bookingsAfterAction(list, today, [], null, false, false)).toBe(list);
+  });
+
+  it("ON-path no-op returns the input array itself", () => {
+    // Already optimally placed, so applyOpt reproduces the same assignment.
+    const list = applyOpt([mk({ id: "a", size: 4 }), mk({ id: "b", time: "20:00", size: 2 })], D, []);
+    expect(bookingsAfterAction(list, D, [], null, false, true)).toBe(list);
+  });
+
+  it("still returns a NEW array when the pass actually moves something", () => {
+    // Deliberately mis-assigned: table 7 for a party of 4 that the optimizer
+    // places elsewhere. The identity contract must not swallow a real change.
+    const list = [mk({ id: "a", size: 4, tables: [], _conflict: true })];
+    const out = bookingsAfterAction(list, D, [], null, false, true);
+    expect(out).not.toBe(list);
+    expect(out[0].tables.length).toBeGreaterThan(0);
+  });
+
+  it("a seated party past its duration is a change, not a no-op", () => {
+    // syncLiveDurations extends `duration`/`customDur`. Both are in the compared
+    // field set on purpose — a narrower compare would report "no change" and the
+    // extension would be discarded, which is the v17.10.2 lesson this reuses.
+    const start = "00:00";
+    const list = [mk({ id: "s", date: today, status: "seated", time: start, duration: 1, customDur: 1, tables: ["7"], _conflict: false })];
+    const out = bookingsAfterAction(list, today, [], null, false, false);
+    expect(out).not.toBe(list);
+    expect(out[0].duration).toBeGreaterThan(1);
+  });
 });
 
 // v17.6.0: separation between bookings. The whole feature hangs off the
@@ -762,13 +797,18 @@ describe("an all-locked clash is unresolvable, which is why the loop existed", (
     expect(verifyClean(after, D)).toBe(false);   // still dirty, still unresolvable
   });
 
-  it("returns a NEW array even though nothing changed — the loop's actual fuel", () => {
-    // This is the property that made an unresolvable clash spin forever: the
-    // reconciliation effect assigned this result unconditionally, React saw a
-    // new reference on a dep, and re-ran the effect. The fix compares
-    // signatures and keeps the ORIGINAL reference; do not "optimise" that away.
+  it("returns the INPUT array when nothing changed — v17.14.0 inverted this", () => {
+    // Until v17.14.0 this returned a fresh array either way, and that was the
+    // fuel: the reconciliation effect assigned the result unconditionally,
+    // React saw a new reference on a dep, and re-ran the effect forever. The
+    // v17.10.2 fix compared signatures at that ONE call site; v17.14.0 fixes it
+    // at the source, so every caller can compare identity.
+    //
+    // This assertion is the exact reverse of the one it replaces. That is the
+    // point of the change, not a regression — the old test's "do not optimise
+    // that away" was guarding the call-site fix, which still stands.
     const before = clash();
-    expect(bookingsAfterAction(before, D, [], null, false, true)).not.toBe(before);
+    expect(bookingsAfterAction(before, D, [], null, false, true)).toBe(before);
   });
 
   it("a clash the optimizer CAN fix does change the signature", () => {

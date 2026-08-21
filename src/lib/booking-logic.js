@@ -663,13 +663,56 @@ export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,pref
   if(!tables&&(pref||"auto")==="auto") tables=findBestAny(size,s,e,slots);
   return tables;
 }
+// v17.14.0: did this pass actually change anything? Element-wise, in order, on
+// `undoKey`'s field set — which is deliberately the SAME set `dayBookingsSig`
+// compares, because v17.10.2 learned that a gate NARROWER than the pass it
+// guards silently discards work: that version's first attempt compared
+// `id:tables` alone and threw away both the `duration` extension
+// `syncLiveDurations` writes and the `_conflict` flag `applyOpt` writes. Every
+// field either of those two touches is in UNDO_FIELDS, which is what makes this
+// compare exactly as wide as the transform.
+//
+// Order differences count as a change. Nothing in this module reorders, so the
+// branch is unreachable today; treating it as changed is the conservative
+// direction if something ever does.
+function sameBookings(a,b){
+  if(a===b) return true;
+  if(!Array.isArray(a)||!Array.isArray(b)||a.length!==b.length) return false;
+  for(var i=0;i<a.length;i++){
+    var x=a[i],y=b[i];
+    if(x===y) continue;
+    if(!x||!y) return false;
+    if(x.id!==y.id) return false;
+    if(undoKey(x)!==undoKey(y)) return false;
+  }
+  return true;
+}
 // Drop-in replacement for applyOpt() in user-triggered actions. Respects the
 // autoOptimizer state for today. When ON → applyOpt as usual. When OFF → keep
 // all existing tables untouched; only reassign `changedId` if forceReassign.
+//
+// ── v17.14.0: a no-op returns its INPUT ARRAY, not a copy ────────────────────
+// This function used to return a fresh array whether or not the pass changed
+// anything, which is the root cause behind the v15.6.1 reconciliation effect
+// spinning forever (fixed at ONE call site in v17.10.2, by comparing
+// `dayBookingsSig` before dispatching). Every other `useEffect` that depends on
+// `bookings` and calls this was one line away from reintroducing the same loop
+// with no warning, and the sibling manual branch survived only by accident —
+// it happens to break with `next === prev`, and React bails out of identical
+// state.
+//
+// Fixing it here removes the bug class for all 29 call sites at once: a caller
+// can now compare identity and trust it. Callers must keep treating the result
+// as immutable — none of them mutates it today (all read via map/filter/find),
+// and the returned array may now BE the caller's own input.
 export function bookingsAfterAction(updatedBks,date,blocks,changedId,forceReassign,autoOptimizerState){
   var today=new Date().toISOString().slice(0,10);
   var d=new Date();var nowM=d.getHours()*60+d.getMinutes();
   var synced=syncLiveDurations(updatedBks,today,nowM);
+  var out=computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptimizerState);
+  return sameBookings(out,updatedBks)?updatedBks:out;
+}
+function computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptimizerState){
   if(optimizerActiveFor(date,autoOptimizerState)) return applyOpt(synced,date,blocks);
   // OFF path: preserve everyone's tables
   if(!changedId||!forceReassign) return synced.map(function(b){return Object.assign({},b);});
@@ -986,12 +1029,21 @@ export function daySummary(bookings,date,splitHour){
 // on array order. Two lists with the same signature for a date are, as far as
 // anything the app persists is concerned, the same day.
 //
-// It exists because `bookingsAfterAction` returns a NEW array whether or not the
-// pass changed anything, and the post-sync reconciliation effect (App.jsx) must
-// be able to tell the difference. Without it that effect re-dispatched an
-// identical snapshot on every commit whenever a date held a clash the optimizer
-// cannot resolve — two `_locked` bookings on one table, which `applyOpt` copies
-// through verbatim — and React re-ran the effect on the new reference forever.
+// It exists because `bookingsAfterAction` USED TO return a NEW array whether or
+// not the pass changed anything, and the post-sync reconciliation effect
+// (App.jsx) must be able to tell the difference. Without it that effect
+// re-dispatched an identical snapshot on every commit whenever a date held a
+// clash the optimizer cannot resolve — two `_locked` bookings on one table,
+// which `applyOpt` copies through verbatim — and React re-ran the effect on the
+// new reference forever.
+//
+// **v17.14.0 fixed that at the source**: `bookingsAfterAction` now returns its
+// input array when the pass moved nothing, so a caller can compare identity.
+// This function stays, because identity answers "did THIS pass change
+// anything" while a signature answers "are these two lists the same day" —
+// the reconciliation loop needs the second (it compares its own accumulated
+// `next` against a pass's output across up to 20 iterations), and so would any
+// future caller diffing two independently-derived snapshots.
 //
 // **It reuses `undoKey`'s field set deliberately, and the first version did not.**
 // That version compared `id:tables` alone, which is wrong in a way that is easy
