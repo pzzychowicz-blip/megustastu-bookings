@@ -223,8 +223,21 @@ function styleValue(line, key) {
 // recorded lessons — this is the same fact pointed the other way.
 const COLOUR_LITERAL = /\brgba?\(\s*[\d.]|(?<![&\w])#[0-9a-fA-F]{3,8}\b/;
 
-// Rule 8: a numeric icon size, in the two positions an icon's size is written.
-const ICON_SIZE = /\bsize=\{\s*-?\d|\bsize\s*=\s*-?\d/;
+// Rule 8: a numeric icon size, in the two positions an icon's size is WRITTEN —
+// a JSX attribute, and a destructured default.
+//
+// /code-review: the second arm was `\bsize\s*=\s*-?\d`, which also matches a
+// plain `let size = 20` or `obj.size = 4` — neither of which is an icon, and the
+// header above this rule says the rule is those two positions only. Nothing in
+// src/ has such a variable today, so CI was green and the false positive was
+// waiting for the first `const size = 4` anyone wrote for a party size or a
+// canvas dimension. Same shape as the defect this file's own comments name three
+// times: a check written around the form the violations happened to take.
+//
+// A destructured default is distinguished by what PRECEDES it — `{` or `,` (with
+// optional whitespace), i.e. the start of a binding in an object pattern — which
+// a declaration (`let `, `const `) and a member assignment (`.size`) never have.
+const ICON_SIZE = /\bsize=\{\s*-?\d|[{,]\s*size\s*=\s*-?\d/;
 
 // Rule 9: a hand-written duration/curve. `var(--t-shift) linear` is a token
 // composition and must not match, so a TIME is required before the keyword.
