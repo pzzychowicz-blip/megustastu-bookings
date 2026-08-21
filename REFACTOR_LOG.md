@@ -13670,3 +13670,24 @@ separated by a zero-width seam is a rendering artefact rather than information.
 than the code it replaced), lint 0 errors, **533 tests** (+7: identical spans,
 overlapping, contained, touching, disjoint-and-reordered, the trivial cases, and
 input not mutated), `check:style` OK.
+
+### 14/n — the notification strip's lid radius accounts for the pane's border
+
+**Files:** `src/components/NotificationStrip.jsx`
+**Behavioural change:** a sub-pixel sliver of pane no longer shows at the lid's
+corners.
+
+The lid carried the pane's own `R.card` (14px), but it sits INSIDE the pane's
+1px border, so the geometrically correct inner radius is 13px. An inner surface
+repeating the outer radius bulges past the curve, and it was visible rather than
+theoretical because the lid's hover veil is a different colour from the pane
+under it.
+
+There is no token for "card minus a border", and adding one would put an entry
+in a shared scale that only ever has this one caller — so it is a `calc()` at
+the site, behind a named `LID_R` const so the open and closed cases cannot
+disagree.
+
+**Verification:** build OK (203.05 kB gz, +0.01), lint 0 errors, **533 tests**,
+`check:style` OK. `calc(var(--r-card) - 1px)` resolved live in the running app:
+14px → 13px.

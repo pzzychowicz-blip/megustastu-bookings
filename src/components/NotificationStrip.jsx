@@ -52,6 +52,9 @@ import { ChevronDownIcon } from "./Icons";
 // So the numbers live here, next to the styles that actually use them, and the
 // callers import the total. Change PAD_X / MARK / GAP and every body follows.
 export const NOTIF_PAD_X = 14;   // the pane's horizontal padding
+// v17.14.0 (/code-review follow-up): the lid's radius is the pane's MINUS the
+// 1px border it sits inside. See the note at its use.
+const LID_R = "calc(" + R.card + " - 1px)";
 const NOTIF_MARK = 15;           // SectionMark's icon box
 const NOTIF_GAP = 9;             // the flex gap between mark and title
 export const NOTIF_GUTTER = NOTIF_PAD_X + NOTIF_MARK + NOTIF_GAP;
@@ -200,7 +203,15 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
           // Its own radius, since the pane no longer clips. Bottom corners go
           // square while the body is open — the lid is then the TOP of a taller
           // surface, not the whole of it.
-          borderRadius: open ? R.card + " " + R.card + " 0 0" : R.card,
+          //
+          // v17.14.0 (/code-review follow-up): LID_R is that radius MINUS the
+          // pane's 1px border, which the lid sits inside. An inner surface
+          // repeating the outer radius bulges past the curve, showing a
+          // sub-pixel sliver of pane at each corner — visible because the lid's
+          // hover veil is a different colour from the pane under it. There is no
+          // token for "card minus a border", and adding one would put an entry
+          // in a shared scale that only ever has this caller.
+          borderRadius: open ? LID_R + " " + LID_R + " 0 0" : LID_R,
           padding: "10px " + NOTIF_PAD_X + "px", textAlign: "left"
         }}>
         {/* v17.8.0: an ICON, not the 8px dot. The dot said "something is
