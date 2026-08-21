@@ -13500,3 +13500,47 @@ every dismissal.
 **Verification:** build OK (202.87 kB gz, +0.17), lint 0 errors, **517 tests**
 (+9, including both identity properties and the "clash survives a day change"
 asymmetry), `check:style` OK.
+
+### 8/n — the preference mirror becomes a declarative table
+
+**Files:** `src/hooks/useUserPrefs.js`, `src/App.jsx`, `tests/prefs.test.js` (new)
+**Behavioural change:** none, and one drift removed (below).
+
+The four synced boolean prefs — reduce animations, plan gestures, lock
+navigation, split view — were each written out **three** times in App: a
+`useState` initializer reading `localStorage`, a toggle handler writing it, and
+a branch of the v17.6.0 seeding effect doing both again. Twelve near-identical
+blocks differing only in a key name and in which way round the default goes.
+
+`PREF_SPEC` (in `useUserPrefs.js`, which already owns the node) states each one
+once. `store` captures the second difference, which is the house convention
+rather than an accident: **only the non-default value is ever stored, so an
+absent key means the default.** `"whenOn"` is the default-OFF shape (`navLocked`,
+`reduceMotion` — store `"1"` when true); `"whenOff"` the default-ON one
+(`planGestures`, `splitEnabled` — store `"0"` when false). App keeps one reader
+(`readPrefLS`), one writer (`writePref`) and one flip (`togglePref`).
+
+**The drift it found immediately:** `readSplit` had a *second* hand-written read
+of `"mgt-split-enabled"`, checking the master switch before restoring a saved
+layout. Two literals for one key, one of them nowhere near the other three.
+
+**Two things stay written out in full, and that is the instruction, not an
+omission.** `theme` is a tri-state STRING with a `?theme=` override that must
+skip both the apply and the seed branches, and whose `undefined` case
+(follow the OS) is deliberately never seeded — folding that into a table hides
+the one pref whose special cases have actually bitten. And `setSplit(null)`
+when Split View goes off is React state rather than storage, so it stays at the
+two call sites; the table only drops the saved-layout localStorage key.
+
+**The tri-state semantics are untouched.** The seeding loop takes the apply
+branch only for a real boolean: `null` means "this user has never chosen", and
+a sanitize returning `false` for an absent field would reset every configured
+device at first login — the property the whole device-fallback migration rests
+on, now pinned by a test.
+
+**Verification:** build OK (202.99 kB gz, +0.12), lint 0 errors, **526 tests**
+(+9: both defaults, both round-trips, `PREF_SPEC` covering exactly the synced
+booleans and not `theme`, no surviving hand-written read of any of the four
+keys in App, `clears` matching `SPLIT_KEY`, and absent-sanitizes-to-null).
+`check:style` OK. Toggled Plan zoom & pan in DEV both ways and watched the key
+go absent and back to `"0"`.

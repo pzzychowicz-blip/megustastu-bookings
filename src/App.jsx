@@ -210,7 +210,7 @@ import { useGeneralSettings } from "./hooks/useGeneralSettings";
 // v17.6.0: per-user preferences (settings/users/{uid}/prefs) — the first
 // settings node that is NOT restaurant-wide. See useUserPrefs.js for what
 // syncs, what stays per-device, and why the localStorage mirror stays.
-import { useUserPrefs } from "./hooks/useUserPrefs";
+import { useUserPrefs, PREF_SPEC, PREF_NAMES, readPrefValue, prefLocalValue } from "./hooks/useUserPrefs";
 import { useLayout } from "./hooks/useLayout";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
@@ -417,7 +417,16 @@ function readAppWidth(){
 // v17.5.0: the persisted Split View, per device. Restored on load so a split
 // survives a reload/redeploy — losing your layout on every refresh would make
 // the feature not worth setting up.
-const SPLIT_KEY="mgt-split";
+const SPLIT_KEY="mgt-split";   // also PREF_SPEC.splitEnabled.clears — keep in step
+// v17.14.0: read one of the four boolean prefs off this device, per its
+// PREF_SPEC convention. The try/catch is the same one the four initializers
+// each carried; the default on a throw is the pref's own default, which is
+// exactly what an absent key means.
+function readPrefLS(name){
+  const spec=PREF_SPEC[name];
+  try{return readPrefValue(spec.store,localStorage.getItem(spec.ls));}
+  catch{return readPrefValue(spec.store,null);}
+}
 // The canonical view order — drives the slide direction on a view switch AND
 // validates a restored split. useKeyboardShortcuts keeps its own VIEW_ORD for
 // the same purpose; keep the two identical if a view is ever added.
@@ -428,7 +437,8 @@ const VIEW_ORD=["timeline","list","plan"];
 // (timelineZoom / selectedListId / showFinished).
 function readSplit(){
   try{
-    if(localStorage.getItem("mgt-split-enabled")==="0") return null;   // master switch off
+    if(!readPrefLS("splitEnabled")) return null;   // master switch off — v17.14.0: was a
+    // second hand-written read of the same key, which is the drift PREF_SPEC exists to stop.
     if(typeof window!=="undefined"&&window.innerWidth<600) return null; // tablet/desktop only
     const s=JSON.parse(localStorage.getItem(SPLIT_KEY)||"null");
     if(!s||typeof s!=="object") return null;
@@ -1063,9 +1073,7 @@ function BookingApp({uid}){
   // the no-flash script in index.html reads the SAME key pre-mount, the CSS
   // kill-switch keys on the attribute, and atoms.jsx's useFlip checks it for
   // WAAPI animations. Keep all three in sync.
-  const [reduceMotion,setReduceMotion]=useState(function(){
-    try{return localStorage.getItem("mgt-reduce-motion")==="1";}catch{return false;}
-  });
+  const [reduceMotion,setReduceMotion]=useState(function(){return readPrefLS("reduceMotion");});
   // v17.10.1: per-device offline shell. localStorage ONLY — deliberately not
   // saveUserPrefs'd: clearing site data is the last-resort escape from a bad
   // worker, and a synced flag would come straight back down and re-enable it.
@@ -1076,67 +1084,64 @@ function BookingApp({uid}){
                                // apart from the writer above, which is a name
                                // that only tells you it is not the other one.
   }
-  function onToggleReduceMotion(){
-    const next=!reduceMotion;
+  // ── v17.14.0: the four boolean prefs, driven by PREF_SPEC ───────────────────
+  // The localStorage convention (which value is stored, which key is dropped)
+  // lives once in useUserPrefs.js; these two functions are the only place that
+  // TOUCHES localStorage for them, and they are shared by the initializers, the
+  // toggles and the seeding effect below.
+  //
+  // `theme` stays written out in full above: it is a tri-state string with a
+  // `?theme=` override that must skip both branches, and hiding that in a table
+  // is how it would get broken.
+  function writePref(name,v){
+    const spec=PREF_SPEC[name];
+    const str=prefLocalValue(spec.store,v);
     try{
-      if(next) localStorage.setItem("mgt-reduce-motion","1");
-      else localStorage.removeItem("mgt-reduce-motion");
+      if(str===null) localStorage.removeItem(spec.ls); else localStorage.setItem(spec.ls,str);
+      if(spec.clears&&!v) localStorage.removeItem(spec.clears);
     }catch{/* ignore */}
-    if(next) document.documentElement.dataset.motion="reduce";
-    else delete document.documentElement.dataset.motion;
-    setReduceMotion(next);
-    saveUserPrefs({reduceMotion:next});   // v17.6.0: follows the account
+    // The one DOM side effect any of them has: index.html's boot script reads
+    // this attribute, and the motion rules key off it.
+    if(name==="reduceMotion"){
+      if(v) document.documentElement.dataset.motion="reduce";
+      else delete document.documentElement.dataset.motion;
+    }
   }
+  // Flip a pref: write it locally, set the state, sync it to the account.
+  // Returns the new value so a caller can hang its own React side effect off it
+  // (only splitEnabled has one — see below).
+  function togglePref(name,cur,set){
+    const next=!cur;
+    writePref(name,next);
+    set(next);
+    saveUserPrefs({[name]:next});   // v17.6.0: follows the account
+    return next;
+  }
+  function onToggleReduceMotion(){togglePref("reduceMotion",reduceMotion,setReduceMotion);}
   // v17.1.2: per-device "Plan zoom & pan" (Settings → General). Theme pattern:
   // localStorage["mgt-plan-gestures"]="0" only when OFF (absent = on, the
   // default) — gates PlanView's wheel/pinch zoom, drag pan and double-tap reset.
-  const [planGestures,setPlanGestures]=useState(function(){
-    try{return localStorage.getItem("mgt-plan-gestures")!=="0";}catch{return true;}
-  });
-  function onTogglePlanGestures(){
-    const next=!planGestures;
-    try{
-      if(next) localStorage.removeItem("mgt-plan-gestures");
-      else localStorage.setItem("mgt-plan-gestures","0");
-    }catch{/* ignore */}
-    setPlanGestures(next);
-    saveUserPrefs({planGestures:next});   // v17.6.0: follows the account
-  }
+  const [planGestures,setPlanGestures]=useState(function(){return readPrefLS("planGestures");});
+  function onTogglePlanGestures(){togglePref("planGestures",planGestures,setPlanGestures);}
   // v17.5.0: per-device "Lock navigation" (Settings → General). Theme pattern,
   // but INVERTED vs planGestures because the default is OFF — only the non-
   // default value is ever stored, so localStorage["mgt-nav-lock"]="1" means on
   // and an absent key means off. Drives the `shellFixed` layout below.
-  const [navLocked,setNavLocked]=useState(function(){
-    try{return localStorage.getItem("mgt-nav-lock")==="1";}catch{return false;}
-  });
-  function onToggleNavLock(){
-    const next=!navLocked;
-    try{
-      if(next) localStorage.setItem("mgt-nav-lock","1");
-      else localStorage.removeItem("mgt-nav-lock");
-    }catch{/* ignore */}
-    setNavLocked(next);
-    saveUserPrefs({navLocked:next});      // v17.6.0: follows the account
-  }
+  const [navLocked,setNavLocked]=useState(function(){return readPrefLS("navLocked");});
+  function onToggleNavLock(){togglePref("navLocked",navLocked,setNavLocked);}
   // v17.5.0: per-device Split View master switch (Settings → General).
   // v17.5.0 correction: default ON (was off), so the RMB / press-and-hold
   // gesture works out of the box. That puts it back on the house convention —
   // key absent = default, only the non-default "0" is stored — same shape as
   // planGestures. (navLocked stays inverted; its default really is off.)
   // While off, the gesture on a view button does nothing at all.
-  const [splitEnabled,setSplitEnabled]=useState(function(){
-    try{return localStorage.getItem("mgt-split-enabled")!=="0";}catch{return true;}
-  });
+  const [splitEnabled,setSplitEnabled]=useState(function(){return readPrefLS("splitEnabled");});
   function onToggleSplitEnabled(){
-    const next=!splitEnabled;
-    try{
-      if(next) localStorage.removeItem("mgt-split-enabled");
-      else{localStorage.setItem("mgt-split-enabled","0");localStorage.removeItem(SPLIT_KEY);}
-    }catch{/* ignore */}
-    setSplitEnabled(next);
-    saveUserPrefs({splitEnabled:next});   // v17.6.0: the SWITCH syncs; the saved
-    // split LAYOUT (which two views + ratio) stays per-device, see useUserPrefs.
-    if(!next) setSplit(null); // turning the feature off must also leave any active split
+    // Only the SWITCH syncs; the saved split LAYOUT (which two views + ratio)
+    // stays per-device — PREF_SPEC drops that key, see useUserPrefs.js.
+    if(!togglePref("splitEnabled",splitEnabled,setSplitEnabled)) setSplit(null);
+    // ^ turning the feature off must also leave any active split. React state,
+    //   so it stays here rather than in the table.
   }
   // The active split, or null for a single view. Restored per-device.
   const [split,setSplit]=useState(readSplit);
@@ -1152,6 +1157,15 @@ function BookingApp({uid}){
   // hook resets it when the path changes), and re-running on every later
   // snapshot would fight the user's own toggles. Reading the current local
   // values here without depending on them is the point, not an oversight.
+  // The current value + setter for each of the four, so the seeding loop below
+  // can read "what is this device using" and "how do I change it" by name.
+  // Rebuilt per render and read only inside the once-per-uid effect.
+  const prefState={
+    reduceMotion:{value:reduceMotion,set:setReduceMotion},
+    planGestures:{value:planGestures,set:setPlanGestures},
+    navLocked:{value:navLocked,set:setNavLocked},
+    splitEnabled:{value:splitEnabled,set:setSplitEnabled},
+  };
   const seededPrefsRef=useRef(false);
   useEffect(function(){
     if(!prefsLoaded||seededPrefsRef.current) return;
@@ -1173,28 +1187,22 @@ function BookingApp({uid}){
       // freeze the user to whatever the OS happened to say at first login.
       seed.theme=themePref?"dark":"light";
     }
-    if(userPrefs.reduceMotion!==null){
-      const v=userPrefs.reduceMotion;
-      try{ if(v) localStorage.setItem("mgt-reduce-motion","1"); else localStorage.removeItem("mgt-reduce-motion"); }catch{/* ignore */}
-      if(v) document.documentElement.dataset.motion="reduce"; else delete document.documentElement.dataset.motion;
-      setReduceMotion(v);
-    }else seed.reduceMotion=reduceMotion;
-    if(userPrefs.planGestures!==null){
-      const v=userPrefs.planGestures;
-      try{ if(v) localStorage.removeItem("mgt-plan-gestures"); else localStorage.setItem("mgt-plan-gestures","0"); }catch{/* ignore */}
-      setPlanGestures(v);
-    }else seed.planGestures=planGestures;
-    if(userPrefs.navLocked!==null){
-      const v=userPrefs.navLocked;
-      try{ if(v) localStorage.setItem("mgt-nav-lock","1"); else localStorage.removeItem("mgt-nav-lock"); }catch{/* ignore */}
-      setNavLocked(v);
-    }else seed.navLocked=navLocked;
-    if(userPrefs.splitEnabled!==null){
-      const v=userPrefs.splitEnabled;
-      try{ if(v) localStorage.removeItem("mgt-split-enabled"); else{localStorage.setItem("mgt-split-enabled","0");localStorage.removeItem(SPLIT_KEY);} }catch{/* ignore */}
-      setSplitEnabled(v);
-      if(!v) setSplit(null);
-    }else seed.splitEnabled=splitEnabled;
+    // v17.14.0: the four booleans, one loop over PREF_SPEC. The TRI-STATE
+    // semantics are untouched and are the reason this cannot be simplified
+    // further: `null` means "this user has never chosen", and a sanitize that
+    // returned `false` for an absent field would reset every configured device
+    // on first login. Only a real boolean takes the apply branch.
+    PREF_NAMES.forEach(function(name){
+      const saved=userPrefs[name];
+      const st=prefState[name];
+      if(saved===true||saved===false){
+        writePref(name,saved);
+        st.set(saved);
+      }else seed[name]=st.value;
+    });
+    // The one React side effect the table does not carry, for the same reason
+    // the toggle keeps it: leaving an active split is state, not storage.
+    if(userPrefs.splitEnabled===false) setSplit(null);
     if(Object.keys(seed).length) saveUserPrefs(seed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[prefsLoaded]);
