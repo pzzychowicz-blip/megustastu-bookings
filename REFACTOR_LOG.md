@@ -13302,3 +13302,33 @@ keep working while becoming unmaintainable.
 
 **Verification:** build OK (201.91 kB gz, unchanged), lint 0 errors,
 **482 tests** (+5), `check:style` OK.
+
+### 4/n — a multi-table booking no longer reads "5A and 5B and 6"
+
+**Files:** `src/lib/booking-logic.js`, `tests/booking-logic.test.js`
+**Behavioural change:** the table clause of every accessible name for a booking
+with two or more tables. Nothing visual — this is the string the List card, the
+timeline block and the floor-plan table hand to a screen reader.
+
+`describeBooking` joined with `" and "`, which is right for two tables and wrong
+for three. A three- or four-table mega-combo is an ordinary Settings → Layout
+configuration, so this was reachable rather than theoretical. It is now a list:
+`"5A, 5B and 6"`, no serial comma, matching the app's copy elsewhere.
+
+**The noun follows the count too** — `"tables 5A, 5B and 6"`, not `"table"`.
+Fixing the join alone leaves the same sentence still half-broken, and the reason
+this function exists at all (v17.12.0 extracted it from three hand-written
+copies) is that there should be exactly one place deciding what a booking sounds
+like. Doing half of it here would be the first step back towards three.
+
+Deliberately not made in the extraction commit, whose whole claim was
+byte-identical output — which is why it was recorded and deferred rather than
+slipped in.
+
+`ClashBanner` and `TimelineView`'s clash title keep their own phrasing: they
+describe the tables two bookings SHARE, which is a different sentence, and both
+already pluralise correctly.
+
+**Verification:** build OK (201.91 kB gz, unchanged), lint 0 errors,
+**484 tests** (+2, and one existing expectation updated for the plural noun),
+`check:style` OK.

@@ -913,8 +913,20 @@ describe("describeBooking", () => {
     expect(describeBooking({ ...b, tables: undefined })).toBe("Pau Estévez, 20:00, 4 guests, no table assigned, confirmed");
   });
 
-  it("joins a multi-table booking", () => {
-    expect(describeBooking({ ...b, tables: ["5A", "5B"] })).toBe("Pau Estévez, 20:00, 4 guests, table 5A and 5B, confirmed");
+  it("joins a two-table booking, and pluralises the noun", () => {
+    expect(describeBooking({ ...b, tables: ["5A", "5B"] })).toBe("Pau Estévez, 20:00, 4 guests, tables 5A and 5B, confirmed");
+  });
+
+  it("joins THREE tables as a list, not as a chain of \"and\"", () => {
+    // v17.14.0. The extraction commit joined with " and " throughout, which gave
+    // "5A and 5B and 6". A three- or four-table mega-combo is an ordinary
+    // Settings → Layout configuration, so this is reachable rather than theoretical.
+    expect(describeBooking({ ...b, tables: ["5A", "5B", "6"] })).toBe("Pau Estévez, 20:00, 4 guests, tables 5A, 5B and 6, confirmed");
+    expect(describeBooking({ ...b, tables: ["1A", "1B", "2", "3"] })).toBe("Pau Estévez, 20:00, 4 guests, tables 1A, 1B, 2 and 3, confirmed");
+  });
+
+  it("a single table keeps the singular noun and no join", () => {
+    expect(describeBooking({ ...b, tables: ["3"] })).toBe("Pau Estévez, 20:00, 4 guests, table 3, confirmed");
   });
 
   it("drops the table clause entirely for PlanView, rather than saying none", () => {

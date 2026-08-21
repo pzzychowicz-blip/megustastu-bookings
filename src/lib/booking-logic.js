@@ -102,9 +102,25 @@ export function describeBooking(b, opts){
   const out=[b.name, b.time, b.size+(b.size===1?" guest":" guests")];
   // `tables: false` drops the clause entirely rather than saying "no table
   // assigned" — on the floor plan the table is already the subject.
-  if(o.tables!==false) out.push(b.tables&&b.tables.length?"table "+b.tables.join(" and "):"no table assigned");
+  if(o.tables!==false){
+    const t=b.tables&&b.tables.length?b.tables:null;
+    out.push(t?(t.length>1?"tables ":"table ")+joinList(t):"no table assigned");
+  }
   out.push(b.status);
   return out.join(", ");
+}
+// v17.14.0: the extraction commit joined with `" and "`, which is right for two
+// and wrong for three — "5A and 5B and 6". A mega-combo of three or four tables
+// is an ordinary Settings → Layout configuration, so this is reachable, not
+// theoretical. No serial comma, matching the app's copy elsewhere.
+//
+// The NOUN follows the count too. "table 5A, 5B and 6" is the same sentence
+// still half-broken, and this function exists so there is exactly one place
+// that decides what a booking sounds like.
+function joinList(a){
+  if(a.length<=1) return a.join("");
+  if(a.length===2) return a[0]+" and "+a[1];
+  return a.slice(0,-1).join(", ")+" and "+a[a.length-1];
 }
 // v17.6.0: how long a COMPLETED party actually stayed, in minutes — or null when
 // that is not knowable. List renders the tag only when this is non-null.
