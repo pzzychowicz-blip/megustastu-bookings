@@ -13563,3 +13563,33 @@ build` nor lint sees it.
 **Verification:** build OK (202.98 kB gz, −0.01), lint 0 errors, **526 tests**,
 `check:style` OK. Loaded in DEV: renders, console clean — which for this change
 is the only check that matters.
+
+### 10/n — `pickView`'s swap branch
+
+**Files:** `src/App.jsx`
+**Behavioural change:** two, both making a plain view tap settle in ONE render
+instead of visibly correcting itself.
+
+Tapping the view that already occupies the other pane swaps the two. That branch
+was two lines, and both were subtly wrong next to the `swapSides` handler
+sitting twenty lines below it:
+
+- **It did not invert the ratio.** `swapSides` does, so each view keeps its own
+  size across a swap; this one let each view inherit the size of the pane it
+  moved into. A 70/30 split came back as 30/70 for the same two views.
+- **It skipped the Timeline width check** the *replace* branch right beneath it
+  performs, so it could drop the Timeline into a side-by-side pane too narrow
+  for one and leave the repair effect to reorient the layout a render later —
+  which the user sees as the split flipping after a plain tap.
+
+Both branches now go through one `fitTimeline(next)`, which asks where the
+Timeline actually ENDS UP rather than assuming it is the view that was tapped —
+a swap moves both views, so "did the user tap timeline" is the wrong question.
+
+**Verification:** build OK (203.00 kB gz, +0.02), lint 0 errors, **526 tests**,
+`check:style` OK. Both halves measured live in DEV at a 946px shell: seeding
+`{a:list, b:plan, dir:v, ratio:0.7}` and tapping *plan* wrote
+`{a:plan, b:list, ratio:0.3}` — each view keeping its width; seeding
+`{a:list, b:timeline, dir:v}` and tapping *timeline* wrote
+`{a:timeline, b:list, dir:h}` — stacked in the same commit as the swap, with no
+intermediate side-by-side frame.

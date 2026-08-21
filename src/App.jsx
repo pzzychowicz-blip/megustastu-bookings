@@ -3126,19 +3126,35 @@ function BookingApp({uid}){
   function pickView(v){
     if(split){
       const other=focusedPane==="a"?"b":"a";
-      if(split[other]===v){applySplit(Object.assign({},split,{a:split.b,b:split.a}));setFocusedPane(other);return;}
+      // Tapping the view that is already in the OTHER pane swaps the two.
+      // v17.14.0 (/code-review follow-up): the swap now INVERTS THE RATIO, like
+      // `swapSides` beside it, so each view keeps its own size across the swap
+      // instead of inheriting the size of the pane it moved into. That was the
+      // only difference between these two lines and `swapSides`' — one of them
+      // was simply missing it.
+      if(split[other]===v){applySplit(fitTimeline(Object.assign({},split,{a:split.b,b:split.a,ratio:1-split.ratio})));setFocusedPane(other);return;}
       if(split[focusedPane]===v) return;
       // v17.11.0: tapping "Timeline" while a side-by-side pane is too narrow for
       // one would drop it into exactly the layout the menu refuses to build. The
       // split TURNS to stacked instead of refusing the tap: the user asked for
       // the timeline, and the orientation is the part that does not fit.
-      const nextSplit=Object.assign({},split,{[focusedPane]:v});
-      if(v==="timeline"&&!tlPaneOk(shellW,nextSplit.dir,nextSplit.ratio,focusedPane)) nextSplit.dir="h";
-      applySplit(nextSplit);
+      applySplit(fitTimeline(Object.assign({},split,{[focusedPane]:v})));
       return;
     }
     if(v!==view) bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");
     setView(v);
+  }
+  // v17.14.0: turn a split stacked when the pane holding the Timeline is too
+  // narrow for one. Shared by BOTH branches of pickView above — the swap branch
+  // used to skip this check entirely and lean on the repair effect to reorient
+  // the layout a render later, which the user sees as the split visibly
+  // flipping after a plain view tap. Asks where the timeline actually ENDS UP,
+  // rather than assuming it is the view that was tapped: a swap moves both.
+  function fitTimeline(next){
+    const tlPane=next.a==="timeline"?"a":next.b==="timeline"?"b":null;
+    if(!tlPane) return next;
+    if(tlPaneOk(shellW,next.dir,next.ratio,tlPane)) return next;
+    return Object.assign({},next,{dir:"h"});
   }
   function confirmSplit(next){
     setSplitMenuFor(null);
