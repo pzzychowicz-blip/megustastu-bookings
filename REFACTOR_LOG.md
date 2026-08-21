@@ -13338,3 +13338,52 @@ already pluralise correctly.
 **Verification:** build OK (201.91 kB gz, unchanged), lint 0 errors,
 **484 tests** (+2, and one existing expectation updated for the plural noun),
 `check:style` OK.
+
+### 5/n — the post-sync reconciliation decision leaves the effect
+
+**Files:** `src/lib/reconcile.js` (new), `tests/reconcile.test.js` (new),
+`src/App.jsx`
+**Behavioural change:** one, in the manual branch (below). The optimiser branch
+is the same decision, reachable by a test for the first time.
+
+The rule is v17.8.0's, the one that produced `placeWaitlist` and
+`presenceState`: **logic that decides something the restaurant acts on does not
+live in a `useEffect`.** This one decides which booking gets MOVED TO ANOTHER
+TABLE after two devices' offline edits merge, which is as consequential as
+either of those, and until now the only part of it any test could reach was the
+`dayBookingsSig` compare v17.10.2 added to stop it spinning. The loop itself was
+found by *reading the console* — the app looks and behaves perfectly while it
+burns the tablet's CPU, which is exactly the class of defect a test catches and
+observation does not.
+
+`dirtyDates(bookings,today)` and `reconcile(prev,dirty,blocks,autoOptimizer)`
+are pure. App keeps the gates (`resyncing`, the loaded ref), the `saveBookings`
+dispatch and the toast — 4055 characters of effect down to 1434.
+
+**The `dayBookingsSig` double-rescan is closed by the identity contract from
+1/n, not by hoisting.** The optimiser branch now asks `after !== next` first,
+which since 1/n is `false` whenever the pass moved nothing — so the
+unresolvable all-locked clash, the case that REPEATS and the one that used to
+spin, costs zero signature scans instead of two full passes over all 518
+bookings. The signature is still required when the reference did change: this
+pass also runs `syncLiveDurations`, which can extend a seated party's duration
+TODAY while iterating a FUTURE date, and that is a change on a date this
+iteration is not about. Skipping the sig there would silently widen what the
+branch commits.
+
+**The one behavioural change is in the manual branch**, and it is also only
+expressible because of 1/n: when `bookingsAfterAction` hands back the same
+reference, the loop now breaks instead of re-running up to 19 more times, and
+does NOT set `changed`. Reachable when `findFreeSlot` returns the tables the
+booking already had — previously that burned the whole guard on the heaviest
+function in the app and then fired "Resolved a table conflict after syncing."
+for a conflict that was still there.
+
+**Verification:** build OK (201.96 kB gz, +0.05 — the new module), lint 0
+errors, **494 tests** (+10: `dirtyDates` over clean/dirty/past/unassigned days;
+the resolvable clash; the unresolvable one returning the SAME reference with
+`changed:false`; idempotence; the manual branch's locked-only no-op, its
+deterministic newest-first pick, and its clean-date no-op; and an empty dirty
+list). `check:style` OK. App reloaded in DEV against 518 bookings: boots clean,
+v17.14.0 in the banner, **no console output at all** after the boot lines —
+which is the specific thing being watched here.

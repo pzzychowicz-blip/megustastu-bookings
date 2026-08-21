@@ -34,12 +34,13 @@ import {
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
-  checkInefficent, verifyClean, findConflicts, findClashes, clashRowId,
+  checkInefficent, findClashes, clashRowId,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
-  undoSnapshots, applyUndo, dayBookingsSig
+  undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
+import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -1417,65 +1418,28 @@ function BookingApp({uid}){
   function flashSyncFix(){setSyncFix(true);setTimeout(function(){setSyncFix(false);},4000);}
 
   // v15.6.1 — Post-sync conflict reconciliation.
-  // Two devices adding bookings OFFLINE to a table that was free at creation
-  // time merge (v15.5.0 per-node) into BOTH bookings on the same table — but
-  // neither device's optimiser saw the other, so they overlap once synced. The
-  // sync path (onValue/resync) stores merged data verbatim with no optimiser
-  // pass, so the overlap persisted until a later edit happened to re-run it.
-  // Here we react to settled snapshots: detect overlapping dates via verifyClean
-  // and resolve only those. When the optimiser is active for the date → full
-  // reshuffle; when OFF (manual mode) → relocate ONLY the newest non-locked
-  // conflicting booking (forceReassign), leaving manual arrangements intact.
-  // Self-stabilising: optimiser/relocate output is clean → next pass is a no-op
-  // (also breaks any Firebase echo loop). Cross-device double-writes settle via
-  // the v15.5.0 per-$id updatedAt CAS; the "newest" pick is deterministic
-  // (updatedAt desc, id tiebreaker) so every device chooses the same booking.
+  // v17.14.0: the DECISION moved to `src/lib/reconcile.js` — which dates are
+  // dirty (`dirtyDates`) and what to do about each (`reconcile`) — leaving here
+  // only what is genuinely React: the gates, the dispatch and the toast. The
+  // rule is v17.8.0's, the one that produced `placeWaitlist` and
+  // `presenceState`: logic that decides something the restaurant acts on does
+  // not live in a useEffect. This one decides which booking gets MOVED TO
+  // ANOTHER TABLE after two devices' offline edits merge, and until now only
+  // its `dayBookingsSig` compare was reachable by a test — the rest was found
+  // to be spinning forever, in v17.10.2, by reading the console.
+  //
   // Silent write (auto-effect, no red refusal banner); gated on !resyncing so it
   // waits out the post-sleep stale window and re-runs once fresh data arrives.
   useEffect(function(){
     if(resyncing||firstLoadCount.current===null) return;
     const today=new Date().toISOString().slice(0,10);
-    const dates=Array.from(new Set(bookings.filter(function(b){return b.date>=today&&(b.tables||[]).length>0;}).map(function(b){return b.date;})));
-    const dirty=dates.filter(function(d){return !verifyClean(bookings,d);});
+    const dirty=dirtyDates(bookings,today);
     if(!dirty.length) return;
     let changed=false;
     const ok=saveBookings(function(prev){
-      let next=prev;
-      dirty.forEach(function(d){
-        if(optimizerActiveFor(d,autoOptimizer)){
-          // v17.10.2 — this branch used to assign unconditionally and set
-          // `changed`, which turned an UNRESOLVABLE clash into an infinite
-          // render loop. `applyOpt` copies a locked booking's tables through
-          // verbatim (booking-logic.js), so two _locked bookings clashing on one
-          // table cannot be separated by a reshuffle — and every walk-in and
-          // every drag-drop path sets `_locked`. The pass therefore produced a
-          // NEW array with identical content, `setBookings` saw a new reference,
-          // the effect's `bookings` dep changed, and it ran again. Forever.
-          //
-          // The manual branch below only ever survived this by ACCIDENT: when
-          // nothing is movable it breaks with `next` still === `prev`, and React
-          // bails out of an identical state. Making that explicit here is the
-          // fix — keep the ORIGINAL reference when the pass changed nothing, so
-          // the bail-out is a property of the code rather than of a lucky
-          // early-return. Do not "simplify" this back to a plain assignment.
-          //
-          // The comparison is over the FULL persisted field set (dayBookingsSig
-          // reuses undoKey's), not tables alone: this pass also extends a seated
-          // party's duration via syncLiveDurations and sets `_conflict` via
-          // applyOpt, and a narrower signature silently discarded both.
-          const after=bookingsAfterAction(next,d,tableBlocks,null,false,autoOptimizer);
-          if(dayBookingsSig(after,d)!==dayBookingsSig(next,d)){next=after;changed=true;}
-        }else{
-          let guard=0;
-          while(!verifyClean(next,d)&&guard++<20){
-            const ids=findConflicts(next,d);
-            const movable=next.filter(function(b){return ids.indexOf(b.id)>=0&&!isLocked(b);}).sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0)||(a.id<b.id?1:-1);});
-            if(!movable.length) break; // only locked overlaps — leave as-is
-            next=bookingsAfterAction(next,d,tableBlocks,movable[0].id,true,autoOptimizer);changed=true;
-          }
-        }
-      });
-      return next;
+      const r=reconcile(prev,dirty,tableBlocks,autoOptimizer);
+      changed=r.changed;
+      return r.next;   // === prev when nothing moved, so React bails out
     },true);
     if(ok&&changed) flashSyncFix();
   },[bookings,tableBlocks,autoOptimizer,resyncing]);
