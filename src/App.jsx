@@ -3302,7 +3302,31 @@ function BookingApp({uid}){
            whereas normally that lift just bleeds to the window edge. It was
            only ever belt-and-braces: html+body are already overflow:hidden in
            this mode (see the body effect above), so nothing can scroll here. */
-        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<header
+        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}
+          {/* v17.14.0: the skip link. v17.12.0 added the landmarks, which are the
+              programmatic bypass and cost nothing visually; this is the one for
+              sighted keyboard users, in an app that is explicitly keyboard-driven
+              — the header is a cog, a title block, three view buttons, two
+              primary actions, a search and a connection dot before you reach a
+              booking, and on every date change you land back at the top of it.
+
+              FIRST in the DOM, because a bypass that is not the first thing you
+              reach is not a bypass. It is hidden by being translated off the top
+              rather than by `display:none`, which would make it unfocusable and
+              so unreachable — the whole rule is in index.html (`.mgt-skip`), and
+              it is in CRITICAL_SELECTORS because losing it fails silently in
+              both directions: the link either never appears or never hides.
+
+              `<main>` carries `tabIndex={-1}`: following a fragment link moves
+              focus to the target only if the target can hold it, and without
+              that the browser scrolls but the next Tab starts from the header
+              again — which looks like the link working and is exactly the bug
+              this is meant to remove. It is NOT in the tab order (-1, not 0).
+
+              It is deliberately outside <header>, so `inert` while a modal is
+              open does not reach it — a skip link inside an inert subtree is
+              silently unfocusable, the same trap as a live region in one. */}
+          <a className="mgt-skip" href="#mgt-main">Skip to bookings</a><header
           /* v17.12.0: `inert` while a modal is open — see the <main> note below. */
           inert={anyModal}
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
@@ -3407,7 +3431,7 @@ function BookingApp({uid}){
             several open at once (a 3+ row late banner) would eat the viewport.
             When shellFixed is off this div is a plain, style-less wrapper and
             the page scrolls exactly as it always did. */}
-            <main style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
+            <main id="mgt-main" tabIndex={-1} style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
               /* With a split the panes own the scrolling, so this region must
                  NOT scroll — a flex:1 child of an overflowY:auto parent resolves
                  to CONTENT height, which would collapse a top/bottom split. The

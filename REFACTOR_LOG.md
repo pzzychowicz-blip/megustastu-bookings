@@ -13743,3 +13743,58 @@ requires anything listed there to actually be some registered fill's `ink`, so
 against the real paint stack, with the date cleared so the button is disabled:
 **5.14:1 light, 4.60:1 dark**. Screenshotted in both themes — the label reads as
 greyed-out beside the live "Back" button rather than as a second live control.
+
+### 16/n — the skip link
+
+**Files:** `src/App.jsx`, `index.html`, `tests/a11y.test.js`,
+`tests/stylesheet.test.js`
+**Behavioural change:** one new control, invisible until focused.
+
+v17.12.0 added the landmarks, which are the *programmatic* bypass and cost
+nothing visually. This is the one a **sighted keyboard user** can take, in an
+app that is explicitly keyboard-driven: the header holds a cog, a title block,
+three view buttons, two primary actions, a search and a connection dot before
+you reach the first booking — and every date change puts you back at the top of
+it.
+
+Focus-revealed pill in the app's own chrome vocabulary (`--r-pill`, `--accent`,
+`--text-on-accent`, `--shadow-btn-accent`), pinned to the viewport corner.
+
+**Three ways this control can be present and useless, all closed:**
+
+- **Hidden by TRANSLATION, never `display:none` or `visibility:hidden`** — both
+  make an element unfocusable, so the link could never be reached while looking
+  perfectly correct in the source. `tests/a11y.test.js` asserts the rule uses a
+  transform and asserts the absence of the other two; proven by swapping in
+  `display:none` and watching it fail.
+- **`<main>` carries `tabIndex={-1}`.** Following a fragment link moves focus to
+  the target only if the target can hold it; without this the browser scrolls
+  and the next Tab starts from the header again — which looks exactly like the
+  link working. `-1`, not `0`: it must be able to receive focus without joining
+  the tab order.
+- **It sits OUTSIDE `<header>`**, which takes `inert` while a modal is open. A
+  skip link inside an inert subtree is silently unfocusable — the same trap as a
+  live region in one, one element along.
+
+`position: fixed`, because the app is a normal scrolling page by default and a
+`100dvh` flex shell under nav-lock or split view; an absolutely-positioned link
+would resolve against a different box in each. `z-index: 200` puts it above the
+header and below the modal layer — a dialog owns the screen while it is open,
+and a bypass to something the user cannot reach is worse than none.
+
+`main:focus { outline: none }` — the ring belongs on the link you pressed, not
+as a browser-default outline drawn around a full-width region, which reads as
+the whole page being selected.
+
+Both selectors are in `CRITICAL_SELECTORS`: losing either fails silently in
+opposite directions — the link never appears, or never hides.
+
+**Verification:** build OK (203.14 kB gz, +0.04), lint 0 errors, **536 tests**
+(+7), `check:style` OK. Walked in the running app: one Tab from a fresh load
+focuses it and it slides in at (8, 8); activating it sets the hash, moves
+`document.activeElement` to `<main>`, and the next Tab lands on the first
+control INSIDE main with the link retracted. **The Enter key had to be a real
+click** — a synthetic `Return` focused the link but never activated it and left
+the hash empty, which is the same tooling limit v17.10.1 recorded for `:active`
+and the drag gestures. Measuring the wrong thing here would have looked like the
+link being broken.

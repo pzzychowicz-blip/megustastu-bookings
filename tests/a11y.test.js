@@ -62,6 +62,11 @@ const Strip = read("components/NotificationStrip.jsx");
 const BookingForm = read("components/BookingFormModal.jsx");
 const Walkin = read("components/WalkinForm.jsx");
 const Connection = read("components/ConnectionStatus.jsx");
+// v17.14.0: the skip link is half markup and half stylesheet, and the CSS half
+// is where it can fail invisibly (hidden in a way that also makes it
+// unfocusable). Read RAW — stripComments is for JS/JSX, and the point here is
+// the declarations, not the prose around them.
+const HTML = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "index.html"), "utf8");
 
 // Assert a source shape is present, with a message saying what breaks without
 // it. `why` is not decoration: a failure here is always someone tidying, and
@@ -121,6 +126,58 @@ describe("landmarks and headings (WCAG 1.3.1, 2.4.1)", () => {
     has(App, "<h1 margin", /<h1[^>]*margin:\s*0/,
       "v17.12.0 note: the restaurant name became an <h1>, and a UA default " +
       "margin on it moves the whole header");
+  });
+});
+
+// v17.14.0. The landmarks are the PROGRAMMATIC bypass; this is the one a sighted
+// keyboard user can take. Every assertion here is about a way the link can be
+// present and useless — which is the whole risk with a control nobody sees.
+describe("the skip link (WCAG 2.4.1)", () => {
+  it("exists, and points at the main landmark", () => {
+    has(App, "skip link", /className="mgt-skip"\s+href="#mgt-main"/,
+      "the bypass a sighted keyboard user takes past the header");
+    has(App, "<main id>", /<main\s+id="mgt-main"/, "the link's target");
+  });
+
+  it("<main> can HOLD focus, or the link only scrolls", () => {
+    // Following a fragment link moves focus to the target only if the target is
+    // focusable. Without this the page scrolls and the next Tab starts from the
+    // header again — which looks exactly like the link working.
+    has(App, "<main tabIndex={-1}>", /<main[^>]*tabIndex=\{-1\}/,
+      "-1, not 0: the landmark must be able to RECEIVE focus without joining " +
+      "the tab order");
+  });
+
+  it("is the FIRST thing in the shell, before <header>", () => {
+    const skip = App.indexOf('className="mgt-skip"');
+    const header = App.indexOf("<header");
+    expect(skip, "the skip link must be in App").toBeGreaterThan(-1);
+    expect(header, "App must render a <header>").toBeGreaterThan(-1);
+    expect(skip, "a bypass that is not the first thing you reach is not a bypass")
+      .toBeLessThan(header);
+  });
+
+  it("is OUTSIDE the subtree that goes inert with a modal", () => {
+    // A skip link inside an inert subtree is silently unfocusable — the same
+    // trap as a live region in one. It sits before <header>, which takes
+    // `inert`, so the check is that no `inert` appears between the shell's
+    // opening and the link.
+    const skip = App.indexOf('className="mgt-skip"');
+    const before = App.slice(App.lastIndexOf("<div", skip - 400), skip);
+    expect(before, "the skip link must not sit inside an inert-marked element")
+      .not.toMatch(/inert=\{anyModal\}[^<]*$/);
+  });
+
+  it("is hidden by TRANSLATION, not by display/visibility", () => {
+    // `display:none` and `visibility:hidden` both make an element unfocusable,
+    // so the link could never be reached while looking correct in the source.
+    const rule = HTML.slice(HTML.indexOf(".mgt-skip {"), HTML.indexOf(".mgt-skip:focus"));
+    expect(rule.length, "could not find the .mgt-skip rule").toBeGreaterThan(50);
+    expect(rule, "hidden by transform, so the link stays focusable").toMatch(/transform:\s*translateY\(-/);
+    expect(rule).not.toMatch(/display:\s*none/);
+    expect(rule).not.toMatch(/visibility:\s*hidden/);
+    has(HTML, ".mgt-skip:focus reveals it", /\.mgt-skip:focus\s*\{[^}]*transform:\s*translateY\(0\)/,
+      "focus is what brings it back");
   });
 });
 

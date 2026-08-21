@@ -1091,6 +1091,52 @@
         .mgt-blk:active:not(.mgt-nopress) { transform: scale(0.96); }
       }
 
+      /* ── v17.14.0: the skip link ────────────────────────────────────────────
+         v17.12.0 added the landmarks, which are the programmatic bypass and cost
+         nothing visually. This is the one a SIGHTED keyboard user can take, in
+         an app that is explicitly keyboard-driven: the header holds a cog, a
+         title block, three view buttons, two primary actions, a search and a
+         connection dot before the first booking, and every date change puts you
+         back at the top of it.
+
+         Hidden by TRANSLATION, never `display:none` or `visibility:hidden` —
+         both make an element unfocusable, so the link could never be reached and
+         the whole feature would be inert while looking correct in the source.
+         `position: fixed` so it lands at the viewport corner in both layouts
+         (the app is a normal scrolling page by default and a 100dvh flex shell
+         under nav-lock / split view, and an absolutely-positioned link would
+         resolve against a different box in each).
+
+         z-index sits above the header and below the modal layer (z=250+): a
+         dialog owns the whole screen while it is open, and a skip link floating
+         over one would be a bypass to something the user cannot reach.
+
+         The transition is the token pair, so the reduce-motion kill-switch
+         below neutralises it like everything else. */
+      .mgt-skip {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        z-index: 200;
+        padding: 10px 18px;
+        border-radius: var(--r-pill);
+        background: var(--accent);
+        color: var(--text-on-accent);
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: var(--shadow-btn-accent);
+        transform: translateY(-300%);
+        transition: transform var(--t-move) var(--ease-out);
+      }
+      .mgt-skip:focus { transform: translateY(0); }
+      /* The target of the link. It takes tabIndex={-1} in App.jsx so it can hold
+         focus when the fragment is followed; without a ring rule it would show
+         the browser default outline on a full-width region, which reads as the
+         whole page being selected. The ring belongs on the link you pressed, not
+         on the landmark you arrived at. */
+      main:focus { outline: none; }
+
       /* ── v17.8.0: the keyboard focus ring ───────────────────────────────────
          The app had NO :focus or :focus-visible rule anywhere, so a focused
          button computed `outline: none` and a keyboard user could not see where
