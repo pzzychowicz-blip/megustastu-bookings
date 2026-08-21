@@ -13273,3 +13273,32 @@ that now spans two code paths rather than one.
 **Verification:** build ✓ (201.91 kB gz, −0.01), lint 0 errors, **477 tests**
 (no new ones: the contract is unchanged and the existing equivalence test is
 what proves it), `check:style` OK.
+
+### 3/n — `clashRowId` gets the tests its comment demanded
+
+**Files:** `tests/booking-logic.test.js`
+**Behavioural change:** none — five assertions over an untested function.
+
+`clashRowId` shipped in v17.11.0 with a comment making its separator
+load-bearing and no test. That matters more than it sounds: it is the key of the
+notification strip's per-clash dismissal Set, so a collision does not throw — it
+silently dismisses a DIFFERENT double-booking than the one the X was pressed on,
+which is a failure nobody would report as a bug.
+
+Pinned: the id is stable; it keys by PAIR, so dismissing "Pau vs Rita" does not
+key "Pau vs someone else" (both directions); and **the collision the comment
+predicts actually collides under the separator it rejects.** The `"_"` case
+builds two pairs that both render `rA_2026-08-21_x` under an underscore —
+reachable because a recurring occurrence id is `"r" + ruleId + "_" + date` — and
+asserts they differ here *and* that substituting the separator back re-creates
+the collision, so the test proves its own premise rather than asserting that two
+arbitrary strings differ.
+
+The fifth reads the **source file** and asserts the separator appears as the
+`\u001f` escape and never as a raw 0x1F byte. That covers `undoKey`'s four keys
+in the same pass, and it is the half a value test structurally cannot see: a raw
+control character is invisible in every editor, grep and diff, so the code would
+keep working while becoming unmaintainable.
+
+**Verification:** build OK (201.91 kB gz, unchanged), lint 0 errors,
+**482 tests** (+5), `check:style` OK.

@@ -11,6 +11,7 @@
 // syncLiveDurations (seated-today only) never perturbs the fixtures.
 
 import { describe, it, expect, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
   comboCap, comboCapBest, sanitize, sanitizeAll, diffBooking,
@@ -19,7 +20,7 @@ import {
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
-  stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking,
+  stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 
@@ -819,6 +820,47 @@ describe("an all-locked clash is unresolvable, which is why the loop existed", (
     const after = bookingsAfterAction(before, D, [], null, false, true);
     expect(dayBookingsSig(after, D)).not.toBe(dayBookingsSig(before, D));
     expect(verifyClean(after, D)).toBe(true);
+  });
+});
+
+// v17.14.0: clashRowId had no test, despite its comment making the separator
+// load-bearing and naming the exact collision it exists to avoid. It is the key
+// of the notification strip's per-clash dismissal Set, so a collision does not
+// throw — it silently dismisses a DIFFERENT double-booking than the one the ✕
+// was pressed on, which is the failure mode nobody would report as a bug.
+describe("clashRowId", () => {
+  it("is stable and ordered — a pair has ONE id", () => {
+    expect(clashRowId({ a: "p", b: "r" })).toBe(clashRowId({ a: "p", b: "r" }));
+  });
+
+  it("keys by PAIR, not by booking — dismissing p·r does not key p·x", () => {
+    // The reason the Set is pair-keyed at all: silencing "Pau vs Rita" must not
+    // silence "Rita vs a third party".
+    expect(clashRowId({ a: "p", b: "r" })).not.toBe(clashRowId({ a: "p", b: "x" }));
+    expect(clashRowId({ a: "p", b: "r" })).not.toBe(clashRowId({ a: "x", b: "r" }));
+  });
+
+  it("does not collide on ids that WOULD collide under \"_\"", () => {
+    // A recurring occurrence id is "r" + ruleId + "_" + date, so "_" is already
+    // spoken for by the data — exactly the class of separator the comment warns
+    // about. Under "_" both of these pairs render "rA_2026-08-21_x".
+    const one = clashRowId({ a: "rA_2026-08-21", b: "x" });
+    const two = clashRowId({ a: "rA", b: "2026-08-21_x" });
+    expect(one).not.toBe(two);
+    expect(one.replace(/\u001f/g, "_")).toBe(two.replace(/\u001f/g, "_"));  // proves the premise
+  });
+
+  it("does not collide on ids containing a hyphen", () => {
+    expect(clashRowId({ a: "r1-2", b: "3" })).not.toBe(clashRowId({ a: "r1", b: "2-3" }));
+  });
+
+  it("the SOURCE writes the separator as an escape, never as a raw byte", () => {
+    // A literal 0x1F in source is invisible in every editor, grep and diff — the
+    // same class of trap as the HTML entity that hid from v17.9.0's glyph sweep.
+    // Asserted over the whole module, so it also covers undoKey's four keys.
+    const src = readFileSync(new URL("../src/lib/booking-logic.js", import.meta.url), "utf8");
+    expect(src).toMatch(/\\u001f/);
+    expect(src.includes("\u001f")).toBe(false);
   });
 });
 
