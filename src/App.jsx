@@ -34,7 +34,7 @@ import {
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
-  checkInefficent, findClashes, clashRowId,
+  checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
   undoSnapshots, applyUndo
@@ -2781,6 +2781,12 @@ function BookingApp({uid}){
         map[t].push({from:c.from,to:c.to});
       });
     });
+    // v17.14.0 (/code-review follow-up): one band per distinct SPAN, not per
+    // pair. Three bookings all clashing on one table produced three coincident
+    // bands on the same pixels — three times the paint for one fact, and a
+    // three-way clash would have rendered differently from a two-way one the
+    // moment the band grew any transparency.
+    Object.keys(map).forEach(function(t){map[t]=mergeSpans(map[t]);});
     return map;
   },[clashPairs]);
 

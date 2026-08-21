@@ -882,6 +882,29 @@ function clashScan(bookings,date,idsOnly){
 // already records. It also belongs here on the merits: the id of a clash is a
 // property of the clash, not of the banner that happens to list it.
 export function clashRowId(c){return c.a+"\u001f"+c.b;}
+// v17.14.0 (/code-review follow-up): merge overlapping [from,to) minute spans.
+//
+// `clashSpans` (App.jsx) emitted one band per PAIR, so three bookings all
+// clashing on one table drew three coincident bands stacked on the same pixels
+// — three times the paint for one fact, and any future opacity on the band
+// would have compounded per pair and made a three-way clash a different colour
+// from a two-way one.
+//
+// Touching spans merge (`from <= to`), not just strictly overlapping ones: two
+// clashes that meet at 20:30 are one continuously-contested stretch of that
+// row, and drawing them as two bands separated by a zero-width seam is a
+// rendering artefact rather than information. Input is not mutated.
+export function mergeSpans(spans){
+  if(!spans||spans.length<2) return spans||[];
+  var s=spans.slice().sort(function(a,b){return a.from-b.from||a.to-b.to;});
+  var out=[{from:s[0].from,to:s[0].to}];
+  for(var i=1;i<s.length;i++){
+    var last=out[out.length-1],cur=s[i];
+    if(cur.from<=last.to){ if(cur.to>last.to) last.to=cur.to; }
+    else out.push({from:cur.from,to:cur.to});
+  }
+  return out;
+}
 // v15.6.1: the ids version of verifyClean's pair-scan — returns every booking
 // involved in a same-table overlap on `date` (active, assigned-tables only).
 // Used by App.jsx's post-sync reconciliation to pick which booking to relocate

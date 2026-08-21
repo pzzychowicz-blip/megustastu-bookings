@@ -20,7 +20,7 @@ import {
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
-  stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId,
+  stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 
@@ -828,6 +828,49 @@ describe("an all-locked clash is unresolvable, which is why the loop existed", (
 // of the notification strip's per-clash dismissal Set, so a collision does not
 // throw — it silently dismisses a DIFFERENT double-booking than the one the ✕
 // was pressed on, which is the failure mode nobody would report as a bug.
+describe("mergeSpans", () => {
+  // v17.14.0. clashSpans emitted one band per PAIR, so three bookings clashing
+  // on one table drew three coincident bands on the same pixels.
+  const sp = (from, to) => ({ from, to });
+
+  it("leaves a single span, or none, alone", () => {
+    expect(mergeSpans([])).toEqual([]);
+    expect(mergeSpans([sp(10, 20)])).toEqual([sp(10, 20)]);
+    expect(mergeSpans(undefined)).toEqual([]);
+  });
+
+  it("merges identical spans - the three-way clash case", () => {
+    expect(mergeSpans([sp(1200, 1290), sp(1200, 1290), sp(1200, 1290)]))
+      .toEqual([sp(1200, 1290)]);
+  });
+
+  it("merges overlapping spans into their union", () => {
+    expect(mergeSpans([sp(1200, 1290), sp(1260, 1350)])).toEqual([sp(1200, 1350)]);
+  });
+
+  it("merges a span fully contained in another", () => {
+    expect(mergeSpans([sp(1200, 1400), sp(1250, 1300)])).toEqual([sp(1200, 1400)]);
+  });
+
+  it("merges spans that merely TOUCH", () => {
+    // Two clashes meeting at 20:30 are one continuously-contested stretch of the
+    // row; two bands separated by a zero-width seam is a rendering artefact.
+    expect(mergeSpans([sp(1200, 1230), sp(1230, 1260)])).toEqual([sp(1200, 1260)]);
+  });
+
+  it("keeps genuinely separate spans apart, in order", () => {
+    expect(mergeSpans([sp(1300, 1400), sp(1200, 1250)]))
+      .toEqual([sp(1200, 1250), sp(1300, 1400)]);
+  });
+
+  it("does not mutate its input", () => {
+    const input = [sp(1200, 1290), sp(1260, 1350)];
+    const copy = input.map((x) => ({ ...x }));
+    mergeSpans(input);
+    expect(input).toEqual(copy);
+  });
+});
+
 describe("clashRowId", () => {
   it("is stable and ordered — a pair has ONE id", () => {
     expect(clashRowId({ a: "p", b: "r" })).toBe(clashRowId({ a: "p", b: "r" }));

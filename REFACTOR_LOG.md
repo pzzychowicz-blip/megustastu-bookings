@@ -13646,3 +13646,27 @@ booking created (prompt gone in all three), cancelled (prompt back in all three,
 List also showing "Completed & cancelled · 1 booking"), fold opened, booking
 deleted, prompt alone again. Both the earlier cases re-checked too — a day with
 live bookings shows no prompt anywhere.
+
+### 13/n — `clashSpans` draws one band per distinct span
+
+**Files:** `src/lib/booking-logic.js`, `src/App.jsx`, `tests/booking-logic.test.js`
+**Behavioural change:** none visible today; one fewer way for the band to be
+wrong later.
+
+`clashSpans` emitted one band per clashing PAIR, so three bookings all clashing
+on one table drew three coincident bands on the same pixels — three times the
+paint for one fact, and the moment the band grew any transparency a three-way
+clash would have rendered a different colour from a two-way one. The band's
+whole job is to say "these minutes are double-claimed", which is a property of
+the row, not of a pair.
+
+`mergeSpans` is in `booking-logic.js` rather than App because it is pure
+interval arithmetic with edge cases worth pinning. **Touching spans merge**, not
+just strictly overlapping ones: two clashes meeting at 20:30 are one
+continuously-contested stretch of that row, and drawing them as two bands
+separated by a zero-width seam is a rendering artefact rather than information.
+
+**Verification:** build OK (203.02 kB gz, −0.06 — the merged output is smaller
+than the code it replaced), lint 0 errors, **533 tests** (+7: identical spans,
+overlapping, contained, touching, disjoint-and-reordered, the trivial cases, and
+input not mutated), `check:style` OK.
