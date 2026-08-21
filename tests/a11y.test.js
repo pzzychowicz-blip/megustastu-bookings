@@ -227,6 +227,48 @@ describe("live regions (WCAG 4.1.3)", () => {
   });
 });
 
+// v17.14.0. The strip and the toasts have spoken since v17.12.0; the VIEW did
+// not, so arrow-key navigation moved a screen-reader user through the week in
+// silence.
+describe("the day announcer (WCAG 4.1.3)", () => {
+  it("is a THIRD region, not a share of the notification one", () => {
+    // They answer different questions and can change in the same commit — a date
+    // change that also brings a clash into view. One region would have had the
+    // two overwrite each other, with the winner decided by render order.
+    expect(
+      count(App, /className="mgt-sr-only" role="status" aria-live="polite"/g),
+      "App must mount both hidden live regions"
+    ).toBe(2);
+    has(App, "dayAnnounce region", /aria-live="polite">\{dayAnnounce\}/,
+      "the day summary needs its own region");
+  });
+
+  it("is keyed on the DATE alone, through a ref mirror", () => {
+    // A memo over `bookings` would recompute on every write, and a write that
+    // changes the COUNT — a cancellation, a walk-in — would re-announce the whole
+    // day at a moment nobody navigated. The ref is what makes "date change only"
+    // literal rather than approximate.
+    const at = App.indexOf("const [dayAnnounce");
+    expect(at, "dayAnnounce must exist").toBeGreaterThan(-1);
+    const body = App.slice(at, at + 1400);
+    has(body, "ref mirror", /bookingsForAnnounceRef\.current/,
+      "the count is read from a ref, not from a dependency");
+    has(body, "[viewDate] only", /\},\s*\[viewDate\]\);/,
+      "the effect must depend on viewDate and nothing else");
+  });
+
+  it("says what navigation changed: the day, and what is on it", () => {
+    const at = App.indexOf("const [dayAnnounce");
+    expect(at, "dayAnnounce must exist").toBeGreaterThan(-1);
+    const body = App.slice(at, at + 1400);
+    has(body, "weekday + date", /weekday:\s*"long"/, "the weekday is the part you navigate by");
+    has(body, "UTC", /timeZone:\s*"UTC"/,
+      "a local weekday against a UTC date string shifts a day in UTC+ zones");
+    has(body, "closed days", /Closed/, "a closed day is what the summary must say");
+    has(body, "empty days", /Nothing booked/, "…and so is an empty one");
+  });
+});
+
 describe("inert marks the page BEHIND the dialog, not <main>", () => {
   // v17.12.0 shipped this wrong and its own /code-review caught it. <main> also
   // holds StatusToasts — the app's OTHER live region — and the Undo pill, so

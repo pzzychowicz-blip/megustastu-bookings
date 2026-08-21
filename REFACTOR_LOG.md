@@ -13798,3 +13798,44 @@ click** — a synthetic `Return` focused the link but never activated it and lef
 the hash empty, which is the same tooling limit v17.10.1 recorded for `:active`
 and the drag gestures. Measuring the wrong thing here would have looked like the
 link being broken.
+
+### 17/n — the day announcer
+
+**Files:** `src/App.jsx`, `tests/a11y.test.js`
+**Behavioural change:** changing the viewed date now says what changed.
+
+The strip and the toasts have spoken since v17.12.0; the VIEW itself still did
+not, so ←/→ moved a screen-reader user through the week in silence — and the
+date input's own value change announces the date without saying what is on it.
+
+**A summary, deliberately not a live region over the grid.** Thirteen bookings
+re-read on every status change would be unusable. This says the one thing
+navigation actually changed: *"Wednesday 19 August. 14 bookings."*, or *"…
+Nothing booked."*, or *"… Closed."*
+
+**On the DATE only, and that is structural rather than intended.** It is an
+effect keyed on `[viewDate]` reading a ref mirror of the bookings — the shape
+this codebase already uses. A `useMemo` over `bookings` would recompute on every
+write, and a write that changes the COUNT (a cancellation, a walk-in) would
+re-announce the whole day at a moment nobody navigated. Not on view switches
+either: T/L/P already announce on activation, so it would repeat what the button
+just said.
+
+**A THIRD region, not a share of the notification one.** They answer different
+questions and can change in the same commit — measured exactly that during
+verification: stepping onto 19 August, one region said "Wednesday 19 August. 14
+bookings." while the other independently said "Notification: Double-booked." In
+one region those would overwrite each other with the winner decided by render
+order. Same placement rules as `notifAnnounce`: always mounted (a region that
+arrives holding its message announces nothing) and outside `<main>`, because
+`inert` removes a subtree from the accessibility tree.
+
+`timeZone: "UTC"` for the same reason `weekdayOf` is all-UTC: a local weekday
+against a UTC date string shifts a day in UTC+ zones (the v14.7.0 Week-view
+lesson).
+
+**Verification:** build OK (203.33 kB gz, +0.19), lint 0 errors, **545 tests**
+(+4; the dep-array guard proven by adding `bookings` back and watching it fail),
+`check:style` OK. Measured in the running app with a `MutationObserver` on the
+region: stepping back two days produced exactly two updates with the right
+counts, and switching Timeline → List → Plan → Timeline produced **zero**.

@@ -2954,6 +2954,44 @@ function BookingApp({uid}){
   // The string is derived from the same titles and counts the strip renders, so
   // the two cannot drift, and it only changes when the notification set does —
   // which is exactly when an announcement is wanted.
+  // ── v17.14.0: the day announcer ─────────────────────────────────────────────
+  // Changing the viewed date was announced by nothing. The strip and the toasts
+  // have spoken since v17.12.0; the VIEW itself still did not, so ←/→ moved a
+  // screen-reader user through the week in silence — and the date input is a
+  // control whose own value change says only the date, not what is on it.
+  //
+  // A SUMMARY, deliberately not a live region over the grid: thirteen bookings
+  // re-read on every status change would be unusable, and this needs to say the
+  // one thing navigation actually changed.
+  //
+  // On the DATE only. Not on view switches (T/L/P already announce on
+  // activation, so it would repeat what the button just said) and not on status
+  // changes, which arrive from other devices too — on a busy evening that region
+  // would never stop talking.
+  //
+  // Computed in an effect keyed on `viewDate` ALONE, reading a ref mirror of the
+  // bookings — the ref-mirror shape this codebase already uses, and here it is
+  // what makes "date change only" literal rather than approximate. A `useMemo`
+  // over `bookings` would recompute on every write, and a write that changes the
+  // COUNT — cancelling a booking, taking a walk-in — would re-announce the whole
+  // day summary at a moment nobody navigated.
+  const [dayAnnounce,setDayAnnounce]=useState("");
+  const bookingsForAnnounceRef=useRef(bookings);
+  bookingsForAnnounceRef.current=bookings;
+  useEffect(function(){
+    const d=new Date(viewDate+"T00:00:00Z");
+    // en-GB + UTC, matching the app's date convention throughout — a local
+    // getDay against a UTC date string shifts a day in UTC+ zones (the v14.7.0
+    // Week-view lesson, recorded at `weekdayOf`).
+    const label=Number.isFinite(d.getTime())
+      ? d.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",timeZone:"UTC"})
+      : viewDate;
+    if(hoursFor(viewDate).closed){setDayAnnounce(label+". Closed.");return;}
+    const n=bookingsForAnnounceRef.current.reduce(function(acc,b){
+      return acc+((b&&b.date===viewDate&&b.status!=="cancelled")?1:0);
+    },0);
+    setDayAnnounce(label+". "+(n===0?"Nothing booked":n+(n===1?" booking":" bookings"))+".");
+  },[viewDate]);
   const notifAnnounce=notifSections.length===0?"":
     (notifSections.length===1?"Notification: ":notifSections.length+" notifications: ")+
     notifSections.map(function(s){return s.title+(s.count>1?", "+s.count:"");}).join("; ")+".";
@@ -3496,7 +3534,11 @@ function BookingApp({uid}){
         well as from the tab order, so a live region inside an inert region goes
         SILENT — and the things this announces (a failed write, the connection
         dropping, a double-booking appearing) are exactly the ones a modal must
-        not suppress. Always mounted; see notifAnnounce. */}<div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div>{splitMenuFor?<SplitMenu
+        not suppress. Always mounted; see notifAnnounce. */}<div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div>{/* v17.14.0: the DAY announcer, a second region rather than a share of the
+        one above. They answer different questions and can change in the same
+        commit — a date change that also brings a clash into view would have one
+        overwrite the other inside a single region, and whichever won would be
+        arbitrary. Same placement rules: always mounted, outside <main>. */}<div className="mgt-sr-only" role="status" aria-live="polite">{dayAnnounce}</div>{splitMenuFor?<SplitMenu
               view={splitMenuFor}
               onConfirm={confirmSplit}
               sideBySideOk={splitSideBySideOk}
