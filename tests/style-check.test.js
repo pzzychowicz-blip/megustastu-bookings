@@ -21,6 +21,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, statSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "../scripts/strip-comments.mjs";
 import { tmpdir } from "node:os";
 
 const SCRIPT = new URL("../scripts/check-style-invariants.mjs", import.meta.url).pathname;
@@ -325,6 +326,17 @@ describe("check:style — the icon scale (v17.13.0)", () => {
     const r = run({ "a.jsx": 'const x = <Dogear size={8} />;   /* @canvas */\n' });
     expect(r.code).toBe(0);
   });
+
+  // /code-review: the destructured-default arm was `\bsize\s*=\s*-?\d`, which
+  // also matched an ordinary variable. Both of these are the shape the rule's
+  // own header excludes, and both reported before the fix.
+  it.each([
+    ["a local variable", "let size = 20;\nexport const g = () => size;\n"],
+    ["a member assignment", "const o = {};\no.size = 4;\nexport default o;\n"],
+  ])("does not touch %s", (_label, body) => {
+    const r = run({ "a.js": body });
+    expect(r.out).not.toMatch(/icon-scale/);
+  });
 });
 
 describe("check:style — the motion scale (v17.13.0)", () => {
@@ -385,7 +397,18 @@ describe("check:style — the motion scale (v17.13.0)", () => {
 describe("weight scale — the ratchet (v17.13.0)", () => {
   const SRC_DIR = new URL("../src/", import.meta.url).pathname;
 
-  function weights() {
+  // /code-review, three fixes in one place.
+  //
+  // (1) COMMENTS ARE STRIPPED. The first version matched FW references against
+  //     raw file text, so prose about weights counted toward the ratio — in the
+  //     version that established comment-stripping twice, with the shared module
+  //     sitting right there. Measured, three of the counted references were
+  //     prose. The gap is small; the direction it can be pushed is not, because
+  //     a comment reading "was FW.regular, now FW.bold" moves the metric and a
+  //     writer could hold the ratchet above its floor purely by writing.
+  // (2) COMPUTED ONCE. It walked all of src/ separately for each `it`.
+  // (3) The second test now checks what its NAME says — see below.
+  const counts = (() => {
     const files = [];
     (function walk(d) {
       for (const n of readdirSync(d)) {
@@ -395,14 +418,19 @@ describe("weight scale — the ratchet (v17.13.0)", () => {
       }
     })(SRC_DIR);
     const c = { regular: 0, medium: 0, semi: 0, bold: 0 };
+    const unknown = [];
     for (const f of files) {
-      for (const m of readFileSync(f, "utf8").matchAll(/\bFW\.(regular|medium|semi|bold)\b/g)) c[m[1]]++;
+      const code = stripComments(readFileSync(f, "utf8")).join("\n");
+      for (const m of code.matchAll(/\bFW\.([A-Za-z_$][\w$]*)/g)) {
+        if (m[1] in c) c[m[1]]++;
+        else unknown.push(f.slice(SRC_DIR.length) + " → FW." + m[1]);
+      }
     }
-    return c;
-  }
+    return { c, unknown };
+  })();
 
   it("at least a third of weight references are regular or medium", () => {
-    const c = weights();
+    const c = counts.c;
     const light = c.regular + c.medium;
     const total = light + c.semi + c.bold;
     const share = light / total;
@@ -417,8 +445,19 @@ describe("weight scale — the ratchet (v17.13.0)", () => {
     ).toBeGreaterThanOrEqual(0.3);
   });
 
+  // /code-review: this used to assert `total > 300`, which `weights()` could not
+  // fail — it only ever counted the four scale names, so an off-scale weight was
+  // invisible to the test that claimed to look for one. It now matches ANY
+  // `FW.<name>` and reports the ones that are not scale steps, which is what the
+  // title always said. `check:style` Rule 3 catches a bare NUMBER; nothing else
+  // catches `FW.heavy`, which is `undefined` at runtime and renders as no
+  // font-weight at all.
   it("every weight reference is one of the four scale steps", () => {
-    const c = weights();
-    expect(c.regular + c.medium + c.semi + c.bold).toBeGreaterThan(300);
+    expect(
+      counts.unknown,
+      "FW references that are not scale steps: " + counts.unknown.join(", ") +
+      " — FW has exactly regular/medium/semi/bold, and an unknown member " +
+      "resolves to undefined, which React drops silently."
+    ).toEqual([]);
   });
 });
