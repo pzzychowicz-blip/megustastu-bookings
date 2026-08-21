@@ -13834,8 +13834,49 @@ arrives holding its message announces nothing) and outside `<main>`, because
 against a UTC date string shifts a day in UTC+ zones (the v14.7.0 Week-view
 lesson).
 
-**Verification:** build OK (203.33 kB gz, +0.19), lint 0 errors, **545 tests**
+**Verification:** build OK (203.33 kB gz, +0.19), lint 0 errors, **544 tests**
 (+4; the dep-array guard proven by adding `bookings` back and watching it fail),
 `check:style` OK. Measured in the running app with a `MutationObserver` on the
 region: stepping back two days produced exactly two updates with the right
 counts, and switching Timeline → List → Plan → Timeline produced **zero**.
+
+### 18/n — `ROADMAP.md`, `CLAUDE.md`, `DESIGN.md`
+
+**Files:** `ROADMAP.md`, `CLAUDE.md`, `DESIGN.md`
+**Behavioural change:** none — documentation.
+
+**`ROADMAP.md`'s Deferred section is empty of app work.** Every entry this
+version shipped is deleted; the two closed as DECISIONS (the waitlist ghost's
+opacity, the List's `list` semantics) are recorded as decisions in this log
+rather than left looking pending; the WhatsApp sandbox entry stays, annotated
+that it is scoped to the `wa-sandbox` branch and cannot ship from `main`. 220
+lines to 78.
+
+**`CLAUDE.md`.** The two gotcha rows the stack retires are rewritten rather than
+deleted — the history is the point, and the general shape is now stated
+explicitly as a row of its own: *any set of facts written out N times will be
+written out N−1 times by somebody, and the missing one is invisible.* That is
+the same defect as the settings-tab list, the four dismissal Sets and the four
+`hoursFor(viewDate)` calls, all met again in this version. The array-identity
+row now says the fix is at the source. New file-structure entries for
+`useModalStack`, `useDismissals` and `lib/reconcile`; updated ones for App.jsx,
+`useKeyboardShortcuts`, `useWalkin`, `useReminders`, `useUserPrefs` and
+`booking-logic`. Test list and count refreshed (544, with the `it.runIf`
+caveat).
+
+**Two stale lines fixed while passing through**, both in the file that calls
+itself the living architecture record: the icon note still said "since v17.4.1
+there is no service worker", true then and wrong since v17.10.1; and
+`DESIGN.md` said mechanising the accessibility standard "is v17.14.0's job",
+which stopped being true when Patryk moved the gate ahead of the modal stack and
+`tests/a11y.test.js` shipped in v17.13.0.
+
+**`DESIGN.md`** gains the skip link's treatment (and the three ways a hidden
+control can be present and useless) and the disabled-ink decision, including the
+general form: a `:root`-only fill composites toward what is behind it, so its
+effective colour flips with the theme even though its declaration does not — and
+an ink that inverts the same way does not fix a contrast failure, it swaps which
+theme has one.
+
+**Verification:** build OK (203.33 kB gz, unchanged), lint 0 errors,
+**544 tests**, `check:style` OK.
