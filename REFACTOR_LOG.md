@@ -13244,6 +13244,32 @@ identity answers "did THIS pass change anything" while a signature answers "are
 these two lists the same day", and the reconciliation loop needs the second.
 
 **Verification:** build ✓ (201.92 kB gz, +0.01 vs v17.13.0), lint 0 errors,
-**476 tests** (+4: OFF-path no-op, ON-path no-op, a real move still returning a
+**477 tests** (+4: OFF-path no-op, ON-path no-op, a real move still returning a
 new array, and a seated party past its duration proving the compare is not
-narrower than `syncLiveDurations`), `check:style` OK.
+narrower than `syncLiveDurations`), `check:style` OK. Note the suite reports 476
+when `dist/` is absent — `tests/csp.test.js` has one `it.runIf` on the built
+`index.html`, so run the build first or the count looks one short.
+
+### 2/n — `findConflicts` stops allocating pairs it discards
+
+**Files:** `src/lib/booking-logic.js`
+**Behavioural change:** none — same ids, same order (insertion order of first
+sighting, which `Object.keys` preserved before and preserves now).
+
+v17.11.0 derived `findConflicts` from `findClashes` rather than repeating the
+pair-scan a third time, and its own note says `verifyClean` keeps a separate
+copy because "making it build a pair list it then throws away would be a real
+cost for no gain". That is exactly what the derivation then had `findConflicts`
+doing: an object literal and an `Array.filter` intersection per clashing pair,
+for a function that wants ids and nothing else — inside the reconciliation loop,
+which calls it up to 20 times per dirty date on every settled snapshot.
+
+The loop moves into a private `clashScan(bookings,date,idsOnly)`; `findClashes`
+and `findConflicts` are one line each. **The two rejection tests stay shared**,
+which is the point — `findClashes`' existing tests remain the proof of both
+contracts, including the `findConflicts is exactly findClashes deduped` case
+that now spans two code paths rather than one.
+
+**Verification:** build ✓ (201.91 kB gz, −0.01), lint 0 errors, **477 tests**
+(no new ones: the contract is unchanged and the existing equivalence test is
+what proves it), `check:style` OK.

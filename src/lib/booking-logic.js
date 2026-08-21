@@ -822,18 +822,29 @@ export function verifyClean(bookings,date){
 // rather than assume there is always a table id to name: "both on table N" is
 // otherwise a sentence with no N in it. See ClashBanner's fallback wording.
 export function findClashes(bookings,date){
+  return clashScan(bookings,date,false);
+}
+// v17.14.0 (/code-review follow-up): the one scan, with the pair-building made
+// optional. `findConflicts` wants ids and nothing else, and it runs inside the
+// reconciliation loop — up to 20 times per dirty date, on every settled
+// snapshot — so building an object and running an Array.filter intersection per
+// clashing pair for it to discard is work done in the hottest path this
+// function has. `idsOnly` skips both; the loop and its two rejection tests are
+// shared, which is what keeps findClashes' tests a proof of BOTH contracts.
+function clashScan(bookings,date,idsOnly){
   var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&(b.tables||[]).length>0;});
-  var out=[];
+  var out=[];var hit=idsOnly?{}:null;
   for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){
     var a=day[i],b=day[j];
     var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;
     if(!overlaps(as,ae,bs,be)) continue;
     if(canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)) continue;
+    if(idsOnly){hit[a.id]=true;hit[b.id]=true;continue;}
     var bt=b.tables||[];
     var shared=(a.tables||[]).filter(function(t){return bt.indexOf(t)>=0;});
     out.push({a:a.id,b:b.id,tables:shared,from:Math.max(as,bs),to:Math.min(ae,be)});
   }}
-  return out;
+  return idsOnly?Object.keys(hit):out;
 }
 // The stable identity of ONE clash pair, for anything that has to remember a
 // particular clash across renders — today that is the strip's per-row dismissal
@@ -865,10 +876,12 @@ export function clashRowId(c){return c.a+"\u001f"+c.b;}
 // the first clash, and it runs over every active date on every settled
 // snapshot, so making it build a pair list it then throws away would be a real
 // cost for no gain.
+// v17.14.0: which is exactly what THIS function was then doing. It shares the
+// loop with findClashes but takes the ids-only path, so no pair object and no
+// intersection filter is built for data it discards — the reconciler calls it
+// up to 20 times per dirty date.
 export function findConflicts(bookings,date){
-  var hit={};
-  findClashes(bookings,date).forEach(function(c){hit[c.a]=true;hit[c.b]=true;});
-  return Object.keys(hit);
+  return clashScan(bookings,date,true);
 }
 export function checkInefficent(bookings,date){
   var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&!isLocked(b);});
