@@ -11,7 +11,7 @@
  * Author:  Patryk Zychowicz
  * Contact: pz.zychowicz@gmail.com
  */
-import { useState, useRef, useEffect, useMemo, lazy, Suspense } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 
@@ -40,6 +40,7 @@ import {
   undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
+import { useModalStack, modalMap, topModal } from "./hooks/useModalStack";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
@@ -738,9 +739,32 @@ function BookingApp({uid}){
   }
   const timelineScrollRef=useRef(0);
   const [followNow, setFollowNow] = useState(false);
-  const [blockTarget, setBlockTarget] = useState(null);
+  // ── v17.14.0: the modal stack ───────────────────────────────────────────────
+  // ONE ordered stack (src/hooks/useModalStack.js) replacing eighteen
+  // independent visibility booleans. The names below are DERIVATIONS off it, so
+  // every mount site, payload read and setter call in this file is unchanged —
+  // what moved is who knows the SET of open surfaces and their ORDER.
+  //
+  // That was previously spread across eighteen `useState` calls, a hand-written
+  // descending Escape chain, a second hand-written chain for Enter, a
+  // hand-written `topLayer` expression and a seventeen-term `anyModal`. Nothing
+  // held them in step, and `showWaitlist` was missing from four of the five —
+  // the waitlist Overlay could not be closed with Esc, did not suppress the
+  // single-letter shortcuts, and did not mark the page behind it `inert`.
+  //
+  // Adding a modal is now: one id in MODAL_Z, one derived name here, one entry
+  // in the Escape table in useKeyboardShortcuts. Leaving any of them out is
+  // visible; leaving out an Esc branch used to be invisible.
+  const { stack: modalStack, setModal } = useModalStack();
+  const modalOpen = useMemo(function(){return modalMap(modalStack);},[modalStack]);
+  const setModalFor = useCallback(function(id){
+    return function(v){ setModal(id,v); };
+  },[setModal]);
+  const blockTarget = modalOpen.block || null;
+  const setBlockTarget = useMemo(function(){return setModalFor("block");},[setModalFor]);
   const [viewDate, setViewDate] = useState(new Date().toISOString().slice(0,10));
-  const [showForm, setShowForm] = useState(false);
+  const showForm = !!modalOpen.form;
+  const setShowForm = useMemo(function(){return setModalFor("form");},[setModalFor]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
   const [error, setError] = useState("");
@@ -757,9 +781,12 @@ function BookingApp({uid}){
   // reader also gates on `error` being truthy, which makes a stale value
   // unreachable rather than merely unlikely.
   const [errorField, setErrorField] = useState(null);
-  const [confirmDel, setConfirmDel] = useState(null);
-  const [confirmReshuffle, setConfirmReshuffle] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(null);
+  const confirmDel = modalOpen.del || null;
+  const setConfirmDel = useMemo(function(){return setModalFor("del");},[setModalFor]);
+  const confirmReshuffle = !!modalOpen.reshuffle;
+  const setConfirmReshuffle = useMemo(function(){return setModalFor("reshuffle");},[setModalFor]);
+  const confirmCancel = modalOpen.cancel || null;
+  const setConfirmCancel = useMemo(function(){return setModalFor("cancel");},[setModalFor]);
   const [reshuffled, setReshuffled] = useState(false);
   // v15.6.1: transient banner shown when the post-sync reconciliation resolves
   // a same-table overlap that arrived via an offline multi-device merge.
@@ -767,7 +794,8 @@ function BookingApp({uid}){
   // v17.0.0 correction: drag&drop feedback toast — {text, good} or null.
   const [dragMsg, setDragMsg] = useState(null);
   const dragMsgTimer = useRef(null);
-  const [manualTarget, setManualTarget] = useState(null);
+  const manualTarget = modalOpen.manual || null;
+  const setManualTarget = useMemo(function(){return setModalFor("manual");},[setModalFor]);
   const [dismissedIneff, setDismissedIneff] = useState(null);
   const formRef=useRef(EMPTY_FORM);
   // ── v17.5.0: unsaved-changes guard ──────────────────────────────────────────
@@ -784,7 +812,8 @@ function BookingApp({uid}){
   // Which surface the discard confirm is asking about: "form" | "walkin" |
   // "manual" | "reminder" | "block" | "settings" | null. One shared modal, six
   // callers as of v17.8.0.
-  const [confirmDiscard, setConfirmDiscard] = useState(null);
+  const confirmDiscard = modalOpen.discard || null;
+  const setConfirmDiscard = useMemo(function(){return setModalFor("discard");},[setModalFor]);
   // ManualModal owns its table-pick state internally, so it reports dirtiness
   // up rather than App reaching in (see its onDirty prop). v17.8.0: BlockModal
   // and Settings do the same — their drafts are component-local too.
@@ -797,13 +826,18 @@ function BookingApp({uid}){
   // call doSave() with no args after the modal round-trip.
   const statusOverrideRef=useRef(null);
   const [swapAffected, setSwapAffected] = useState(null);
-  const [confirmKitchen, setConfirmKitchen] = useState(null);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showPrefPicker, setShowPrefPicker] = useState(false);
+  const confirmKitchen = modalOpen.kitchen || null;
+  const setConfirmKitchen = useMemo(function(){return setModalFor("kitchen");},[setModalFor]);
+  const showHistory = !!modalOpen.history;
+  const setShowHistory = useMemo(function(){return setModalFor("history");},[setModalFor]);
+  const showPrefPicker = !!modalOpen.prefpicker;
+  const setShowPrefPicker = useMemo(function(){return setModalFor("prefpicker");},[setModalFor]);
   // v14 preview 3: Settings / keyboard-shortcuts modal. Toggled by the cog
   // icon in TimelineView's legend row and by the `?` keyboard shortcut.
-  const [showSettings, setShowSettings] = useState(false);
-  const [showSearch, setShowSearch] = useState(false); // v16.3.0: global booking search panel
+  const showSettings = !!modalOpen.settings;
+  const setShowSettings = useMemo(function(){return setModalFor("settings");},[setModalFor]);
+  const showSearch = !!modalOpen.search; // v16.3.0: global booking search panel
+  const setShowSearch = useMemo(function(){return setModalFor("search");},[setModalFor]);
   const pendingSelectRef = useRef(null); // v16.3.0: booking id to focus in the List after a search-jump changes the day
   // v17.3.1: scroll-into-view REQUEST counter for the List's focused card. A
   // plain click on a card must NOT scroll the page, so ListView scrolls on this
@@ -814,7 +848,8 @@ function BookingApp({uid}){
   // v14.6.0: Summary panel expand/collapse (toggled by click or the g shortcut).
   const [summaryOpen, setSummaryOpen] = useState(false);
   // v14.7.0: Week View popover (opened from the Summary panel's Week button).
-  const [showWeek, setShowWeek] = useState(false);
+  const showWeek = !!modalOpen.week;
+  const setShowWeek = useMemo(function(){return setModalFor("week");},[setModalFor]);
   // Settings tab state — which tab is active in the Settings modal.
   // Resets to 'general' on modal close so reopens start fresh. Belongs to
   // the Settings subsystem; lived inside the reminder state block pre-D2
@@ -928,22 +963,34 @@ function BookingApp({uid}){
   // (from usePersistence above) lets reminder save-refusals share the same
   // banner as booking save-refusals. Phase D2 (v14.1.9).
   // See ./hooks/useReminders.jsx.
+  // v17.14.0: the editor and its delete-confirm are two entries in App's modal
+  // stack, so App owns them and passes them in — the `confirmKitchen` /
+  // `useWalkin` arrangement. Everything about REMINDERS still lives in the hook.
+  const reminderEditor = modalOpen.reminder || null;
+  const setReminderEditor = useMemo(function(){return setModalFor("reminder");},[setModalFor]);
+  const confirmReminderDel = modalOpen.reminderdel || null;
+  const setConfirmReminderDel = useMemo(function(){return setModalFor("reminderdel");},[setModalFor]);
   const {
     reminders,
-    reminderEditor, setReminderEditor,
     reminderDirty,
-    confirmReminderDel, setConfirmReminderDel,
     saveReminderFromEditor,
     doDeleteReminder,
     openNewReminder, openEditReminder,
     deleteReminder, toggleReminderActive,
     reminderBanners, reminderCount,
-  } = useReminders({ nowMins, setWriteWarning });
+  } = useReminders({ nowMins, setWriteWarning, reminderEditor, setReminderEditor, setConfirmReminderDel });
   // ── v16.0.0: Waitlist state ─────────────────────────────────────────────────
   const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
   const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
-  const [showWaitlist, setShowWaitlist] = useState(false);
+  // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
+  // suppression and `inert` — all three of which it had silently never had.
+  const showWaitlist = !!modalOpen.waitlist;
+  const setShowWaitlist = useMemo(function(){return setModalFor("waitlist");},[setModalFor]);
+  // v17.14.0: the walk-in form's VISIBILITY is a stack entry; its draft, its
+  // baseline and its dirty flag stay in useWalkin, which takes these two.
+  const showWalkin = !!modalOpen.walkin;
+  const setShowWalkin = useMemo(function(){return setModalFor("walkin");},[setModalFor]);
   // waitAvail: {entryId: {tables, time}} for entries a table CURRENTLY fits
   // (recomputed by an effect below — deliberately state, not a render-time
   // derivation, so the trialFits scans run only when the inputs change, not
@@ -1140,7 +1187,8 @@ function BookingApp({uid}){
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[prefsLoaded]);
   const [focusedPane,setFocusedPane]=useState("a");
-  const [splitMenuFor,setSplitMenuFor]=useState(null); // which view's SplitMenu is open
+  const splitMenuFor = modalOpen.splitmenu || null; // which view's SplitMenu is open
+  const setSplitMenuFor = useMemo(function(){return setModalFor("splitmenu");},[setModalFor]);
   // Which view the keyboard acts on: the focused pane's in a split, else `view`.
   // Declared HERE, not next to the split handlers further down, because
   // useKeyboardShortcuts' ctx object is built mid-render and a `const` used
@@ -1715,7 +1763,6 @@ function BookingApp({uid}){
   // call time); hoisting keeps the textual order valid. Phase D4 (v14.1.11).
   // See ./hooks/useWalkin.js.
   const {
-    showWalkin, setShowWalkin,
     walkinForm, setWalkinForm,
     walkinError, walkinDirty,
     getNextWalkinNum,
@@ -1724,6 +1771,7 @@ function BookingApp({uid}){
     bookings, saveBookings,
     setViewDate, getUser,
     confirmKitchen, setConfirmKitchen,
+    showWalkin, setShowWalkin,   // v17.14.0: an entry in App's modal stack
     defaultWalkinSize: generalSettings.defaultWalkinSize,
   });
 
@@ -2297,17 +2345,27 @@ function BookingApp({uid}){
   // an id, and `inert` is a boolean DOM attribute — React renders `inert={0}`
   // and `inert={null}` differently from `inert={false}`.
   //
-  // This is the one piece of the v17.13.0 modal-stack work brought forward,
-  // because the alternative was to add to the mess and then clean it up. When
-  // the stack lands, this becomes `stack.length > 0` and every reader is
-  // already pointed at one place.
+  // v17.12.0 brought this derivation forward from the modal-stack work rather
+  // than adding an eighteenth term to an expression written out twice.
+  // **v17.14.0 finishes it**: the seventeen-term expression is
+  // `modalStack.length > 0`, and every reader was already pointed here.
+  //
+  // The term it had been missing all along is `showWaitlist`, which is exactly
+  // the point — a hand-written list of every open surface is a list that will
+  // be one short, and nothing about being one short is visible.
+  //
+  // `topModalId` is the other half: the visually topmost open surface, from the
+  // declared z-order rather than from a hand-ordered chain. It replaces the
+  // `topLayer` expression that used to gate the form's letter shortcuts (a
+  // ten-term list that omitted the discard confirm, so A/P/B/H fired behind it).
   //
   // MUST stay above the useKeyboardShortcuts call below: the ctx object is
   // built mid-render, and a `const` read before its declaration is a TDZ
   // ReferenceError that blanks the whole app with a generic message. That has
   // happened twice in this codebase (v17.5.0's `activeView`, v17.11.0's
   // `isViewToday`), and neither lint nor `npm run build` catches it.
-  const anyModal=!!(splitMenuFor||confirmDiscard||showForm||showWalkin||showWeek||showHistory||confirmDel||confirmReshuffle||confirmCancel||confirmKitchen||manualTarget||blockTarget||showPrefPicker||showSettings||showSearch||reminderEditor||confirmReminderDel);
+  const anyModal=modalStack.length>0;
+  const topModalId=topModal(modalStack);
 
   // v17.3.3: the global keyboard shortcuts (precedence rules, every key) and
   // the v17.3.1 neutral-space List-deselect mousedown listener were extracted
@@ -2317,6 +2375,12 @@ function BookingApp({uid}){
   // Adding a shortcut = add the state/handler HERE and use it in the hook.
   useKeyboardShortcuts({
     anyModal:anyModal,
+    // v17.14.0: the modal stack. `modalOpen` is {id: payload} for what is open;
+    // `topModalId` is the visually topmost, from the declared z-order. Escape
+    // acts on `topModalId` and Enter walks MODAL_ENTER_ORDER — both used to be
+    // hand-written chains here, kept in step with the mount sites by nothing.
+    modalOpen:modalOpen,
+    topModalId:topModalId,
     // v17.5.0: in a split, every view-sensitive shortcut (S/C status, ↑/↓ list
     // nav, the neutral-space and Esc list-deselect, the zoom keys) must act on
     // the FOCUSED pane, not on the stale single-view `view`. Passing activeView

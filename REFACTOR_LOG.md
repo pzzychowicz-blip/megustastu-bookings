@@ -13387,3 +13387,81 @@ deterministic newest-first pick, and its clean-date no-op; and an empty dirty
 list). `check:style` OK. App reloaded in DEV against 518 bookings: boots clean,
 v17.14.0 in the banner, **no console output at all** after the boot lines —
 which is the specific thing being watched here.
+
+### 6/n — the modal stack
+
+**Files:** `src/hooks/useModalStack.js` (new), `tests/modal-stack.test.js`
+(new), `src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`,
+`src/hooks/useReminders.jsx`, `src/hooks/useWalkin.js`
+**Behavioural change:** four, all of them the same defect surfacing in four
+places (below). No visual change; every mount site, payload read and setter
+call site in App.jsx is untouched.
+
+The refactor the last three versions were staged behind. App.jsx had **eighteen**
+independent modal-visibility states, and two of the recurring bug classes
+`CLAUDE.md` documents were properties of that arrangement rather than of any one
+modal: *"the Esc chain bypasses every `onClose`"* and *"adding a new drafting
+surface = three wirings, not one"*.
+
+**What was actually wrong is worth stating precisely.** The set of open surfaces
+and their order were spread across eighteen `useState` calls, a hand-written
+descending Escape chain, a *second* hand-written chain for Enter, a
+hand-written ten-term `topLayer` expression, and a seventeen-term `anyModal`.
+Five lists of the same fact, kept in step by nothing. So they had drifted, and
+the drift is the version's best argument:
+
+- **`showWaitlist` was in none of them.** The waitlist Overlay could not be
+  closed with Esc — the only modal in the app you could not dismiss from the
+  keyboard — did not suppress the single-letter shortcuts firing behind it, and
+  did not mark the page behind it `inert`. Found while writing the stack, not
+  by using the app, which is the point.
+- **`topLayer` omitted the discard confirm, the pref picker, the search panel
+  and the split menu**, so the booking form's A/P/B/H shortcuts fired straight
+  through those into the form underneath.
+- **The Settings tab-cycle gate** named the two sub-modals that existed when it
+  was written (`!reminderEditor && !confirmReminderDel`), so ←/→ cycled Settings
+  tabs behind the discard confirm and the split menu.
+
+`MODAL_Z` is the z-order, ascending — **exactly the old Escape chain read
+bottom-up**, now data. Escape acts on `topModal(stack)`; `anyModal` is
+`modalStack.length > 0`; the two `topLayer`-shaped gates are `topModalId === …`.
+
+**The names survive as one-line derivations**, which is what keeps the diff
+reviewable: `showForm` is `!!modalOpen.form`, `manualTarget` is
+`modalOpen.manual || null`, and `setShowForm` is a memoised
+`setModalFor("form")`. Nothing downstream knows the difference — including the
+payload-carrying reads (`confirmKitchen === "walkin"`, `manualTarget.id`) and
+`ReminderEditor`'s updater-form `setDraft`, which `applyModal` supports.
+
+**Three states moved between hooks**, all on the established
+"legitimately shared" pattern `confirmKitchen` already had with `useWalkin`:
+`showWalkin` out of `useWalkin`, `reminderEditor` and `confirmReminderDel` out
+of `useReminders`. Only *"is this surface on screen"* moved — every draft, every
+baseline and every dirty flag stayed where it was, because those are facts about
+walk-ins and reminders rather than about which surface is on top.
+
+**Enter deliberately keeps its own order, and that is not laziness.** The two
+chains had already diverged: Enter checks the manual picker ABOVE the kitchen
+confirm while Escape has it far below, and eight modals have no Enter branch at
+all and FALL THROUGH to whatever is under them. Unifying them would be a
+keyboard behaviour change smuggled into a refactor. `MODAL_ENTER_ORDER` is the
+old sequence verbatim, an id absent from it falls through exactly as before, and
+the divergence is now visible in one place instead of implicit in two.
+
+**Two coverage guards, both proven against known-bad input** (not asserted):
+every `setModalFor("…")` id in App.jsx must have a rank in `MODAL_Z`, and every
+id in `MODAL_Z` must have an `escapeAction` case. Deleting the waitlist entry
+from either file fails the corresponding test. That is the property the eighteen
+booleans could not have at any price — a surface added without an Escape branch
+used to be silently unreachable, and is now a red build.
+
+The z-order test is the regression guard for the whole change: it asserts every
+pair of the old seventeen-branch chain still resolves the same way round, in
+both push orders, since the chain itself no longer exists to be read.
+
+**Verification:** build OK (202.70 kB gz, +0.74), lint 0 errors, **508 tests**
+(+14). Walked in DEV against 518 bookings: Esc on a clean form closes silently;
+Esc on a dirty form raises the discard confirm with both dialogs stacked; Esc
+again dismisses only the confirm and leaves the form; Enter on the confirm
+discards; Esc closes the search panel and Settings; ←/→ still cycle Settings
+tabs. Console clean throughout.

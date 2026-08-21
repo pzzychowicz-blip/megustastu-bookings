@@ -30,6 +30,78 @@ const SUMMARY_KEY="s";
 // open) lives in WeekView. Change here + the Shortcuts "M" row to rebind.
 const WEEK_KEY="m";
 
+// ── v17.14.0: the modal keyboard tables ──────────────────────────────────────
+// Escape acts on ONE modal — the visually topmost, which App derives from
+// MODAL_Z (useModalStack.js). This maps that id to what closing it means.
+//
+// Six of these are GUARDED closes (`requestClose*`): the surfaces that hold a
+// draft raise the discard confirm when dirty. That is why the mapping lives
+// here rather than being read off a mount site's `onClose` — this handler has
+// never touched `onClose`, and a surface whose guard is not named here has an
+// Esc key that walks straight past it.
+function escapeAction(K,id){
+  switch(id){
+    case "splitmenu":   return function(){K.setSplitMenuFor(null);};
+    // The discard confirm is raised BY the surface below it, so Esc dismisses it
+    // and returns you to what you were editing — the safe direction.
+    case "discard":     return function(){K.setConfirmDiscard(null);};
+    case "reminder":    return K.requestCloseReminderEditor;
+    case "reminderdel": return function(){K.setConfirmReminderDel(null);};
+    // requestCloseSettings owns the tab reset, on both its paths.
+    case "settings":    return K.requestCloseSettings;
+    case "history":     return function(){K.setShowHistory(false);};
+    case "kitchen":     return function(){K.setConfirmKitchen(null);};
+    case "reshuffle":   return function(){K.setConfirmReshuffle(false);};
+    case "cancel":      return function(){K.setConfirmCancel(null);};
+    case "del":         return function(){K.setConfirmDel(null);};
+    case "prefpicker":  return function(){K.setShowPrefPicker(false);};
+    case "search":      return function(){K.setShowSearch(false);};
+    case "block":       return K.requestCloseBlock;
+    case "manual":      return K.requestCloseManual;
+    case "walkin":      return K.requestCloseWalkin;
+    // v17.14.0: new. The waitlist Overlay had no Esc branch, so it was the one
+    // modal in the app you could not dismiss from the keyboard.
+    case "waitlist":    return function(){K.setShowWaitlist(false);};
+    case "week":        return function(){K.setShowWeek(false);};
+    case "form":        return K.requestCloseForm;
+    default:            return null;
+  }
+}
+// Enter's own order, top-first — see the note at the Enter branch for why it is
+// not MODAL_Z reversed. An id absent from this list falls through to the next
+// one down, which is what the old `if` chain did by simply not mentioning it.
+const MODAL_ENTER_ORDER=["discard","reminder","reminderdel","manual","kitchen",
+  "reshuffle","del","prefpicker","walkin","form"];
+function enterAction(K,id,e){
+  if(id==="discard"){e.preventDefault();K.doDiscard();return;}
+  if(id==="reminder"){
+    // Save only a valid draft; an invalid one swallows the key rather than
+    // letting it reach the surface underneath.
+    if(!validateReminderDraft(K.reminderEditor.draft)){e.preventDefault();K.saveReminderFromEditor();}
+    return;
+  }
+  if(id==="reminderdel"){e.preventDefault();K.doDeleteReminder(K.confirmReminderDel);return;}
+  // ManualModal handles its own Enter — this SWALLOWS the key rather than
+  // falling through. Quick-status popup is ambiguous, so it has no entry.
+  if(id==="manual") return;
+  if(id==="kitchen"){
+    const isW=K.confirmKitchen==="walkin";
+    e.preventDefault();
+    K.setConfirmKitchen(null);
+    if(isW) K.doSaveWalkin(); else K.doSave();
+    return;
+  }
+  if(id==="reshuffle"){e.preventDefault();K.setConfirmReshuffle(false);K.forceReshuffle();return;}
+  if(id==="del"){e.preventDefault();K.delBooking(K.confirmDel);return;}
+  if(id==="prefpicker"){e.preventDefault();K.setShowPrefPicker(false);return;}
+  if(id==="walkin"){e.preventDefault();K.saveWalkin();return;}
+  if(id==="form"){
+    // Save is disabled when the date is empty → mirror that, and swallow.
+    if(K.form&&K.form.date){e.preventDefault();K.save();}
+    return;
+  }
+}
+
 export function useKeyboardShortcuts(ctx){
   // v14 preview 3: Global keyboard shortcuts. Uses a ref to capture the latest
   // state and action callbacks on every render so the window-level keydown
@@ -57,87 +129,46 @@ export function useKeyboardShortcuts(ctx){
     function handler(e){
       if(e.ctrlKey||e.metaKey||e.altKey) return;
       const K=kbRef.current;const k=e.key;const typing=isTyping(e.target);
-      // ── Escape: close topmost modal (checked in visual z-order) ──
+      // ── Escape: close the topmost modal ──
+      // v17.14.0: this was a seventeen-branch chain written in descending
+      // z-order by hand. The order is now DATA (MODAL_Z in useModalStack.js) and
+      // `K.topModalId` is derived from it, so the chain is a table lookup.
+      //
+      // Two things that were wrong here and are now structurally impossible:
+      // the waitlist Overlay had no branch at all, so Esc did not close it; and
+      // a modal added without one was silently un-escapable, which is half of
+      // "adding a new drafting surface = three wirings, not one".
+      //
+      // The guarded closes are still the point: this handler never touches a
+      // modal's `onClose` prop, so a surface holding a draft has to name its
+      // requestClose* HERE or Esc is a silent back door past the unsaved-changes
+      // guard.
       if(k==="Escape"){
-        // v17.5.0 correction: the split-setup popup sits at z=300, above even
-        // the discard confirm, so it goes first. It has no Cancel button by
-        // design — the scrim click and this branch are the two ways out.
-        if(K.splitMenuFor){e.preventDefault();K.setSplitMenuFor(null);return;}
-        // v17.5.0: the discard confirm is topmost whenever it's up (z=260) —
-        // Esc dismisses it and returns you to the form you were editing, which
-        // is the safe direction. It must be FIRST: the surfaces below it are
-        // exactly the ones that raised it, so any earlier branch would close
-        // the form out from under the confirm.
-        if(K.confirmDiscard){e.preventDefault();K.setConfirmDiscard(null);return;}
-        // v14 p7: reminderEditor sits above Settings (z=250). Close it first.
-        // v17.8.0: through the GUARDED close — see the v17.5.0 note below; this
-        // chain never touches a modal's onClose, so each drafting surface has
-        // to be guarded here in its own right or Esc is a silent back door.
-        if(K.reminderEditor){e.preventDefault();K.requestCloseReminderEditor();return;}
-        // v14 p7 fix: delete-confirm renders above Settings in DOM order.
-        if(K.confirmReminderDel){e.preventDefault();K.setConfirmReminderDel(null);return;}
-        // v14 p7 fix: reset tab to 'general' on Esc close — matches the
-        // Close button and backdrop-click onClose behavior. v17.8.0: the tab
-        // reset now lives inside requestCloseSettings, on both its paths.
-        if(K.showSettings){e.preventDefault();K.requestCloseSettings();return;}
-        if(K.showHistory){e.preventDefault();K.setShowHistory(false);return;}
-        if(K.confirmKitchen){e.preventDefault();K.setConfirmKitchen(null);return;}
-        if(K.confirmReshuffle){e.preventDefault();K.setConfirmReshuffle(false);return;}
-        if(K.confirmCancel){e.preventDefault();K.setConfirmCancel(null);return;}
-        if(K.confirmDel){e.preventDefault();K.setConfirmDel(null);return;}
-        if(K.showPrefPicker){e.preventDefault();K.setShowPrefPicker(false);return;}
-        // v16.3.0 correction: Esc dismisses the search panel (its "Done" button).
-        if(K.showSearch){e.preventDefault();K.setShowSearch(false);return;}
-        if(K.blockTarget){e.preventDefault();K.requestCloseBlock();return;}
-        // v17.5.0: these three hold user drafts, so Esc goes through the GUARDED
-        // close (clean → closes as before; dirty → raises the discard confirm).
-        // This chain calls the setters directly and never touches the modals'
-        // onClose props, so it has to be guarded here in its own right —
-        // routing the mount-site onClose alone would leave Esc a silent
-        // back door straight past the guard.
-        if(K.manualTarget){e.preventDefault();K.requestCloseManual();return;}
-        if(K.showWalkin){e.preventDefault();K.requestCloseWalkin();return;}
-        if(K.showWeek){e.preventDefault();K.setShowWeek(false);return;}
-        if(K.showForm){e.preventDefault();K.requestCloseForm();return;}
+        const close=K.topModalId?escapeAction(K,K.topModalId):null;
+        if(close){e.preventDefault();close();return;}
         // v17.3.1: nothing modal is open — Esc drops the List selection (the
-        // keyboard counterpart of clicking neutral space). LAST in the chain, so
-        // Esc still closes a modal first when one is up.
+        // keyboard counterpart of clicking neutral space). LAST, so Esc still
+        // closes a modal first when one is up.
         if(K.view==="list"&&K.selectedListId){e.preventDefault();K.setSelectedListId(null);return;}
         return;
       }
-      // ── Enter: primary action of topmost modal ──
+      // ── Enter: primary action of the topmost modal that HAS one ──
+      // v17.14.0: also a table, but deliberately NOT the same order as Escape.
+      // The two chains diverged before this refactor — Enter checked the manual
+      // picker ABOVE the kitchen confirm while Escape has it far below — and
+      // several modals (settings, history, cancel, search, block, week,
+      // splitmenu, waitlist) have no Enter branch at all and FALL THROUGH to
+      // whatever is under them. Unifying the two orders would have been a
+      // keyboard behaviour change smuggled into a refactor, so the divergence is
+      // preserved and made visible instead: MODAL_ENTER_ORDER is exactly the old
+      // sequence, and an id absent from it falls through exactly as before.
       if(k==="Enter"){
         // In a textarea Enter always inserts a newline — never save.
         if(typing&&e.target.tagName==="TEXTAREA") return;
-        // v17.5.0: discard confirm is topmost — Enter takes its primary action,
-        // matching confirmDel / confirmCancel / confirmReminderDel. Esc (above)
-        // is the "keep editing" escape hatch.
-        if(K.confirmDiscard){e.preventDefault();K.doDiscard();return;}
-        // v14 p7: reminderEditor is topmost when open — save if draft is valid.
-        if(K.reminderEditor){
-          if(!validateReminderDraft(K.reminderEditor.draft)){
-            e.preventDefault();K.saveReminderFromEditor();
-          }
-          return;
-        }
-        // v14 p7 fix: delete-confirm Enter → confirm deletion.
-        if(K.confirmReminderDel){e.preventDefault();K.doDeleteReminder(K.confirmReminderDel);return;}
-        // Manual Modal handles its own Enter. Quick-status popup is ambiguous.
-        if(K.manualTarget) return;
-        if(K.confirmKitchen){
-          const isW=K.confirmKitchen==="walkin";
-          e.preventDefault();
-          K.setConfirmKitchen(null);
-          if(isW) K.doSaveWalkin(); else K.doSave();
-          return;
-        }
-        if(K.confirmReshuffle){e.preventDefault();K.setConfirmReshuffle(false);K.forceReshuffle();return;}
-        if(K.confirmDel){e.preventDefault();K.delBooking(K.confirmDel);return;}
-        if(K.showPrefPicker){e.preventDefault();K.setShowPrefPicker(false);return;}
-        if(K.showWalkin){e.preventDefault();K.saveWalkin();return;}
-        if(K.showForm){
-          // Save button is disabled when date is empty → mirror that here.
-          if(K.form&&K.form.date){e.preventDefault();K.save();}
+        for(let i=0;i<MODAL_ENTER_ORDER.length;i++){
+          const id=MODAL_ENTER_ORDER[i];
+          if(!K.modalOpen[id]) continue;
+          enterAction(K,id,e);
           return;
         }
         return;
@@ -163,11 +194,14 @@ export function useKeyboardShortcuts(ctx){
       if(e.shiftKey&&(k==="_"||k==="-")){e.preventDefault();K.onSetAppWidth(K.appWidth-50);return;}
       if(k==="?"){e.preventDefault();K.setShowSettings(true);return;}
       // ── v14 p7: Settings tab-cycle with ←/→ ──
-      // Active only when Settings is the top layer (reminderEditor and
-      // confirmReminderDel are sub-modals on top of Settings — when they're
-      // open, arrows should flow to their default behavior or be no-ops).
-      // Takes priority over the global ←/→ day-nav shortcut below.
-      if(K.showSettings&&!K.reminderEditor&&!K.confirmReminderDel){
+      // Active only when Settings is the top layer. Takes priority over the
+      // global ←/→ day-nav shortcut below.
+      // v17.14.0: was `showSettings && !reminderEditor && !confirmReminderDel`,
+      // a hand-written exclusion list naming the two sub-modals that existed
+      // when it was written. It missed the discard confirm (v17.5.0) and the
+      // split menu, so arrows cycled Settings tabs behind both. `topModalId`
+      // asks the question the comment was already asking.
+      if(K.topModalId==="settings"){
         if(k==="ArrowLeft"||k==="ArrowRight"){
           e.preventDefault();
           // v16.0.0 follow-up: derived from SETTINGS_TABS (Settings.jsx — the ONE
@@ -206,8 +240,11 @@ export function useKeyboardShortcuts(ctx){
       //   buttons: if the user has set manualTables, clear those; else in
       //   edit mode, if the stored booking has a manual assignment not yet
       //   marked cleared, set _clearManual:true; else no-op.
-      const topLayer=K.showSettings||K.showHistory||K.confirmKitchen||K.confirmReshuffle||K.confirmCancel||K.confirmDel||K.blockTarget||K.manualTarget||K.reminderEditor||K.confirmReminderDel;
-      if(K.showForm&&!topLayer){
+      // v17.14.0: was a ten-term `topLayer` expression, the third hand-written
+      // list of "what is above the form" in this file. It omitted the discard
+      // confirm, the pref picker, the search panel and the split menu — so
+      // A/P/B/H fired straight through them into the form underneath.
+      if(K.topModalId==="form"){
         if(k==="a"||k==="A"){e.preventDefault();K.setManualTarget(K.editId||"__new__");return;}
         if(k==="p"||k==="P"){e.preventDefault();K.setShowPrefPicker(true);return;}
         if(k==="c"||k==="C"){
