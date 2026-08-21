@@ -76,6 +76,29 @@ function count(src, re) {
   return (src.match(re) || []).length;
 }
 
+// The full text of an element's OPENING tag, however long it is — JSX inline
+// style objects here run to hundreds of characters and grow. It walks to the
+// `>` that closes the tag, tracking brace depth and quotes so a `>` inside an
+// expression container (`a > b`, an arrow function) does not end it early.
+function openingTag(src, open) {
+  const start = src.indexOf(open);
+  if (start < 0) throw new Error("a11y.test: no " + open + " found");
+  let depth = 0, quote = null;
+  for (let i = start; i < src.length; i++) {
+    const c = src[i];
+    if (quote) { if (c === "\\") i++; else if (c === quote) quote = null; continue; }
+    if (c === '"' || c === "'" || c === "`") { quote = c; continue; }
+    if (c === "{") depth++;
+    else if (c === "}") depth--;
+    else if (c === ">" && depth === 0) return src.slice(start, i + 1);
+  }
+  throw new Error(
+    "a11y.test: could not find the end of " + open + "'s opening tag. Fix this " +
+    "rather than widening a window — a guard that stops seeing the attribute it " +
+    "guards still passes."
+  );
+}
+
 describe("landmarks and headings (WCAG 1.3.1, 2.4.1)", () => {
   it("App renders header / nav / main", () => {
     has(App, "<header>", /<header\b/,
@@ -153,10 +176,17 @@ describe("inert marks the page BEHIND the dialog, not <main>", () => {
   // `inert` there silenced every toast behind every modal and made Undo
   // unclickable. The test is not "is this in the DOM behind the dialog" but
   // "is this the PAGE behind the dialog".
+  // /code-review: this used to slice a fixed 400 characters and split on the
+  // first `>`. <main>'s opening tag is 316 characters of inline style — 79% of
+  // that budget — so one more conditional branch in the style object would push
+  // the closing `>` past the window, and the guard against exactly one attribute
+  // would silently stop covering the end of the tag that attribute would be
+  // added to. `openingTag` finds the real end instead, and THROWS if it cannot,
+  // which is the failure mode to prefer over a quiet pass.
   it("<main> itself is never inert", () => {
-    const tag = App.slice(App.indexOf("<main"), App.indexOf("<main") + 400);
+    const tag = openingTag(App, "<main");
     expect(
-      /\binert\b/.test(tag.split(">")[0]),
+      /\binert\b/.test(tag),
       "`inert` is on <main>'s opening tag. It must sit on the two CONTENT " +
       "children instead — <main> also contains StatusToasts (a live region) and " +
       "the Undo pill, and inert would silence and disable both."
@@ -294,6 +324,16 @@ describe("the gate proves itself", () => {
 
   it("hasnt() fails on a present shape", () => {
     expect(() => hasnt('<div aria-modal="true" />', "fixture", /aria-modal/, "why")).toThrow();
+  });
+
+  it("openingTag() reads past a `>` inside an expression container", () => {
+    const src = 'x <main style={{a: n > 2 ? 1 : 0}} inert={m}>body</main>';
+    expect(openingTag(src, "<main")).toBe('<main style={{a: n > 2 ? 1 : 0}} inert={m}>');
+    expect(/\binert\b/.test(openingTag(src, "<main"))).toBe(true);
+  });
+
+  it("openingTag() throws rather than returning a truncated tag", () => {
+    expect(() => openingTag("x <main style={{a: 1}", "<main")).toThrow();
   });
 
   it("count() distinguishes one heading from two", () => {
