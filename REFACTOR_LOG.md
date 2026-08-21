@@ -13544,3 +13544,22 @@ booleans and not `theme`, no surviving hand-written read of any of the four
 keys in App, `clears` matching `SPLIT_KEY`, and absent-sanitizes-to-null).
 `check:style` OK. Toggled Plan zoom & pan in DEV both ways and watched the key
 go absent and back to `"0"`.
+
+### 9/n — `hoursFor(viewDate)` is evaluated once per render, not four times
+
+**Files:** `src/App.jsx`
+**Behavioural change:** none.
+
+One value, four names: `viewHours`, the `notifSections` memo's `dayClosed`, the
+`dayClosed` const beside the view elements, and the header's hours line each
+called `hoursFor(viewDate)` and re-derived the same weekday lookup.
+
+`dayClosed` moves up beside `viewHours` rather than staying with its first
+reader — for the reason the comment down at the view elements already gives, and
+which this file has hit twice: a `const` used above its declaration in a render
+body is a TDZ ReferenceError that blanks the whole app, and neither `npm run
+build` nor lint sees it.
+
+**Verification:** build OK (202.98 kB gz, −0.01), lint 0 errors, **526 tests**,
+`check:style` OK. Loaded in DEV: renders, console clean — which for this change
+is the only check that matters.

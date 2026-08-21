@@ -2807,7 +2807,16 @@ function BookingApp({uid}){
   // `defaultZoom` is a FLOOR, never a ceiling: a device set to open at 3× still
   // opens at 3× on a short day, and at max(3, span) on a long one. The setting
   // says how close in you like to start; this says how much the day owes you.
+  // v17.14.0 (/code-review follow-up): ONE value, four names. `hoursFor(viewDate)`
+  // was evaluated four times per App render — here, inside the notifSections
+  // memo, again for the three views, and again in the header line — each one
+  // re-deriving the same weekday lookup. `dayClosed` is declared here rather
+  // than beside its first reader for the reason the comment down at the view
+  // elements already gives: a `const` used above its declaration in a render
+  // body is a TDZ ReferenceError that blanks the whole app, and this file has
+  // hit that twice.
   const viewHours=hoursFor(viewDate);
+  const dayClosed=viewHours.closed;
   const viewGridMins=(viewHours.gridClose-viewHours.open)*60;
   useEffect(function(){
     if(zoomTouchedRef.current) return;
@@ -2888,7 +2897,7 @@ function BookingApp({uid}){
       loadFailed:!bookingsReady&&loadStalled,
       readError:readError,
       hasConnected:hasConnected,
-      dayClosed:hoursFor(viewDate).closed
+      dayClosed:dayClosed
     }),
     hasClash?[{id:"clash",tone:"var(--danger-text)",tint:"var(--danger-bg)",icon:ClashIcon,
       title:clashBannerPairs.length===1?"Double-booked":"Double-bookings",count:clashBannerPairs.length,
@@ -3021,7 +3030,6 @@ function BookingApp({uid}){
   // app — which neither `npm run build` nor lint sees. Hit here exactly as
   // CLAUDE.md's gotcha describes, and caught by loading the page.
   const emptyWalkin=isViewToday?VA.onWalkin:null;
-  const dayClosed=hoursFor(viewDate).closed;
 
   const planView=<PlanView
     bookings={bookings}
@@ -3272,7 +3280,7 @@ function BookingApp({uid}){
               title="Settings & keyboard shortcuts"
               aria-label="Settings & keyboard shortcuts"
               className="mgt-hover-scale"
-              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
+              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(dayClosed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
