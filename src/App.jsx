@@ -3091,7 +3091,7 @@ function BookingApp({uid}){
     hoursSig={weekHours}
     layoutSig={layout}
     onNew={VA.onNew}
-    onWalkin={emptyWalkin}
+    emptyWalkin={emptyWalkin}
     dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const listEl=<ListView
@@ -3111,7 +3111,7 @@ function BookingApp({uid}){
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
     onNew={VA.onNew}
-    onWalkin={emptyWalkin}
+    emptyWalkin={emptyWalkin}
     dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const viewEl={timeline:timelineEl,list:listEl,plan:planView};

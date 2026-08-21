@@ -76,7 +76,8 @@ export const ListView = memo(function ListView({
   late = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {}, focusReq = 0,
   showFinished = false, onToggleFinished = () => {},
-  onNew = null, onWalkin = null,
+  // v17.14.0: `emptyWalkin` — one name across all three views, see TimelineView.
+  onNew = null, emptyWalkin = null,
   // v17.11.0: the viewed day is a closed day. EmptyDay renders nothing then —
   // the strip's `Closed this day` section is the empty state for that case, and
   // offering two buttons the app refuses is worse than offering none.
@@ -225,7 +226,7 @@ export const ListView = memo(function ListView({
   // is worth keeping. `dayClosed` is new: this used to offer "New booking" and
   // "Walk-in" on a closed day, both of which the app refuses.
   if (!day.length) {
-    return <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={onWalkin} />;
+    return <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} />;
   }
 
   // v17.12.0: exactly ONE card is in the tab order at a time (the roving

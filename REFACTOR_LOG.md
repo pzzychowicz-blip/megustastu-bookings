@@ -13593,3 +13593,23 @@ a swap moves both views, so "did the user tap timeline" is the wrong question.
 `{a:list, b:timeline, dir:v}` and tapping *timeline* wrote
 `{a:timeline, b:list, dir:h}` — stacked in the same commit as the swap, with no
 intermediate side-by-side frame.
+
+### 11/n — the empty-day walk-in prop has one name
+
+**Files:** `src/components/{TimelineView,ListView,EmptyDay}.jsx`, `src/App.jsx`
+**Behavioural change:** none.
+
+`EmptyDay`'s walk-in callback arrived as `onWalkin` in TimelineView and ListView
+and as `emptyWalkin` in PlanView. The collision is real rather than sloppy —
+PlanView already has an `onWalkin(tableId)` of its own, for the table popover's
+"Walk-in here", and the two callbacks are genuinely different — but the result
+was one input under two names across three views, and the next surface to grow
+an empty-day prompt would have guessed and got a silently missing button.
+
+All three views take `emptyWalkin`. `EmptyDay`'s own prop stays `onWalkin`:
+inside that component there is nothing to tell it apart from, so it keeps the
+plain `on*` handler convention, and its JSDoc now says which name the callers
+use and why.
+
+**Verification:** build OK (203.00 kB gz, unchanged), lint 0 errors,
+**526 tests**, `check:style` OK.
