@@ -328,7 +328,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
       <div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
           {WDS.map(function(w){ return (
-            <div key={w} style={{ textAlign: "center", fontSize: T.small, fontWeight: FW.medium, color: "var(--text-muted)" }}>{w}</div>
+            <div key={w} style={{ textAlign: "center", fontSize: T.small, fontWeight: FW.bold, color: "var(--text-muted)" }}>{w}</div>
           ); })}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
