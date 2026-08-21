@@ -229,7 +229,10 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
           border: RIM_SOLID,
           borderRadius: R.pill, padding: "10px 18px",
           cursor: ok ? "pointer" : "not-allowed",
-          fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
+          fontSize: T.lead, fontWeight: FW.semi, minHeight: 44,
+          // v17.14.0: muted ink while disabled — white on --btn-disabled measures
+          // 1.30:1 in light, which is not dim but GONE. See index.html.
+          color: ok ? "var(--text-on-accent)" : "var(--btn-disabled-ink)",
           boxShadow: ok ? "var(--shadow-btn-solid)" : "none"
         }}
       >

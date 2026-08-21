@@ -13691,3 +13691,55 @@ disagree.
 **Verification:** build OK (203.05 kB gz, +0.01), lint 0 errors, **533 tests**,
 `check:style` OK. `calc(var(--r-card) - 1px)` resolved live in the running app:
 14px → 13px.
+
+### 15/n — the disabled primary button has a label again
+
+**Files:** `index.html`, `src/components/{BookingFormModal,WalkinForm,ReminderEditor,ManualModal}.jsx`,
+`tests/contrast.test.js`
+**Behavioural change:** the greyed-out primary in the two form footers,
+`ReminderEditor` and `ManualModal` now shows its label. **This closes a
+v17.13.0 open design question**; Patryk chose muted ink over a darker fill.
+
+v17.13.0 measured white on `--btn-disabled` at **1.30:1** in light — at which
+the label is not dim, it is GONE — and recorded it as an exemption, because WCAG
+1.4.3 exempts inactive components and answering it inside a gate-closing commit
+would have been the wrong place. A staff member who had not picked a date saw an
+empty grey pill where "Save booking" should be.
+
+**Why it is a new token and not `--text-muted`, which was the obvious answer.**
+`--btn-disabled` is declared in `:root` only and composites toward whatever is
+behind it, so its *effective* colour flips with the theme even though its
+declaration does not — light grey in light, mid-dark in dark. That is why white
+is invisible in one theme and fine in the other (6.42:1 dark). `--text-muted`
+inverts the same way the composite does, so it measures 4.59:1 light and
+**2.30:1 dark**: it would have swapped which theme was broken, not fixed either.
+`--btn-disabled-ink` is per-theme, picked against the two composited fills.
+
+**The light value is a step darker than `--text-muted`, and the reason is a
+limit of `tests/contrast.test.js` worth recording.** That file composites over
+the THEME EXTREME and calls it the worst case — which is true for WHITE ink and
+false for dark ink. The real modal sheet is a translucent panel over a tinted
+app background, so the fill composites to rgb(211,211,217) on screen against
+rgb(225,225,229) in the file. `--text-muted` read 4.59 in the registry and
+**4.02 in the running app**. The number to trust is the measured one, which is
+why this was walked in the browser rather than declared done when the test
+turned green.
+
+The entry stops being an exemption: `role: "label"`, held to 4.5, and
+`EXEMPT_FLOOR` loses its only per-theme member (the pair FORM stays, so the next
+fill whose themes diverge does not have to rediscover why one number is not
+enough).
+
+**One guard needed widening rather than dodging.** `--btn-disabled-ink` matches
+the `--btn-*` prefix the registry-coverage sweep scans, and it is an ink, not a
+fill. Naming it outside that prefix would have made the sweep blind to it —
+which is exactly how `--app-btn-grey` once hid from a check written around
+`--btn-*`. It is declared in a new `INKS` bucket instead, and a second assertion
+requires anything listed there to actually be some registered fill's `ink`, so
+"it is an ink" cannot become a sentence that silences the sweep.
+
+**Verification:** build OK (203.10 kB gz, +0.05), lint 0 errors, **534 tests**
+(+1: the new INKS assertion), `check:style` OK. Measured in the running app
+against the real paint stack, with the date cleared so the button is disabled:
+**5.14:1 light, 4.60:1 dark**. Screenshotted in both themes — the label reads as
+greyed-out beside the live "Back" button rather than as a second live control.

@@ -370,6 +370,35 @@
            rim on an invariant surface. */
         --app-btn-dark: rgba(0, 0, 0, 0.6);
         --btn-disabled: rgba(180, 180, 190, 0.4);
+        /* v17.14.0: the INK on --btn-disabled, and unlike the fill it must be
+           declared per theme. v17.13.0 measured the disabled primary's white
+           label at 1.30:1 in light — not dim, gone: a staff member who has not
+           picked a date saw an empty grey pill where "Save booking" should be.
+           WCAG 1.4.3 exempts inactive components, so this was recorded as a
+           design question rather than fixed inside a gate-closing commit.
+           Patryk's answer: muted ink, fill unchanged.
+
+           It cannot be --text-muted, and that is the whole reason this token
+           exists. The FILL is :root-only and composites toward whatever is
+           behind it, so its effective colour flips WITH the theme — light grey
+           in light, mid-dark in dark — which means white is invisible in one
+           theme and correct in the other (6.42:1 dark). --text-muted inverts the
+           same way the composite does, so it would have swapped which theme was
+           broken: measured 4.59:1 light but 2.30:1 dark, replacing an exempt
+           failure with a worse one (white is 1.30:1 light / 6.42:1 dark — the
+           same asymmetry, the other way up).
+
+           The light value is a step darker than --text-muted, and the reason is
+           worth carrying: tests/contrast.test.js composites over the THEME
+           EXTREME (pure white here) and calls that the worst case — which is
+           true for WHITE ink and false for dark ink. The real modal sheet is a
+           translucent panel over a tinted app background, so this fill
+           composites to rgb(211,211,217) live against the registry's
+           rgb(225,225,229), and a dark ink therefore measures LOWER in the app
+           than in the file: --text-muted's own value read 4.59 there and 4.02
+           on screen. Measured in the running app, both themes: 5.14:1 light,
+           4.60:1 dark. Both clear AA, so this is no longer an exemption. */
+        --btn-disabled-ink: #4a5464;
         /* v17.8.0: the three popovers (QuickStatus, SplitMenu, Plan's day queue)
            all carried the same hand-written `0 8px 32px rgba(0,0,0,0.14)`, which
            never deepened for dark mode the way every --shadow-* token does. */
@@ -479,6 +508,10 @@
         --border-card: rgba(255, 255, 255, 0.10);
         --text-primary: #f2f2f7;
         --text-muted: #9a9aa0;
+        /* v17.14.0: see --btn-disabled-ink in :root. Lighter than --text-muted
+           because the disabled fill composites DARK here, and dimmer than white
+           so the pill still reads as inactive. 4.70:1 on the composite. */
+        --btn-disabled-ink: #dcdce0;
         --accent: #0a84ff;
         --focus-ring: #ffffff;
         /* Status chip text -> light variants for dark surfaces. */

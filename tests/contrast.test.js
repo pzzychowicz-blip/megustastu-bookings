@@ -159,15 +159,31 @@ const FILLS = [
   // exactly the size of the literals."
   { fill: "--app-btn-dark", alpha: null, ink: "--text-on-accent", role: "button", what: "timeline Follow, while following" },
   // The greyed-out primary in both form footers, ReminderEditor and ManualModal.
-  // It is `exempt` and the reason is the standard's, not this app's: WCAG 1.4.3
-  // exempts inactive user-interface components, and every one of these buttons
-  // is `disabled` when it wears this fill. What the number still says is worth
-  // knowing — at 1.31:1 in light the label is not dim, it is GONE, so a staff
-  // member who has not filled the date sees an empty pill rather than a
-  // greyed-out "Save booking". Recorded here, floored so it cannot get worse,
-  // and left as a design question rather than answered inside a gate-closing
-  // commit (ROADMAP.md).
-  { fill: "--btn-disabled", alpha: null, ink: "--text-on-accent", role: "exempt", what: "disabled primary button" },
+  //
+  // v17.13.0 recorded this as an EXEMPTION: WCAG 1.4.3 exempts inactive
+  // components, and white on this fill measured 1.31:1 in light — at which the
+  // label is not dim, it is GONE, so a staff member who had not filled the date
+  // saw an empty pill rather than a greyed-out "Save booking". It was left as a
+  // design question rather than answered inside a gate-closing commit.
+  //
+  // **v17.14.0 answered it, and it is no longer an exemption.** The ink is
+  // `--btn-disabled-ink`, which is per-theme because the FILL is :root-only and
+  // composites toward whatever is behind it — so its effective colour flips WITH
+  // the theme even though its declaration does not. That is why `--text-muted`
+  // was the wrong answer despite being the obvious one: it inverts the same way
+  // the composite does, measuring 4.59:1 light but 2.30:1 dark, which would have
+  // swapped which theme was broken rather than fixing either. White was the
+  // mirror image: 1.30:1 light, 6.42:1 dark.
+  //
+  // The light ink is a step darker than --text-muted, and the reason is a limit
+  // of THIS FILE worth stating: BASE is the theme extreme, which is the worst
+  // case for WHITE ink and the BEST case for dark ink. The real modal sheet is
+  // translucent over a tinted app background, so the fill composites to
+  // rgb(211,211,217) on screen against rgb(225,225,229) here — a dark ink
+  // measures LOWER in the app than in this file. --text-muted read 4.59 here and
+  // 4.02 live. The shipped pair measures 5.14 light / 4.60 dark in the running
+  // app, and is a `label` entry held to 4.5 rather than an exemption.
+  { fill: "--btn-disabled", alpha: null, ink: "--btn-disabled-ink", role: "label", what: "disabled primary button" },
 
   // The two PRIMARY header buttons. Named --app-* rather than --btn-*, which is
   // the only reason they were not in the first draft of this list.
@@ -232,14 +248,13 @@ const NEED = { label: 4.5, button: 3 };
 // chose this one, informed, after seeing the numbers and the pixels. It is
 // recorded here rather than argued away: the floors below still gate a
 // regression, and an accepted contrast is not a licence to keep going.
-// /code-review: PER-THEME for --btn-disabled. The block exemptions share one
-// number because their two themes land within ~0.4 of each other; this fill
-// measures 1.30:1 in light and 6.42:1 in dark, so a single 1.3 floor leaves five
-// points of slack in the theme where it currently works and could not see a
-// dark-mode regression at all. A number may be a scalar (both themes) or a
-// {light, dark} pair.
-const EXEMPT_FLOOR = { "--block-confirmed": 2.8, "--block-pending": 1.75, "--block-completed": 2.1,
-                       "--btn-disabled": { light: 1.3, dark: 6.3 } };
+// A number may be a scalar (both themes) or a {light, dark} pair. The per-theme
+// form arrived for --btn-disabled, whose two themes were 5x apart so a single
+// floor could not have seen a dark-mode regression at all; that entry is no
+// longer an exemption (v17.14.0), but the pair form stays, because the next fill
+// whose themes diverge should not have to rediscover why one number is not
+// enough.
+const EXEMPT_FLOOR = { "--block-confirmed": 2.8, "--block-pending": 1.75, "--block-completed": 2.1 };
 const exemptFloor = (fill, theme) => {
   const f = EXEMPT_FLOOR[fill];
   return typeof f === "number" ? f : f[theme];
@@ -394,7 +409,19 @@ describe("registry coverage", () => {
     "--btn-nav-quiet": "date-arrow rail, glyph is --text-primary not white",
     "--tl-blocked-badge-border": "rim of the blocked badge, not its fill",
   };
+  // v17.14.0: tokens matching the fill prefixes that are INK, not fill. Listing
+  // one here is not an exemption — the assertion below requires it to be some
+  // registered fill's `ink`, so it is measured, just from the other side.
+  //
+  // The alternative was to name it outside the `--btn-` prefix so the sweep
+  // would not see it, which is precisely how `--app-btn-grey` once hid from a
+  // check written around `--btn-*`. A token should not be renamed to escape an
+  // audit.
+  const INKS = {
+    "--btn-disabled-ink": "the ink ON --btn-disabled, per-theme (see its FILLS entry)",
+  };
   const registered = new Set(FILLS.map((f) => f.fill));
+  const usedAsInk = new Set(FILLS.map((f) => f.ink));
 
   it("every --block-* / --btn-* / --tbl-*-rgb / timeline pill+badge token is registered or declared decorative", () => {
     // The `--tl-.*(pill|badge)` clause is the v17.8.0 review fix. The rest of
@@ -405,11 +432,24 @@ describe("registry coverage", () => {
     const candidates = Object.keys(LIGHT_VARS).filter((k) =>
       /^--(block-|btn-|app-btn-|app-new|app-walkin|tbl-.*-rgb|tl-.*(pill|badge))/.test(k)
     );
-    const missing = candidates.filter((k) => !registered.has(k) && !(k in DECORATIVE));
+    const missing = candidates.filter((k) => !registered.has(k) && !(k in DECORATIVE) && !(k in INKS));
     expect(
       missing,
       "unregistered text-bearing fill(s): " + missing.join(", ") +
-      " — add them to FILLS so their contrast is measured, or to DECORATIVE with a reason"
+      " — add them to FILLS so their contrast is measured, to INKS if the token is" +
+      " ink rather than fill, or to DECORATIVE with a reason"
+    ).toEqual([]);
+  });
+
+  it("every token declared an INK is actually used as one", () => {
+    // INKS is not a hiding place: a token listed there must appear as some
+    // registered fill's `ink`, so it is measured from the other side. Without
+    // this, "it is an ink" would be a sentence anyone could write to silence
+    // the sweep above.
+    const unused = Object.keys(INKS).filter((k) => !usedAsInk.has(k));
+    expect(
+      unused,
+      "declared INK but never used as one: " + unused.join(", ")
     ).toEqual([]);
   });
 

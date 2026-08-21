@@ -269,7 +269,9 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               borderRadius: R.pill,
               padding: "10px 18px",
               cursor: err ? "not-allowed" : "pointer",
-              fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 40,
+              fontSize: T.lead, fontWeight: FW.semi, minHeight: 40,
+              // v17.14.0: muted ink while disabled — see index.html.
+              color: err ? "var(--btn-disabled-ink)" : "var(--text-on-accent)",
               boxShadow: err ? "none" : "var(--shadow-btn-success)"
             }}
           >
