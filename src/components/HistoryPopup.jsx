@@ -44,7 +44,7 @@ export function HistoryPopup({ booking, onClose }) {
         maxHeight: 300, overflowY: "auto",
         borderRadius: R.card,
         border: "1px solid var(--border-soft)",
-        background: "var(--bg-input)",
+        background: "var(--bg-soft)",
         padding: "10px 12px",
         boxShadow: "var(--shadow-well)"
       }}>
