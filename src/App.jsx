@@ -41,6 +41,7 @@ import {
 } from "./lib/booking-logic";
 
 import { useModalStack, modalMap, topModal } from "./hooks/useModalStack";
+import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
@@ -352,6 +353,10 @@ const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400;
 // React.memo for zero visual change; these shared consts keep it stable.
 const EMPTY_OBJ=Object.freeze({});
 const EMPTY_ARR=Object.freeze([]);
+// v17.14.0: the ✕-dismissal Sets emptied on a day change. "clash" is absent on
+// purpose — it prunes against its own live pairs, which covers the date change
+// too (see useDismissals.js).
+const DAY_DISMISS_KEYS=Object.freeze(["late","overlap","wait"]);
 
 // ── The two chrome icon buttons (v17.9.0) ────────────────────────────────────
 // Find-a-booking and Settings. v17.0.0 round 8 put them in ONE pair in the
@@ -1001,7 +1006,14 @@ function BookingApp({uid}){
   // scan budget cut its pass short, instead of blinking the banner row.
   const waitAvailRef = useRef({});
   const [waitAddedShown, setWaitAddedShown] = useState(false);
-  const [waitNotifyDismissed, setWaitNotifyDismissed] = useState(function(){return new Set();}); // v16.3.0: session-only ✕-dismissed waitlist-free rows
+  // ── v17.14.0: the four ✕-dismissal Sets, one mechanism ──────────────────────
+  // `late` · `overlap` · `wait` · `clash` — see src/hooks/useDismissals.js for
+  // the two lifecycles (three are emptied on a day change; `clash` prunes
+  // against its live pairs instead, which is not the drift it looks like).
+  // Untouched Sets keep their identity, so `[dismissed.late]` is still a stable
+  // memo dep when an overlap row is dismissed.
+  const { sets: dismissed, dismiss: dismissRow, prune: pruneDismissed, reset: resetDismissed } = useDismissals();
+  const waitNotifyDismissed = dismissed.wait; // v16.3.0: session-only ✕-dismissed waitlist-free rows
   const [undoInfo, setUndoInfo] = useState(null);   // v17.4.0: {snapshot, kind:"cancel"|"delete"|"edit", noShow} — general undo (was cancel/no-show-only, v16.3.0)
   const undoTimerRef = useRef(null);                // 10s auto-clear timer for the undo toast
   const pendingWaitlistRef = useRef(null); // entry id being converted via Book
@@ -1355,7 +1367,7 @@ function BookingApp({uid}){
     }else{
       setSelectedListId(null);setShowFinished(false);
     }
-    setLateDismissed(function(prev){return prev.size?new Set():prev;});setOverlapDismissed(function(prev){return prev.size?new Set():prev;});setWaitNotifyDismissed(function(prev){return prev.size?new Set():prev;});
+    resetDismissed(DAY_DISMISS_KEYS);   // NOT "clash" — it prunes itself, see useDismissals.js
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[viewDate]);
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
@@ -1419,30 +1431,24 @@ function BookingApp({uid}){
   // Reveal must collapse once the last row is dismissed. lateMap itself stays
   // UNFILTERED — the list/timeline amber highlights keep showing for a dismissed
   // row; only the banner (lateBannerMap) hides it. Reset on day change (below).
-  const [lateDismissed,setLateDismissed]=useState(function(){return new Set();});
+  const lateDismissed=dismissed.late;
   const lateBannerMap=useMemo(function(){
     if(lateDismissed.size===0) return lateMap;
     const map={};
     Object.keys(lateMap).forEach(function(id){if(!lateDismissed.has(id)) map[id]=lateMap[id];});
     return map;
   },[lateMap,lateDismissed]);
-  function dismissLateRow(id){
-    setLateDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
-  }
+  function dismissLateRow(id){dismissRow("late",id);}
   // v17.0.0 round 7 — same ✕-dismiss mechanism for the Overlap banner (the
   // Running-late pattern applied app-wide). Session-only; keyed by seated id.
-  const [overlapDismissed,setOverlapDismissed]=useState(function(){return new Set();});
-  function dismissOverlapRow(id){
-    setOverlapDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
-  }
+  const overlapDismissed=dismissed.overlap;
+  function dismissOverlapRow(id){dismissRow("overlap",id);}
   // v17.11.0 — the same ✕-dismiss mechanism for the double-booking rows. Keyed
   // by the PAIR's row id (clashRowId), not a booking id: the row is about two
   // bookings, and dismissing "Pau vs Rita" must not also silence "Rita vs a
   // third party" if the day is bad enough to have both.
-  const [clashDismissed,setClashDismissed]=useState(function(){return new Set();});
-  function dismissClashRow(id){
-    setClashDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
-  }
+  const clashDismissed=dismissed.clash;
+  function dismissClashRow(id){dismissRow("clash",id);}
   // v16.3.0 — Table-turn prediction: today's seated bookings whose scheduled end
   // is within the next freeSoonWindow min (freeingSoon, booking-logic.js). Gated
   // on the settings/bookingDefaults master switch (freeSoonEnabled). Two shapes:
@@ -2686,7 +2692,7 @@ function BookingApp({uid}){
     return (viewDate===todayStr2?dayWaiting:waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===todayStr2;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);}))
       .filter(function(w){return !!waitAvail[w.id]&&!waitNotifyDismissed.has(w.id);});
   },[dayWaiting,waitlist,viewDate,waitAvail,waitNotifyDismissed]);
-  function dismissWaitRow(id){setWaitNotifyDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});}
+  function dismissWaitRow(id){dismissRow("wait",id);}
   const hasWaitBanner=waitBannerEntries.length>0;
 
   // ── v17.11.0: double-bookings on the viewed day ────────────────────────────
@@ -2726,16 +2732,8 @@ function BookingApp({uid}){
   // cannot re-enter (the v17.10.2 lesson about effects that write derived state).
   useEffect(function(){
     if(clashDismissed.size===0) return;
-    const live=new Set(clashPairs.map(clashRowId));
-    setClashDismissed(function(prev){
-      let drop=false;
-      prev.forEach(function(id){if(!live.has(id)) drop=true;});
-      if(!drop) return prev;
-      const next=new Set();
-      prev.forEach(function(id){if(live.has(id)) next.add(id);});
-      return next;
-    });
-  },[clashPairs,clashDismissed]);
+    pruneDismissed("clash",new Set(clashPairs.map(clashRowId)));
+  },[clashPairs,clashDismissed,pruneDismissed]);
   const hasClash=clashBannerPairs.length>0;
   // The timeline's view of the same pairs: per booking, who it clashes with and
   // where. Built from `clashPairs` and NOT from the dismiss-filtered list —

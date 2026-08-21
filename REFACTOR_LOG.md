@@ -13465,3 +13465,38 @@ Esc on a dirty form raises the discard confirm with both dialogs stacked; Esc
 again dismisses only the confirm and leaves the form; Enter on the confirm
 discards; Esc closes the search panel and Settings; ←/→ still cycle Settings
 tabs. Console clean throughout.
+
+### 7/n — the four dismissal Sets become one mechanism
+
+**Files:** `src/hooks/useDismissals.js` (new), `tests/dismissals.test.js` (new),
+`src/App.jsx`
+**Behavioural change:** none.
+
+Four session-only `Set`s with identical bodies written out four times: a
+`useState(() => new Set())`, a `dismissXRow(id)` that copies and adds, and a
+filter-the-map-by-the-Set memo. (ROADMAP said three; `clashDismissed` arrived in
+v17.11.0 and made it four, which is the pattern this version keeps meeting.)
+
+What actually differed between them was the KEY — `clash` is keyed by
+`clashRowId(pair)`, the rest by booking id — and the LIFECYCLE, and only the
+second is a real distinction worth keeping visible. `late`, `overlap` and `wait`
+are today-only sections whose conditions are monotonic within a day, so they
+never prune and are emptied on a date change. `clash` is the opposite: it is the
+one notification whose point is that you go and FIX it, so it clears and can
+recur on the same pair, and it prunes against its live pairs instead — which
+covers the date change for free, since those pairs are already viewDate-scoped.
+**`clash` being absent from the day-change reset is therefore correct, not the
+drift it looks like**, and `DAY_DISMISS_KEYS` now says so in one place instead
+of leaving it to be re-derived.
+
+**Both identity properties are preserved deliberately, and both were free
+before.** A no-op returns the same object (React bails out, and the clash prune
+effect — which depends on the Set it writes — cannot re-enter, the v17.10.2
+lesson one file along). And an untouched key keeps ITS Set by reference, so
+`[dismissed.late]` is still a stable memo dep when an overlap row is dismissed;
+a naive single state object would have quietly invalidated all four banners on
+every dismissal.
+
+**Verification:** build OK (202.87 kB gz, +0.17), lint 0 errors, **517 tests**
+(+9, including both identity properties and the "clash survives a day change"
+asymmetry), `check:style` OK.
