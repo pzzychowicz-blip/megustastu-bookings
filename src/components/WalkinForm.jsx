@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC } from "../lib/constants";
+import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC, RIM_SOLID } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
@@ -55,7 +55,7 @@ import { useDeferredCompute } from "../hooks/useDeferredCompute";
 // The token sweep briefly used --success-text / --status-pending-text here,
 // which invert between themes and left light-green text on a pale-green chip in
 // dark mode. A token may only be used where the surface under it flips as well.
-const KTXT_OK = "#166534", KTXT_TIGHT = "#854d0e";
+const KTXT_OK = "#166534", KTXT_TIGHT = "#854d0e";   /* @fixed-fill */
 
 export function WalkinForm({
   draft, setDraft,
@@ -199,9 +199,9 @@ export function WalkinForm({
         style={{
           cursor: "pointer", padding: "2px 8px", borderRadius: R.pill,
           fontWeight: FW.semi, fontSize: T.body,
-          background: r.hasTables ? "rgba(220,252,231,0.8)" : "rgba(254,249,195,0.8)",
+          background: r.hasTables ? "rgba(220,252,231,0.8)" : "rgba(254,249,195,0.8)",  /* @fixed-fill */
           color: r.hasTables ? KTXT_OK : KTXT_TIGHT,
-          border: "1px solid " + (r.hasTables ? "rgba(134,239,172,0.5)" : "rgba(253,230,138,0.5)"),
+          border: "1px solid " + (r.hasTables ? "rgba(134,239,172,0.5)" : "rgba(253,230,138,0.5)"),  /* @fixed-fill */
           boxShadow: "var(--shadow-flat)"
         }}
       >
@@ -214,14 +214,14 @@ export function WalkinForm({
     <div style={{ marginTop: 8 }}>
       <div style={{ fontSize: T.small, color: S.muted, marginBottom: 6 }}>
         <span style={{
-          background: "rgba(220,252,231,0.8)", color: KTXT_OK,
+          background: "rgba(220,252,231,0.8)", /* @fixed-fill */ color: KTXT_OK,
           padding: "2px 6px", borderRadius: R.pill, fontSize: T.micro, fontWeight: FW.semi
         }}>
           green
         </span>
         {" = tables available  "}
         <span style={{
-          background: "rgba(254,249,195,0.8)", color: KTXT_TIGHT,
+          background: "rgba(254,249,195,0.8)", /* @fixed-fill */ color: KTXT_TIGHT,
           padding: "2px 6px", borderRadius: R.pill, fontSize: T.micro, fontWeight: FW.semi
         }}>
           yellow
@@ -270,7 +270,7 @@ export function WalkinForm({
           <span style={{
             fontWeight: FW.bold, color: "var(--text-required)", fontSize: T.body,
             padding: "4px 12px", borderRadius: R.pill,
-            border: "1.5px solid rgba(220,38,38,0.4)",
+            border: "1.5px solid rgba(220,38,38,0.4)",  /* @fixed-fill */
             flexShrink: 0
           }}>
             Kitchen busy
@@ -337,8 +337,8 @@ export function WalkinForm({
           disabled={!wOk}
           className="mgt-hover-scale"
           style={{
-            background: wOk ? "var(--app-success-solid)" : "rgba(180,180,190,0.4)",
-            border: "1px solid rgba(255,255,255,0.2)",
+            background: wOk ? "var(--app-success-solid)" : "var(--btn-disabled)",
+            border: RIM_SOLID,
             borderRadius: R.pill, padding: "10px 18px",
             cursor: wOk ? "pointer" : "not-allowed",
             fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
@@ -509,7 +509,7 @@ export function WalkinForm({
           Reveal-wrapped — its ~300ms ease is the grace, so a fast scan shows
           only an imperceptible sliver instead of a flash. */}
       <Reveal show={wChecking && wSel.length === 0}>
-        <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>
+        <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>
       </Reveal>
       {wAutoCheck && wSel.length === 0 ? (
         <>

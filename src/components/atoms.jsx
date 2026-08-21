@@ -12,7 +12,7 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC } from "../lib/constants";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, RIM_SOLID } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 import { ChevronRightIcon } from "./Icons";
 
@@ -377,7 +377,7 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
         fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
         display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
         background, margin: 0,
-        border: "1px solid rgba(255,255,255,0.2)",
+        border: RIM_SOLID,
         boxShadow: "var(--shadow-btn)"
       }}>{children}</h2>
     </div>
@@ -456,7 +456,7 @@ export function Fld({ label, req, invalid, describedBy, style, children }) {
       <label
         id={id + "-l"}
         htmlFor={single ? id : undefined}
-        style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.semi, letterSpacing: "0.01em" }}>
+        style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.medium, letterSpacing: "0.01em" }}>
         {label}
         {req ? <span aria-hidden="true" style={{ color: "var(--text-required)" }}>*</span> : null}
       </label>
@@ -567,7 +567,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {!open && summary ? (
-            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
           ) : null}
           <span style={{
             fontSize: T.title, fontWeight: FW.bold, color: "var(--text-muted)", lineHeight: 1,
@@ -1183,7 +1183,7 @@ export function SBadge({ status }) {
     <span style={{
       fontSize: T.body, padding: "4px 10px", borderRadius: R.pill,
       background: BLOCK_BG[status] || BLOCK_BG.confirmed,
-      color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: "1px solid rgba(255,255,255,0.2)",
+      color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: RIM_SOLID,
       fontWeight: FW.semi, textTransform: "capitalize",
       display: "inline-block",
       boxShadow: "var(--shadow-flat)"

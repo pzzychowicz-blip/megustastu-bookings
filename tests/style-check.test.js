@@ -19,8 +19,9 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, statSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "../scripts/strip-comments.mjs";
 import { tmpdir } from "node:os";
 
 const SCRIPT = new URL("../scripts/check-style-invariants.mjs", import.meta.url).pathname;
@@ -72,16 +73,29 @@ describe("check:style — shadow literals (v17.10.1)", () => {
   });
 
   // A zero blur is a ring however it is spelled, including `0px`.
+  //
+  // v17.13.0: asserted on the RULE, not on the exit code. The rgba spelling is
+  // the point of the fixture, and the colour rule added in this version reports
+  // it — correctly, since a ring in this app takes a token. Weakening either
+  // rule to keep one `toBe(0)` would have been the wrong trade; naming the rule
+  // each fixture is about is what it should always have done.
   it("leaves a 0px-blur ring alone", () => {
     const r = run({ "a.jsx": 'const x = <div style={{ boxShadow: "0 0 0px 2px rgba(0,122,255,0.4)" }} />;\n' });
-    expect(r.code).toBe(0);
+    expect(r.out).not.toMatch(/shadow-literal/);
   });
 
   // The colour alternation now accepts a bare identifier, so prove it does not
   // reach into ordinary multi-length properties.
+  //
+  // v17.13.0: scoped to this rule, like the two ring fixtures above. The
+  // transition value is a hand-written duration/curve, which Rule 9 now reports
+  // — correctly. Twice in one version an added rule collided with a fixture
+  // asserting `code === 0`, which is the lesson: **a fixture should assert on
+  // the rule it is about.** `toBe(0)` quietly means "and no future rule may ever
+  // have an opinion about this line", which is not what any of them meant.
   it("leaves padding and transition values alone", () => {
     const r = run({ "a.jsx": 'const x = <div style={{ padding: "0 2px 6px 8px", transition: "transform 240ms ease" }} />;\n' });
-    expect(r.code).toBe(0);
+    expect(r.out).not.toMatch(/shadow-literal/);
   });
 
   it("catches an inset groove", () => {
@@ -99,7 +113,7 @@ describe("check:style — shadow literals (v17.10.1)", () => {
     const r = run({ "a.jsx":
       'const a = <div style={{ boxShadow: "0 0 0 3px var(--accent)" }} />;\n'
       + 'const b = <div style={{ boxShadow: "0 0 0 2px rgba(0,122,255,0.4)" }} />;\n' });
-    expect(r.code).toBe(0);
+    expect(r.out).not.toMatch(/shadow-literal/);   // see the 0px-blur fixture
   });
 
   it("leaves a token and a marked one-off alone", () => {
@@ -187,5 +201,263 @@ describe("check:style — the v17.8.0 rules still bite", () => {
     const r = run({ "a.jsx": "const x = <div style={{ borderRadius: 4 }} />   /* @canvas */;\n" });
     expect(r.code).toBe(1);
     expect(r.out).toMatch(/marker-placement/);
+  });
+});
+
+describe("check:style — colour literals (v17.13.0)", () => {
+  it.each([
+    ["rgba()", 'background: "rgba(180,180,190,0.4)"'],
+    ["rgb()",  'background: "rgb(249,115,22)"'],
+    ["6-digit hex", 'color: "#1f2937"'],
+    ["3-digit hex", 'color: "#fff"'],
+  ])("catches a bare %s", (_label, decl) => {
+    const r = run({ "a.jsx": `const x = <div style={{ ${decl} }} />;\n` });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/colour-literal/);
+  });
+
+  it("catches a colour hiding behind a const", () => {
+    const r = run({ "a.jsx": 'const ink = "#166534";\nconst x = <div style={{ color: ink }} />;\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/colour-literal/);
+  });
+
+  // The composed-token idiom — `rgba(var(--tbl-out-rgb), 0.8)` in constants.js —
+  // is a token reference, not a literal. If this ever reports, every fill in
+  // STATUS_COLORS and TBL lights up and the rule gets muted, which is how a
+  // noisy check dies.
+  it("leaves a token reference alone", () => {
+    const r = run({
+      "a.jsx": 'const x = <div style={{ background: "rgba(var(--tbl-out-rgb),0.8)", color: "var(--text-on-accent)" }} />;\n',
+    });
+    expect(r.code).toBe(0);
+  });
+
+  it("accepts /* @fixed-fill */ on a deliberate literal", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ background: "#fef9c3", /* @fixed-fill */ color: "#854d0e" }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  // @shadow blesses the colour inside the shadow it already blesses; requiring
+  // both markers on one line would teach nothing.
+  it("accepts /* @shadow */ on a shadow literal's colour", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ boxShadow: "0 10px 24px rgba(0,0,0,0.3)" /* @shadow */ }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  // Half of this repo's apparent colour literals are PROSE about colours — the
+  // SIZE_RING note, the v17.8.0 lessons, the `rgba(0,0,0,0)` a class measured
+  // at. A `startsWith("//")` test is not enough: a JSX block comment's
+  // continuation lines start with ordinary words.
+  it("ignores a colour named in a comment, including a block continuation line", () => {
+    const r = run({
+      "a.jsx": [
+        "// The old value was rgba(255,255,255,0.2) and it was wrong.",
+        "/* An open comment",
+        "   whose second line says #1f2937 with no leading marker,",
+        "   and mentions rgba(0,0,0,0) too. */",
+        "const x = <div />;",
+        "",
+      ].join("\n"),
+    });
+    expect(r.code).toBe(0);
+  });
+
+  // Devtools `%c` styling is a CSS declaration list handed to console.log — not
+  // app UI and not themed. Rule 4 faced the same site and its comment says why
+  // marking it would be the wrong fix.
+  it("ignores devtools %c styling", () => {
+    const r = run({
+      "a.js": 'console.log("%cMGT", "color:#60a5fa;font-size:18px;font-weight:500;");\n',
+    });
+    expect(r.code).toBe(0);
+  });
+
+  // The false negative that shipped in this rule's first draft, and the reason
+  // the devtools test reads a quoted string's CONTENTS rather than scanning the
+  // whole line: on dense JSX the old pattern started at a CLOSING quote and ran
+  // through the markup to the STATEMENT's trailing `;`, so a real literal read
+  // as console styling and was silently not reported.
+  it("still catches a literal on a JSX line whose statement ends in a semicolon", () => {
+    const r = run({
+      "a.jsx": 'const x = <span style={{ border: "1.5px solid rgba(220,38,38,0.4)", flexShrink: 0 }}>Kitchen busy</span>;\n',
+    });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/colour-literal/);
+  });
+
+  // An HTML entity is not a colour. The app drew its nav chevrons as
+  // `&#8249;`/`&#8250;` until v17.9.0, and "an entity is invisible to a glyph
+  // grep" is already a recorded lesson — this is that fact pointed the other way.
+  it("does not read an HTML entity as a hex colour", () => {
+    const r = run({ "a.jsx": 'const x = <span dangerouslySetInnerHTML={{ __html: "&#8249;" }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+});
+
+describe("check:style — the icon scale (v17.13.0)", () => {
+  it("catches a numeric size on an icon call site", () => {
+    const r = run({ "a.jsx": 'const x = <CogIcon size={20} />;\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/icon-scale/);
+  });
+
+  it("catches a numeric destructured default", () => {
+    const r = run({ "a.jsx": 'function Svg({ size = 20 }) { return <svg width={size} />; }\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/icon-scale/);
+  });
+
+  it("leaves an IC reference alone", () => {
+    const r = run({ "a.jsx": 'const x = <CogIcon size={IC.chrome} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  // THE reason this rule is JSX-position only. `size: <number>` in this app is
+  // overwhelmingly a PARTY size — EMPTY_FORM, every booking, every waitlist
+  // entry. A rule that fires on a booking's guest count gets muted within a day,
+  // and it would be right to mute it.
+  it("does not touch a booking's party size", () => {
+    const r = run({ "a.js": 'export var EMPTY_FORM = { name: "", size: 2, status: "confirmed" };\n' });
+    expect(r.code).toBe(0);
+  });
+
+  it("accepts /* @canvas */ on a drawn-in-place marker", () => {
+    const r = run({ "a.jsx": 'const x = <Dogear size={8} />;   /* @canvas */\n' });
+    expect(r.code).toBe(0);
+  });
+
+  // /code-review: the destructured-default arm was `\bsize\s*=\s*-?\d`, which
+  // also matched an ordinary variable. Both of these are the shape the rule's
+  // own header excludes, and both reported before the fix.
+  it.each([
+    ["a local variable", "let size = 20;\nexport const g = () => size;\n"],
+    ["a member assignment", "const o = {};\no.size = 4;\nexport default o;\n"],
+  ])("does not touch %s", (_label, body) => {
+    const r = run({ "a.js": body });
+    expect(r.out).not.toMatch(/icon-scale/);
+  });
+});
+
+describe("check:style — the motion scale (v17.13.0)", () => {
+  it.each([
+    ["cubic-bezier", 'transition: "opacity 240ms cubic-bezier(0.33,1,0.68,1)"'],
+    ["ms + ease",    'transition: "transform 240ms ease-out"'],
+    ["s + linear",   'transition: "height 0.4s linear"'],
+  ])("catches a hand-written %s", (_label, decl) => {
+    const r = run({ "a.jsx": `const x = <div style={{ ${decl} }} />;\n` });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/motion-scale/);
+  });
+
+  it("leaves an M reference alone", () => {
+    const r = run({ "a.jsx": 'const x = <div style={{ transition: "transform " + M.move }} />;\n' });
+    expect(r.code).toBe(0);
+  });
+
+  // M.resize is `var(--t-shift) linear` — a TOKEN composition, and the documented
+  // linear exception. Requiring a time before the keyword is what separates it
+  // from a hand-written pair; without that this rule would report the scale's own
+  // member and there would be no way to write M at all.
+  it("leaves a token composition with a bare keyword alone", () => {
+    const r = run({ "a.js": 'export var M = { resize: "var(--t-shift) linear" };\n' });
+    expect(r.code).toBe(0);
+  });
+
+  it("accepts /* @motion */ on the WAAPI escape hatch", () => {
+    const r = run({ "a.js": 'const easeOut = "cubic-bezier(0.33, 1, 0.68, 1)";   /* @motion */\n' });
+    expect(r.code).toBe(0);
+  });
+});
+
+// ── The weight ratchet (v17.13.0) ────────────────────────────────────────────
+//
+// The other half of v17.8.0's type change, and the half nothing was holding.
+// That version's reasoning: "There was no regular weight: 93 of 95 elements
+// were 500+. When everything is semibold, weight cannot carry emphasis, so size
+// carries all of it, so sizes multiply and crowd." The SIZE half is enforced by
+// Rule 3 and the live DOM renders exactly six sizes, all on the scale. The
+// weight half was enforced by nothing and had drifted back to 84% semibold-or-
+// bolder by the 2026-08-19 review.
+//
+// **This is deliberately an AGGREGATE ratchet, not a per-site rule**, and the
+// review that found the problem said so first: "this is not worth a lint rule".
+// It is right, and the reason is worth keeping. The criterion the v17.13.0 pass
+// actually applied — *text coloured as secondary must not also be weighted as
+// primary* — has real exceptions: a quiet section heading (muted colour, bold
+// weight, letterspaced) is a legitimate device, and there are about fifteen of
+// them. A rule with a 24% exemption rate teaches people to type the marker, not
+// to think, which is the opposite of what every other rule here does.
+//
+// So this holds the RATIO and judges no individual line — the same shape as
+// EXEMPT_FLOOR in tests/contrast.test.js: asserted against itself, so an
+// accepted position cannot quietly get worse. It counts source references
+// rather than rendered elements because CI cannot render; the two move
+// together, and the direction is what matters.
+describe("weight scale — the ratchet (v17.13.0)", () => {
+  const SRC_DIR = new URL("../src/", import.meta.url).pathname;
+
+  // /code-review, three fixes in one place.
+  //
+  // (1) COMMENTS ARE STRIPPED. The first version matched FW references against
+  //     raw file text, so prose about weights counted toward the ratio — in the
+  //     version that established comment-stripping twice, with the shared module
+  //     sitting right there. Measured, three of the counted references were
+  //     prose. The gap is small; the direction it can be pushed is not, because
+  //     a comment reading "was FW.regular, now FW.bold" moves the metric and a
+  //     writer could hold the ratchet above its floor purely by writing.
+  // (2) COMPUTED ONCE. It walked all of src/ separately for each `it`.
+  // (3) The second test now checks what its NAME says — see below.
+  const counts = (() => {
+    const files = [];
+    (function walk(d) {
+      for (const n of readdirSync(d)) {
+        const p = join(d, n);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.(js|jsx)$/.test(p)) files.push(p);
+      }
+    })(SRC_DIR);
+    const c = { regular: 0, medium: 0, semi: 0, bold: 0 };
+    const unknown = [];
+    for (const f of files) {
+      const code = stripComments(readFileSync(f, "utf8")).join("\n");
+      for (const m of code.matchAll(/\bFW\.([A-Za-z_$][\w$]*)/g)) {
+        if (m[1] in c) c[m[1]]++;
+        else unknown.push(f.slice(SRC_DIR.length) + " → FW." + m[1]);
+      }
+    }
+    return { c, unknown };
+  })();
+
+  it("at least a third of weight references are regular or medium", () => {
+    const c = counts.c;
+    const light = c.regular + c.medium;
+    const total = light + c.semi + c.bold;
+    const share = light / total;
+    expect(
+      +share.toFixed(3),
+      `regular+medium is ${light} of ${total} FW references (${Math.round(share * 100)}%). ` +
+      `v17.13.0's pass took it from 20% to 32% by demoting 46 runs that were ` +
+      `coloured secondary AND weighted primary. Below 30% the scale is sliding ` +
+      `back toward uniform bold, where weight can no longer carry emphasis and ` +
+      `size has to carry all of it — which is what produced thirteen font sizes ` +
+      `before v17.8.0. Demote descriptive text rather than lowering this floor.`
+    ).toBeGreaterThanOrEqual(0.3);
+  });
+
+  // /code-review: this used to assert `total > 300`, which `weights()` could not
+  // fail — it only ever counted the four scale names, so an off-scale weight was
+  // invisible to the test that claimed to look for one. It now matches ANY
+  // `FW.<name>` and reports the ones that are not scale steps, which is what the
+  // title always said. `check:style` Rule 3 catches a bare NUMBER; nothing else
+  // catches `FW.heavy`, which is `undefined` at runtime and renders as no
+  // font-weight at all.
+  it("every weight reference is one of the four scale steps", () => {
+    expect(
+      counts.unknown,
+      "FW references that are not scale steps: " + counts.unknown.join(", ") +
+      " — FW has exactly regular/medium/semi/bold, and an unknown member " +
+      "resolves to undefined, which React drops silently."
+    ).toEqual([]);
   });
 });

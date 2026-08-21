@@ -39,7 +39,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
     // coloured-text shape that reads as a stock badge.
     const fitChip=avail?<span
       style={{fontSize: T.small,fontWeight: FW.bold,color:"var(--success-text)",whiteSpace:"nowrap",flexShrink:0}}>{"Table free"+(avail.time?" · "+avail.time:"")}</span>:<span
-      style={{fontSize: T.small,fontWeight: FW.semi,color:S.muted,whiteSpace:"nowrap",flexShrink:0}}>waiting</span>;
+      style={{fontSize: T.small,fontWeight: FW.medium,color:S.muted,whiteSpace:"nowrap",flexShrink:0}}>waiting</span>;
     const arming=confirmId===w.id;
     return (
       <div

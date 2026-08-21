@@ -59,10 +59,84 @@
 //
 // marks a genuine one-off (a block lifted under a finger; the Kbd keycap).
 
+// ── Rule 7: no bare COLOUR literal ──────────────────────────────────────────
+// v17.13.0, and it is the last unguarded axis. Six rules covered radius, type,
+// spacing, height, white insets and drop shadows; none of them looked at a
+// colour, in a codebase whose recorded history is a series of colour-literal
+// defects — the Follow button's hard-coded copy of --app-btn-grey, the
+// ReminderEditor buttons at 1.70:1, the four fills that carried white text and
+// were invisible to tests/contrast.test.js because that file enumerates TOKENS.
+// The file's most-repeated sentence is "grep the VALUE, not the name", and the
+// gate encoded every lesson from that family except this one.
+//
+// v17.13.0 (1/n) cleared the debt: 26 copies of one rim value became
+// --rim-solid, two text-bearing fills became tokens and are now measured, and
+// one hard-coded white wash under an INVERTING ink was a live 1.70:1 defect in
+// dark mode. What remains is deliberate, and each site says so:
+//
+//     background: "rgba(254,249,195,0.8)", color: KTXT_TIGHT,  /* @fixed-fill */
+//
+// ── The marker is @fixed-fill, shared with Rule 2, on purpose ───────────────
+// Rule 2 asks "is the surface under this white inset theme-invariant". Rule 7
+// asks "is the surface under this colour theme-invariant". That is the same
+// question about the same line, and inventing a second word for it is precisely
+// how "two names for one concept" let --app-btn-grey hide from a check written
+// around the --btn-* prefix. The coupling is real and worth knowing: a marker
+// added for a colour also blesses a white inset on that same line. It is
+// coherent — both claims are the one claim — but read the whole line before
+// marking it.
+//
+// @shadow exempts too, because a drop-shadow literal blessed as a one-off is
+// necessarily a colour literal as well, and making the author write both
+// markers would teach nothing.
+//
+// ── Two things it must NOT see ─────────────────────────────────────────────
+// COMMENTS. Half of this repo's colour "literals" are prose ABOUT literals —
+// the SIZE_RING note, the v17.8.0 lessons, the `rgba(0,0,0,0)` a class was
+// measured at. A per-line startsWith("//") test is not enough: a JSX block
+// comment's continuation lines start with ordinary words. So the file is
+// scanned once, tracking block-comment and string state, and each line is
+// judged on its CODE only.
+//
+// DEVTOOLS `%c` STYLING. firebase.js's DEV/PROD badge and App.jsx's boot banner
+// are CSS declaration LISTS handed to console.log — not app UI, not themed, and
+// not a surface at all. Rule 4 already faced this exact site and its comment
+// says why marking it would be the wrong fix: "the rule would keep mis-firing
+// on the next piece of console styling anyone writes." So the test is
+// structural — a quoted `prop: value;` list, which a JSX style VALUE never is,
+// because inline style values hold no semicolons.
+
+// ── Rules 8 & 9: the icon scale and the motion scale ────────────────────────
+// v17.13.0. CLAUDE.md states both as rules — "No new numeric `size={n}` on an
+// icon", and `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back
+// empty apart from M's own WAAPI values — and neither was enforced by anything.
+//
+// They are added here precisely BECAUSE compliance is already 100%: 0 numeric
+// icon sizes at 31 icon exports' call sites, and every motion match in `src/`
+// inside a comment save one. A rule adopted at 100% costs nothing and guards
+// the next edit; a rule adopted against a backlog gets muted. That asymmetry is
+// why these two waited for a version with no debt to clear rather than shipping
+// alongside the axes that had some.
+//
+// Rule 8 is JSX-attribute and destructured-default position only — `size={14}`
+// and `{ size = 20 }`. NOT `size: <number>` in an object, which in this app is
+// overwhelmingly a PARTY size (`EMPTY_FORM`, every booking, every waitlist
+// entry). A rule that fires on a booking's guest count would be muted within a
+// day, and it would be right to mute it.
+//
+// Rule 9 flags a `cubic-bezier(` or a CSS time followed by an easing keyword.
+// `M.resize`'s `"var(--t-shift) linear"` is deliberately NOT caught: it is a
+// token composition, and the thing this guards is a hand-written duration/curve
+// pair. The one genuine escape hatch — `M.easeOut`, which useFlip needs as a
+// literal because WAAPI cannot read a CSS var — is marked:
+//
+//     easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"   /* @motion */
+
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
+import { stripComments } from "./strip-comments.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // An explicit directory argument exists so the checker can be pointed at a
@@ -140,6 +214,66 @@ function styleValue(line, key) {
   return out.trim();
 }
 
+// ── Rule 7's two helpers ────────────────────────────────────────────────────
+// An `rgb()`/`rgba()` with a NUMERIC first argument (so `rgba(var(--x), 0.8)` —
+// the composed-token idiom in constants.js — is not a literal), or a `#` hex of
+// 3/4/6/8 digits. The hex arm refuses a leading `&` so an HTML entity such as
+// `&#8249;` is not read as a colour: the app had exactly that shape until
+// v17.9.0, and an entity being invisible to a glyph grep is already one of the
+// recorded lessons — this is the same fact pointed the other way.
+const COLOUR_LITERAL = /\brgba?\(\s*[\d.]|(?<![&\w])#[0-9a-fA-F]{3,8}\b/;
+
+// Rule 8: a numeric icon size, in the two positions an icon's size is WRITTEN —
+// a JSX attribute, and a destructured default.
+//
+// /code-review: the second arm was `\bsize\s*=\s*-?\d`, which also matches a
+// plain `let size = 20` or `obj.size = 4` — neither of which is an icon, and the
+// header above this rule says the rule is those two positions only. Nothing in
+// src/ has such a variable today, so CI was green and the false positive was
+// waiting for the first `const size = 4` anyone wrote for a party size or a
+// canvas dimension. Same shape as the defect this file's own comments name three
+// times: a check written around the form the violations happened to take.
+//
+// A destructured default is distinguished by what PRECEDES it — `{` or `,` (with
+// optional whitespace), i.e. the start of a binding in an object pattern — which
+// a declaration (`let `, `const `) and a member assignment (`.size`) never have.
+const ICON_SIZE = /\bsize=\{\s*-?\d|[{,]\s*size\s*=\s*-?\d/;
+
+// Rule 9: a hand-written duration/curve. `var(--t-shift) linear` is a token
+// composition and must not match, so a TIME is required before the keyword.
+const MOTION_LITERAL = /cubic-bezier\s*\(|\b\d+(?:\.\d+)?m?s\s+(?:ease|linear|steps)\b/;
+
+// A quoted CSS DECLARATION LIST — `prop: value;` — i.e. devtools `%c` styling.
+// A JSX inline style VALUE never contains a semicolon, which is what makes this
+// structural rather than a guess. See the header note.
+//
+// It tests the CONTENTS of each quoted string, and that is not fussiness. The
+// first version was one regex across the whole line — quote, anything, `prop:`,
+// anything, `;` — and on a dense JSX line it started at a CLOSING quote and ran
+// through the markup to the STATEMENT's trailing semicolon, so
+// `border:"1.5px solid rgba(220,38,38,0.4)"` in BookingFormModal read as
+// console styling and was silently not reported. Caught only by diffing the
+// rule's output against a plain grep. That is this repo's most-repeated
+// checker defect — blind exactly where it was meant to bite, while printing OK
+// — and tests/style-check.test.js pins the case.
+const DECL_LIST = /[a-z-]+\s*:[^;]*;/;
+function quotedStrings(line) {
+  const out = [];
+  let quote = null, cur = "";
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quote) {
+      if (c === "\\") { i++; continue; }
+      if (c === quote) { out.push(cur); cur = ""; quote = null; continue; }
+      cur += c;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") quote = c;
+  }
+  return out;
+}
+const isDevtoolsCss = (line) => quotedStrings(line).some((str) => DECL_LIST.test(str));
+
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
@@ -153,7 +287,9 @@ const problems = [];
 
 for (const file of walk(SRC)) {
   const rel = relative(ROOT, file);
-  const lines = readFileSync(file, "utf8").split("\n");
+  const raw = readFileSync(file, "utf8");
+  const lines = raw.split("\n");
+  const codeLines = stripComments(raw);
 
   lines.forEach((line, i) => {
     // ── Rule 1 ──────────────────────────────────────────────────────────────
@@ -330,6 +466,42 @@ for (const file of walk(SRC)) {
       }
     }
 
+    // ── Rule 7 ──────────────────────────────────────────────────────────────
+    // `code` is this line with comment text removed (see codeLines below), so
+    // prose about a colour is not a colour. Markers are read off the RAW line,
+    // which is where they live.
+    const code = codeLines[i];
+    if (!/@fixed-fill|@shadow/.test(line) && !isDevtoolsCss(code) && COLOUR_LITERAL.test(code)) {
+      problems.push({
+        file: rel, line: i + 1, rule: "colour-literal",
+        text: line.trim().slice(0, 90),
+        hint: "bare colour literal — use a var(--…) token (constants.js composes them; "
+              + "index.html declares them), or mark /* @fixed-fill */ if the surface "
+              + "under it is theme-invariant",
+      });
+    }
+
+    // ── Rule 8 ──────────────────────────────────────────────────────────────
+    if (ICON_SIZE.test(code) && !/@canvas/.test(line)) {
+      problems.push({
+        file: rel, line: i + 1, rule: "icon-scale",
+        text: line.trim().slice(0, 90),
+        hint: "numeric icon size — use the IC scale (IC.inline 12 / IC.control 14 / "
+              + "IC.chrome 18), or mark a drawn-in-place marker /* @canvas */",
+      });
+    }
+
+    // ── Rule 9 ──────────────────────────────────────────────────────────────
+    if (MOTION_LITERAL.test(code) && !/@motion/.test(line)) {
+      problems.push({
+        file: rel, line: i + 1, rule: "motion-scale",
+        text: line.trim().slice(0, 90),
+        hint: "hand-written duration/curve — use the M scale (M.tap/move/shift/"
+              + "status/exit, M.resize for AutoHeight only), or mark the WAAPI "
+              + "escape hatch /* @motion */",
+      });
+    }
+
     // ── Rule 6 ──────────────────────────────────────────────────────────────
     const bare = line.trim();
     const isComment = bare.startsWith("//") || bare.startsWith("*") || bare.startsWith("/*");
@@ -347,7 +519,8 @@ for (const file of walk(SRC)) {
 
 if (problems.length === 0) {
   console.log("style invariants: OK (radius + type + spacing + height scales, "
-            + "white-inset-over-fixed-fill, shadow literals, marker placement)");
+            + "white-inset-over-fixed-fill, shadow + colour literals, icon + motion "
+            + "scales, marker placement)");
   process.exit(0);
 }
 

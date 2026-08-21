@@ -29,7 +29,7 @@
 // source. The duplicate in WalkinForm has been replaced with the same import.
 
 import { useState, useEffect, useRef } from "react";
-import { S, BTN, R, M, T, FW } from "../lib/constants";
+import { S, BTN, R, M, T, FW, RIM_SOLID } from "../lib/constants";
 import { isTyping } from "../lib/keyboard";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
@@ -158,7 +158,14 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   // TableGrid's swap cells use, so the panel and the cells it describes finally
   // agree; the rim goes neutral per the solid-label convention.
   const swapBg = swapBusy ? "var(--app-warn-solid)" : S.bg;
-  const swapBrd = "1px solid " + (swapBusy ? "var(--border-glass)" : "rgba(255,255,255,0.5)");
+  // v17.13.0 /code-review: the idle rim was a hard-coded white at 0.5, and the
+  // colour rule's first pass MARKED it @fixed-fill — which asserts the surface
+  // under it is theme-invariant. It is not: `S.bg` is "transparent", so the idle
+  // panel shows the modal sheet, which flips. Measured, that rim is 1.00-1.04:1
+  // against the light sheet (invisible) and 4.69:1 against the dark one. The
+  // marker would have certified it forever. Both branches now take a token that
+  // flips with the surface, which is what the busy branch already did.
+  const swapBrd = "1px solid " + (swapBusy ? "var(--border-glass)" : "var(--border-soft)");
   const swapTitleClr = swapBusy ? "var(--text-on-accent)" : S.text;
   const swapSubClr = swapBusy ? "var(--text-on-accent)" : S.text;
 
@@ -218,8 +225,8 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         onClick={() => { if (ok) onSave(selected, true, isSwapping ? affectedBookings : null); }}
         className="mgt-hover-scale"
         style={{
-          background: ok ? (isSwapping ? BTN.orange : S.accent) : "rgba(180,180,190,0.4)",
-          border: "1px solid rgba(255,255,255,0.2)",
+          background: ok ? (isSwapping ? BTN.orange : S.accent) : "var(--btn-disabled)",
+          border: RIM_SOLID,
           borderRadius: R.pill, padding: "10px 18px",
           cursor: ok ? "pointer" : "not-allowed",
           fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,

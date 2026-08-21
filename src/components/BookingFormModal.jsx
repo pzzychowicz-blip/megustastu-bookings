@@ -36,7 +36,7 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, RIM_SOLID } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
@@ -376,7 +376,7 @@ export function BookingFormModal({
       const showTbl=mt||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
       const showClearManual=isManual&&!mt&&!cleared;
       const leftEls=[
-        <span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.semi}}>Tables</span>];
+        <span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium}}>Tables</span>];
       if(showTbl) showTbl.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
       else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
       if((changed||cleared)&&!mt&&curTbl) leftEls.push(<span key="prev" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
@@ -399,7 +399,7 @@ export function BookingFormModal({
                 onClick={function(){onOpenManualAssign(editId);}}><AssignIcon size={IC.control} />Assign</button>{prefBtn}</div></div></Section>
       );
     }
-    const leftEls=[<span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.semi}}>Tables</span>];
+    const leftEls=[<span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium}}>Tables</span>];
     if(mt) mt.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
     else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
     if(mt) leftEls.push(<button
@@ -450,7 +450,7 @@ export function BookingFormModal({
   // having barely opened (imperceptible sliver), a slow scan shows it fully.
   // One shared row covers both scans; it sits in the availBanner's slot region.
   const availChecking=availScan.pending||(kitchenBusy&&kitchenScan.pending);
-  const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.semi,color:"var(--text-muted)",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>;
+  const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.medium,color:"var(--text-muted)",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>;
   // v17.8.0 review fix: these two colours are hex literals ON PURPOSE, and must
   // stay that way. The chip FILLS below are hard-coded pale green / pale yellow
   // — deliberately theme-invariant, like the timeline's BLOCK_BG. The token
@@ -459,7 +459,7 @@ export function BookingFormModal({
   // mode pale-green chips carried light-green text at about 1.3:1. Triage rule:
   // a token may only be used where the SURFACE UNDER it flips too. It doesn't
   // here, so neither may the text.
-  const KTXT_OK="#166534", KTXT_TIGHT="#854d0e";
+  const KTXT_OK="#166534", KTXT_TIGHT="#854d0e";   /* @fixed-fill */
   function renderKitchenTimes(arr){
     if(!arr||!arr.length) return null;
     return arr.map(function(r){return (
@@ -467,19 +467,19 @@ export function BookingFormModal({
         key={r.timeStr}
         className="mgt-hover-scale"
         onClick={function(){setForm(function(f){return Object.assign({},f,{time:r.timeStr});});}}
-        style={{cursor:"pointer",padding:"2px 8px",borderRadius:R.pill,fontWeight: FW.semi,fontSize: T.body,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?KTXT_OK:KTXT_TIGHT,border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"var(--shadow-flat)"}}>{r.timeStr}</span>
+        style={{cursor:"pointer",padding:"2px 8px",borderRadius:R.pill,fontWeight: FW.semi,fontSize: T.body,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)", /* @fixed-fill */ color:r.hasTables?KTXT_OK:KTXT_TIGHT,border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"var(--shadow-flat)"}}>{r.timeStr}</span>
     );});
   }
   // v15.8.0 cont.4: the kitchen suggestion sub-panel (the part that appears when the
   // kitchen is busy) eases in/out via Reveal — the same effect as the Summary panel.
   const kitchenSugBlock=(kitchenSugg&&(kitchenSugg.before.length||kitchenSugg.after.length))?<div style={{marginTop:8}}><div style={{fontSize: T.small,color:S.muted,marginBottom:6}}><span
-          style={{background:"rgba(220,252,231,0.8)",color:KTXT_OK,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>green</span>= tables available  <span
-          style={{background:"rgba(254,249,195,0.8)",color:KTXT_TIGHT,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight: FW.bold,fontSize: T.body}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight: FW.bold,fontSize: T.body}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
+          style={{background:"rgba(220,252,231,0.8)", /* @fixed-fill */ color:KTXT_OK,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>green</span>= tables available  <span
+          style={{background:"rgba(254,249,195,0.8)", /* @fixed-fill */ color:KTXT_TIGHT,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight: FW.bold,fontSize: T.body}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight: FW.bold,fontSize: T.body}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
     (kitchenBusy?<div style={{marginTop:6,fontSize: T.body,color:"var(--danger-text)"}}>No kitchen-friendly alternatives found nearby.</div>:null);
   const kitchenSection=kitchenLoad?<div
     style={{padding:"10px 14px",borderRadius:R.card,border:"1px solid "+(kitchenBusy?"var(--warn-border)":"var(--border-soft)"),background:kitchenBusy?"var(--warn-bg)":"var(--bg-soft)",marginBottom:14,fontSize: T.body,color:kitchenBusy?"var(--warn-text)":S.muted}}><div
       style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<span
-        style={{fontWeight: FW.bold,color:"var(--text-required)",fontSize: T.body,padding:"4px 12px",borderRadius:R.pill,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}}>Kitchen busy</span>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>:null;
+        style={{fontWeight: FW.bold,color:"var(--text-required)",fontSize: T.body,padding:"4px 12px",borderRadius:R.pill,border:"1.5px solid rgba(220,38,38,0.4)", /* @fixed-fill */ flexShrink:0}}>Kitchen busy</span>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>:null;
 
   // v17.6.0: which statuses the edit form offers.
   //
@@ -503,7 +503,7 @@ export function BookingFormModal({
   })();
   const quickStatusBtns=editId?<Section style={{position:"relative"}}>{statusFlash?(
         <div key={statusFlash.k} className="mgt-wipe-ltr" style={{position:"absolute",inset:0,borderRadius:R.card,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
-      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.semi,marginRight:4}}>Status:</span>{statusTargets.map(function(s){return (
+      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium,marginRight:4}}>Status:</span>{statusTargets.map(function(s){return (
         // v17.10.0: the per-status mark, from the ONE source in Icons.jsx that
         // this row, the List card and the quick-status popup all read.
         <button
@@ -663,7 +663,7 @@ export function BookingFormModal({
             disabled={!canSave}
             onClick={onSave}
             className="mgt-hover-scale"
-            style={{background:canSave?S.accent:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"var(--shadow-btn-accent)":"none"}}>Save booking</button>
+            style={{background:canSave?S.accent:"var(--btn-disabled)",border:RIM_SOLID,borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"var(--shadow-btn-accent)":"none"}}>Save booking</button>
         );
       })()}{origPendingBooking?(
         <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" outMs={190} tag="span">
@@ -671,7 +671,7 @@ export function BookingFormModal({
             disabled={!form.date}
             onClick={onSaveConfirm}
             className="mgt-hover-scale"
-            style={{background:form.date?"var(--app-success-solid)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"var(--shadow-btn-success)":"none"}}>Save&confirm</button>
+            style={{background:form.date?"var(--app-success-solid)":"var(--btn-disabled)",border:RIM_SOLID,borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"var(--shadow-btn-success)":"none"}}>Save&confirm</button>
         </Presence>
       ):null}</div></div>
     </>

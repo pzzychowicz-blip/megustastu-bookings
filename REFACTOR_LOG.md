@@ -12672,3 +12672,501 @@ rather than deferred, and gains one genuinely new item: `describeBooking` joins
 tables with `" and "`, which is right for two and wrong for three — a one-line
 change now that the sentence has one source, and deliberately not made in the
 extraction commit, whose whole claim was byte-identical output.
+
+---
+
+## v17.13.0 — close the gate behind it
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** see each entry. No persisted-data change and no Firebase
+console step for any of them.
+**Verification:** see each entry.
+
+The fourth and last version staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`; `04-design-system.md` is the source of
+truth for the figures quoted here). v17.10.2 took the findings that needed no
+decision, v17.11.0 the ones staff hit during service, v17.12.0 the half of the
+app nobody had ever measured. This one stops all three from drifting back.
+
+**Note the ordering.** The ROADMAP staged this as v17.14.0 behind the modal
+stack; Patryk moved it forward. The reasoning holds either way and is worth
+stating: v17.12.0 shipped roughly forty individually-correct decisions that
+nothing in CI can see. Landmarks, a live region, a label association and a
+roving tab stop are all *invisible* when they are removed — the app looks and
+behaves identically to a sighted mouse user — which is the same property that
+let them be missing for seventeen versions. A fix with no gate behind it is a
+fix with a half-life. The modal stack, by contrast, is a refactor whose defects
+announce themselves the moment you press Escape.
+
+### 1/n — the colour rule's first half: stop hand-writing colours
+
+**Files:** `index.html`, `src/lib/constants.js`, `src/App.jsx`,
+`src/components/{TimelineView,BookingFormModal,WalkinForm,ReminderEditor,ManualModal,BlockModal,PlanView,PrefPickerModal,FloorPlanEditor,HistoryPopup,Shortcuts,Settings,atoms}.jsx`,
+`tests/contrast.test.js`
+**Behavioural change:** one measured fix (below); everything else is
+byte-identical rendering.
+
+`check:style` has seven rules — radius, marker placement, type, spacing, height,
+white-inset, shadow — and **none of them looks at a colour**, in a codebase whose
+recorded history is a series of colour-literal defects. The rule itself is 2/n.
+This entry is the debt it would otherwise report: 76 literal colours across
+twelve files, of which the design-system pass named three groups.
+
+**The 26 copies of one value.** `border: "1px solid rgba(255,255,255,0.2)"` — the
+hairline rim on a solid-fill button or block — hand-written twenty-six times in
+twelve files, the single most-duplicated literal in the app and the exact
+condition of "a literal duplicate of a token is a token that cannot be fixed".
+It is now `RIM_SOLID` (`constants.js`) over `--rim-solid`.
+
+**Why not `--border-glass`, which already exists for "white rim on filled
+btns".** Because that token FLIPS — 0.3 light, 0.14 dark — and these rims sit on
+`BLOCK_BG` / `--app-*-solid` / `BTN.*` fills, which are deliberately the same
+colour in both themes. A rim on an invariant surface must be invariant too; that
+is the v17.8.0 white-inset rule one property along. So `--rim-solid` and
+`--rim-solid-strong` are declared in `:root` **only** and deliberately not
+repeated in the dark block, exactly as `BLOCK_BG` is.
+
+**And that is what the old comment at `SIZE_RING` got wrong.** It said the alpha
+was a literal "because BLOCK_BG is theme-invariant" — which is a reason not to
+use `--border-glass`, and was read as a reason not to use a token at all. A
+`:root`-only token has the property that sentence was reaching for. `SIZE_RING`
+and the waitlist ghost's dashed edge now take `--rim-solid-strong`, and
+`tests/contrast.test.js`'s `ringAlpha()` resolves the token out of `index.html`
+instead of reading a number out of the component — strictly what that guard was
+already trying to be, and it now catches a retune of the token as well as of the
+call site. A raw rgba is still accepted there, so reverting cannot silently
+disable it.
+
+**Two fills that were hiding from the contrast registry**, which is the v17.8.0
+lesson recurring: that file enumerates TOKENS, so a literal is invisible to it.
+The timeline Follow button's active fill was `rgba(0,0,0,0.6)` — eight lines
+below a comment about this very bug class, left behind by the sweep that wrote
+it — and is now `--app-btn-dark`. The greyed-out primary in both form footers,
+`ReminderEditor` and `ManualModal` was `rgba(180,180,190,0.4)`, a copy of
+`--toggle-off`'s LIGHT value that never flipped; it is now `--btn-disabled`.
+Both are registered, and the coverage guard is what forced them in — adding the
+tokens failed the build until they were.
+
+`--btn-disabled` is recorded as an exemption rather than fixed, and the reason is
+the standard's rather than this app's: WCAG 1.4.3 exempts inactive components,
+and every button wearing this fill is `disabled`. What the number says is still
+worth knowing — at **1.30:1** in light the label is not dim, it is gone — so a
+staff member who has not picked a date sees an empty pill rather than a
+greyed-out "Save booking". Floored so it cannot get worse, and left in
+`ROADMAP.md` as a design question rather than answered inside a gate-closing
+commit.
+
+**One measured live fix.** `HistoryPopup`'s scroll panel was a hard-coded
+`rgba(255,255,255,0.35)` — a white wash — while its rows take `--text-muted`,
+which INVERTS. In dark mode that is light grey text on a light grey panel:
+measured in the running app at **1.70:1**. On `--bg-input` it is **4.03:1** dark
+and **5.42:1** light (was 5.25 — light never showed the defect, which is why it
+survived). The same file's two hairlines and `Shortcuts`' row rule were
+undocumented greys and are now `--border-soft`; `Settings`' "Open" day pill was
+`rgba(52,199,89,0.16)` and is now `--suggest-bg`, the app's existing chip-weight
+positive wash, which composites within a couple of levels of it in both themes.
+
+The remaining literals are deliberate and are marked at their sites in 2/n.
+
+**Verification:** build ✓ (201.91 kB gz, +0.00 vs v17.12.0), lint 0 errors,
+**416 tests** (+4: the two new fills × two themes), `check:style` OK. Both themes
+walked in the running app; the history-panel numbers above are measured from the
+live paint stack, not computed from the tokens.
+
+### 2/n — the colour rule itself
+
+**Files:** `scripts/check-style-invariants.mjs`, `tests/style-check.test.js`,
+`src/components/{BookingFormModal,WalkinForm,DaySheet,ManualModal,PlanView,PrefPickerModal,TableGrid,TimelineView}.jsx`
+**Behavioural change:** none — 22 exemption markers and one fallback that stops
+being a literal.
+
+`check:style` Rule 7. It flags an `rgb()`/`rgba()` with a NUMERIC first argument
+(so `rgba(var(--tbl-out-rgb),0.8)`, the composed-token idiom, is not a literal)
+or a `#` hex, anywhere under `src/`, unless the line carries `/* @fixed-fill */`
+or `/* @shadow */`.
+
+**The marker is `@fixed-fill`, shared with Rule 2, deliberately.** Rule 2 asks
+whether the surface under a white inset is theme-invariant; Rule 7 asks whether
+the surface under a colour is. That is one question about one line, and
+inventing a second word for it is exactly how "two names for one concept" let
+`--app-btn-grey` hide from a check written around the `--btn-*` prefix. The
+coupling is real — a marker added for a colour also blesses a white inset on
+that line — and is stated in the script.
+
+**Two things it must not see, and both are structural rather than marked.**
+Comments, because half this repo's apparent colour literals are prose ABOUT
+colour literals, including ones a previous version removed; a
+`startsWith("//")` test does not cover a JSX block comment's continuation lines,
+so the file is scanned once tracking block and string state and each line is
+judged on its code only. And devtools `%c` styling — `firebase.js`'s DEV/PROD
+badge, `App.jsx`'s boot banner — which is a CSS declaration list handed to
+`console.log`, not app UI. Rule 4 met the same site and its comment already says
+why marking it would be the wrong fix: the rule would keep mis-firing on the
+next piece of console styling anyone writes.
+
+**The first draft of that second exclusion was a false negative, and it is the
+reason this entry exists in this shape.** It was one regex across the whole line
+— quote, anything, `prop:`, anything, `;` — and on dense JSX it started at a
+CLOSING quote and ran through the markup to the STATEMENT's trailing semicolon.
+So `border:"1.5px solid rgba(220,38,38,0.4)"` in `BookingFormModal` read as
+console styling and was silently not reported, while the rule printed a
+confident 21 findings. It was caught by diffing the rule's output against a
+plain `grep` — this repo's most-repeated checker defect, blind exactly where it
+was meant to bite. It now tests the CONTENTS of each quoted string, and
+`tests/style-check.test.js` pins that exact line shape.
+
+The 23 remaining literals are all deliberate and now say so at their sites: the
+kitchen-suggestion chips in both forms (the fills are theme-invariant precisely
+so the hex ink on them cannot invert — the v17.8.0 decision, unchanged), the
+print sheet (paper has no theme), and white on a saturated block or badge.
+`TimelineView`'s legend swatch was the one that did not deserve a marker — its
+`BLOCK_BG[s] || "#999"` fallback is now `|| BLOCK_BG.confirmed`, which is the
+same defensive default `PlanView` already spells five lines from the same data.
+
+Two pre-existing shadow fixtures moved from `expect(r.code).toBe(0)` to
+`expect(r.out).not.toMatch(/shadow-literal/)`. Both use an rgba ring on purpose,
+which the colour rule reports — correctly, since a ring in this app takes a
+token — and naming the rule a fixture is about is what it should always have
+done. Weakening either rule to preserve an exit code would have been the wrong
+trade.
+
+**Verification:** build ✓, lint 0 errors, **428 tests** (+12 fixtures for this
+rule: four literal shapes, a literal behind a `const`, the composed-token
+idiom, both markers, block-comment continuation lines, devtools styling, the
+false-negative line shape, and an HTML entity not being read as a hex colour),
+`check:style` OK. App reloaded in DEV: no console errors, and no marker text
+rendered anywhere (Rule 0's failure mode, checked live rather than assumed).
+
+### 3/n — the waitlist ghost, measured at last
+
+**Files:** `tests/contrast.test.js`
+**Behavioural change:** none — a guard over an existing element.
+
+The contrast registry declares its own gap in a comment: `chipOpacity()` is
+anchored on `const timeChip`, and that comment names the three `...HOUR_PILL`
+spreads in `TimelineView.jsx` and says only the first is measured. **`WaitGhost`
+is the second.** So the one component in the app that takes an already-exempt
+fill and dims it a further 45% was, by construction, outside everything this
+file looks at.
+
+The design-system pass went and measured what that costs: the ghost's guest name
+renders at **1.50:1**, the lowest text contrast in the application, on
+`--block-pending` — which is already this registry's worst recorded exemption at
+1.82:1. It is the v17.9.0 hour-pill defect one level further along, and it
+arrived through the same door: **a token's number is not the screen's number
+wherever that token is reused over something else**, and an element-level
+`opacity` is exactly such a reuse — invisible to a registry that reads
+`index.html`.
+
+Eight new cases: name, chip and size ring, at both shipped opacities (0.55, and
+0.4 for a reshuffle-only match), in both themes. Both opacities are read out of
+`WaitGhost` rather than typed here, for `chipOpacity()`'s reason — a guard that
+names the thing it guards and then uses a number typed into the test is not
+guarding it — and the anchor throws with a message rather than silently
+measuring a default.
+
+Asserted against ITSELF, like `SIZE_RING` and unlike the clash band. A 0.55
+dimming cannot reach 4.5:1 over any fill this app owns, so a 4.5 bar here would
+be a permanently red test, which is a muted test. What the floors buy is that
+the dimming cannot deepen without saying so — verified by turning the ghost down
+to 0.45/0.3, which fails four of the eight, then reverting.
+
+Two numbers worth keeping. The registry computes **1.39:1** for the light guest
+name where the live measurement said 1.50, and both are right: this file takes
+the extreme of each theme as the worst case for washout, while the real timeline
+row has a faint tint under the ghost. And the dark side is *worse than it looks*
+relative to its neighbours — 1.82 plain, 1.63 reshuffle-only.
+
+**The number is recorded, not endorsed**, and that distinction is the whole
+reason the `exempt` machinery exists here. The amber exemption's justification —
+a block's meaning is carried by colour, position and width, and the one part
+that is INFORMATION moved onto an opaque chip — does not reach the ghost,
+because the chip is *inside* the ghost and dims with it. On a ghost, every
+element is below the bar at once. `ROADMAP.md` carries it as a design question
+with the numbers attached, the way the waitlist-amber decision was put in
+v17.10.0.
+
+**Verification:** build ✓, lint 0 errors, **432 tests** (+4 cases, each
+asserting name, chip and ring), `check:style` OK. Guard proven against
+known-bad input rather than assumed.
+
+### 4/n — the two free rules: the icon scale and the motion scale
+
+**Files:** `scripts/check-style-invariants.mjs`, `tests/style-check.test.js`,
+`src/components/Icons.jsx`, `src/lib/constants.js`
+**Behavioural change:** none — nothing on screen moves (see the icon defaults).
+
+`CLAUDE.md` states both as rules — "No new numeric `size={n}` on an icon", and
+`grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back empty apart
+from `M`'s own WAAPI values — and neither was enforced by anything. They are
+`check:style` Rules 8 and 9 now.
+
+**They were added precisely because compliance is already 100%**, which is the
+whole argument for doing it in this version rather than any earlier one. A rule
+adopted at zero debt costs nothing and guards the next edit; a rule adopted
+against a backlog gets muted, and muting it is the rational response. That
+asymmetry is why these waited for a version with nothing to clear.
+
+**Rule 8 is JSX-attribute and destructured-default position only** — `size={14}`
+and `{ size = 20 }` — and deliberately not `size: <number>` in an object, which
+in this app is overwhelmingly a *party* size: `EMPTY_FORM`, every booking, every
+waitlist entry. A rule that fires on a booking's guest count would be muted
+within a day and would deserve it. There is a fixture for that exact case.
+
+It found three sites, all in `Icons.jsx`: `Svg`, `StarIcon` and `SplitGlyph`
+defaulted to `size = 20`, a fourth value beside the scale's 12/14/18 and
+reachable by any caller that omits the prop. Every one of the 31 icon exports is
+currently called with an explicit size — checked, not assumed — so nothing on
+screen moves; what changes is that the fallback is now a member of the scale.
+
+**Rule 9 requires a TIME before the easing keyword**, and that is load-bearing
+rather than incidental: `M.resize` is `"var(--t-shift) linear"`, the documented
+linear exception, and a rule matching a bare keyword would report the scale's
+own member — leaving no way to write `M` at all. The one genuine escape hatch,
+`M.easeOut` (useFlip drives WAAPI, which cannot read a CSS var and silently runs
+linear if you try), is marked `/* @motion */`.
+
+**One lesson from the fixtures, and it cost three of them.** Adding two rules
+broke three pre-existing tests that asserted `expect(r.code).toBe(0)` on lines
+containing an rgba ring or a `240ms ease` transition. Each was written about ONE
+rule, but `toBe(0)` quietly asserts "and no future rule may ever have an opinion
+about this line", which is not what any of them meant. All three now assert on
+the rule they are about. **A fixture should name its own rule** — otherwise
+every new rule looks like a regression in the old ones.
+
+**Verification:** build ✓, lint 0 errors, **443 tests** (+11 fixtures across the
+two rules, including the party-size false positive and the token-composition
+one), `check:style` OK. Also corrects the test count stated in 3/n above, which
+said 436 where the run says 432 — four cases, each asserting three parts.
+
+### 5/n — the accessibility gate
+
+**Files:** `tests/a11y.test.js` (new), `scripts/strip-comments.mjs` (new),
+`scripts/check-style-invariants.mjs`
+**Behavioural change:** none.
+
+The reason this version exists. v17.12.0 shipped roughly forty individually
+correct accessibility decisions, and **every one of them is invisible when it is
+removed**: delete the `<main>` landmark, the `role="status"` on the toast layer,
+the `htmlFor` in `Fld`, the roving tab stop in `ListView` — the app looks
+identical, behaves identically to a mouse user, passes every other test here,
+and ships. That is the same property that let all of it be missing for seventeen
+versions.
+
+**What it claims, and what it must not be read as claiming.** It reads SOURCE,
+so it cannot say the app is accessible. What it asserts is narrower and worth
+more: the specific wirings v17.12.0 established are still present, and the three
+rules that version had to *learn* — two of them by shipping their violation —
+have not been undone. Live measurement remains the method for anything new;
+v17.12.0's own entry records two SVG facts that source review provably cannot
+catch (a browser paints no `outline` on a `<g>`; `:focus-visible` never matches
+an SVG element in Chrome).
+
+24 assertions in seven groups: landmarks and exactly one `<h1>`; the three live
+regions and **where each one has to live** (a live region must already be in the
+DOM when its content changes, which is why `StatusToasts` can own its own and
+the strip cannot); `inert` never on `<main>`; `Fld`'s label association on both
+shapes, with `aria-required` on the control and `aria-describedby` emitted only
+where it cannot dangle; bookings reachable in all three views; the List card
+explicitly NOT a button; pointer-focus suppression on the two surfaces that
+scroll under a finger; and the connection popover claiming `haspopup` but not
+`aria-modal`.
+
+**Every assertion goes through `has()` / `hasnt()`, which throw on a pattern
+matching nothing**, so a check cannot rot into a tautology when a file is
+renamed or a shape rewritten — and three of them run the helpers against
+known-bad strings, for the reason `tests/style-check.test.js` exists. Proven the
+same way: `role="status"` was removed from `StatusToasts` and `inert` put back
+on `<main>`, both were caught, both reverted.
+
+**The gate's first run produced two false positives, and both were comments.**
+`ConnectionStatus.jsx` explains in prose that the popover is "NOT `aria-modal`
+and no focus trap" — so a grep for `aria-modal` read a sentence as the opposite
+of what it says — and `ListView.jsx`'s card carries "`role="listitem"`, NOT
+`role="button"`". In a codebase commented this heavily, **a source check that
+reads comments is measuring the documentation.** Rule 7 had hit the identical
+wall an hour earlier, so its line-by-line comment stripper moved out to
+`scripts/strip-comments.mjs` and both now share it — the second consumer is what
+made it worth a file rather than a helper.
+
+**Verification:** build ✓, lint 0 errors, **467 tests** (+24), `check:style` OK.
+
+### 6/n — the weight pass, and a ratchet to hold it
+
+**Files:** `src/components/{BookingFormModal,CustomersSettings,FloorPlanEditor,LayoutSettings,Settings,Summary,TimeAxis,WaitlistPanel,WalkinForm,WeekView,atoms}.jsx`,
+`tests/style-check.test.js`
+**Behavioural change:** none. 46 runs of descriptive text drop from semibold or
+bold to `FW.medium`.
+
+v17.8.0's type change had two halves and only one of them was ever enforced.
+Its own reasoning: "There was no regular weight: 93 of 95 elements were 500+.
+When everything is semibold, weight cannot carry emphasis, so size carries all
+of it, so sizes multiply and crowd." The SIZE half is Rule 3, and the live DOM
+now renders exactly six sizes, every one on the scale. The weight half was held
+by nothing and had drifted back to **84% semibold or bolder** by the review.
+
+**The criterion, which is what makes this a pass rather than 63 taste calls: a
+run coloured as secondary must not also be weighted as primary.** `--text-muted`
+/ `--text-secondary` / `--text-faint` and `FW.semi`/`FW.bold` co-occurred on 63
+lines. Colour is already saying "this is subordinate"; weight was saying the
+opposite on the same word.
+
+46 of those were plainly descriptive and moved: the connector words between
+Settings' steppers ("to", "party", "seats", "cap", "priority", "from a party
+of"), row labels in `Summary` and `WeekView`, the inspector labels in the floor
+plan, `Collapsible`'s collapsed summary, "waiting", "no phone", "Checking table
+availability…", and `Fld`'s label — which is the app-wide one, and reads
+markedly better: the value now dominates the field.
+
+**The other 17 were left, and they are why this is not a lint rule.** A quiet
+section heading — muted colour, bold weight, letterspaced — is a legitimate
+device, and `LayoutSettings` and `WeekView` are full of them; so is a disabled
+button's faint label and a 10px "This device" marker. A rule with a 24%
+exemption rate teaches people to type the marker rather than to think, which is
+the opposite of what every other rule in `check:style` does. The review that
+found the problem said "this is not worth a lint rule" and was right.
+
+**So the gate is an AGGREGATE ratchet instead**, in `tests/style-check.test.js`:
+regular+medium must stay at or above 30% of all `FW.` references. It judges no
+individual line — the same shape as `EXEMPT_FLOOR`, asserted against itself so
+an accepted position cannot quietly get worse. The pass took the source ratio
+from 20% to **32.5%** (58 regular + 60 medium against 104 semi + 141 bold).
+
+Measured live, rendered: the booking form went to **45%** heavy from a
+whole-app 84%, Settings to 56%, and the Timeline — where the remaining mass is
+legend chips, the hour ruler and table row identifiers, all of which
+legitimately carry weight — barely moved, which is the right outcome. The
+legend chips were considered and deliberately left: they are SOLID badges on
+`BLOCK_BG`, two of which are the recorded amber exemption, and demoting weight
+there would trade a hierarchy improvement for legibility on the app's
+worst-contrast fills.
+
+**Verification:** build ✓, lint 0 errors, **469 tests** (+2), `check:style` OK.
+Both themes walked in DEV; Settings, the booking form and the three views
+screenshotted after the change.
+
+### 7/n — `DESIGN.md`
+
+**Files:** `DESIGN.md` (new), `CLAUDE.md`
+**Behavioural change:** none — documentation.
+
+`CLAUDE.md` is auto-loaded into every session, and **57% of it had become the
+visual system**: 817 of 1,436 lines, across `### Style tokens` and everything
+from `## UI / style rules` through the motion sections. None of it is needed to
+answer "how does the optimizer pick a table" or "why was that write refused".
+It is now `DESIGN.md`, 901 lines, and `CLAUDE.md` is 686 — down 52%.
+
+**The split has exactly one hazard: a rule nobody loads is a rule nobody
+follows.** Three things answer it, and they are the reason this is a safe move
+rather than a tidy one.
+
+First, the non-negotiables stayed. Both extracted sections leave a stub that
+carries what ships a bug when unseen — the ≤4 blur limit, `Overlay` owning
+every modal, no colour literal, the four exemption markers and the fact that a
+marker in JSX children position renders as text, "a colour token may only sit
+on a surface that flips with it", and the three accessibility rules v17.12.0
+learned by shipping their violation.
+
+Second, and more to the point, **most of what moved is no longer held by a
+document at all**. Nine `check:style` rules, `tests/contrast.test.js`,
+`tests/stylesheet.test.js` and now `tests/a11y.test.js` hold the parts that can
+be held mechanically. `DESIGN.md` opens by saying so, and with the instruction
+that follows from it: if you find yourself writing a rule there that a test
+could hold instead, write the test.
+
+Third, the file explains how to read itself. Nearly every entry carries more
+history than a style guide normally would, because nearly every rule is the
+residue of a specific shipped defect — a light-mode fill at 1.8:1, a stray `*/`
+that deleted a CSS rule, a `scale(1.08)` on an 820px card that moved the button
+out from under the cursor. **The number and the story are what stop the rule
+being "simplified" back into the bug**, so the sections that look fussy are the
+ones to read rather than trim.
+
+Two cross-references in the file-structure block pointed at "the motion
+section" and "the accessibility section" and now name `DESIGN.md` — the same
+class of stale-copy defect this repo has recorded twice under "copy that
+describes a glyph has to change when the glyph does".
+
+v17.13.0's own additions were written into `DESIGN.md` rather than left in this
+log: the two rim tokens, Rules 7/8/9, the weight ratchet, and the accessibility
+gate.
+
+**Verification:** build ✓, 469 tests, `check:style` OK. Text moved verbatim —
+the extraction is a line-range move with the two headings re-levelled, not a
+rewrite, so nothing recorded was lost or paraphrased.
+
+### 8/n — `/code-review max`: 13 findings, all fixed
+
+**Files:** `src/components/{ManualModal,BookingFormModal,WeekView,HistoryPopup}.jsx`,
+`scripts/{check-style-invariants,strip-comments}.mjs`,
+`tests/{contrast,style-check,a11y}.test.js`, `DESIGN.md`
+**Behavioural change:** three restored font weights and one border token; the
+rest are guards.
+
+None met the "fix without asking" bar — no data loss, no crash, no security, no
+broken build — so all thirteen went to Patryk in one question. He chose all
+thirteen. **Nine of them are this version's own new machinery failing in the
+way it was written to prevent**, which is the finding worth keeping.
+
+**The one that matters most.** The colour rule's first pass marked
+`ManualModal`'s idle swap-panel rim `/* @fixed-fill */` — an assertion that the
+surface under it is theme-invariant. It is not: `swapBg` is `S.bg`, i.e.
+`"transparent"`, so the idle panel shows the modal sheet, which flips. That
+white 0.5 rim measures **1.00–1.04:1 against the light sheet** and 4.69:1
+against the dark one. The rim was already wrong; what this version added was a
+marker that would have certified it forever and stopped Rule 7 ever reporting
+the line again. It now takes `--border-soft`, the token `Section` uses, because
+that is what this panel is.
+
+**Why it happened, which is the transferable part.** `@fixed-fill` was being
+applied to mean "I looked and it is fine" rather than its literal definition.
+Applied literally — *is the surface under this theme-invariant?* — `S.bg` fails
+at the point of writing. Three other new markers carry the same looseness
+harmlessly (the "Kitchen busy" border sits on `--warn-bg`/`--bg-soft`, both
+theme tokens; `TableGrid`'s white ink sits on `--accent`, which is redefined for
+dark) — and that looseness is exactly what let the one real case through.
+`DESIGN.md` now states the test as a question to answer rather than a label to
+apply.
+
+**The mechanical sweep over-reached in three places**, and the mechanism is
+worth recording: the weight pass matched a muted colour and a heavy weight
+within ±140 characters of each other, which on dense JSX reaches across element
+boundaries. It demoted the autocomplete "N visits" chip while its SIBLING "N
+no-shows" chip on the same row kept `FW.bold` — two chips of identical size,
+shape, padding and role at different weights — plus the "no phone" chip and
+`WeekView`'s month-grid weekday header, a structural column header that dropped
+two steps. All three restored; the ratchet still holds, since the pass was 46
+sites and this is 3.
+
+**Four guards had stopped guarding, three of them written in this version.**
+`ringAlpha()`'s new token branch returned an alpha and let the caller composite
+a hard-coded white, so a non-white ring would pass while the function's own
+throw message promised otherwise. `EXEMPT_FLOOR["--btn-disabled"]` was one
+number for two themes measuring 1.30 and 6.42, so it could not see a dark-mode
+regression at all. The weight ratchet's second test was named "every weight
+reference is one of the four scale steps" and asserted `total > 300` — a
+tautology, since the counter only ever counted those four names. And the
+`<main>`-is-never-inert guard read a fixed 400-character window of a
+316-character opening tag: one more style branch and it would have stopped
+covering the end of the tag that attribute gets added to. **Every fix was proven
+against known-bad input**, not asserted.
+
+**Two blind spots in the checkers.** `stripComments` claimed in its header that
+a `/*` inside a regex is not read as a comment, and did no such thing — a regex
+is not a string literal, so it truncated the line (and would have swallowed
+lines on a `/*`). It handles regex literals now, distinguishing them from
+division by what precedes the slash. And Rule 8's destructured-default arm
+matched any `size = <number>`, including `let size = 20` and `o.size = 4`,
+contrary to its own documented scope.
+
+Two smaller ones: the ratchet counted `FW.` references inside comments — in the
+version that established comment-stripping twice, with the shared module
+already one import away — and walked `src/` once per test; and `HistoryPopup`
+had taken `--bg-input` ("text inputs / selects") for a read-only scroll panel.
+
+**Verification:** build ✓, lint 0 errors, **473 tests** (+4: two `openingTag`
+self-tests and two Rule 8 fixtures; the contrast fixes strengthened existing
+cases rather than adding any), `check:style` OK. The swap panel re-measured in
+the running app: transparent background confirmed, rim now resolving to
+`--border-soft`.

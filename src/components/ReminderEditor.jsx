@@ -18,7 +18,7 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { S, BTN, R, T, FW, IC } from "../lib/constants";
+import { S, BTN, R, T, FW, IC, RIM_SOLID } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
 import { Fld, Toggle, mkBtn, mkInp, mkArea, useModalPresence, AutoHeight } from "./atoms";
 import { CloseIcon } from "./Icons";
@@ -118,7 +118,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
             display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
             background: "var(--app-new)",
-            border: "1px solid rgba(255,255,255,0.2)",
+            border: RIM_SOLID,
             boxShadow: "var(--shadow-btn)"
           }}>
             {isNew ? "New reminder" : "Edit reminder"}
@@ -264,8 +264,8 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             disabled={!!err}
             className="mgt-hover-scale"
             style={{
-              background: err ? "rgba(180,180,190,0.4)" : "var(--app-success-solid)",
-              border: "1px solid rgba(255,255,255,0.2)",
+              background: err ? "var(--btn-disabled)" : "var(--app-success-solid)",
+              border: RIM_SOLID,
               borderRadius: R.pill,
               padding: "10px 18px",
               cursor: err ? "not-allowed" : "pointer",

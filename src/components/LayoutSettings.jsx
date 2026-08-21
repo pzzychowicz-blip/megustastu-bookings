@@ -348,7 +348,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
     return (
       <div style={{ marginTop: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>{label}</span>
+          <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>{label}</span>
           {list.length ? list.map(function (id, idx) {
             return (
               <span key={id} style={GCHIP}>
@@ -391,7 +391,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         subtitle="Each table's id, capacity and zone. Shared across all devices."
         summary={tables.length + " tables · " + totalSeats + " seats"}
       >
-        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", marginBottom: 2 }}>
+        <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", marginBottom: 2 }}>
           {outdoorCount} outdoor · {indoorCount} indoor · {totalSeats} seats total
         </div>
         {tables.map(function (t) {
@@ -412,7 +412,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 ) : (
                   <span style={{ width: 44, fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", flexShrink: 0 }}>{t.id}</span>
                 )}
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>cap</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>cap</span>
                 <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 20}
                   onDec={function () { updateTable(t.id, { capacity: cap - 1 }); }} onInc={function () { updateTable(t.id, { capacity: cap + 1 }); }} />
                 <button onClick={function () { updateTable(t.id, { zone: indoor ? "outdoor" : "indoor" }); }} className="mgt-hover-scale"
@@ -476,7 +476,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <input value={newId} autoFocus placeholder="id" aria-label="New table id" style={{ ...TXT_INP }}
               onChange={function (e) { setNewId(e.target.value); }}
               onKeyDown={function (e) { if (e.key === "Enter" && newIdValid) addTable(); if (e.key === "Escape") { setAdding(false); setNewId(""); } }} />
-            <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>cap</span>
+            <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>cap</span>
             <Stepper value={newCap} disableDec={newCap <= 1} disableInc={newCap >= 20}
               onDec={function () { setNewCap(Math.max(1, newCap - 1)); }} onInc={function () { setNewCap(Math.min(20, newCap + 1)); }} />
             <button onClick={function () { setNewZone(newZone === "indoor" ? "outdoor" : "indoor"); }} className="mgt-hover-scale"
@@ -554,10 +554,10 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 0", borderTop: "1px solid var(--border-soft)" }}>
                     <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{run.join(" + ")}</span>
                     {overridden && cap !== sum ? (
-                      <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-muted)" }}>sum {sum}</span>
+                      <span style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-muted)" }}>sum {sum}</span>
                     ) : null}
                     <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>seats</span>
+                      <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
                       <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 60}
                         onDec={function () { setComboCap(key, cap - 1); }} onInc={function () { setComboCap(key, cap + 1); }} />
                     </div>
@@ -591,7 +591,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 0", borderTop: "1px solid var(--border-soft)" }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{mc.ids.join(" + ")}</span>
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>seats</span>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
                   <Stepper value={mc.cap} disableDec={mc.cap <= 1} disableInc={mc.cap >= 60}
                     onDec={function () { setMegaCap(i, mc.cap - 1); }} onInc={function () { setMegaCap(i, mc.cap + 1); }} />
                   <button onClick={function () { removeMega(i); }} className="mgt-hover-scale" title="Remove combo" style={X_BTN}><CloseIcon size={IC.control} /></button>
@@ -623,7 +623,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               })}
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, flexWrap: "wrap" }}>
-              <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>seats</span>
+              <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
               <Stepper value={addCap} disableDec={addCap <= 1} disableInc={addCap >= 60}
                 onDec={function () { setAddCap(Math.max(1, addCap - 1)); }} onInc={function () { setAddCap(Math.min(60, addCap + 1)); }} />
               <button onClick={addMega} disabled={!canAdd} className={canAdd ? "mgt-hover-scale" : undefined}
@@ -666,7 +666,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>Party of</span>
                 <Stepper value={b.min} disableDec={b.min <= 1} disableInc={b.min >= b.max}
                   onDec={function () { setBand(i, { min: b.min - 1 }); }} onInc={function () { setBand(i, { min: b.min + 1 }); }} />
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>to</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
                 <Stepper value={b.max} disableDec={b.max <= b.min} disableInc={b.max >= 30}
                   onDec={function () { setBand(i, { max: b.max - 1 }); }} onInc={function () { setBand(i, { max: b.max + 1 }); }} />
                 <button onClick={function () { removeBand(i); }} className="mgt-hover-scale" title="Remove rule"
@@ -675,7 +675,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               {chipRow("Prefer", b.prefer || [], true, "prefer", i, function (l) { setBand(i, { prefer: l }); })}
               {chipRow("Avoid", b.avoid || [], false, "avoid", i, function (l) { setBand(i, { avoid: l }); })}
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>Try first</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>Try first</span>
                 {[["any", "Table order"], ["indoor", "Indoor"], ["outdoor", "Outdoor"]].map(function (opt) {
                   const on = zm === opt[0];
                   return (
@@ -688,7 +688,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
                 <Toggle on={!!b.combosFirst} onClick={function () { setBand(i, { combosFirst: !b.combosFirst }); }} />
-                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)" }}>Try joined tables before single tables</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)" }}>Try joined tables before single tables</span>
               </div>
             </div>
           );
@@ -710,10 +710,10 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   {known ? null : <option value={r.key}>{String(r.key).split("|").join(" + ")}</option>}
                   {declared.map(function (d) { return <option key={d.key} value={d.key}>{d.label}</option>; })}
                 </select>
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>party</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>party</span>
                 <Stepper value={r.min} disableDec={r.min <= 1} disableInc={r.min >= r.max}
                   onDec={function () { setRule(i, { min: r.min - 1 }); }} onInc={function () { setRule(i, { min: r.min + 1 }); }} />
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>to</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
                 <Stepper value={r.max} disableDec={r.max <= r.min} disableInc={r.max >= 30}
                   onDec={function () { setRule(i, { max: r.max - 1 }); }} onInc={function () { setRule(i, { max: r.max + 1 }); }} />
                 <button onClick={function () { setRule(i, { avoid: !r.avoid }); }} className="mgt-hover-scale"
@@ -723,7 +723,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 </button>
                 {r.avoid ? null : (
                   <>
-                    <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>priority</span>
+                    <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>priority</span>
                     <Stepper value={r.weight} disableDec={r.weight <= 1} disableInc={r.weight >= 10}
                       onDec={function () { setRule(i, { weight: r.weight - 1 }); }} onInc={function () { setRule(i, { weight: r.weight + 1 }); }} />
                   </>
@@ -745,7 +745,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           </div>
           {chipRow("Anchors", priAnchors, true, "anchor", -1, function (l) { savePri({ anchors: l }); })}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>Require</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>Require</span>
             {tableIds.map(function (id) {
               const on = priMixed.indexOf(id) >= 0;
               return (
@@ -770,15 +770,15 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           {priSwaps.map(function (r, i) {
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>Free</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>Free</span>
                 <select value={r.table} aria-label="Table to free" onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
                   {tableIds.indexOf(r.table) >= 0 ? null : <option value={r.table}>{r.table}</option>}
                   {tableIds.map(function (id) { return <option key={id} value={id}>{id}</option>; })}
                 </select>
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>from a party of</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>from a party of</span>
                 <Stepper value={r.fromSize} disableDec={r.fromSize <= 1} disableInc={r.fromSize >= 30}
                   onDec={function () { setSwap(i, { fromSize: r.fromSize - 1 }); }} onInc={function () { setSwap(i, { fromSize: r.fromSize + 1 }); }} />
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.semi }}>for a party of</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>for a party of</span>
                 <Stepper value={r.toSize} disableDec={r.toSize <= 1} disableInc={r.toSize >= 30}
                   onDec={function () { setSwap(i, { toSize: r.toSize - 1 }); }} onInc={function () { setSwap(i, { toSize: r.toSize + 1 }); }} />
                 <button onClick={function () { removeSwap(i); }} className="mgt-hover-scale" title="Remove rule"
