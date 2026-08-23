@@ -727,8 +727,14 @@ export var M={
 //
 // They live here, beside the tokens they follow, so there is one place to look
 // and nothing to keep in step by hand except M.dur itself.
-export var EXIT_MS = M.dur.move + 20;
-export var REVEAL_EXIT_MS = M.dur.reveal + 20;
+// v17.15.0: ONE frame of slack, stated once. `Reveal` takes a `speed` and must
+// derive its own hold from whichever entry that names, so the arithmetic has to
+// be a function rather than two finished numbers — and the two named constants
+// below become what they always were, its two named applications.
+export var EXIT_PAD = 20;
+export function exitHold(speed) { return M.dur[speed] + EXIT_PAD; }
+export var EXIT_MS = exitHold("move");
+export var REVEAL_EXIT_MS = exitHold("reveal");
 
 // v17.10.0: `guestId` is the phone-less customer identity carried by the draft
 // (see customers.js → identityKey); `guestSeed` is the id of the booking that

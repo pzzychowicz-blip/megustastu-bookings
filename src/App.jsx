@@ -3540,7 +3540,7 @@ function BookingApp({uid}){
                   the same reason: a floating status layer pinned ABOVE the
                   dialog is not "the page behind the dialog", which is the only
                   thing `inert` is meant to describe. This is the same finding
-                  as notifAnnounce living outside <main>, one level down. */}<div inert={anyModal}><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
+                  as notifAnnounce living outside <main>, one level down. */}<div inert={anyModal}><Reveal speed="move" show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
                   children, so the pane fades out fully drawn instead of blanking a
                   frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} swapKey={viewDate} />:null}</Reveal></div><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}

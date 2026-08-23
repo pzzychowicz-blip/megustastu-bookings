@@ -516,7 +516,8 @@
            not interface response:
            --t-reveal a DISCLOSURE opening or closing under your finger: the
                       Summary body, "Completed & cancelled", every Settings
-                      section, the notification strip. Slower than --t-shift on
+                      section, the notification strip's LID. Slower than
+                      --t-shift on
                       purpose, and the distinction is what is being asked of the
                       eye. A block repositioning is something you WATCH ARRIVE,
                       and 385ms is already generous for that. A disclosure is
@@ -529,6 +530,17 @@
                       — its two internal timeouts are derived from this number,
                       so raising it here is safe and raising it anywhere else is
                       not (see atoms.jsx).
+                      v17.15.0: read "under your finger" as load-bearing. This
+                      list said "the notification strip", and the strip holds
+                      TWO Reveals — the lid's body, which you pressed, and the
+                      pane itself, which arrives because a booking went late or
+                      because you changed the day. Nobody pressed that one, and
+                      at 520ms it outlasted the 240ms view slide by more than
+                      double, so a date change slid sideways and then went on
+                      rising: one event read as two. It takes --t-move, via
+                      `Reveal`'s `speed` prop. A Reveal is still a disclosure by
+                      DEFAULT; that call site is the exception this paragraph
+                      exists to justify.
            --t-status the status colour change, shared by TimelineView and
                       PlanView. Its own token precisely BECAUSE two files must
                       agree; a shared number needs a shared name.

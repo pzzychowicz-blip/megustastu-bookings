@@ -12,7 +12,7 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, REVEAL_EXIT_MS } from "../lib/constants";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 import { AlertIcon, ChevronRightIcon } from "./Icons";
 
@@ -712,16 +712,33 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // the one-way-transition defect this version exists to remove. So the numbers
 // follow the token, and the token is the only thing to change.
 //
-// UNMOUNT_MS trails the transition slightly so the last frame is painted before
-// the node goes; SETTLE_MS is when it is safe to drop `overflow:hidden` and let
-// a child's hover lift out of the box, which is the same moment.
-// `REVEAL_EXIT_MS` lives in lib/constants.js beside the token it follows, so
+// The hold trails the transition slightly so the last frame is painted before
+// the node goes, and it is also when it is safe to drop `overflow:hidden` and
+// let a child's hover lift out of the box — the same moment, hence one number.
+// `exitHold` lives in lib/constants.js beside the tokens it follows, so
 // `useRevealRows` — which must outlast this same collapse — reads the same
-// number instead of keeping its own copy (it kept 350, tuned for the old 385ms).
-const UNMOUNT_MS = REVEAL_EXIT_MS;
-const SETTLE_MS = REVEAL_EXIT_MS;
-
-export function Reveal({ show, children, style, horizontal = false }) {
+// arithmetic instead of keeping its own copy (it kept 350, tuned for the old
+// 385ms).
+//
+// ── `speed` (v17.15.0) ───────────────────────────────────────────────────────
+// Which entry of the `M` scale this Reveal runs on. It exists because the
+// --t-reveal token's own definition is "a DISCLOSURE opening or closing UNDER
+// YOUR FINGER", and its list of examples ends with "the notification strip" —
+// which contains TWO of these, only one of them under anybody's finger. The
+// lid's body opening because you pressed the lid is the disclosure the token
+// was written for. The PANE arriving because a booking has gone late, or
+// because you pressed Next day, is not a disclosure at all; nobody pressed it.
+// It is --t-move's own definition, "something arriving or leaving".
+//
+// Applied to both, the 520ms made the pane outlast the view's 240ms slide by
+// more than double, so a date change slid horizontally for 240ms and then went
+// on rising for another 280ms — one event, read as two.
+//
+// The duration and the hold MUST come from the same entry, which is why this
+// takes a NAME and not a number: they are the two halves that were wrong in six
+// places at the start of this version, and a caller able to pass one without the
+// other is the same defect with a nicer spelling.
+export function Reveal({ show, children, style, horizontal = false, speed = "reveal" }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -739,22 +756,25 @@ export function Reveal({ show, children, style, horizontal = false }) {
       // the mount so the transition actually fires (a single frame can batch).
       let r2 = 0;
       const r1 = requestAnimationFrame(function () { r2 = requestAnimationFrame(function () { setOpen(true); }); });
-      const tv = setTimeout(function () { setRevealed(true); }, SETTLE_MS);
+      const tv = setTimeout(function () { setRevealed(true); }, exitHold(speed));
       return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); clearTimeout(tv); };
     }
     setOpen(false);
     setRevealed(false);   // clip immediately so the collapse hides cleanly
-    const t = setTimeout(function () { setMounted(false); }, UNMOUNT_MS);
+    const t = setTimeout(function () { setMounted(false); }, exitHold(speed));
     return function () { clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `speed` is fixed per call site; re-running on it would restart a live transition
   }, [show]);
   if (!mounted) return null;
+  // A Reveal is a DISCLOSURE by default, so it takes M.reveal rather than the
+  // M.shift a bare geometry change would get — see the --t-reveal note in
+  // index.html for why those are different questions, and `speed` above for the
+  // one caller for which they are not. The opacity rides along on the same
+  // timing so the two land together.
+  const ease = M[speed];
   const track = horizontal
-    // A Reveal is a DISCLOSURE, so it takes M.reveal rather than the M.shift a
-    // bare geometry change would get — see the --t-reveal note in index.html for
-    // why those are different questions. The opacity rides along on the same
-    // timing so the two land together.
-    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + M.reveal + ", opacity " + M.reveal }
-    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + M.reveal + ", opacity " + M.reveal };
+    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + ease + ", opacity " + ease }
+    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + ease + ", opacity " + ease };
   // v16.1.1: the horizontal inner track is a flex box (align-items:center) so the
   // revealed child is vertically centred without an inherited-font line-box strut
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).

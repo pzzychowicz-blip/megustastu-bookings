@@ -40,7 +40,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { M, EXIT_MS, REVEAL_EXIT_MS } from "../src/lib/constants.js";
+import { M, EXIT_MS, REVEAL_EXIT_MS, exitHold } from "../src/lib/constants.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const html = readFileSync(join(ROOT, "index.html"), "utf8");
@@ -91,6 +91,51 @@ describe("exit holds outlast their animations", () => {
     const src = readFileSync(join(ROOT, "src/hooks/useRevealRows.js"), "utf8");
     expect(src).toMatch(/PRUNE_MS\s*=\s*REVEAL_EXIT_MS/);
     expect(src).not.toMatch(/PRUNE_MS\s*=\s*\d/);
+  });
+});
+
+// v17.15.0 — `Reveal` takes a `speed` naming an entry of the M scale, because
+// the notification strip's PANE arriving is not the disclosure --t-reveal was
+// written for (see the token's own note in index.html). The name buys one thing
+// over a duration: the CSS timing and the unmount hold cannot be given
+// separately, which is the exact defect this file was created for.
+//
+// A typo fails in complete silence and in BOTH halves at once. `M["slide"]` is
+// undefined, so the transition string reads "grid-template-rows undefined" and
+// the browser drops the declaration — no animation. `M.dur["slide"]` is
+// undefined too, so the hold is NaN, `setTimeout` coerces that to 0 and the node
+// unmounts on the next tick. A Reveal that neither animates nor waits, from one
+// misspelt word.
+describe("Reveal speeds name a real entry of the scale", () => {
+  it("every M.dur entry has its CSS pair and a hold that outlasts it", () => {
+    for (const speed of Object.keys(M.dur)) {
+      expect(M[speed], "M." + speed + " has no CSS string").toBeTruthy();
+      expect(exitHold(speed), "exitHold(" + speed + ") must outlast its own animation")
+        .toBeGreaterThan(M.dur[speed]);
+    }
+  });
+
+  it("Reveal derives both halves from the speed it was given", () => {
+    const src = readFileSync(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    // The hold, twice (settle + unmount), and the easing — all from `speed`.
+    expect((src.match(/exitHold\(speed\)/g) || []).length,
+      "Reveal's two timeouts must both derive from its speed").toBe(2);
+    expect(src).toMatch(/const ease = M\[speed\]/);
+  });
+
+  it("no call site names a speed that does not exist", () => {
+    const names = new Set(Object.keys(M.dur));
+    const offenders = [];
+    const files = readdirSync(join(ROOT, "src/components"))
+      .filter((f) => /\.jsx?$/.test(f))
+      .map((f) => ["src/components/" + f, join(ROOT, "src/components", f)]);
+    files.push(["src/App.jsx", join(ROOT, "src/App.jsx")]);
+    for (const [label, full] of files) {
+      for (const m of readFileSync(full, "utf8").matchAll(/\bspeed="([^"]*)"/g)) {
+        if (!names.has(m[1])) offenders.push(label + ': speed="' + m[1] + '"');
+      }
+    }
+    expect(offenders, "a speed must be a key of M.dur").toEqual([]);
   });
 });
 
