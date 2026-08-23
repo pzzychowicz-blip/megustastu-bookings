@@ -602,6 +602,22 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // the sibling booking-name span slides in lockstep with the chip instead of
 // snapping when the chip appears/disappears. Default `false` = the original
 // vertical behaviour, byte-for-byte for every existing caller.
+// v17.15.0: both timeouts are DERIVED from the duration token, not typed. They
+// were 320 and 300 against a 385ms transition, which happened to work; against
+// the 520ms `--t-reveal` the unmount would have fired 220ms early and cut the
+// collapse off halfway — the exit silently stops working, which is precisely
+// the one-way-transition defect this version exists to remove. So the numbers
+// follow the token, and the token is the only thing to change.
+//
+// UNMOUNT_MS trails the transition slightly so the last frame is painted before
+// the node goes; SETTLE_MS is when it is safe to drop `overflow:hidden` and let
+// a child's hover lift out of the box, which is the same moment.
+// M.dur.reveal must stay equal to --t-reveal by hand — a timeout cannot read a
+// CSS var (the M.dur/M.easeOut constraint).
+const REVEAL_MS = M.dur.reveal;
+const UNMOUNT_MS = REVEAL_MS + 20;
+const SETTLE_MS = REVEAL_MS + 20;
+
 export function Reveal({ show, children, style, horizontal = false }) {
   const last = useRef(null);
   if (children) last.current = children;
@@ -620,20 +636,22 @@ export function Reveal({ show, children, style, horizontal = false }) {
       // the mount so the transition actually fires (a single frame can batch).
       let r2 = 0;
       const r1 = requestAnimationFrame(function () { r2 = requestAnimationFrame(function () { setOpen(true); }); });
-      const tv = setTimeout(function () { setRevealed(true); }, 320);
+      const tv = setTimeout(function () { setRevealed(true); }, SETTLE_MS);
       return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); clearTimeout(tv); };
     }
     setOpen(false);
     setRevealed(false);   // clip immediately so the collapse hides cleanly
-    const t = setTimeout(function () { setMounted(false); }, 300);
+    const t = setTimeout(function () { setMounted(false); }, UNMOUNT_MS);
     return function () { clearTimeout(t); };
   }, [show]);
   if (!mounted) return null;
   const track = horizontal
-    // A Reveal changes GEOMETRY (the 0fr↔1fr track), so it takes M.shift; the
-    // opacity riding along takes the same timing so the two land together.
-    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + M.shift + ", opacity " + M.shift }
-    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + M.shift + ", opacity " + M.shift };
+    // A Reveal is a DISCLOSURE, so it takes M.reveal rather than the M.shift a
+    // bare geometry change would get — see the --t-reveal note in index.html for
+    // why those are different questions. The opacity rides along on the same
+    // timing so the two land together.
+    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + M.reveal + ", opacity " + M.reveal }
+    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + M.reveal + ", opacity " + M.reveal };
   // v16.1.1: the horizontal inner track is a flex box (align-items:center) so the
   // revealed child is vertically centred without an inherited-font line-box strut
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).

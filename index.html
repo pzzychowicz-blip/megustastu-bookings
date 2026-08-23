@@ -481,11 +481,26 @@
                       a tint, a toggle knob, the TimeAxis detent.
            --t-move   something arriving or leaving: toasts, modals, sheets,
                       the view switch, a slide-in button.
-           --t-shift  geometry: heights, widths, positions — a Reveal opening,
-                      a timeline block repositioning, the split divider.
+           --t-shift  geometry: heights, widths, positions — a timeline block
+                      repositioning, the split divider.
 
-           Plus two that are deliberately outside the scale because they are
+           Plus three that are deliberately outside the scale because they are
            not interface response:
+           --t-reveal a DISCLOSURE opening or closing under your finger: the
+                      Summary body, "Completed & cancelled", every Settings
+                      section, the notification strip. Slower than --t-shift on
+                      purpose, and the distinction is what is being asked of the
+                      eye. A block repositioning is something you WATCH ARRIVE,
+                      and 385ms is already generous for that. A disclosure is
+                      something you READ AS IT ARRIVES: the content is new, it is
+                      several lines tall, and the motion is the only thing
+                      telling you it came from the header you just pressed rather
+                      than being dumped onto the page. Reported as "too snappy",
+                      which is exactly the complaint of being handed something
+                      before you are looking at it. `Reveal` is the ONLY consumer
+                      — its two internal timeouts are derived from this number,
+                      so raising it here is safe and raising it anywhere else is
+                      not (see atoms.jsx).
            --t-status the status colour change, shared by TimelineView and
                       PlanView. Its own token precisely BECAUSE two files must
                       agree; a shared number needs a shared name.
@@ -498,6 +513,7 @@
         --t-tap: 145ms;
         --t-move: 240ms;
         --t-shift: 385ms;
+        --t-reveal: 520ms;
         --t-status: 360ms;
         --t-wipe: 760ms;
       }

@@ -683,6 +683,12 @@ export var M={
   tap:"var(--t-tap) var(--ease-out)",
   move:"var(--t-move) var(--ease-out)",
   shift:"var(--t-shift) var(--ease-out)",
+  // v17.15.0: a DISCLOSURE, which is slower than geometry on purpose — see the
+  // token's own note in index.html. `Reveal` is the only consumer, and its two
+  // internal timeouts are derived from REVEAL_MS below, which must stay in step
+  // with --t-reveal by hand (a JS timeout cannot read a CSS var, the same
+  // constraint as M.dur/M.easeOut).
+  reveal:"var(--t-reveal) var(--ease-out)",
   status:"var(--t-status) var(--ease-out)",
   exit:"var(--t-move) var(--ease-in)",
   // The documented LINEAR exception (v17.8.0), alongside .mgt-dot-pulse's
@@ -693,8 +699,10 @@ export var M={
   // height change in the first third of the time, then crawls. AutoHeight is
   // the only consumer; anything that travels still takes move/shift.
   resize:"var(--t-shift) linear",
-  // Raw values — WAAPI only. Keep identical to index.html's :root.
-  dur:{tap:145,move:240,shift:385},
+  // Raw values — WAAPI only (plus `reveal`, which `Reveal` needs as a NUMBER to
+  // time its mount/settle timeouts against). Keep identical to index.html's
+  // :root — these are the only values here that can drift.
+  dur:{tap:145,move:240,shift:385,reveal:520},
   easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"   /* @motion */
 };
 
