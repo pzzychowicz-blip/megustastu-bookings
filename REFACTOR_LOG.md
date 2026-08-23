@@ -14393,6 +14393,55 @@ nothing visibly missing. The two slide classes had carried that failure mode
 since v15.8.0 without being in `CRITICAL_SELECTORS`; all three are now, proven
 by deletion.
 
+### 13. `/code-review xhigh`: 12 findings, all fixed
+
+Four behavioural, eight statements of record. The behavioural four:
+
+**The strip's swap animations ignored reduced motion.** index.html's
+kill-switch rewrites CSS `animation-duration` and `transition-duration`, and
+neither reaches a WAAPI `animate()` — `useFlip` says exactly that in a comment
+and checks `data-motion` / `prefers-reduced-motion` in JS before animating. The
+three calls added in entry 10 did not, so the per-device "Reduce animations"
+toggle, whose stated job is weak tablet hardware, still played 240ms of height
+and opacity on every date change. The expression is `reduceMotionOn()` in
+atoms.jsx now and both callers read it, because two copies of it is how one of
+them silently stops asking. Verified live: three animations with motion normal,
+**zero** with reduce on.
+
+**That layout effect ran its measurements on every commit.** No early return and
+no dep array, so `offsetHeight` plus two `textContent`s on every render — and
+this component is not memoized while `notifSections` is rebuilt each App render,
+so that included every keystroke in the booking form, a path CLAUDE.md documents
+as performance-critical. Benchmarked in the running app with the strip expanded
+and 1402 nodes under `<main>`: **2.886ms per commit**, on desktop, to serve a
+measurement wanted only on a date change. It returns early now, and the baseline
+moved to a passive effect where layout is already clean.
+
+**The baseline was sampled during the animation.** `offsetHeight` on an element
+with a WAAPI run in flight returns the INTERPOLATED height, so any commit inside
+those 240ms overwrote the resting height with a value true for one frame — and a
+second date change in the window would then ease from a position the box is not
+in. Skipped while `playState === "running"`.
+
+**The new speed guard had a hole exactly where it mattered.** It scanned
+`src/components` and `src/App.jsx`, leaving `src/hooks/` out — and
+`useReminders.jsx` is the one hook in the app that returns JSX, i.e. the single
+place a `Reveal` can be written outside a component file was the one place
+unguarded. It walks all of `src/` now, proven by planting a bad speed in exactly
+that file.
+
+The eight others were the same defect in prose, and it is the one this version
+keeps naming: **a statement of record that a later commit made false.**
+ListView still promised "the early return above guarantees `day` is non-empty"
+three commits after entry 1 deleted that return; App's `slide` comment still
+named date nav as a source of the directional classes after entry 12 stopped it
+passing them; `M.reveal` pointed at a `REVEAL_MS` that has never existed.
+Also removed: an exported `EXIT_PAD` nothing imports (a caller able to reach it
+is a caller able to hand-compute `M.dur.x + EXIT_PAD`, which is the split
+`exitHold` exists to prevent) and a `/* @motion */` marker on a line containing
+no literal, which would have suppressed the check:style failure that should
+catch the next one added beside it.
+
 ### The shape of this version
 
 Four of six reports had a cause other than the obvious one, and the two that
