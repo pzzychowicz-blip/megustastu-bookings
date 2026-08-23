@@ -1076,12 +1076,35 @@ export function SlideView({ dir, fill = false, children }) {
 // `[data-flip-id]` child's top, and for any that moved, plays a Web-Animations
 // translateY(from→0) — so a re-sorted card eases to its new spot instead of
 // jumping. WAAPI leaves no inline styles, so it never fights `.mgt-hover-scale`.
+//
+// v17.15.0: offsets are measured relative to the CONTAINER, not the viewport.
+// The two agree only while nothing above the container ever changes height, and
+// something does: the notification strip. It appears and collapses on its own
+// schedule, moves the whole grid vertically, and does NOT change `assignSig` —
+// so this effect does not run, and `prevTops` keeps viewport coordinates from
+// before the shift. The next UNRELATED edit then compares new tops against that
+// stale baseline and animates every block by the strip's height, including the
+// ones that did not move.
+//
+// Measured live on the timeline before the fix: collapse the strip (blocks move
+// 391px → 286px, zero WAAPI calls, baseline now stale), then add a booking —
+// and all FIVE blocks played `translateY(-46px) → 0` over 385ms, four of them
+// having stayed on exactly the same table. Together with the blocks' own
+// `left`/`width` CSS transition, which a real reshuffle does fire, that reads
+// as the whole grid sliding in diagonally from a corner.
+//
+// Container-relative is not a workaround, it is what this hook actually means:
+// it exists to animate a card or a block moving to a different ROW, which is a
+// movement WITHIN the container. A whole-container move is the page scrolling
+// or reflowing around it, which is not this hook's business and which the
+// browser has already drawn correctly.
 export function useFlip(deps) {
   const ref = useRef(null);
   const prevTops = useRef(new Map());
   useLayoutEffect(function () {
     const container = ref.current;
     if (!container) return;
+    const originTop = container.getBoundingClientRect().top;
     // v17.1.0: WAAPI animations aren't touched by the CSS reduced-motion
     // kill-switch — honor both the OS setting and the per-device "Reduce
     // animations" toggle (data-motion, index.html) here in JS. Computed ONCE
@@ -1091,7 +1114,9 @@ export function useFlip(deps) {
     const next = new Map();
     container.querySelectorAll("[data-flip-id]").forEach(function (el) {
       const id = el.getAttribute("data-flip-id");
-      const top = el.getBoundingClientRect().top;
+      // Relative to the container — see the note above. A shift applied to the
+      // container itself cancels out of every child's offset.
+      const top = el.getBoundingClientRect().top - originTop;
       next.set(id, top);
       const prev = prevTops.current.get(id);
       if (!reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
