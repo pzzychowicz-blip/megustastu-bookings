@@ -30,7 +30,7 @@
 // "collapse a banner with more than N rows". It now means the same thing about
 // the strip as a whole, so the setting keeps working and gains reach.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Reveal } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { R, M, T, FW, IC } from "../lib/constants";
@@ -80,7 +80,14 @@ function SectionMark({ icon: Icon, tone, size, fallbackDot }) {
   );
 }
 
-export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null }) {
+// ── The date swap (v17.15.0) ─────────────────────────────────────────────────
+// One movement, on the view slide's own clock. `M.dur`/`M.easeOut` are the raw
+// WAAPI pair (a var() in an `animate()` easing resolves to nothing and the
+// animation silently runs linear), which is exactly the escape hatch they are
+// documented for.
+const SWAP = { duration: M.dur.move, easing: M.easeOut };  /* @motion */
+
+export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null, swapKey }) {
   const liveTotal = sections.reduce(function (n, s) { return n + (s.count || 1); }, 0);
   // Initial-only, like BannerRows' own collapse was: a strip the user opened
   // must not slam shut because a seventh late booking arrived.
@@ -93,9 +100,68 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
   // useRevealRows is the hook LateBanner/Overlap/WaitAvail already share for
   // their rows; applying it one level up means the strip's own contents behave
   // like its contents' contents, and there is one implementation of the pattern.
+  //
+  // v17.15.0: `swapKey` (the viewed date) is what tells the lifecycle apart
+  // from a replacement — see useRevealRows for the measurements. On a change of
+  // it the sections do not ease in and out at all; the whole body is swapped in
+  // one frame and the geometry is handled once, below.
   const ids = sections.map(function (s) { return s.id; });
   const sig = ids.join(",");
-  const { renderIds, openIds } = useRevealRows(ids);
+  const { renderIds, openIds } = useRevealRows(ids, swapKey);
+
+  // ── The swap's single move ──────────────────────────────────────────────────
+  // With the content replaced in one frame, the only thing left to animate is
+  // the box: from the height the day you left needed, to the height this one
+  // does. One WAAPI shot, on --t-move, so it starts and ends with the view's
+  // 28px horizontal slide and the day changes as ONE movement. Measured before:
+  // the pane wandered 70px of height across 1.15s under a 240ms slide, dragging
+  // the whole timeline diagonally with it; with no strip on either date the
+  // same switch is 28px sideways and zero vertical, which is what it should be.
+  //
+  // This CANNOT be `AutoHeight`, and the reason is worth keeping: that atom's
+  // observer fires every frame while its content is itself animating and eases
+  // the box to follow, clipping what overflows. That is right for a Settings
+  // tab and wrong here, where the sections' own Reveals animate constantly by
+  // design — every notification arriving in place would be clipped mid-reveal
+  // by a box chasing it. A one-shot fires only on the swap and touches nothing
+  // else.
+  //
+  // The fade is gated on the rendered TEXT actually differing. "Working
+  // offline" is not about the day, and fading it because you pressed Next is
+  // motion describing something that did not happen.
+  const lidRef = useRef(null);
+  const bodyRef = useRef(null);
+  const lastH = useRef(0);
+  const lastText = useRef("");
+  const swapRef = useRef(swapKey);
+  useLayoutEffect(function () {
+    const body = bodyRef.current;
+    // The body is unmounted while the strip is collapsed, and 0 then means
+    // "nothing to measure", not "zero tall" — hence the `from > 0` guard, which
+    // also covers the first render and the strip arriving from nothing (the
+    // outer Reveal owns that one).
+    const h = body ? body.offsetHeight : 0;
+    const text = (lidRef.current ? lidRef.current.textContent : "") + (body ? body.textContent : "");
+    if (swapRef.current !== swapKey) {
+      swapRef.current = swapKey;
+      const from = lastH.current;
+      if (body && body.animate) {
+        if (from > 0 && h > 0 && Math.abs(from - h) > 1) {
+          body.animate([{ height: from + "px" }, { height: h + "px" }], SWAP);
+        }
+        if (text !== lastText.current) {
+          // Opacity on the two CONTENT boxes, never on the pane: the pane owns
+          // the severity tint and its border, and fading those from zero pops
+          // the strip's whole surface against the page. The tint itself already
+          // cross-fades on --t-move, so it is on this clock too.
+          body.animate([{ opacity: 0 }, { opacity: 1 }], SWAP);
+          if (lidRef.current && lidRef.current.animate) lidRef.current.animate([{ opacity: 0 }, { opacity: 1 }], SWAP);
+        }
+      }
+    }
+    lastH.current = h;
+    lastText.current = text;
+  });
 
   // A departed section is gone from `sections` but must keep rendering for the
   // ~350ms its Reveal takes to collapse. Its CONTENT needs no cache here — the
@@ -179,6 +245,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
       // animates. Do not add it back to fix a corner — round the child.
     }}>
       <button
+        ref={lidRef}
         onClick={function () { setOpen(!open); }}
         aria-expanded={open}
         aria-label={open ? "Collapse notifications" : "Expand notifications"}
@@ -310,7 +377,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
             is actually on screen, loosest on exactly the devices this exists to
             protect. Matching the shell's unit is what makes "40% of the
             viewport" true rather than approximately true. */}
-        <div className="mgt-notif" style={{ maxHeight: "40dvh", overflowY: "auto" }}>
+        <div ref={bodyRef} className="mgt-notif" style={{ maxHeight: "40dvh", overflowY: "auto" }}>
           {orderedIds.map(function (id) {
             const s = byId[id];
             return (

@@ -2930,7 +2930,7 @@ function BookingApp({uid}){
     }),
     hasClash?[{id:"clash",tone:"var(--danger-text)",tint:"var(--danger-bg)",icon:ClashIcon,
       title:clashBannerPairs.length===1?"Double-booked":"Double-bookings",count:clashBannerPairs.length,
-      node:<ClashBanner pairs={clashBannerPairs} bookings={bookings} onAssign={setManualTarget} onDismiss={dismissClashRow} />}]:[],
+      node:<ClashBanner pairs={clashBannerPairs} bookings={bookings} onAssign={setManualTarget} onDismiss={dismissClashRow} swapKey={viewDate} />}]:[],
     hasOverlap?[{id:"overlap",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:OverlapIcon,
       title:"Overlap warnings",count:Object.keys(overlapBannerMap).length,
       node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
@@ -3542,7 +3542,7 @@ function BookingApp({uid}){
                   thing `inert` is meant to describe. This is the same finding
                   as notifAnnounce living outside <main>, one level down. */}<div inert={anyModal}><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
                   children, so the pane fades out fully drawn instead of blanking a
-                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} />:null}</Reveal></div><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
+                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} swapKey={viewDate} />:null}</Reveal></div><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 loadStalled={loadStalled}
                 resyncing={resyncing}
