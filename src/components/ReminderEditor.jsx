@@ -1,7 +1,21 @@
 // src/components/ReminderEditor.jsx
 // Modal editor for creating or editing a single reminder. Sits on top of the
-// Settings overlay using z-index 250 (vs Overlay's 200) — this is why it
-// doesn't reuse the shared `Overlay` component from atoms.jsx.
+// Settings overlay at z-index 250 (vs Overlay's 200).
+//
+// v17.15.0: it is built on the shared `Overlay` like every other modal. The
+// header used to say the z-index "is why it doesn't reuse the shared Overlay",
+// and that reason was false — provably, because the discard confirm sits at
+// z=260 using `Overlay` and gets there by wrapping it in a positioned div. A
+// wrapper with `position` + `z-index` creates a stacking context, so the whole
+// subtree stacks at that level regardless of what the fixed elements inside it
+// declare. Same idiom here, at 250; the atom is untouched.
+//
+// What the bespoke scrim + card was costing: no `role="dialog"`, no
+// `aria-modal`, no focus trap, no focus restore and no accessible name — five
+// things every other modal has had since v17.9.1. Nobody could see any of them,
+// which is DESIGN.md's own point about accessibility defects generating no
+// incident and therefore no lesson. `tests/a11y.test.js` now fails the build if
+// a modal-shaped component builds its own scrim instead of using the atom.
 //
 // State model: this component is purely presentational — `draft` and
 // `setDraft` are owned by BookingApp. Validation runs on every render via
@@ -20,7 +34,7 @@
 
 import { S, BTN, R, T, FW, H, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
-import { Fld, InlineAlert, ModalTitle, Toggle, mkBtn, mkSolidBtn, mkInp, mkArea, useModalPresence, AutoHeight } from "./atoms";
+import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight } from "./atoms";
 import { CloseIcon } from "./Icons";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
@@ -34,8 +48,9 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
   const err = validateReminderDraft(draft);
   const rec = draft.recurrence || {};
   const todayStr = new Date().toISOString().slice(0, 10);
-  // v15.8.0: symmetric open/close animation via the wrapping <ModalPresence>.
-  const { leaving } = useModalPresence();
+  // The open/close animation, the scrim, the body-scroll lock, the dialog
+  // semantics and the focus trap all come from `Overlay` now — it reads the
+  // wrapping <ModalPresence> itself.
 
   // ── Field updaters ──────────────────────────────────────────────────────
   // Each one returns a new draft via spread; never mutates the existing one.
@@ -84,31 +99,50 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
     setDraft({ ...draft, active: !draft.active });
   }
 
+  // v14.4.1 had already given this modal Overlay's exact shape by hand — a
+  // scrolling body with the error and the actions pinned below it. v17.15.0
+  // hands that structure to the `footer` slot it was imitating.
+  const footer = (
+    <>
+      {/* v17.15.0: the shared InlineAlert — a notification-strip section,
+          inside a modal. It was one of three copies of the pale-fill +
+          matching-border + third-shade-text shape DESIGN.md bans. */}
+      {err ? <InlineAlert style={{ marginBottom: 12 }}>{err}</InlineAlert> : null}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button
+          onClick={onCancel}
+          className="mgt-hover-scale"
+          style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+        >
+          Back
+        </button>
+        <button
+          onClick={() => { if (!err) onSave(); }}
+          disabled={!!err}
+          className="mgt-hover-scale"
+          // v17.15.0: was minHeight 40, the only modal-footer decision button
+          // in the app below the 44 floor (H.touch is "decision surfaces only,
+          // where a mis-tap costs something: modal footers").
+          style={mkSolidBtn(err ? "var(--btn-disabled)" : "var(--app-success-solid)", {
+            cursor: err ? "not-allowed" : "pointer",
+            // v17.14.0: muted ink while disabled — see index.html.
+            color: err ? "var(--btn-disabled-ink)" : "var(--text-on-accent)",
+            boxShadow: err ? "none" : "var(--shadow-btn-success)"
+          })}
+        >
+          Save
+        </button>
+      </div>
+    </>
+  );
+
   return (
-    <div
-      className={leaving ? "mgt-scrim-out" : "mgt-scrim-in"}
-      style={{
-        position: "fixed", inset: 0,
-        background: "var(--scrim)",
-        backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        zIndex: 250, padding: 12
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-    >
-      <div className={leaving ? "mgt-card-out" : "mgt-card-in"} style={{
-        background: "var(--bg-sheet)",
-        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-        borderRadius: R.sheet,
-        border: "1px solid var(--border-sheet)",
-        width: "100%", maxWidth: 520, maxHeight: "90dvh",
-        display: "flex", flexDirection: "column", overflow: "hidden",
-        boxSizing: "border-box",
-        boxShadow: "var(--shadow-sheet)"
-      }}>
-        {/* v14.4.1: body scrolls, action footer (err + buttons) pinned to the
-            bottom — mirrors Overlay's `footer` slot (this modal predates it). */}
-        <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
+    // The z=250 wrapper, the discard confirm's idiom (App.jsx, z=260): position
+    // + z-index makes a stacking context, so everything inside stacks above
+    // Settings' 200 whatever the fixed children declare. `Overlay` needs no
+    // z prop and none of its four branches changes.
+    <div style={{ position: "relative", zIndex: 250 }}>
+      <Overlay onClose={onCancel} footer={footer}>
         {/* v15.8.0: AutoHeight eases the body when Recurrence flips once↔weekly. */}
         <AutoHeight>
         {/* v14 p7: header matches New booking / Edit booking pattern —
@@ -235,41 +269,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           </span>
         </div>
         </AutoHeight>
-        </div>
-        <div style={{ flexShrink: 0, padding: "16px 24px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
-        {/* v17.15.0: the shared InlineAlert — a notification-strip section,
-            inside a modal. It was one of three copies of the pale-fill +
-            matching-border + third-shade-text shape DESIGN.md bans. */}
-        {err ? <InlineAlert style={{ marginBottom: 12 }}>{err}</InlineAlert> : null}
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button
-            onClick={onCancel}
-            className="mgt-hover-scale"
-            style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: "var(--app-btn-slate)" })}
-          >
-            Back
-          </button>
-          <button
-            onClick={() => { if (!err) onSave(); }}
-            disabled={!!err}
-            className="mgt-hover-scale"
-            // v17.15.0: was minHeight 40, the only modal-footer decision button
-            // in the app below the 44 floor (H.touch is "decision surfaces only,
-            // where a mis-tap costs something: modal footers"). Both buttons in
-            // this footer move up together, so the row stays one height.
-            style={mkSolidBtn(err ? "var(--btn-disabled)" : "var(--app-success-solid)", {
-              cursor: err ? "not-allowed" : "pointer",
-              // v17.14.0: muted ink while disabled — see index.html.
-              color: err ? "var(--btn-disabled-ink)" : "var(--text-on-accent)",
-              boxShadow: err ? "none" : "var(--shadow-btn-success)"
-            })}
-          >
-            Save
-          </button>
-        </div>
-        </div>
-      </div>
+      </Overlay>
     </div>
   );
 }
