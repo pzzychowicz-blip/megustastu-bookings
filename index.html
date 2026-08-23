@@ -225,6 +225,34 @@
            as a fill. */
         --danger-bg: rgba(254, 226, 226, 0.7);  --danger-border: rgba(252, 165, 165, 0.55);
         --suggest-bg: rgba(220, 252, 231, 0.8); --suggest-border: rgba(134, 239, 172, 0.5);
+        /* v17.15.0 — OUTLINE-CHIP borders, DERIVED from the ink they sit beside.
+           An outline chip is transparent with a 2px border and coloured text
+           (DESIGN.md's three label treatments), and it took its border from
+           --suggest-border / --warn-border and its text from --success-text /
+           --warn-text — two unrelated families. In light that is a pale mint
+           ring around dark forest text; in dark the two nearly match. The chip
+           looked like a different component depending on the theme.
+
+           A border is the same statement as the text, quieter — so it is the
+           same colour, at half strength. color-mix() means it tracks the ink
+           automatically and cannot drift from it again, in either theme, and it
+           is the first use of the function in this codebase. The baseline is
+           fine (Safari 16.2 / Chrome 111; the app already needs Safari 16 for
+           grid-template-rows: 0fr) and the failure mode is benign rather than
+           broken: an unsupported color-mix makes the custom property
+           guaranteed-invalid, so border-color falls back to currentColor —
+           which IS the ink, just at full strength. Verified in the browser
+           rather than assumed.
+
+           These are theme-agnostic BY CONSTRUCTION: each references a token
+           that already flips, so they are declared once and never duplicated
+           into the dark block — the same reasoning as the radii and the motion
+           tokens. Adding one to [data-theme="dark"] would re-introduce exactly
+           the hand-maintained pair this replaces. */
+        --chip-success-border: color-mix(in srgb, var(--success-text) 50%, transparent);
+        --chip-warn-border:    color-mix(in srgb, var(--warn-text)    50%, transparent);
+        --chip-danger-border:  color-mix(in srgb, var(--danger-text)  50%, transparent);
+        --chip-neutral-border: color-mix(in srgb, var(--text-secondary) 50%, transparent);
         /* Shadows carrying white inset highlights (dimmed on dark) */
         --shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.8);
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.6);

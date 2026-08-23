@@ -1360,6 +1360,57 @@ export function TBadge({ id }) {
   );
 }
 
+// ── OutlineChip — the standalone count / disclosure chip (v17.15.0) ─────────
+// DESIGN.md's OUTLINE treatment: no fill, a 2px border in the semantic hue,
+// text in the same family. Customers' "3 visits" / "1 no-show", the booking
+// form's Regular and No-show disclosures, the phone-autocomplete rows.
+//
+// It was the same component written twice — `chip()` in CustomersSettings and
+// `chipBase` in BookingFormModal — one a <span>, the other a <button>, agreeing
+// on 2px, the pill radius, the transparent fill and the bold text, and taking
+// their colours from two unrelated token families: the BORDER from
+// --suggest-border / --warn-border, the TEXT from --success-text / --warn-text.
+// In light that renders a pale mint ring around dark forest text; in dark the
+// two nearly converge. The chip looked like a different component depending on
+// the theme, which is what was reported.
+//
+// So a tone here is ONE decision, not two: the border is the ink at half
+// strength, derived with color-mix (see index.html). Pass `as="button"` for the
+// clickable kind — a chip that is a disclosure is still the same chip, and
+// DESIGN.md's note that clickable chips are "the documented exception" was
+// about them keeping a FILL, which v17.8.0 already removed.
+//
+// The SOLID row tags in ListView (`manual`, `locked`, `no-show ×N`, `N min
+// late`, `€N deposit`) are deliberately NOT this. They share a dense row with
+// four other solid tags, and DESIGN.md's rule for choosing between the two
+// treatments is "match whatever sits next to you".
+export const CHIP_TONES = {
+  success: { border: "var(--chip-success-border)", text: "var(--success-text)" },
+  warn:    { border: "var(--chip-warn-border)",    text: "var(--warn-text)" },
+  danger:  { border: "var(--chip-danger-border)",  text: "var(--danger-text)" },
+  neutral: { border: "var(--chip-neutral-border)", text: "var(--text-secondary)" }
+};
+
+export function OutlineChip({ tone = "neutral", as = "span", size = "micro", style, children, ...rest }) {
+  const c = CHIP_TONES[tone] || CHIP_TONES.neutral;
+  const Tag = as;
+  return (
+    <Tag {...rest} style={{
+      display: "inline-flex", alignItems: "center", gap: SP.tight,
+      borderRadius: R.pill,
+      padding: size === "micro" ? "2px 6px" : "2px 10px",
+      fontSize: size === "micro" ? T.micro : T.small,
+      fontWeight: FW.bold,
+      background: "transparent",
+      border: "2px solid " + c.border,
+      color: c.text,
+      flexShrink: 0,
+      ...(as === "button" ? { cursor: "pointer" } : null),
+      ...(style || {})
+    }}>{children}</Tag>
+  );
+}
+
 // ── Generic small chip / inline tag ──────────────────────────────────────────
 export function SmallTag({ label, style }) {
   return (
