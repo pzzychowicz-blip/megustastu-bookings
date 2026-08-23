@@ -37,7 +37,7 @@ import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking } f
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
-import { mkBtn } from "./atoms";
+import { mkBtn, Reveal } from "./atoms";
 import { EmptyDay } from "./EmptyDay";
 
 // Neutral (free) table fill — theme tokens, matches the editor's look.
@@ -412,7 +412,10 @@ export const PlanView = memo(function PlanView({
       {/* v17.11.0: the empty-day prompt, above the floor rather than instead of
           it — the plan is a picture of the room, and an empty room is precisely
           what you want to see on an empty day. See EmptyDay.jsx. */}
-      {isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}
+      {/* v17.15.0: eased, not snapped — same `Reveal` as the notification strip.
+          The `null` on the false branch is what lets the exit animate at all
+          (Reveal caches only truthy children and collapses that cache). */}
+      <Reveal show={isEmpty}>{isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}</Reveal>
       {/* v17.5.0: Now + selected time + legend on one row, the ruler directly
           below it. The ruler is a SIBLING above the <svg>, so it sits outside
           the svg's touchAction:"none" and never fights the plan's pan/pinch
