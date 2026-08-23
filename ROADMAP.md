@@ -79,13 +79,14 @@ The sweep fixed every truncated exit in the app (see `REFACTOR_LOG.md`). Three
 one-way transitions were left alone, and all three for the same structural
 reason: each would need two copies of a stateful view mounted at once.
 
-- **The view switch** (`mgt-view-in-right`/`-left`, no `-out` twin). A
-  cross-slide needs the outgoing view still mounted, and `CLAUDE.md` records
-  that two instances of one view fight over App's singleton state
-  (`timelineZoom`, `selectedListId`, `showFinished`) — the same collision that
-  makes Split View refuse to put one view in both panes. Sequencing them
-  instead (fade out, then slide in) would double the perceived latency of every
-  date change, which is the most-used control in the app.
+- **The view switch and the date change** (`mgt-view-in-right`/`-left` and,
+  since v17.15.0, `mgt-view-fade` — none with an `-out` twin). A cross-slide or
+  cross-fade needs the outgoing view still mounted, and `CLAUDE.md` records that
+  two instances of one view fight over App's singleton state (`timelineZoom`,
+  `selectedListId`, `showFinished`) — the same collision that makes Split View
+  refuse to put one view in both panes. Sequencing them instead (fade out, then
+  in) would double the perceived latency of every date change, which is the
+  most-used control in the app.
 - **The Settings tab body** (`.mgt-fade-in`, no fade-out). Same shape: a
   cross-fade needs both tab bodies mounted, which would double-register ids in
   `SettingsContent`'s `reportDirty` Set and strand the unsaved-changes guard.

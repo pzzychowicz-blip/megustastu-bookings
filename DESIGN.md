@@ -1068,6 +1068,16 @@ around it, which the browser has already drawn.
   the old height to the new. **Retiming cannot fix a replacement animated as a
   change** — the wobble was the visible half, the stale content was the half
   that mattered.
+- **A gesture owns ONE axis.** If two things move at once on different axes,
+  no duration or curve reconciles them — co-timing them perfectly is what makes
+  the diagonal *clean*, not what removes it (v17.15.0 shipped that intermediate
+  state and it was reported again). A date change drives both the view's
+  entrance and the notification strip's height, so it fades rather than slides
+  and keeps the vertical axis it cannot avoid: measured across 19→26 August it
+  moves the grid −98, +100, +51 and −151px, and the two upward ones read as the
+  grid heading for a top corner. The T/L/P switch keeps the horizontal slide,
+  because the strip sits outside the view and a view switch moves nothing
+  vertically. **Before choosing a duration, ask which axis the gesture owns.**
 - **A one-shot is not `AutoHeight`.** That atom's observer chases its content
   every frame and clips the overflow, which is right for a Settings tab and
   wrong for any box whose contents animate by design — there, every in-place

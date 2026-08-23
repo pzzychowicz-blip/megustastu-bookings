@@ -13988,12 +13988,12 @@ navigation, and no console output on load.
 `ManualModal.jsx`, `ConnectionStatus.jsx`, `CustomersSettings.jsx`,
 `AppBanners.jsx`, `NotificationStrip.jsx`, `BannerRows.jsx`, `ClashBanner.jsx`,
 `src/hooks/useRevealRows.js`, `tests/motion.test.js` (new),
-`tests/contrast.test.js`, `tests/a11y.test.js`, `CLAUDE.md`, `DESIGN.md`,
-`ROADMAP.md`.
+`tests/contrast.test.js`, `tests/a11y.test.js`, `tests/stylesheet.test.js`,
+`CLAUDE.md`, `DESIGN.md`, `ROADMAP.md`.
 **Behavioural change:** motion only, plus three colour corrections. No persisted-data
 change, no security-rule change, **no Firebase console step**. Rolling deploy.
 **Verification:** every item measured in the running DEV app before and after —
-see each entry. Build + 561 tests + lint (0 errors) + `check:style` green.
+see each entry. Build + 564 tests + lint (0 errors) + `check:style` green.
 
 Patryk reported six things in two groups: four about transitions that snap, run
 too fast or only run one way, and three about buttons, banners and chips that
@@ -14348,6 +14348,51 @@ Measured: appear 0→100px and the slide's 28px now start and finish together at
 ~300ms; the collapse is 250ms where it was 530ms; the lid's own disclosure is
 untouched at ~500ms.
 
+### 12. A date change owns the vertical axis
+
+Reported twice, and still true after entries 10 and 11 had removed the wobble
+and put both clocks on `--t-move`: switching dates with the strip up moved the
+grid diagonally, "as if to a top corner".
+
+**Entry 11 is why retiming could never have fixed it.** Co-timing two movements
+is exactly what turns a wobble into one clean diagonal. The grid moves on both
+axes because a date change drives both — the view enters with a 28px horizontal
+slide, and the strip's height change pushes it vertically. Measured across
+19 → 26 August, four of seven steps move vertically:
+
+| step | vertical | |
+|---|---|---|
+| 19→20 | **−98** | strip disappears |
+| 21→22 | **+100** | strip appears |
+| 22→23 | **+51** | strip grows to two sections |
+| 23→24 | **−151** | strip disappears |
+
+The two negatives are the "top corner" precisely: the grid rises ~150px while
+sliding sideways.
+
+So the axes are separated instead of the clocks aligned. A date change fades
+(`mgt-view-fade` — opacity only, no transform) and its sole movement is the
+strip's own vertical reveal pushing the grid. The T/L/P switch keeps its
+directional slide and keeps it honestly: the strip sits OUTSIDE the view, so a
+view switch never moves anything vertically and its horizontal slide is already
+pure. Accepted cost, put to Patryk before building it: a date change loses its
+left/right direction cue, and on a day where the strip does not change the grid
+crossfades without moving.
+
+One call site — every date path runs through `goToDate`. Verified live: the nav
+buttons, the arrow keys and the date input all report `mgt-view-fade`; both view
+buttons still report `mgt-view-in-left`/`-right`.
+
+**The guard is three entries, not one.** `SlideView` mounts with `animating:
+true` and leaves that state only on `animationend`, so a missing rule means the
+event never comes and the view wrapper keeps `overflow: hidden` forever — hover
+lifts clipped app-wide, panes clipped in the fixed-shell and Split View layouts.
+Verified by injecting `animation: none` on the new class and changing the date:
+class still applied, computed overflow still `hidden`, nothing thrown and
+nothing visibly missing. The two slide classes had carried that failure mode
+since v15.8.0 without being in `CRITICAL_SELECTORS`; all three are now, proven
+by deletion.
+
 ### The shape of this version
 
 Four of six reports had a cause other than the obvious one, and the two that
@@ -14382,3 +14427,11 @@ half a second of the previous day's notifications, which no amount of retiming
 would have fixed. Entry 11's seam had even been written down, in the token's
 own defining clause, and read past. Ask what KIND of change this is before
 picking how it should move.
+
+Entry 12 closes the loop on all three, because it is the one report that
+survived two fixes. Both of those made the motion better and neither made it
+right, for the same reason: they treated a two-axis movement as a timing
+problem. **Two movements on different axes cannot be reconciled by a clock —
+aligning them perfectly is what makes the diagonal clean rather than what makes
+it go away.** The question was never "when should each of these run", it was
+"which axis does this gesture own".
