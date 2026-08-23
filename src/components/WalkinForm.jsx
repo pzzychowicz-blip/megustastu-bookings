@@ -311,8 +311,11 @@ export function WalkinForm({
           errors are all form-level (capacity, no table), so there is no field
           to mark invalid here, unlike the booking form. */}
       <div role="alert">
-        {/* v17.15.0: the shared InlineAlert — see atoms.jsx. */}
-        {error ? <InlineAlert style={{ marginBottom: 14 }}>{error}</InlineAlert> : null}
+        {/* v17.15.0: the shared InlineAlert — see atoms.jsx — eased in AND out,
+            for the reason given at the booking form's copy of this. */}
+        <Reveal show={!!error}>
+          {error ? <InlineAlert style={{ marginBottom: 14 }}>{error}</InlineAlert> : null}
+        </Reveal>
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button

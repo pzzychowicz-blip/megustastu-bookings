@@ -607,9 +607,17 @@ export function BookingFormModal({
   // that is what `aria-describedby` names — `Fld` emits the reference only when
   // the caller says the field is invalid, and a describedby aimed at an id not
   // in the tree is the dangling reference the atom exists to avoid.
-  const errorEl=<div role="alert">{error?
+  // v17.15.0: eased, in BOTH directions. The alert appears and disappears while
+  // the modal is open and being read — pressing Save raises it, typing into the
+  // field clears it — so it is exactly the case the in-and-out rule is about,
+  // and it was snapping the footer (and the card above it) by its own height.
+  // `Reveal` caches its last truthy child, which is what makes the exit animate
+  // once `error` is already null. The `role="alert"` div stays OUTSIDE it and
+  // permanently mounted: a live region announces a change to its CONTENT, so a
+  // region that arrives holding its message says nothing.
+  const errorEl=<div role="alert"><Reveal show={!!error}>{error?
     <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14}}>{error}</InlineAlert>
-  :null}</div>;
+  :null}</Reveal></div>;
   // Gated on `error` as well as the field name, so the id handed to
   // aria-describedby can only ever name an element that is on screen.
   function invalidField(name){return !!error&&errorField===name;}

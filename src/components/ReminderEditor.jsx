@@ -34,7 +34,7 @@
 
 import { S, BTN, R, T, FW, H, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
-import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight } from "./atoms";
+import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, Reveal, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight } from "./atoms";
 import { CloseIcon } from "./Icons";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
@@ -106,8 +106,21 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
     <>
       {/* v17.15.0: the shared InlineAlert — a notification-strip section,
           inside a modal. It was one of three copies of the pale-fill +
-          matching-border + third-shade-text shape DESIGN.md bans. */}
-      {err ? <InlineAlert style={{ marginBottom: 12 }}>{err}</InlineAlert> : null}
+          matching-border + third-shade-text shape DESIGN.md bans.
+
+          Two things the other two copies already had and this one did not.
+          It is EASED, in both directions: the message appears the moment the
+          text field is emptied and goes the moment a character is typed, i.e.
+          it comes and goes under the eye of someone editing, which is the whole
+          condition for needing an exit. And it is inside a permanently-mounted
+          `role="alert"`, so it is announced at all — a live region reports a
+          change to its content, and one that arrives already holding its
+          message reports nothing. */}
+      <div role="alert">
+        <Reveal show={!!err}>
+          {err ? <InlineAlert style={{ marginBottom: 12 }}>{err}</InlineAlert> : null}
+        </Reveal>
+      </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button
           onClick={onCancel}
