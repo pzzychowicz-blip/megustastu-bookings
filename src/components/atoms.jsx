@@ -1243,6 +1243,23 @@ export function SlideView({ dir, fill = false, children }) {
 // movement WITHIN the container. A whole-container move is the page scrolling
 // or reflowing around it, which is not this hook's business and which the
 // browser has already drawn correctly.
+// ── reduceMotionOn — the WAAPI half of the motion kill-switch (v17.15.0) ────
+// index.html's reduced-motion rules rewrite CSS `animation-duration` and
+// `transition-duration`; NEITHER reaches a Web-Animations `animate()` call, so
+// anything driven from JS has to ask in JS. Two things now do — `useFlip`'s
+// list reorder and `NotificationStrip`'s date swap — which is one more than the
+// number of copies of this expression that may exist.
+//
+// Both inputs matter and they are different intents: `data-motion="reduce"` is
+// the per-device "Reduce animations" toggle, whose stated job is weak tablet
+// hardware where the cheapest frame is no frame; `prefers-reduced-motion` is the
+// OS-level request. Read at call time, never cached — the toggle can flip while
+// the app is running.
+export function reduceMotionOn() {
+  return document.documentElement.dataset.motion === "reduce"
+    || !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+
 export function useFlip(deps) {
   const ref = useRef(null);
   const prevTops = useRef(new Map());
@@ -1254,8 +1271,10 @@ export function useFlip(deps) {
     // kill-switch — honor both the OS setting and the per-device "Reduce
     // animations" toggle (data-motion, index.html) here in JS. Computed ONCE
     // per flip pass (/code-review fix #4 — it was inside the per-element loop).
-    const reduceMotion = document.documentElement.dataset.motion === "reduce"
-      || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    // v17.15.0: the expression moved to `reduceMotionOn` above, because the
+    // notification strip's swap needs the same answer and two copies of this
+    // is how one of them silently stops asking.
+    const reduceMotion = reduceMotionOn();
     const next = new Map();
     container.querySelectorAll("[data-flip-id]").forEach(function (el) {
       const id = el.getAttribute("data-flip-id");

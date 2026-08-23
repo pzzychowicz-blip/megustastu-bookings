@@ -126,10 +126,17 @@ describe("Reveal speeds name a real entry of the scale", () => {
   it("no call site names a speed that does not exist", () => {
     const names = new Set(Object.keys(M.dur));
     const offenders = [];
-    const files = readdirSync(join(ROOT, "src/components"))
-      .filter((f) => /\.jsx?$/.test(f))
-      .map((f) => ["src/components/" + f, join(ROOT, "src/components", f)]);
-    files.push(["src/App.jsx", join(ROOT, "src/App.jsx")]);
+    // ALL of src/, recursively (/code-review). Scanning only `src/components`
+    // and `src/App.jsx` left `src/hooks/` out, and `useReminders.jsx` is the one
+    // hook that returns JSX — so the single place in the app where a Reveal can
+    // be written outside a component file was the one place unguarded.
+    const files = [];
+    (function walk(dir, label) {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.isDirectory()) walk(join(dir, e.name), label + e.name + "/");
+        else if (/\.jsx?$/.test(e.name)) files.push([label + e.name, join(dir, e.name)]);
+      }
+    })(join(ROOT, "src"), "src/");
     for (const [label, full] of files) {
       for (const m of readFileSync(full, "utf8").matchAll(/\bspeed="([^"]*)"/g)) {
         if (!names.has(m[1])) offenders.push(label + ': speed="' + m[1] + '"');

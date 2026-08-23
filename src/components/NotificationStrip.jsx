@@ -31,7 +31,7 @@
 // the strip as a whole, so the setting keeps working and gains reach.
 
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { Reveal } from "./atoms";
+import { Reveal, reduceMotionOn } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { R, M, T, FW, IC } from "../lib/constants";
 import { ChevronDownIcon } from "./Icons";
@@ -85,7 +85,7 @@ function SectionMark({ icon: Icon, tone, size, fallbackDot }) {
 // WAAPI pair (a var() in an `animate()` easing resolves to nothing and the
 // animation silently runs linear), which is exactly the escape hatch they are
 // documented for.
-const SWAP = { duration: M.dur.move, easing: M.easeOut };  /* @motion */
+const SWAP = { duration: M.dur.move, easing: M.easeOut };
 
 export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null, swapKey }) {
   const liveTotal = sections.reduce(function (n, s) { return n + (s.count || 1); }, 0);
@@ -134,17 +134,41 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null, s
   const lastH = useRef(0);
   const lastText = useRef("");
   const swapRef = useRef(swapKey);
-  useLayoutEffect(function () {
+  const heightAnim = useRef(null);
+
+  function readText() {
     const body = bodyRef.current;
+    return (lidRef.current ? lidRef.current.textContent : "") + (body ? body.textContent : "");
+  }
+
+  // The swap itself. It must be a LAYOUT effect — the animation has to be
+  // created before the browser paints the new day, or the box paints at its
+  // final height for a frame first — but it does nothing on any other commit,
+  // and that early return is the whole point (/code-review).
+  //
+  // The first version had no early return and no dep array, so it read
+  // `offsetHeight` and two `textContent`s on EVERY commit. This component is not
+  // memoized and `notifSections` is rebuilt each App render, so that included
+  // every keystroke in the booking form — a path CLAUDE.md documents as
+  // performance-critical. Benchmarked in the running app with the strip expanded
+  // and 1402 nodes under <main>: 2.886ms per commit for the read pair, on
+  // desktop hardware, to serve a measurement wanted only on a date change.
+  useLayoutEffect(function () {
+    if (swapRef.current === swapKey) return;
+    swapRef.current = swapKey;
+    const body = bodyRef.current;
+    const from = lastH.current;
     // The body is unmounted while the strip is collapsed, and 0 then means
-    // "nothing to measure", not "zero tall" — hence the `from > 0` guard, which
-    // also covers the first render and the strip arriving from nothing (the
-    // outer Reveal owns that one).
+    // "nothing to measure", not "zero tall" — hence the `from > 0` guard below,
+    // which also covers the first render and the strip arriving from nothing
+    // (the outer Reveal owns that one).
     const h = body ? body.offsetHeight : 0;
-    const text = (lidRef.current ? lidRef.current.textContent : "") + (body ? body.textContent : "");
-    if (swapRef.current !== swapKey) {
-      swapRef.current = swapKey;
-      const from = lastH.current;
+    const text = readText();
+    // WAAPI is not reachable by index.html's reduced-motion rules, which only
+    // rewrite CSS durations — so anything driven from JS has to ask in JS. The
+    // per-device toggle exists for weak tablets, where this is exactly the work
+    // it is meant to remove (/code-review).
+    if (!reduceMotionOn()) {
       // Opacity on the two CONTENT boxes, never on the pane: the pane owns the
       // severity tint and its border, and fading those from zero pops the whole
       // surface against the page. The tint already cross-fades on --t-move, so
@@ -165,11 +189,31 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null, s
       // against: `from` is 0 both when the strip was collapsed and when it was
       // not mounted at all, and neither is a height to ease from.
       if (body && body.animate && from > 0 && h > 0 && Math.abs(from - h) > 1) {
-        body.animate([{ height: from + "px" }, { height: h + "px" }], SWAP);
+        heightAnim.current = body.animate([{ height: from + "px" }, { height: h + "px" }], SWAP);
       }
     }
+    // `h` was read BEFORE the animation was created, so this is the resting
+    // height, not an interpolated one.
     lastH.current = h;
     lastText.current = text;
+  });
+
+  // The baseline the NEXT swap eases from, kept current after paint rather than
+  // before it: at this point layout is already clean, so reading it back costs
+  // nothing like the forced reflow the same read causes in a layout effect.
+  //
+  // Skipped while the height animation is in flight (/code-review). `offsetHeight`
+  // during a WAAPI run returns the INTERPOLATED height, and any commit landing
+  // inside those 240ms — a status change, a keystroke, the 15s clock tick — would
+  // otherwise overwrite the resting height with a value that is only true for one
+  // frame, so a second date change inside the window would ease from a position
+  // the box is not in.
+  useEffect(function () {
+    const anim = heightAnim.current;
+    if (!anim || anim.playState !== "running") {
+      lastH.current = bodyRef.current ? bodyRef.current.offsetHeight : 0;
+    }
+    lastText.current = readText();
   });
 
   // A departed section is gone from `sections` but must keep rendering for the

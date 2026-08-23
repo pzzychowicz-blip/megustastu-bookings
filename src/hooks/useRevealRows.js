@@ -75,8 +75,20 @@ export function useRevealRows(ids, resetKey) {
   const [prevReset, setPrevReset] = useState(resetKey);
   if (resetKey !== prevReset) {
     setPrevReset(resetKey);
-    setRenderIds(ids.slice());
-    setOpenIds(new Set(ids));
+    // Only when the list ACTUALLY differs (/code-review). Two days can carry
+    // the same sections — "Working offline", a reminder that fires on both —
+    // and re-seeding those hands every consumer a fresh array and a fresh Set
+    // describing a list that did not change, invalidating anything memoized on
+    // their identity. The scan is at most a handful of ids and runs once per
+    // reset, never per render.
+    const settled = renderIds.length === ids.length
+      && renderIds.every(function (id, i) { return id === ids[i]; })
+      && openIds.size === ids.length
+      && ids.every(function (id) { return openIds.has(id); });
+    if (!settled) {
+      setRenderIds(ids.slice());
+      setOpenIds(new Set(ids));
+    }
   }
 
   // The bookkeeping that re-seed implies, done where a ref may legally be
