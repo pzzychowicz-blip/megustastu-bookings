@@ -13987,11 +13987,12 @@ navigation, and no console output on load.
 `BookingFormModal.jsx`, `WalkinForm.jsx`, `ReminderEditor.jsx`, `BlockModal.jsx`,
 `ManualModal.jsx`, `ConnectionStatus.jsx`, `CustomersSettings.jsx`,
 `AppBanners.jsx`, `src/hooks/useRevealRows.js`, `tests/motion.test.js` (new),
-`tests/contrast.test.js`, `CLAUDE.md`, `DESIGN.md`, `ROADMAP.md`.
+`tests/contrast.test.js`, `tests/a11y.test.js`, `CLAUDE.md`, `DESIGN.md`,
+`ROADMAP.md`.
 **Behavioural change:** motion only, plus three colour corrections. No persisted-data
 change, no security-rule change, **no Firebase console step**. Rolling deploy.
 **Verification:** every item measured in the running DEV app before and after —
-see each entry. Build + 556 tests + lint (0 errors) + `check:style` green.
+see each entry. Build + 558 tests + lint (0 errors) + `check:style` green.
 
 Patryk reported six things in two groups: four about transitions that snap, run
 too fast or only run one way, and three about buttons, banners and chips that
@@ -14165,6 +14166,59 @@ Verified in both themes: `rgba(0,0,0,0)` fill, border exactly the ink at 0.5 alp
 — light `srgb(0.086 0.396 0.204 / 0.5)` against `rgb(22,101,52)`, dark
 `srgb(0.525 0.937 0.675 / 0.5)` against `rgb(134,239,172)`.
 
+### 8. ReminderEditor is a real dialog
+
+Found while doing (5): it was the only modal in the app not built on `Overlay`,
+so it had no `role="dialog"`, no `aria-modal`, no focus trap, no focus restore
+and no accessible name — five things every other modal has had since v17.9.1,
+and five things nothing on screen reveals as missing.
+
+**Its stated reason for the exception was false, and had been for eleven
+versions.** The file header said the z-index 250 "is why it doesn't reuse the
+shared `Overlay`" (whose scrim is 200). But the discard confirm sits at z=260
+using `Overlay`, and gets there by wrapping it in a positioned div: `position` +
+`z-index` makes a stacking context, so the whole subtree stacks at that level
+whatever the fixed children inside it declare. The same idiom at 250 works
+here, and **`Overlay` is untouched** — no `z` prop, no new branch, nothing for
+the other eleven modals to regress on.
+
+The rest of the port is deletion. v14.4.1 had already reproduced Overlay's
+shape BY HAND — a scrolling body with the error and actions pinned below it —
+with a comment saying it "mirrors Overlay's `footer` slot (this modal predates
+it)". That structure is now the slot it was imitating; the hand-written scrim,
+card, `useModalPresence` and four animation classes are gone.
+
+Two accepted consequences: the desktop card goes 520 → 580, and below 600px it
+becomes Overlay's full-screen sheet rather than a centred card, so the reminder
+editor stops being the one modal that behaves differently on a phone. Checked
+at 375px — `mgt-sheet-in`, full viewport, footer pinned; both sheets are
+`--bg-sheet-mobile` at 98% opacity, so what looks like bleed-through in a
+screenshot is 2% of an identically coloured surface.
+
+Verified in the running app: role, `aria-modal`, `aria-labelledby` resolving to
+the `<h2>` "New reminder", focus landing on the dialog container, Tab wrapping
+in both directions, and focus returning to the "+ New reminder" button. The
+ancestor chain is card → Overlay's scrim (fixed, z=200) → the z=250 wrapper,
+with the editor topmost at its own centre and Settings still mounted beneath.
+
+**A measurement trap worth recording.** The first focus-restore reading said
+focus returned to the Settings container, not the button — an artefact of
+driving the test with `.click()`, which does not move focus the way a real
+press does, so `Overlay` had captured the wrong element to restore TO. Focusing
+the opener first, which is what a finger does, shows the restore working.
+CLAUDE.md already says a synthetic press is not a finger; this is that rule one
+layer up, in the thing the press was supposed to set up rather than in the press
+itself.
+
+`tests/a11y.test.js` gained the gate (558 tests), and it checks the STRUCTURE
+rather than the roles — because ReminderEditor was not a modal that forgot its
+role, it was a modal that never went through the atom. `var(--scrim)` may
+appear in exactly one file; the popups paint `--tl-popup-scrim`, since a popup
+is not a dialog and must not claim to be one. Proven against real regressions:
+restoring the pre-port file verbatim fails both assertions, and deleting only
+the z=250 wrapper fails the second — a one-div deletion that would otherwise
+make the editor paint under the modal that opened it with nothing to catch it.
+
 ### The shape of this version
 
 Four of six reports had a cause other than the obvious one, and the two that
@@ -14181,3 +14235,9 @@ exit timeouts against one duration token, twelve copies of one button, three
 copies of one alert, two copies of one chip, and two colour pairs drawn from
 families never required to match. v17.14.0 said it about modal lists; it is the
 same sentence.
+
+Entry 8 is its sibling rather than its counter-example: not a value duplicated,
+but a whole surface that left the shared component for a reason nobody
+re-checked, and took five invisible guarantees with it. Both are cases of the
+single source of truth having exactly one exception, and the exception being
+the thing that breaks.

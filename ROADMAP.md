@@ -98,20 +98,6 @@ reason: each would need two copies of a stateful view mounted at once.
   blinks out. Would need a `useRevealRows`-style layer to keep departed ghosts
   alive.
 
-### ReminderEditor is not built on `Overlay`
-
-It is the only modal surface in the app that renders its own scrim and card
-instead of using the shared atom, so it has no `role="dialog"`, no
-`aria-modal`, no focus trap, no focus restore and no accessible name — five
-things every other modal gets for free.
-
-v17.15.0 gave it a `ModalTitle`, so it now carries `MODAL_TITLE_ATTR`, which is
-exactly the hook `Overlay` uses to resolve its own `aria-labelledby`. The
-naming half is prepared; the port is not done. Prefer porting it onto `Overlay`
-(its pinned footer maps to the `footer` slot) over bolting the semantics on,
-and add a guard to `tests/a11y.test.js` so the next bespoke modal cannot skip
-them either.
-
 ## Ideas
 
 _(nothing pending)_

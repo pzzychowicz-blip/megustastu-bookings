@@ -749,6 +749,21 @@ the platform announces with no relationship to keep in sync.
 between the top of List and anything after it. The selected card holds the stop,
 or the first card when nothing is selected, so the list is always enterable.
 
+**A shared component is only shared if nothing is allowed outside it.**
+`Overlay` has carried `role="dialog"`, `aria-modal`, a DOM-resolved name, a
+focus trap and focus restore since v17.9.1 — and `ReminderEditor` had none of
+them, because it was never on `Overlay` at all. Its stated reason was structural
+and sounded convincing (it renders at z=250, Overlay's scrim is 200) and was
+false: the discard confirm sits at z=260 on `Overlay`, by wrapping it in a
+positioned div. **That is the general shape — a surface leaves the shared
+component for a plausible reason that nobody re-checks, and takes every
+invisible guarantee with it.** So the gate is on the STRUCTURE, not the roles:
+`var(--scrim)` may appear in exactly one file. Asserting "every modal has a
+dialog role" would have caught nothing here, because the file was not a modal
+that forgot its role. A modal that must sit above another gets a positioned
+wrapper with a higher z-index; the popups paint `--tl-popup-scrim`, since a
+popup is not a dialog and must not claim to be one.
+
 **SVG breaks the focus rule in two ways, and both are invisible in source.**
 A browser paints **no `outline` on a `<g>`** (it does on the shape child), and
 **`:focus-visible` never matches an SVG element in Chrome** — two consecutive
