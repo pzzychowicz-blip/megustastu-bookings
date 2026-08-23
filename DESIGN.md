@@ -951,7 +951,21 @@ several lines tall, and the motion is the only thing saying it came out of the
 header you just pressed rather than being dumped on the page. Reported as "too
 snappy", which is the complaint of being handed something before you are looking
 at it. `Reveal` is the only consumer — the Summary, the finished fold, all ~15
-Settings sections and the notification strip; nothing geometric moved.
+Settings sections and the notification strip's LID; nothing geometric moved.
+
+**Read "under your finger" as load-bearing.** The list above said "the
+notification strip", and that component holds TWO `Reveal`s: the lid's body,
+which you pressed, and the pane itself, which arrives because a booking went
+late or because you changed the day. Nobody pressed the second, so it is not a
+disclosure at all — it is `--t-move`'s own definition, "something arriving or
+leaving" — and at 520ms it outlasted the 240ms view slide by more than double,
+so a date change slid sideways and then went on rising: one event read as two.
+`Reveal` therefore takes a **`speed`** naming an entry of the `M` scale, still
+defaulting to `"reveal"`; the strip's pane is the one caller that opts out
+(v17.15.0). A NAME rather than a number, because the CSS timing and the unmount
+hold must come from the same entry — the two halves this version found wrong in
+six places. **When a shared component serves two kinds of change, say which one
+each call site is.**
 
 **The curve was a quint (`0.22,1,0.36,1`) for one version and it was wrong for
 travel.** A quint spends ~90% of the distance in the first third of the time —
@@ -1042,9 +1056,31 @@ around it, which the browser has already drawn.
   remembered index **ties** with whatever shifted up into its place, and the tie
   falls through to arrival order — so it visibly jumps before it collapses. Sort
   departed items half a step above their replacement (`rank - 0.5`).
-- **Not everything that appears needs an animation.** The empty-day state gets
-  none: it appears mostly when you navigate to an empty day, where `SlideView`
-  is already animating the whole view, and a second fade inside it just makes
-  the day change feel slow.
+- **A REPLACEMENT is not a change, and a per-item lifecycle cannot tell them
+  apart.** `useRevealRows` holds a departed id mounted so it can collapse and
+  mounts a newcomer closed so it can ease open — right for an item arriving or
+  resolving while you watch, wrong for a list swapped wholesale, where it shows
+  the OLD list for the length of its collapse and passes through a combined
+  state belonging to neither side. Measured on the notification strip across a
+  date change: half a second of the previous day's notifications, and 70px of
+  height travelled to finish 2px away. Pass a `resetKey` (v17.15.0) so the
+  lifecycle re-seeds as it does on first mount, and animate the box ONCE from
+  the old height to the new. **Retiming cannot fix a replacement animated as a
+  change** — the wobble was the visible half, the stale content was the half
+  that mattered.
+- **A one-shot is not `AutoHeight`.** That atom's observer chases its content
+  every frame and clips the overflow, which is right for a Settings tab and
+  wrong for any box whose contents animate by design — there, every in-place
+  change gets clipped by a box following it. For a height change that happens
+  on a known event, use one WAAPI shot: it runs only then, and with the default
+  `fill: none` it leaves no inline height to get stuck.
+- **Not everything that appears needs an animation** — but check the claim
+  against what shipped. This bullet named the empty-day state as the example
+  until v17.15.0 gave it a `Reveal` in the same version whose docs pass left the
+  sentence standing. The reasoning was that `SlideView` is already animating the
+  whole view on a date change; what it missed is that the prompt also appears
+  and disappears *without* a navigation, when the last booking of a day is
+  cancelled or the first is made, and there it was the only in-flow surface left
+  changing the page height in one frame.
 
 ---
