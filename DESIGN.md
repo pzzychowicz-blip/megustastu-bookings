@@ -402,6 +402,22 @@ explaining why is usually the one to read.
   **All of them now live in ONE `NotificationStrip` pane** whose collapsed height
   is one row however many fire; adding a new in-flow notification means adding a
   section to App's `notifSections` in severity order, never a new pane.
+  **v17.15.0 extends that to modals: an in-form error is a strip SECTION too.**
+  `InlineAlert` (`atoms.jsx`) is the strip's section shape — tinted pane, the
+  mark in the tone colour, the message in the same tone, no border — so a fault
+  looks the same whether it fires on the main screen or inside a form. It is a
+  one-line section with no separate title, on the strip's own precedent that a
+  single live section drops the generic lid rather than adding a redundant
+  sub-header. The three copies it replaced were all the BANNED fourth shape
+  (pale fill + matching border + third-shade text). **Its tone is
+  `--danger-text`, not the strip's `--status-offline`** — measured before
+  copying, because `--status-offline` is `#ff3b30` in both themes while
+  `--danger-bg` inverts: 3.03:1 in light against 4.31:1 in dark, below AA and a
+  42% swing. `--danger-text` gives 7.09:1 / 8.05:1, and `AppBanners`' two danger
+  sections were corrected to match. The pairing is a registered `FILLS` entry
+  now; **register the warn and suggest panes when you add them**, because
+  neither the coverage guard (its prefixes miss `--danger-bg`) nor `check:style`
+  (it sees literals, not token pairings) can see this class of fault.
 
 - **Three label treatments (v17.8.0), and context decides which.** **SOLID**
   where a tag competes inside a busy row (ListView's `manual`/`locked`/`★`/the
@@ -409,7 +425,18 @@ explaining why is usually the one to read.
   border in the semantic hue, text in the same family — where a chip stands
   alone as a count or a disclosure (Customers' visits/no-shows,
   `BookingFormModal`'s Regular/no-show buttons). **TEXT** where the colour
-  carries itself unaided. The banned shape is the fourth one: pale semantic fill
+  carries itself unaided.
+  **v17.15.0: an outline chip's border is DERIVED from its text**, not chosen
+  beside it — `--chip-<role>-border` is `color-mix(in srgb, var(--<role>-text)
+  50%, transparent)`. The border and the text are the same statement at two
+  volumes, so they are one decision. Before this the border came from
+  `--suggest-border` / `--warn-border` and the text from `--success-text` /
+  `--warn-text`, two families never required to agree: in light that is a pale
+  mint ring around dark forest text, in dark the two nearly converge, and the
+  chip read as a different component per theme. The tokens are declared ONCE —
+  each references an ink that already flips, so a dark override would re-create
+  the hand-maintained pair. Build chips with `OutlineChip` (`atoms.jsx`);
+  `as="button"` is the disclosure kind. The banned shape is the fourth one: pale semantic fill
   *plus* a matching border *plus* bold text in a third shade, which encodes one
   signal three times. The outline chip drops the fill and earns its extra border
   pixel; do not "restore" the fill.
@@ -901,6 +928,16 @@ Durations by **what is moving**: `--t-tap` 145ms (a control answering your
 finger), `--t-move` 240ms (something arriving or leaving), `--t-shift` 385ms
 (geometry — heights, widths, positions).
 
+**`--t-reveal` 520ms (v17.15.0) is a DISCLOSURE**, and it is its own token
+rather than a bigger `--t-shift` because the two ask different things of the
+eye. A block repositioning is something you WATCH ARRIVE, and 385ms is already
+generous. A disclosure is something you READ AS IT ARRIVES: the content is new,
+several lines tall, and the motion is the only thing saying it came out of the
+header you just pressed rather than being dumped on the page. Reported as "too
+snappy", which is the complaint of being handed something before you are looking
+at it. `Reveal` is the only consumer — the Summary, the finished fold, all ~15
+Settings sections and the notification strip; nothing geometric moved.
+
 **The curve was a quint (`0.22,1,0.36,1`) for one version and it was wrong for
 travel.** A quint spends ~90% of the distance in the first third of the time —
 right for a press dip, where the eye only registers arrival; wrong for anything
@@ -931,6 +968,32 @@ that can drift.
 **Never `transition: all`** — it animates layout properties too and you cannot
 tell what moves by reading it. Name the properties.
 
+**An exit has two halves, and nothing in the language connects them** (v17.15.0).
+A `*-out` keyframe class has a duration; a JS timeout decides when to unmount.
+When the timeout is shorter the exit is not broken in any way a reviewer can
+see — it plays part way and the node blinks out at whatever opacity it reached.
+It was wrong in six places at once, by five different hand-typed numbers, and
+measured live: closing the booking form ran `mgt-scrim-out` (240ms) and
+unmounted it at `currentTime` 167, so the scrim vanished at 70% of its own fade
+while still plainly visible. **The hold is derived, never typed** — `EXIT_MS`
+and `REVEAL_EXIT_MS` in `lib/constants.js` sit beside the tokens they follow,
+every primitive takes them as its default, and `tests/motion.test.js` fails the
+build if a hold stops outlasting its animation, if `M.dur` drifts from
+index.html, or if a component passes a literal `outMs` again. Exactly ONE site
+had it right beforehand and said so in a comment nobody had propagated — the
+same shape as v17.14.0's five hand-written modal lists.
+
+**`useFlip` measures relative to its CONTAINER, not the viewport** (v17.15.0).
+It re-measures only when its deps change, so anything that moves the whole
+container without changing them — the notification strip appearing — leaves its
+baseline holding pre-shift coordinates, and the next unrelated edit animates
+every element by that stale offset. Measured on the timeline: collapse the strip
+(blocks move 105px, zero FLIP calls), add a booking, and all five blocks play
+`translateY(-46px) → 0` with four of them still on the same table. Container-
+relative is also what the hook MEANS: it animates a row change, which is
+movement inside the container; a whole-container move is the page reflowing
+around it, which the browser has already drawn.
+
 ### Adding motion to something that has none
 
 - **Fading in to an element's own opacity** is `.mgt-appear`, not
@@ -940,6 +1003,12 @@ tell what moves by reading it. Name the properties.
   animated properties forever, which on a `.mgt-hover-scale` element means the
   lift never applies again. For the same reason it animates opacity only:
   nothing may own `transform`, because the hover and press rules do.
+- **Fix the exit at the same time as the entrance, always.** A one-way
+  transition is the app's most common motion defect and the least visible one:
+  it looks finished. Before adding an enter animation, decide what the exit is —
+  and if the answer is "the node just unmounts", that is the bug, not the
+  design. The three surfaces v17.15.0 left one-way are recorded in `ROADMAP.md`
+  with the reason (each needs two copies of a stateful view mounted at once).
 - **An element that must animate OUT needs its content held.** `Reveal` already
   caches its last truthy children for exactly this — pass `null` and it fades
   out what it was showing. Corollary that bit once: it only caches **truthy**
