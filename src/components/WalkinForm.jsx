@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC, RIM_SOLID } from "../lib/constants";
+import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
@@ -44,7 +44,7 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   comboCapBest, nowTime
 } from "../lib/booking-logic";
-import { Overlay, ModalTitle, Section, Fld, AvailBanner, mkInp, mkArea, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, ModalTitle, Section, Fld, AvailBanner, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
 import { WaitIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
@@ -336,16 +336,12 @@ export function WalkinForm({
           onClick={onSave}
           disabled={!wOk}
           className="mgt-hover-scale"
-          style={{
-            background: wOk ? "var(--app-success-solid)" : "var(--btn-disabled)",
-            border: RIM_SOLID,
-            borderRadius: R.pill, padding: "10px 18px",
+          style={mkSolidBtn(wOk ? "var(--app-success-solid)" : "var(--btn-disabled)", {
             cursor: wOk ? "pointer" : "not-allowed",
-            fontSize: T.lead, fontWeight: FW.semi, minHeight: 44,
             // v17.14.0: muted ink while disabled — see index.html.
             color: wOk ? "var(--text-on-accent)" : "var(--btn-disabled-ink)",
             boxShadow: wOk ? "var(--shadow-btn-success)" : "none"
-          }}
+          })}
         >
           Seat
         </button>

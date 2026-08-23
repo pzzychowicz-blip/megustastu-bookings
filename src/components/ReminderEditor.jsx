@@ -18,9 +18,9 @@
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original.
 
-import { S, BTN, R, T, FW, IC, RIM_SOLID } from "../lib/constants";
+import { S, BTN, R, T, FW, H, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
-import { Fld, Toggle, mkBtn, mkInp, mkArea, useModalPresence, AutoHeight } from "./atoms";
+import { Fld, ModalTitle, Toggle, mkBtn, mkSolidBtn, mkInp, mkArea, useModalPresence, AutoHeight } from "./atoms";
 import { CloseIcon } from "./Icons";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
@@ -112,18 +112,17 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         {/* v15.8.0: AutoHeight eases the body when Recurrence flips once↔weekly. */}
         <AutoHeight>
         {/* v14 p7: header matches New booking / Edit booking pattern —
-            centered wrapper + pill-shaped inner with blue background. */}
-        <div style={{ textAlign: "center", marginBottom: 16 }}>
-          <div style={{
-            fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
-            display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-            background: "var(--app-new)",
-            border: RIM_SOLID,
-            boxShadow: "var(--shadow-btn)"
-          }}>
-            {isNew ? "New reminder" : "Edit reminder"}
-          </div>
-        </div>
+            centered wrapper + pill-shaped inner with blue background.
+            v17.15.0: it IS that pattern now. `ModalTitle` was written in v17.9.1
+            to absorb "SEVEN hand-written copies" of this pill, and this was an
+            eighth the sweep missed — it renders outside `Overlay`, so a grep of
+            Overlay call sites could not see it. Keeps `--app-new`: the pill
+            colour rule is that a create/act surface wears its action's own
+            colour, and this is the reminder equivalent of + New. It also gains
+            an <h2> and the title attribute, which a <div> never had. */}
+        <ModalTitle background="var(--app-new)" marginBottom={16}>
+          {isNew ? "New reminder" : "Edit reminder"}
+        </ModalTitle>
 
         <Fld label="Text" style={{ marginBottom: 12 }}>{(fid) => (
           <textarea
@@ -255,7 +254,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           <button
             onClick={onCancel}
             className="mgt-hover-scale"
-            style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })}
+            style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: "var(--app-btn-slate)" })}
           >
             Back
           </button>
@@ -263,17 +262,16 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             onClick={() => { if (!err) onSave(); }}
             disabled={!!err}
             className="mgt-hover-scale"
-            style={{
-              background: err ? "var(--btn-disabled)" : "var(--app-success-solid)",
-              border: RIM_SOLID,
-              borderRadius: R.pill,
-              padding: "10px 18px",
+            // v17.15.0: was minHeight 40, the only modal-footer decision button
+            // in the app below the 44 floor (H.touch is "decision surfaces only,
+            // where a mis-tap costs something: modal footers"). Both buttons in
+            // this footer move up together, so the row stays one height.
+            style={mkSolidBtn(err ? "var(--btn-disabled)" : "var(--app-success-solid)", {
               cursor: err ? "not-allowed" : "pointer",
-              fontSize: T.lead, fontWeight: FW.semi, minHeight: 40,
               // v17.14.0: muted ink while disabled — see index.html.
               color: err ? "var(--btn-disabled-ink)" : "var(--text-on-accent)",
               boxShadow: err ? "none" : "var(--shadow-btn-success)"
-            }}
+            })}
           >
             Save
           </button>

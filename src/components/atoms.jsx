@@ -123,6 +123,44 @@ export function mkBtn(extra) {
   };
 }
 
+// ── mkSolidBtn — the SOLID decision button (v17.15.0) ────────────────────────
+// `mkBtn`'s counterpart for a button that commits or destroys something: Save
+// booking, Seat, Block, Delete, Discard, Cancel booking, No show, Confirm. It
+// differs from `mkBtn` in four ways, and each one is a decision rather than
+// drift — `RIM_SOLID` instead of the glass rim (the fill underneath is a
+// saturated theme-invariant solid, so a translucent white rim reads as a smear
+// on it), `--shadow-btn-solid` to match, `T.lead` and `H.touch` because 44 is
+// the floor for a control where a mis-tap costs something (v17.8.0's sizing
+// rule), and `background` REQUIRED with no default, for `ModalTitle`'s reason:
+// a default would be a silent thirteenth answer to "what colour is this
+// action".
+//
+// It existed as twelve hand-written copies before this. They agreed, which is
+// exactly the condition that produces the next disagreement — and one had
+// already appeared: the "No show" in the Cancel-booking overlay was
+// `--app-warn-solid` (#9a3412) while the same button in ListView, LateBanner
+// and QuickStatusPopup is `--btn-orange` (rgba(210,91,28,.8)). Two oranges for
+// one action, told apart only by which surface you happened to be looking at.
+//
+// A disabled button passes its own fill, ink and shadow through `extra`; those
+// are three coupled values (see index.html on --btn-disabled-ink) and belong at
+// the call site that knows the condition, not in a boolean here.
+export function mkSolidBtn(background, extra) {
+  return {
+    background,
+    border: RIM_SOLID,
+    borderRadius: R.pill,
+    padding: "10px 18px",
+    cursor: "pointer",
+    fontSize: T.lead,
+    fontWeight: FW.semi,
+    color: "var(--text-on-accent)",
+    minHeight: H.touch,
+    boxShadow: "var(--shadow-btn-solid)",
+    ...(extra || {})
+  };
+}
+
 // ── Modal overlay (mobile = full-screen sheet, desktop = centered card) ──────
 // Optional `footer` (v14.4.1): when provided, the action buttons render PINNED
 // to the modal bottom while `children` scroll above them — so Save/Cancel stay
