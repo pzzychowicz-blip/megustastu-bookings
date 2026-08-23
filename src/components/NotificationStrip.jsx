@@ -145,18 +145,27 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null, s
     if (swapRef.current !== swapKey) {
       swapRef.current = swapKey;
       const from = lastH.current;
-      if (body && body.animate) {
-        if (from > 0 && h > 0 && Math.abs(from - h) > 1) {
-          body.animate([{ height: from + "px" }, { height: h + "px" }], SWAP);
-        }
-        if (text !== lastText.current) {
-          // Opacity on the two CONTENT boxes, never on the pane: the pane owns
-          // the severity tint and its border, and fading those from zero pops
-          // the strip's whole surface against the page. The tint itself already
-          // cross-fades on --t-move, so it is on this clock too.
-          body.animate([{ opacity: 0 }, { opacity: 1 }], SWAP);
-          if (lidRef.current && lidRef.current.animate) lidRef.current.animate([{ opacity: 0 }, { opacity: 1 }], SWAP);
-        }
+      // Opacity on the two CONTENT boxes, never on the pane: the pane owns the
+      // severity tint and its border, and fading those from zero pops the whole
+      // surface against the page. The tint already cross-fades on --t-move, so
+      // it is on this clock too.
+      //
+      // The lid is faded INDEPENDENTLY of the body, which the first version got
+      // wrong by nesting both inside one `if (body)`. A COLLAPSED strip has no
+      // body — `Reveal` has unmounted it — and a collapsed strip is still a
+      // visible strip: it is one row carrying the worst section's title and the
+      // per-category tally, all of which change with the day. Measured in that
+      // state: "Running late 1" became "Tables could be reshuffled 1" with zero
+      // animations, a hard cut in the one part of the strip that was on screen.
+      if (text !== lastText.current) {
+        if (body && body.animate) body.animate([{ opacity: 0 }, { opacity: 1 }], SWAP);
+        if (lidRef.current && lidRef.current.animate) lidRef.current.animate([{ opacity: 0 }, { opacity: 1 }], SWAP);
+      }
+      // The height is the body's alone, and only when there IS one to measure
+      // against: `from` is 0 both when the strip was collapsed and when it was
+      // not mounted at all, and neither is a height to ease from.
+      if (body && body.animate && from > 0 && h > 0 && Math.abs(from - h) > 1) {
+        body.animate([{ height: from + "px" }, { height: h + "px" }], SWAP);
       }
     }
     lastH.current = h;
