@@ -706,6 +706,30 @@ export var M={
   easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"   /* @motion */
 };
 
+// ── Derived exit delays (v17.15.0) ────────────────────────────────────────────
+// How long a LEAVING node must stay mounted for its exit to actually finish.
+// Both are `duration + one frame of slack`, and both are DERIVED rather than
+// typed, because every hand-typed copy of this number in the app was wrong:
+//
+//   EXIT_MS         every `*-out` keyframe class runs for --t-move. `Presence`
+//                   used 200, its six slide-out call sites 190, `Toast` 210 and
+//                   `ModalPresence` 200 — so every modal, toast and slide-out
+//                   button in the app unmounted mid-animation. Measured before
+//                   the fix: `mgt-scrim-out` (240ms) unmounted at currentTime
+//                   167, i.e. the close was cut off at 70% and the scrim
+//                   vanished while still visible.
+//   REVEAL_EXIT_MS  a `Reveal` collapsing takes --t-reveal. `Reveal`'s own
+//                   unmount timeout and `useRevealRows`' PRUNE_MS (350, chosen
+//                   as "> Reveal's ~300ms collapse") both encoded the OLD 385ms
+//                   duration as a literal, so raising --t-reveal to 520 would
+//                   have silently truncated every disclosure and every departing
+//                   banner row — the fix for "too snappy" breaking the exits.
+//
+// They live here, beside the tokens they follow, so there is one place to look
+// and nothing to keep in step by hand except M.dur itself.
+export var EXIT_MS = M.dur.move + 20;
+export var REVEAL_EXIT_MS = M.dur.reveal + 20;
+
 // v17.10.0: `guestId` is the phone-less customer identity carried by the draft
 // (see customers.js → identityKey); `guestSeed` is the id of the booking that
 // still needs the same stamp written BACK to it, and is draft-only — doSave

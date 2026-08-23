@@ -666,7 +666,7 @@ export function BookingFormModal({
             style={{background:canSave?S.accent:"var(--btn-disabled)",border:RIM_SOLID,borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:canSave?"var(--text-on-accent)":"var(--btn-disabled-ink)",minHeight:44,boxShadow:canSave?"var(--shadow-btn-accent)":"none"}}>Save booking</button>
         );
       })()}{origPendingBooking?(
-        <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" outMs={190} tag="span">
+        <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" tag="span">
           <button
             disabled={!form.date}
             onClick={onSaveConfirm}

@@ -12,7 +12,7 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, RIM_SOLID } from "../lib/constants";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, RIM_SOLID, EXIT_MS, REVEAL_EXIT_MS } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 import { ChevronRightIcon } from "./Icons";
 
@@ -612,11 +612,11 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // UNMOUNT_MS trails the transition slightly so the last frame is painted before
 // the node goes; SETTLE_MS is when it is safe to drop `overflow:hidden` and let
 // a child's hover lift out of the box, which is the same moment.
-// M.dur.reveal must stay equal to --t-reveal by hand — a timeout cannot read a
-// CSS var (the M.dur/M.easeOut constraint).
-const REVEAL_MS = M.dur.reveal;
-const UNMOUNT_MS = REVEAL_MS + 20;
-const SETTLE_MS = REVEAL_MS + 20;
+// `REVEAL_EXIT_MS` lives in lib/constants.js beside the token it follows, so
+// `useRevealRows` — which must outlast this same collapse — reads the same
+// number instead of keeping its own copy (it kept 350, tuned for the old 385ms).
+const UNMOUNT_MS = REVEAL_EXIT_MS;
+const SETTLE_MS = REVEAL_EXIT_MS;
 
 export function Reveal({ show, children, style, horizontal = false }) {
   const last = useRef(null);
@@ -1160,6 +1160,10 @@ export function useFlip(deps) {
 //   Presence({ show, inClass, outClass, outMs, children, style, tag })
 // `usePresenceLifecycle` is the bare state machine, reused by ModalPresence
 // (which provides a context instead of rendering a wrapper element).
+// v17.15.0: `EXIT_MS` (lib/constants.js) is how long a leaving node stays
+// mounted so its `*-out` keyframe can finish. It is the default for all three
+// primitives here — see the note at its definition for what each of the four
+// hand-typed numbers it replaces was getting wrong.
 function usePresenceLifecycle(show, outMs) {
   const [render, setRender] = useState(show === true);
   const [leaving, setLeaving] = useState(false);
@@ -1174,7 +1178,7 @@ function usePresenceLifecycle(show, outMs) {
   return [render, leaving];
 }
 
-export function Presence({ show, inClass, outClass, outMs = 200, children, style, tag = "div" }) {
+export function Presence({ show, inClass, outClass, outMs = EXIT_MS, children, style, tag = "div" }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [render, leaving] = usePresenceLifecycle(show, outMs);
@@ -1188,7 +1192,7 @@ export function Presence({ show, inClass, outClass, outMs = 200, children, style
 // toasts overlap in the same grid cell (crossfade in place, never stack).
 export function Toast({ show, children, style }) {
   return (
-    <Presence show={show} inClass="mgt-toast-in" outClass="mgt-toast-out" outMs={210} style={style}>
+    <Presence show={show} inClass="mgt-toast-in" outClass="mgt-toast-out" style={style}>
       {children}
     </Presence>
   );
@@ -1208,7 +1212,7 @@ export const PresenceContext = createContext({ leaving: false });
 // so it takes the specific name, and it now pairs with its own provider.
 export function useModalPresence() { return useContext(PresenceContext); }
 
-export function ModalPresence({ show, children, outMs = 200 }) {
+export function ModalPresence({ show, children, outMs = EXIT_MS }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [render, leaving] = usePresenceLifecycle(show, outMs);

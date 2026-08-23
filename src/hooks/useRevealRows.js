@@ -21,8 +21,15 @@
 // (the app-wide set()-in-updater gotcha applies to any side-effect-in-updater).
 
 import { useState, useRef, useEffect } from "react";
+import { REVEAL_EXIT_MS } from "../lib/constants";
 
-const PRUNE_MS = 350; // > Reveal's ~300ms collapse, so a departed row finishes easing out
+// v17.15.0: derived, not typed. This was 350, chosen as "> Reveal's ~300ms
+// collapse" — a literal encoding of the OLD --t-shift. `Reveal` now takes
+// --t-reveal (520ms) and holds a leaving node for REVEAL_EXIT_MS, so 350 would
+// have unmounted every departing banner row at ~two thirds of its collapse. A
+// row must outlive the Reveal inside it, so this IS that number: same source,
+// no second copy to keep in step.
+const PRUNE_MS = REVEAL_EXIT_MS;
 
 export function useRevealRows(ids) {
   const [renderIds, setRenderIds] = useState(function () { return ids.slice(); });

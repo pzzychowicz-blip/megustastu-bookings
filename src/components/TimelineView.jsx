@@ -1627,7 +1627,7 @@ export const TimelineView = memo(function TimelineView({
         {"Optimiser: " + (autoOptimizer ? "ON" : "OFF")}
       </button>
       {/* v15.8.0: slides in L→R when Optimizer is toggled OFF, slides out →L when ON. */}
-      <Presence show={!autoOptimizer} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span">
+      <Presence show={!autoOptimizer} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
         <button
           onClick={onReshuffle}
           className="mgt-hover-scale"
