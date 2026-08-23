@@ -1189,8 +1189,12 @@ export function AutoHeight({ children, watch, style }) {
 
 // ── SlideView — slide-in wrapper that only clips while animating (v15.8.0) ─────
 // Wraps the main view (timeline/list). The parent keys it (`key={slideKey}`) so a
-// nav/view change remounts it and replays the slide (`dir` = mgt-view-in-left /
-// -right). `overflow:hidden` ONLY while the slide runs (so the 28px translateX
+// nav/view change remounts it and replays the entrance. `dir` is the ENTRANCE
+// CLASS, not a direction: the T/L/P switch passes mgt-view-in-left / -right and
+// travels 28px sideways, and since v17.15.0 a DATE change passes mgt-view-fade
+// and travels nowhere, because a date change also moves the notification strip
+// and two axes at once is a diagonal (see the keyframe's note in index.html).
+// `overflow:hidden` ONLY while the entrance runs (so the 28px translateX
 // doesn't cause a transient scrollbar), then `visible` so card hover-lifts aren't
 // clipped at rest (the v15.8.0-cont.3 regression fix).
 // `fill` (v17.5.0): in the fixed-shell layout (Settings → "Lock navigation",

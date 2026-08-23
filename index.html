@@ -1280,6 +1280,23 @@
       @keyframes mgt-view-in-left  { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
       .mgt-view-in-right { animation: mgt-view-in-right var(--t-move) var(--ease-out) both; }
       .mgt-view-in-left  { animation: mgt-view-in-left var(--t-move) var(--ease-out) both; }
+      /* v17.15.0 — the DATE change's entrance, and it deliberately has no
+         transform. The two above move the view 28px sideways; the notification
+         strip appearing, growing or leaving moves it vertically, by 98, 100, 51
+         and 151px on the four steps of 19 -> 26 August that change it. Run at
+         once the two compose into a diagonal, and the two upward cases read as
+         the grid heading for a top corner — reported twice.
+         Retiming cannot fix it: co-timing them, which is what v17.15.0 did
+         first, is exactly what turns a wobble into one clean diagonal. Only
+         separating the AXES fixes it, so a date change now owns the vertical
+         one outright and its sole movement is the strip's own reveal pushing
+         the grid. The view switch keeps the horizontal slide, and keeps it
+         honestly: the strip sits outside the view, so switching T/L/P never
+         moves anything vertically.
+         --t-move, not the --t-shift `.mgt-fade-in` takes, because this has to
+         land with the push it is replacing the slide for. */
+      @keyframes mgt-view-fade { from { opacity: 0; } to { opacity: 1; } }
+      .mgt-view-fade { animation: mgt-view-fade var(--t-move) var(--ease-out) both; }
       /* Settings tab-content crossfade on switch. --t-shift, not --t-move: it
          rides inside an AutoHeight that is resizing the modal card over
          --t-shift at the same moment, and the two are one event. At --t-move

@@ -728,8 +728,18 @@ function BookingApp({uid}){
   // right"); mgt-view-in-right = enters from right (→ "right to left").
   const [slide, setSlide] = useState({ k: 0, dir: "mgt-view-in-left" });
   function bumpSlide(dir){ setSlide(function(s){ return { k: s.k + 1, dir: dir }; }); }
-  // Navigate to a date with a slide whose direction matches forward/back.
-  function goToDate(next){ if(next!==viewDate){ bumpSlide(next > viewDate ? "mgt-view-in-left" : "mgt-view-in-right"); } setViewDate(next); }
+  // v17.15.0: a DATE change does not slide sideways — it fades, and the only
+  // thing that moves is the notification strip's own reveal pushing the grid
+  // down or up. A date change is the one navigation that also changes the
+  // strip, so it is the one that cannot afford a horizontal component: the two
+  // compose into a diagonal, and on the steps where the strip LEAVES the grid
+  // rises ~150px while sliding sideways, which reads as it heading for a top
+  // corner. See the keyframe's note in index.html for why retiming was not the
+  // answer. Every date path goes through here — the ‹ › buttons, the date
+  // input, Today, the D and arrow keys, the search jump and the week popover —
+  // so this is the whole of it. `bumpSlide` keeps its directional classes for
+  // the T/L/P switch, which never moves the strip.
+  function goToDate(next){ if(next!==viewDate){ bumpSlide("mgt-view-fade"); } setViewDate(next); }
   // v14.4.0: List-view keyboard focus — the booking the A/E/D/S/C/Delete
   // shortcuts act on. ↑/↓ move it; click a card to set it. Null = nothing focused.
   const [selectedListId, setSelectedListId] = useState(null);
