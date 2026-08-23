@@ -263,8 +263,11 @@ export const ListView = memo(function ListView({
   // into the closed fold. A day whose bookings are all completed or cancelled
   // (ROADMAP already records that day as reachable) did it with no keystrokes.
   //
-  // The early return above guarantees `day` is non-empty; `reachable` can still
-  // be empty, when every booking is finished and the fold is shut.
+  // `reachable` can be empty two ways: every booking finished with the fold
+  // shut, and — since v17.15.0 removed the early return that used to guarantee
+  // otherwise — a genuinely empty day, which now renders through here. Both
+  // land on `rovingId === null`, which is correct: there is no card to give the
+  // tab stop to (/code-review, on a comment that outlived its guarantee).
   const reachable = showFinished ? day : active;
   const rovingId = (selectedId && reachable.some(function (x) { return x.id === selectedId; }))
     ? selectedId

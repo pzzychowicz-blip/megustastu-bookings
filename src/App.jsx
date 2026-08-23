@@ -724,8 +724,11 @@ function BookingApp({uid}){
   const [view, setView] = useState("timeline");
   // v15.8.0: main-view slide. `slide.k` keys the SlideView wrapper (a bump remounts
   // it → replays the slide); `slide.dir` picks direction. Set by view-toggle + date
-  // nav (‹/›/date-input/Today). mgt-view-in-left = enters from left (→ "left to
-  // right"); mgt-view-in-right = enters from right (→ "right to left").
+  // nav. The two directional classes are the VIEW toggle's: mgt-view-in-left =
+  // enters from left (→ "left to right"), mgt-view-in-right = enters from right
+  // (→ "right to left"). Date nav has passed mgt-view-fade since v17.15.0 — see
+  // `goToDate` below for why it gave up the horizontal axis (/code-review: this
+  // comment still named date nav as a source of the directional classes).
   const [slide, setSlide] = useState({ k: 0, dir: "mgt-view-in-left" });
   function bumpSlide(dir){ setSlide(function(s){ return { k: s.k + 1, dir: dir }; }); }
   // v17.15.0: a DATE change does not slide sideways — it fades, and the only

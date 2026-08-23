@@ -685,9 +685,9 @@ export var M={
   shift:"var(--t-shift) var(--ease-out)",
   // v17.15.0: a DISCLOSURE, which is slower than geometry on purpose — see the
   // token's own note in index.html. `Reveal` is the only consumer, and its two
-  // internal timeouts are derived from REVEAL_MS below, which must stay in step
-  // with --t-reveal by hand (a JS timeout cannot read a CSS var, the same
-  // constraint as M.dur/M.easeOut).
+  // internal timeouts come from `exitHold()` below, which reads `M.dur.reveal`
+  // — the number that must stay in step with --t-reveal by hand, since a JS
+  // timeout cannot read a CSS var (the same constraint as M.dur/M.easeOut).
   reveal:"var(--t-reveal) var(--ease-out)",
   status:"var(--t-status) var(--ease-out)",
   exit:"var(--t-move) var(--ease-in)",
@@ -707,9 +707,12 @@ export var M={
 };
 
 // ── Derived exit delays (v17.15.0) ────────────────────────────────────────────
-// How long a LEAVING node must stay mounted for its exit to actually finish.
-// Both are `duration + one frame of slack`, and both are DERIVED rather than
-// typed, because every hand-typed copy of this number in the app was wrong:
+// How long a LEAVING node must stay mounted for its exit to actually finish:
+// its duration plus one frame of slack, as ARITHMETIC rather than as finished
+// numbers, because `Reveal` takes a `speed` and has to derive its own hold from
+// whichever entry of the scale that names. `EXIT_MS` and `REVEAL_EXIT_MS` are
+// the two named applications of it, and they are derived rather than typed
+// because every hand-typed copy of this number in the app was wrong:
 //
 //   EXIT_MS         every `*-out` keyframe class runs for --t-move. `Presence`
 //                   used 200, its six slide-out call sites 190, `Toast` 210 and
@@ -727,11 +730,12 @@ export var M={
 //
 // They live here, beside the tokens they follow, so there is one place to look
 // and nothing to keep in step by hand except M.dur itself.
-// v17.15.0: ONE frame of slack, stated once. `Reveal` takes a `speed` and must
-// derive its own hold from whichever entry that names, so the arithmetic has to
-// be a function rather than two finished numbers — and the two named constants
-// below become what they always were, its two named applications.
-export var EXIT_PAD = 20;
+//
+// EXIT_PAD is deliberately NOT exported (/code-review): nothing outside this
+// file has a use for it, and a caller able to reach it is a caller able to
+// hand-compute `M.dur.x + EXIT_PAD` — re-creating the exact split between a
+// duration and its hold that `exitHold` exists to make impossible.
+var EXIT_PAD = 20;
 export function exitHold(speed) { return M.dur[speed] + EXIT_PAD; }
 export var EXIT_MS = exitHold("move");
 export var REVEAL_EXIT_MS = exitHold("reveal");
