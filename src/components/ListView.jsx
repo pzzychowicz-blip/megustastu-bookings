@@ -34,7 +34,7 @@ import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC } from "../lib
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins, describeBooking } from "../lib/booking-logic";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
-import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, useFlip } from "./atoms";
+import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, Reveal, useFlip } from "./atoms";
 import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon } from "./Icons";
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
@@ -236,16 +236,16 @@ export const ListView = memo(function ListView({
   // A cancelled booking is not a booked table, so `isEmpty` takes the other two
   // views' reading.
   //
-  // But it returns EARLY only when there is genuinely nothing to draw. A
-  // cancelled-only day still has cards, and replacing the whole body with the
-  // prompt would make them unreachable — no reopen, no undo, no record of who
-  // cancelled — which trades one blank screen for a worse one. So the prompt
-  // goes ABOVE the fold instead, which is exactly what Timeline and Plan do
-  // with their canvases: the day is empty AND there is still something worth
-  // showing. (Measured live: without this the fold does not render at all.)
-  if (isEmpty && day.length === 0) {
-    return <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} />;
-  }
+  // It used to return EARLY when there was genuinely nothing to draw, so that a
+  // truly empty day rendered the prompt AS the whole body. v17.15.0 removed that
+  // branch, because it made the prompt impossible to animate OUT: the branch is
+  // taken only while the day IS empty, so the moment a booking lands the whole
+  // subtree is replaced in one frame and there is nothing left to collapse. The
+  // normal return already produces the identical screen — `active` is empty, the
+  // list ROLE is conditional so it announces nothing, and the finished fold is
+  // gated on `finished.length` — so the one mount below covers both cases and
+  // can ease in and out. It also keeps `flipRef`'s container mounted on an empty
+  // day, which the note beside it says is required and the early return broke.
 
   // v17.12.0: exactly ONE card is in the tab order at a time (the roving
   // tab-stop pattern), because 10 bookings x ~6 controls each would otherwise
@@ -263,8 +263,11 @@ export const ListView = memo(function ListView({
   // into the closed fold. A day whose bookings are all completed or cancelled
   // (ROADMAP already records that day as reachable) did it with no keystrokes.
   //
-  // The early return above guarantees `day` is non-empty; `reachable` can still
-  // be empty, when every booking is finished and the fold is shut.
+  // `reachable` can be empty two ways: every booking finished with the fold
+  // shut, and — since v17.15.0 removed the early return that used to guarantee
+  // otherwise — a genuinely empty day, which now renders through here. Both
+  // land on `rovingId === null`, which is correct: there is no card to give the
+  // tab stop to (/code-review, on a comment that outlived its guarantee).
   const reachable = showFinished ? day : active;
   const rovingId = (selectedId && reachable.some(function (x) { return x.id === selectedId; }))
     ? selectedId
@@ -604,7 +607,11 @@ export const ListView = memo(function ListView({
       {/* v17.14.0: a cancelled-only day — empty by the shared reading, but the
           cards below are still worth reaching. See the note at the early
           return above. */}
-      {isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}
+      {/* v17.15.0: the prompt eases in and out instead of snapping, on the same
+          `Reveal` the notification strip uses. The `null` on the false branch is
+          load-bearing — `Reveal` caches only TRUTHY children, and that cache is
+          what it collapses on the way out. */}
+      <Reveal show={isEmpty}>{isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}</Reveal>
       {/* v17.12.0: a real list, so the cards are list items and the count is
           announced. Two lists rather than one, because the finished cards live
           inside the Collapsible and a `list` must contain its items directly.

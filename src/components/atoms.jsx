@@ -12,9 +12,9 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, RIM_SOLID } from "../lib/constants";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
-import { ChevronRightIcon } from "./Icons";
+import { AlertIcon, ChevronRightIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
 // Return inline-style objects. Used wherever an `<input>` or `<button>` needs
@@ -119,6 +119,44 @@ export function mkBtn(extra) {
     minHeight: H.control,
     boxShadow: "var(--shadow-btn)",
     letterSpacing: "0.01em",
+    ...(extra || {})
+  };
+}
+
+// ── mkSolidBtn — the SOLID decision button (v17.15.0) ────────────────────────
+// `mkBtn`'s counterpart for a button that commits or destroys something: Save
+// booking, Seat, Block, Delete, Discard, Cancel booking, No show, Confirm. It
+// differs from `mkBtn` in four ways, and each one is a decision rather than
+// drift — `RIM_SOLID` instead of the glass rim (the fill underneath is a
+// saturated theme-invariant solid, so a translucent white rim reads as a smear
+// on it), `--shadow-btn-solid` to match, `T.lead` and `H.touch` because 44 is
+// the floor for a control where a mis-tap costs something (v17.8.0's sizing
+// rule), and `background` REQUIRED with no default, for `ModalTitle`'s reason:
+// a default would be a silent thirteenth answer to "what colour is this
+// action".
+//
+// It existed as twelve hand-written copies before this. They agreed, which is
+// exactly the condition that produces the next disagreement — and one had
+// already appeared: the "No show" in the Cancel-booking overlay was
+// `--app-warn-solid` (#9a3412) while the same button in ListView, LateBanner
+// and QuickStatusPopup is `--btn-orange` (rgba(210,91,28,.8)). Two oranges for
+// one action, told apart only by which surface you happened to be looking at.
+//
+// A disabled button passes its own fill, ink and shadow through `extra`; those
+// are three coupled values (see index.html on --btn-disabled-ink) and belong at
+// the call site that knows the condition, not in a boolean here.
+export function mkSolidBtn(background, extra) {
+  return {
+    background,
+    border: RIM_SOLID,
+    borderRadius: R.pill,
+    padding: "10px 18px",
+    cursor: "pointer",
+    fontSize: T.lead,
+    fontWeight: FW.semi,
+    color: "var(--text-on-accent)",
+    minHeight: H.touch,
+    boxShadow: "var(--shadow-btn-solid)",
     ...(extra || {})
   };
 }
@@ -384,6 +422,71 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
   );
 }
 
+// ── InlineAlert — a notification-strip section, inside a modal (v17.15.0) ────
+// The message a form shows when it refuses to save: "Text is required.", "No
+// free table for that time", the walk-in capacity error. There were three
+// copies, in ReminderEditor, BookingFormModal and WalkinForm, differing only in
+// padding (8px 12px vs 10px 14px) and margin (12 vs 14) — and all three wore the
+// one label shape DESIGN.md bans outright: a pale semantic fill PLUS a border in
+// the matching hue PLUS bold text in a third shade of it, which encodes one
+// signal three times and is the stock badge every framework ships.
+//
+// So it takes the shape the app already uses to report a fault: a notification
+// strip section. Tinted pane, the section's mark in the tone colour, the message
+// in the same tone. A fault now looks the same whether it fires on the main
+// screen or inside a modal, which is the point — `AppBanners`' "Couldn't save"
+// and a form's "Text is required" are the same kind of statement.
+//
+// It is a one-line section, with no separate title, on the strip's OWN
+// precedent: with exactly one section live the strip drops the generic lid and
+// takes that section's title rather than rendering a redundant sub-header. Here
+// the message IS the section.
+//
+// ── Why the tone is --danger-text and not --status-offline ───────────────────
+// The strip's danger sections use `tone: --status-offline`, and copying that
+// verbatim was the obvious move. Measured first, per the rule that a colour
+// token may only sit on a surface that flips with it — and --status-offline is
+// #ff3b30 in BOTH themes while --danger-bg inverts:
+//
+//   --status-offline on --danger-bg   light 3.03:1   dark 4.31:1
+//   --danger-text    on --danger-bg   light 7.09:1   dark 8.05:1
+//
+// 3.03:1 is below AA for body text, and a 42% swing between themes is exactly
+// the light/dark inconsistency this version was asked to remove. --danger-text
+// is the token that flips with the fill it sits on, so it is the one that can
+// be trusted on it. `AppBanners` was corrected to match in the same commit —
+// its two danger sections had been shipping the 3.03:1.
+export const ALERT_DANGER = { tone: "var(--danger-text)", tint: "var(--danger-bg)" };
+
+export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint, icon: Icon = AlertIcon, id, style, children }) {
+  return (
+    <div id={id} style={{
+      // `alignItems: center` and the mark-to-text gap both mirror the strip's
+      // own section header. The gap there is a module const of 9 that this file
+      // cannot import without a cycle (NotificationStrip imports from atoms), so
+      // it takes the nearest step on the shared scale — SP snaps DOWNWARD, and a
+      // pixel between a modal alert and a strip section is not something anyone
+      // can see, whereas an off-scale literal here is something check:style can.
+      display: "flex", alignItems: "center", gap: SP.base,
+      padding: "10px 14px", borderRadius: R.card,
+      background: tint,
+      ...(style || {})
+    }}>
+      {/* `icon={null}` renders the message alone. The explicit guard is also
+          what makes the reference visible to eslint here: this config does not
+          count a JSX element reference as a use, so a component read ONLY as
+          `<Icon />` reports as unused (`SectionMark` in NotificationStrip
+          passes only because its own `if (!Icon)` happens to read it). */}
+      {Icon ? (
+        <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", color: tone, flexShrink: 0 }}>
+          <Icon size={IC.control} />
+        </span>
+      ) : null}
+      <span style={{ fontSize: T.body, fontWeight: FW.bold, color: tone, flex: 1, minWidth: 0 }}>{children}</span>
+    </div>
+  );
+}
+
 // ── Form field (label + child control) ───────────────────────────────────────
 // v17.10.2: the label is ASSOCIATED with its control. Before this, Fld rendered
 // a real <label> and then rendered the control as its SIBLING — which names
@@ -602,7 +705,40 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // the sibling booking-name span slides in lockstep with the chip instead of
 // snapping when the chip appears/disappears. Default `false` = the original
 // vertical behaviour, byte-for-byte for every existing caller.
-export function Reveal({ show, children, style, horizontal = false }) {
+// v17.15.0: both timeouts are DERIVED from the duration token, not typed. They
+// were 320 and 300 against a 385ms transition, which happened to work; against
+// the 520ms `--t-reveal` the unmount would have fired 220ms early and cut the
+// collapse off halfway — the exit silently stops working, which is precisely
+// the one-way-transition defect this version exists to remove. So the numbers
+// follow the token, and the token is the only thing to change.
+//
+// The hold trails the transition slightly so the last frame is painted before
+// the node goes, and it is also when it is safe to drop `overflow:hidden` and
+// let a child's hover lift out of the box — the same moment, hence one number.
+// `exitHold` lives in lib/constants.js beside the tokens it follows, so
+// `useRevealRows` — which must outlast this same collapse — reads the same
+// arithmetic instead of keeping its own copy (it kept 350, tuned for the old
+// 385ms).
+//
+// ── `speed` (v17.15.0) ───────────────────────────────────────────────────────
+// Which entry of the `M` scale this Reveal runs on. It exists because the
+// --t-reveal token's own definition is "a DISCLOSURE opening or closing UNDER
+// YOUR FINGER", and its list of examples ends with "the notification strip" —
+// which contains TWO of these, only one of them under anybody's finger. The
+// lid's body opening because you pressed the lid is the disclosure the token
+// was written for. The PANE arriving because a booking has gone late, or
+// because you pressed Next day, is not a disclosure at all; nobody pressed it.
+// It is --t-move's own definition, "something arriving or leaving".
+//
+// Applied to both, the 520ms made the pane outlast the view's 240ms slide by
+// more than double, so a date change slid horizontally for 240ms and then went
+// on rising for another 280ms — one event, read as two.
+//
+// The duration and the hold MUST come from the same entry, which is why this
+// takes a NAME and not a number: they are the two halves that were wrong in six
+// places at the start of this version, and a caller able to pass one without the
+// other is the same defect with a nicer spelling.
+export function Reveal({ show, children, style, horizontal = false, speed = "reveal" }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -620,20 +756,25 @@ export function Reveal({ show, children, style, horizontal = false }) {
       // the mount so the transition actually fires (a single frame can batch).
       let r2 = 0;
       const r1 = requestAnimationFrame(function () { r2 = requestAnimationFrame(function () { setOpen(true); }); });
-      const tv = setTimeout(function () { setRevealed(true); }, 320);
+      const tv = setTimeout(function () { setRevealed(true); }, exitHold(speed));
       return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); clearTimeout(tv); };
     }
     setOpen(false);
     setRevealed(false);   // clip immediately so the collapse hides cleanly
-    const t = setTimeout(function () { setMounted(false); }, 300);
+    const t = setTimeout(function () { setMounted(false); }, exitHold(speed));
     return function () { clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `speed` is fixed per call site; re-running on it would restart a live transition
   }, [show]);
   if (!mounted) return null;
+  // A Reveal is a DISCLOSURE by default, so it takes M.reveal rather than the
+  // M.shift a bare geometry change would get — see the --t-reveal note in
+  // index.html for why those are different questions, and `speed` above for the
+  // one caller for which they are not. The opacity rides along on the same
+  // timing so the two land together.
+  const ease = M[speed];
   const track = horizontal
-    // A Reveal changes GEOMETRY (the 0fr↔1fr track), so it takes M.shift; the
-    // opacity riding along takes the same timing so the two land together.
-    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + M.shift + ", opacity " + M.shift }
-    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + M.shift + ", opacity " + M.shift };
+    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + ease + ", opacity " + ease }
+    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + ease + ", opacity " + ease };
   // v16.1.1: the horizontal inner track is a flex box (align-items:center) so the
   // revealed child is vertically centred without an inherited-font line-box strut
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).
@@ -1048,8 +1189,12 @@ export function AutoHeight({ children, watch, style }) {
 
 // ── SlideView — slide-in wrapper that only clips while animating (v15.8.0) ─────
 // Wraps the main view (timeline/list). The parent keys it (`key={slideKey}`) so a
-// nav/view change remounts it and replays the slide (`dir` = mgt-view-in-left /
-// -right). `overflow:hidden` ONLY while the slide runs (so the 28px translateX
+// nav/view change remounts it and replays the entrance. `dir` is the ENTRANCE
+// CLASS, not a direction: the T/L/P switch passes mgt-view-in-left / -right and
+// travels 28px sideways, and since v17.15.0 a DATE change passes mgt-view-fade
+// and travels nowhere, because a date change also moves the notification strip
+// and two axes at once is a diagonal (see the keyframe's note in index.html).
+// `overflow:hidden` ONLY while the entrance runs (so the 28px translateX
 // doesn't cause a transient scrollbar), then `visible` so card hover-lifts aren't
 // clipped at rest (the v15.8.0-cont.3 regression fix).
 // `fill` (v17.5.0): in the fixed-shell layout (Settings → "Lock navigation",
@@ -1076,22 +1221,66 @@ export function SlideView({ dir, fill = false, children }) {
 // `[data-flip-id]` child's top, and for any that moved, plays a Web-Animations
 // translateY(from→0) — so a re-sorted card eases to its new spot instead of
 // jumping. WAAPI leaves no inline styles, so it never fights `.mgt-hover-scale`.
+//
+// v17.15.0: offsets are measured relative to the CONTAINER, not the viewport.
+// The two agree only while nothing above the container ever changes height, and
+// something does: the notification strip. It appears and collapses on its own
+// schedule, moves the whole grid vertically, and does NOT change `assignSig` —
+// so this effect does not run, and `prevTops` keeps viewport coordinates from
+// before the shift. The next UNRELATED edit then compares new tops against that
+// stale baseline and animates every block by the strip's height, including the
+// ones that did not move.
+//
+// Measured live on the timeline before the fix: collapse the strip (blocks move
+// 391px → 286px, zero WAAPI calls, baseline now stale), then add a booking —
+// and all FIVE blocks played `translateY(-46px) → 0` over 385ms, four of them
+// having stayed on exactly the same table. Together with the blocks' own
+// `left`/`width` CSS transition, which a real reshuffle does fire, that reads
+// as the whole grid sliding in diagonally from a corner.
+//
+// Container-relative is not a workaround, it is what this hook actually means:
+// it exists to animate a card or a block moving to a different ROW, which is a
+// movement WITHIN the container. A whole-container move is the page scrolling
+// or reflowing around it, which is not this hook's business and which the
+// browser has already drawn correctly.
+// ── reduceMotionOn — the WAAPI half of the motion kill-switch (v17.15.0) ────
+// index.html's reduced-motion rules rewrite CSS `animation-duration` and
+// `transition-duration`; NEITHER reaches a Web-Animations `animate()` call, so
+// anything driven from JS has to ask in JS. Two things now do — `useFlip`'s
+// list reorder and `NotificationStrip`'s date swap — which is one more than the
+// number of copies of this expression that may exist.
+//
+// Both inputs matter and they are different intents: `data-motion="reduce"` is
+// the per-device "Reduce animations" toggle, whose stated job is weak tablet
+// hardware where the cheapest frame is no frame; `prefers-reduced-motion` is the
+// OS-level request. Read at call time, never cached — the toggle can flip while
+// the app is running.
+export function reduceMotionOn() {
+  return document.documentElement.dataset.motion === "reduce"
+    || !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+
 export function useFlip(deps) {
   const ref = useRef(null);
   const prevTops = useRef(new Map());
   useLayoutEffect(function () {
     const container = ref.current;
     if (!container) return;
+    const originTop = container.getBoundingClientRect().top;
     // v17.1.0: WAAPI animations aren't touched by the CSS reduced-motion
     // kill-switch — honor both the OS setting and the per-device "Reduce
     // animations" toggle (data-motion, index.html) here in JS. Computed ONCE
     // per flip pass (/code-review fix #4 — it was inside the per-element loop).
-    const reduceMotion = document.documentElement.dataset.motion === "reduce"
-      || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    // v17.15.0: the expression moved to `reduceMotionOn` above, because the
+    // notification strip's swap needs the same answer and two copies of this
+    // is how one of them silently stops asking.
+    const reduceMotion = reduceMotionOn();
     const next = new Map();
     container.querySelectorAll("[data-flip-id]").forEach(function (el) {
       const id = el.getAttribute("data-flip-id");
-      const top = el.getBoundingClientRect().top;
+      // Relative to the container — see the note above. A shift applied to the
+      // container itself cancels out of every child's offset.
+      const top = el.getBoundingClientRect().top - originTop;
       next.set(id, top);
       const prev = prevTops.current.get(id);
       if (!reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
@@ -1117,6 +1306,10 @@ export function useFlip(deps) {
 //   Presence({ show, inClass, outClass, outMs, children, style, tag })
 // `usePresenceLifecycle` is the bare state machine, reused by ModalPresence
 // (which provides a context instead of rendering a wrapper element).
+// v17.15.0: `EXIT_MS` (lib/constants.js) is how long a leaving node stays
+// mounted so its `*-out` keyframe can finish. It is the default for all three
+// primitives here — see the note at its definition for what each of the four
+// hand-typed numbers it replaces was getting wrong.
 function usePresenceLifecycle(show, outMs) {
   const [render, setRender] = useState(show === true);
   const [leaving, setLeaving] = useState(false);
@@ -1131,7 +1324,7 @@ function usePresenceLifecycle(show, outMs) {
   return [render, leaving];
 }
 
-export function Presence({ show, inClass, outClass, outMs = 200, children, style, tag = "div" }) {
+export function Presence({ show, inClass, outClass, outMs = EXIT_MS, children, style, tag = "div" }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [render, leaving] = usePresenceLifecycle(show, outMs);
@@ -1145,7 +1338,7 @@ export function Presence({ show, inClass, outClass, outMs = 200, children, style
 // toasts overlap in the same grid cell (crossfade in place, never stack).
 export function Toast({ show, children, style }) {
   return (
-    <Presence show={show} inClass="mgt-toast-in" outClass="mgt-toast-out" outMs={210} style={style}>
+    <Presence show={show} inClass="mgt-toast-in" outClass="mgt-toast-out" style={style}>
       {children}
     </Presence>
   );
@@ -1165,7 +1358,7 @@ export const PresenceContext = createContext({ leaving: false });
 // so it takes the specific name, and it now pairs with its own provider.
 export function useModalPresence() { return useContext(PresenceContext); }
 
-export function ModalPresence({ show, children, outMs = 200 }) {
+export function ModalPresence({ show, children, outMs = EXIT_MS }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [render, leaving] = usePresenceLifecycle(show, outMs);
@@ -1207,6 +1400,57 @@ export function TBadge({ id }) {
     }}>
       {id}
     </span>
+  );
+}
+
+// ── OutlineChip — the standalone count / disclosure chip (v17.15.0) ─────────
+// DESIGN.md's OUTLINE treatment: no fill, a 2px border in the semantic hue,
+// text in the same family. Customers' "3 visits" / "1 no-show", the booking
+// form's Regular and No-show disclosures, the phone-autocomplete rows.
+//
+// It was the same component written twice — `chip()` in CustomersSettings and
+// `chipBase` in BookingFormModal — one a <span>, the other a <button>, agreeing
+// on 2px, the pill radius, the transparent fill and the bold text, and taking
+// their colours from two unrelated token families: the BORDER from
+// --suggest-border / --warn-border, the TEXT from --success-text / --warn-text.
+// In light that renders a pale mint ring around dark forest text; in dark the
+// two nearly converge. The chip looked like a different component depending on
+// the theme, which is what was reported.
+//
+// So a tone here is ONE decision, not two: the border is the ink at half
+// strength, derived with color-mix (see index.html). Pass `as="button"` for the
+// clickable kind — a chip that is a disclosure is still the same chip, and
+// DESIGN.md's note that clickable chips are "the documented exception" was
+// about them keeping a FILL, which v17.8.0 already removed.
+//
+// The SOLID row tags in ListView (`manual`, `locked`, `no-show ×N`, `N min
+// late`, `€N deposit`) are deliberately NOT this. They share a dense row with
+// four other solid tags, and DESIGN.md's rule for choosing between the two
+// treatments is "match whatever sits next to you".
+export const CHIP_TONES = {
+  success: { border: "var(--chip-success-border)", text: "var(--success-text)" },
+  warn:    { border: "var(--chip-warn-border)",    text: "var(--warn-text)" },
+  danger:  { border: "var(--chip-danger-border)",  text: "var(--danger-text)" },
+  neutral: { border: "var(--chip-neutral-border)", text: "var(--text-secondary)" }
+};
+
+export function OutlineChip({ tone = "neutral", as = "span", size = "micro", style, children, ...rest }) {
+  const c = CHIP_TONES[tone] || CHIP_TONES.neutral;
+  const Tag = as;
+  return (
+    <Tag {...rest} style={{
+      display: "inline-flex", alignItems: "center", gap: SP.tight,
+      borderRadius: R.pill,
+      padding: size === "micro" ? "2px 6px" : "2px 10px",
+      fontSize: size === "micro" ? T.micro : T.small,
+      fontWeight: FW.bold,
+      background: "transparent",
+      border: "2px solid " + c.border,
+      color: c.text,
+      flexShrink: 0,
+      ...(as === "button" ? { cursor: "pointer" } : null),
+      ...(style || {})
+    }}>{children}</Tag>
   );
 }
 

@@ -123,6 +123,16 @@ const FILLS = [
   { fill: "--block-seated", alpha: null, ink: "--ink-seated", role: "label", what: "seated block" },
   { fill: "--block-cancelled", alpha: null, ink: "--ink-cancelled", role: "label", what: "cancelled block" },
 
+  // v17.15.0: the SOFT semantic pane and the ink on it — the notification
+  // strip's danger sections and the modal InlineAlert that copies their shape.
+  // Registered because the pairing was WRONG when it was measured: the tone was
+  // --status-offline, which is #ff3b30 in both themes while --danger-bg inverts,
+  // giving 3.03:1 in light against 4.31:1 in dark. Neither the coverage guard
+  // below nor check:style could see it — the guard's prefixes do not match
+  // `--danger-bg`, and a token pair is not a literal. So it is named here, and
+  // whoever adds the warn or suggest pane should name theirs too.
+  { fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "label", what: "danger pane (strip section + InlineAlert)" },
+
   // Solid semantic fills — already correct before this pass; here so they stay so.
   { fill: "--app-success-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "success tag" },
   { fill: "--app-danger-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "danger tag" },

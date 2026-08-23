@@ -402,6 +402,22 @@ explaining why is usually the one to read.
   **All of them now live in ONE `NotificationStrip` pane** whose collapsed height
   is one row however many fire; adding a new in-flow notification means adding a
   section to App's `notifSections` in severity order, never a new pane.
+  **v17.15.0 extends that to modals: an in-form error is a strip SECTION too.**
+  `InlineAlert` (`atoms.jsx`) is the strip's section shape — tinted pane, the
+  mark in the tone colour, the message in the same tone, no border — so a fault
+  looks the same whether it fires on the main screen or inside a form. It is a
+  one-line section with no separate title, on the strip's own precedent that a
+  single live section drops the generic lid rather than adding a redundant
+  sub-header. The three copies it replaced were all the BANNED fourth shape
+  (pale fill + matching border + third-shade text). **Its tone is
+  `--danger-text`, not the strip's `--status-offline`** — measured before
+  copying, because `--status-offline` is `#ff3b30` in both themes while
+  `--danger-bg` inverts: 3.03:1 in light against 4.31:1 in dark, below AA and a
+  42% swing. `--danger-text` gives 7.09:1 / 8.05:1, and `AppBanners`' two danger
+  sections were corrected to match. The pairing is a registered `FILLS` entry
+  now; **register the warn and suggest panes when you add them**, because
+  neither the coverage guard (its prefixes miss `--danger-bg`) nor `check:style`
+  (it sees literals, not token pairings) can see this class of fault.
 
 - **Three label treatments (v17.8.0), and context decides which.** **SOLID**
   where a tag competes inside a busy row (ListView's `manual`/`locked`/`★`/the
@@ -409,7 +425,18 @@ explaining why is usually the one to read.
   border in the semantic hue, text in the same family — where a chip stands
   alone as a count or a disclosure (Customers' visits/no-shows,
   `BookingFormModal`'s Regular/no-show buttons). **TEXT** where the colour
-  carries itself unaided. The banned shape is the fourth one: pale semantic fill
+  carries itself unaided.
+  **v17.15.0: an outline chip's border is DERIVED from its text**, not chosen
+  beside it — `--chip-<role>-border` is `color-mix(in srgb, var(--<role>-text)
+  50%, transparent)`. The border and the text are the same statement at two
+  volumes, so they are one decision. Before this the border came from
+  `--suggest-border` / `--warn-border` and the text from `--success-text` /
+  `--warn-text`, two families never required to agree: in light that is a pale
+  mint ring around dark forest text, in dark the two nearly converge, and the
+  chip read as a different component per theme. The tokens are declared ONCE —
+  each references an ink that already flips, so a dark override would re-create
+  the hand-maintained pair. Build chips with `OutlineChip` (`atoms.jsx`);
+  `as="button"` is the disclosure kind. The banned shape is the fourth one: pale semantic fill
   *plus* a matching border *plus* bold text in a third shade, which encodes one
   signal three times. The outline chip drops the fill and earns its extra border
   pixel; do not "restore" the fill.
@@ -722,6 +749,21 @@ the platform announces with no relationship to keep in sync.
 between the top of List and anything after it. The selected card holds the stop,
 or the first card when nothing is selected, so the list is always enterable.
 
+**A shared component is only shared if nothing is allowed outside it.**
+`Overlay` has carried `role="dialog"`, `aria-modal`, a DOM-resolved name, a
+focus trap and focus restore since v17.9.1 — and `ReminderEditor` had none of
+them, because it was never on `Overlay` at all. Its stated reason was structural
+and sounded convincing (it renders at z=250, Overlay's scrim is 200) and was
+false: the discard confirm sits at z=260 on `Overlay`, by wrapping it in a
+positioned div. **That is the general shape — a surface leaves the shared
+component for a plausible reason that nobody re-checks, and takes every
+invisible guarantee with it.** So the gate is on the STRUCTURE, not the roles:
+`var(--scrim)` may appear in exactly one file. Asserting "every modal has a
+dialog role" would have caught nothing here, because the file was not a modal
+that forgot its role. A modal that must sit above another gets a positioned
+wrapper with a higher z-index; the popups paint `--tl-popup-scrim`, since a
+popup is not a dialog and must not claim to be one.
+
 **SVG breaks the focus rule in two ways, and both are invisible in source.**
 A browser paints **no `outline` on a `<g>`** (it does on the shape child), and
 **`:focus-visible` never matches an SVG element in Chrome** — two consecutive
@@ -901,6 +943,30 @@ Durations by **what is moving**: `--t-tap` 145ms (a control answering your
 finger), `--t-move` 240ms (something arriving or leaving), `--t-shift` 385ms
 (geometry — heights, widths, positions).
 
+**`--t-reveal` 520ms (v17.15.0) is a DISCLOSURE**, and it is its own token
+rather than a bigger `--t-shift` because the two ask different things of the
+eye. A block repositioning is something you WATCH ARRIVE, and 385ms is already
+generous. A disclosure is something you READ AS IT ARRIVES: the content is new,
+several lines tall, and the motion is the only thing saying it came out of the
+header you just pressed rather than being dumped on the page. Reported as "too
+snappy", which is the complaint of being handed something before you are looking
+at it. `Reveal` is the only consumer — the Summary, the finished fold, all ~15
+Settings sections and the notification strip's LID; nothing geometric moved.
+
+**Read "under your finger" as load-bearing.** The list above said "the
+notification strip", and that component holds TWO `Reveal`s: the lid's body,
+which you pressed, and the pane itself, which arrives because a booking went
+late or because you changed the day. Nobody pressed the second, so it is not a
+disclosure at all — it is `--t-move`'s own definition, "something arriving or
+leaving" — and at 520ms it outlasted the 240ms view slide by more than double,
+so a date change slid sideways and then went on rising: one event read as two.
+`Reveal` therefore takes a **`speed`** naming an entry of the `M` scale, still
+defaulting to `"reveal"`; the strip's pane is the one caller that opts out
+(v17.15.0). A NAME rather than a number, because the CSS timing and the unmount
+hold must come from the same entry — the two halves this version found wrong in
+six places. **When a shared component serves two kinds of change, say which one
+each call site is.**
+
 **The curve was a quint (`0.22,1,0.36,1`) for one version and it was wrong for
 travel.** A quint spends ~90% of the distance in the first third of the time —
 right for a press dip, where the eye only registers arrival; wrong for anything
@@ -931,6 +997,32 @@ that can drift.
 **Never `transition: all`** — it animates layout properties too and you cannot
 tell what moves by reading it. Name the properties.
 
+**An exit has two halves, and nothing in the language connects them** (v17.15.0).
+A `*-out` keyframe class has a duration; a JS timeout decides when to unmount.
+When the timeout is shorter the exit is not broken in any way a reviewer can
+see — it plays part way and the node blinks out at whatever opacity it reached.
+It was wrong in six places at once, by five different hand-typed numbers, and
+measured live: closing the booking form ran `mgt-scrim-out` (240ms) and
+unmounted it at `currentTime` 167, so the scrim vanished at 70% of its own fade
+while still plainly visible. **The hold is derived, never typed** — `EXIT_MS`
+and `REVEAL_EXIT_MS` in `lib/constants.js` sit beside the tokens they follow,
+every primitive takes them as its default, and `tests/motion.test.js` fails the
+build if a hold stops outlasting its animation, if `M.dur` drifts from
+index.html, or if a component passes a literal `outMs` again. Exactly ONE site
+had it right beforehand and said so in a comment nobody had propagated — the
+same shape as v17.14.0's five hand-written modal lists.
+
+**`useFlip` measures relative to its CONTAINER, not the viewport** (v17.15.0).
+It re-measures only when its deps change, so anything that moves the whole
+container without changing them — the notification strip appearing — leaves its
+baseline holding pre-shift coordinates, and the next unrelated edit animates
+every element by that stale offset. Measured on the timeline: collapse the strip
+(blocks move 105px, zero FLIP calls), add a booking, and all five blocks play
+`translateY(-46px) → 0` with four of them still on the same table. Container-
+relative is also what the hook MEANS: it animates a row change, which is
+movement inside the container; a whole-container move is the page reflowing
+around it, which the browser has already drawn.
+
 ### Adding motion to something that has none
 
 - **Fading in to an element's own opacity** is `.mgt-appear`, not
@@ -940,6 +1032,12 @@ tell what moves by reading it. Name the properties.
   animated properties forever, which on a `.mgt-hover-scale` element means the
   lift never applies again. For the same reason it animates opacity only:
   nothing may own `transform`, because the hover and press rules do.
+- **Fix the exit at the same time as the entrance, always.** A one-way
+  transition is the app's most common motion defect and the least visible one:
+  it looks finished. Before adding an enter animation, decide what the exit is —
+  and if the answer is "the node just unmounts", that is the bug, not the
+  design. The three surfaces v17.15.0 left one-way are recorded in `ROADMAP.md`
+  with the reason (each needs two copies of a stateful view mounted at once).
 - **An element that must animate OUT needs its content held.** `Reveal` already
   caches its last truthy children for exactly this — pass `null` and it fades
   out what it was showing. Corollary that bit once: it only caches **truthy**
@@ -958,9 +1056,41 @@ tell what moves by reading it. Name the properties.
   remembered index **ties** with whatever shifted up into its place, and the tie
   falls through to arrival order — so it visibly jumps before it collapses. Sort
   departed items half a step above their replacement (`rank - 0.5`).
-- **Not everything that appears needs an animation.** The empty-day state gets
-  none: it appears mostly when you navigate to an empty day, where `SlideView`
-  is already animating the whole view, and a second fade inside it just makes
-  the day change feel slow.
+- **A REPLACEMENT is not a change, and a per-item lifecycle cannot tell them
+  apart.** `useRevealRows` holds a departed id mounted so it can collapse and
+  mounts a newcomer closed so it can ease open — right for an item arriving or
+  resolving while you watch, wrong for a list swapped wholesale, where it shows
+  the OLD list for the length of its collapse and passes through a combined
+  state belonging to neither side. Measured on the notification strip across a
+  date change: half a second of the previous day's notifications, and 70px of
+  height travelled to finish 2px away. Pass a `resetKey` (v17.15.0) so the
+  lifecycle re-seeds as it does on first mount, and animate the box ONCE from
+  the old height to the new. **Retiming cannot fix a replacement animated as a
+  change** — the wobble was the visible half, the stale content was the half
+  that mattered.
+- **A gesture owns ONE axis.** If two things move at once on different axes,
+  no duration or curve reconciles them — co-timing them perfectly is what makes
+  the diagonal *clean*, not what removes it (v17.15.0 shipped that intermediate
+  state and it was reported again). A date change drives both the view's
+  entrance and the notification strip's height, so it fades rather than slides
+  and keeps the vertical axis it cannot avoid: measured across 19→26 August it
+  moves the grid −98, +100, +51 and −151px, and the two upward ones read as the
+  grid heading for a top corner. The T/L/P switch keeps the horizontal slide,
+  because the strip sits outside the view and a view switch moves nothing
+  vertically. **Before choosing a duration, ask which axis the gesture owns.**
+- **A one-shot is not `AutoHeight`.** That atom's observer chases its content
+  every frame and clips the overflow, which is right for a Settings tab and
+  wrong for any box whose contents animate by design — there, every in-place
+  change gets clipped by a box following it. For a height change that happens
+  on a known event, use one WAAPI shot: it runs only then, and with the default
+  `fill: none` it leaves no inline height to get stuck.
+- **Not everything that appears needs an animation** — but check the claim
+  against what shipped. This bullet named the empty-day state as the example
+  until v17.15.0 gave it a `Reveal` in the same version whose docs pass left the
+  sentence standing. The reasoning was that `SlideView` is already animating the
+  whole view on a date change; what it missed is that the prompt also appears
+  and disappears *without* a navigation, when the last booking of a day is
+  cancelled or the first is made, and there it was the only in-flow surface left
+  changing the page height in one frame.
 
 ---

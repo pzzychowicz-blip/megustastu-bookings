@@ -63,7 +63,11 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, in
   // else, which is right: nothing below it is trustworthy if the read failed.
   if (loadFailed) out.push({
     id: "loadFail",
-    tone: "var(--status-offline)", tint: "var(--danger-bg)",
+    // v17.15.0: was --status-offline, which is #ff3b30 in BOTH themes while
+    // --danger-bg inverts — measured 3.03:1 in light and 4.31:1 in dark, i.e.
+    // below AA and a 42% swing between themes. --danger-text flips with the
+    // fill it sits on: 7.09:1 / 8.05:1. Same token the modal InlineAlert takes.
+    tone: "var(--danger-text)", tint: "var(--danger-bg)",
     icon: AlertIcon,
     title: "Couldn't load bookings", count: 1,
     node: body(
@@ -87,7 +91,11 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, in
   // coloured dot plus coloured text is three signals for one message.
   if (writeWarning) out.push({
     id: "writeError",
-    tone: "var(--status-offline)", tint: "var(--danger-bg)",
+    // v17.15.0: was --status-offline, which is #ff3b30 in BOTH themes while
+    // --danger-bg inverts — measured 3.03:1 in light and 4.31:1 in dark, i.e.
+    // below AA and a 42% swing between themes. --danger-text flips with the
+    // fill it sits on: 7.09:1 / 8.05:1. Same token the modal InlineAlert takes.
+    tone: "var(--danger-text)", tint: "var(--danger-bg)",
     icon: AlertIcon,
     title: "Couldn't save", count: 1,
     node: body(

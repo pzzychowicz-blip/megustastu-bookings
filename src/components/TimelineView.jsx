@@ -1627,7 +1627,7 @@ export const TimelineView = memo(function TimelineView({
         {"Optimiser: " + (autoOptimizer ? "ON" : "OFF")}
       </button>
       {/* v15.8.0: slides in L→R when Optimizer is toggled OFF, slides out →L when ON. */}
-      <Presence show={!autoOptimizer} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span">
+      <Presence show={!autoOptimizer} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
         <button
           onClick={onReshuffle}
           className="mgt-hover-scale"
@@ -1717,7 +1717,10 @@ export const TimelineView = memo(function TimelineView({
           ABOVE the grid rather than instead of it — the grid is a picture of the
           room and an empty room is what you want to see on an empty day, plus
           the label column still lets you block a table. See EmptyDay.jsx. */}
-      {isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}
+      {/* v17.15.0: eased, not snapped — same `Reveal` as the notification strip.
+          The `null` on the false branch is what lets the exit animate at all
+          (Reveal caches only truthy children and collapses that cache). */}
+      <Reveal show={isEmpty}>{isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}</Reveal>
       <div style={{ display: "flex" }}>
         {labelCol}
         {gridCol}

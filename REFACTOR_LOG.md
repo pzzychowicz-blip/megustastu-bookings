@@ -13976,3 +13976,511 @@ hours save.
 than asserted. In the running app: the waitlist panel closes on Escape with a
 clean console, the day region is empty at mount and correct after one
 navigation, and no console output on load.
+
+---
+
+## v17.15.0 — both directions, and one colour per role
+
+**Date:** 2026-08-23
+**Files:** `src/App.jsx`, `src/lib/constants.js`, `index.html`,
+`src/components/atoms.jsx`, `TimelineView.jsx`, `ListView.jsx`, `PlanView.jsx`,
+`BookingFormModal.jsx`, `WalkinForm.jsx`, `ReminderEditor.jsx`, `BlockModal.jsx`,
+`ManualModal.jsx`, `ConnectionStatus.jsx`, `CustomersSettings.jsx`,
+`AppBanners.jsx`, `NotificationStrip.jsx`, `BannerRows.jsx`, `ClashBanner.jsx`,
+`src/hooks/useRevealRows.js`, `tests/motion.test.js` (new),
+`tests/contrast.test.js`, `tests/a11y.test.js`, `tests/stylesheet.test.js`,
+`CLAUDE.md`, `DESIGN.md`, `ROADMAP.md`.
+**Behavioural change:** motion only, plus three colour corrections. No persisted-data
+change, no security-rule change, **no Firebase console step**. Rolling deploy.
+**Verification:** every item measured in the running DEV app before and after —
+see each entry. Build + 564 tests + lint (0 errors) + `check:style` green.
+
+Patryk reported six things in two groups: four about transitions that snap, run
+too fast or only run one way, and three about buttons, banners and chips that
+differ between surfaces and between themes. Four of the six turned out to have a
+cause other than the one the symptom suggested, and two of those causes were
+shipping a defect nobody had reported.
+
+A second round (entries 9–11) came from watching the first: the inline alert the
+version had just standardised still snapped, and the date switch was still
+diagonal. That one turned out not to be a motion defect at heart.
+
+### 1. The empty-day prompt eases in and out
+
+"Nothing booked for this day yet." was the only in-flow surface left that changed
+the page height without easing it. All three views now mount it inside `Reveal`.
+
+ListView needed a structural change first. It had TWO mount sites — an early
+`return` for a genuinely empty day and an in-flow one for a cancelled-only day —
+and the early return cannot animate out by construction: the branch is taken only
+WHILE the day is empty, so the first booking replaces the whole subtree in one
+frame with nothing left to collapse. It was also redundant; the normal return
+already produces the identical screen (`active` is empty, the list role is
+conditional since v17.14.0, the finished fold is gated on `finished.length`).
+Removing it also fixed something the note beside `flipRef` had already warned
+about: `useFlip` bails on a null container and stays dead for the session, and the
+early return unmounted that container on every empty day.
+
+### 2. The timeline grid moves vertically only — and it was never the grid
+
+Reported as: when the notification strip turns up, the grid animates in from a top
+corner instead of being pushed down.
+
+The vertical push was already correct. Seeking the strip's `Reveal` transition
+frame by frame showed the grid body and every block easing straight down with `x`
+and `width` constant to the tenth of a pixel, in default and `shellFixed` modes,
+with `min-width` binding and not. The planned fix — the grid's own
+`transition: width` misfiring — was measured and **disproved**.
+
+The diagonal is `useFlip`. It records each element's top in VIEWPORT coordinates
+and re-measures only when its deps change, which for TimelineView is `assignSig`.
+The strip changes neither, so when it appears or collapses every block moves, the
+effect does not run, and `prevTops` is left holding pre-shift coordinates. The
+next unrelated edit measures against that stale baseline.
+
+Reproduced exactly: collapse the strip (blocks move 391px → 286px, **zero** WAAPI
+calls, baseline now stale), then add a booking — and all FIVE blocks play
+`translateY(-46px) → 0` over 385ms, four of them still on the same table. With the
+blocks' own `left`/`width` transition, which a real reshuffle fires, that is a
+diagonal.
+
+The fix is one subtraction — measure relative to the container — and it is what the
+hook has always meant: it animates a block re-parenting into a different ROW,
+which is movement inside the container. Verified both ways afterwards: the same
+shift-then-edit sequence produces zero animations, and moving a List card from 3rd
+to 7th still plays `translateY(-584px)` on that card and `translateY(146px)` on
+the four that shifted up.
+
+### 3. `--t-reveal`, and the timeout that would have broken the exit
+
+The Summary body and "Completed & cancelled" took `--t-shift` (385ms) along with
+every geometry change in the app. They are not the same question: a block
+repositioning is something you WATCH ARRIVE; a disclosure is something you READ AS
+IT ARRIVES. "Too snappy" is the complaint of being handed something before you are
+looking at it. So `--t-reveal: 520ms` joins `--t-status` and `--t-wipe` as a
+documented off-scale step, `Reveal` is its only consumer, and nothing geometric
+moved.
+
+The part that would have bitten: `Reveal`'s two internal timeouts were literals,
+320 and 300 against 385ms. At 520 the unmount fires 220ms early and the collapse
+is cut off — the fix for "too fast" silently breaking the exit, in the version
+whose stated purpose was removing one-way transitions.
+
+### 4. The sweep: every exit in the app was cut off
+
+An element that animates out has two halves nothing connects — a keyframe class
+with a duration, and a JS timeout deciding when to unmount. When the timeout is
+shorter the exit is not broken in any way a reviewer can see: it plays part way and
+the node blinks out at whatever opacity it reached.
+
+Every `.mgt-*-out` class runs for `--t-move` (240ms). The holds were 200
+(`Presence`), 190 (its six call sites), 210 (`Toast`), 200 (`ModalPresence` — every
+modal in the app), 300 (`Reveal`) and 350 (`useRevealRows`). Measured: closing the
+booking form ran `mgt-scrim-out` and unmounted it at `currentTime` **167 of 240**,
+so the scrim vanished at 70% of its own fade while plainly visible. After: 218 at
+252ms, unmounting at ~260.
+
+Exactly ONE site had it right, and it is the interesting part — `ConnectionStatus`,
+whose comment read *"outMs must match --t-move (240ms) or the node unmounts
+mid-animation"*. The knowledge existed at one call site and had not propagated,
+which is the same shape as v17.14.0's five hand-written modal lists. So the number
+is no longer writable at a call site: `EXIT_MS` and `REVEAL_EXIT_MS` live beside
+the tokens they follow and are the defaults.
+
+`tests/motion.test.js` (6 tests) holds it: every hold outlasts its animation,
+`M.dur` matches index.html, a disclosure stays slower than a geometry move, and no
+component may pass a literal `outMs`. All three guards proven against the exact
+historical values.
+
+**Three one-way transitions were left**, each needing two copies of a stateful view
+mounted at once — the view switch, the Settings tab body and the timeline's
+waitlist ghost. Reasons and the ghost's one arguable case are in `ROADMAP.md`.
+
+### 5. One solid decision button
+
+"No show" exists in four places. Three are `mkBtn` on `--btn-orange` with
+`NoShowIcon`; the fourth — the Cancel-booking confirm — was hand-written on
+`--app-warn-solid` with no icon. Two oranges for one action.
+
+It was hand-written because there was nothing to write it with: the SOLID decision
+button existed as twelve verbatim copies of nine declarations. They agreed, which
+is the condition that produces the next disagreement, and it had already produced
+this one. `mkSolidBtn` is that shape; `background` is required with no default, for
+`ModalTitle`'s reason.
+
+Two things the conversion surfaced. ReminderEditor's footer was `minHeight: 40`,
+the only modal-footer decision button below the 44 floor. And its title was an
+EIGHTH hand-written copy of the pill `ModalTitle` was created in v17.9.1 to absorb
+— invisible to that sweep because it renders outside `Overlay`, which is where the
+sweep looked. It also has no `role="dialog"` at all; that is recorded in
+`ROADMAP.md` rather than fixed here.
+
+Verified: all three "No show" buttons `rgba(210, 91, 28, 0.8)` with the icon, and
+the confirm popover's three buttons at one height, radius and padding.
+
+### 6. The inline alert is a strip section
+
+"Text is required." and its twins in the booking and walk-in forms: three copies
+differing only in padding and margin, all three wearing the one label shape
+`DESIGN.md` bans outright — pale semantic fill PLUS a matching border PLUS bold
+text in a third shade. `InlineAlert` gives them the strip's section shape, so a
+fault looks the same whether it fires on the main screen or inside a form. No new
+icon: `AlertIcon` already means "the app failing rather than the restaurant
+needing something", and the rule against two sections sharing a mark is about the
+collapsed tally, which an in-modal alert never enters.
+
+Copying the strip's `tone: --status-offline` was the obvious move and would have
+been wrong. Measured first, because `--status-offline` is `#ff3b30` in BOTH themes
+while `--danger-bg` inverts:
+
+| ink on `--danger-bg` | light | dark |
+|---|---|---|
+| `--status-offline` | **3.03:1** | 4.31:1 |
+| `--danger-text` | 7.09:1 | 8.05:1 |
+
+Below AA in light, and a 42% swing between themes — the exact inconsistency this
+version was asked to remove, shipping on "Couldn't save" and "Couldn't load
+bookings". `AppBanners` was corrected in the same commit.
+
+**Nothing could have caught it.** The contrast guard's coverage prefixes do not
+match `--danger-bg`, and `check:style` sees literals, not token pairings. So the
+pair is a registered `FILLS` entry now, proven against the old one.
+
+### 7. Outline chips derive their border from their text
+
+An outline chip took its BORDER from `--suggest-border`/`--warn-border` and its
+TEXT from `--success-text`/`--warn-text` — two families never required to agree.
+In light that is a pale mint ring around dark forest text; in dark the two nearly
+converge. The chip read as a different component per theme, which is what was
+reported.
+
+A border is the same statement as the text, quieter, so it is now the same colour
+at half strength: `--chip-<role>-border` is `color-mix(in srgb,
+var(--<role>-text) 50%, transparent)`. First use of `color-mix` here; the failure
+mode is benign rather than broken (an unsupported mix makes the property
+guaranteed-invalid and `border-color` falls back to `currentColor`, which IS the
+ink), verified in the browser. Declared once, never duplicated into the dark
+block — each references an ink that already flips.
+
+`OutlineChip` replaces the two hand-written copies plus the autocomplete
+dropdown's chips, which were the banned shape in full. ListView's SOLID row tags
+are deliberately unchanged: they share a dense row with four other solid tags, and
+the rule is "match whatever sits next to you".
+
+Verified in both themes: `rgba(0,0,0,0)` fill, border exactly the ink at 0.5 alpha
+— light `srgb(0.086 0.396 0.204 / 0.5)` against `rgb(22,101,52)`, dark
+`srgb(0.525 0.937 0.675 / 0.5)` against `rgb(134,239,172)`.
+
+### 8. ReminderEditor is a real dialog
+
+Found while doing (5): it was the only modal in the app not built on `Overlay`,
+so it had no `role="dialog"`, no `aria-modal`, no focus trap, no focus restore
+and no accessible name — five things every other modal has had since v17.9.1,
+and five things nothing on screen reveals as missing.
+
+**Its stated reason for the exception was false, and had been for eleven
+versions.** The file header said the z-index 250 "is why it doesn't reuse the
+shared `Overlay`" (whose scrim is 200). But the discard confirm sits at z=260
+using `Overlay`, and gets there by wrapping it in a positioned div: `position` +
+`z-index` makes a stacking context, so the whole subtree stacks at that level
+whatever the fixed children inside it declare. The same idiom at 250 works
+here, and **`Overlay` is untouched** — no `z` prop, no new branch, nothing for
+the other eleven modals to regress on.
+
+The rest of the port is deletion. v14.4.1 had already reproduced Overlay's
+shape BY HAND — a scrolling body with the error and actions pinned below it —
+with a comment saying it "mirrors Overlay's `footer` slot (this modal predates
+it)". That structure is now the slot it was imitating; the hand-written scrim,
+card, `useModalPresence` and four animation classes are gone.
+
+Two accepted consequences: the desktop card goes 520 → 580, and below 600px it
+becomes Overlay's full-screen sheet rather than a centred card, so the reminder
+editor stops being the one modal that behaves differently on a phone. Checked
+at 375px — `mgt-sheet-in`, full viewport, footer pinned; both sheets are
+`--bg-sheet-mobile` at 98% opacity, so what looks like bleed-through in a
+screenshot is 2% of an identically coloured surface.
+
+Verified in the running app: role, `aria-modal`, `aria-labelledby` resolving to
+the `<h2>` "New reminder", focus landing on the dialog container, Tab wrapping
+in both directions, and focus returning to the "+ New reminder" button. The
+ancestor chain is card → Overlay's scrim (fixed, z=200) → the z=250 wrapper,
+with the editor topmost at its own centre and Settings still mounted beneath.
+
+**A measurement trap worth recording.** The first focus-restore reading said
+focus returned to the Settings container, not the button — an artefact of
+driving the test with `.click()`, which does not move focus the way a real
+press does, so `Overlay` had captured the wrong element to restore TO. Focusing
+the opener first, which is what a finger does, shows the restore working.
+CLAUDE.md already says a synthetic press is not a finger; this is that rule one
+layer up, in the thing the press was supposed to set up rather than in the press
+itself.
+
+`tests/a11y.test.js` gained the gate (558 tests), and it checks the STRUCTURE
+rather than the roles — because ReminderEditor was not a modal that forgot its
+role, it was a modal that never went through the atom. `var(--scrim)` may
+appear in exactly one file; the popups paint `--tl-popup-scrim`, since a popup
+is not a dialog and must not claim to be one. Proven against real regressions:
+restoring the pre-port file verbatim fails both assertions, and deleting only
+the z=250 wrapper fails the second — a one-div deletion that would otherwise
+make the editor paint under the modal that opened it with nothing to catch it.
+
+### 9. The inline alert eases in and out
+
+`InlineAlert` was standardised in entry 6 and still appeared and disappeared in
+one frame. It is the clearest possible case for the in-and-out rule: it arrives
+because you pressed Save and leaves because you typed a character, i.e. it comes
+and goes under the eye of someone already reading the form, and each of the
+three copies snapped the footer — and the card above it — by its own height.
+
+Each is wrapped in `Reveal` now, which caches its last truthy child so the exit
+still animates once `error` is already null. The always-mounted `role="alert"`
+stays OUTSIDE it, per v17.12.0's rule that a live region must be in the tree
+before its content changes.
+
+ReminderEditor had no `role="alert"` at all, so its error was announced by
+nobody — found only because this entry touched all three sites side by side.
+It has one now and the three read identically. Measured, both directions:
+46px ↔ 0 over ~520ms with the opacity in lockstep.
+
+### 10. A date change replaces the strip; it does not edit it
+
+Reported as two things — the horizontal date switch moves diagonally when the
+notification strip is up, and the strip's content snaps when it changes. They
+are one defect, and it is not really about motion.
+
+The strip's per-section lifecycle (`useRevealRows`) is built for a notification
+ARRIVING or RESOLVING while you watch: it holds a departed section mounted so
+its `Reveal` can collapse, and mounts a newcomer closed so it can ease open. A
+date change is not that. Nothing arrived and nothing resolved; you navigated,
+and the sections differ because it is a different day. Sampled per frame going
+22 → 23 August:
+
+- For **~550ms the strip showed the day you had left**. At t=62 it read
+  "Running late" — the new day's heading, taken live — above a body about a
+  table reshuffle belonging to the previous day. That is not slow motion, it is
+  the wrong information, and it is the half of this that no timing could fix.
+- Departure and arrival overlapped, so the pane passed through a state that
+  exists on **neither** day: two sections, each wearing the sub-header a lone
+  section does not get, under a lid reading "Notifications". It travelled
+  **70px of height to finish 2px from where it started**, reversing direction
+  twice across 1.15s.
+
+That second bullet is the entire diagonal. With no strip on either date the
+same switch is 28px sideways and **zero** vertical, measured; with one it
+dragged the timeline up 13px, down 32px and back, under a slide lasting 240ms.
+
+So `useRevealRows` takes an optional `resetKey` meaning "this is a different
+list, not a changed one", and re-seeds on it exactly as it does on first mount
+— which is what its own initializers already describe. Ids common to both days
+keep their place untouched, so a notification equally true on both does not
+blink. With the content replaced in one frame the only thing left is the box,
+which eases once: a single WAAPI shot on `--t-move`, so it starts and ends with
+the view's own slide. The fade is gated on the rendered text actually
+differing, because "Working offline" is not about the day and fading it because
+you pressed Next is motion describing something that did not happen.
+
+**It cannot be `AutoHeight`**, and the reason generalises. That atom's observer
+fires every frame while its content is itself animating and eases the box to
+follow, clipping the overflow — correct for a Settings tab, wrong here, where
+the sections' own Reveals animate constantly by design. Every notification
+arriving in place would be clipped mid-reveal by a box chasing it. A one-shot
+fires on the swap and touches nothing else; with WAAPI's default `fill: none`
+it also leaves no inline height behind to get stuck, verified by interrupting a
+swap mid-flight.
+
+`ClashBanner` takes the same key one level down — the only rows banner scoped to
+the VIEWED date rather than to today, so the only one whose rows can be replaced
+by another day's while its section stays put.
+
+The re-seed runs during render rather than from an effect, and that is
+load-bearing: it makes the first committed DOM the new list, so the strip's own
+layout effect can measure the height it is leaving against the height it is
+arriving at. From an effect it lands a commit late and the height in between
+belongs to the two-section state nobody was meant to see. The ref writes it
+implies were first done during render too, next to the setState calls; they are
+in a layout effect now, which is both what the linter asks for and where they
+belong — a render may be discarded and a ref written there survives it.
+
+After: 28px horizontal, y constant at 326, strip height constant at 98, and the
+new day's text in the first frame.
+
+**One follow-up, found by asking where the guards stop.** The first version
+nested the lid's fade inside `if (body)`, so a strip that was COLLAPSED when the
+date changed got no transition at all — `Reveal` has unmounted the body in that
+state and the guard took the whole block with it. Collapsed is not hidden: it is
+one row carrying the worst section's title and the per-category tally, both of
+which change with the day, and measured there "Running late 1" became "Tables
+could be reshuffled 1" with zero animations. The two questions are independent
+now — the fade asks whether the rendered text changed, the height asks whether
+there is a body to ease from.
+
+### 11. The strip arrives on the clock it is arriving with
+
+`--t-reveal`'s own definition is "a DISCLOSURE opening or closing **under your
+finger**", and its list of examples ends with "the notification strip" — a
+component holding TWO `Reveal`s, only one of them under anybody's finger. The
+lid's body opening because you pressed the lid is the disclosure the token was
+written for. The pane arriving because a booking went late, or because you
+pressed Next day, is nobody's press: it is `--t-move`'s own definition,
+"something arriving or leaving". Entry 3 gave the token to both.
+
+At 520ms it outlasted the view's 240ms slide by more than double, so a date
+change slid sideways for 240ms and then went on rising for another 280ms — one
+event read as two, and the last of the vertical component entry 10 did not
+already remove.
+
+`Reveal` takes a `speed` naming an entry of the `M` scale, defaulting to
+`"reveal"` so every other call site is unchanged. A **name** and not a number,
+because the CSS timing and the unmount hold have to come from the same entry —
+they are the two halves that were wrong in six places in entry 4, and a caller
+able to pass one without the other is that defect with a nicer spelling.
+`exitHold(speed)` is the arithmetic now, and `EXIT_MS` / `REVEAL_EXIT_MS` are
+what they always were: its two named applications.
+
+A misspelt speed fails silently in both halves at once. `M["slide"]` is
+undefined, so the transition declaration reads `grid-template-rows undefined`
+and the browser drops it; `M.dur["slide"]` is undefined, so the hold is `NaN`,
+which `setTimeout` takes as 0. A Reveal that neither animates nor waits, from
+one wrong word. Three guards in `tests/motion.test.js`, two proven against
+exactly that.
+
+Measured: appear 0→100px and the slide's 28px now start and finish together at
+~300ms; the collapse is 250ms where it was 530ms; the lid's own disclosure is
+untouched at ~500ms.
+
+### 12. A date change owns the vertical axis
+
+Reported twice, and still true after entries 10 and 11 had removed the wobble
+and put both clocks on `--t-move`: switching dates with the strip up moved the
+grid diagonally, "as if to a top corner".
+
+**Entry 11 is why retiming could never have fixed it.** Co-timing two movements
+is exactly what turns a wobble into one clean diagonal. The grid moves on both
+axes because a date change drives both — the view enters with a 28px horizontal
+slide, and the strip's height change pushes it vertically. Measured across
+19 → 26 August, four of seven steps move vertically:
+
+| step | vertical | |
+|---|---|---|
+| 19→20 | **−98** | strip disappears |
+| 21→22 | **+100** | strip appears |
+| 22→23 | **+51** | strip grows to two sections |
+| 23→24 | **−151** | strip disappears |
+
+The two negatives are the "top corner" precisely: the grid rises ~150px while
+sliding sideways.
+
+So the axes are separated instead of the clocks aligned. A date change fades
+(`mgt-view-fade` — opacity only, no transform) and its sole movement is the
+strip's own vertical reveal pushing the grid. The T/L/P switch keeps its
+directional slide and keeps it honestly: the strip sits OUTSIDE the view, so a
+view switch never moves anything vertically and its horizontal slide is already
+pure. Accepted cost, put to Patryk before building it: a date change loses its
+left/right direction cue, and on a day where the strip does not change the grid
+crossfades without moving.
+
+One call site — every date path runs through `goToDate`. Verified live: the nav
+buttons, the arrow keys and the date input all report `mgt-view-fade`; both view
+buttons still report `mgt-view-in-left`/`-right`.
+
+**The guard is three entries, not one.** `SlideView` mounts with `animating:
+true` and leaves that state only on `animationend`, so a missing rule means the
+event never comes and the view wrapper keeps `overflow: hidden` forever — hover
+lifts clipped app-wide, panes clipped in the fixed-shell and Split View layouts.
+Verified by injecting `animation: none` on the new class and changing the date:
+class still applied, computed overflow still `hidden`, nothing thrown and
+nothing visibly missing. The two slide classes had carried that failure mode
+since v15.8.0 without being in `CRITICAL_SELECTORS`; all three are now, proven
+by deletion.
+
+### 13. `/code-review xhigh`: 12 findings, all fixed
+
+Four behavioural, eight statements of record. The behavioural four:
+
+**The strip's swap animations ignored reduced motion.** index.html's
+kill-switch rewrites CSS `animation-duration` and `transition-duration`, and
+neither reaches a WAAPI `animate()` — `useFlip` says exactly that in a comment
+and checks `data-motion` / `prefers-reduced-motion` in JS before animating. The
+three calls added in entry 10 did not, so the per-device "Reduce animations"
+toggle, whose stated job is weak tablet hardware, still played 240ms of height
+and opacity on every date change. The expression is `reduceMotionOn()` in
+atoms.jsx now and both callers read it, because two copies of it is how one of
+them silently stops asking. Verified live: three animations with motion normal,
+**zero** with reduce on.
+
+**That layout effect ran its measurements on every commit.** No early return and
+no dep array, so `offsetHeight` plus two `textContent`s on every render — and
+this component is not memoized while `notifSections` is rebuilt each App render,
+so that included every keystroke in the booking form, a path CLAUDE.md documents
+as performance-critical. Benchmarked in the running app with the strip expanded
+and 1402 nodes under `<main>`: **2.886ms per commit**, on desktop, to serve a
+measurement wanted only on a date change. It returns early now, and the baseline
+moved to a passive effect where layout is already clean.
+
+**The baseline was sampled during the animation.** `offsetHeight` on an element
+with a WAAPI run in flight returns the INTERPOLATED height, so any commit inside
+those 240ms overwrote the resting height with a value true for one frame — and a
+second date change in the window would then ease from a position the box is not
+in. Skipped while `playState === "running"`.
+
+**The new speed guard had a hole exactly where it mattered.** It scanned
+`src/components` and `src/App.jsx`, leaving `src/hooks/` out — and
+`useReminders.jsx` is the one hook in the app that returns JSX, i.e. the single
+place a `Reveal` can be written outside a component file was the one place
+unguarded. It walks all of `src/` now, proven by planting a bad speed in exactly
+that file.
+
+The eight others were the same defect in prose, and it is the one this version
+keeps naming: **a statement of record that a later commit made false.**
+ListView still promised "the early return above guarantees `day` is non-empty"
+three commits after entry 1 deleted that return; App's `slide` comment still
+named date nav as a source of the directional classes after entry 12 stopped it
+passing them; `M.reveal` pointed at a `REVEAL_MS` that has never existed.
+Also removed: an exported `EXIT_PAD` nothing imports (a caller able to reach it
+is a caller able to hand-compute `M.dur.x + EXIT_PAD`, which is the split
+`exitHold` exists to prevent) and a `/* @motion */` marker on a line containing
+no literal, which would have suppressed the check:style failure that should
+catch the next one added beside it.
+
+### The shape of this version
+
+Four of six reports had a cause other than the obvious one, and the two that
+mattered most were invisible: a stale FLIP baseline that makes the grid slide
+diagonally on an unrelated edit, and every modal in the app closing at 70% of its
+own animation. Both were found by measuring in the running app rather than by
+reading the code, and neither would have been reported as itself — one was
+reported as "the grid moves to a corner" and the other was never reported at all,
+because a truncated exit still looks like an animation.
+
+The recurring fault underneath five of the seven entries is one thing: **a value
+that must agree with another value, written out by hand in both places.** Six
+exit timeouts against one duration token, twelve copies of one button, three
+copies of one alert, two copies of one chip, and two colour pairs drawn from
+families never required to match. v17.14.0 said it about modal lists; it is the
+same sentence.
+
+Entry 8 is its sibling rather than its counter-example: not a value duplicated,
+but a whole surface that left the shared component for a reason nobody
+re-checked, and took five invisible guarantees with it. Both are cases of the
+single source of truth having exactly one exception, and the exception being
+the thing that breaks.
+
+Entries 10 and 11 are a third variant, and the most useful one to carry
+forward: **a mechanism correct for one kind of change, applied to a different
+kind of change nobody had distinguished.** A per-row lifecycle is right for a
+notification arriving and wrong for a whole list being replaced; a disclosure
+duration is right for a panel you opened and wrong for a panel that opened
+itself. In both cases the two kinds shared a component, so nothing marked the
+seam — and in the first the visible symptom was a wobble while the real one was
+half a second of the previous day's notifications, which no amount of retiming
+would have fixed. Entry 11's seam had even been written down, in the token's
+own defining clause, and read past. Ask what KIND of change this is before
+picking how it should move.
+
+Entry 12 closes the loop on all three, because it is the one report that
+survived two fixes. Both of those made the motion better and neither made it
+right, for the same reason: they treated a two-axis movement as a timing
+problem. **Two movements on different axes cannot be reconciled by a clock —
+aligning them perfectly is what makes the diagonal clean rather than what makes
+it go away.** The question was never "when should each of these run", it was
+"which axis does this gesture own".

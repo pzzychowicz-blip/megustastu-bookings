@@ -36,7 +36,7 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, RIM_SOLID } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
@@ -44,7 +44,7 @@ import {
   optimizerActiveFor
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps } from "../lib/customers";
-import { Overlay, ModalTitle, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
@@ -224,18 +224,21 @@ export function BookingFormModal({
   // so the border alone carries the colour and the fill was a third copy of it.
   // v17.9.0: `gap` is new — the disclosure marker is now an SVG sibling rather
   // than a " ▾" tacked onto the label string, so the space has to be real.
-  const chipBase={display:"inline-flex",alignItems:"center",gap:4,borderRadius:R.pill,padding:"2px 10px",fontSize: T.small,fontWeight: FW.bold,cursor:"pointer",background:"transparent"};
-  const regularChip=custMatch&&custMatch.regularCount>=1?<button
-    key="reg" type="button" className="mgt-hover-scale mgt-press"
-    onClick={function(){toggleChipHist("regular");}}
-    style={Object.assign({},chipBase,{border:"2px solid var(--suggest-border)",color:"var(--success-text)"})}><span>{custMatch.regularCount>=(regularMin||2)?"Regular · "+custMatch.regularCount+" past visits":custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":"")}</span>{histWhich==="regular"?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />}</button>:null;
-  const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<button
-    key="ns" type="button" className="mgt-hover-scale mgt-press"
-    onClick={function(){toggleChipHist("noshow");}}
-    style={Object.assign({},chipBase,{border:"2px solid var(--warn-border)",color:"var(--warn-text)"})}><span>{"No-show ×"+custMatch.noShowCount}</span>{histWhich==="noshow"?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />}</button>:<button
-    key="ns" type="button" className="mgt-hover-scale mgt-press"
-    onClick={function(){toggleChipHist("noshow");}}
-    style={Object.assign({},chipBase,{border:"2px solid var(--border-soft)",color:"var(--text-secondary)"})}><span>1 no-show</span>{histWhich==="noshow"?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />}</button>):null;
+  // v17.15.0: the shared `OutlineChip`, `as="button"` for the disclosure kind.
+  // `chipBase` was the second hand-written copy of it (CustomersSettings had the
+  // other), and the two disagreed on their colour SOURCE: border from the
+  // --suggest/--warn families, text from --success-text/--warn-text. A tone is
+  // one decision now. `size="small"` keeps this chip's wider inset and T.small —
+  // it sits in a form beside inputs, not in a dense settings row.
+  const chipMark=function(which){return histWhich===which?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />;};
+  const regularChip=custMatch&&custMatch.regularCount>=1?<OutlineChip
+    key="reg" tone="success" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
+    onClick={function(){toggleChipHist("regular");}}><span>{custMatch.regularCount>=(regularMin||2)?"Regular · "+custMatch.regularCount+" past visits":custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":"")}</span>{chipMark("regular")}</OutlineChip>:null;
+  const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<OutlineChip
+    key="ns" tone="warn" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
+    onClick={function(){toggleChipHist("noshow");}}><span>{"No-show ×"+custMatch.noShowCount}</span>{chipMark("noshow")}</OutlineChip>:<OutlineChip
+    key="ns" tone="neutral" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
+    onClick={function(){toggleChipHist("noshow");}}><span>1 no-show</span>{chipMark("noshow")}</OutlineChip>):null;
   // Disclosure panel — the WA pastListBody, on app tokens (suggest family for
   // Regular, warn family for no-shows). Top 5 rows like WA; a muted "+N earlier"
   // tail when there are more. Reveal (below) eases it open/closed; its cached-
@@ -298,7 +301,10 @@ export function BookingFormModal({
       key={c.phone}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickCustomer(c);})}
-      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{c.visits>0?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--success-text)",background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:R.pill,padding:"2px 6px"}}>{c.visits+" visit"+(c.visits!==1?"s":"")}</span>:null}{c.noShowCount>0?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--warn-text)",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.pill,padding:"2px 6px"}}>{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</span>:null}</div></div>
+      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{/* v17.15.0: these were the banned shape in full — pale semantic fill PLUS a
+              border in the matching hue PLUS bold text in a third shade. They are
+              the same counts as the Customers tab's chips, so they are now the
+              same chip. */}{c.visits>0?<OutlineChip tone="success">{c.visits+" visit"+(c.visits!==1?"s":"")}</OutlineChip>:null}{c.noShowCount>0?<OutlineChip tone="warn">{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</OutlineChip>:null}</div></div>
   );})}</div>:null;
   // v16.4.0: name-search dropdown — same opaque-sheet chrome as phoneDropdown.
   // Each row shows the phone (or "no phone") + last date so two same-name
@@ -597,9 +603,21 @@ export function BookingFormModal({
   //
   // Assertive rather than polite because this fires in response to pressing
   // Save: the user is waiting on exactly this answer.
-  const errorEl=<div role="alert">{error?<div
-    id={FORM_ERROR_ID}
-    style={{color:"var(--danger-text)",fontSize: T.body,padding:"10px 14px",background:"var(--danger-bg)",borderRadius:R.card,border:"1px solid var(--danger-border)",marginBottom:14}}>{error}</div>:null}</div>;
+  // v17.15.0: the shared InlineAlert. `id` stays on the element itself, because
+  // that is what `aria-describedby` names — `Fld` emits the reference only when
+  // the caller says the field is invalid, and a describedby aimed at an id not
+  // in the tree is the dangling reference the atom exists to avoid.
+  // v17.15.0: eased, in BOTH directions. The alert appears and disappears while
+  // the modal is open and being read — pressing Save raises it, typing into the
+  // field clears it — so it is exactly the case the in-and-out rule is about,
+  // and it was snapping the footer (and the card above it) by its own height.
+  // `Reveal` caches its last truthy child, which is what makes the exit animate
+  // once `error` is already null. The `role="alert"` div stays OUTSIDE it and
+  // permanently mounted: a live region announces a change to its CONTENT, so a
+  // region that arrives holding its message says nothing.
+  const errorEl=<div role="alert"><Reveal show={!!error}>{error?
+    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14}}>{error}</InlineAlert>
+  :null}</Reveal></div>;
   // Gated on `error` as well as the field name, so the id handed to
   // aria-describedby can only ever name an element that is on screen.
   function invalidField(name){return !!error&&errorField===name;}
@@ -663,15 +681,15 @@ export function BookingFormModal({
             disabled={!canSave}
             onClick={onSave}
             className="mgt-hover-scale"
-            style={{background:canSave?S.accent:"var(--btn-disabled)",border:RIM_SOLID,borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:canSave?"var(--text-on-accent)":"var(--btn-disabled-ink)",minHeight:44,boxShadow:canSave?"var(--shadow-btn-accent)":"none"}}>Save booking</button>
+            style={mkSolidBtn(canSave?S.accent:"var(--btn-disabled)",{cursor:canSave?"pointer":"not-allowed",color:canSave?"var(--text-on-accent)":"var(--btn-disabled-ink)",boxShadow:canSave?"var(--shadow-btn-accent)":"none"})}>Save booking</button>
         );
       })()}{origPendingBooking?(
-        <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" outMs={190} tag="span">
+        <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" tag="span">
           <button
             disabled={!form.date}
             onClick={onSaveConfirm}
             className="mgt-hover-scale"
-            style={{background:form.date?"var(--app-success-solid)":"var(--btn-disabled)",border:RIM_SOLID,borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:form.date?"var(--text-on-accent)":"var(--btn-disabled-ink)",minHeight:44,boxShadow:form.date?"var(--shadow-btn-success)":"none"}}>Save&confirm</button>
+            style={mkSolidBtn(form.date?"var(--app-success-solid)":"var(--btn-disabled)",{cursor:form.date?"pointer":"not-allowed",color:form.date?"var(--text-on-accent)":"var(--btn-disabled-ink)",boxShadow:form.date?"var(--shadow-btn-success)":"none"})}>Save&confirm</button>
         </Presence>
       ):null}</div></div>
     </>

@@ -154,7 +154,7 @@ export function ViewSwitcher({
           )}
         >{v}</button>
       ))}
-      <Presence show={!!split} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span">
+      <Presence show={!!split} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
         <span style={{ display: "inline-flex", gap: 6 }}>
           <button className="mgt-hover-scale" onClick={onSwapSides}
             title="Swap the two views" aria-label="Swap the two views"

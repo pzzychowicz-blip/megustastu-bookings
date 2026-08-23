@@ -63,6 +63,18 @@ const CRITICAL_SELECTORS = [
   ".mgt-skip",                        // the skip link is hidden BY this rule
   ".mgt-skip:focus",                  // …and revealed by this one
   ".mgt-detent",                      // TimeAxis snap
+  // v17.15.0 — SlideView's three entrance classes. It mounts with
+  // `animating: true` and leaves that state ONLY on `animationend`, so a
+  // missing rule means the event never comes and the view wrapper keeps
+  // `overflow: hidden` forever: hover lifts clipped app-wide, and a clipped
+  // pane in the fixed-shell and Split View layouts. Verified by injecting
+  // `animation: none` on the fade and changing the date — the class stayed on
+  // and the computed overflow stayed `hidden`, with nothing thrown and nothing
+  // visibly missing. Textbook silent failure, and the two slide classes had
+  // always had it without being listed.
+  ".mgt-view-in-left",                // the T/L/P switch, leftward
+  ".mgt-view-in-right",               // the T/L/P switch, rightward
+  ".mgt-view-fade",                   // a DATE change: no transform, on purpose
   "@media print",                     // DaySheet is print-only; nothing else shows it
 ];
 

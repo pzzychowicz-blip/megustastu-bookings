@@ -46,7 +46,7 @@ import { toMins, clashRowId } from "../lib/booking-logic";
 import { BTN, T, FW, IC, H } from "../lib/constants";
 import { CloseIcon } from "./Icons";
 
-export function ClashBanner({ pairs, bookings, onAssign, onDismiss }) {
+export function ClashBanner({ pairs, bookings, onAssign, onDismiss, swapKey }) {
   const byId = new Map(bookings.map(function (b) { return [b.id, b]; }));
   const byRow = new Map(pairs.map(function (c) { return [clashRowId(c), c]; }));
 
@@ -84,6 +84,6 @@ export function ClashBanner({ pairs, bookings, onAssign, onDismiss }) {
   }
 
   return (
-    <BannerRows ids={pairs.map(clashRowId)} renderRow={renderRow} />
+    <BannerRows ids={pairs.map(clashRowId)} renderRow={renderRow} swapKey={swapKey} />
   );
 }

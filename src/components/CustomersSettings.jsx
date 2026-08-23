@@ -21,7 +21,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { S, BTN, BLOCK_BG, BLOCK_INK, R, T, FW, IC } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKey, isNoShow } from "../lib/customers";
-import { Section, Reveal, mkInp, mkBtn } from "./atoms";
+import { Section, OutlineChip, Reveal, mkInp, mkBtn } from "./atoms";
 import { ChevronDownIcon, ChevronRightIcon, WaitIcon } from "./Icons";
 
 export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2 }) {
@@ -76,9 +76,12 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   // ListView's solid tags are), so the pale-fill-plus-border-plus-bold-text
   // stack was three encodings of one signal on something that needs one. The
   // extra pixel of border is what keeps them legible once the fill is gone.
-  const chip = function (label, colors) {
-    return <span style={{ fontSize: T.micro, fontWeight: FW.bold, borderRadius: R.pill, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 2, background: "transparent", border: "2px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
-  };
+  //
+  // v17.15.0: the shared `OutlineChip`, which is the same component this local
+  // helper and BookingFormModal's `chipBase` had each written out. A TONE is
+  // one decision now — the border is the ink at half strength — instead of a
+  // border token and a text token from two unrelated families that disagreed
+  // in light mode and nearly converged in dark.
 
   const rows = shown.map(function (c) {
     // v17.10.0: `c.key` — the identity, which is the phone for a phone customer
@@ -90,7 +93,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     const wlCount = c.phone ? waitCountOf(c.phone) : 0;
     const historyRows = open ? c.bookings.map(function (b) {
       return (
-        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "4px 10px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
+        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "4px 10px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? <OutlineChip tone="warn">no-show</OutlineChip> : null}</div>
       );
     }) : null;
     return (
@@ -110,7 +113,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           // squared off inside its own rounded card on hover. R.card matches the
           // parent exactly. (ConnectionStatus's dot button was the first case in
           // the app; this is the second. Check any new one.)
-          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted }}>{(c.phone ? formatPhone(c.phone) : "No phone · linked guest") + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? chip(c.visits + " visit" + (c.visits !== 1 ? "s" : ""), { border: "var(--suggest-border)", text: "var(--success-text)" }) : null}{c.noShowCount > 0 ? chip(c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}{wlCount > 0 ? chip(<><WaitIcon size={IC.inline} />{wlCount}</>, { border: "var(--border-soft)", text: "var(--text-secondary)" }) : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></div></div>
+          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted }}>{(c.phone ? formatPhone(c.phone) : "No phone · linked guest") + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? <OutlineChip tone="success">{c.visits + " visit" + (c.visits !== 1 ? "s" : "")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></div></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
             <div style={{ fontSize: T.body, fontWeight: FW.medium, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>

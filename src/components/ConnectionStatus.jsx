@@ -173,8 +173,10 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
           survivable once every other surface in the app eased. mgt-card-in /
           -out are reused rather than invented: they fade and translateY(8px),
           which on a top-anchored popover reads as it dropping out of the dot,
-          exactly the motion this needs. outMs must match --t-move (240ms) or
-          the node unmounts mid-animation.
+          exactly the motion this needs. outMs must match --t-move or the node
+          unmounts mid-animation — which this site knew and every other one did
+          not, so v17.15.0 made it `Presence`'s default (EXIT_MS) and deleted
+          the hand-typed number here along with the six wrong ones elsewhere.
           Presence renders the positioned element ITSELF (its `style` prop) —
           no extra wrapper, so `wrapRef.current.contains()` and the absolute
           anchoring are untouched. */}
@@ -182,7 +184,6 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
         show={open}
         inClass="mgt-card-in"
         outClass="mgt-card-out"
-        outMs={240}
         style={{
           position: "absolute",
           top: "calc(100% + 8px)",

@@ -29,12 +29,12 @@
 // source. The duplicate in WalkinForm has been replaced with the same import.
 
 import { useState, useEffect, useRef } from "react";
-import { S, BTN, R, M, T, FW, RIM_SOLID } from "../lib/constants";
+import { S, BTN, R, M, T, FW } from "../lib/constants";
 import { isTyping } from "../lib/keyboard";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
 } from "../lib/booking-logic";
-import { Overlay, ModalTitle, Toggle, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, ModalTitle, Toggle, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
 import { TableGrid } from "./TableGrid";
 import { sameDraft } from "../lib/drafts";
 
@@ -224,17 +224,13 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         disabled={!ok}
         onClick={() => { if (ok) onSave(selected, true, isSwapping ? affectedBookings : null); }}
         className="mgt-hover-scale"
-        style={{
-          background: ok ? (isSwapping ? BTN.orange : S.accent) : "var(--btn-disabled)",
-          border: RIM_SOLID,
-          borderRadius: R.pill, padding: "10px 18px",
+        style={mkSolidBtn(ok ? (isSwapping ? BTN.orange : S.accent) : "var(--btn-disabled)", {
           cursor: ok ? "pointer" : "not-allowed",
-          fontSize: T.lead, fontWeight: FW.semi, minHeight: 44,
           // v17.14.0: muted ink while disabled — white on --btn-disabled measures
           // 1.30:1 in light, which is not dim but GONE. See index.html.
           color: ok ? "var(--text-on-accent)" : "var(--btn-disabled-ink)",
           boxShadow: ok ? "var(--shadow-btn-solid)" : "none"
-        }}
+        })}
       >
         {assignLabel}
       </button>

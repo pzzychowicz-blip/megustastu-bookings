@@ -35,7 +35,7 @@
 // catch a blind spot; running it against input that must fail does.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
@@ -62,6 +62,7 @@ const Strip = read("components/NotificationStrip.jsx");
 const BookingForm = read("components/BookingFormModal.jsx");
 const Walkin = read("components/WalkinForm.jsx");
 const Connection = read("components/ConnectionStatus.jsx");
+const Reminder = read("components/ReminderEditor.jsx");
 // v17.14.0: the skip link is half markup and half stylesheet, and the CSS half
 // is where it can fail invisibly (hidden in a way that also makes it
 // unfocusable). Read RAW — stripComments is for JS/JSX, and the point here is
@@ -439,6 +440,60 @@ describe("the connection popover claims only what it is", () => {
       "the popover has no focus trap, so it must not claim one — the same " +
       "trade Overlay makes in the other direction by resolving its name from " +
       "the DOM rather than promising one it might not have");
+  });
+});
+
+describe("every modal is Overlay's modal (WCAG 4.1.2, 2.4.3)", () => {
+  // v17.15.0. `Overlay` carries five things no modal can be correct without —
+  // `role="dialog"`, `aria-modal`, an accessible name resolved from the DOM, a
+  // focus trap, and focus restore on close. A component that builds its own
+  // scrim and card gets NONE of them, and there is nothing on screen to say so.
+  //
+  // ReminderEditor did exactly that for eleven versions. Its stated reason was
+  // that it renders at z-index 250 while Overlay's scrim is 200 — which was
+  // false the whole time, because the discard confirm sits at 260 using Overlay
+  // and gets there by WRAPPING it in a positioned div. The lesson is not "don't
+  // forget the roles"; it is that a plausible-sounding structural excuse is how
+  // a modal ends up outside the atom, so the check is on the STRUCTURE.
+  //
+  // `var(--scrim)` is the tell, and it is a precise one. It is the modal scrim
+  // specifically — the popups (SplitMenu, QuickStatusPopup) paint
+  // `--tl-popup-scrim`, a different token, because a popup is not a dialog and
+  // must not claim to be one. So: exactly one file may reference `--scrim`, and
+  // it is the file that owns the behaviour.
+  const MODAL_SCRIM = /var\(--scrim\)/;
+
+  it("only atoms.jsx paints the modal scrim", () => {
+    has(Atoms, "Overlay", MODAL_SCRIM, "Overlay is the one place the modal scrim is drawn");
+    const dir = join(SRC, "components");
+    const offenders = readdirSync(dir)
+      .filter((f) => /\.jsx?$/.test(f) && f !== "atoms.jsx")
+      .filter((f) => MODAL_SCRIM.test(stripComments(readFileSync(join(dir, f), "utf8")).join("\n")));
+    expect(
+      offenders,
+      "a component painting var(--scrim) is building a second Overlay, and it " +
+      "gets no dialog role, no focus trap and no accessible name. Use Overlay; " +
+      "if it must sit above another modal, wrap it in a positioned div with a " +
+      "higher z-index (ReminderEditor at 250, the discard confirm at 260) " +
+      "rather than reimplementing the surface."
+    ).toEqual([]);
+    // App.jsx renders its confirm dialogs INLINE, so it is checked too.
+    hasnt(App, "App.jsx", MODAL_SCRIM, "App's confirm dialogs go through Overlay");
+  });
+
+  it("ReminderEditor is on Overlay, at z=250, and owns no scrim of its own", () => {
+    has(Reminder, "Overlay import", /import\s*\{[^}]*\bOverlay\b[^}]*\}\s*from\s*"\.\/atoms"/,
+      "it was the last modal outside the atom");
+    has(Reminder, "<Overlay", /<Overlay\b/, "the shell is Overlay's, not hand-written");
+    has(Reminder, "z=250 wrapper", /position:\s*"relative",\s*zIndex:\s*250/,
+      "it must render ABOVE Settings (z=200). A wrapper with position + z-index " +
+      "makes a stacking context, so the subtree stacks at 250 whatever the " +
+      "fixed children inside it declare — remove it and the editor paints " +
+      "UNDER the modal that opened it, which no test but this one would notice");
+    hasnt(Reminder, "hand-written scrim/card classes", /mgt-(scrim|card)-(in|out)/,
+      "Overlay owns the open/close animation now; a second copy would fight it");
+    hasnt(Reminder, "useModalPresence", /useModalPresence/,
+      "Overlay reads the wrapping ModalPresence itself");
   });
 });
 

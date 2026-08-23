@@ -225,6 +225,34 @@
            as a fill. */
         --danger-bg: rgba(254, 226, 226, 0.7);  --danger-border: rgba(252, 165, 165, 0.55);
         --suggest-bg: rgba(220, 252, 231, 0.8); --suggest-border: rgba(134, 239, 172, 0.5);
+        /* v17.15.0 — OUTLINE-CHIP borders, DERIVED from the ink they sit beside.
+           An outline chip is transparent with a 2px border and coloured text
+           (DESIGN.md's three label treatments), and it took its border from
+           --suggest-border / --warn-border and its text from --success-text /
+           --warn-text — two unrelated families. In light that is a pale mint
+           ring around dark forest text; in dark the two nearly match. The chip
+           looked like a different component depending on the theme.
+
+           A border is the same statement as the text, quieter — so it is the
+           same colour, at half strength. color-mix() means it tracks the ink
+           automatically and cannot drift from it again, in either theme, and it
+           is the first use of the function in this codebase. The baseline is
+           fine (Safari 16.2 / Chrome 111; the app already needs Safari 16 for
+           grid-template-rows: 0fr) and the failure mode is benign rather than
+           broken: an unsupported color-mix makes the custom property
+           guaranteed-invalid, so border-color falls back to currentColor —
+           which IS the ink, just at full strength. Verified in the browser
+           rather than assumed.
+
+           These are theme-agnostic BY CONSTRUCTION: each references a token
+           that already flips, so they are declared once and never duplicated
+           into the dark block — the same reasoning as the radii and the motion
+           tokens. Adding one to [data-theme="dark"] would re-introduce exactly
+           the hand-maintained pair this replaces. */
+        --chip-success-border: color-mix(in srgb, var(--success-text) 50%, transparent);
+        --chip-warn-border:    color-mix(in srgb, var(--warn-text)    50%, transparent);
+        --chip-danger-border:  color-mix(in srgb, var(--danger-text)  50%, transparent);
+        --chip-neutral-border: color-mix(in srgb, var(--text-secondary) 50%, transparent);
         /* Shadows carrying white inset highlights (dimmed on dark) */
         --shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.8);
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.6);
@@ -481,11 +509,37 @@
                       a tint, a toggle knob, the TimeAxis detent.
            --t-move   something arriving or leaving: toasts, modals, sheets,
                       the view switch, a slide-in button.
-           --t-shift  geometry: heights, widths, positions — a Reveal opening,
-                      a timeline block repositioning, the split divider.
+           --t-shift  geometry: heights, widths, positions — a timeline block
+                      repositioning, the split divider.
 
-           Plus two that are deliberately outside the scale because they are
+           Plus three that are deliberately outside the scale because they are
            not interface response:
+           --t-reveal a DISCLOSURE opening or closing under your finger: the
+                      Summary body, "Completed & cancelled", every Settings
+                      section, the notification strip's LID. Slower than
+                      --t-shift on purpose, and the distinction is what is being
+                      asked of the eye. A block repositioning is something you WATCH ARRIVE,
+                      and 385ms is already generous for that. A disclosure is
+                      something you READ AS IT ARRIVES: the content is new, it is
+                      several lines tall, and the motion is the only thing
+                      telling you it came from the header you just pressed rather
+                      than being dumped onto the page. Reported as "too snappy",
+                      which is exactly the complaint of being handed something
+                      before you are looking at it. `Reveal` is the ONLY consumer
+                      — its two internal timeouts are derived from this number,
+                      so raising it here is safe and raising it anywhere else is
+                      not (see atoms.jsx).
+                      v17.15.0: read "under your finger" as load-bearing. This
+                      list said "the notification strip", and the strip holds
+                      TWO Reveals — the lid's body, which you pressed, and the
+                      pane itself, which arrives because a booking went late or
+                      because you changed the day. Nobody pressed that one, and
+                      at 520ms it outlasted the 240ms view slide by more than
+                      double, so a date change slid sideways and then went on
+                      rising: one event read as two. It takes --t-move, via
+                      `Reveal`'s `speed` prop. A Reveal is still a disclosure by
+                      DEFAULT; that call site is the exception this paragraph
+                      exists to justify.
            --t-status the status colour change, shared by TimelineView and
                       PlanView. Its own token precisely BECAUSE two files must
                       agree; a shared number needs a shared name.
@@ -498,6 +552,7 @@
         --t-tap: 145ms;
         --t-move: 240ms;
         --t-shift: 385ms;
+        --t-reveal: 520ms;
         --t-status: 360ms;
         --t-wipe: 760ms;
       }
@@ -1224,6 +1279,23 @@
       @keyframes mgt-view-in-left  { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
       .mgt-view-in-right { animation: mgt-view-in-right var(--t-move) var(--ease-out) both; }
       .mgt-view-in-left  { animation: mgt-view-in-left var(--t-move) var(--ease-out) both; }
+      /* v17.15.0 — the DATE change's entrance, and it deliberately has no
+         transform. The two above move the view 28px sideways; the notification
+         strip appearing, growing or leaving moves it vertically, by 98, 100, 51
+         and 151px on the four steps of 19 -> 26 August that change it. Run at
+         once the two compose into a diagonal, and the two upward cases read as
+         the grid heading for a top corner — reported twice.
+         Retiming cannot fix it: co-timing them, which is what v17.15.0 did
+         first, is exactly what turns a wobble into one clean diagonal. Only
+         separating the AXES fixes it, so a date change now owns the vertical
+         one outright and its sole movement is the strip's own reveal pushing
+         the grid. The view switch keeps the horizontal slide, and keeps it
+         honestly: the strip sits outside the view, so switching T/L/P never
+         moves anything vertically.
+         --t-move, not the --t-shift `.mgt-fade-in` takes, because this has to
+         land with the push it is replacing the slide for. */
+      @keyframes mgt-view-fade { from { opacity: 0; } to { opacity: 1; } }
+      .mgt-view-fade { animation: mgt-view-fade var(--t-move) var(--ease-out) both; }
       /* Settings tab-content crossfade on switch. --t-shift, not --t-move: it
          rides inside an AutoHeight that is resizing the modal card over
          --t-shift at the same moment, and the two are one event. At --t-move
