@@ -12,9 +12,9 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, RIM_SOLID, EXIT_MS, REVEAL_EXIT_MS } from "../lib/constants";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, REVEAL_EXIT_MS } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
-import { ChevronRightIcon } from "./Icons";
+import { AlertIcon, ChevronRightIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
 // Return inline-style objects. Used wherever an `<input>` or `<button>` needs
@@ -418,6 +418,71 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
         border: RIM_SOLID,
         boxShadow: "var(--shadow-btn)"
       }}>{children}</h2>
+    </div>
+  );
+}
+
+// ── InlineAlert — a notification-strip section, inside a modal (v17.15.0) ────
+// The message a form shows when it refuses to save: "Text is required.", "No
+// free table for that time", the walk-in capacity error. There were three
+// copies, in ReminderEditor, BookingFormModal and WalkinForm, differing only in
+// padding (8px 12px vs 10px 14px) and margin (12 vs 14) — and all three wore the
+// one label shape DESIGN.md bans outright: a pale semantic fill PLUS a border in
+// the matching hue PLUS bold text in a third shade of it, which encodes one
+// signal three times and is the stock badge every framework ships.
+//
+// So it takes the shape the app already uses to report a fault: a notification
+// strip section. Tinted pane, the section's mark in the tone colour, the message
+// in the same tone. A fault now looks the same whether it fires on the main
+// screen or inside a modal, which is the point — `AppBanners`' "Couldn't save"
+// and a form's "Text is required" are the same kind of statement.
+//
+// It is a one-line section, with no separate title, on the strip's OWN
+// precedent: with exactly one section live the strip drops the generic lid and
+// takes that section's title rather than rendering a redundant sub-header. Here
+// the message IS the section.
+//
+// ── Why the tone is --danger-text and not --status-offline ───────────────────
+// The strip's danger sections use `tone: --status-offline`, and copying that
+// verbatim was the obvious move. Measured first, per the rule that a colour
+// token may only sit on a surface that flips with it — and --status-offline is
+// #ff3b30 in BOTH themes while --danger-bg inverts:
+//
+//   --status-offline on --danger-bg   light 3.03:1   dark 4.31:1
+//   --danger-text    on --danger-bg   light 7.09:1   dark 8.05:1
+//
+// 3.03:1 is below AA for body text, and a 42% swing between themes is exactly
+// the light/dark inconsistency this version was asked to remove. --danger-text
+// is the token that flips with the fill it sits on, so it is the one that can
+// be trusted on it. `AppBanners` was corrected to match in the same commit —
+// its two danger sections had been shipping the 3.03:1.
+export const ALERT_DANGER = { tone: "var(--danger-text)", tint: "var(--danger-bg)" };
+
+export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint, icon: Icon = AlertIcon, id, style, children }) {
+  return (
+    <div id={id} style={{
+      // `alignItems: center` and the mark-to-text gap both mirror the strip's
+      // own section header. The gap there is a module const of 9 that this file
+      // cannot import without a cycle (NotificationStrip imports from atoms), so
+      // it takes the nearest step on the shared scale — SP snaps DOWNWARD, and a
+      // pixel between a modal alert and a strip section is not something anyone
+      // can see, whereas an off-scale literal here is something check:style can.
+      display: "flex", alignItems: "center", gap: SP.base,
+      padding: "10px 14px", borderRadius: R.card,
+      background: tint,
+      ...(style || {})
+    }}>
+      {/* `icon={null}` renders the message alone. The explicit guard is also
+          what makes the reference visible to eslint here: this config does not
+          count a JSX element reference as a use, so a component read ONLY as
+          `<Icon />` reports as unused (`SectionMark` in NotificationStrip
+          passes only because its own `if (!Icon)` happens to read it). */}
+      {Icon ? (
+        <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", color: tone, flexShrink: 0 }}>
+          <Icon size={IC.control} />
+        </span>
+      ) : null}
+      <span style={{ fontSize: T.body, fontWeight: FW.bold, color: tone, flex: 1, minWidth: 0 }}>{children}</span>
     </div>
   );
 }

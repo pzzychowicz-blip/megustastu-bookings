@@ -44,7 +44,7 @@ import {
   optimizerActiveFor
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps } from "../lib/customers";
-import { Overlay, ModalTitle, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { Overlay, ModalTitle, Fld, InlineAlert, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
@@ -597,9 +597,13 @@ export function BookingFormModal({
   //
   // Assertive rather than polite because this fires in response to pressing
   // Save: the user is waiting on exactly this answer.
-  const errorEl=<div role="alert">{error?<div
-    id={FORM_ERROR_ID}
-    style={{color:"var(--danger-text)",fontSize: T.body,padding:"10px 14px",background:"var(--danger-bg)",borderRadius:R.card,border:"1px solid var(--danger-border)",marginBottom:14}}>{error}</div>:null}</div>;
+  // v17.15.0: the shared InlineAlert. `id` stays on the element itself, because
+  // that is what `aria-describedby` names — `Fld` emits the reference only when
+  // the caller says the field is invalid, and a describedby aimed at an id not
+  // in the tree is the dangling reference the atom exists to avoid.
+  const errorEl=<div role="alert">{error?
+    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14}}>{error}</InlineAlert>
+  :null}</div>;
   // Gated on `error` as well as the field name, so the id handed to
   // aria-describedby can only ever name an element that is on screen.
   function invalidField(name){return !!error&&errorField===name;}

@@ -20,7 +20,7 @@
 
 import { S, BTN, R, T, FW, H, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
-import { Fld, ModalTitle, Toggle, mkBtn, mkSolidBtn, mkInp, mkArea, useModalPresence, AutoHeight } from "./atoms";
+import { Fld, InlineAlert, ModalTitle, Toggle, mkBtn, mkSolidBtn, mkInp, mkArea, useModalPresence, AutoHeight } from "./atoms";
 import { CloseIcon } from "./Icons";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
@@ -237,18 +237,10 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         </AutoHeight>
         </div>
         <div style={{ flexShrink: 0, padding: "16px 24px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
-        {err ? (
-          <div style={{
-            color: "var(--danger-text)", fontSize: T.body,
-            padding: "8px 12px",
-            background: "var(--danger-bg)",
-            borderRadius: R.card,
-            border: "1px solid var(--danger-border)",
-            marginBottom: 12
-          }}>
-            {err}
-          </div>
-        ) : null}
+        {/* v17.15.0: the shared InlineAlert — a notification-strip section,
+            inside a modal. It was one of three copies of the pale-fill +
+            matching-border + third-shade-text shape DESIGN.md bans. */}
+        {err ? <InlineAlert style={{ marginBottom: 12 }}>{err}</InlineAlert> : null}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button
