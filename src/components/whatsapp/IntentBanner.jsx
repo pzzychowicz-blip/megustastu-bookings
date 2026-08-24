@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { Reveal, mkSolidBtn } from "../atoms";
 import { useCollapseState } from "../../hooks/useCollapseState";
-import { R, T, FW, M, IC, H } from "../../lib/constants";
+import { R, T, FW, M, IC, H, EXIT_MS } from "../../lib/constants";
 import { WarnIcon, PencilIcon } from "./WaIcons";
 import { CheckIcon, ChevronRightIcon } from "../Icons";
 
@@ -63,7 +63,13 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
         onClick={() => {
           if (leaving) return; // ignore re-clicks during the fade
           setLeaving(true);
-          setTimeout(() => { if (onMarkHandled) onMarkHandled(); }, 300);
+          // 17.15.0-wa-sandbox: EXIT_MS, not a typed 300. The banner fades on
+          // `M.exit` (--t-move) and this is the hold that keeps it mounted long
+          // enough to finish — two halves of one fact in two languages, which
+          // is the pairing v17.15.0 found wrong in six places at once. A hold
+          // shorter than its animation does not LOOK broken: the fade plays
+          // part way and the node blinks out at whatever opacity it reached.
+          setTimeout(() => { if (onMarkHandled) onMarkHandled(); }, EXIT_MS);
         }}
         title="Mark this request as handled"
         className="mgt-hover-scale mgt-press"

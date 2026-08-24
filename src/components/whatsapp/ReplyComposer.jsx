@@ -124,8 +124,11 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
           className="mgt-hover-scale mgt-press"
           style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: R.pill, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "var(--shadow-btn)", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
         ><TemplatesIcon size={IC.chrome} /></button>
+        {/* Named for the same reason as the inbox search: the placeholder is
+            the only text near this control and it disappears once you type. */}
         <textarea
           ref={areaRef}
+          aria-label="Reply message"
           value={txt}
           onChange={(e) => setTxt(e.target.value)}
           onKeyDown={onKey}

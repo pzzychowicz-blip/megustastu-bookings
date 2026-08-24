@@ -400,8 +400,16 @@ export function InboxPanel({
                which is what the strip's dots report too. */}
             <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "currentColor", flexShrink: 0 }} />Needs action</button>
           <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+            {/* 17.15.0-wa-sandbox: a placeholder is not a name. It is not
+                exposed as one consistently, and it is gone the moment there is
+                a value — so the control a screen reader meets while you are
+                typing in it has no name at all. There is no visible label to
+                associate here by design (the field is the width of the pane and
+                its purpose is obvious to the eye), which is exactly the case
+                `aria-label` exists for. */}
             <input
               ref={searchRef}
+              aria-label="Search conversations"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search name, number or message…"

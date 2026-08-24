@@ -75,10 +75,10 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
         <div style={{ padding: "14px", borderRadius: R.card, background: "var(--wa-row-active-bg)", border: "1px solid var(--wa-row-active-border)" }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)", marginBottom: 10 }}>{editing === "__new__" ? "New template" : "Edit template"}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Fld label="Label (EN)"><input className="mgt-hover-scale" value={form.labelEn} onChange={(e) => setForm(Object.assign({}, form, { labelEn: e.target.value }))} style={mkInp()} placeholder="Confirm" /></Fld>
-            <Fld label="Label (ES)"><input className="mgt-hover-scale" value={form.labelEs} onChange={(e) => setForm(Object.assign({}, form, { labelEs: e.target.value }))} style={mkInp()} placeholder="Confirmar" /></Fld>
-            <Fld label="Text (EN)" style={{ gridColumn: "1 / -1" }}><textarea className="mgt-hover-scale" value={form.textEn} onChange={(e) => setForm(Object.assign({}, form, { textEn: e.target.value }))} rows={2} style={mkArea()} placeholder="Your booking is confirmed..." /></Fld>
-            <Fld label="Text (ES)" style={{ gridColumn: "1 / -1" }}><textarea className="mgt-hover-scale" value={form.textEs} onChange={(e) => setForm(Object.assign({}, form, { textEs: e.target.value }))} rows={2} style={mkArea()} placeholder="Su reserva está confirmada..." /></Fld>
+            <Fld label="Label (EN)">{(id) => <input id={id} className="mgt-hover-scale" value={form.labelEn} onChange={(e) => setForm(Object.assign({}, form, { labelEn: e.target.value }))} style={mkInp()} placeholder="Confirm" />}</Fld>
+            <Fld label="Label (ES)">{(id) => <input id={id} className="mgt-hover-scale" value={form.labelEs} onChange={(e) => setForm(Object.assign({}, form, { labelEs: e.target.value }))} style={mkInp()} placeholder="Confirmar" />}</Fld>
+            <Fld label="Text (EN)" style={{ gridColumn: "1 / -1" }}>{(id) => <textarea id={id} className="mgt-hover-scale" value={form.textEn} onChange={(e) => setForm(Object.assign({}, form, { textEn: e.target.value }))} rows={2} style={mkArea()} placeholder="Your booking is confirmed..." />}</Fld>
+            <Fld label="Text (ES)" style={{ gridColumn: "1 / -1" }}>{(id) => <textarea id={id} className="mgt-hover-scale" value={form.textEs} onChange={(e) => setForm(Object.assign({}, form, { textEs: e.target.value }))} rows={2} style={mkArea()} placeholder="Su reserva está confirmada..." />}</Fld>
           </div>
         </div>
       ) : (

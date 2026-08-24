@@ -185,7 +185,7 @@ export function WaSimulator({ ctx, onClose }) {
       <Section>
         <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><DiceIcon size={IC.control} />Generate scenario (Gemini)</div>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginBottom: 8 }}>Gemini invents a fresh, varied customer message (new sender) and runs it through the live pipeline — variety beyond the canned scenarios. Optional steer below; leave blank to surprise.</div>
-        <input className="mgt-hover-scale" value={genHint} onChange={(e) => setGenHint(e.target.value)} placeholder="Optional steer — e.g. birthday for 10, running late, cancel…" style={Object.assign({}, mkInp(), { marginBottom: 8 })} />
+        <input className="mgt-hover-scale" aria-label="Optional steer for the generated scenario" value={genHint} onChange={(e) => setGenHint(e.target.value)} placeholder="Optional steer — e.g. birthday for 10, running late, cancel…" style={Object.assign({}, mkInp(), { marginBottom: 8 })} />
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(1)} style={mkBtn({ minHeight: 40, padding: "8px 14px", background: "var(--wa-sim-accent)" })}>{genBusy ? "Thinking…" : "Generate"}</button>
           <button className="mgt-hover-scale" disabled={genBusy} onClick={() => runGenerate(3)} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent })}>Generate 3</button>
@@ -199,12 +199,14 @@ export function WaSimulator({ ctx, onClose }) {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <Fld label="Conversation">
-              <select className="mgt-hover-scale" value={effectiveKey} onChange={(e) => setCustKey(e.target.value)} style={mkSel()}>
+              {(id) => (
+                <select id={id} className="mgt-hover-scale" value={effectiveKey} onChange={(e) => setCustKey(e.target.value)} style={mkSel()}>
                 {custList.map((c) => <option key={c.phoneKey} value={c.phoneKey}>{custLabel(c)}</option>)}
-              </select>
+                </select>
+              )}
             </Fld>
             <Fld label="The customer's message">
-              <textarea className="mgt-hover-scale" value={custText} onChange={(e) => setCustText(e.target.value)} rows={2} style={mkArea()} placeholder={custConv && custConv.language === "en" ? "Type as the customer…" : "Escribe como el cliente…"} />
+              {(id) => <textarea id={id} className="mgt-hover-scale" value={custText} onChange={(e) => setCustText(e.target.value)} rows={2} style={mkArea()} placeholder={custConv && custConv.language === "en" ? "Type as the customer…" : "Escribe como el cliente…"} />}
             </Fld>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {/* Suggest = Gemini plays the customer. DEV → harness
@@ -257,30 +259,36 @@ export function WaSimulator({ ctx, onClose }) {
       <Section>
         <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 10 }}>Custom message</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Fld label="Phone"><input className="mgt-hover-scale" value={form.phone} onChange={upd("phone")} style={mkInp()} placeholder="+34600000000" /></Fld>
+          <Fld label="Phone">{(id) => <input id={id} className="mgt-hover-scale" value={form.phone} onChange={upd("phone")} style={mkInp()} placeholder="+34600000000" />}</Fld>
           <Fld label="Language">
-            <select className="mgt-hover-scale" value={form.language} onChange={upd("language")} style={mkSel()}>
+            {(id) => (
+              <select id={id} className="mgt-hover-scale" value={form.language} onChange={upd("language")} style={mkSel()}>
               <option value="es">ES</option><option value="en">EN</option>
-            </select>
+              </select>
+            )}
           </Fld>
           <Fld label="Intent">
-            <select className="mgt-hover-scale" value={form.intent} onChange={upd("intent")} style={mkSel()}>
+            {(id) => (
+              <select id={id} className="mgt-hover-scale" value={form.intent} onChange={upd("intent")} style={mkSel()}>
               <option value="new_booking">new_booking</option>
               <option value="cancel">cancel</option>
               <option value="modify">modify</option>
               <option value="question">question</option>
               <option value="other">other</option>
-            </select>
+              </select>
+            )}
           </Fld>
           <Fld label="Confidence">
-            <select className="mgt-hover-scale" value={form.confidence} onChange={upd("confidence")} style={mkSel()}>
+            {(id) => (
+              <select id={id} className="mgt-hover-scale" value={form.confidence} onChange={upd("confidence")} style={mkSel()}>
               <option value="high">high</option><option value="medium">medium</option><option value="low">low</option>
-            </select>
+              </select>
+            )}
           </Fld>
-          <Fld label="Size"><input className="mgt-hover-scale" type="number" value={form.size} onChange={upd("size")} style={mkInp()} /></Fld>
-          <Fld label="Date"><input className="mgt-hover-scale" type="date" value={form.date} onChange={upd("date")} style={mkInp()} /></Fld>
-          <Fld label="Time"><input className="mgt-hover-scale" type="time" value={form.time} onChange={upd("time")} style={mkInp()} /></Fld>
-          <Fld label="Message" style={{ gridColumn: "1 / -1" }}><textarea className="mgt-hover-scale" value={form.text} onChange={upd("text")} rows={2} style={mkArea()} placeholder="What the customer typed…" /></Fld>
+          <Fld label="Size">{(id) => <input id={id} className="mgt-hover-scale" type="number" value={form.size} onChange={upd("size")} style={mkInp()} />}</Fld>
+          <Fld label="Date">{(id) => <input id={id} className="mgt-hover-scale" type="date" value={form.date} onChange={upd("date")} style={mkInp()} />}</Fld>
+          <Fld label="Time">{(id) => <input id={id} className="mgt-hover-scale" type="time" value={form.time} onChange={upd("time")} style={mkInp()} />}</Fld>
+          <Fld label="Message" style={{ gridColumn: "1 / -1" }}>{(id) => <textarea id={id} className="mgt-hover-scale" value={form.text} onChange={upd("text")} rows={2} style={mkArea()} placeholder="What the customer typed…" />}</Fld>
         </div>
         <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 16px", background: S.accent, marginTop: 10 })} onClick={sendCustom}>Send custom message</button>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Intent question/other → message only (no draft). Size/date/time apply to new_booking.</div>
