@@ -43,8 +43,8 @@ export function HistoryPopup({ booking, onClose }) {
       <div style={{
         maxHeight: 300, overflowY: "auto",
         borderRadius: R.card,
-        border: "1px solid rgba(160,170,190,0.4)",
-        background: "rgba(255,255,255,0.35)",
+        border: "1px solid var(--border-soft)",
+        background: "var(--bg-soft)",
         padding: "10px 12px",
         boxShadow: "var(--shadow-well)"
       }}>
@@ -61,7 +61,7 @@ export function HistoryPopup({ booking, onClose }) {
               style={{
                 fontSize: T.body, color: S.muted,
                 padding: "6px 0",
-                borderBottom: i < reversed.length - 1 ? "1px solid rgba(160,170,190,0.25)" : "none"
+                borderBottom: i < reversed.length - 1 ? "1px solid var(--border-soft)" : "none"
               }}
             >
               <span style={{ fontWeight: FW.semi, color: S.text }}>{dateStr + " " + timeStr}</span>

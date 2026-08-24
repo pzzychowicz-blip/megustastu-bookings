@@ -77,6 +77,51 @@ export function freeingSoon(bookings,todayStr,nowMins,windowMin){
   out.sort(function(a,b){return a.inMin-b.inMin;});
   return out;
 }
+// v17.12.0 (/code-review): what a booking SOUNDS like — the one source for every
+// spoken label in the app.
+//
+// It shipped as three hand-written copies: ListView's card, TimelineView's block
+// and PlanView's table, the first two byte-identical down to the
+// `size === 1 ? " guest" : " guests"` branch and the `"no table assigned"`
+// fallback. Adding a status, changing the pluralisation, or deciding a
+// three-table booking should not read "5A and 5B and 6" meant three edits, and
+// the app's own `STATUS_LABEL` note ("reuses the List card's vocabulary so the
+// two cannot drift") is the standing argument against that.
+//
+// PlanView is the reason for the option rather than a second function: its
+// subject is a TABLE, so it prefixes "Table 3, " and must not then repeat the
+// table at the end — but the rest of the sentence is this one exactly. That is a
+// parameter, not a different sentence; contrast `hourLabel`/`cutoffLabel` in
+// `time-grid.js`, which looked like copies and were genuinely two functions.
+//
+// Callers append their own state clauses (a block adds double-booked /
+// overstaying / running late) — those are properties of how a booking is being
+// DRAWN, not of the booking.
+export function describeBooking(b, opts){
+  const o=opts||{};
+  const out=[b.name, b.time, b.size+(b.size===1?" guest":" guests")];
+  // `tables: false` drops the clause entirely rather than saying "no table
+  // assigned" — on the floor plan the table is already the subject.
+  if(o.tables!==false){
+    const t=b.tables&&b.tables.length?b.tables:null;
+    out.push(t?(t.length>1?"tables ":"table ")+joinList(t):"no table assigned");
+  }
+  out.push(b.status);
+  return out.join(", ");
+}
+// v17.14.0: the extraction commit joined with `" and "`, which is right for two
+// and wrong for three — "5A and 5B and 6". A mega-combo of three or four tables
+// is an ordinary Settings → Layout configuration, so this is reachable, not
+// theoretical. No serial comma, matching the app's copy elsewhere.
+//
+// The NOUN follows the count too. "table 5A, 5B and 6" is the same sentence
+// still half-broken, and this function exists so there is exactly one place
+// that decides what a booking sounds like.
+function joinList(a){
+  if(a.length<=1) return a.join("");
+  if(a.length===2) return a[0]+" and "+a[1];
+  return a.slice(0,-1).join(", ")+" and "+a[a.length-1];
+}
 // v17.6.0: how long a COMPLETED party actually stayed, in minutes — or null when
 // that is not knowable. List renders the tag only when this is non-null.
 //
@@ -634,13 +679,56 @@ export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,pref
   if(!tables&&(pref||"auto")==="auto") tables=findBestAny(size,s,e,slots);
   return tables;
 }
+// v17.14.0: did this pass actually change anything? Element-wise, in order, on
+// `undoKey`'s field set — which is deliberately the SAME set `dayBookingsSig`
+// compares, because v17.10.2 learned that a gate NARROWER than the pass it
+// guards silently discards work: that version's first attempt compared
+// `id:tables` alone and threw away both the `duration` extension
+// `syncLiveDurations` writes and the `_conflict` flag `applyOpt` writes. Every
+// field either of those two touches is in UNDO_FIELDS, which is what makes this
+// compare exactly as wide as the transform.
+//
+// Order differences count as a change. Nothing in this module reorders, so the
+// branch is unreachable today; treating it as changed is the conservative
+// direction if something ever does.
+function sameBookings(a,b){
+  if(a===b) return true;
+  if(!Array.isArray(a)||!Array.isArray(b)||a.length!==b.length) return false;
+  for(var i=0;i<a.length;i++){
+    var x=a[i],y=b[i];
+    if(x===y) continue;
+    if(!x||!y) return false;
+    if(x.id!==y.id) return false;
+    if(undoKey(x)!==undoKey(y)) return false;
+  }
+  return true;
+}
 // Drop-in replacement for applyOpt() in user-triggered actions. Respects the
 // autoOptimizer state for today. When ON → applyOpt as usual. When OFF → keep
 // all existing tables untouched; only reassign `changedId` if forceReassign.
+//
+// ── v17.14.0: a no-op returns its INPUT ARRAY, not a copy ────────────────────
+// This function used to return a fresh array whether or not the pass changed
+// anything, which is the root cause behind the v15.6.1 reconciliation effect
+// spinning forever (fixed at ONE call site in v17.10.2, by comparing
+// `dayBookingsSig` before dispatching). Every other `useEffect` that depends on
+// `bookings` and calls this was one line away from reintroducing the same loop
+// with no warning, and the sibling manual branch survived only by accident —
+// it happens to break with `next === prev`, and React bails out of identical
+// state.
+//
+// Fixing it here removes the bug class for all 29 call sites at once: a caller
+// can now compare identity and trust it. Callers must keep treating the result
+// as immutable — none of them mutates it today (all read via map/filter/find),
+// and the returned array may now BE the caller's own input.
 export function bookingsAfterAction(updatedBks,date,blocks,changedId,forceReassign,autoOptimizerState){
   var today=new Date().toISOString().slice(0,10);
   var d=new Date();var nowM=d.getHours()*60+d.getMinutes();
   var synced=syncLiveDurations(updatedBks,today,nowM);
+  var out=computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptimizerState);
+  return sameBookings(out,updatedBks)?updatedBks:out;
+}
+function computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptimizerState){
   if(optimizerActiveFor(date,autoOptimizerState)) return applyOpt(synced,date,blocks);
   // OFF path: preserve everyone's tables
   if(!changedId||!forceReassign) return synced.map(function(b){return Object.assign({},b);});
@@ -674,12 +762,21 @@ var UNDO_FIELDS=["name","phone","date","time","scheduledTime","size","duration",
   "originalDuration","customDur","preference","notes","deposit","status","noShow",
   "tables","_manual","_locked","_conflict","preferredTables","returnOf",
   "recurringId","recurringDate","anonymized"];
+// v17.10.2 (/code-review): the separators are ASCII control characters, not "|"
+// and "+". Those were reachable FROM THE DATA — a table id only has to avoid
+// "|" (`idOk` in LayoutSettings.jsx), so a venue naming a joined table "1+2"
+// made `["1+2"]` and `["1","2"]` the same key, and `notes` is free text that can
+// contain either. A collision reads as "nothing changed": for undo that means a
+// snapshot is never taken, for `dayBookingsSig` below that a real reshuffle is
+// discarded. No text field in the app can produce a control character, and the
+// key is only ever compared — never stored, never shown.
+var K_ARR="\u001f", K_FLD="\u001e", K_REC="\u001d", K_LST="\u001c";
 function undoKey(b){
   return UNDO_FIELDS.map(function(k){
     var v=b[k];
-    if(Array.isArray(v)) return v.slice().sort().join("+");
+    if(Array.isArray(v)) return v.slice().sort().join(K_ARR);
     return (v===undefined||v===null)?"":String(v);
-  }).join("|");
+  }).join(K_FLD);
 }
 export function undoSnapshots(prev,next){
   var nextById={};
@@ -715,16 +812,115 @@ export function verifyClean(bookings,date){
   for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){var a=day[i],b=day[j];var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;if(!overlaps(as,ae,bs,be)) continue;if(!canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)) return false;}}
   return true;
 }
+// v17.11.0: the PAIRS behind findConflicts — who clashes with WHOM, on which
+// tables, over which minutes. This is the same pair-scan verifyClean and
+// findConflicts already ran; it just stops throwing away the pairing.
+//
+// The id SET was enough for the only consumer there had ever been — the
+// reconciliation effect picks one booking out of the set and relocates it, and
+// does not care what it collided with. Drawing the clash needs the other half:
+// a block must say "double-booked with Rita Camps on table 3", and a strip row
+// is about a PAIR, not about a booking. Neither sentence is recoverable from
+// `["p","r"]`.
+//
+// Unbuffered, deliberately, like the two functions it replaces the loop of —
+// turning the turnaround setting on must never make an already-booked day
+// start reporting clashes (see the v17.6.0 scope note above).
+//
+// `tables` is the INTERSECTION, which is the shared table in the ordinary case
+// and EMPTY in the other one: canAssign also rejects a pair when each booking
+// takes two or more tables from the same join cluster, since they would need
+// the same physical join, and those two sets need not intersect. That case is
+// unreachable in the DEFAULT layout by pigeonhole — its biggest cluster is
+// three tables and two 2-subsets of a 3-set always share a member — but a join
+// group of FOUR is a legitimate Settings → Layout edit, so it is reachable in a
+// custom layout and pinned in the tests. Callers must handle an empty array
+// rather than assume there is always a table id to name: "both on table N" is
+// otherwise a sentence with no N in it. See ClashBanner's fallback wording.
+export function findClashes(bookings,date){
+  return clashScan(bookings,date,false);
+}
+// v17.14.0 (/code-review follow-up): the one scan, with the pair-building made
+// optional. `findConflicts` wants ids and nothing else, and it runs inside the
+// reconciliation loop — up to 20 times per dirty date, on every settled
+// snapshot — so building an object and running an Array.filter intersection per
+// clashing pair for it to discard is work done in the hottest path this
+// function has. `idsOnly` skips both; the loop and its two rejection tests are
+// shared, which is what keeps findClashes' tests a proof of BOTH contracts.
+function clashScan(bookings,date,idsOnly){
+  var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&(b.tables||[]).length>0;});
+  var out=[];var hit=idsOnly?{}:null;
+  for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){
+    var a=day[i],b=day[j];
+    var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;
+    if(!overlaps(as,ae,bs,be)) continue;
+    if(canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)) continue;
+    if(idsOnly){hit[a.id]=true;hit[b.id]=true;continue;}
+    var bt=b.tables||[];
+    var shared=(a.tables||[]).filter(function(t){return bt.indexOf(t)>=0;});
+    out.push({a:a.id,b:b.id,tables:shared,from:Math.max(as,bs),to:Math.min(ae,be)});
+  }}
+  return idsOnly?Object.keys(hit):out;
+}
+// The stable identity of ONE clash pair, for anything that has to remember a
+// particular clash across renders — today that is the strip's per-row dismissal
+// Set, which is keyed by pair rather than by booking so that dismissing
+// "Pau vs Rita" does not also silence "Rita vs a third party".
+//
+// The separator is a control character, not "|" or "+", for the reason `undoKey`
+// learned in v17.10.2: a separator reachable FROM THE DATA is a collision
+// waiting to happen. Booking ids are `[0-9a-z]` from `genId`, but a recurring
+// occurrence id is `"r" + ruleId + "_" + date`, so "_" and "-" are already
+// spoken for and the next id format is not something this function gets to know
+// about. Written as the ESCAPE and never as the raw byte: a literal 0x1F in
+// source is invisible in every editor, grep and diff — the same class of trap
+// as the HTML entity that hid from v17.9.0's glyph sweep.
+//
+// It lives HERE and not in ClashBanner because a component file that also
+// exports a plain function trips `react-refresh/only-export-components`, which
+// is a lint ERROR and a hard CI gate — the trap Icons.jsx's StatusIcon note
+// already records. It also belongs here on the merits: the id of a clash is a
+// property of the clash, not of the banner that happens to list it.
+export function clashRowId(c){return c.a+"\u001f"+c.b;}
+// v17.14.0 (/code-review follow-up): merge overlapping [from,to) minute spans.
+//
+// `clashSpans` (App.jsx) emitted one band per PAIR, so three bookings all
+// clashing on one table drew three coincident bands stacked on the same pixels
+// — three times the paint for one fact, and any future opacity on the band
+// would have compounded per pair and made a three-way clash a different colour
+// from a two-way one.
+//
+// Touching spans merge (`from <= to`), not just strictly overlapping ones: two
+// clashes that meet at 20:30 are one continuously-contested stretch of that
+// row, and drawing them as two bands separated by a zero-width seam is a
+// rendering artefact rather than information. Input is not mutated.
+export function mergeSpans(spans){
+  if(!spans||spans.length<2) return spans||[];
+  var s=spans.slice().sort(function(a,b){return a.from-b.from||a.to-b.to;});
+  var out=[{from:s[0].from,to:s[0].to}];
+  for(var i=1;i<s.length;i++){
+    var last=out[out.length-1],cur=s[i];
+    if(cur.from<=last.to){ if(cur.to>last.to) last.to=cur.to; }
+    else out.push({from:cur.from,to:cur.to});
+  }
+  return out;
+}
 // v15.6.1: the ids version of verifyClean's pair-scan — returns every booking
 // involved in a same-table overlap on `date` (active, assigned-tables only).
 // Used by App.jsx's post-sync reconciliation to pick which booking to relocate
-// when the optimiser is OFF. Mirrors verifyClean's loop exactly; collects ids
-// instead of short-circuiting to a boolean.
+// when the optimiser is OFF.
+// v17.11.0: derived from findClashes rather than repeating its loop a third
+// time. The contract is unchanged (a deduped id array) and its tests are what
+// prove that. verifyClean keeps its own copy on purpose — it short-circuits at
+// the first clash, and it runs over every active date on every settled
+// snapshot, so making it build a pair list it then throws away would be a real
+// cost for no gain.
+// v17.14.0: which is exactly what THIS function was then doing. It shares the
+// loop with findClashes but takes the ids-only path, so no pair object and no
+// intersection filter is built for data it discards — the reconciler calls it
+// up to 20 times per dirty date.
 export function findConflicts(bookings,date){
-  var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&(b.tables||[]).length>0;});
-  var hit={};
-  for(var i=0;i<day.length;i++){for(var j=i+1;j<day.length;j++){var a=day[i],b=day[j];var as=toMins(a.time),ae=as+a.duration,bs=toMins(b.time),be=bs+b.duration;if(!overlaps(as,ae,bs,be)) continue;if(!canAssign(b.tables,[{tables:a.tables,s:as,e:ae}],bs,be)){hit[a.id]=true;hit[b.id]=true;}}}
-  return Object.keys(hit);
+  return clashScan(bookings,date,true);
 }
 export function checkInefficent(bookings,date){
   var day=bookings.filter(function(b){return b.date===date&&isActive(b)&&!isLocked(b);});
@@ -878,4 +1074,44 @@ export function daySummary(bookings,date,splitHour){
     seated:{count:seatedCount,covers:seatedCovers}, // v14.8.0 — live occupancy
     upcoming:{count:upcomingCount}                  // v14.8.0 — confirmed (not yet seated)
   };
+}
+
+// dayBookingsSig — v17.10.2. A content signature of ONE DATE's bookings: each
+// booking's id paired with its `undoKey`, sorted so the answer does not depend
+// on array order. Two lists with the same signature for a date are, as far as
+// anything the app persists is concerned, the same day.
+//
+// It exists because `bookingsAfterAction` USED TO return a NEW array whether or
+// not the pass changed anything, and the post-sync reconciliation effect
+// (App.jsx) must be able to tell the difference. Without it that effect
+// re-dispatched an identical snapshot on every commit whenever a date held a
+// clash the optimizer cannot resolve — two `_locked` bookings on one table,
+// which `applyOpt` copies through verbatim — and React re-ran the effect on the
+// new reference forever.
+//
+// **v17.14.0 fixed that at the source**: `bookingsAfterAction` now returns its
+// input array when the pass moved nothing, so a caller can compare identity.
+// This function stays, because identity answers "did THIS pass change
+// anything" while a signature answers "are these two lists the same day" —
+// the reconciliation loop needs the second (it compares its own accumulated
+// `next` against a pass's output across up to 20 iterations), and so would any
+// future caller diffing two independently-derived snapshots.
+//
+// **It reuses `undoKey`'s field set deliberately, and the first version did not.**
+// That version compared `id:tables` alone, which is wrong in a way that is easy
+// to miss: `bookingsAfterAction` also runs `syncLiveDurations` (extending a
+// seated party's `duration`/`customDur`) and `applyOpt` sets `_conflict` on
+// every booking for the date. On a date that stays dirty — the all-locked clash
+// this guard exists for — a tables-only comparison read those as "no change" and
+// the effect DISCARDED them. Comparing the same fields undo already trusts means
+// the guard cannot be narrower than the thing it is gating.
+export function dayBookingsSig(list,date){
+  if(!Array.isArray(list)) return "";
+  var out=[];
+  for(var i=0;i<list.length;i++){
+    var b=list[i];
+    if(!b||b.date!==date) continue;
+    out.push(b.id+K_REC+undoKey(b));
+  }
+  return out.sort().join(K_LST);
 }

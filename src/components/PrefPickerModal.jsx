@@ -100,7 +100,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       <AutoHeight>
       <ModalTitle marginBottom={4} background="var(--btn-tables)">Preferred table</ModalTitle>
       <div style={{ fontSize: T.body, color: S.text, marginBottom: 14, textAlign: "center" }}>
-        Soft hint — optimizer tries this first, falls back if unavailable.
+        Soft hint — the optimiser tries this first, falls back if unavailable.
       </div>
       <div style={{
         marginBottom: 14, padding: "10px 14px", borderRadius: R.card,
@@ -134,7 +134,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                     width: 64, height: 52,   /* @canvas */ padding: 0, borderRadius: R.pill,
                     border: "2px solid " + (isPref ? "var(--accent)" : tc.bg),
                     background: isPref ? "var(--btn-tables)" : "var(--bg-input)",
-                    color: isPref ? "#fff" : S.text,
+                    color: isPref ? "var(--text-on-accent)" : S.text,
                     fontWeight: FW.semi, fontSize: T.lead,
                     cursor: "pointer",
                     display: "flex", flexDirection: "column",
@@ -146,7 +146,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                   <span>{t.id}</span>
                   <span style={{
                     fontSize: T.micro, fontWeight: FW.medium,
-                    color: isPref ? "rgba(255,255,255,0.8)" : S.text
+                    color: isPref ? "rgba(255,255,255,0.8)" : S.text  /* @fixed-fill */
                   }}>
                     {"cap " + t.cap}
                   </span>

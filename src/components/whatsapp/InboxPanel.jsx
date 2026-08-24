@@ -15,8 +15,8 @@ import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { TemplatesIcon, SelectIcon, FlaskIcon, TrashIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
 import { CloseIcon } from "../Icons";
-import { mkBtn, mkInp, usePresence, ModalPresence, Overlay, Reveal, useDialog } from "../atoms";
-import { R, T, FW, M, IC } from "../../lib/constants";
+import { mkBtn, mkInp, mkSolidBtn, useModalPresence, ModalPresence, Overlay, Reveal, useDialog } from "../atoms";
+import { R, T, FW, M, IC, H } from "../../lib/constants";
 
 // A conversation is "actionable" when it needs a staff response. For a
 // cancel/modify request that's the intent banner being VISIBLE (i.e. not yet
@@ -91,7 +91,7 @@ export function InboxPanel({
   const compact = winH < INBOX_COMPACT_HEIGHT;
   // v15.8.0 open/close animation: ModalPresence (in App.jsx) provides `leaving`;
   // the panel swaps its scrim/card to the *-out keyframes before unmounting.
-  const { leaving } = usePresence();
+  const { leaving } = useModalPresence();
   // v17.9.1 (audit P1), reaching the one modal surface that is not an Overlay.
   // This panel is bespoke — its own scrim, its own two-pane body — so it
   // inherited none of the dialog work: no role, no accessible name, and focus
@@ -418,11 +418,11 @@ export function InboxPanel({
             <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexShrink: 0 }}>
               {tab === "archived" ? (
                 <>
-                  <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ background: selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}><RestoreIcon size={IC.inline} />Restore</button>
-                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: selected.size ? "var(--wa-btn-cancel)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }} ><TrashIcon size={IC.inline} />Delete</button>
+                  <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", { padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
+                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-btn-cancel)" : "var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 })} ><TrashIcon size={IC.inline} />Delete</button>
                 </>
               ) : (
-                <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: selected.size ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "6px 12px", cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 }} ><ArchiveIcon size={IC.inline} />Archive</button>
+                <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-green-dark)" : "var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 })} ><ArchiveIcon size={IC.inline} />Archive</button>
               )}
               <button onClick={exitSelectMode} className="mgt-hover-scale mgt-press" style={{ background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "6px 12px", fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap" }}>Cancel</button>
             </div>

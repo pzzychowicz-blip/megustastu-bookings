@@ -12,9 +12,9 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC } from "../lib/constants";
+import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
-import { ChevronRightIcon } from "./Icons";
+import { AlertIcon, ChevronRightIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
 // Return inline-style objects. Used wherever an `<input>` or `<button>` needs
@@ -123,6 +123,44 @@ export function mkBtn(extra) {
   };
 }
 
+// ── mkSolidBtn — the SOLID decision button (v17.15.0) ────────────────────────
+// `mkBtn`'s counterpart for a button that commits or destroys something: Save
+// booking, Seat, Block, Delete, Discard, Cancel booking, No show, Confirm. It
+// differs from `mkBtn` in four ways, and each one is a decision rather than
+// drift — `RIM_SOLID` instead of the glass rim (the fill underneath is a
+// saturated theme-invariant solid, so a translucent white rim reads as a smear
+// on it), `--shadow-btn-solid` to match, `T.lead` and `H.touch` because 44 is
+// the floor for a control where a mis-tap costs something (v17.8.0's sizing
+// rule), and `background` REQUIRED with no default, for `ModalTitle`'s reason:
+// a default would be a silent thirteenth answer to "what colour is this
+// action".
+//
+// It existed as twelve hand-written copies before this. They agreed, which is
+// exactly the condition that produces the next disagreement — and one had
+// already appeared: the "No show" in the Cancel-booking overlay was
+// `--app-warn-solid` (#9a3412) while the same button in ListView, LateBanner
+// and QuickStatusPopup is `--btn-orange` (rgba(210,91,28,.8)). Two oranges for
+// one action, told apart only by which surface you happened to be looking at.
+//
+// A disabled button passes its own fill, ink and shadow through `extra`; those
+// are three coupled values (see index.html on --btn-disabled-ink) and belong at
+// the call site that knows the condition, not in a boolean here.
+export function mkSolidBtn(background, extra) {
+  return {
+    background,
+    border: RIM_SOLID,
+    borderRadius: R.pill,
+    padding: "10px 18px",
+    cursor: "pointer",
+    fontSize: T.lead,
+    fontWeight: FW.semi,
+    color: "var(--text-on-accent)",
+    minHeight: H.touch,
+    boxShadow: "var(--shadow-btn-solid)",
+    ...(extra || {})
+  };
+}
+
 // ── Modal overlay (mobile = full-screen sheet, desktop = centered card) ──────
 // Optional `footer` (v14.4.1): when provided, the action buttons render PINNED
 // to the modal bottom while `children` scroll above them — so Save/Cancel stay
@@ -151,77 +189,84 @@ const OverlayScrollContext = createContext(null);
 export function useOverlayScroll() { return useContext(OverlayScrollContext); }
 
 // ── useDialog (v17.9.1 prod; extracted here in 17.9.1-wa-sandbox) ────────────
-// Everything below was written inside Overlay, which is right for the twelve
-// modals that ARE Overlays — and unreachable for the one surface that is not.
-// The WA inbox is a bespoke full-screen panel with its own scrim (it predates
-// Overlay's footer slot and needs a two-pane body), so it inherited none of the
-// audit's work: no role, no name, no focus trap, on the module's main surface.
+// Everything below was written inside Overlay, which is right for the modals
+// that ARE Overlays — and unreachable for the one surface that is not. The WA
+// inbox is a bespoke full-screen panel with its own scrim, so it inherited none
+// of the audit's work: no role, no name, no focus trap, on the module's main
+// surface. Duplicating a focus trap is exactly the "one implementation of a
+// subtle pattern" rule's target, so the behaviour is a hook and Overlay is its
+// first caller — byte-for-byte the same logic, same comments, one owner.
 //
-// Duplicating a focus trap is exactly the "one implementation of a subtle
-// pattern" rule's target, so the behaviour is a hook and Overlay is its first
-// caller — byte-for-byte the same logic, same comments, one owner.
+// Measured in the live DOM before this: no role, no aria-modal, no accessible
+// name, and focus left sitting on <body> when a modal opened. A screen-reader
+// or keyboard user got no announcement that anything had happened and no way
+// into the dialog except tabbing through the entire page behind it.
 //
-// NOTE FOR THE NEXT PROD SYNC: this refactor touches a PROD file. It is the
-// right shape and should be ported upstream rather than re-resolved as a
-// conflict; if prod grows its own version, take prod's and delete this.
+// The accessible NAME is resolved from the DOM rather than from a prop. Seven
+// modals render a <ModalTitle> and five (the confirm dialogs, WeekView,
+// BlockModal, HistoryPopup) render their own heading text instead, and a prop
+// would have to be kept correct at twelve call sites forever. Pointing
+// `aria-labelledby` at an id that is not in the tree leaves the dialog
+// NAMELESS — strictly worse than not trying — so this checks. Falling back to
+// the first heading means the untitled modals get a real name too.
 export function useDialog(ref) {
-  const restoreRef = useRef(null);
-  const uid = useId();
-  useEffect(() => {
-    restoreRef.current = document.activeElement;
-    const el = ref.current;
-    if (el) {
-      // Scoped to THIS dialog's subtree, then given an id unique to this
-      // instance — two modals can be mounted at once (a sub-modal opened from
-      // the booking form), and a shared id makes both point at the first one in
-      // document order. See MODAL_TITLE_ATTR.
-      const titled = el.querySelector("[" + MODAL_TITLE_ATTR + "]") || el.querySelector("h1,h2,h3");
-      if (titled) {
-        if (!titled.id) titled.id = "mgt-modal-title-" + uid;
-        el.setAttribute("aria-labelledby", titled.id);
-      } else {
-        el.setAttribute("aria-label", "Dialog");
-      }
-      // Focus the dialog itself, not its first control: focusing a text input
-      // pops the keyboard on a tablet before the user has decided to type, and
-      // focusing the first BUTTON puts a destructive action one Enter away.
-      // tabIndex -1 makes the container focusable without adding a tab stop.
-      el.focus({ preventScroll: true });
+const restoreRef = useRef(null);
+const uid = useId();
+useEffect(() => {
+  restoreRef.current = document.activeElement;
+  const el = ref.current;
+  if (el) {
+    // Scoped to THIS dialog's subtree, then given an id unique to this
+    // instance — two modals can be mounted at once (a sub-modal opened from
+    // the booking form), and a shared id makes both point at the first one in
+    // document order. See MODAL_TITLE_ATTR.
+    const titled = el.querySelector("[" + MODAL_TITLE_ATTR + "]") || el.querySelector("h1,h2,h3");
+    if (titled) {
+      if (!titled.id) titled.id = "mgt-modal-title-" + uid;
+      el.setAttribute("aria-labelledby", titled.id);
+    } else {
+      el.setAttribute("aria-label", "Dialog");
     }
-    return () => {
-      const prev = restoreRef.current;
-      // Return focus to whatever opened the modal, so the keyboard lands back
-      // where the user left it instead of at the top of the document.
-      if (prev && typeof prev.focus === "function" && document.contains(prev)) {
-        prev.focus({ preventScroll: true });
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount/unmount only
-  }, []);
-
-  // Focus trap. Esc is NOT handled here on purpose — useKeyboardShortcuts owns
-  // the app-wide Escape z-order chain, and a second handler would race it.
-  function onKeyDown(e) {
-    if (e.key !== "Tab") return;
-    const el = ref.current;
-    if (!el) return;
-    const items = [...el.querySelectorAll(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    )].filter((n) => n.offsetParent !== null || n === document.activeElement);
-    if (!items.length) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (e.shiftKey && (document.activeElement === first || document.activeElement === el)) {
-      e.preventDefault(); last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault(); first.focus();
-    }
+    // Focus the dialog itself, not its first control: focusing a text input
+    // pops the keyboard on a tablet before the user has decided to type, and
+    // focusing the first BUTTON puts a destructive action one Enter away.
+    // tabIndex -1 makes the container focusable without adding a tab stop.
+    el.focus({ preventScroll: true });
   }
+  return () => {
+    const prev = restoreRef.current;
+    // Return focus to whatever opened the modal, so the keyboard lands back
+    // where the user left it instead of at the top of the document.
+    if (prev && typeof prev.focus === "function" && document.contains(prev)) {
+      prev.focus({ preventScroll: true });
+    }
+  };
+}, []);
 
-  // NB: no `ref` in here, and do not add one. Overlay's desktop no-footer card
-  // is BOTH the dialog and the scroll port, and one node cannot take two refs —
-  // that branch assigns both through a callback ref instead. Returning a `ref`
-  // from this hook would read as the obvious convenience and silently break it.
+// Focus trap. Esc is NOT handled here on purpose — useKeyboardShortcuts owns
+// the app-wide Escape z-order chain, and a second handler would race it.
+function onKeyDown(e) {
+  if (e.key !== "Tab") return;
+  const el = ref.current;
+  if (!el) return;
+  const items = [...el.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )].filter((n) => n.offsetParent !== null || n === document.activeElement);
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (e.shiftKey && (document.activeElement === first || document.activeElement === el)) {
+    e.preventDefault(); last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault(); first.focus();
+  }
+}
+
+// NB: no `ref` in the returned props, and do not add one. Overlay's desktop
+// no-footer card is BOTH the dialog and the scroll port, and one node cannot
+// take two refs — that branch assigns both through a callback ref instead.
+// Returning a `ref` from here would read as the obvious convenience and
+// silently break it.
   return { role: "dialog", "aria-modal": "true", tabIndex: -1, onKeyDown };
 }
 
@@ -233,7 +278,7 @@ export function Overlay({ onClose, children, footer }) {
   // v15.8.0: symmetric open/close animation. `leaving` comes from the wrapping
   // <ModalPresence> (default false when there's no provider → enter-only). Mobile
   // = slide-up/down sheet; desktop = scrim fade + card fade/scale. See index.html.
-  const { leaving } = usePresence();
+  const { leaving } = useModalPresence();
   const sheetCls = leaving ? "mgt-sheet-out" : "mgt-sheet-in";
   const scrimCls = leaving ? "mgt-scrim-out" : "mgt-scrim-in";
   const cardCls = leaving ? "mgt-card-out" : "mgt-card-in";
@@ -382,22 +427,155 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
         fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
         display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
         background, margin: 0,
-        border: "1px solid rgba(255,255,255,0.2)",
+        border: RIM_SOLID,
         boxShadow: "var(--shadow-btn)"
       }}>{children}</h2>
     </div>
   );
 }
 
-// ── Form field (label + child input) ─────────────────────────────────────────
-export function Fld({ label, req, style, children }) {
+// ── InlineAlert — a notification-strip section, inside a modal (v17.15.0) ────
+// The message a form shows when it refuses to save: "Text is required.", "No
+// free table for that time", the walk-in capacity error. There were three
+// copies, in ReminderEditor, BookingFormModal and WalkinForm, differing only in
+// padding (8px 12px vs 10px 14px) and margin (12 vs 14) — and all three wore the
+// one label shape DESIGN.md bans outright: a pale semantic fill PLUS a border in
+// the matching hue PLUS bold text in a third shade of it, which encodes one
+// signal three times and is the stock badge every framework ships.
+//
+// So it takes the shape the app already uses to report a fault: a notification
+// strip section. Tinted pane, the section's mark in the tone colour, the message
+// in the same tone. A fault now looks the same whether it fires on the main
+// screen or inside a modal, which is the point — `AppBanners`' "Couldn't save"
+// and a form's "Text is required" are the same kind of statement.
+//
+// It is a one-line section, with no separate title, on the strip's OWN
+// precedent: with exactly one section live the strip drops the generic lid and
+// takes that section's title rather than rendering a redundant sub-header. Here
+// the message IS the section.
+//
+// ── Why the tone is --danger-text and not --status-offline ───────────────────
+// The strip's danger sections use `tone: --status-offline`, and copying that
+// verbatim was the obvious move. Measured first, per the rule that a colour
+// token may only sit on a surface that flips with it — and --status-offline is
+// #ff3b30 in BOTH themes while --danger-bg inverts:
+//
+//   --status-offline on --danger-bg   light 3.03:1   dark 4.31:1
+//   --danger-text    on --danger-bg   light 7.09:1   dark 8.05:1
+//
+// 3.03:1 is below AA for body text, and a 42% swing between themes is exactly
+// the light/dark inconsistency this version was asked to remove. --danger-text
+// is the token that flips with the fill it sits on, so it is the one that can
+// be trusted on it. `AppBanners` was corrected to match in the same commit —
+// its two danger sections had been shipping the 3.03:1.
+export const ALERT_DANGER = { tone: "var(--danger-text)", tint: "var(--danger-bg)" };
+
+export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint, icon: Icon = AlertIcon, id, style, children }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, ...(style || {}) }}>
-      <label style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.semi, letterSpacing: "0.01em" }}>
+    <div id={id} style={{
+      // `alignItems: center` and the mark-to-text gap both mirror the strip's
+      // own section header. The gap there is a module const of 9 that this file
+      // cannot import without a cycle (NotificationStrip imports from atoms), so
+      // it takes the nearest step on the shared scale — SP snaps DOWNWARD, and a
+      // pixel between a modal alert and a strip section is not something anyone
+      // can see, whereas an off-scale literal here is something check:style can.
+      display: "flex", alignItems: "center", gap: SP.base,
+      padding: "10px 14px", borderRadius: R.card,
+      background: tint,
+      ...(style || {})
+    }}>
+      {/* `icon={null}` renders the message alone. The explicit guard is also
+          what makes the reference visible to eslint here: this config does not
+          count a JSX element reference as a use, so a component read ONLY as
+          `<Icon />` reports as unused (`SectionMark` in NotificationStrip
+          passes only because its own `if (!Icon)` happens to read it). */}
+      {Icon ? (
+        <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", color: tone, flexShrink: 0 }}>
+          <Icon size={IC.control} />
+        </span>
+      ) : null}
+      <span style={{ fontSize: T.body, fontWeight: FW.bold, color: tone, flex: 1, minWidth: 0 }}>{children}</span>
+    </div>
+  );
+}
+
+// ── Form field (label + child control) ───────────────────────────────────────
+// v17.10.2: the label is ASSOCIATED with its control. Before this, Fld rendered
+// a real <label> and then rendered the control as its SIBLING — which names
+// nothing: implicit association requires the control INSIDE the label, and
+// there was no htmlFor/id pair. Measured live, every one of the app's ~20 form
+// fields was unnamed to a screen reader while looking perfectly labelled.
+//
+// TWO shapes, because half of these fields are not a single control:
+//
+//   • children as a FUNCTION — called with a generated id, which the call site
+//     puts on its control. The label then carries `htmlFor`, so the control has
+//     a real accessible name. Use this shape whenever there IS one control.
+//
+//   • children as ELEMENTS — a stepper pair, a chip row, a list of times. There
+//     is no single control to point at, so the wrapper becomes a `role="group"`
+//     named by the label instead. `htmlFor` is deliberately NOT rendered on this
+//     path: a `for` aimed at an id that is not in the tree is a DANGLING
+//     reference, which is strictly worse than not trying — the same reasoning
+//     Overlay uses when it resolves its own `aria-labelledby` from the DOM
+//     rather than taking it as a prop.
+//
+// The `*` is `aria-hidden` — a screen reader announcing "star" is noise. The
+// CONTROL says it instead, via `aria-required`, and the ATOM applies that
+// (/code-review): the first version left it to the call site, which is a
+// convention with nothing enforcing it — one of twenty call sites actually did
+// it, and the next `<Fld req>` would have got a visible `*` that is hidden from
+// assistive technology and no programmatic signal at all, i.e. a field that
+// reads as OPTIONAL. On the function path the atom already hands the call site
+// an id, so it hands it the required flag the same way.
+export function Fld({ label, req, invalid, describedBy, style, children }) {
+  const id = useId();
+  const single = typeof children === "function";
+  // v17.12.0: the second callback argument grew from "the required attrs" into
+  // "the state attrs" — same channel, so a call site that already spreads it
+  // gets validity for free and one that doesn't is unaffected.
+  //
+  // `aria-describedby` is emitted ONLY alongside `aria-invalid`, and both only
+  // when the caller says the field is invalid — which in practice means an
+  // error message is on screen. That ordering is deliberate: a describedby
+  // pointing at an id that is not in the tree is a dangling reference, the
+  // exact failure Overlay refuses when it resolves its own name from the DOM
+  // rather than taking a prop. Better no description than a broken one.
+  //
+  // /code-review: the state attrs are built for BOTH shapes. They used to be
+  // built only when `single`, so passing `invalid` to a composite field — a
+  // stepper pair, a chip row — was silently ignored: no error, no lint warning,
+  // no test, and a field that reports VALID to assistive technology while a red
+  // banner sits above it. Nothing does that today, which is exactly why it had
+  // to be fixed now rather than found later. On the group path they land on the
+  // wrapper, which is the element carrying the role and the name; both
+  // attributes are global, so a `group` may hold them. `aria-required` stays
+  // single-only on purpose — it belongs on a control, not on a wrapper, and the
+  // composite path already signals required with the `*` in its label.
+  const stateAttrs = (function () {
+    const a = {};
+    if (req && single) a["aria-required"] = "true";
+    if (invalid) {
+      a["aria-invalid"] = "true";
+      if (describedBy) a["aria-describedby"] = describedBy;
+    }
+    return Object.keys(a).length ? a : null;
+  })();
+  const attrs = single ? stateAttrs : null;
+  return (
+    <div
+      role={single ? undefined : "group"}
+      aria-labelledby={single ? undefined : id + "-l"}
+      {...(single ? null : stateAttrs)}
+      style={{ display: "flex", flexDirection: "column", gap: 4, ...(style || {}) }}>
+      <label
+        id={id + "-l"}
+        htmlFor={single ? id : undefined}
+        style={{ fontSize: T.body, color: "var(--text-secondary)", fontWeight: FW.medium, letterSpacing: "0.01em" }}>
         {label}
-        {req ? <span style={{ color: "var(--text-required)" }}>*</span> : null}
+        {req ? <span aria-hidden="true" style={{ color: "var(--text-required)" }}>*</span> : null}
       </label>
-      {children}
+      {single ? children(id, attrs) : children}
     </div>
   );
 }
@@ -504,7 +682,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {!open && summary ? (
-            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
           ) : null}
           <span style={{
             fontSize: T.title, fontWeight: FW.bold, color: "var(--text-muted)", lineHeight: 1,
@@ -539,31 +717,40 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // the sibling booking-name span slides in lockstep with the chip instead of
 // snapping when the chip appears/disappears. Default `false` = the original
 // vertical behaviour, byte-for-byte for every existing caller.
-// v17.6.0-wa-sandbox: optional `ms` overrides the collapse duration. OMITTED is
-// the only shape prod ever uses, and it is byte-for-byte prod's Reveal — the
-// M.shift token pair plus the fixed 300/320 timeouts. PASSED, the transition
-// becomes an explicit millisecond value on the same --ease-out curve and the
-// two timeouts scale with it, so the unmount lands after the height and
-// `revealed` after that. Used by the WA conversation list, whose per-row
-// collapse runs slower than the house speed.
+// v17.15.0: both timeouts are DERIVED from the duration token, not typed. They
+// were 320 and 300 against a 385ms transition, which happened to work; against
+// the 520ms `--t-reveal` the unmount would have fired 220ms early and cut the
+// collapse off halfway — the exit silently stops working, which is precisely
+// the one-way-transition defect this version exists to remove. So the numbers
+// follow the token, and the token is the only thing to change.
 //
-// KNOWN, and PROD's, not the sandbox's — do not "fix" it here or the next sync
-// conflicts: on the DEFAULT path those two timeouts do NOT hold that ordering.
-// The track runs M.shift (--t-shift, 385ms) while the unmount fires at 300 and
-// `revealed` at 320, both inherited from when the house Reveal was 280ms. So
-// the children are dropped at 78% of the collapse. It is invisible in practice
-// — cubic-out is ~97% travelled by then, leaving ~2% of height and 0.02 opacity
-// — which is exactly why it has survived. Same arithmetic in useRevealRows,
-// whose PRUNE_MS is 350 under a comment reading "> Reveal's ~300ms collapse".
-// The `k = ms / 280` divisor is the same fossil: 280 is a duration that no
-// longer exists anywhere. Any ms ≥ 280 still scales safely (k ≥ 1 ⇒ unmount
-// ≥ 300 > ms only holds from ms ≈ 300 up; the one live caller passes 365 → 391,
-// which is correct). Fix belongs on main, in one commit with PRUNE_MS.
-export function Reveal({ show, children, style, horizontal = false, ms = null }) {
-  const trackMs = ms == null ? M.shift : ms + "ms var(--ease-out)";
-  const k = ms == null ? 1 : ms / 280;
-  const unmountMs = Math.round(300 * k);
-  const revealedMs = Math.round(320 * k);
+// The hold trails the transition slightly so the last frame is painted before
+// the node goes, and it is also when it is safe to drop `overflow:hidden` and
+// let a child's hover lift out of the box — the same moment, hence one number.
+// `exitHold` lives in lib/constants.js beside the tokens it follows, so
+// `useRevealRows` — which must outlast this same collapse — reads the same
+// arithmetic instead of keeping its own copy (it kept 350, tuned for the old
+// 385ms).
+//
+// ── `speed` (v17.15.0) ───────────────────────────────────────────────────────
+// Which entry of the `M` scale this Reveal runs on. It exists because the
+// --t-reveal token's own definition is "a DISCLOSURE opening or closing UNDER
+// YOUR FINGER", and its list of examples ends with "the notification strip" —
+// which contains TWO of these, only one of them under anybody's finger. The
+// lid's body opening because you pressed the lid is the disclosure the token
+// was written for. The PANE arriving because a booking has gone late, or
+// because you pressed Next day, is not a disclosure at all; nobody pressed it.
+// It is --t-move's own definition, "something arriving or leaving".
+//
+// Applied to both, the 520ms made the pane outlast the view's 240ms slide by
+// more than double, so a date change slid horizontally for 240ms and then went
+// on rising for another 280ms — one event, read as two.
+//
+// The duration and the hold MUST come from the same entry, which is why this
+// takes a NAME and not a number: they are the two halves that were wrong in six
+// places at the start of this version, and a caller able to pass one without the
+// other is the same defect with a nicer spelling.
+export function Reveal({ show, children, style, horizontal = false, speed = "reveal" }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -581,35 +768,31 @@ export function Reveal({ show, children, style, horizontal = false, ms = null })
       // the mount so the transition actually fires (a single frame can batch).
       let r2 = 0;
       const r1 = requestAnimationFrame(function () { r2 = requestAnimationFrame(function () { setOpen(true); }); });
-      const tv = setTimeout(function () { setRevealed(true); }, revealedMs);
+      const tv = setTimeout(function () { setRevealed(true); }, exitHold(speed));
       return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); clearTimeout(tv); };
     }
     setOpen(false);
     setRevealed(false);   // clip immediately so the collapse hides cleanly
-    const t = setTimeout(function () { setMounted(false); }, unmountMs);
+    const t = setTimeout(function () { setMounted(false); }, exitHold(speed));
     return function () { clearTimeout(t); };
-  }, [show, ms]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `speed` is fixed per call site; re-running on it would restart a live transition
+  }, [show]);
   if (!mounted) return null;
+  // A Reveal is a DISCLOSURE by default, so it takes M.reveal rather than the
+  // M.shift a bare geometry change would get — see the --t-reveal note in
+  // index.html for why those are different questions, and `speed` above for the
+  // one caller for which they are not. The opacity rides along on the same
+  // timing so the two land together.
+  const ease = M[speed];
   const track = horizontal
-    // A Reveal changes GEOMETRY (the 0fr↔1fr track), so it takes M.shift; the
-    // opacity riding along takes the same timing so the two land together.
-    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + trackMs + ", opacity " + trackMs }
-    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + trackMs + ", opacity " + trackMs };
+    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + ease + ", opacity " + ease }
+    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + ease + ", opacity " + ease };
   // v16.1.1: the horizontal inner track is a flex box (align-items:center) so the
   // revealed child is vertically centred without an inherited-font line-box strut
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).
   const innerStyle = horizontal
     ? { overflow: revealed ? "visible" : "hidden", minWidth: 0, minHeight: 0, display: "flex", alignItems: "center" }
-    // `minWidth: 0` is the horizontal counterpart of the `minHeight: 0` beside
-    // it, and it is load-bearing: the inner track is a GRID ITEM, whose default
-    // `min-width: auto` resolves to its content's MIN-CONTENT width. Wrap
-    // anything containing `white-space: nowrap` text (the WA conversation rows)
-    // and the item refuses to shrink below the full unwrapped text, blowing out
-    // of its track and killing the ellipsis. The horizontal branch above always
-    // had it; the vertical branch only ever wrapped self-limiting content, so
-    // the gap went unnoticed until v17.6.0-wa-sandbox put the conversation list
-    // in a Reveal.
-    : { overflow: revealed ? "visible" : "hidden", minHeight: 0, minWidth: 0 };
+    : { overflow: revealed ? "visible" : "hidden", minHeight: 0 };
   return (
     <div style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
       <div style={innerStyle}>{children || last.current}</div>
@@ -1018,8 +1201,12 @@ export function AutoHeight({ children, watch, style }) {
 
 // ── SlideView — slide-in wrapper that only clips while animating (v15.8.0) ─────
 // Wraps the main view (timeline/list). The parent keys it (`key={slideKey}`) so a
-// nav/view change remounts it and replays the slide (`dir` = mgt-view-in-left /
-// -right). `overflow:hidden` ONLY while the slide runs (so the 28px translateX
+// nav/view change remounts it and replays the entrance. `dir` is the ENTRANCE
+// CLASS, not a direction: the T/L/P switch passes mgt-view-in-left / -right and
+// travels 28px sideways, and since v17.15.0 a DATE change passes mgt-view-fade
+// and travels nowhere, because a date change also moves the notification strip
+// and two axes at once is a diagonal (see the keyframe's note in index.html).
+// `overflow:hidden` ONLY while the entrance runs (so the 28px translateX
 // doesn't cause a transient scrollbar), then `visible` so card hover-lifts aren't
 // clipped at rest (the v15.8.0-cont.3 regression fix).
 // `fill` (v17.5.0): in the fixed-shell layout (Settings → "Lock navigation",
@@ -1047,14 +1234,56 @@ export function SlideView({ dir, fill = false, children }) {
 // translateY(from→0) — so a re-sorted card eases to its new spot instead of
 // jumping. WAAPI leaves no inline styles, so it never fights `.mgt-hover-scale`.
 //
-// `isQuiet` (v17.6.0-wa-sandbox) — an optional PREDICATE that re-measures WITHOUT
-// animating when it returns true. It exists because FLIP's stored tops only
-// refresh when `deps` change, so a layout shift that happened between two passes —
-// a CSS height transition easing rows upward, say — leaves the stored tops
-// describing a position the rows left long ago. The next pass then measures that
-// whole stale delta and replays a move the user already watched. A caller that
-// knows a given change was carried by something other than FLIP returns true for
-// that pass, which resyncs the tops and animates nothing.
+// v17.15.0: offsets are measured relative to the CONTAINER, not the viewport.
+// The two agree only while nothing above the container ever changes height, and
+// something does: the notification strip. It appears and collapses on its own
+// schedule, moves the whole grid vertically, and does NOT change `assignSig` —
+// so this effect does not run, and `prevTops` keeps viewport coordinates from
+// before the shift. The next UNRELATED edit then compares new tops against that
+// stale baseline and animates every block by the strip's height, including the
+// ones that did not move.
+//
+// Measured live on the timeline before the fix: collapse the strip (blocks move
+// 391px → 286px, zero WAAPI calls, baseline now stale), then add a booking —
+// and all FIVE blocks played `translateY(-46px) → 0` over 385ms, four of them
+// having stayed on exactly the same table. Together with the blocks' own
+// `left`/`width` CSS transition, which a real reshuffle does fire, that reads
+// as the whole grid sliding in diagonally from a corner.
+//
+// Container-relative is not a workaround, it is what this hook actually means:
+// it exists to animate a card or a block moving to a different ROW, which is a
+// movement WITHIN the container. A whole-container move is the page scrolling
+// or reflowing around it, which is not this hook's business and which the
+// browser has already drawn correctly.
+// ── reduceMotionOn — the WAAPI half of the motion kill-switch (v17.15.0) ────
+// index.html's reduced-motion rules rewrite CSS `animation-duration` and
+// `transition-duration`; NEITHER reaches a Web-Animations `animate()` call, so
+// anything driven from JS has to ask in JS. Two things now do — `useFlip`'s
+// list reorder and `NotificationStrip`'s date swap — which is one more than the
+// number of copies of this expression that may exist.
+//
+// Both inputs matter and they are different intents: `data-motion="reduce"` is
+// the per-device "Reduce animations" toggle, whose stated job is weak tablet
+// hardware where the cheapest frame is no frame; `prefers-reduced-motion` is the
+// OS-level request. Read at call time, never cached — the toggle can flip while
+// the app is running.
+export function reduceMotionOn() {
+  return document.documentElement.dataset.motion === "reduce"
+    || !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+
+// `isQuiet` (v17.6.0-wa-sandbox) — an optional PREDICATE that re-measures
+// WITHOUT animating when it returns true. It is NOT superseded by v17.15.0's
+// container-relative measurement above, and the two answer different faults:
+// that one cancels a shift OF the container, which every child shares; this one
+// covers a shift WITHIN it, where a sibling's own CSS height transition eases
+// the rows below it upward between two passes. Nothing above the container
+// moved, so container-relative offsets change exactly as much as viewport ones
+// do — and the stored tops still describe a position the rows left long ago.
+// The next pass measures that whole stale delta and replays a move the user has
+// already watched. A caller that knows a given change was carried by something
+// other than FLIP returns true for that pass, which resyncs the tops and
+// animates nothing. The WA conversation list does, while a row collapses.
 //
 // A predicate rather than a boolean so it is evaluated HERE, inside the layout
 // effect — the moment the question is actually asked. That also lets a caller
@@ -1065,17 +1294,22 @@ export function useFlip(deps, isQuiet) {
   useLayoutEffect(function () {
     const container = ref.current;
     if (!container) return;
+    const originTop = container.getBoundingClientRect().top;
+    const quiet = typeof isQuiet === "function" && isQuiet() === true;
     // v17.1.0: WAAPI animations aren't touched by the CSS reduced-motion
     // kill-switch — honor both the OS setting and the per-device "Reduce
     // animations" toggle (data-motion, index.html) here in JS. Computed ONCE
     // per flip pass (/code-review fix #4 — it was inside the per-element loop).
-    const reduceMotion = document.documentElement.dataset.motion === "reduce"
-      || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-    const quiet = typeof isQuiet === "function" && isQuiet() === true;
+    // v17.15.0: the expression moved to `reduceMotionOn` above, because the
+    // notification strip's swap needs the same answer and two copies of this
+    // is how one of them silently stops asking.
+    const reduceMotion = reduceMotionOn();
     const next = new Map();
     container.querySelectorAll("[data-flip-id]").forEach(function (el) {
       const id = el.getAttribute("data-flip-id");
-      const top = el.getBoundingClientRect().top;
+      // Relative to the container — see the note above. A shift applied to the
+      // container itself cancels out of every child's offset.
+      const top = el.getBoundingClientRect().top - originTop;
       next.set(id, top);
       const prev = prevTops.current.get(id);
       if (!quiet && !reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
@@ -1101,6 +1335,10 @@ export function useFlip(deps, isQuiet) {
 //   Presence({ show, inClass, outClass, outMs, children, style, tag })
 // `usePresenceLifecycle` is the bare state machine, reused by ModalPresence
 // (which provides a context instead of rendering a wrapper element).
+// v17.15.0: `EXIT_MS` (lib/constants.js) is how long a leaving node stays
+// mounted so its `*-out` keyframe can finish. It is the default for all three
+// primitives here — see the note at its definition for what each of the four
+// hand-typed numbers it replaces was getting wrong.
 function usePresenceLifecycle(show, outMs) {
   const [render, setRender] = useState(show === true);
   const [leaving, setLeaving] = useState(false);
@@ -1115,7 +1353,7 @@ function usePresenceLifecycle(show, outMs) {
   return [render, leaving];
 }
 
-export function Presence({ show, inClass, outClass, outMs = 200, children, style, tag = "div" }) {
+export function Presence({ show, inClass, outClass, outMs = EXIT_MS, children, style, tag = "div" }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [render, leaving] = usePresenceLifecycle(show, outMs);
@@ -1129,7 +1367,7 @@ export function Presence({ show, inClass, outClass, outMs = 200, children, style
 // toasts overlap in the same grid cell (crossfade in place, never stack).
 export function Toast({ show, children, style }) {
   return (
-    <Presence show={show} inClass="mgt-toast-in" outClass="mgt-toast-out" outMs={210} style={style}>
+    <Presence show={show} inClass="mgt-toast-in" outClass="mgt-toast-out" style={style}>
       {children}
     </Presence>
   );
@@ -1142,9 +1380,14 @@ export function Toast({ show, children, style }) {
 // card/sheet to the *-out keyframe before unmounting. No wrapper element is
 // rendered, so the modal's own fixed/overlay positioning is untouched.
 export const PresenceContext = createContext({ leaving: false });
-export function usePresence() { return useContext(PresenceContext); }
+// v17.10.2: was `usePresence`, which collided with the Firebase device-presence
+// hook in src/hooks/usePresence.js — two exported, importable functions of that
+// name sharing nothing but a good word. Importing the wrong one gave a confusing
+// RUNTIME failure, not a build error. This is the narrower, purely-local concern,
+// so it takes the specific name, and it now pairs with its own provider.
+export function useModalPresence() { return useContext(PresenceContext); }
 
-export function ModalPresence({ show, children, outMs = 200 }) {
+export function ModalPresence({ show, children, outMs = EXIT_MS }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [render, leaving] = usePresenceLifecycle(show, outMs);
@@ -1162,7 +1405,7 @@ export function SBadge({ status }) {
     <span style={{
       fontSize: T.body, padding: "4px 10px", borderRadius: R.pill,
       background: BLOCK_BG[status] || BLOCK_BG.confirmed,
-      color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: "1px solid rgba(255,255,255,0.2)",
+      color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: RIM_SOLID,
       fontWeight: FW.semi, textTransform: "capitalize",
       display: "inline-block",
       boxShadow: "var(--shadow-flat)"
@@ -1186,6 +1429,57 @@ export function TBadge({ id }) {
     }}>
       {id}
     </span>
+  );
+}
+
+// ── OutlineChip — the standalone count / disclosure chip (v17.15.0) ─────────
+// DESIGN.md's OUTLINE treatment: no fill, a 2px border in the semantic hue,
+// text in the same family. Customers' "3 visits" / "1 no-show", the booking
+// form's Regular and No-show disclosures, the phone-autocomplete rows.
+//
+// It was the same component written twice — `chip()` in CustomersSettings and
+// `chipBase` in BookingFormModal — one a <span>, the other a <button>, agreeing
+// on 2px, the pill radius, the transparent fill and the bold text, and taking
+// their colours from two unrelated token families: the BORDER from
+// --suggest-border / --warn-border, the TEXT from --success-text / --warn-text.
+// In light that renders a pale mint ring around dark forest text; in dark the
+// two nearly converge. The chip looked like a different component depending on
+// the theme, which is what was reported.
+//
+// So a tone here is ONE decision, not two: the border is the ink at half
+// strength, derived with color-mix (see index.html). Pass `as="button"` for the
+// clickable kind — a chip that is a disclosure is still the same chip, and
+// DESIGN.md's note that clickable chips are "the documented exception" was
+// about them keeping a FILL, which v17.8.0 already removed.
+//
+// The SOLID row tags in ListView (`manual`, `locked`, `no-show ×N`, `N min
+// late`, `€N deposit`) are deliberately NOT this. They share a dense row with
+// four other solid tags, and DESIGN.md's rule for choosing between the two
+// treatments is "match whatever sits next to you".
+export const CHIP_TONES = {
+  success: { border: "var(--chip-success-border)", text: "var(--success-text)" },
+  warn:    { border: "var(--chip-warn-border)",    text: "var(--warn-text)" },
+  danger:  { border: "var(--chip-danger-border)",  text: "var(--danger-text)" },
+  neutral: { border: "var(--chip-neutral-border)", text: "var(--text-secondary)" }
+};
+
+export function OutlineChip({ tone = "neutral", as = "span", size = "micro", style, children, ...rest }) {
+  const c = CHIP_TONES[tone] || CHIP_TONES.neutral;
+  const Tag = as;
+  return (
+    <Tag {...rest} style={{
+      display: "inline-flex", alignItems: "center", gap: SP.tight,
+      borderRadius: R.pill,
+      padding: size === "micro" ? "2px 6px" : "2px 10px",
+      fontSize: size === "micro" ? T.micro : T.small,
+      fontWeight: FW.bold,
+      background: "transparent",
+      border: "2px solid " + c.border,
+      color: c.text,
+      flexShrink: 0,
+      ...(as === "button" ? { cursor: "pointer" } : null),
+      ...(style || {})
+    }}>{children}</Tag>
   );
 }
 

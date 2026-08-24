@@ -4,9 +4,9 @@
 // collapsed it shrinks to a one-line strip. Holds the single source of truth for
 // the two booking actions — Open booking (blue) and Cancel booking (red).
 
-import { Reveal } from "../atoms";
+import { Reveal, mkSolidBtn } from "../atoms";
 import { useCollapseState } from "../../hooks/useCollapseState";
-import { BLOCK_BG, R, T, FW, M, IC } from "../../lib/constants";
+import { BLOCK_BG, R, T, FW, M, IC, H } from "../../lib/constants";
 import { LinkIcon } from "./WaIcons";
 import { ChevronRightIcon } from "../Icons";
 
@@ -26,7 +26,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
       <button
         onClick={onOpen}
         className="mgt-hover-scale mgt-press"
-        style={{ background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
+        style={mkSolidBtn("var(--wa-btn-open)", { padding: "8px 14px", minHeight: H.chrome, fontSize: T.body, boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" })}
       >Open booking</button>
       {/* Secondary = OUTLINE in its own hue. A solid red pill next to a solid
           blue one made the destructive action compete with the safe one for the

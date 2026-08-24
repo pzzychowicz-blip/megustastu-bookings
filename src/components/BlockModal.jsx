@@ -19,7 +19,7 @@ import { useState, useEffect } from "react";
 import { S, BTN, TBL, OPEN, GRID_CLOSE, R, T, FW } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
 import { hourLabel } from "../lib/time-grid";
-import { Overlay, Section, Fld, mkBtn, mkInp } from "./atoms";
+import { Overlay, Section, Fld, mkBtn, mkSolidBtn, mkInp } from "./atoms";
 
 export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose, onDirty }) {
   const existing = blocks.filter((bl) => bl.tableId === tableId && bl.date === date);
@@ -64,7 +64,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
         </button>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: BTN.cancel })}
+          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: "var(--app-btn-slate)" })}
           onClick={onClose}
         >
           Close
@@ -118,24 +118,18 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
       <button
         className="mgt-hover-scale"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
         onClick={onClose}
       >
-        Cancel
+        Back
       </button>
       <button
         onClick={handleSave}
         className="mgt-hover-scale"
-        style={{
-          // v17.8.0: deep red, deliberately — this Save BLOCKS a table out of
-          // service rather than saving a booking. Tokenized onto the app's
-          // solid danger fill instead of a one-off literal.
-          background: "var(--app-danger-solid)",
-          border: "1px solid rgba(255,255,255,0.2)",
-          borderRadius: R.pill, padding: "10px 18px", cursor: "pointer",
-          fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
-          boxShadow: "var(--shadow-btn-solid)"
-        }}
+        // v17.8.0: deep red, deliberately — this Save BLOCKS a table out of
+        // service rather than saving a booking. Tokenized onto the app's solid
+        // danger fill instead of a one-off literal.
+        style={mkSolidBtn("var(--app-danger-solid)")}
       >
         Block
       </button>
@@ -157,8 +151,9 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
       <div style={{ fontSize: T.body, color: S.muted, marginBottom: 16 }}>{date}</div>
       <Section>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Fld label="From">
+          <Fld label="From">{(fid) => (
             <input
+              id={fid}
               type="time"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
@@ -167,9 +162,10 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               className="mgt-hover-scale"
               style={mkInp()}
             />
-          </Fld>
-          <Fld label="To">
+          )}</Fld>
+          <Fld label="To">{(fid) => (
             <input
+              id={fid}
               type="time"
               value={to}
               onChange={(e) => setTo(e.target.value)}
@@ -178,7 +174,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               className="mgt-hover-scale"
               style={mkInp()}
             />
-          </Fld>
+          )}</Fld>
         </div>
       </Section>
     </Overlay>

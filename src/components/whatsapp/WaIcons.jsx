@@ -8,7 +8,9 @@
 //   the composer "Templates" toggle (replaces the text "Templates ▸" button).
 // SelectIcon — a checkbox with a tick. Toggles multi-select mode in the inbox.
 
-export function TemplatesIcon({ size = 16, color = "currentColor" }) {
+import { IC } from "../../lib/constants";
+
+export function TemplatesIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -28,7 +30,7 @@ export function TemplatesIcon({ size = 16, color = "currentColor" }) {
 // again". Used for the manual LLM re-check button, left of Archive in the
 // conversation header. The gap + arrowhead sit at ~2 o'clock so the tick stays
 // centred and legible at 17px.
-export function RecheckIcon({ size = 16, color = "currentColor" }) {
+export function RecheckIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -43,7 +45,7 @@ export function RecheckIcon({ size = 16, color = "currentColor" }) {
   );
 }
 
-export function SelectIcon({ size = 16, color = "currentColor" }) {
+export function SelectIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -84,7 +86,7 @@ function Svg({ size, color, children }) {
 
 // DraftIcon (was 📋) — a clipboard. The marker for "a booking was parsed out of
 // this message", on the conversation row, the draft card and the parsing notice.
-export function DraftIcon({ size = 16, color = "currentColor" }) {
+export function DraftIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <Svg size={size} color={color}>
       <rect x="4" y="4" width="16" height="17" rx="2.5" />
@@ -96,7 +98,7 @@ export function DraftIcon({ size = 16, color = "currentColor" }) {
 }
 
 // ArchiveIcon (was 📦) — a box with a lid band and a pull slot.
-export function ArchiveIcon({ size = 16, color = "currentColor" }) {
+export function ArchiveIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <Svg size={size} color={color}>
       <rect x="3" y="4" width="18" height="4.5" rx="1.5" />
@@ -107,7 +109,7 @@ export function ArchiveIcon({ size = 16, color = "currentColor" }) {
 }
 
 // TrashIcon (was 🗑) — a bin with a lid and two staves.
-export function TrashIcon({ size = 16, color = "currentColor" }) {
+export function TrashIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <Svg size={size} color={color}>
       <line x1="4" y1="6.5" x2="20" y2="6.5" />
@@ -120,7 +122,7 @@ export function TrashIcon({ size = 16, color = "currentColor" }) {
 }
 
 // LinkIcon (was 🔗) — two chain links. Heads the "linked booking" card.
-export function LinkIcon({ size = 16, color = "currentColor" }) {
+export function LinkIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <Svg size={size} color={color}>
       <path d="M10 13.5a4 4 0 0 0 5.7.4l2.8-2.8a4 4 0 0 0-5.7-5.7l-1.6 1.6" />
@@ -132,7 +134,7 @@ export function LinkIcon({ size = 16, color = "currentColor" }) {
 // WarnIcon (was ⚠) — a triangle with a bang. THE one that motivated this pass:
 // U+26A0 renders differently per platform, so the app's most important marker
 // was the least predictable glyph in it.
-export function WarnIcon({ size = 16, color = "currentColor" }) {
+export function WarnIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <Svg size={size} color={color}>
       <path d="M12 3.5 21.2 19.5a1.4 1.4 0 0 1-1.2 2H4a1.4 1.4 0 0 1-1.2-2Z" />
@@ -143,7 +145,7 @@ export function WarnIcon({ size = 16, color = "currentColor" }) {
 }
 
 // PencilIcon (was ✎) — heads a modification request, and its Apply button.
-export function PencilIcon({ size = 16, color = "currentColor" }) {
+export function PencilIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <Svg size={size} color={color}>
       <path d="M4 20h4l10.5-10.5a2.8 2.8 0 0 0-4-4L4 16Z" />
@@ -179,11 +181,11 @@ function Rotate({ flip, size, color }) {
   );
 }
 // ↺ — counter-clockwise: bring it back.
-export function RestoreIcon({ size = 16, color = "currentColor" }) {
+export function RestoreIcon({ size = IC.chrome, color = "currentColor" }) {
   return <Rotate flip size={size} color={color} />;
 }
 // ↻ — clockwise: do it again.
-export function RetryIcon({ size = 16, color = "currentColor" }) {
+export function RetryIcon({ size = IC.chrome, color = "currentColor" }) {
   return <Rotate size={size} color={color} />;
 }
 
@@ -199,7 +201,7 @@ export function RetryIcon({ size = 16, color = "currentColor" }) {
 // burst" are full-word labels on a dev-only panel and the glyph was decoration.
 // Note that lint cannot catch this class of thing: an unused *export* has no
 // unused-variable to report. Grep a new icon's call sites before trusting it.
-export function FlaskIcon({ size = 16, color = "currentColor" }) {
+export function FlaskIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <Svg size={size} color={color}>
       <path d="M9.5 3v6.2L4.6 18a2 2 0 0 0 1.7 3h11.4a2 2 0 0 0 1.7-3l-4.9-8.8V3" />
@@ -208,7 +210,7 @@ export function FlaskIcon({ size = 16, color = "currentColor" }) {
     </Svg>
   );
 }
-export function DiceIcon({ size = 16, color = "currentColor" }) {
+export function DiceIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <Svg size={size} color={color}>
       <rect x="3.5" y="3.5" width="17" height="17" rx="3.5" />

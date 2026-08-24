@@ -9,13 +9,19 @@ import { useRevealRows } from "../../hooks/useRevealRows";
 import { ConversationRow } from "./ConversationRow";
 import { T } from "../../lib/constants";
 
-// Per-row collapse speed. 365 = the house 280ms Reveal + 30% (Patryk, on the
-// "Needs action" toggle reading as a snap in the Inbox tab where it removes many
-// rows at once). ROW_PRUNE_MS scales the useRevealRows prune window by the same
-// factor — it MUST stay above ROW_MS or a departing row is unmounted mid-collapse
-// and vanishes, which is the exact behaviour this replaces.
-const ROW_MS = 365;
-const ROW_PRUNE_MS = Math.round((350 / 280) * ROW_MS); // 456
+// Per-row collapse speed (17.15.0-wa-sandbox). This was a hand-tuned `ms={365}`
+// plus a `ROW_PRUNE_MS` derived from it — 365 being the then-house 280ms Reveal
+// plus 30%, after Patryk found the "Needs action" toggle read as a snap in the
+// Inbox tab, where it removes many rows at once.
+//
+// v17.15.0 made `Reveal` take a NAME from the `M` scale instead of a number,
+// precisely so a caller cannot set a duration without the matching unmount hold.
+// `shift` is 385ms — 20ms off the tuned value, so the fold is unchanged to the
+// eye — and it is also the honest reading: a Reveal changes GEOMETRY, which is
+// what --t-shift is for. `move` (240ms) would have been FASTER than the 280 that
+// was rejected in the first place, which is how a semantic argument quietly
+// undoes a measurement.
+const ROW_SPEED = "shift";
 
 export function ConversationList({ conversations, activeKey, onSelect, bookings, archivedView, emptyLabel, selectMode, selected, onToggleSelect }) {
   // Shared with InboxPanel's keyboard-nav so the rendered order and the ↑/↓
@@ -31,12 +37,16 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
   // the "stack of cards" fold, identical in both tabs because it is one code
   // path with no per-tab branch.
   //
-  // ASYMMETRIC on purpose (`instantIn`): only the way OUT folds. A returning row
+  // ASYMMETRIC on purpose (`opts.instantIn`): only the way OUT folds. A returning row
   // appears at full height straight away and the rows below slide down to it via
   // the FLIP below. Easing it open as well meant two motions stacked on one row —
   // the row growing AND the rows under it travelling — which read as too much
   // movement for what is just a filter toggle.
-  const { renderIds, openIds } = useRevealRows(sorted.map((c) => c.phoneKey), ROW_PRUNE_MS, true);
+  // No `resetKey`: this list is EDITED (a thread arrives, a filter drops some
+  // rows), never REPLACED wholesale the way the notification strip's is on a
+  // date change. The prune window comes from ROW_SPEED, so it cannot drift from
+  // the Reveal below it.
+  const { renderIds, openIds } = useRevealRows(sorted.map((c) => c.phoneKey), undefined, { speed: ROW_SPEED, instantIn: true });
   // A departing row is no longer in `conversations`, so its object has to come
   // from somewhere: cache every conversation we have rendered, keyed by
   // phoneKey. Bounded by the number of conversations that have been on screen.
@@ -83,7 +93,7 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
   // `wasCollapsing` is written in a plain effect, so during the PRUNE commit's
   // layout effect it still holds the previous render's answer (true) — which is
   // exactly the question being asked. A genuine reorder landing inside that window
-  // loses its FLIP for one pass; a new message arriving during a 365ms fold is
+  // loses its FLIP for one pass; a new message arriving during a ~385ms fold is
   // rare enough to accept.
   const collapsing = renderIds.some((id) => !live[id]);
   const wasCollapsing = useRef(false);
@@ -107,7 +117,7 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
         <Reveal
           key={c.phoneKey}
           show={openIds.has(c.phoneKey)}
-          ms={ROW_MS}
+          speed={ROW_SPEED}
           style={openIds.has(c.phoneKey) ? undefined : { pointerEvents: "none" }}
         >
           <ConversationRow

@@ -37,10 +37,18 @@ import { Reveal } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 
-export function BannerRows({ ids, renderRow }) {
+export function BannerRows({ ids, renderRow, swapKey }) {
   // Per-row ease-in/out lifecycle: renderIds may hold departing rows a moment
   // longer than `ids` so their collapse animates.
-  const { renderIds, openIds } = useRevealRows(ids);
+  //
+  // v17.15.0: `swapKey` marks a wholesale replacement of the row list, and only
+  // ClashBanner passes one — it is the sole rows banner scoped to the VIEWED
+  // date rather than to today, so it is the only one whose rows can be replaced
+  // by a different day's while the section itself stays put. The other three
+  // depart as a whole section when you leave today, which the strip's own
+  // swapKey already covers. Undefined here means the original behaviour,
+  // unchanged.
+  const { renderIds, openIds } = useRevealRows(ids, swapKey);
 
   if (renderIds.length === 0) return null;
 

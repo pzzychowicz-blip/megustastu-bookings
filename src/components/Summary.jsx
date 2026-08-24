@@ -179,7 +179,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                 {s.hours.map(function(h){
                   return (
                     <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body }}>
-                      <span style={{ color: "var(--text-secondary)", fontWeight: FW.semi, minWidth: 104, flexShrink: 0 }}>
+                      <span style={{ color: "var(--text-secondary)", fontWeight: FW.medium, minWidth: 104, flexShrink: 0 }}>
                         {hh(h.hour) + "–" + hh(h.hour + 1)}
                       </span>
                       <div style={{ flex: 1, height: 7, background: "var(--bg-input)", borderRadius: 4,   /* @canvas */  overflow: "hidden", minWidth: 40 }}>
@@ -232,7 +232,7 @@ function ShiftChip({ label, covers, count }) {
       padding: "8px 12px",
       background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset
     }}>
-      <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
       <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{covers + " cover" + (covers !== 1 ? "s" : "")}</div>
       <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{count + " booking" + (count !== 1 ? "s" : "")}</div>
     </div>

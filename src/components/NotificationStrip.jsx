@@ -30,8 +30,8 @@
 // "collapse a banner with more than N rows". It now means the same thing about
 // the strip as a whole, so the setting keeps working and gains reach.
 
-import { useState, useEffect } from "react";
-import { Reveal } from "./atoms";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { Reveal, reduceMotionOn } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { R, M, T, FW, IC } from "../lib/constants";
 import { ChevronDownIcon } from "./Icons";
@@ -52,6 +52,9 @@ import { ChevronDownIcon } from "./Icons";
 // So the numbers live here, next to the styles that actually use them, and the
 // callers import the total. Change PAD_X / MARK / GAP and every body follows.
 export const NOTIF_PAD_X = 14;   // the pane's horizontal padding
+// v17.14.0 (/code-review follow-up): the lid's radius is the pane's MINUS the
+// 1px border it sits inside. See the note at its use.
+const LID_R = "calc(" + R.card + " - 1px)";
 const NOTIF_MARK = 15;           // SectionMark's icon box
 const NOTIF_GAP = 9;             // the flex gap between mark and title
 export const NOTIF_GUTTER = NOTIF_PAD_X + NOTIF_MARK + NOTIF_GAP;
@@ -77,7 +80,14 @@ function SectionMark({ icon: Icon, tone, size, fallbackDot }) {
   );
 }
 
-export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null }) {
+// ── The date swap (v17.15.0) ─────────────────────────────────────────────────
+// One movement, on the view slide's own clock. `M.dur`/`M.easeOut` are the raw
+// WAAPI pair (a var() in an `animate()` easing resolves to nothing and the
+// animation silently runs linear), which is exactly the escape hatch they are
+// documented for.
+const SWAP = { duration: M.dur.move, easing: M.easeOut };
+
+export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null, swapKey }) {
   const liveTotal = sections.reduce(function (n, s) { return n + (s.count || 1); }, 0);
   // Initial-only, like BannerRows' own collapse was: a strip the user opened
   // must not slam shut because a seventh late booking arrived.
@@ -90,9 +100,121 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
   // useRevealRows is the hook LateBanner/Overlap/WaitAvail already share for
   // their rows; applying it one level up means the strip's own contents behave
   // like its contents' contents, and there is one implementation of the pattern.
+  //
+  // v17.15.0: `swapKey` (the viewed date) is what tells the lifecycle apart
+  // from a replacement — see useRevealRows for the measurements. On a change of
+  // it the sections do not ease in and out at all; the whole body is swapped in
+  // one frame and the geometry is handled once, below.
   const ids = sections.map(function (s) { return s.id; });
   const sig = ids.join(",");
-  const { renderIds, openIds } = useRevealRows(ids);
+  const { renderIds, openIds } = useRevealRows(ids, swapKey);
+
+  // ── The swap's single move ──────────────────────────────────────────────────
+  // With the content replaced in one frame, the only thing left to animate is
+  // the box: from the height the day you left needed, to the height this one
+  // does. One WAAPI shot, on --t-move, so it starts and ends with the view's
+  // 28px horizontal slide and the day changes as ONE movement. Measured before:
+  // the pane wandered 70px of height across 1.15s under a 240ms slide, dragging
+  // the whole timeline diagonally with it; with no strip on either date the
+  // same switch is 28px sideways and zero vertical, which is what it should be.
+  //
+  // This CANNOT be `AutoHeight`, and the reason is worth keeping: that atom's
+  // observer fires every frame while its content is itself animating and eases
+  // the box to follow, clipping what overflows. That is right for a Settings
+  // tab and wrong here, where the sections' own Reveals animate constantly by
+  // design — every notification arriving in place would be clipped mid-reveal
+  // by a box chasing it. A one-shot fires only on the swap and touches nothing
+  // else.
+  //
+  // The fade is gated on the rendered TEXT actually differing. "Working
+  // offline" is not about the day, and fading it because you pressed Next is
+  // motion describing something that did not happen.
+  const lidRef = useRef(null);
+  const bodyRef = useRef(null);
+  const lastH = useRef(0);
+  const lastText = useRef("");
+  const swapRef = useRef(swapKey);
+  const heightAnim = useRef(null);
+
+  function readText() {
+    const body = bodyRef.current;
+    return (lidRef.current ? lidRef.current.textContent : "") + (body ? body.textContent : "");
+  }
+
+  // The swap itself. It must be a LAYOUT effect — the animation has to be
+  // created before the browser paints the new day, or the box paints at its
+  // final height for a frame first — but it does nothing on any other commit,
+  // and that early return is the whole point (/code-review).
+  //
+  // The first version had no early return and no dep array, so it read
+  // `offsetHeight` and two `textContent`s on EVERY commit. This component is not
+  // memoized and `notifSections` is rebuilt each App render, so that included
+  // every keystroke in the booking form — a path CLAUDE.md documents as
+  // performance-critical. Benchmarked in the running app with the strip expanded
+  // and 1402 nodes under <main>: 2.886ms per commit for the read pair, on
+  // desktop hardware, to serve a measurement wanted only on a date change.
+  useLayoutEffect(function () {
+    if (swapRef.current === swapKey) return;
+    swapRef.current = swapKey;
+    const body = bodyRef.current;
+    const from = lastH.current;
+    // The body is unmounted while the strip is collapsed, and 0 then means
+    // "nothing to measure", not "zero tall" — hence the `from > 0` guard below,
+    // which also covers the first render and the strip arriving from nothing
+    // (the outer Reveal owns that one).
+    const h = body ? body.offsetHeight : 0;
+    const text = readText();
+    // WAAPI is not reachable by index.html's reduced-motion rules, which only
+    // rewrite CSS durations — so anything driven from JS has to ask in JS. The
+    // per-device toggle exists for weak tablets, where this is exactly the work
+    // it is meant to remove (/code-review).
+    if (!reduceMotionOn()) {
+      // Opacity on the two CONTENT boxes, never on the pane: the pane owns the
+      // severity tint and its border, and fading those from zero pops the whole
+      // surface against the page. The tint already cross-fades on --t-move, so
+      // it is on this clock too.
+      //
+      // The lid is faded INDEPENDENTLY of the body, which the first version got
+      // wrong by nesting both inside one `if (body)`. A COLLAPSED strip has no
+      // body — `Reveal` has unmounted it — and a collapsed strip is still a
+      // visible strip: it is one row carrying the worst section's title and the
+      // per-category tally, all of which change with the day. Measured in that
+      // state: "Running late 1" became "Tables could be reshuffled 1" with zero
+      // animations, a hard cut in the one part of the strip that was on screen.
+      if (text !== lastText.current) {
+        if (body && body.animate) body.animate([{ opacity: 0 }, { opacity: 1 }], SWAP);
+        if (lidRef.current && lidRef.current.animate) lidRef.current.animate([{ opacity: 0 }, { opacity: 1 }], SWAP);
+      }
+      // The height is the body's alone, and only when there IS one to measure
+      // against: `from` is 0 both when the strip was collapsed and when it was
+      // not mounted at all, and neither is a height to ease from.
+      if (body && body.animate && from > 0 && h > 0 && Math.abs(from - h) > 1) {
+        heightAnim.current = body.animate([{ height: from + "px" }, { height: h + "px" }], SWAP);
+      }
+    }
+    // `h` was read BEFORE the animation was created, so this is the resting
+    // height, not an interpolated one.
+    lastH.current = h;
+    lastText.current = text;
+  });
+
+  // The baseline the NEXT swap eases from, kept current after paint rather than
+  // before it: at this point layout is already clean, so reading it back costs
+  // nothing like the forced reflow the same read causes in a layout effect.
+  //
+  // Skipped while the height animation is in flight (/code-review). `offsetHeight`
+  // during a WAAPI run returns the INTERPOLATED height, and any commit landing
+  // inside those 240ms — a status change, a keystroke, the 15s clock tick — would
+  // otherwise overwrite the resting height with a value that is only true for one
+  // frame, so a second date change inside the window would ease from a position
+  // the box is not in.
+  useEffect(function () {
+    const anim = heightAnim.current;
+    if (!anim || anim.playState !== "running") {
+      lastH.current = bodyRef.current ? bodyRef.current.offsetHeight : 0;
+    }
+    lastText.current = readText();
+  });
 
   // A departed section is gone from `sections` but must keep rendering for the
   // ~350ms its Reveal takes to collapse. Its CONTENT needs no cache here — the
@@ -145,7 +267,14 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
   const ordered = orderedIds.map(function (id) { return byId[id]; }).filter(Boolean);
 
   return (
-    <div style={{
+    /* v17.12.0: a named region, so the strip is a landmark an assistive-tech
+       user can jump straight to instead of arrowing into it from the header.
+       It is deliberately NOT a live region: the strip is persistent content,
+       and marking the whole pane live would re-read every section each time one
+       is dismissed or the body is expanded. The announcement is a composed
+       one-sentence summary, carried by an always-mounted hidden region in App —
+       see notifAnnounce there for why it cannot live in this file. */
+    <div role="region" aria-label="Notifications" style={{
       backgroundColor: top.tint || "var(--app-overlap-bg)",
       // The strip is recoloured by whatever is WORST right now, so its tint and
       // tone change under the reader when a notification arrives or resolves —
@@ -156,10 +285,20 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
       border: "1px solid var(--border-card)",
       borderRadius: R.card,
       marginBottom: 10,
-      boxShadow: "var(--shadow-soft)",
-      overflow: "hidden"
+      boxShadow: "var(--shadow-soft)"
+      // v17.10.2: `overflow: "hidden"` is GONE from here. It was clipping the
+      // lid's focus ring to 1px of the 4 it needs (2px offset + 2px width) —
+      // exactly the trap CLAUDE.md documents, recurring at a new site — and,
+      // unreported, the hover lift of every button in the expanded body.
+      //
+      // It was only ever protecting this pane's rounded corners from the lid's
+      // full-bleed hover tint, so the lid carries its own radius instead (below)
+      // and nothing needs a clip: the body's rows are transparent with hairline
+      // separators, and `Reveal` already manages its own overflow while it
+      // animates. Do not add it back to fix a corner — round the child.
     }}>
       <button
+        ref={lidRef}
         onClick={function () { setOpen(!open); }}
         aria-expanded={open}
         aria-label={open ? "Collapse notifications" : "Expand notifications"}
@@ -181,6 +320,18 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
           "--row-bg-hover": "var(--bg-veil)",
           display: "flex", alignItems: "center", gap: NOTIF_GAP, width: "100%",
           border: "none", cursor: "pointer",
+          // Its own radius, since the pane no longer clips. Bottom corners go
+          // square while the body is open — the lid is then the TOP of a taller
+          // surface, not the whole of it.
+          //
+          // v17.14.0 (/code-review follow-up): LID_R is that radius MINUS the
+          // pane's 1px border, which the lid sits inside. An inner surface
+          // repeating the outer radius bulges past the curve, showing a
+          // sub-pixel sliver of pane at each corner — visible because the lid's
+          // hover veil is a different colour from the pane under it. There is no
+          // token for "card minus a border", and adding one would put an entry
+          // in a shared scale that only ever has this caller.
+          borderRadius: open ? LID_R + " " + LID_R + " 0 0" : LID_R,
           padding: "10px " + NOTIF_PAD_X + "px", textAlign: "left"
         }}>
         {/* v17.8.0: an ICON, not the 8px dot. The dot said "something is
@@ -247,8 +398,39 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null })
       <Reveal show={open}>
         {/* .mgt-notif draws the hairlines between sections (index.html). A CSS
             adjacent-sibling rule rather than a per-section borderTop prop, so a
-            section never has to know its own position in the list. */}
-        <div className="mgt-notif">
+            section never has to know its own position in the list.
+
+            v17.11.0: the expanded body is BOUNDED and scrolls. Collapsed height
+            has been one row however many notifications fire since v17.8.0 —
+            that was the whole point — but expanding was unbounded, and measured
+            live it took 305px of an 860px viewport with only TWO of six sections
+            up. Six late bookings and a waitlist would have pushed the timeline
+            off the tablet again, which is the failure the strip exists to
+            prevent, merely moved one tap away.
+
+            The cap is on the BODY, never on the pane: the lid is a sibling and
+            must stay put, which is also what makes this work — v17.8.0 already
+            decided the collapsed tally survives expansion "because the sections
+            scroll and the lid doesn't". That sentence described an intent the
+            code had not yet implemented; this is it.
+
+            No `padding-inline` gutter here, unlike the app's other scrollers.
+            The rule (CLAUDE.md) is that a scroll container clips its children's
+            hover lift and focus ring at the padding box, and `overflow-y: auto`
+            makes the OTHER axis clip too, per spec. But these rows already carry
+            their own inset from BannerRows, and it is enough: measured live at
+            14px of clearance on the right against a worst case of 5.8px — that
+            is 4% of the WIDEST control, a 145px "Assign <name>" button, not the
+            36px ✕ it is tempting to size this against — plus 4px for the focus
+            ring. Measured, not assumed; re-measure if a wider control is ever
+            added to a banner row.
+            /code-review fix: `dvh`, not `vh`. The shell is `100dvh` in every
+            branch, and on a phone or tablet with a dynamic browser toolbar
+            `100vh` is the LARGER viewport — so a `40vh` cap is ~45–50% of what
+            is actually on screen, loosest on exactly the devices this exists to
+            protect. Matching the shell's unit is what makes "40% of the
+            viewport" true rather than approximately true. */}
+        <div ref={bodyRef} className="mgt-notif" style={{ maxHeight: "40dvh", overflowY: "auto" }}>
           {orderedIds.map(function (id) {
             const s = byId[id];
             return (

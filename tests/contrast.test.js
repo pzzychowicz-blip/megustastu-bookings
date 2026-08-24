@@ -123,6 +123,16 @@ const FILLS = [
   { fill: "--block-seated", alpha: null, ink: "--ink-seated", role: "label", what: "seated block" },
   { fill: "--block-cancelled", alpha: null, ink: "--ink-cancelled", role: "label", what: "cancelled block" },
 
+  // v17.15.0: the SOFT semantic pane and the ink on it — the notification
+  // strip's danger sections and the modal InlineAlert that copies their shape.
+  // Registered because the pairing was WRONG when it was measured: the tone was
+  // --status-offline, which is #ff3b30 in both themes while --danger-bg inverts,
+  // giving 3.03:1 in light against 4.31:1 in dark. Neither the coverage guard
+  // below nor check:style could see it — the guard's prefixes do not match
+  // `--danger-bg`, and a token pair is not a literal. So it is named here, and
+  // whoever adds the warn or suggest pane should name theirs too.
+  { fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "label", what: "danger pane (strip section + InlineAlert)" },
+
   // Solid semantic fills — already correct before this pass; here so they stay so.
   { fill: "--app-success-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "success tag" },
   { fill: "--app-danger-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "danger tag" },
@@ -151,6 +161,39 @@ const FILLS = [
   { fill: "--app-btn-grey-strong", alpha: null, ink: "--text-on-accent", role: "button", what: "secondary (strong)" },
   { fill: "--app-btn-slate", alpha: null, ink: "--text-on-accent", role: "button", what: "dialog secondary" },
   { fill: "--app-btn-slate-dim", alpha: null, ink: "--text-on-accent", role: "button", what: "write-warning dismiss" },
+
+  // v17.13.0 — two fills that reached this file only because the colour rule
+  // in check:style forced them out of the components. Both carried white text
+  // as hand-written literals, i.e. in the one form this file cannot see: it
+  // enumerates TOKENS, and "an audit that enumerates tokens has a blind spot
+  // exactly the size of the literals."
+  { fill: "--app-btn-dark", alpha: null, ink: "--text-on-accent", role: "button", what: "timeline Follow, while following" },
+  // The greyed-out primary in both form footers, ReminderEditor and ManualModal.
+  //
+  // v17.13.0 recorded this as an EXEMPTION: WCAG 1.4.3 exempts inactive
+  // components, and white on this fill measured 1.31:1 in light — at which the
+  // label is not dim, it is GONE, so a staff member who had not filled the date
+  // saw an empty pill rather than a greyed-out "Save booking". It was left as a
+  // design question rather than answered inside a gate-closing commit.
+  //
+  // **v17.14.0 answered it, and it is no longer an exemption.** The ink is
+  // `--btn-disabled-ink`, which is per-theme because the FILL is :root-only and
+  // composites toward whatever is behind it — so its effective colour flips WITH
+  // the theme even though its declaration does not. That is why `--text-muted`
+  // was the wrong answer despite being the obvious one: it inverts the same way
+  // the composite does, measuring 4.59:1 light but 2.30:1 dark, which would have
+  // swapped which theme was broken rather than fixing either. White was the
+  // mirror image: 1.30:1 light, 6.42:1 dark.
+  //
+  // The light ink is a step darker than --text-muted, and the reason is a limit
+  // of THIS FILE worth stating: BASE is the theme extreme, which is the worst
+  // case for WHITE ink and the BEST case for dark ink. The real modal sheet is
+  // translucent over a tinted app background, so the fill composites to
+  // rgb(211,211,217) on screen against rgb(225,225,229) here — a dark ink
+  // measures LOWER in the app than in this file. --text-muted read 4.59 here and
+  // 4.02 live. The shipped pair measures 5.14 light / 4.60 dark in the running
+  // app, and is a `label` entry held to 4.5 rather than an exemption.
+  { fill: "--btn-disabled", alpha: null, ink: "--btn-disabled-ink", role: "label", what: "disabled primary button" },
 
   // The two PRIMARY header buttons. Named --app-* rather than --btn-*, which is
   // the only reason they were not in the first draft of this list.
@@ -262,7 +305,17 @@ const NEED = { label: 4.5, button: 3 };
 // chose this one, informed, after seeing the numbers and the pixels. It is
 // recorded here rather than argued away: the floors below still gate a
 // regression, and an accepted contrast is not a licence to keep going.
+// A number may be a scalar (both themes) or a {light, dark} pair. The per-theme
+// form arrived for --btn-disabled, whose two themes were 5x apart so a single
+// floor could not have seen a dark-mode regression at all; that entry is no
+// longer an exemption (v17.14.0), but the pair form stays, because the next fill
+// whose themes diverge should not have to rediscover why one number is not
+// enough.
 const EXEMPT_FLOOR = { "--block-confirmed": 2.8, "--block-pending": 1.75, "--block-completed": 2.1 };
+const exemptFloor = (fill, theme) => {
+  const f = EXEMPT_FLOOR[fill];
+  return typeof f === "number" ? f : f[theme];
+};
 
 function measure(entry, theme) {
   const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
@@ -380,7 +433,7 @@ describe("fill/ink contrast — every text-bearing fill, both themes", () => {
         if (entry.role === "exempt") {
           // Not asserted against the bar — asserted against ITSELF, so the
           // exemption cannot quietly rot into something worse.
-          const floor = EXEMPT_FLOOR[entry.fill];
+          const floor = exemptFloor(entry.fill, theme);
           expect(
             got,
             `${entry.what} in ${theme} is a recorded exemption at ${got}:1, but it ` +
@@ -423,7 +476,19 @@ describe("registry coverage", () => {
     "--wa-unread-ring": "a box-shadow, not a fill",
     "--wa-row-active-glow": "a box-shadow, not a fill",
   };
+  // v17.14.0: tokens matching the fill prefixes that are INK, not fill. Listing
+  // one here is not an exemption — the assertion below requires it to be some
+  // registered fill's `ink`, so it is measured, just from the other side.
+  //
+  // The alternative was to name it outside the `--btn-` prefix so the sweep
+  // would not see it, which is precisely how `--app-btn-grey` once hid from a
+  // check written around `--btn-*`. A token should not be renamed to escape an
+  // audit.
+  const INKS = {
+    "--btn-disabled-ink": "the ink ON --btn-disabled, per-theme (see its FILLS entry)",
+  };
   const registered = new Set(FILLS.map((f) => f.fill));
+  const usedAsInk = new Set(FILLS.map((f) => f.ink));
 
   it("every --block-* / --btn-* / --tbl-*-rgb / timeline pill+badge token is registered or declared decorative", () => {
     // The `--tl-.*(pill|badge)` clause is the v17.8.0 review fix. The rest of
@@ -436,13 +501,31 @@ describe("registry coverage", () => {
     );
     // `*-text*` tokens are INKS, not fills — they are checked by the
     // ink-exists test below and measured as the ink half of a pair above.
+    // Two ways of saying that, both live: prod's explicit INKS map names one
+    // token at a time and makes it prove it is used as an ink, while the
+    // `-text` suffix rule covers the `--wa-*-text` family, which is named by
+    // convention rather than enumerated. A WA ink that ever stops being an ink
+    // is caught by the fill sweep the moment it is put on a surface.
     const missing = candidates.filter(
-      (k) => !registered.has(k) && !(k in DECORATIVE) && !/-text(-dim)?$/.test(k)
+      (k) => !registered.has(k) && !(k in DECORATIVE) && !(k in INKS) && !/-text(-dim)?$/.test(k)
     );
     expect(
       missing,
       "unregistered text-bearing fill(s): " + missing.join(", ") +
-      " — add them to FILLS so their contrast is measured, or to DECORATIVE with a reason"
+      " — add them to FILLS so their contrast is measured, to INKS if the token is" +
+      " ink rather than fill, or to DECORATIVE with a reason"
+    ).toEqual([]);
+  });
+
+  it("every token declared an INK is actually used as one", () => {
+    // INKS is not a hiding place: a token listed there must appear as some
+    // registered fill's `ink`, so it is measured from the other side. Without
+    // this, "it is an ink" would be a sentence anyone could write to silence
+    // the sweep above.
+    const unused = Object.keys(INKS).filter((k) => !usedAsInk.has(k));
+    expect(
+      unused,
+      "declared INK but never used as one: " + unused.join(", ")
     ).toEqual([]);
   });
 
@@ -503,12 +586,45 @@ function ringAlpha() {
     );
   }
   for (let k = start; k < Math.min(start + 12, lines.length); k++) {
+    // v17.13.0: the ring's rim became `--rim-solid-strong` when the 26 copies of
+    // its 0.2 sibling were tokenised, so this resolves the token out of
+    // index.html rather than reading a number out of the component. That is
+    // strictly what this guard was already trying to be — the number the test
+    // uses is the number the app renders — and it now catches a retune of the
+    // TOKEN as well as a retune of the call site. A raw rgba is still accepted,
+    // because reverting to one must not silently disable the guard.
+    const tok = lines[k].match(/border:\s*"[^"]*var\((--[a-z0-9-]+)\)/);
+    if (tok) {
+      const raw = LIGHT_VARS[tok[1]];
+      if (!raw) {
+        throw new Error(
+          "contrast.test: SIZE_RING's border names " + tok[1] +
+          ", which is not declared in index.html's :root."
+        );
+      }
+      // /code-review: the rgba branch below matches `rgba(255,255,255,…)`
+      // explicitly, so a ring that stopped being WHITE threw. The token branch
+      // returned only the alpha and let the caller composite a hard-coded white,
+      // which silently accepts any colour — the guard would then report a white
+      // ring that is not on screen. This function's own throw message promises
+      // otherwise ("If the ring stopped being a white rule, this guard needs
+      // rewriting, not removing"), so the token has to prove it is white too.
+      const c = parse(raw);
+      if (c.r !== 255 || c.g !== 255 || c.b !== 255) {
+        throw new Error(
+          "contrast.test: SIZE_RING's border resolves to " + raw + " via " + tok[1] +
+          ", which is not white. The ring stopped being a white rule — this guard " +
+          "needs rewriting (it composites pure white), not removing."
+        );
+      }
+      return c.a;
+    }
     const m = lines[k].match(/border:\s*"[^"]*rgba\(255,\s*255,\s*255,\s*([\d.]+)\)/);
     if (m) return parseFloat(m[1]);
     if (/^\};/.test(lines[k]) && k > start) break;
   }
   throw new Error(
-    "contrast.test: no white rgba border found inside the SIZE_RING declaration. " +
+    "contrast.test: no white rule found inside the SIZE_RING declaration. " +
     "If the ring stopped being a white rule, this guard needs rewriting, not removing."
   );
 }
@@ -530,6 +646,176 @@ describe("party-size ring — the boundary over each block, as rendered", () => 
           `If the border alpha went back to --blk-rule's 0.3, the ring is absent ` +
           `on the yellow blocks; put it back.`
         ).toBeGreaterThanOrEqual(floor);
+      });
+    }
+  }
+});
+
+// ── The double-booked band's casing — the other NON-TEXT boundary (v17.11.0) ──
+// Found by /code-review, and it is the SIZE_RING lesson recurring one element
+// along: a marker was given a single opaque colour, documented as sitting
+// somewhere "where nothing competes with it", and never measured against what
+// it actually paints on. It paints on BLOCK_BG. Measured, the red core is
+// 1.02–1.63:1 across the four statuses in both themes — invisible on a seated
+// block — and this bar is the one part of the double-booking treatment carrying
+// information the block border cannot (it runs from the later booking's start
+// to the EARLIER one's end, so its right edge is the minute the hidden booking
+// really finishes).
+//
+// Unlike SIZE_RING this is NOT an exemption: a near-black casing clears 3:1
+// everywhere, so the bar is asserted against the real bar. The red keeps the
+// meaning; the casing carries the boundary.
+//
+// It needs its own block for two reasons. `measure()` takes a fill/ink pair and
+// there is no ink here — the same reason the size ring has one. And the
+// registry's coverage guard matches `--tl-.*(pill|badge)`, so it cannot see a
+// `--tl-clash-*` token at all: this family is exactly the blind spot that guard
+// documents itself as having, which is why the band shipped unmeasured.
+describe("double-booked band — the casing over each block, as rendered", () => {
+  for (const theme of ["light", "dark"]) {
+    for (const blockTok of BLOCK_FILLS) {
+      it(`${blockTok} clash-band casing is visible in ${theme}`, () => {
+        const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+        const block = over(parse(vars[blockTok]), BASE[theme]);
+        const edge = over(parse(vars["--tl-clash-edge"]), block);
+        const got = +ratio(edge, block).toFixed(2);
+        expect(
+          got,
+          `clash-band casing on ${blockTok} in ${theme}: ${got}:1, needs 3:1 ` +
+          `(WCAG 1.4.11, non-text boundary). The band's own red is 1.02–1.63:1 ` +
+          `on these fills — if the casing is dropped, the one marker that says ` +
+          `WHERE the two bookings collide becomes invisible on a seated block.`
+        ).toBeGreaterThanOrEqual(3);
+      });
+    }
+  }
+
+  // The core is not asserted against 3:1 — it cannot meet it and does not need
+  // to, because the casing is the boundary. It IS asserted to still be a
+  // distinguishable red, so "simplifying" the pair down to one flat neutral
+  // (which would pass the casing test on its own) does not go unnoticed.
+  it("the band core is still a red, distinct from its casing", () => {
+    for (const theme of ["light", "dark"]) {
+      const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+      const core = parse(vars["--tl-clash-a"]);
+      const edge = parse(vars["--tl-clash-edge"]);
+      expect(core.r, `clash core in ${theme} is not red-dominant`).toBeGreaterThan(core.g + 60);
+      expect(core.r, `clash core in ${theme} is not red-dominant`).toBeGreaterThan(core.b + 60);
+      expect(+ratio(core, edge).toFixed(2), `core vs casing in ${theme}`).toBeGreaterThanOrEqual(2);
+    }
+  });
+});
+
+// ── The waitlist ghost — a DIMMED copy of the worst fill in the app (v17.13.0)
+//
+// This is the gap the file above declares it has, and the design-system pass
+// went and measured it: the ghost's guest name renders at **1.50:1**, the
+// lowest text contrast in the application, on a fill (`--block-pending`) that
+// is ALREADY this registry's worst recorded exemption at 1.82:1.
+//
+// It arrived through the same door as the v17.9.0 hour-pill defect, one level
+// further along. `chipOpacity()` above is anchored on `const timeChip` — a
+// deliberate /code-review fix, and correct for what it set out to do — and its
+// own comment names the three `...HOUR_PILL` spreads and says only the first is
+// measured. `WaitGhost` is the second. So the component that dims an exempt
+// fill by a further 45% was, by construction, outside everything this file
+// looks at. **A token's number is not the screen's number wherever that token
+// is reused over something else** — and an element-level `opacity` is exactly
+// such a reuse, invisible to a registry that reads `index.html`.
+//
+// Asserted against ITSELF, like SIZE_RING and unlike the clash band: a 0.55
+// dimming cannot reach 4.5:1 over any fill this app owns, so a 4.5 bar here
+// would be a permanently red test, which is a muted test. The floors are the
+// values measured at the shipped opacities. What they buy is that the dimming
+// cannot deepen, and that raising it shows up as a number rather than a
+// feeling.
+//
+// **The 1.50 is recorded, not endorsed.** The amber exemption's justification —
+// a block's meaning is carried by colour, position and width, and the one part
+// that is INFORMATION moved onto an opaque chip — does not reach here: the
+// chip is inside the ghost and dims with it, so on a ghost every element is
+// below the bar at once. See ROADMAP.md.
+//
+// Both opacities are read out of the component for `chipOpacity()`'s reason: a
+// guard that names the thing it guards and then uses a number typed into the
+// test is not guarding it.
+function ghostOpacity() {
+  const lines = TIMELINE_SRC.split("\n");
+  const start = lines.findIndex((l) => /function\s+WaitGhost\s*\(/.test(l));
+  if (start < 0) {
+    throw new Error(
+      "contrast.test: could not find `function WaitGhost` in TimelineView.jsx. " +
+      "The waitlist ghost was renamed or moved — re-anchor ghostOpacity() on it " +
+      "rather than deleting this guard."
+    );
+  }
+  for (let k = start; k < lines.length; k++) {
+    // `opacity: g.resh ? 0.4 : 0.55` — the reshuffle-only match is turned down
+    // further because it can sit over a table that is visibly occupied now.
+    const m = lines[k].match(/opacity:\s*g\.resh\s*\?\s*([\d.]+)\s*:\s*([\d.]+)/);
+    if (m) return { resh: parseFloat(m[1]), plain: parseFloat(m[2]) };
+    if (/^}/.test(lines[k]) && k > start) break;
+  }
+  throw new Error(
+    "contrast.test: no `opacity: g.resh ? … : …` inside WaitGhost. If the ghost " +
+    "stopped being drawn by element opacity, this guard needs rewriting, not removing."
+  );
+}
+
+// Measured at the shipped 0.55 / 0.4. Everything on a ghost is dimmed together,
+// so all three are below the bar at once — which is the finding, not a rounding.
+//
+// The review measured the light guest name at 1.50:1 from the live DOM and this
+// file computes 1.39. Both are right and the gap is the BASE: this registry
+// takes the extreme of each theme (pure white / the darkest sheet) as the worst
+// case for washout, while the timeline row has its own faint tint under the
+// ghost. Recording the stricter of the two is the point of choosing an extreme.
+const GHOST_FLOOR = {
+  light: { plain: { name: 1.39, chip: 2.22, ring: 1.2 }, resh: { name: 1.27, chip: 1.74, ring: 1.14 } },
+  dark:  { plain: { name: 1.82, chip: 3.12, ring: 1.39 }, resh: { name: 1.63, chip: 2.41, ring: 1.3 } },
+};
+
+describe("waitlist ghost — the dimmed block, as rendered", () => {
+  for (const theme of ["light", "dark"]) {
+    for (const kind of ["plain", "resh"]) {
+      it(`${kind} ghost stays at or above its recorded floors in ${theme}`, () => {
+        const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+        const a = ghostOpacity()[kind];
+        const base = BASE[theme];
+        // Element opacity composites the already-painted element back over the
+        // page, so fill, chip and ink all fade together — the same shape as the
+        // start-time-chip block above, with the block itself as the thing faded.
+        const fillFull = over(parse(vars["--block-pending"]), base);
+        const fill = over({ ...fillFull, a }, base);
+
+        const nameFull = over(parse(vars["--ink-pending"]), fillFull);
+        const name = over({ ...nameFull, a }, base);
+
+        const chipFull = over(parse(vars["--tl-hour-pill"]), fillFull);
+        const chip = over({ ...chipFull, a }, base);
+        const chipInkFull = over(parse(vars["--text-on-accent"]), chipFull);
+        const chipInk = over({ ...chipInkFull, a }, base);
+
+        const ringFull = over({ r: 255, g: 255, b: 255, a: ringAlpha() }, fillFull);
+        const ring = over({ ...ringFull, a }, base);
+
+        const got = {
+          name: +ratio(name, fill).toFixed(2),
+          chip: +ratio(chipInk, chip).toFixed(2),
+          ring: +ratio(ring, fill).toFixed(2),
+        };
+        const floor = GHOST_FLOOR[theme][kind];
+        for (const part of ["name", "chip", "ring"]) {
+          expect(
+            got[part],
+            `waitlist ghost ${part} (${kind}, ${theme}): ${got[part]}:1, recorded ` +
+            `floor ${floor[part]}:1. These are BELOW the bar by design of the ` +
+            `dimming and are asserted against themselves so they cannot get ` +
+            `worse — an accepted contrast is not a licence to keep going. If the ` +
+            `opacity was turned down further, the guest name on a proposal is no ` +
+            `longer readable at all.`
+          ).toBeGreaterThanOrEqual(floor[part]);
+        }
       });
     }
   }

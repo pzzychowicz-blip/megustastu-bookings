@@ -492,6 +492,15 @@ export var BLOCK_INK={confirmed:"var(--ink-confirmed)",pending:"var(--ink-pendin
 // families (BLOCK_BG, BTN) are direct tokens. Block/table/button tokens are
 // theme-invariant (saturated fills read on both themes); only status-chip
 // *text* flips light in dark. `S.bg` stays the literal "transparent".
+// v17.13.0 — the hairline rim on a theme-INVARIANT solid fill, as a whole
+// border declaration because that is the shape all 26 call sites had:
+// `border:"1px solid rgba(255,255,255,0.2)"`, hand-written in twelve files.
+// One value repeated 26 times is a token that cannot be fixed — the app's
+// most-repeated lesson, and the last colour to still be living it. The token
+// itself is declared in index.html's :root ONLY (not the dark block) and the
+// comment there says why. A rim that needs a different width or style takes
+// `var(--rim-solid)` / `var(--rim-solid-strong)` inline instead.
+export var RIM_SOLID="1px solid var(--rim-solid)";
 export var S={bg:"transparent",card:"var(--bg-card)",border:"var(--border-card)",muted:"var(--text-muted)",text:"var(--text-primary)",accent:"var(--accent)"};
 export var TBL={out:{bg:"rgba(var(--tbl-out-rgb),0.8)",text:"var(--text-on-accent)",border:"rgba(var(--tbl-out-rgb),0.5)"},ind:{bg:"rgba(var(--tbl-ind-rgb),0.8)",text:"var(--text-on-accent)",border:"rgba(var(--tbl-ind-rgb),0.5)"}};
 // ── Corner-radius tokens (v17.7.0) ───────────────────────────────────────────
@@ -674,6 +683,12 @@ export var M={
   tap:"var(--t-tap) var(--ease-out)",
   move:"var(--t-move) var(--ease-out)",
   shift:"var(--t-shift) var(--ease-out)",
+  // v17.15.0: a DISCLOSURE, which is slower than geometry on purpose — see the
+  // token's own note in index.html. `Reveal` is the only consumer, and its two
+  // internal timeouts come from `exitHold()` below, which reads `M.dur.reveal`
+  // — the number that must stay in step with --t-reveal by hand, since a JS
+  // timeout cannot read a CSS var (the same constraint as M.dur/M.easeOut).
+  reveal:"var(--t-reveal) var(--ease-out)",
   status:"var(--t-status) var(--ease-out)",
   exit:"var(--t-move) var(--ease-in)",
   // The documented LINEAR exception (v17.8.0), alongside .mgt-dot-pulse's
@@ -684,10 +699,46 @@ export var M={
   // height change in the first third of the time, then crawls. AutoHeight is
   // the only consumer; anything that travels still takes move/shift.
   resize:"var(--t-shift) linear",
-  // Raw values — WAAPI only. Keep identical to index.html's :root.
-  dur:{tap:145,move:240,shift:385},
-  easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"
+  // Raw values — WAAPI only (plus `reveal`, which `Reveal` needs as a NUMBER to
+  // time its mount/settle timeouts against). Keep identical to index.html's
+  // :root — these are the only values here that can drift.
+  dur:{tap:145,move:240,shift:385,reveal:520},
+  easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"   /* @motion */
 };
+
+// ── Derived exit delays (v17.15.0) ────────────────────────────────────────────
+// How long a LEAVING node must stay mounted for its exit to actually finish:
+// its duration plus one frame of slack, as ARITHMETIC rather than as finished
+// numbers, because `Reveal` takes a `speed` and has to derive its own hold from
+// whichever entry of the scale that names. `EXIT_MS` and `REVEAL_EXIT_MS` are
+// the two named applications of it, and they are derived rather than typed
+// because every hand-typed copy of this number in the app was wrong:
+//
+//   EXIT_MS         every `*-out` keyframe class runs for --t-move. `Presence`
+//                   used 200, its six slide-out call sites 190, `Toast` 210 and
+//                   `ModalPresence` 200 — so every modal, toast and slide-out
+//                   button in the app unmounted mid-animation. Measured before
+//                   the fix: `mgt-scrim-out` (240ms) unmounted at currentTime
+//                   167, i.e. the close was cut off at 70% and the scrim
+//                   vanished while still visible.
+//   REVEAL_EXIT_MS  a `Reveal` collapsing takes --t-reveal. `Reveal`'s own
+//                   unmount timeout and `useRevealRows`' PRUNE_MS (350, chosen
+//                   as "> Reveal's ~300ms collapse") both encoded the OLD 385ms
+//                   duration as a literal, so raising --t-reveal to 520 would
+//                   have silently truncated every disclosure and every departing
+//                   banner row — the fix for "too snappy" breaking the exits.
+//
+// They live here, beside the tokens they follow, so there is one place to look
+// and nothing to keep in step by hand except M.dur itself.
+//
+// EXIT_PAD is deliberately NOT exported (/code-review): nothing outside this
+// file has a use for it, and a caller able to reach it is a caller able to
+// hand-compute `M.dur.x + EXIT_PAD` — re-creating the exact split between a
+// duration and its hold that `exitHold` exists to make impossible.
+var EXIT_PAD = 20;
+export function exitHold(speed) { return M.dur[speed] + EXIT_PAD; }
+export var EXIT_MS = exitHold("move");
+export var REVEAL_EXIT_MS = exitHold("reveal");
 
 // v17.10.0: `guestId` is the phone-less customer identity carried by the draft
 // (see customers.js → identityKey); `guestSeed` is the id of the booking that

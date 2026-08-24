@@ -77,7 +77,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
             : <span style={{ width: 8, height: 8, borderRadius: "50%", background: "transparent", border: "1px solid var(--wa-bubble-in-border)", flexShrink: 0, boxSizing: "border-box" }} />}
           <span style={{ fontSize: T.lead, fontWeight: conv.unread ? FW.bold : FW.semi, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
           {tagEl}
-          {conv.archived ? <span title="Archived" style={{ marginLeft: 4, color: "var(--text-muted)", display: "inline-flex", alignItems: "center" }}><ArchiveIcon size={12} /></span> : null}
+          {conv.archived ? <span title="Archived" style={{ marginLeft: 4, color: "var(--text-muted)", display: "inline-flex", alignItems: "center" }}><ArchiveIcon size={IC.inline} /></span> : null}
         </div>
         <span style={{ fontSize: T.small, color: "var(--text-muted)", flexShrink: 0, fontWeight: FW.regular }}>{formatRelativeTime(conv.lastMessageAt)}</span>
       </div>

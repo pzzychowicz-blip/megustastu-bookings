@@ -11,7 +11,7 @@
  * Author:  Patryk Zychowicz
  * Contact: pz.zychowicz@gmail.com
  */
-import { useState, useRef, useEffect, useMemo, lazy, Suspense } from "react";
+import { useCallback, useState, useRef, useEffect, useMemo, lazy, Suspense } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 
@@ -24,7 +24,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, M, T, FW, IC } from "./lib/constants";
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, M, T, FW, H, IC } from "./lib/constants";
 
 import {
   getDur, toMins, genId,
@@ -34,15 +34,18 @@ import {
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
-  checkInefficent, verifyClean, findConflicts,
+  checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
   undoSnapshots, applyUndo
 } from "./lib/booking-logic";
 
+import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
+import { useDismissals } from "./hooks/useDismissals";
+import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
-import { hourLabel } from "./lib/time-grid";
+import { hourLabel, spanZoom } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
 // can be unit-tested (tests/waitlist-match.test.js).
 import { placeWaitlist } from "./lib/waitlist-match";
@@ -52,7 +55,7 @@ import { placeWaitlist } from "./lib/waitlist-match";
 // First component file in the codebase using JSX syntax. App.jsx now also
 // uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
 // compatibility no longer applies — both files share a single style.
-import { Overlay, ModalTitle, mkBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
+import { Overlay, ModalTitle, mkBtn, mkSolidBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
 import { appBannerSections } from "./components/AppBanners";
@@ -124,7 +127,7 @@ import { Summary }      from "./components/Summary";
 // re-export. The re-export exists to keep the LAZY-Settings boundary intact for
 // importers that predate the move; App has no reason to go the long way round,
 // and Icons.jsx has no imports of its own to drag into the startup chunk.
-import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, CogIcon, LateIcon, OverlapIcon, SearchIcon, WaitIcon } from "./components/Icons";
+import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, ClashIcon, CogIcon, LateIcon, NoShowIcon, OverlapIcon, SearchIcon, WaitIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -134,6 +137,7 @@ import { SplitMenu }     from "./components/SplitMenu";
 const WeekView = lazyChunk(function(){return import("./components/WeekView").then(function(m){return {default:m.WeekView};});},"WeekView"); // v17.1.0: lazy (opened on demand)
 import { LateBanner }   from "./components/LateBanner";
 import { OverlapBanner } from "./components/OverlapBanner";
+import { ClashBanner } from "./components/ClashBanner";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 
 // ── Phase B5 (v15-refactor): Final modal & screen extraction ──────────────
@@ -206,7 +210,7 @@ import { useGeneralSettings } from "./hooks/useGeneralSettings";
 // v17.6.0: per-user preferences (settings/users/{uid}/prefs) — the first
 // settings node that is NOT restaurant-wide. See useUserPrefs.js for what
 // syncs, what stays per-device, and why the localStorage mirror stays.
-import { useUserPrefs } from "./hooks/useUserPrefs";
+import { useUserPrefs, PREF_SPEC, PREF_NAMES, readPrefValue, prefLocalValue } from "./hooks/useUserPrefs";
 import { useLayout } from "./hooks/useLayout";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
@@ -283,7 +287,7 @@ const __APP_SIGNATURE__={
   app:"Me Gustas Tú Booking System",
   // Sandbox build marker — WhatsApp module under local test, NOT a release.
   // The formal version bump happens on "give me the deployment version".
-  version:"17.10.1-wa-sandbox",
+  version:"17.15.0-wa-sandbox",
   sandbox:"WhatsApp inbox + simulator (localhost only)",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
@@ -367,6 +371,10 @@ const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400;
 // React.memo for zero visual change; these shared consts keep it stable.
 const EMPTY_OBJ=Object.freeze({});
 const EMPTY_ARR=Object.freeze([]);
+// v17.14.0: the ✕-dismissal Sets emptied on a day change. "clash" is absent on
+// purpose — it prunes against its own live pairs, which covers the date change
+// too (see useDismissals.js).
+const DAY_DISMISS_KEYS=Object.freeze(["late","overlap","wait"]);
 
 // ── The two chrome icon buttons (v17.9.0) ────────────────────────────────────
 // Find-a-booking and Settings. v17.0.0 round 8 put them in ONE pair in the
@@ -427,7 +435,16 @@ function readAppWidth(){
 // v17.5.0: the persisted Split View, per device. Restored on load so a split
 // survives a reload/redeploy — losing your layout on every refresh would make
 // the feature not worth setting up.
-const SPLIT_KEY="mgt-split";
+const SPLIT_KEY="mgt-split";   // also PREF_SPEC.splitEnabled.clears — keep in step
+// v17.14.0: read one of the four boolean prefs off this device, per its
+// PREF_SPEC convention. The try/catch is the same one the four initializers
+// each carried; the default on a throw is the pref's own default, which is
+// exactly what an absent key means.
+function readPrefLS(name){
+  const spec=PREF_SPEC[name];
+  try{return readPrefValue(spec.store,localStorage.getItem(spec.ls));}
+  catch{return readPrefValue(spec.store,null);}
+}
 // The canonical view order — drives the slide direction on a view switch AND
 // validates a restored split. useKeyboardShortcuts keeps its own VIEW_ORD for
 // the same purpose; keep the two identical if a view is ever added.
@@ -438,7 +455,8 @@ const VIEW_ORD=["timeline","list","plan"];
 // (timelineZoom / selectedListId / showFinished).
 function readSplit(){
   try{
-    if(localStorage.getItem("mgt-split-enabled")==="0") return null;   // master switch off
+    if(!readPrefLS("splitEnabled")) return null;   // master switch off — v17.14.0: was a
+    // second hand-written read of the same key, which is the drift PREF_SPEC exists to stop.
     if(typeof window!=="undefined"&&window.innerWidth<600) return null; // tablet/desktop only
     const s=JSON.parse(localStorage.getItem(SPLIT_KEY)||"null");
     if(!s||typeof s!=="object") return null;
@@ -447,6 +465,39 @@ function readSplit(){
     const r=Number(s.ratio);
     return {a:s.a,b:s.b,dir:s.dir,ratio:Number.isFinite(r)&&r>=0.2&&r<=0.8?r:0.5};
   }catch{return null;}
+}
+
+// ── v17.11.0: a Timeline needs horizontal room, and a side-by-side split
+// halves exactly the dimension it needs most ────────────────────────────────
+// The `winW < 600` gate above already says "a view needs room, and a Timeline in
+// a ~180px pane is unusable". That reasoning is about the PANE and was only ever
+// applied to the WINDOW. Measured live at 1280px in a 50/50 side-by-side split:
+// the Timeline's own scroller is **371px against a 2896px grid — 13% of the
+// service visible at once**.
+//
+// Scrolling a timeline is normal; that is not the complaint. The complaint is
+// that a half-width Timeline can show you the whole day OR readable blocks and
+// never both, and the view exists to do both — "where does the evening stand" is
+// the question it answers.
+//
+// The number is derived, not chosen. Measured on the live DOM, a pane loses
+// ~124px to the table-label column (58) and the card's own padding and gutters
+// before the grid starts. On the reference 10-hour day a 90-minute booking is
+// 15% of the grid, and v17.9.1's own width budget says a block needs 138px
+// (NAME_MIN 55 + the assign handle 41 + the size ring 24 + v17.11.0's status
+// mark 18) before its guest name renders at all. 138 / 0.15 = 920px of grid,
+// + 124 = 1044. Rounded up to the divider-inclusive figure below.
+//
+// A STACKED split is always fine — it halves the height, and fewer visible table
+// rows is what scrolling is for.
+const MIN_TL_PANE=1050;
+const SPLIT_DIVIDER_PX=10;
+// `tlPane` is "a" or "b" — which side the Timeline is on. Pure, so the menu, the
+// view-switcher and the repair effect all ask the same question one way.
+function tlPaneOk(appW,dir,ratio,tlPane){
+  if(dir!=="v") return true;
+  const share=tlPane==="a"?ratio:1-ratio;
+  return (appW-SPLIT_DIVIDER_PX)*share>=MIN_TL_PANE;
 }
 
 // v17.2.0: per-device Timeline zoom/follow settings (theme pattern — key absent
@@ -691,12 +742,25 @@ function BookingApp({uid}){
   const [view, setView] = useState("timeline");
   // v15.8.0: main-view slide. `slide.k` keys the SlideView wrapper (a bump remounts
   // it → replays the slide); `slide.dir` picks direction. Set by view-toggle + date
-  // nav (‹/›/date-input/Today). mgt-view-in-left = enters from left (→ "left to
-  // right"); mgt-view-in-right = enters from right (→ "right to left").
+  // nav. The two directional classes are the VIEW toggle's: mgt-view-in-left =
+  // enters from left (→ "left to right"), mgt-view-in-right = enters from right
+  // (→ "right to left"). Date nav has passed mgt-view-fade since v17.15.0 — see
+  // `goToDate` below for why it gave up the horizontal axis (/code-review: this
+  // comment still named date nav as a source of the directional classes).
   const [slide, setSlide] = useState({ k: 0, dir: "mgt-view-in-left" });
   function bumpSlide(dir){ setSlide(function(s){ return { k: s.k + 1, dir: dir }; }); }
-  // Navigate to a date with a slide whose direction matches forward/back.
-  function goToDate(next){ if(next!==viewDate){ bumpSlide(next > viewDate ? "mgt-view-in-left" : "mgt-view-in-right"); } setViewDate(next); }
+  // v17.15.0: a DATE change does not slide sideways — it fades, and the only
+  // thing that moves is the notification strip's own reveal pushing the grid
+  // down or up. A date change is the one navigation that also changes the
+  // strip, so it is the one that cannot afford a horizontal component: the two
+  // compose into a diagonal, and on the steps where the strip LEAVES the grid
+  // rises ~150px while sliding sideways, which reads as it heading for a top
+  // corner. See the keyframe's note in index.html for why retiming was not the
+  // answer. Every date path goes through here — the ‹ › buttons, the date
+  // input, Today, the D and arrow keys, the search jump and the week popover —
+  // so this is the whole of it. `bumpSlide` keeps its directional classes for
+  // the T/L/P switch, which never moves the strip.
+  function goToDate(next){ if(next!==viewDate){ bumpSlide("mgt-view-fade"); } setViewDate(next); }
   // v14.4.0: List-view keyboard focus — the booking the A/E/D/S/C/Delete
   // shortcuts act on. ↑/↓ move it; click a card to set it. Null = nothing focused.
   const [selectedListId, setSelectedListId] = useState(null);
@@ -705,18 +769,77 @@ function BookingApp({uid}){
   // keeps ↑/↓ focus and the per-card shortcuts in lockstep with what's visible.
   const [showFinished, setShowFinished] = useState(false);
   // v17.2.0: initial zoom = the per-device "Default zoom" setting (was 1).
+  // v17.11.0: …raised to whatever the viewed day's HOURS SPAN needs, until the
+  // user touches the zoom controls. See the effect further down; `zoomTouched`
+  // is the "until".
   const [timelineZoom, setTimelineZoom] = useState(() => readTlSettings().defaultZoom);
+  const zoomTouchedRef = useRef(false);
+  // Every USER-driven zoom goes through this: the +/- buttons, the reset, the
+  // Follow button, the keyboard shortcuts. It is the only thing that
+  // distinguishes "the app picked this" from "the user picked this", and after
+  // the first user pick the app stops choosing — a view that re-zoomed itself
+  // on every date change would fight whoever was reading it.
+  function setTimelineZoomManual(z){
+    zoomTouchedRef.current = true;
+    setTimelineZoom(z);
+  }
   const timelineScrollRef=useRef(0);
   const [followNow, setFollowNow] = useState(false);
-  const [blockTarget, setBlockTarget] = useState(null);
+  // ── v17.14.0: the modal stack ───────────────────────────────────────────────
+  // ONE ordered stack (src/hooks/useModalStack.js) replacing eighteen
+  // independent visibility booleans. The names below are DERIVATIONS off it, so
+  // every mount site, payload read and setter call in this file is unchanged —
+  // what moved is who knows the SET of open surfaces and their ORDER.
+  //
+  // That was previously spread across eighteen `useState` calls, a hand-written
+  // descending Escape chain, a second hand-written chain for Enter, a
+  // hand-written `topLayer` expression and a seventeen-term `anyModal`. Nothing
+  // held them in step, and `showWaitlist` was missing from four of the five —
+  // the waitlist Overlay could not be closed with Esc, did not suppress the
+  // single-letter shortcuts, and did not mark the page behind it `inert`.
+  //
+  // Adding a modal is now: one id in MODAL_Z, one derived name here, one entry
+  // in the Escape table in useKeyboardShortcuts. Leaving any of them out is
+  // visible; leaving out an Esc branch used to be invisible.
+  const { stack: modalStack, setModal } = useModalStack();
+  const modalOpen = useMemo(function(){return modalMap(modalStack);},[modalStack]);
+  // /code-review: ONE memo holding all eighteen setters, derived from MODAL_Z —
+  // not a factory called from eighteen separate `useMemo`s, which was 36 hook
+  // slots per render to produce eighteen stable closures. Building them from the
+  // z-order list also makes "every modal id has a setter" structural instead of
+  // eighteen hand-written lines a test has to police.
+  const setModalFns = useMemo(function(){
+    const m={};
+    MODAL_Z.forEach(function(id){ m[id]=function(v){ setModal(id,v); }; });
+    return m;
+  },[setModal]);
+  const blockTarget = modalOpen.block || null;
+  const setBlockTarget = setModalFns.block;
   const [viewDate, setViewDate] = useState(new Date().toISOString().slice(0,10));
-  const [showForm, setShowForm] = useState(false);
+  const showForm = !!modalOpen.form;
+  const setShowForm = setModalFns.form;
   const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
   const [error, setError] = useState("");
-  const [confirmDel, setConfirmDel] = useState(null);
-  const [confirmReshuffle, setConfirmReshuffle] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(null);
+  // v17.12.0: WHICH field the current error is about, or null for a form-level
+  // one (capacity, displacement, "could not assign a table"). It exists so the
+  // offending control can carry `aria-invalid` and point at the message with
+  // `aria-describedby` — the error copy in this app is already specific
+  // ("Customer name is required."), it simply was not attached to anything.
+  //
+  // A sibling state rather than a reshaped `error`: `error` is read as a string
+  // at a dozen sites and passed to two components, and the field is additive
+  // information. Set ONLY inside doSave's validation, cleared at its entry — so
+  // a form-level error later in the same pass correctly leaves it null. Every
+  // reader also gates on `error` being truthy, which makes a stale value
+  // unreachable rather than merely unlikely.
+  const [errorField, setErrorField] = useState(null);
+  const confirmDel = modalOpen.del || null;
+  const setConfirmDel = setModalFns.del;
+  const confirmReshuffle = !!modalOpen.reshuffle;
+  const setConfirmReshuffle = setModalFns.reshuffle;
+  const confirmCancel = modalOpen.cancel || null;
+  const setConfirmCancel = setModalFns.cancel;
   const [reshuffled, setReshuffled] = useState(false);
   // v15.6.1: transient banner shown when the post-sync reconciliation resolves
   // a same-table overlap that arrived via an offline multi-device merge.
@@ -724,7 +847,8 @@ function BookingApp({uid}){
   // v17.0.0 correction: drag&drop feedback toast — {text, good} or null.
   const [dragMsg, setDragMsg] = useState(null);
   const dragMsgTimer = useRef(null);
-  const [manualTarget, setManualTarget] = useState(null);
+  const manualTarget = modalOpen.manual || null;
+  const setManualTarget = setModalFns.manual;
   const [dismissedIneff, setDismissedIneff] = useState(null);
   const formRef=useRef(EMPTY_FORM);
   // ── v17.5.0: unsaved-changes guard ──────────────────────────────────────────
@@ -741,7 +865,8 @@ function BookingApp({uid}){
   // Which surface the discard confirm is asking about: "form" | "walkin" |
   // "manual" | "reminder" | "block" | "settings" | null. One shared modal, six
   // callers as of v17.8.0.
-  const [confirmDiscard, setConfirmDiscard] = useState(null);
+  const confirmDiscard = modalOpen.discard || null;
+  const setConfirmDiscard = setModalFns.discard;
   // ManualModal owns its table-pick state internally, so it reports dirtiness
   // up rather than App reaching in (see its onDirty prop). v17.8.0: BlockModal
   // and Settings do the same — their drafts are component-local too.
@@ -754,13 +879,18 @@ function BookingApp({uid}){
   // call doSave() with no args after the modal round-trip.
   const statusOverrideRef=useRef(null);
   const [swapAffected, setSwapAffected] = useState(null);
-  const [confirmKitchen, setConfirmKitchen] = useState(null);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showPrefPicker, setShowPrefPicker] = useState(false);
+  const confirmKitchen = modalOpen.kitchen || null;
+  const setConfirmKitchen = setModalFns.kitchen;
+  const showHistory = !!modalOpen.history;
+  const setShowHistory = setModalFns.history;
+  const showPrefPicker = !!modalOpen.prefpicker;
+  const setShowPrefPicker = setModalFns.prefpicker;
   // v14 preview 3: Settings / keyboard-shortcuts modal. Toggled by the cog
   // icon in TimelineView's legend row and by the `?` keyboard shortcut.
-  const [showSettings, setShowSettings] = useState(false);
-  const [showSearch, setShowSearch] = useState(false); // v16.3.0: global booking search panel
+  const showSettings = !!modalOpen.settings;
+  const setShowSettings = setModalFns.settings;
+  const showSearch = !!modalOpen.search; // v16.3.0: global booking search panel
+  const setShowSearch = setModalFns.search;
   const pendingSelectRef = useRef(null); // v16.3.0: booking id to focus in the List after a search-jump changes the day
   // v17.3.1: scroll-into-view REQUEST counter for the List's focused card. A
   // plain click on a card must NOT scroll the page, so ListView scrolls on this
@@ -771,21 +901,44 @@ function BookingApp({uid}){
   // v14.6.0: Summary panel expand/collapse (toggled by click or the g shortcut).
   const [summaryOpen, setSummaryOpen] = useState(false);
   // v14.7.0: Week View popover (opened from the Summary panel's Week button).
-  const [showWeek, setShowWeek] = useState(false);
-  // ── WhatsApp Inbox (sandbox) UI state — owned by BookingApp because these
-  // interleave with the global anyModal logic + the return-to-inbox effect. The
-  // useWhatsApp hook (below) owns the data + handlers and calls these setters.
-  const [showInbox, setShowInbox] = useState(false);
-  const [confirmArchive, setConfirmArchive] = useState(null);       // phoneKey pending archive-confirm
-  const [confirmDeleteConv, setConfirmDeleteConv] = useState(null); // phoneKey pending delete-confirm
+  const showWeek = !!modalOpen.week;
+  const setShowWeek = setModalFns.week;
+  // ── WhatsApp Inbox (sandbox) UI state ──────────────────────────────────────
+  // 17.15.0-wa-sandbox: the four VISIBILITY flags are entries in the modal stack
+  // like every other surface, so they inherit the Escape order, `inert` and the
+  // single-letter-shortcut suppression instead of being OR'd into `anyModal` by
+  // hand — the arrangement v17.14.0 retired precisely because the hand-written
+  // list is the one nobody keeps in step. The names survive as one-line
+  // derivations, so nothing below this changes.
+  //
+  // What stays plain state is what is NOT a surface: the inbox's own filter and
+  // the return key. They must survive the inbox CLOSING (Open booking / Apply
+  // changes take you to the form and back), which is the opposite of a modal's
+  // lifetime.
+  const showInbox = !!modalOpen.inbox;
+  const setShowInbox = setModalFns.inbox;
+  const confirmArchive = modalOpen.waarchive || null;       // phoneKey pending archive-confirm
+  const setConfirmArchive = setModalFns.waarchive;
+  const confirmDeleteConv = modalOpen.wadelete || null;     // phoneKey pending delete-confirm
+  const setConfirmDeleteConv = setModalFns.wadelete;
+  const showSim = !!modalOpen.sim;                          // sandbox-only simulator panel
+  const setShowSim = setModalFns.sim;
   const [returnToInboxKey, setReturnToInboxKey] = useState(null);   // reopen the inbox here when an overlay closes
   // Inbox filter state lives here (not in InboxPanel) so it survives the inbox
   // round-trip — Open booking / Apply changes close the inbox to show the form,
   // and returning restores the same Needs-action / search state. Reset only on
-  // an explicit inbox close (the X / Esc / scrim → onClose).
+  // an explicit inbox close (the X / Esc / scrim → closeInbox).
   const [waQuery, setWaQuery] = useState("");
   const [waNeedsAction, setWaNeedsAction] = useState(false);
-  const [showSim, setShowSim] = useState(false);                    // DEV-only simulator panel
+  // The inbox's real close: the surface plus the state that outlives it. Named
+  // because Escape must take the same door as the ✕ and the scrim — a raw
+  // `setShowInbox(false)` from the keyboard would leave the filter and the
+  // return key set, and the next open would come up filtered for no visible
+  // reason. This is `requestClose*`'s shape without a dirty guard; there is no
+  // draft here to lose.
+  const closeInbox = useCallback(function(){
+    setShowInbox(false); setReturnToInboxKey(null); setWaQuery(""); setWaNeedsAction(false);
+  },[setShowInbox]);
   // Settings tab state — which tab is active in the Settings modal.
   // Resets to 'general' on modal close so reopens start fresh. Belongs to
   // the Settings subsystem; lived inside the reminder state block pre-D2
@@ -796,7 +949,16 @@ function BookingApp({uid}){
   const swAppliedRef = useRef(false);
   const [settingsTab, setSettingsTab] = useState("general");
   useEffect(function(){formRef.current=form;},[form]);
-  useEffect(function(){if(error) setError("");},[form.time,form.size,form.date,form.preference,form.customDur]);
+  // /code-review (v17.12.0): `form.name` belongs in this list and never was.
+  // The dep list is what clears a stale error, and the name field was missing
+  // from it — so after "Customer name is required." the banner stayed up while
+  // the user typed a perfectly good name. Survivable while it was only a
+  // banner; not once v17.12.0 turned it into an ASSERTION about the control,
+  // because the field then keeps `aria-invalid="true"` and an
+  // `aria-describedby` pointing at that message for the whole time it is being
+  // corrected, which is the one field where "required" is the only thing that
+  // can be wrong.
+  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.time,form.size,form.date,form.preference,form.customDur]);
   // ── Time tick hook ──────────────────────────────────────────────────────────
   // Real-time clock for seated duration. 15s tick. Drives liveBookings, the
   // overlapWarnings derivation, applySeatedShift inside doSave, updateStatus's
@@ -943,22 +1105,34 @@ function BookingApp({uid}){
   // (from usePersistence above) lets reminder save-refusals share the same
   // banner as booking save-refusals. Phase D2 (v14.1.9).
   // See ./hooks/useReminders.jsx.
+  // v17.14.0: the editor and its delete-confirm are two entries in App's modal
+  // stack, so App owns them and passes them in — the `confirmKitchen` /
+  // `useWalkin` arrangement. Everything about REMINDERS still lives in the hook.
+  const reminderEditor = modalOpen.reminder || null;
+  const setReminderEditor = setModalFns.reminder;
+  const confirmReminderDel = modalOpen.reminderdel || null;
+  const setConfirmReminderDel = setModalFns.reminderdel;
   const {
     reminders,
-    reminderEditor, setReminderEditor,
     reminderDirty,
-    confirmReminderDel, setConfirmReminderDel,
     saveReminderFromEditor,
     doDeleteReminder,
     openNewReminder, openEditReminder,
     deleteReminder, toggleReminderActive,
     reminderBanners, reminderCount,
-  } = useReminders({ nowMins, setWriteWarning });
+  } = useReminders({ nowMins, setWriteWarning, reminderEditor, setReminderEditor, setConfirmReminderDel });
   // ── v16.0.0: Waitlist state ─────────────────────────────────────────────────
   const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
   const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
-  const [showWaitlist, setShowWaitlist] = useState(false);
+  // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
+  // suppression and `inert` — all three of which it had silently never had.
+  const showWaitlist = !!modalOpen.waitlist;
+  const setShowWaitlist = setModalFns.waitlist;
+  // v17.14.0: the walk-in form's VISIBILITY is a stack entry; its draft, its
+  // baseline and its dirty flag stay in useWalkin, which takes these two.
+  const showWalkin = !!modalOpen.walkin;
+  const setShowWalkin = setModalFns.walkin;
   // waitAvail: {entryId: {tables, time}} for entries a table CURRENTLY fits
   // (recomputed by an effect below — deliberately state, not a render-time
   // derivation, so the trialFits scans run only when the inputs change, not
@@ -969,7 +1143,14 @@ function BookingApp({uid}){
   // scan budget cut its pass short, instead of blinking the banner row.
   const waitAvailRef = useRef({});
   const [waitAddedShown, setWaitAddedShown] = useState(false);
-  const [waitNotifyDismissed, setWaitNotifyDismissed] = useState(function(){return new Set();}); // v16.3.0: session-only ✕-dismissed waitlist-free rows
+  // ── v17.14.0: the four ✕-dismissal Sets, one mechanism ──────────────────────
+  // `late` · `overlap` · `wait` · `clash` — see src/hooks/useDismissals.js for
+  // the two lifecycles (three are emptied on a day change; `clash` prunes
+  // against its live pairs instead, which is not the drift it looks like).
+  // Untouched Sets keep their identity, so `[dismissed.late]` is still a stable
+  // memo dep when an overlap row is dismissed.
+  const { sets: dismissed, dismiss: dismissRow, prune: pruneDismissed, reset: resetDismissed } = useDismissals();
+  const waitNotifyDismissed = dismissed.wait; // v16.3.0: session-only ✕-dismissed waitlist-free rows
   const [undoInfo, setUndoInfo] = useState(null);   // v17.4.0: {snapshot, kind:"cancel"|"delete"|"edit", noShow} — general undo (was cancel/no-show-only, v16.3.0)
   const undoTimerRef = useRef(null);                // 10s auto-clear timer for the undo toast
   const pendingWaitlistRef = useRef(null); // entry id being converted via Book
@@ -1019,9 +1200,7 @@ function BookingApp({uid}){
   // the no-flash script in index.html reads the SAME key pre-mount, the CSS
   // kill-switch keys on the attribute, and atoms.jsx's useFlip checks it for
   // WAAPI animations. Keep all three in sync.
-  const [reduceMotion,setReduceMotion]=useState(function(){
-    try{return localStorage.getItem("mgt-reduce-motion")==="1";}catch{return false;}
-  });
+  const [reduceMotion,setReduceMotion]=useState(function(){return readPrefLS("reduceMotion");});
   // v17.10.1: per-device offline shell. localStorage ONLY — deliberately not
   // saveUserPrefs'd: clearing site data is the last-resort escape from a bad
   // worker, and a synced flag would come straight back down and re-enable it.
@@ -1032,67 +1211,64 @@ function BookingApp({uid}){
                                // apart from the writer above, which is a name
                                // that only tells you it is not the other one.
   }
-  function onToggleReduceMotion(){
-    const next=!reduceMotion;
+  // ── v17.14.0: the four boolean prefs, driven by PREF_SPEC ───────────────────
+  // The localStorage convention (which value is stored, which key is dropped)
+  // lives once in useUserPrefs.js; these two functions are the only place that
+  // TOUCHES localStorage for them, and they are shared by the initializers, the
+  // toggles and the seeding effect below.
+  //
+  // `theme` stays written out in full above: it is a tri-state string with a
+  // `?theme=` override that must skip both branches, and hiding that in a table
+  // is how it would get broken.
+  function writePref(name,v){
+    const spec=PREF_SPEC[name];
+    const str=prefLocalValue(spec.store,v);
     try{
-      if(next) localStorage.setItem("mgt-reduce-motion","1");
-      else localStorage.removeItem("mgt-reduce-motion");
+      if(str===null) localStorage.removeItem(spec.ls); else localStorage.setItem(spec.ls,str);
+      if(spec.clears&&!v) localStorage.removeItem(spec.clears);
     }catch{/* ignore */}
-    if(next) document.documentElement.dataset.motion="reduce";
-    else delete document.documentElement.dataset.motion;
-    setReduceMotion(next);
-    saveUserPrefs({reduceMotion:next});   // v17.6.0: follows the account
+    // The one DOM side effect any of them has: index.html's boot script reads
+    // this attribute, and the motion rules key off it.
+    if(name==="reduceMotion"){
+      if(v) document.documentElement.dataset.motion="reduce";
+      else delete document.documentElement.dataset.motion;
+    }
   }
+  // Flip a pref: write it locally, set the state, sync it to the account.
+  // Returns the new value so a caller can hang its own React side effect off it
+  // (only splitEnabled has one — see below).
+  function togglePref(name,cur,set){
+    const next=!cur;
+    writePref(name,next);
+    set(next);
+    saveUserPrefs({[name]:next});   // v17.6.0: follows the account
+    return next;
+  }
+  function onToggleReduceMotion(){togglePref("reduceMotion",reduceMotion,setReduceMotion);}
   // v17.1.2: per-device "Plan zoom & pan" (Settings → General). Theme pattern:
   // localStorage["mgt-plan-gestures"]="0" only when OFF (absent = on, the
   // default) — gates PlanView's wheel/pinch zoom, drag pan and double-tap reset.
-  const [planGestures,setPlanGestures]=useState(function(){
-    try{return localStorage.getItem("mgt-plan-gestures")!=="0";}catch{return true;}
-  });
-  function onTogglePlanGestures(){
-    const next=!planGestures;
-    try{
-      if(next) localStorage.removeItem("mgt-plan-gestures");
-      else localStorage.setItem("mgt-plan-gestures","0");
-    }catch{/* ignore */}
-    setPlanGestures(next);
-    saveUserPrefs({planGestures:next});   // v17.6.0: follows the account
-  }
+  const [planGestures,setPlanGestures]=useState(function(){return readPrefLS("planGestures");});
+  function onTogglePlanGestures(){togglePref("planGestures",planGestures,setPlanGestures);}
   // v17.5.0: per-device "Lock navigation" (Settings → General). Theme pattern,
   // but INVERTED vs planGestures because the default is OFF — only the non-
   // default value is ever stored, so localStorage["mgt-nav-lock"]="1" means on
   // and an absent key means off. Drives the `shellFixed` layout below.
-  const [navLocked,setNavLocked]=useState(function(){
-    try{return localStorage.getItem("mgt-nav-lock")==="1";}catch{return false;}
-  });
-  function onToggleNavLock(){
-    const next=!navLocked;
-    try{
-      if(next) localStorage.setItem("mgt-nav-lock","1");
-      else localStorage.removeItem("mgt-nav-lock");
-    }catch{/* ignore */}
-    setNavLocked(next);
-    saveUserPrefs({navLocked:next});      // v17.6.0: follows the account
-  }
+  const [navLocked,setNavLocked]=useState(function(){return readPrefLS("navLocked");});
+  function onToggleNavLock(){togglePref("navLocked",navLocked,setNavLocked);}
   // v17.5.0: per-device Split View master switch (Settings → General).
   // v17.5.0 correction: default ON (was off), so the RMB / press-and-hold
   // gesture works out of the box. That puts it back on the house convention —
   // key absent = default, only the non-default "0" is stored — same shape as
   // planGestures. (navLocked stays inverted; its default really is off.)
   // While off, the gesture on a view button does nothing at all.
-  const [splitEnabled,setSplitEnabled]=useState(function(){
-    try{return localStorage.getItem("mgt-split-enabled")!=="0";}catch{return true;}
-  });
+  const [splitEnabled,setSplitEnabled]=useState(function(){return readPrefLS("splitEnabled");});
   function onToggleSplitEnabled(){
-    const next=!splitEnabled;
-    try{
-      if(next) localStorage.removeItem("mgt-split-enabled");
-      else{localStorage.setItem("mgt-split-enabled","0");localStorage.removeItem(SPLIT_KEY);}
-    }catch{/* ignore */}
-    setSplitEnabled(next);
-    saveUserPrefs({splitEnabled:next});   // v17.6.0: the SWITCH syncs; the saved
-    // split LAYOUT (which two views + ratio) stays per-device, see useUserPrefs.
-    if(!next) setSplit(null); // turning the feature off must also leave any active split
+    // Only the SWITCH syncs; the saved split LAYOUT (which two views + ratio)
+    // stays per-device — PREF_SPEC drops that key, see useUserPrefs.js.
+    if(!togglePref("splitEnabled",splitEnabled,setSplitEnabled)) setSplit(null);
+    // ^ turning the feature off must also leave any active split. React state,
+    //   so it stays here rather than in the table.
   }
   // The active split, or null for a single view. Restored per-device.
   const [split,setSplit]=useState(readSplit);
@@ -1108,6 +1284,15 @@ function BookingApp({uid}){
   // hook resets it when the path changes), and re-running on every later
   // snapshot would fight the user's own toggles. Reading the current local
   // values here without depending on them is the point, not an oversight.
+  // The current value + setter for each of the four, so the seeding loop below
+  // can read "what is this device using" and "how do I change it" by name.
+  // Rebuilt per render and read only inside the once-per-uid effect.
+  const prefState={
+    reduceMotion:{value:reduceMotion,set:setReduceMotion},
+    planGestures:{value:planGestures,set:setPlanGestures},
+    navLocked:{value:navLocked,set:setNavLocked},
+    splitEnabled:{value:splitEnabled,set:setSplitEnabled},
+  };
   const seededPrefsRef=useRef(false);
   useEffect(function(){
     if(!prefsLoaded||seededPrefsRef.current) return;
@@ -1129,33 +1314,28 @@ function BookingApp({uid}){
       // freeze the user to whatever the OS happened to say at first login.
       seed.theme=themePref?"dark":"light";
     }
-    if(userPrefs.reduceMotion!==null){
-      const v=userPrefs.reduceMotion;
-      try{ if(v) localStorage.setItem("mgt-reduce-motion","1"); else localStorage.removeItem("mgt-reduce-motion"); }catch{/* ignore */}
-      if(v) document.documentElement.dataset.motion="reduce"; else delete document.documentElement.dataset.motion;
-      setReduceMotion(v);
-    }else seed.reduceMotion=reduceMotion;
-    if(userPrefs.planGestures!==null){
-      const v=userPrefs.planGestures;
-      try{ if(v) localStorage.removeItem("mgt-plan-gestures"); else localStorage.setItem("mgt-plan-gestures","0"); }catch{/* ignore */}
-      setPlanGestures(v);
-    }else seed.planGestures=planGestures;
-    if(userPrefs.navLocked!==null){
-      const v=userPrefs.navLocked;
-      try{ if(v) localStorage.setItem("mgt-nav-lock","1"); else localStorage.removeItem("mgt-nav-lock"); }catch{/* ignore */}
-      setNavLocked(v);
-    }else seed.navLocked=navLocked;
-    if(userPrefs.splitEnabled!==null){
-      const v=userPrefs.splitEnabled;
-      try{ if(v) localStorage.removeItem("mgt-split-enabled"); else{localStorage.setItem("mgt-split-enabled","0");localStorage.removeItem(SPLIT_KEY);} }catch{/* ignore */}
-      setSplitEnabled(v);
-      if(!v) setSplit(null);
-    }else seed.splitEnabled=splitEnabled;
+    // v17.14.0: the four booleans, one loop over PREF_SPEC. The TRI-STATE
+    // semantics are untouched and are the reason this cannot be simplified
+    // further: `null` means "this user has never chosen", and a sanitize that
+    // returned `false` for an absent field would reset every configured device
+    // on first login. Only a real boolean takes the apply branch.
+    PREF_NAMES.forEach(function(name){
+      const saved=userPrefs[name];
+      const st=prefState[name];
+      if(saved===true||saved===false){
+        writePref(name,saved);
+        st.set(saved);
+      }else seed[name]=st.value;
+    });
+    // The one React side effect the table does not carry, for the same reason
+    // the toggle keeps it: leaving an active split is state, not storage.
+    if(userPrefs.splitEnabled===false) setSplit(null);
     if(Object.keys(seed).length) saveUserPrefs(seed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[prefsLoaded]);
   const [focusedPane,setFocusedPane]=useState("a");
-  const [splitMenuFor,setSplitMenuFor]=useState(null); // which view's SplitMenu is open
+  const splitMenuFor = modalOpen.splitmenu || null; // which view's SplitMenu is open
+  const setSplitMenuFor = setModalFns.splitmenu;
   // Which view the keyboard acts on: the focused pane's in a split, else `view`.
   // Declared HERE, not next to the split handlers further down, because
   // useKeyboardShortcuts' ctx object is built mid-render and a `const` used
@@ -1177,6 +1357,23 @@ function BookingApp({uid}){
     if(isMobile&&split) applySplit(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[isMobile]);
+  // v17.11.0: the width the two panes actually divide — the app is clamped to
+  // the per-device App-width setting, so the WINDOW is not what a pane gets.
+  const shellW=Math.min(winW,appWidth);
+  const tlSide=split?(split.a==="timeline"?"a":split.b==="timeline"?"b":null):null;
+  const splitSideBySideOk=tlPaneOk(shellW,"v",0.5,"a");
+  // …and the repair: an existing side-by-side split whose Timeline pane has
+  // become too narrow — the window was resized, the divider dragged, or the App
+  // width setting lowered — turns STACKED rather than being torn down. The
+  // phone rule above collapses the split because a phone cannot host one at all;
+  // here the split is still perfectly viable, it is only this orientation that
+  // is not, so preserving the user's intent is the better repair.
+  useEffect(function(){
+    if(!split||!tlSide) return;
+    if(tlPaneOk(shellW,split.dir,split.ratio,tlSide)) return;
+    applySplit(Object.assign({},split,{dir:"h"}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[shellW,split,tlSide]);
   // ── v17.5.0: the fixed shell ────────────────────────────────────────────────
   // Normally <body> is the scrollport (see the mount effect near the top of
   // BookingApp) and the app is a plain `minHeight:100dvh` block that grows.
@@ -1199,6 +1396,41 @@ function BookingApp({uid}){
     document.body.style.overflow=shellFixed?"hidden":"auto";
     return function(){document.body.style.overflow="auto";};
   },[shellFixed]);
+  // v17.12.0: `data-kbd` — a two-line stand-in for `:focus-visible`, and ONLY
+  // for the floor plan's tables.
+  //
+  // Those became focusable this version, and two measured facts about SVG made
+  // the app's one focus rule unusable there: a browser paints no `outline` on a
+  // `<g>`, and `:focus-visible` never matches an SVG element in Chrome at all
+  // (two consecutive REAL Tab presses left the focused group matching `:focus`
+  // and not `:focus-visible`). Plain `:focus` is not the answer either — a mouse
+  // click focuses the group too, so every table tap during service would leave a
+  // white ring behind it.
+  //
+  // So the modality is tracked here and read by ONE rule in index.html. It lives
+  // in App rather than in the boot script because that script is pinned by a
+  // CSP hash, and adding two lines there would silently break the whole script
+  // in production if the hash were not regenerated (tests/csp.test.js exists
+  // because that has already happened once).
+  //
+  // Capture phase, so it records the modality before anything can stop
+  // propagation. Deliberately narrow: only the keys that MOVE focus set the
+  // flag — typing a letter into a form field is not a request for focus rings.
+  useEffect(function(){
+    const root=document.documentElement;
+    function onKey(e){
+      const k=e.key||"";
+      if(k==="Tab"||k.indexOf("Arrow")===0) root.dataset.kbd="1";
+    }
+    function onPointer(){ delete root.dataset.kbd; }
+    window.addEventListener("keydown",onKey,true);
+    window.addEventListener("pointerdown",onPointer,true);
+    return function(){
+      window.removeEventListener("keydown",onKey,true);
+      window.removeEventListener("pointerdown",onPointer,true);
+      delete root.dataset.kbd;
+    };
+  },[]);
   // v17.2.0: per-device Timeline zoom/follow settings (see readTlSettings above).
   // Stored one value per key; a value equal to its default removes the key.
   // Lowering maxZoom clamps followZoom/defaultZoom (and the live zoom) with it.
@@ -1270,7 +1502,7 @@ function BookingApp({uid}){
     }else{
       setSelectedListId(null);setShowFinished(false);
     }
-    setLateDismissed(function(prev){return prev.size?new Set():prev;});setOverlapDismissed(function(prev){return prev.size?new Set():prev;});setWaitNotifyDismissed(function(prev){return prev.size?new Set():prev;});
+    resetDismissed(DAY_DISMISS_KEYS);   // NOT "clash" — it prunes itself, see useDismissals.js
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[viewDate]);
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
@@ -1334,22 +1566,24 @@ function BookingApp({uid}){
   // Reveal must collapse once the last row is dismissed. lateMap itself stays
   // UNFILTERED — the list/timeline amber highlights keep showing for a dismissed
   // row; only the banner (lateBannerMap) hides it. Reset on day change (below).
-  const [lateDismissed,setLateDismissed]=useState(function(){return new Set();});
+  const lateDismissed=dismissed.late;
   const lateBannerMap=useMemo(function(){
     if(lateDismissed.size===0) return lateMap;
     const map={};
     Object.keys(lateMap).forEach(function(id){if(!lateDismissed.has(id)) map[id]=lateMap[id];});
     return map;
   },[lateMap,lateDismissed]);
-  function dismissLateRow(id){
-    setLateDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
-  }
+  function dismissLateRow(id){dismissRow("late",id);}
   // v17.0.0 round 7 — same ✕-dismiss mechanism for the Overlap banner (the
   // Running-late pattern applied app-wide). Session-only; keyed by seated id.
-  const [overlapDismissed,setOverlapDismissed]=useState(function(){return new Set();});
-  function dismissOverlapRow(id){
-    setOverlapDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});
-  }
+  const overlapDismissed=dismissed.overlap;
+  function dismissOverlapRow(id){dismissRow("overlap",id);}
+  // v17.11.0 — the same ✕-dismiss mechanism for the double-booking rows. Keyed
+  // by the PAIR's row id (clashRowId), not a booking id: the row is about two
+  // bookings, and dismissing "Pau vs Rita" must not also silence "Rita vs a
+  // third party" if the day is bad enough to have both.
+  const clashDismissed=dismissed.clash;
+  function dismissClashRow(id){dismissRow("clash",id);}
   // v16.3.0 — Table-turn prediction: today's seated bookings whose scheduled end
   // is within the next freeSoonWindow min (freeingSoon, booking-logic.js). Gated
   // on the settings/bookingDefaults master switch (freeSoonEnabled). Two shapes:
@@ -1373,44 +1607,28 @@ function BookingApp({uid}){
   function flashSyncFix(){setSyncFix(true);setTimeout(function(){setSyncFix(false);},4000);}
 
   // v15.6.1 — Post-sync conflict reconciliation.
-  // Two devices adding bookings OFFLINE to a table that was free at creation
-  // time merge (v15.5.0 per-node) into BOTH bookings on the same table — but
-  // neither device's optimiser saw the other, so they overlap once synced. The
-  // sync path (onValue/resync) stores merged data verbatim with no optimiser
-  // pass, so the overlap persisted until a later edit happened to re-run it.
-  // Here we react to settled snapshots: detect overlapping dates via verifyClean
-  // and resolve only those. When the optimiser is active for the date → full
-  // reshuffle; when OFF (manual mode) → relocate ONLY the newest non-locked
-  // conflicting booking (forceReassign), leaving manual arrangements intact.
-  // Self-stabilising: optimiser/relocate output is clean → next pass is a no-op
-  // (also breaks any Firebase echo loop). Cross-device double-writes settle via
-  // the v15.5.0 per-$id updatedAt CAS; the "newest" pick is deterministic
-  // (updatedAt desc, id tiebreaker) so every device chooses the same booking.
+  // v17.14.0: the DECISION moved to `src/lib/reconcile.js` — which dates are
+  // dirty (`dirtyDates`) and what to do about each (`reconcile`) — leaving here
+  // only what is genuinely React: the gates, the dispatch and the toast. The
+  // rule is v17.8.0's, the one that produced `placeWaitlist` and
+  // `presenceState`: logic that decides something the restaurant acts on does
+  // not live in a useEffect. This one decides which booking gets MOVED TO
+  // ANOTHER TABLE after two devices' offline edits merge, and until now only
+  // its `dayBookingsSig` compare was reachable by a test — the rest was found
+  // to be spinning forever, in v17.10.2, by reading the console.
+  //
   // Silent write (auto-effect, no red refusal banner); gated on !resyncing so it
   // waits out the post-sleep stale window and re-runs once fresh data arrives.
   useEffect(function(){
     if(resyncing||firstLoadCount.current===null) return;
     const today=new Date().toISOString().slice(0,10);
-    const dates=Array.from(new Set(bookings.filter(function(b){return b.date>=today&&(b.tables||[]).length>0;}).map(function(b){return b.date;})));
-    const dirty=dates.filter(function(d){return !verifyClean(bookings,d);});
+    const dirty=dirtyDates(bookings,today);
     if(!dirty.length) return;
     let changed=false;
     const ok=saveBookings(function(prev){
-      let next=prev;
-      dirty.forEach(function(d){
-        if(optimizerActiveFor(d,autoOptimizer)){
-          next=bookingsAfterAction(next,d,tableBlocks,null,false,autoOptimizer);changed=true;
-        }else{
-          let guard=0;
-          while(!verifyClean(next,d)&&guard++<20){
-            const ids=findConflicts(next,d);
-            const movable=next.filter(function(b){return ids.indexOf(b.id)>=0&&!isLocked(b);}).sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0)||(a.id<b.id?1:-1);});
-            if(!movable.length) break; // only locked overlaps — leave as-is
-            next=bookingsAfterAction(next,d,tableBlocks,movable[0].id,true,autoOptimizer);changed=true;
-          }
-        }
-      });
-      return next;
+      const r=reconcile(prev,dirty,tableBlocks,autoOptimizer);
+      changed=r.changed;
+      return r.next;   // === prev when nothing moved, so React bails out
     },true);
     if(ok&&changed) flashSyncFix();
   },[bookings,tableBlocks,autoOptimizer,resyncing]);
@@ -1686,7 +1904,6 @@ function BookingApp({uid}){
   // call time); hoisting keeps the textual order valid. Phase D4 (v14.1.11).
   // See ./hooks/useWalkin.js.
   const {
-    showWalkin, setShowWalkin,
     walkinForm, setWalkinForm,
     walkinError, walkinDirty,
     getNextWalkinNum,
@@ -1695,6 +1912,7 @@ function BookingApp({uid}){
     bookings, saveBookings,
     setViewDate, getUser,
     confirmKitchen, setConfirmKitchen,
+    showWalkin, setShowWalkin,   // v17.14.0: an entry in App's modal stack
     defaultWalkinSize: generalSettings.defaultWalkinSize,
   });
 
@@ -1972,18 +2190,21 @@ function BookingApp({uid}){
     // duration gate, flash condition) sees the effective status uniformly.
     const so=statusOverrideRef.current;
     const f=so?Object.assign({},formRef.current,{status:so}):formRef.current;
+    // v17.12.0: cleared here, set only by the field-specific branches below, so
+    // the form-level errors further down leave it null without having to say so.
+    setErrorField(null);
     try{
-      if(!f.name||!f.name.trim()){setError("Customer name is required.");return;}
+      if(!f.name||!f.name.trim()){setErrorField("name");setError("Customer name is required.");return;}
       // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
       // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
-      if(!f.date){setError("Please set a date.");return;}
-      if(!f.time){setError("Please set a time.");return;}
+      if(!f.date){setErrorField("date");setError("Please set a date.");return;}
+      if(!f.time){setErrorField("time");setError("Please set a time.");return;}
       const sm=toMins(f.time);
       // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
       // viewed day, and block a closed day outright.
       const fh=hoursFor(f.date);
-      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
-      if(sm<fh.open*60||sm>fh.close*60){setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
+      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setErrorField("date");setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
+      if(sm<fh.open*60||sm>fh.close*60){setErrorField("time");setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
       const size=Number(f.size)||2;
       const dur=f.customDur||getDur(size);
       const cleanPhone=cleanPhoneOf(f.phone);
@@ -2265,6 +2486,39 @@ function BookingApp({uid}){
     // skipDate just stops a REGENERATION it no longer needs to do.
     if(ok){flash();armUndo(undoDelta(bookings,postDel),id,"delete",false);}}
 
+  // ── v17.12.0: is ANY modal open? ───────────────────────────────────────────
+  // One derivation, in the component that owns all seventeen pieces of state.
+  // It existed before as a 17-term expression written out TWICE inside
+  // useKeyboardShortcuts, and `inert` would have made a third copy — three
+  // hand-maintained lists that a new modal has to be added to, with nothing to
+  // catch the omission except the bug it causes.
+  //
+  // Deliberately coerced to a real boolean: half these states hold an object or
+  // an id, and `inert` is a boolean DOM attribute — React renders `inert={0}`
+  // and `inert={null}` differently from `inert={false}`.
+  //
+  // v17.12.0 brought this derivation forward from the modal-stack work rather
+  // than adding an eighteenth term to an expression written out twice.
+  // **v17.14.0 finishes it**: the seventeen-term expression is
+  // `modalStack.length > 0`, and every reader was already pointed here.
+  //
+  // The term it had been missing all along is `showWaitlist`, which is exactly
+  // the point — a hand-written list of every open surface is a list that will
+  // be one short, and nothing about being one short is visible.
+  //
+  // `topModalId` is the other half: the visually topmost open surface, from the
+  // declared z-order rather than from a hand-ordered chain. It replaces the
+  // `topLayer` expression that used to gate the form's letter shortcuts (a
+  // ten-term list that omitted the discard confirm, so A/P/B/H fired behind it).
+  //
+  // MUST stay above the useKeyboardShortcuts call below: the ctx object is
+  // built mid-render, and a `const` read before its declaration is a TDZ
+  // ReferenceError that blanks the whole app with a generic message. That has
+  // happened twice in this codebase (v17.5.0's `activeView`, v17.11.0's
+  // `isViewToday`), and neither lint nor `npm run build` catches it.
+  const anyModal=modalStack.length>0;
+  const topModalId=topModal(modalStack);
+
   // v17.3.3: the global keyboard shortcuts (precedence rules, every key) and
   // the v17.3.1 neutral-space List-deselect mousedown listener were extracted
   // VERBATIM into hooks/useKeyboardShortcuts.js. This object is the hook's
@@ -2272,13 +2526,20 @@ function BookingApp({uid}){
   // the hook mounts its window listeners once and reads this through a ref).
   // Adding a shortcut = add the state/handler HERE and use it in the hook.
   useKeyboardShortcuts({
+    anyModal:anyModal,
+    // v17.14.0: the modal stack. `modalOpen` is {id: payload} for what is open;
+    // `topModalId` is the visually topmost, from the declared z-order. Escape
+    // acts on `topModalId` and Enter walks MODAL_ENTER_ORDER — both used to be
+    // hand-written chains here, kept in step with the mount sites by nothing.
+    modalOpen:modalOpen,
+    topModalId:topModalId,
     // v17.5.0: in a split, every view-sensitive shortcut (S/C status, ↑/↓ list
     // nav, the neutral-space and Esc list-deselect, the zoom keys) must act on
     // the FOCUSED pane, not on the stale single-view `view`. Passing activeView
     // here means the whole hook is split-aware without touching each branch.
     view:activeView,setView:setView,goView:pickView,
     viewDate:viewDate,setViewDate:setViewDate,
-    timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoom,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
+    timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoomManual,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
     followNow:followNow,setFollowNow:setFollowNow,
     autoOptimizer:autoOptimizer,setAutoOptimizer:setAutoOptimizer,
     showForm:showForm,setShowForm:setShowForm,editId:editId,form:form,setForm:setForm,setSwapAffected:setSwapAffected,
@@ -2312,10 +2573,19 @@ function BookingApp({uid}){
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
     showWeek:showWeek,setShowWeek:setShowWeek,
-    // WhatsApp sandbox: inbox open flag (suppresses global shortcuts) + the I
-    // shortcut opener. confirmArchive/confirmDeleteConv/showSim feed anyModal.
-    showInbox:showInbox,setShowInbox:setShowInbox,
-    confirmArchive:confirmArchive,confirmDeleteConv:confirmDeleteConv,showSim:showSim,setShowSim:setShowSim,
+    // WhatsApp sandbox: the I shortcut's opener, and the four setters
+    // `escapeAction` names. `showInbox` is still read directly — the I key must
+    // not re-open a panel that is already up.
+    showInbox:showInbox,setShowInbox:setShowInbox,closeInbox:closeInbox,
+    setConfirmArchive:setConfirmArchive,setConfirmDeleteConv:setConfirmDeleteConv,
+    showSim:showSim,setShowSim:setShowSim,
+    // v17.14.0 (/code-review): the waitlist panel's Escape close. It is here and
+    // not merely in `escapeAction` because the OLD chain had no waitlist branch,
+    // so this setter had never been needed in the ctx — adding the `case` without
+    // adding the key made Esc on that panel throw `K.setShowWaitlist is not a
+    // function`, i.e. shipped the exact defect the stack was written to remove.
+    // A `case` in escapeAction is only half a wiring; the other half is here.
+    setShowWaitlist:setShowWaitlist,
     save:save,doSave:doSave,saveWalkin:saveWalkin,doSaveWalkin:doSaveWalkin,
     forceReshuffle:forceReshuffle,delBooking:delBooking,bookAgain:bookAgain,
     // v15.8.0 cont.4: keyboard nav routes through the same slide path as the buttons.
@@ -2582,8 +2852,185 @@ function BookingApp({uid}){
     return (viewDate===todayStr2?dayWaiting:waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===todayStr2;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);}))
       .filter(function(w){return !!waitAvail[w.id]&&!waitNotifyDismissed.has(w.id);});
   },[dayWaiting,waitlist,viewDate,waitAvail,waitNotifyDismissed]);
-  function dismissWaitRow(id){setWaitNotifyDismissed(function(prev){const next=new Set(prev);next.add(id);return next;});}
+  function dismissWaitRow(id){dismissRow("wait",id);}
   const hasWaitBanner=waitBannerEntries.length>0;
+
+  // ── v17.11.0: double-bookings on the viewed day ────────────────────────────
+  // `findConflicts` has existed since v15.6.1 and was wired to exactly one
+  // consumer: the silent reconciliation effect, which relocates the newest
+  // NON-LOCKED booking and then gives up on the rest. So the clashes it cannot
+  // fix — the all-locked ones, which is every walk-in and every drag-drop —
+  // were detected, deliberately left alone, and never shown to anyone.
+  //
+  // Scoped to the VIEWED date rather than today, unlike late/overlap/waitlist.
+  // This is the one section whose rows correspond 1:1 to markers drawn on the
+  // view you are looking at, and whose action (assign tables) operates on that
+  // day. A clash section about today, sitting under a date navigator showing
+  // next Tuesday, next to blocks that carry no marker, would be three different
+  // days in one glance.
+  const clashPairs=useMemo(function(){return findClashes(bookings,viewDate);},[bookings,viewDate]);
+  const clashBannerPairs=useMemo(function(){
+    if(!clashPairs.length) return EMPTY_ARR;
+    if(clashDismissed.size===0) return clashPairs;
+    return clashPairs.filter(function(c){return !clashDismissed.has(clashRowId(c));});
+  },[clashPairs,clashDismissed]);
+  // /code-review fix: a dismissed clash must RE-ARM once it stops being true.
+  // The other two dismissal Sets get away with never pruning because their
+  // conditions are monotonic within a day — a late booking stays late, an
+  // overstay stays an overstay. A double-booking is the opposite: it is the one
+  // notification whose whole point is that you go and FIX it, so it clears, and
+  // it can then recur on the same pair (drag a booking back onto the table —
+  // every drag-drop sets `_locked`, so the reconciler will not undo it).
+  //
+  // Without this the strip row — the only surface carrying the Assign action —
+  // never came back for that pair, for the rest of the session, while the block
+  // markers said the clash was live. Dropping ids that are no longer clashing is
+  // what makes "dismiss" mean "I have seen THIS one" instead of "never mention
+  // these two again".
+  //
+  // Keyed on the live pair ids and set only when the set actually shrinks, so it
+  // cannot re-enter (the v17.10.2 lesson about effects that write derived state).
+  useEffect(function(){
+    if(clashDismissed.size===0) return;
+    pruneDismissed("clash",new Set(clashPairs.map(clashRowId)));
+  },[clashPairs,clashDismissed,pruneDismissed]);
+  const hasClash=clashBannerPairs.length>0;
+  // The timeline's view of the same pairs: per booking, who it clashes with and
+  // where. Built from `clashPairs` and NOT from the dismiss-filtered list —
+  // dismissing a strip row quiets the row, it does not make the double-booking
+  // stop being true, and the block marker is the permanent record of it.
+  const clashMap=useMemo(function(){
+    if(!clashPairs.length) return EMPTY_OBJ;
+    const byId={};bookings.forEach(function(b){byId[b.id]=b;});
+    const map={};
+    function add(id,other,c){
+      if(!map[id]) map[id]={names:[],tables:[]};
+      if(other&&map[id].names.indexOf(other.name)<0) map[id].names.push(other.name);
+      c.tables.forEach(function(t){if(map[id].tables.indexOf(t)<0) map[id].tables.push(t);});
+    }
+    clashPairs.forEach(function(c){
+      const A=byId[c.a],B=byId[c.b];
+      if(!A||!B) return;
+      add(c.a,B,c);add(c.b,A,c);
+    });
+    return map;
+  },[clashPairs,bookings]);
+
+  // The same pairs seen per ROW: which minutes of which table are claimed
+  // twice. `findClashes` reports the shared window, so the band is drawn from
+  // the data rather than re-derived from two blocks' geometry.
+  //
+  // A pair whose `tables` is empty (the join-cluster case — see findClashes)
+  // contributes no band, because there is no single row it belongs on. The
+  // marker and the strip row still carry it; only the geometry has nowhere to
+  // go, which is the honest outcome rather than a band drawn on a guess.
+  const clashSpans=useMemo(function(){
+    if(!clashPairs.length) return EMPTY_OBJ;
+    const map={};
+    clashPairs.forEach(function(c){
+      c.tables.forEach(function(t){
+        if(!map[t]) map[t]=[];
+        map[t].push({from:c.from,to:c.to});
+      });
+    });
+    // v17.14.0 (/code-review follow-up): one band per distinct SPAN, not per
+    // pair. Three bookings all clashing on one table produced three coincident
+    // bands on the same pixels — three times the paint for one fact, and a
+    // three-way clash would have rendered differently from a two-way one the
+    // moment the band grew any transparency.
+    Object.keys(map).forEach(function(t){map[t]=mergeSpans(map[t]);});
+    return map;
+  },[clashPairs]);
+
+  // ── v17.11.0: the opening zoom follows the hours span ──────────────────────
+  // A block's width is a fraction of the grid and the grid spans the day, so
+  // widening the day narrows every block. Measured in the review: at the real
+  // 13:00–22:00 the average block is 192px and 8 of 13 carry a start-time chip;
+  // at 06:00–01:00 it is 96px, 10 of 13 names truncate and NO block shows a
+  // time. Settings permits open 6 through close 25, so that is reachable by an
+  // ordinary choice, and the view degrades to colour-and-position exactly when a
+  // long day means more bookings to tell apart. `spanZoom` (time-grid.js, with
+  // the arithmetic tested) returns the zoom that restores the reference density.
+  //
+  // An EFFECT, not the initial state, for two reasons. The hours arrive from the
+  // server after mount, so a lazy initializer would compute against the seed
+  // and never correct itself; and hours are PER WEEKDAY, so a Saturday that
+  // closes at 01:00 needs a different answer from the Tuesday beside it.
+  //
+  // It stops the moment the user touches the controls (`zoomTouchedRef`). The
+  // app choosing a sensible starting zoom is help; the app re-choosing it under
+  // someone who has already zoomed is a fight, and they would lose it on every
+  // date change.
+  //
+  // `defaultZoom` is a FLOOR, never a ceiling: a device set to open at 3× still
+  // opens at 3× on a short day, and at max(3, span) on a long one. The setting
+  // says how close in you like to start; this says how much the day owes you.
+  // v17.14.0 (/code-review follow-up): ONE value, four names. `hoursFor(viewDate)`
+  // was evaluated four times per App render — here, inside the notifSections
+  // memo, again for the three views, and again in the header line — each one
+  // re-deriving the same weekday lookup. `dayClosed` is declared here rather
+  // than beside its first reader for the reason the comment down at the view
+  // elements already gives: a `const` used above its declaration in a render
+  // body is a TDZ ReferenceError that blanks the whole app, and this file has
+  // hit that twice.
+  const viewHours=hoursFor(viewDate);
+  const dayClosed=viewHours.closed;
+  // v17.14.0 (/code-review follow-up): ONE answer to "is this day empty",
+  // shared by all three views the way `dayClosed` and `emptyWalkin` already are.
+  // It used to be each view's own `day.length === 0`, and List's `day` includes
+  // cancelled bookings while Timeline's and Plan's exclude them — so a day whose
+  // bookings had all been cancelled showed the prompt in two views and a nearly
+  // blank card list in the third. A cancelled booking is not a booked table.
+  const isEmptyDay=useMemo(function(){
+    return !bookings.some(function(b){return b&&b.date===viewDate&&b.status!=="cancelled";});
+  },[bookings,viewDate]);
+  const viewGridMins=(viewHours.gridClose-viewHours.open)*60;
+  useEffect(function(){
+    if(zoomTouchedRef.current) return;
+    const want=Math.max(tlSettings.defaultZoom,spanZoom(viewGridMins,tlSettings.maxZoom));
+    // Return the SAME value when it already matches, so this cannot re-enter —
+    // the v17.10.2 lesson about effects that write derived state.
+    setTimelineZoom(function(cur){return cur===want?cur:want;});
+  },[viewGridMins,tlSettings.defaultZoom,tlSettings.maxZoom]);
+
+  // v17.11.0: "is the day on screen today?" — read by the strip's date
+  // qualifier below AND by the three views' empty-day prompt further down, so it
+  // is declared once, ABOVE the first of them. (A `const` read above its own
+  // declaration in a render body is a TDZ ReferenceError that blanks the app
+  // while build and lint both pass — CLAUDE.md's gotcha, and this is the second
+  // time in this one version that moving a line has been the fix.)
+  const isViewToday=viewDate===new Date().toISOString().slice(0,10);
+
+  // ── v17.11.0: naming the day, for the two sections that cross dates ────────
+  // The strip sits DIRECTLY under the date navigator, so a bare time in it reads
+  // as belonging to the day on screen. Measured in the review: viewing
+  // 15.09.2026 it advertised "Sofía Herrera · 2 pax — table free · 20:00", which
+  // is today's waitlist and today's 20:00.
+  //
+  // Date-scoping the strip was the other option and is the wrong one: it would
+  // hide a live problem behind an unrelated navigation. Someone browsing next
+  // Tuesday to take a booking still needs to know a reminder just fired. So the
+  // sections keep their scope and say what it is.
+  //
+  // EXACTLY TWO sections can be on screen while showing another day's business,
+  // and the first draft of this applied the suffix to four. `lateMap` and
+  // `overlapWarnings` both `return EMPTY_OBJ` when `viewDate !== today`, so
+  // their sections cannot render off-today at all and a qualifier there is dead
+  // code that tells the next reader they can. The two that genuinely cross are
+  // `waitBannerEntries`, which explicitly falls back to TODAY's waitlist when
+  // you navigate away, and the reminder banners, whose hook says outright they
+  // are "operational, not tied to the day being viewed".
+  //
+  // On the TITLE rather than on each row: one place per section, it covers rows
+  // carrying no time at all, and it survives collapse — where the lid shows the
+  // top section's own title.
+  //
+  // `Double-booked` takes no suffix because it IS scoped to the viewed date (see
+  // clashPairs), which is the day its markers are drawn on. AppBanners takes
+  // none either: offline / write-failed / load-failed are not about a day, and
+  // `Closed this day` and the inefficiency notice are already about the viewed
+  // one.
+  const notifToday=isViewToday?"":" · today";
 
   // ── v17.8.0: the ONE notification strip ────────────────────────────────────
   // Six banners could stack at once and, on a busy evening — exactly when
@@ -2595,7 +3042,10 @@ function BookingApp({uid}){
   // ORDER IS SEVERITY, and it lives here rather than in the strip because it
   // is a judgement about THIS app's operations, next to the flags that produce
   // it: a failed write can lose a booking; offline is degraded but safe;
-  // overlap means two parties are on one table; late is a guest problem;
+  // a double-booking means two parties are ALREADY on one table and one of them
+  // will be turned away; overlap is the softer version of the same sentence —
+  // a seated party predicted to run into the next booking; late is a guest
+  // problem;
   // reminders are scheduled prompts; the waitlist is an opportunity, not a
   // problem, so it sits last and stays green. The strip shows the first entry
   // as its collapsed summary, which makes "worst thing first" load-bearing.
@@ -2614,8 +3064,11 @@ function BookingApp({uid}){
       loadFailed:!bookingsReady&&loadStalled,
       readError:readError,
       hasConnected:hasConnected,
-      dayClosed:hoursFor(viewDate).closed
+      dayClosed:dayClosed
     }),
+    hasClash?[{id:"clash",tone:"var(--danger-text)",tint:"var(--danger-bg)",icon:ClashIcon,
+      title:clashBannerPairs.length===1?"Double-booked":"Double-bookings",count:clashBannerPairs.length,
+      node:<ClashBanner pairs={clashBannerPairs} bookings={bookings} onAssign={setManualTarget} onDismiss={dismissClashRow} swapKey={viewDate} />}]:[],
     hasOverlap?[{id:"overlap",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:OverlapIcon,
       title:"Overlap warnings",count:Object.keys(overlapBannerMap).length,
       node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
@@ -2623,11 +3076,108 @@ function BookingApp({uid}){
       title:"Running late",count:Object.keys(lateBannerMap).length,
       node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
     reminderCount?[{id:"reminders",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:BellRingIcon,
-      title:reminderCount===1?"Reminder":"Reminders",count:reminderCount,node:reminderBanners}]:[],
+      title:(reminderCount===1?"Reminder":"Reminders")+notifToday,count:reminderCount,node:reminderBanners}]:[],
     hasWaitBanner?[{id:"wait",tone:"var(--success-text)",tint:"var(--suggest-bg-soft)",icon:WaitIcon,
-      title:"Waitlist — table free",count:waitBannerEntries.length,
+      title:"Waitlist — table free"+notifToday,count:waitBannerEntries.length,
       node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[]
   );
+  // v17.12.0: what a screen reader is TOLD when the strip changes.
+  //
+  // Three things forced this shape, and each of them rules out the obvious
+  // alternative:
+  //
+  //  1. It cannot live inside NotificationStrip. A live region has to already
+  //     BE in the DOM when its content changes, or the insertion goes
+  //     unannounced — and the strip is mounted only while `notifSections`
+  //     is non-empty, i.e. it arrives WITH its first message every time. This
+  //     region is always mounted, so the strip appearing is a content change
+  //     inside a region that was already there. (StatusToasts gets this for
+  //     free: its container has been always-mounted since v15.8.0.)
+  //
+  //  2. It cannot be the lid. Every mark in the strip is `aria-hidden` — which
+  //     is correct, they are decorative — so the collapsed tally reads as bare
+  //     numbers: "Notifications 2 1". And with several sections the lid's title
+  //     is the generic word, so going from one section to two would announce
+  //     "Notifications", which is less than it knew before.
+  //
+  //  3. The pane must not itself be live, or dismissing one row re-reads all of
+  //     them. Persistent content is a region; the CHANGE is the message.
+  //
+  // The string is derived from the same titles and counts the strip renders, so
+  // the two cannot drift, and it only changes when the notification set does —
+  // which is exactly when an announcement is wanted.
+  // ── v17.14.0: the day announcer ─────────────────────────────────────────────
+  // Changing the viewed date was announced by nothing. The strip and the toasts
+  // have spoken since v17.12.0; the VIEW itself still did not, so ←/→ moved a
+  // screen-reader user through the week in silence — and the date input is a
+  // control whose own value change says only the date, not what is on it.
+  //
+  // A SUMMARY, deliberately not a live region over the grid: thirteen bookings
+  // re-read on every status change would be unusable, and this needs to say the
+  // one thing navigation actually changed.
+  //
+  // On the DATE only. Not on view switches (T/L/P already announce on
+  // activation, so it would repeat what the button just said) and not on status
+  // changes, which arrive from other devices too — on a busy evening that region
+  // would never stop talking.
+  //
+  // Computed in an effect keyed on `viewDate` ALONE, reading a ref mirror of the
+  // bookings. That is what makes "date change only" literal rather than
+  // approximate: a `useMemo` over `bookings` would recompute on every write, and
+  // a write that changes the COUNT — cancelling a booking, taking a walk-in —
+  // would re-announce the whole day summary at a moment nobody navigated.
+  //
+  // **It says nothing on the first pass, and that is the fix for two things at
+  // once** (/code-review). `bookings` starts as `[]` and the hours start at
+  // their seed, so a mount-time announcement said "Nothing booked" on a day with
+  // twelve, and "open" on a day the loaded schedule closes — then never
+  // corrected, because `viewDate` had not changed. And it was wrong in principle
+  // anyway: nothing had CHANGED, which is the only thing this region is for.
+  // `announcedDateRef` is SEEDED with the mount date, so the date the app opens
+  // on is recorded without being spoken for; the first real navigation is the
+  // first utterance, by which time the snapshot has landed.
+  //
+  // Seeded with the date rather than with `null` and a first-run flag, because
+  // that flag is wrong under StrictMode: React re-invokes the effect on the
+  // simulated remount while REFS SURVIVE, so the flag was already consumed and
+  // the second run announced. Measured in DEV — the region held
+  // "Friday 21 August. Nothing booked." at mount with the flag version.
+  // Comparing the ref to `viewDate` is idempotent under any number of re-runs,
+  // which is the property actually wanted: announce when the DATE changed, not
+  // when the effect ran.
+  const [dayAnnounce,setDayAnnounce]=useState("");
+  const bookingsForAnnounceRef=useRef(bookings);
+  const announcedDateRef=useRef(viewDate);
+  // The mirror is refreshed in a DEP-LESS effect, not during render — the
+  // convention `useKeyboardShortcuts` adopted in v17.3.3 for its own ctx ref,
+  // for the reason recorded there (a render can be discarded or replayed, so a
+  // ref written mid-render can hold a value from a commit that never happened).
+  // Declared ABOVE the announce effect so it has already run when that fires.
+  useEffect(function(){bookingsForAnnounceRef.current=bookings;});
+  useEffect(function(){
+    if(announcedDateRef.current===viewDate) return;   // mounting is not navigating
+    announcedDateRef.current=viewDate;
+    const d=new Date(viewDate+"T00:00:00Z");
+    // en-GB + UTC, matching the app's date convention throughout — a local
+    // getDay against a UTC date string shifts a day in UTC+ zones (the v14.7.0
+    // Week-view lesson, recorded at `weekdayOf`).
+    const label=Number.isFinite(d.getTime())
+      ? d.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",timeZone:"UTC"})
+      : viewDate;
+    // `hoursFor(viewDate)`, not the `dayClosed` const above, and not by accident
+    // (/code-review — commit 9/n of this version collapsed four such calls into
+    // one). Two reasons it is right HERE: the value must be for the date being
+    // announced, read at effect time; and `dayClosed` in the dep array would
+    // re-announce the whole day every time someone saves Opening hours.
+    if(hoursFor(viewDate).closed){setDayAnnounce(label+". Closed.");return;}
+    const n=bookingsForAnnounceRef.current.reduce(function(acc,b){
+      return acc+((b&&b.date===viewDate&&b.status!=="cancelled")?1:0);
+    },0);
+    setDayAnnounce(label+". "+(n===0?"Nothing booked":n+(n===1?" booking":" bookings"))+".");
+  },[viewDate]);
+  const notifAnnounce=notifSections.length===0?"":
+    (notifSections.length===1?"Notification: ":notifSections.length+" notifications: ")+
+    notifSections.map(function(s){return s.title+(s.count>1?", "+s.count:"");}).join("; ")+".";
   // ── v17.8.0: waitlist ghost blocks for the Timeline ─────────────────────────
   // waitAvail already knows, per waiting party, the exact tables + time that
   // would fit them — but that only ever surfaced as a banner row and the ⏳
@@ -2666,7 +3216,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -2689,12 +3239,34 @@ function BookingApp({uid}){
       // hand the whole entry to the existing bookFromWaitlist (which prefills
       // the booking form from it + its waitAvail time).
       onBookWait:function(id){const A=R.current;const w=(A.waitlist||[]).find(function(x){return x&&x.id===id;});if(w) A.bookFromWaitlist(w);},
+      // /code-review fix: the zoom setter has to come through VA like every
+      // other function prop on the memoized views. It replaced `setTimelineZoom`
+      // — a React state setter, which is stable across renders forever — with a
+      // plain function declared in BookingApp's body, i.e. a NEW identity every
+      // render, which busts TimelineView's React.memo unconditionally. The
+      // booking-form draft lives in BookingApp, so that re-ran the timeline's
+      // whole block layout on every keystroke: the exact failure CLAUDE.md
+      // records for `liveBookings`.
+      onSetZoom:function(z){R.current.setTimelineZoomManual(z);},
       onPrint:function(){window.print();}
     };
   });
 
   // v17.0.0: the Plan (floor) view — reads settings/layout.floorPlan via the
   // `layout` state; quick-status + edit + walk-in ride the existing handlers.
+  // v17.11.0: the empty-day prompt's three inputs, computed ONCE so the three
+  // views cannot disagree about when a day is empty or what you may do with it.
+  // The walk-in rule is List's, generalised: a walk-in is a party standing at
+  // the door now, so offering it on any day but today opens a form for the wrong
+  // date.
+  //
+  // Declared ABOVE the three view elements, not next to the first one that
+  // reads them: `planView` is built first, and a `const` used above its
+  // declaration in a render body is a TDZ ReferenceError that blanks the whole
+  // app — which neither `npm run build` nor lint sees. Hit here exactly as
+  // CLAUDE.md's gotcha describes, and caught by loading the page.
+  const emptyWalkin=isViewToday?VA.onWalkin:null;
+
   const planView=<PlanView
     bookings={bookings}
     date={viewDate}
@@ -2709,6 +3281,10 @@ function BookingApp({uid}){
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
     turnBuffer={turnBuffer}
+    onNew={VA.onNew}
+    emptyWalkin={emptyWalkin}
+    isEmpty={isEmptyDay}
+    dayClosed={dayClosed}
     hoursSig={weekHours} />;
   // v17.1.0 perf note: hoursSig / layoutSig are identity-only props — the views
   // read OPEN/GRID_CLOSE/QUARTER_HOURS/TIMELINE_TABLES/TOTAL_SEATS as LIVE
@@ -2730,11 +3306,13 @@ function BookingApp({uid}){
     onBlock={VA.onBlock}
     nowMins={nowMins}
     warnings={overlapWarnings}
+    clashes={clashMap}
+    clashSpans={clashSpans}
     late={lateMap}
     freeing={freeingMap}
     onNoShow={VA.onNoShow}
     zoom={timelineZoom}
-    setZoom={setTimelineZoom}
+    setZoom={VA.onSetZoom}
     followZoom={tlSettings.followZoom}
     followLeadMins={tlSettings.followLead}
     maxZoom={tlSettings.maxZoom}
@@ -2749,6 +3327,10 @@ function BookingApp({uid}){
     onBookWait={VA.onBookWait}
     hoursSig={weekHours}
     layoutSig={layout}
+    onNew={VA.onNew}
+    emptyWalkin={emptyWalkin}
+    isEmpty={isEmptyDay}
+    dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const listEl=<ListView
     bookings={bookings}
@@ -2767,9 +3349,9 @@ function BookingApp({uid}){
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
     onNew={VA.onNew}
-    // Walk-in only on TODAY: a walk-in is a party standing at the door now, so
-    // offering it on a future day would open a form for the wrong date.
-    onWalkin={viewDate===new Date().toISOString().slice(0,10)?VA.onWalkin:null}
+    emptyWalkin={emptyWalkin}
+    isEmpty={isEmptyDay}
+    dayClosed={dayClosed}
     currency={generalSettings.currency} />;
   const viewEl={timeline:timelineEl,list:listEl,plan:planView};
   const mainView=viewEl[view];
@@ -2783,13 +3365,35 @@ function BookingApp({uid}){
   function pickView(v){
     if(split){
       const other=focusedPane==="a"?"b":"a";
-      if(split[other]===v){applySplit(Object.assign({},split,{a:split.b,b:split.a}));setFocusedPane(other);return;}
+      // Tapping the view that is already in the OTHER pane swaps the two.
+      // v17.14.0 (/code-review follow-up): the swap now INVERTS THE RATIO, like
+      // `swapSides` beside it, so each view keeps its own size across the swap
+      // instead of inheriting the size of the pane it moved into. That was the
+      // only difference between these two lines and `swapSides`' — one of them
+      // was simply missing it.
+      if(split[other]===v){applySplit(fitTimeline(Object.assign({},split,{a:split.b,b:split.a,ratio:1-split.ratio})));setFocusedPane(other);return;}
       if(split[focusedPane]===v) return;
-      applySplit(Object.assign({},split,{[focusedPane]:v}));
+      // v17.11.0: tapping "Timeline" while a side-by-side pane is too narrow for
+      // one would drop it into exactly the layout the menu refuses to build. The
+      // split TURNS to stacked instead of refusing the tap: the user asked for
+      // the timeline, and the orientation is the part that does not fit.
+      applySplit(fitTimeline(Object.assign({},split,{[focusedPane]:v})));
       return;
     }
     if(v!==view) bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");
     setView(v);
+  }
+  // v17.14.0: turn a split stacked when the pane holding the Timeline is too
+  // narrow for one. Shared by BOTH branches of pickView above — the swap branch
+  // used to skip this check entirely and lean on the repair effect to reorient
+  // the layout a render later, which the user sees as the split visibly
+  // flipping after a plain view tap. Asks where the timeline actually ENDS UP,
+  // rather than assuming it is the view that was tapped: a swap moves both.
+  function fitTimeline(next){
+    const tlPane=next.a==="timeline"?"a":next.b==="timeline"?"b":null;
+    if(!tlPane) return next;
+    if(tlPaneOk(shellW,next.dir,next.ratio,tlPane)) return next;
+    return Object.assign({},next,{dir:"h"});
   }
   function confirmSplit(next){
     setSplitMenuFor(null);
@@ -2840,11 +3444,11 @@ function BookingApp({uid}){
 
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.cancel})}
-        onClick={function(){setConfirmDel(null);}}>Cancel</button><button
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+        onClick={function(){setConfirmDel(null);}}>Back</button><button
         onClick={function(){delBooking(confirmDel);}}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after deletion.</div></Overlay>:null}</ModalPresence>;
+        style={mkSolidBtn("var(--app-danger-solid)")}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This can't be undone. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence>;
 
   // v17.5.0: the ONE discard confirm, shared by the booking form, the walk-in
   // form and ManualModal (requestClose* raise it; doDiscard commits).
@@ -2874,7 +3478,7 @@ function BookingApp({uid}){
         onClick={function(){setConfirmDiscard(null);}}>Keep editing</button><button
         onClick={doDiscard}
         className="mgt-hover-scale"
-        style={{background:"var(--app-danger-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Discard</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Discard unsaved changes?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
+        style={mkSolidBtn("var(--app-danger-solid)")}>Discard</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Discard unsaved changes?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
 
   const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
     booking={manualBooking}
@@ -2919,7 +3523,33 @@ function BookingApp({uid}){
            whereas normally that lift just bleeds to the window edge. It was
            only ever belt-and-braces: html+body are already overflow:hidden in
            this mode (see the body effect above), so nothing can scroll here. */
-        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}<div
+        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}
+          {/* v17.14.0: the skip link. v17.12.0 added the landmarks, which are the
+              programmatic bypass and cost nothing visually; this is the one for
+              sighted keyboard users, in an app that is explicitly keyboard-driven
+              — the header is a cog, a title block, three view buttons, two
+              primary actions, a search and a connection dot before you reach a
+              booking, and on every date change you land back at the top of it.
+
+              FIRST in the DOM, because a bypass that is not the first thing you
+              reach is not a bypass. It is hidden by being translated off the top
+              rather than by `display:none`, which would make it unfocusable and
+              so unreachable — the whole rule is in index.html (`.mgt-skip`), and
+              it is in CRITICAL_SELECTORS because losing it fails silently in
+              both directions: the link either never appears or never hides.
+
+              `<main>` carries `tabIndex={-1}`: following a fragment link moves
+              focus to the target only if the target can hold it, and without
+              that the browser scrolls but the next Tab starts from the header
+              again — which looks like the link working and is exactly the bug
+              this is meant to remove. It is NOT in the tab order (-1, not 0).
+
+              It is deliberately outside <header>, so `inert` while a modal is
+              open does not reach it — a skip link inside an inert subtree is
+              silently unfocusable, the same trap as a live region in one. */}
+          <a className="mgt-skip" href="#mgt-main">Skip to bookings</a><header
+          /* v17.12.0: `inert` while a modal is open — see the <main> note below. */
+          inert={anyModal}
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
               beside it ARE the restaurant's configuration read back — its name,
               its table counts, its opening hours — and the control that edits
@@ -2929,7 +3559,7 @@ function BookingApp({uid}){
               title="Settings & keyboard shortcuts"
               aria-label="Settings & keyboard shortcuts"
               className="mgt-hover-scale"
-              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><div style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold}}>{generalSettings.restaurantName}</div><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(hoursFor(viewDate).closed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
+              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(dayClosed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -2942,17 +3572,17 @@ function BookingApp({uid}){
               onExitSplit={exitSplit} /><button
               onClick={openWalkin}
               className="mgt-hover-scale"
-              style={{background:"var(--app-walkin)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"var(--shadow-btn-solid)"}}>Walk-in</button><button
+              style={mkSolidBtn("var(--app-walkin)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
-              style={{background:"var(--app-new)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"var(--shadow-btn-solid)"}}>+ New</button>{/* PROD-leak guard: the whole WA entry point is WA_SANDBOX-gated — a
+              style={mkSolidBtn("var(--app-new)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>+ New</button>{/* PROD-leak guard: the whole WA entry point is WA_SANDBOX-gated — a
               build without VITE_FB_TARGET=dev (e.g. a main-project Vercel preview
               of this branch) runs on PROD Firebase and must show no WA UI. */}
             {WA_SANDBOX?<button
               onClick={function(){setShowInbox(true);}}
               className="mgt-hover-scale"
               title="WhatsApp inbox (I)"
-              style={{position:"relative",background:"var(--wa-green)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"8px 14px",fontSize: T.body,cursor:"pointer",fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:40,boxShadow:"var(--shadow-btn)"}}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:R.pill,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize: T.small,fontWeight: FW.bold,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"var(--shadow-flat)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button>:null}{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
+              style={mkSolidBtn("var(--wa-green)",{position:"relative",padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:R.pill,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize: T.small,fontWeight: FW.bold,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"var(--shadow-flat)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button>:null}{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
               toolbar, between "+ New" and the dot. Searching is an ACTION, and
               this is the row of them — it reads as the counterpart to adding a
               booking rather than as view chrome. */}<button
@@ -2963,7 +3593,7 @@ function BookingApp({uid}){
               style={CHROME_BTN}><SearchIcon size={IC.chrome} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
               It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
-              wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onReconnect={forceReconnect} onLogout={function(){signOut(auth);}} /></div></div><div
+              wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onReconnect={forceReconnect} onLogout={function(){signOut(auth);}} /></div></header><div
           /* v17.9.0 (Patryk): the date controls are 40px and the collapsed
              Summary card beside them is 58, so `flex-start` left them sitting
              flush against the top of the row with 18px of dead space beneath —
@@ -2981,7 +3611,8 @@ function BookingApp({uid}){
              `alignItems` re-resolved the position against whatever height the
              row happened to have in that one frame — which, on collapse, was
              still the open height. See DATE_CTRL_DROP for the numbers. */
-          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><div style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
+          inert={anyModal}
+          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
               onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
@@ -2995,16 +3626,17 @@ function BookingApp({uid}){
               title="Next day (→)"
               ><ChevronRightIcon size={IC.chrome} /></button><input
               type="date"
+              aria-label="Viewed date"
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
               className="mgt-hover-scale"
-              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></div><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
+              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){goToDate(new Date().toISOString().slice(0,10));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
               Today is visible); the flex:1 Summary sibling absorbs the width change.
               Orange = a table currently fits someone waiting; slate = just waiting. */}
-            <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" outMs={190} tag="span"><button
+            <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
               aria-label={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
               title={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
@@ -3027,7 +3659,7 @@ function BookingApp({uid}){
             several open at once (a 3+ row late banner) would eat the viewport.
             When shellFixed is off this div is a plain, style-less wrapper and
             the page scrolls exactly as it always did. */}
-            <div style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
+            <main id="mgt-main" tabIndex={-1} style={shellFixed?Object.assign({flex:1,minHeight:0,display:"flex",flexDirection:"column"},
               /* With a split the panes own the scrolling, so this region must
                  NOT scroll — a flex:1 child of an overflowY:auto parent resolves
                  to CONTENT height, which would collapse a top/bottom split. The
@@ -3043,9 +3675,19 @@ function BookingApp({uid}){
                  card is the content box, so 4% padding is precisely enough at
                  any width. The negative margin puts the content back where it
                  was, so card width and position are unchanged from before. */
-              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}><Reveal show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}>{/* v17.12.0 (review fix): `inert` sits on the two CONTENT
+                  children rather than on <main> itself. It was on <main>, and
+                  <main> also contains StatusToasts — the app's live region for
+                  transient status. `inert` removes a subtree from the
+                  ACCESSIBILITY TREE as well as the tab order, so every toast
+                  went silent for as long as any modal was open, and the Undo
+                  pill inside it stopped being clickable. Both are wrong for
+                  the same reason: a floating status layer pinned ABOVE the
+                  dialog is not "the page behind the dialog", which is the only
+                  thing `inert` is meant to describe. This is the same finding
+                  as notifAnnounce living outside <main>, one level down. */}<div inert={anyModal}><Reveal speed="move" show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
                   children, so the pane fades out fully drawn instead of blanking a
-                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} />:null}</Reveal><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
+                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} swapKey={viewDate} />:null}</Reveal></div><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 loadStalled={loadStalled}
                 resyncing={resyncing}
@@ -3059,21 +3701,43 @@ function BookingApp({uid}){
                 reshuffled={reshuffled}
                 reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
                 loadShown={loadBannerShown}
-                loadMsg={"Firebase connected — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><SlideView key={slide.k} dir={slide.dir} fill={shellFixed}>{split?<SplitLayout
+                loadMsg={"Connected to the server — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><div
+                /* v17.12.0 (review fix): the view — the actual "page behind the
+                   dialog" — is what goes inert, not <main>. See the note on the
+                   strip wrapper above for why the toast layer above this div
+                   must stay live.
+                   In the shellFixed layout this wrapper is load-bearing rather
+                   than decorative: SlideView takes `fill` and resolves its own
+                   flex:1/minHeight:0 against its PARENT, so an intervening plain
+                   block would collapse the chain and the panes would size to
+                   content. It therefore carries the same three properties. */
+                inert={anyModal}
+                style={shellFixed?{flex:1,minHeight:0,display:"flex",flexDirection:"column"}:undefined}><SlideView key={slide.k} dir={slide.dir} fill={shellFixed}>{split?<SplitLayout
                 dir={split.dir}
                 ratio={split.ratio}
                 onRatio={setSplitRatio}
                 focused={focusedPane}
                 onFocus={setFocusedPane}
                 paneA={viewEl[split.a]}
-                paneB={viewEl[split.b]} />:mainView}</SlideView></div></div>{splitMenuFor?<SplitMenu
+                paneB={viewEl[split.b]} />:mainView}</SlideView></div></div></main>{/* v17.12.0: the notification announcer sits OUTSIDE <main>, and that
+        is not tidiness. `inert` removes a subtree from the accessibility tree as
+        well as from the tab order, so a live region inside an inert region goes
+        SILENT — and the things this announces (a failed write, the connection
+        dropping, a double-booking appearing) are exactly the ones a modal must
+        not suppress. Always mounted; see notifAnnounce. */}<div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div>{/* v17.14.0: the DAY announcer, a second region rather than a share of the
+        one above. They answer different questions and can change in the same
+        commit — a date change that also brings a clash into view would have one
+        overwrite the other inside a single region, and whichever won would be
+        arbitrary. Same placement rules: always mounted, outside <main>. */}<div className="mgt-sr-only" role="status" aria-live="polite">{dayAnnounce}</div>{splitMenuFor?<SplitMenu
               view={splitMenuFor}
               onConfirm={confirmSplit}
+              sideBySideOk={splitSideBySideOk}
               onClose={function(){setSplitMenuFor(null);}} />:null}<ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}
               error={error}
+              errorField={errorField}
               bookings={bookings}
               liveBookings={liveBookings}
               tableBlocks={tableBlocks}
@@ -3106,22 +3770,22 @@ function BookingApp({uid}){
               onClick={function(){setConfirmCancel(null);}}>Back</button><button
               onClick={function(){doCancelBooking(confirmCancel,true);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>No show</button><button
+              style={mkSolidBtn(BTN.orange,{display:"inline-flex",alignItems:"center",gap:6})}><NoShowIcon size={IC.control} />No show</button><button
               onClick={function(){doCancelBooking(confirmCancel,false);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={{background:BLOCK_BG.cancelled,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Tables will be re-optimised after cancellation.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={mkSolidBtn(BLOCK_BG.cancelled)}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>The booking stays on the day, marked cancelled. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={{background:"var(--app-warn-solid)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
               onClick={function(){setConfirmReshuffle(false);forceReshuffle();}}
               className="mgt-hover-scale"
-              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
+              style={mkSolidBtn(BTN.orange)}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
@@ -3189,7 +3853,7 @@ function BookingApp({uid}){
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
               onClick={function(){doDeleteReminder(confirmReminderDel);}}
               className="mgt-hover-scale"
-              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
+              style={mkSolidBtn(BTN.del)}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
         reminderEditor?<ReminderEditor
           draft={reminderEditor.draft}
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
@@ -3231,14 +3895,14 @@ function BookingApp({uid}){
               onClick={function(){setConfirmArchive(null);}}>Back</button><button
               onClick={function(){wa.doArchive(confirmArchive);setConfirmArchive(null);}}
               className="mgt-hover-scale"
-              style={{background:BTN.orange,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+bk.date+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
+              style={mkSolidBtn(BTN.orange,{minHeight:H.touch})}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+bk.date+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
         })():null}{confirmDeleteConv?<Overlay onClose={function(){setConfirmDeleteConv(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmDeleteConv(null);}}>Back</button><button
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
-              style={{background:BTN.del,border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:"pointer",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:"var(--shadow-btn-solid)"}}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<WaSimulator
+              style={mkSolidBtn(BTN.del,{minHeight:H.touch})}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<WaSimulator
           ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.appendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
           onClose={function(){setShowSim(false);}} />:null):null}{historyPopup}</div></div>
   );

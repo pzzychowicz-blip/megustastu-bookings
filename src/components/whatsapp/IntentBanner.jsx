@@ -9,9 +9,9 @@
 // which is fine — the conversation isn't on screen during that flow.
 
 import { useState } from "react";
-import { Reveal } from "../atoms";
+import { Reveal, mkSolidBtn } from "../atoms";
 import { useCollapseState } from "../../hooks/useCollapseState";
-import { R, T, FW, M, IC } from "../../lib/constants";
+import { R, T, FW, M, IC, H } from "../../lib/constants";
 import { WarnIcon, PencilIcon } from "./WaIcons";
 import { CheckIcon, ChevronRightIcon } from "../Icons";
 
@@ -56,7 +56,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
           onClick={() => { if (onApplyChanges) onApplyChanges(); }}
           title="Open the booking pre-filled with the requested changes"
           className="mgt-hover-scale mgt-press"
-          style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--wa-btn-open)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
+          style={mkSolidBtn("var(--wa-btn-open)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 14px", minHeight: H.chrome, fontSize: T.body, boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" })}
          ><PencilIcon size={IC.inline} />Apply changes</button>
       ) : null}
       <button
@@ -67,7 +67,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
         }}
         title="Mark this request as handled"
         className="mgt-hover-scale mgt-press"
-        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: leaving ? "default" : "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
+        style={mkSolidBtn("var(--wa-btn-handled)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 14px", minHeight: H.chrome, cursor: leaving ? "default" : "pointer", fontSize: T.body, boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" })}
       ><CheckIcon size={IC.inline} />Mark as handled</button>
     </div>
   );

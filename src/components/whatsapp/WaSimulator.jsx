@@ -183,7 +183,7 @@ export function WaSimulator({ ctx, onClose }) {
       ) : null}
 
       <Section>
-        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><DiceIcon size={14} />Generate scenario (Gemini)</div>
+        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><DiceIcon size={IC.control} />Generate scenario (Gemini)</div>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginBottom: 8 }}>Gemini invents a fresh, varied customer message (new sender) and runs it through the live pipeline — variety beyond the canned scenarios. Optional steer below; leave blank to surprise.</div>
         <input className="mgt-hover-scale" value={genHint} onChange={(e) => setGenHint(e.target.value)} placeholder="Optional steer — e.g. birthday for 10, running late, cancel…" style={Object.assign({}, mkInp(), { marginBottom: 8 })} />
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

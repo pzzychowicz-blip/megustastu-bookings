@@ -77,7 +77,7 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
               // selected AND busy; it paints orange (isSel wins above), so the
               // label must agree.
               const label = isSel ? "selected" : blocked ? "busy" : isBusyT ? "swap" : "cap " + t.cap;
-              const subClr = isSel || blocked || isBusyT ? "rgba(255,255,255,0.8)" : S.text;
+              const subClr = isSel || blocked || isBusyT ? "rgba(255,255,255,0.8)" : S.text;  /* @fixed-fill */
               return (
                 <button
                   key={t.id}

@@ -32,12 +32,13 @@
 
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
-import { S, BLOCK_BG, BLOCK_INK, hoursFor, R, M, T, FW } from "../lib/constants";
-import { toMins, toTime, getBlockSlots, statusOrder, getDur } from "../lib/booking-logic";
+import { S, BLOCK_BG, BLOCK_INK, hoursFor, R, M, T, FW, RIM_SOLID } from "../lib/constants";
+import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
-import { mkBtn } from "./atoms";
+import { mkBtn, Reveal } from "./atoms";
+import { EmptyDay } from "./EmptyDay";
 
 // Neutral (free) table fill — theme tokens, matches the editor's look.
 const FREE_FILL = "var(--bg-card)";
@@ -52,6 +53,13 @@ export const PlanView = memo(function PlanView({
   bookings, date, layout, blocks = [],
   nowMins = 0, late = {}, freeing = {},
   onEdit, onStatus, onNoShow, onWalkin = () => {},
+  // v17.11.0: the empty-day prompt (EmptyDay.jsx), which shipped in List only.
+  // `emptyWalkin` is separate from `onWalkin` above: that one is this view's own
+  // per-table handler and is always present, while the prompt's button must
+  // disappear on any day but today — so they are different questions with
+  // different answers, and folding them into one prop would have made the
+  // Walk-in button appear on next month's empty plan.
+  onNew = null, emptyWalkin = null, dayClosed = false, isEmpty = false,
   // v17.1.2: per-device master switch for zoom/pan/double-tap-reset (Settings →
   // General "Plan zoom & pan", localStorage-backed in App — scalar, memo-safe).
   gesturesEnabled = true,
@@ -320,7 +328,7 @@ export const PlanView = memo(function PlanView({
     // clearly not offerable either.
     if (!b && resetting[id]) return { fill: FREE_FILL, stroke: "var(--text-muted)", dash: "4 3" };
     if (!b) return { fill: FREE_FILL, stroke: FREE_STROKE, dash: undefined };
-    return { fill: BLOCK_BG[b.status] || BLOCK_BG.confirmed, stroke: "rgba(255,255,255,0.5)", dash: undefined };
+    return { fill: BLOCK_BG[b.status] || BLOCK_BG.confirmed, stroke: "rgba(255,255,255,0.5)", /* @fixed-fill */ dash: undefined };
   }
 
   // ── Table-tap popover: the day's queue on this table ────────────────────────
@@ -391,7 +399,7 @@ export const PlanView = memo(function PlanView({
 
   // ── Legend + slider row ─────────────────────────────────────────────────────
   const legend = ["seated", "confirmed", "pending"].map((s) => (
-    <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: "1px solid rgba(255,255,255,0.2)", fontWeight: FW.semi, textTransform: "capitalize" }}>{s}</span>
+    <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi, textTransform: "capitalize" }}>{s}</span>
   ));
 
   return (
@@ -401,6 +409,13 @@ export const PlanView = memo(function PlanView({
       borderRadius: R.sheet, border: "1px solid var(--tl-card-border)",
       padding: "10px 12px", boxShadow: "var(--shadow-soft)"
     }}>
+      {/* v17.11.0: the empty-day prompt, above the floor rather than instead of
+          it — the plan is a picture of the room, and an empty room is precisely
+          what you want to see on an empty day. See EmptyDay.jsx. */}
+      {/* v17.15.0: eased, not snapped — same `Reveal` as the notification strip.
+          The `null` on the false branch is what lets the exit animate at all
+          (Reveal caches only truthy children and collapses that cache). */}
+      <Reveal show={isEmpty}>{isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}</Reveal>
       {/* v17.5.0: Now + selected time + legend on one row, the ruler directly
           below it. The ruler is a SIBLING above the <svg>, so it sits outside
           the svg's touchAction:"none" and never fights the plan's pan/pinch
@@ -468,8 +483,23 @@ export const PlanView = memo(function PlanView({
               if (!e) return null;
               const f = fillFor(t.id);
               const soon = freeSoonOf[t.id];
+              // v17.12.0: the spoken version of the fill. The colour of a table
+              // IS its state here, so without this a screen-reader user gets a
+              // room full of identical "Table 5A" buttons. It describes the
+              // table at the SELECTED time, exactly like the fill it mirrors.
+              const occ = occupying[t.id];
+              // /code-review: the occupant clause is `describeBooking` with the
+              // table dropped — the table is already the subject of this
+              // sentence. Same source as the List card and the timeline block,
+              // so the three cannot word a booking differently.
+              const a11yLabel = "Table " + t.id + ", " + (
+                isBlocked(t.id) ? "blocked"
+                  : occ ? describeBooking(occ, { tables: false })
+                    : resetting[t.id] ? "free after turnaround"
+                      : "free"
+              ) + (soon != null ? ", free in about " + soon + " minutes" : "");
               return (
-                <TableGlyph key={t.id} id={t.id} entry={e}
+                <TableGlyph key={t.id} id={t.id} entry={e} ariaLabel={a11yLabel}
                   fill={f.fill} stroke={f.stroke} strokeWidth={2} strokeDasharray={f.dash}
                   // v17.1.1: occupancy colour changes fade with the timeline's
                   // Seated→Completed timing (.mgt-fade-overlay). CSS can't
@@ -492,7 +522,7 @@ export const PlanView = memo(function PlanView({
                   {soon != null ? (
                     <g transform="translate(0,-22)">
                       <rect x={-22} y={-9} width={44} height={16} rx={8} fill="var(--tl-block-warn-soon)" />
-                      <text x={0} y={3} textAnchor="middle" fontSize={10} fontWeight={700} fill="#fff" style={{ pointerEvents: "none" }}>{"~" + soon + "m"}</text>
+                      <text x={0} y={3} textAnchor="middle" fontSize={10} fontWeight={700} fill="var(--text-on-accent)" style={{ pointerEvents: "none" }}>{"~" + soon + "m"}</text>
                     </g>
                   ) : null}
                 </TableGlyph>

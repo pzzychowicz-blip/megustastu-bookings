@@ -46,9 +46,9 @@
 //  reshuffled      — the post-save flag
 //  reshuffledMsg   — "Tables re-optimised." / "Booking saved." (computed in
 //                    App — it reads optimizerActiveFor(viewDate, autoOptimizer))
-//  loadShown       — the 6s "Firebase connected" banner flag (NOT a loaded
+//  loadShown       — the 6s "Connected to the server" banner flag (NOT a loaded
 //                    signal — see the loadBannerShown gotcha in CLAUDE.md)
-//  loadMsg         — "Firebase connected — N bookings loaded."
+//  loadMsg         — "Connected to the server — N bookings loaded."
 
 import { mkBtn, Toast } from "./atoms";
 import { BTN, R, T, FW, H } from "../lib/constants";
@@ -69,7 +69,7 @@ const toastShadow="var(--shadow-popover)";
 // These nine toasts used to be nine hand-written style objects, each a
 // saturated tint behind a 2px ring in its own semantic colour. Two problems.
 // They shouted — a 2px ring plus a full-surface wash is the loudest treatment
-// in the app, spent on messages that are mostly ambient ("Firebase connected").
+// in the app, spent on messages that are mostly ambient ("Connected to the server").
 // And they were nine independent definitions of the same object, so the
 // vocabulary drifted: font weight alternated 600/700 with no rule behind it.
 //
@@ -159,6 +159,20 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
   // — more at-a-glance, and it tracks mainView's position. Anchored to the
   // relative wrapper around mainView at App's render site; works in all views.
   return <div
+    /* v17.12.0: THE live region for transient status. `role="status"` is polite
+       (it waits for a pause rather than interrupting) and atomic, so what is
+       read is the toast currently in the slot — which is precisely this layer's
+       model: one slot, highest priority wins.
+       It works here for a reason worth stating, because it is the pitfall that
+       kills most live regions: a live region must already BE in the DOM when
+       its content changes, or the insertion is not announced. This container
+       has been always-mounted since v15.8.0 — for an unrelated reason (each
+       Toast self-manages its out-animation, so the container has to outlive
+       it) — and that is exactly the property the announcement needs. The
+       notification strip has the opposite shape, which is why its live region
+       lives in App rather than inside the strip. */
+    role="status"
+    aria-live="polite"
     style={{position:"absolute",top:0,left:0,right:0,zIndex:60,display:"flex",justifyContent:"center",alignItems:"flex-start",padding:"6px 12px 0",pointerEvents:"none"}}><div
     style={{width:"100%",maxWidth:360,display:"grid",justifyItems:"center",textAlign:"center"}}>{statusToasts.map(function(t){return <Toast key={t.key} show={t.key===topToastKey} style={{gridArea:"1 / 1",width:"fit-content",justifySelf:"center"}}>{t.node}</Toast>;})}</div></div>;
 }

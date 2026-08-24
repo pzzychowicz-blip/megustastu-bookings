@@ -185,6 +185,22 @@
         --border-input: rgba(255, 255, 255, 0.4);
         --border-kbd: rgba(180, 190, 210, 0.55);
         --border-glass: rgba(255, 255, 255, 0.3);      /* white rim on filled btns / Toggle */
+        /* v17.13.0 — the hairline rim on a THEME-INVARIANT solid fill, and the
+           reason it is not --border-glass: that token flips (0.3 light / 0.14
+           dark) because it rims controls sitting on the themed sheet. These two
+           rim a saturated BLOCK_BG / --app-*-solid / BTN.* fill, which is the
+           same colour in both themes, so the rim on it must be too — the
+           v17.8.0 white-inset rule, one property along. They are therefore
+           declared here ONLY and deliberately NOT repeated in the dark block.
+           `solid` was 26 hand-written copies of one value across 12 files, the
+           single most-duplicated literal in the app; `strong` is the party-size
+           ring and the waitlist ghost's dashed edge, and its 0.55 is a RECORDED
+           MEASUREMENT (see SIZE_RING in TimelineView.jsx — at --blk-rule's 0.3
+           the ring does not render at all on the amber fills). Retuning either
+           is a change to every block in the app; tests/contrast.test.js reads
+           `strong` back out of here and floors it per status. */
+        --rim-solid: rgba(255, 255, 255, 0.2);
+        --rim-solid-strong: rgba(255, 255, 255, 0.55);
         /* Scrim + toggle */
         --scrim: rgba(0, 0, 0, 0.25);                  /* modal backdrop */
         --toggle-on: rgba(0, 122, 255, 0.7);
@@ -209,6 +225,34 @@
            as a fill. */
         --danger-bg: rgba(254, 226, 226, 0.7);  --danger-border: rgba(252, 165, 165, 0.55);
         --suggest-bg: rgba(220, 252, 231, 0.8); --suggest-border: rgba(134, 239, 172, 0.5);
+        /* v17.15.0 — OUTLINE-CHIP borders, DERIVED from the ink they sit beside.
+           An outline chip is transparent with a 2px border and coloured text
+           (DESIGN.md's three label treatments), and it took its border from
+           --suggest-border / --warn-border and its text from --success-text /
+           --warn-text — two unrelated families. In light that is a pale mint
+           ring around dark forest text; in dark the two nearly match. The chip
+           looked like a different component depending on the theme.
+
+           A border is the same statement as the text, quieter — so it is the
+           same colour, at half strength. color-mix() means it tracks the ink
+           automatically and cannot drift from it again, in either theme, and it
+           is the first use of the function in this codebase. The baseline is
+           fine (Safari 16.2 / Chrome 111; the app already needs Safari 16 for
+           grid-template-rows: 0fr) and the failure mode is benign rather than
+           broken: an unsupported color-mix makes the custom property
+           guaranteed-invalid, so border-color falls back to currentColor —
+           which IS the ink, just at full strength. Verified in the browser
+           rather than assumed.
+
+           These are theme-agnostic BY CONSTRUCTION: each references a token
+           that already flips, so they are declared once and never duplicated
+           into the dark block — the same reasoning as the radii and the motion
+           tokens. Adding one to [data-theme="dark"] would re-introduce exactly
+           the hand-maintained pair this replaces. */
+        --chip-success-border: color-mix(in srgb, var(--success-text) 50%, transparent);
+        --chip-warn-border:    color-mix(in srgb, var(--warn-text)    50%, transparent);
+        --chip-danger-border:  color-mix(in srgb, var(--danger-text)  50%, transparent);
+        --chip-neutral-border: color-mix(in srgb, var(--text-secondary) 50%, transparent);
         /* Shadows carrying white inset highlights (dimmed on dark) */
         --shadow-sheet: 0 8px 40px rgba(0, 0, 0, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.8);
         --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.6);
@@ -280,6 +324,24 @@
            the overstay "due soon" border stays amber (it paints on SEATED/green
            blocks, where amber reads fine). */
         --tl-block-late: #fde047;                        /* running-late border (yellow-300) */
+        /* v17.11.0: the double-booked underline — the bar drawn under the
+           minutes two bookings both claim.
+           /code-review fix: it sits INSIDE the block, over BLOCK_BG, and the
+           first version of this comment claimed the opposite ("in the strip
+           below the blocks where nothing competes with it"). That false claim
+           is what justified shipping a single opaque red with no contrast
+           check — and measured against the fills it actually paints on, red is
+           1.02–1.63:1 across the four statuses in both themes: invisible on a
+           seated block, and this bar is the ONE thing carrying information the
+           block border cannot.
+           So the red keeps the meaning and a near-black CASING carries the
+           boundary contrast, which is how a marker over a variable fill is
+           normally done. The edge clears WCAG 1.4.11's 3:1 on every block fill
+           in both themes (min 3.48, dark/completed) and is asserted in
+           tests/contrast.test.js — the registry's own coverage guard matches
+           `--tl-.*(pill|badge)` and so cannot see this one. */
+        --tl-clash-a: rgb(220, 38, 38);                  /* double-booked underline */
+        --tl-clash-edge: rgb(18, 18, 21);                /* …and its casing */
         --tl-blocked-a: #991b1b;                          /* table-block stripe colours */
         --tl-blocked-b: #7f1d1d;
         --tl-blocked-badge: rgba(153, 27, 27, 0.85);     /* "blocked" label-col badge bg */
@@ -329,6 +391,49 @@
         /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
         --app-btn-grey: rgba(58, 62, 72, 0.55);  --app-btn-grey-strong: rgba(105, 114, 131, 0.75);
         --app-btn-slate: #64748b;                 /* dialog secondary buttons */
+        /* v17.13.0 — two fills that were hand-written literals, i.e. invisible
+           to tests/contrast.test.js, which enumerates TOKENS. Both carry white
+           text, which is exactly the pairing that file exists to measure.
+           --app-btn-dark is the timeline Follow button while it is FOLLOWING
+           (it was `rgba(0,0,0,0.6)`, eight lines under a comment about this
+           very bug class); --btn-disabled is the greyed-out primary in the two
+           form footers, the reminder editor and ManualModal, whose old literal
+           was a copy of --toggle-off's LIGHT value that never flipped. Both are
+           :root-only: they composite toward whatever is behind them, so one
+           declaration lands correctly in both themes — the alpha is doing the
+           theming, which is legitimate here because the value is a FILL, not a
+           rim on an invariant surface. */
+        --app-btn-dark: rgba(0, 0, 0, 0.6);
+        --btn-disabled: rgba(180, 180, 190, 0.4);
+        /* v17.14.0: the INK on --btn-disabled, and unlike the fill it must be
+           declared per theme. v17.13.0 measured the disabled primary's white
+           label at 1.30:1 in light — not dim, gone: a staff member who has not
+           picked a date saw an empty grey pill where "Save booking" should be.
+           WCAG 1.4.3 exempts inactive components, so this was recorded as a
+           design question rather than fixed inside a gate-closing commit.
+           Patryk's answer: muted ink, fill unchanged.
+
+           It cannot be --text-muted, and that is the whole reason this token
+           exists. The FILL is :root-only and composites toward whatever is
+           behind it, so its effective colour flips WITH the theme — light grey
+           in light, mid-dark in dark — which means white is invisible in one
+           theme and correct in the other (6.42:1 dark). --text-muted inverts the
+           same way the composite does, so it would have swapped which theme was
+           broken: measured 4.59:1 light but 2.30:1 dark, replacing an exempt
+           failure with a worse one (white is 1.30:1 light / 6.42:1 dark — the
+           same asymmetry, the other way up).
+
+           The light value is a step darker than --text-muted, and the reason is
+           worth carrying: tests/contrast.test.js composites over the THEME
+           EXTREME (pure white here) and calls that the worst case — which is
+           true for WHITE ink and false for dark ink. The real modal sheet is a
+           translucent panel over a tinted app background, so this fill
+           composites to rgb(211,211,217) live against the registry's
+           rgb(225,225,229), and a dark ink therefore measures LOWER in the app
+           than in the file: --text-muted's own value read 4.59 there and 4.02
+           on screen. Measured in the running app, both themes: 5.14:1 light,
+           4.60:1 dark. Both clear AA, so this is no longer an exemption. */
+        --btn-disabled-ink: #4a5464;
         /* v17.8.0: the three popovers (QuickStatus, SplitMenu, Plan's day queue)
            all carried the same hand-written `0 8px 32px rgba(0,0,0,0.14)`, which
            never deepened for dark mode the way every --shadow-* token does. */
@@ -470,11 +575,37 @@
                       a tint, a toggle knob, the TimeAxis detent.
            --t-move   something arriving or leaving: toasts, modals, sheets,
                       the view switch, a slide-in button.
-           --t-shift  geometry: heights, widths, positions — a Reveal opening,
-                      a timeline block repositioning, the split divider.
+           --t-shift  geometry: heights, widths, positions — a timeline block
+                      repositioning, the split divider.
 
-           Plus two that are deliberately outside the scale because they are
+           Plus three that are deliberately outside the scale because they are
            not interface response:
+           --t-reveal a DISCLOSURE opening or closing under your finger: the
+                      Summary body, "Completed & cancelled", every Settings
+                      section, the notification strip's LID. Slower than
+                      --t-shift on purpose, and the distinction is what is being
+                      asked of the eye. A block repositioning is something you WATCH ARRIVE,
+                      and 385ms is already generous for that. A disclosure is
+                      something you READ AS IT ARRIVES: the content is new, it is
+                      several lines tall, and the motion is the only thing
+                      telling you it came from the header you just pressed rather
+                      than being dumped onto the page. Reported as "too snappy",
+                      which is exactly the complaint of being handed something
+                      before you are looking at it. `Reveal` is the ONLY consumer
+                      — its two internal timeouts are derived from this number,
+                      so raising it here is safe and raising it anywhere else is
+                      not (see atoms.jsx).
+                      v17.15.0: read "under your finger" as load-bearing. This
+                      list said "the notification strip", and the strip holds
+                      TWO Reveals — the lid's body, which you pressed, and the
+                      pane itself, which arrives because a booking went late or
+                      because you changed the day. Nobody pressed that one, and
+                      at 520ms it outlasted the 240ms view slide by more than
+                      double, so a date change slid sideways and then went on
+                      rising: one event read as two. It takes --t-move, via
+                      `Reveal`'s `speed` prop. A Reveal is still a disclosure by
+                      DEFAULT; that call site is the exception this paragraph
+                      exists to justify.
            --t-status the status colour change, shared by TimelineView and
                       PlanView. Its own token precisely BECAUSE two files must
                       agree; a shared number needs a shared name.
@@ -487,6 +618,7 @@
         --t-tap: 145ms;
         --t-move: 240ms;
         --t-shift: 385ms;
+        --t-reveal: 520ms;
         --t-status: 360ms;
         --t-wipe: 760ms;
       }
@@ -497,6 +629,10 @@
         --border-card: rgba(255, 255, 255, 0.10);
         --text-primary: #f2f2f7;
         --text-muted: #9a9aa0;
+        /* v17.14.0: see --btn-disabled-ink in :root. Lighter than --text-muted
+           because the disabled fill composites DARK here, and dimmer than white
+           so the pill still reads as inactive. 4.70:1 on the composite. */
+        --btn-disabled-ink: #dcdce0;
         --accent: #0a84ff;
         --focus-ring: #ffffff;
         /* Status chip text -> light variants for dark surfaces. */
@@ -942,6 +1078,41 @@
       }
       .mgt-glyph:active { filter: brightness(0.86); }
 
+      /* v17.12.0: the focus ring for a floor-plan table. The glyph became
+         focusable this version (Plan was 27 shapes with `cursor: pointer` and
+         ZERO focusable descendants), and giving something focus without giving
+         it a visible ring trades one WCAG failure for another. Two things about
+         SVG made this different from every other control in the app, and both
+         were MEASURED live rather than assumed:
+
+         1. `outline` does not paint on a `<g>`. An inline
+            `outline: 2px solid #fff` on the group rendered nothing; the same
+            declaration on its `<rect>` child rendered a clean ring. So the ring
+            goes on `.mgt-glyph-shape` — which is also the better place for it,
+            landing on the table's silhouette rather than around its chairs and
+            label, and riding the rotation on a rotated table because it is
+            drawn in the shape's own coordinate space.
+
+         2. `:focus-visible` never matches an SVG element at all in Chrome. Two
+            consecutive REAL Tab presses left the focused `<g>` matching
+            `:focus` and not `:focus-visible`, with `document.querySelectorAll(
+            ":focus-visible")` empty. A rule keyed on it would simply never have
+            fired — the worst kind of fix, one that looks right in the source.
+
+         Hence `[data-kbd]`, a two-line stand-in for `:focus-visible` scoped to
+         this one case (set in App.jsx, not in the CSP-pinned boot script). Plain
+         `:focus` was the alternative and is wrong: a real mouse click DOES focus
+         the group — verified — so every table tap during service would leave a
+         white ring behind it.
+
+         Same colour, same 2px, same 2px offset as every other control: this is a
+         different PLACE for the ring, not a different ring. */
+      .mgt-glyph:focus { outline: none; }
+      :root[data-kbd] .mgt-glyph:focus .mgt-glyph-shape {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+
       /* ── v17.8.0: a timeline block's ink scheme ──────────────────────────────
          A block sets `color` inline from BLOCK_INK[status] and its text
          children inherit it. Every fill currently takes white (see index.html's
@@ -983,7 +1154,36 @@
          glossy tablet screen. Paint-only, so it never reflows neighbours.
          The reduce-motion block below zeroes the transition (the scale still
          applies instantly, which is feedback without motion). */
-      button, [role="button"] {
+      /* ── v17.12.0 fix: NEITHER of these rules may reach a floor-plan table ──
+         `[role="button"]` matched NOTHING in this app until v17.12.0 gave
+         TableGlyph a button role for keyboard reach — the seven-pass review's
+         own finding m2 predicted precisely that ("if C1 is fixed by adding
+         role=button to blocks, this rule starts applying"), and read it as a
+         good thing. For a `<div>` block it is. For an SVG `<g>` it is the
+         v17.9.1 lesson arriving through a door nobody was watching.
+
+         A CSS `transform` REPLACES an SVG element's `transform` PRESENTATION
+         ATTRIBUTE. So `scale(0.96)` on a table does not shrink it — it deletes
+         its `translate(x,y) rotate(r)` and teleports it to the plan origin.
+         Measured: a table sitting at (554,243) jumped to (313,176), and the
+         `transition` here made it FLY there and back over 145ms, for as long
+         as the button was held. The click then resolved on the parent, because
+         its target had left from under the pointer. That is the whole reported
+         bug — the plan lurches and left-click stops working — and it is why
+         `.mgt-glyph` exists as a THIRD affordance in the first place (see its
+         block above: a halo on hover, a brightness dim on press, because
+         neither of the app's transform- and background-based answers can touch
+         an SVG shape).
+
+         `.mgt-nopress` is deliberately NOT the fix. That class means "this
+         control is inert; animating a press would be a lie about what the tap
+         did" — and a plan table is neither inert nor without feedback. The
+         exclusion lives HERE, on the rules it disarms, so the next person
+         giving an SVG element a button role meets it before they ship it.
+         `user-select: none` above deliberately still applies: suppressing a
+         long-press text selection is wanted on a table exactly as it is on a
+         timeline block. */
+      button, [role="button"]:not(.mgt-glyph) {
         /* Same duration AND same curve as .mgt-hover-scale's transform, so a
            button that has both reads as one material rather than two easings
            fighting. (The class wins this declaration on hover-scale elements
@@ -992,7 +1192,7 @@
         transition: transform var(--t-tap) var(--ease-out);
       }
       button:active:not(:disabled):not(.mgt-nopress),
-      [role="button"]:active:not(.mgt-nopress) {
+      [role="button"]:not(.mgt-glyph):active:not(.mgt-nopress) {
         transform: scale(0.96);
       }
       /* A hover-lifted button presses from its lifted size, so the dip stays
@@ -1026,6 +1226,52 @@
         .mgt-blk:active:not(.mgt-nopress) { transform: scale(0.96); }
       }
 
+      /* ── v17.14.0: the skip link ────────────────────────────────────────────
+         v17.12.0 added the landmarks, which are the programmatic bypass and cost
+         nothing visually. This is the one a SIGHTED keyboard user can take, in
+         an app that is explicitly keyboard-driven: the header holds a cog, a
+         title block, three view buttons, two primary actions, a search and a
+         connection dot before the first booking, and every date change puts you
+         back at the top of it.
+
+         Hidden by TRANSLATION, never `display:none` or `visibility:hidden` —
+         both make an element unfocusable, so the link could never be reached and
+         the whole feature would be inert while looking correct in the source.
+         `position: fixed` so it lands at the viewport corner in both layouts
+         (the app is a normal scrolling page by default and a 100dvh flex shell
+         under nav-lock / split view, and an absolutely-positioned link would
+         resolve against a different box in each).
+
+         z-index sits above the header and below the modal layer (z=250+): a
+         dialog owns the whole screen while it is open, and a skip link floating
+         over one would be a bypass to something the user cannot reach.
+
+         The transition is the token pair, so the reduce-motion kill-switch
+         below neutralises it like everything else. */
+      .mgt-skip {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        z-index: 200;
+        padding: 10px 18px;
+        border-radius: var(--r-pill);
+        background: var(--accent);
+        color: var(--text-on-accent);
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: var(--shadow-btn-accent);
+        transform: translateY(-300%);
+        transition: transform var(--t-move) var(--ease-out);
+      }
+      .mgt-skip:focus { transform: translateY(0); }
+      /* The target of the link. It takes tabIndex={-1} in App.jsx so it can hold
+         focus when the fragment is followed; without a ring rule it would show
+         the browser default outline on a full-width region, which reads as the
+         whole page being selected. The ring belongs on the link you pressed, not
+         on the landmark you arrived at. */
+      main:focus { outline: none; }
+
       /* ── v17.8.0: the keyboard focus ring ───────────────────────────────────
          The app had NO :focus or :focus-visible rule anywhere, so a focused
          button computed `outline: none` and a keyboard user could not see where
@@ -1058,6 +1304,25 @@
       }
       /* The ring is the only focus signal; never let a UA default double it. */
       :focus:not(:focus-visible) { outline: none; }
+
+      /* v17.12.0: visually hidden, but PRESENT to assistive technology — the
+         carrier for live-region text that has no on-screen equivalent. It is
+         not `display:none` and not `visibility:hidden`: both remove the node
+         from the accessibility tree, which is exactly the thing this must not
+         do. The clip pair is deliberate — `clip-path` is the modern rule and
+         `clip` the legacy one, and a 1px box with `overflow:hidden` is what
+         keeps a screen reader treating the text as rendered.
+
+         If this rule ever goes missing the text becomes VISIBLE, which is why
+         it is not in tests/stylesheet.test.js's CRITICAL_SELECTORS — that list
+         is for rules that fail SILENTLY, and a stray sentence across the top of
+         the timeline is the opposite of silent. */
+      .mgt-sr-only {
+        position: absolute; width: 1px; height: 1px;
+        padding: 0; margin: -1px; overflow: hidden;
+        clip: rect(0 0 0 0); clip-path: inset(50%);
+        white-space: nowrap; border: 0;
+      }
 
       /* v17.8.0: hairlines BETWEEN the notification strip's sections. An
          adjacent-sibling rule rather than a borderTop prop on each section, so
@@ -1094,6 +1359,23 @@
       @keyframes mgt-view-in-left  { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
       .mgt-view-in-right { animation: mgt-view-in-right var(--t-move) var(--ease-out) both; }
       .mgt-view-in-left  { animation: mgt-view-in-left var(--t-move) var(--ease-out) both; }
+      /* v17.15.0 — the DATE change's entrance, and it deliberately has no
+         transform. The two above move the view 28px sideways; the notification
+         strip appearing, growing or leaving moves it vertically, by 98, 100, 51
+         and 151px on the four steps of 19 -> 26 August that change it. Run at
+         once the two compose into a diagonal, and the two upward cases read as
+         the grid heading for a top corner — reported twice.
+         Retiming cannot fix it: co-timing them, which is what v17.15.0 did
+         first, is exactly what turns a wobble into one clean diagonal. Only
+         separating the AXES fixes it, so a date change now owns the vertical
+         one outright and its sole movement is the strip's own reveal pushing
+         the grid. The view switch keeps the horizontal slide, and keeps it
+         honestly: the strip sits outside the view, so switching T/L/P never
+         moves anything vertically.
+         --t-move, not the --t-shift `.mgt-fade-in` takes, because this has to
+         land with the push it is replacing the slide for. */
+      @keyframes mgt-view-fade { from { opacity: 0; } to { opacity: 1; } }
+      .mgt-view-fade { animation: mgt-view-fade var(--t-move) var(--ease-out) both; }
       /* Settings tab-content crossfade on switch. --t-shift, not --t-move: it
          rides inside an AutoHeight that is resizing the modal card over
          --t-shift at the same moment, and the two are one event. At --t-move

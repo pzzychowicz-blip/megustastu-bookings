@@ -111,8 +111,16 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
         type="button"
         className="mgt-hover-scale"
         onClick={toggleOpen}
-        title={connecting ? "Connecting to Firebase…" : connected ? "Connected to Firebase" : "Firebase connection lost"}
-        aria-label={connecting ? "Connecting to Firebase" : connected ? "Connected to Firebase" : "Firebase connection lost"}
+        /* v17.12.0: the trigger announces that it HAS a popup and whether that
+           popup is open. It carried neither before — measured `aria-expanded:
+           null` both before and after opening — so the one control that holds
+           the device list, "Reconnect now" and Log out looked like a decorative
+           dot to assistive technology. `aria-label` already changed with the
+           connection state and still does; this adds the disclosure half. */
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title={connecting ? "Connecting to the server…" : connected ? "Connected to the server" : "Lost connection to the server"}
+        aria-label={connecting ? "Connecting to the server" : connected ? "Connected to the server" : "Lost connection to the server"}
         style={{
           appearance: "none",
           border: "none",
@@ -165,8 +173,10 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
           survivable once every other surface in the app eased. mgt-card-in /
           -out are reused rather than invented: they fade and translateY(8px),
           which on a top-anchored popover reads as it dropping out of the dot,
-          exactly the motion this needs. outMs must match --t-move (240ms) or
-          the node unmounts mid-animation.
+          exactly the motion this needs. outMs must match --t-move or the node
+          unmounts mid-animation — which this site knew and every other one did
+          not, so v17.15.0 made it `Presence`'s default (EXIT_MS) and deleted
+          the hand-typed number here along with the six wrong ones elsewhere.
           Presence renders the positioned element ITSELF (its `style` prop) —
           no extra wrapper, so `wrapRef.current.contains()` and the absolute
           anchoring are untouched. */}
@@ -174,7 +184,6 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
         show={open}
         inClass="mgt-card-in"
         outClass="mgt-card-out"
-        outMs={240}
         style={{
           position: "absolute",
           top: "calc(100% + 8px)",
@@ -190,7 +199,14 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
         }}
       >
         {open ? (
-          <>
+          /* v17.12.0: a real dialog, like every other surface in the app that
+             holds controls. NOT `aria-modal` and no focus trap — it is a
+             non-modal popover that closes on outside-click and Escape, and
+             claiming modality it does not enforce would be a lie of exactly the
+             kind `Overlay` refuses when it resolves its name from the DOM.
+             The role goes on this wrapper rather than on `Presence`, which
+             forwards only `className` and `style`. */
+          <div role="dialog" aria-label="Connection and account">
           {/* v17.8.0: Log out moved OFF the header row and in here, right-aligned
               on the status line. It belongs with the identity this popover
               already shows ("Signed in as" sits two rows below), and the header
@@ -225,10 +241,10 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
           </div>
           <div style={{ fontSize: T.small, marginBottom: 8, color: S.muted }}>
             {connecting
-              ? "Establishing the first connection to the Realtime Database…"
+              ? "Establishing the first connection to the server…"
               : connected
-                ? "Realtime Database is connected."
-                : "Lost connection to the Realtime Database. Changes will sync when it reconnects."}
+                ? "Connected to the server."
+                : "Lost connection to the server. Changes will sync when it reconnects."}
           </div>
           {/* v17.10.1: the manual half of the reconnect watchdog. The watchdog
               (usePersistence) already resets the SDK's backoff after 20s of a
@@ -302,7 +318,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
               </div>
             </div>
           ) : null}
-          </>
+          </div>
         ) : null}
       </Presence>
     </div>

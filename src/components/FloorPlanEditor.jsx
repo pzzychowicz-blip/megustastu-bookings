@@ -42,7 +42,7 @@ function Step({ label, value, fmt, onDec, onInc, disableDec, disableInc }){
   };
   return (
     <div>
-      <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
           style={{ ...btn, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
@@ -260,7 +260,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             disableDec={false} disableInc={false}
             onDec={function(){ patchTable(id, { rot: ((e.rot || 0) + 345) % 360 }); }} onInc={function(){ patchTable(id, { rot: ((e.rot || 0) + 15) % 360 }); }} />
         </div>
-        <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6 }}>
+        <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 6 }}>
           {e.shape === "round" ? "Chairs (spread evenly around)" : "Chairs per side"}
         </div>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
@@ -288,7 +288,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             onDec={function(){ patchDoor(i, { width: d.width - 10 }); }} onInc={function(){ patchDoor(i, { width: d.width + 10 }); }} />
           {/* v17.0.0 correction: which side the door opens toward (hinge side) */}
           <div>
-            <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 4 }}>Opens</div>
+            <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 4 }}>Opens</div>
             <div style={{ display: "flex", gap: 6 }}>
               {[["left", !d.flip], ["right", !!d.flip]].map(function(o){
                 return <button key={o[0]} onClick={function(){ patchDoor(i, { flip: o[0] === "right" }); }}
@@ -401,11 +401,11 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
               <g key="wsel">
                 {/* v17.0.0 correction: draggable endpoint handles (round 9:
                     each visible r=9 dot gets an invisible r=24 hit circle) */}
-                <circle cx={wl.x1} cy={wl.y1} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2} />
+                <circle cx={wl.x1} cy={wl.y1} r={9} fill="var(--accent)" stroke="var(--text-on-accent)" strokeWidth={2} />
                 <circle cx={wl.x1} cy={wl.y1} r={24} fill="transparent" pointerEvents="fill"
                   style={{ cursor: "move" }}
                   onPointerDown={function(e){ startDrag(e, "wallA", i, { x: wl0.x1, y: wl0.y1 }); }} />
-                <circle cx={wl.x2} cy={wl.y2} r={9} fill="var(--accent)" stroke="#fff" strokeWidth={2} />
+                <circle cx={wl.x2} cy={wl.y2} r={9} fill="var(--accent)" stroke="var(--text-on-accent)" strokeWidth={2} />
                 <circle cx={wl.x2} cy={wl.y2} r={24} fill="transparent" pointerEvents="fill"
                   style={{ cursor: "move" }}
                   onPointerDown={function(e){ startDrag(e, "wallB", i, { x: wl0.x2, y: wl0.y2 }); }} />

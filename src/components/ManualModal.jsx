@@ -30,10 +30,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { S, BTN, R, M, T, FW } from "../lib/constants";
+import { isTyping } from "../lib/keyboard";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
 } from "../lib/booking-logic";
-import { Overlay, ModalTitle, Toggle, mkBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, ModalTitle, Toggle, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
 import { TableGrid } from "./TableGrid";
 import { sameDraft } from "../lib/drafts";
 
@@ -157,7 +158,14 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   // TableGrid's swap cells use, so the panel and the cells it describes finally
   // agree; the rim goes neutral per the solid-label convention.
   const swapBg = swapBusy ? "var(--app-warn-solid)" : S.bg;
-  const swapBrd = "1px solid " + (swapBusy ? "var(--border-glass)" : "rgba(255,255,255,0.5)");
+  // v17.13.0 /code-review: the idle rim was a hard-coded white at 0.5, and the
+  // colour rule's first pass MARKED it @fixed-fill — which asserts the surface
+  // under it is theme-invariant. It is not: `S.bg` is "transparent", so the idle
+  // panel shows the modal sheet, which flips. Measured, that rim is 1.00-1.04:1
+  // against the light sheet (invisible) and 4.69:1 against the dark one. The
+  // marker would have certified it forever. Both branches now take a token that
+  // flips with the surface, which is what the busy branch already did.
+  const swapBrd = "1px solid " + (swapBusy ? "var(--border-glass)" : "var(--border-soft)");
   const swapTitleClr = swapBusy ? "var(--text-on-accent)" : S.text;
   const swapSubClr = swapBusy ? "var(--text-on-accent)" : S.text;
 
@@ -166,11 +174,6 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   // — the listener gets re-registered, but that's the existing behaviour
   // and changing it is out of scope for the structural extraction.
   useEffect(() => {
-    function isTyping(el) {
-      if (!el) return false;
-      const t = el.tagName;
-      return t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || el.isContentEditable;
-    }
     function handler(ev) {
       // v17.4.0 /code-review: bail when there is no booking. The null guard sits
       // BELOW this effect (moving it above would change the hook count — the
@@ -212,23 +215,22 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
       <button
         className="mgt-hover-scale"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.cancel })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
         onClick={onClose}
       >
-        Cancel
+        Back
       </button>
       <button
         disabled={!ok}
         onClick={() => { if (ok) onSave(selected, true, isSwapping ? affectedBookings : null); }}
         className="mgt-hover-scale"
-        style={{
-          background: ok ? (isSwapping ? BTN.orange : S.accent) : "rgba(180,180,190,0.4)",
-          border: "1px solid rgba(255,255,255,0.2)",
-          borderRadius: R.pill, padding: "10px 18px",
+        style={mkSolidBtn(ok ? (isSwapping ? BTN.orange : S.accent) : "var(--btn-disabled)", {
           cursor: ok ? "pointer" : "not-allowed",
-          fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44,
+          // v17.14.0: muted ink while disabled — white on --btn-disabled measures
+          // 1.30:1 in light, which is not dim but GONE. See index.html.
+          color: ok ? "var(--text-on-accent)" : "var(--btn-disabled-ink)",
           boxShadow: ok ? "var(--shadow-btn-solid)" : "none"
-        }}
+        })}
       >
         {assignLabel}
       </button>

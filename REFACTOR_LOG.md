@@ -10689,3 +10689,3798 @@ became `addEventListener`, matching the boot watchdog and its CSP reasoning;
 failures; and `csp.test.js`'s dist comparison no longer silently skips.
 
 **355 tests.**
+
+---
+
+## v17.10.2 — the one-line class, from the seven-pass review
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** copy and accessible-name changes only. No persisted-data
+change, no Firebase console step, no visual change.
+**Verification:** see each entry.
+
+The first of the versions staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`). Everything here is high value per unit
+of risk and needed no decision: nothing changes what the app *does*, only what it
+is *called* — by a screen reader, and by the person reading a dialog.
+
+The review's one structural finding is worth restating before the entries,
+because it explains why a version of one-liners was worth cutting at all. Quality
+in this app is bimodal along a single line: *did anyone ever see it fail*. What a
+sighted user meets measures excellently — six font sizes rendered, all six on the
+scale; one backdrop-blur of an allowed four; a 12.5:1 focus ring. What a screen
+reader meets was close to absent — zero landmarks, zero live regions, zero named
+form fields, zero keyboard-reachable bookings. That is not carelessness. Every
+rule in `CLAUDE.md` was earned by an *observed* failure, and an accessibility
+defect produces no incident, so it never entered the loop that produced all the
+other rules.
+
+### Commit 1 — every form field in the app was unnamed
+
+**Files:** `src/components/atoms.jsx`, `BookingFormModal.jsx`, `WalkinForm.jsx`,
+`BlockModal.jsx`, `ReminderEditor.jsx`, `SearchPanel.jsx`, `Settings.jsx`,
+`LayoutSettings.jsx`, `CustomersSettings.jsx`, `LoginScreen.jsx`, `src/App.jsx`.
+**Behavioural change:** no visual change; every control gains an accessible name.
+
+`Fld` rendered a real `<label>`, and then rendered the control as its **sibling**.
+Implicit association requires the control *inside* the label, and there was no
+`htmlFor`/`id` pair — so the atom produced markup that looks perfectly labelled
+and names nothing. Measured live in the booking form: **9 labels, 0 associated,
+7 of 7 fields unnamed.** WCAG 1.3.1 / 3.3.2 / 4.1.2, and corroborated by two
+independent passes (it is also why the design-system audit scored `Fld` 4/10 —
+the one atom in the file that is functionally incomplete).
+
+**The fix is two shapes, because half of these fields are not a single control.**
+Where there is one control, `children` is a **function** called with a generated
+`useId()`; the call site puts that id on its input and the label carries
+`htmlFor`. Where the field is a stepper pair, a chip row or a list of times,
+`children` stays elements and the wrapper becomes a `role="group"` named by the
+label instead.
+
+`htmlFor` is deliberately **not** rendered on the group path. A `for` aimed at an
+id that is not in the tree is a dangling reference, and the app already has the
+precedent for refusing that trade: `Overlay` resolves its own `aria-labelledby`
+from the DOM rather than taking it as a prop, on the grounds that pointing at a
+missing id leaves a dialog **nameless** — strictly worse than not trying.
+
+Nine controls live outside `Fld` and were named individually: the date navigator's
+date picker, both search boxes, Settings' `GsTextField` (whose label was a styled
+`<div>` — now a real `<label>`), LayoutSettings' rename / new-table boxes and its
+two priority selects, and the login screen's email and password. **A placeholder
+is not a name**: it disappears exactly when the field has content, which is when
+someone is most likely to need it. Each reminder time row gets its own index.
+
+The `*` on a required field is `aria-hidden` — a screen reader announcing "star"
+is noise — and the control says it properly, with `aria-required`.
+
+**Verified live** against the seeded service day: booking form **7/7 named**
+(both composite fields exposed as named groups), walk-in **2/2**, **0** dangling
+`for` references anywhere, and the name-autocomplete dropdown still opens on
+typing with the input keeping DOM focus (the v17.10.0 reopen fix, which this
+commit restructures the JSX around). Build, lint 0 errors, 355 tests,
+`check:style` OK.
+
+### Commit 2 — "Cancel" was the dismiss button, in an app where Cancel is a status
+
+**Files:** `src/App.jsx`, `BookingFormModal.jsx`, `WalkinForm.jsx`,
+`BlockModal.jsx`, `ManualModal.jsx`, `ReminderEditor.jsx`.
+**Behavioural change:** wording and one button colour; no logic.
+
+The **Delete booking?** dialog's dismiss read `Cancel` and wore the RED
+`BTN.cancel`. One tap away, on the same card, `Cancel booking` performs a
+destructive domain action — and that dialog's dismiss already read `Back` in
+slate, correctly. So the same word meant both "abort this dialog" and "cancel
+the reservation" on adjacent surfaces, and the delete footer rendered as two red
+buttons.
+
+CLAUDE.md already reasons about exactly this, at the colour level: *"`BTN.cancel`
+is RED — in this app 'cancel' means cancel the BOOKING… do NOT reach for it as a
+generic dialog 'go back'."* The rule was applied to the token and missed on the
+word.
+
+**The review measured the two dialogs; the grep found five more.** v17.8.0 fixed
+`BookingFormModal`'s footer and wrote the comment explaining why — and left
+`ManualModal`, `BlockModal` (×2), `WalkinForm` and `ReminderEditor` on the red
+`BTN.cancel`, four of them also labelled "Cancel". That is this repo's own
+recorded lesson recurring: *fixing one copy of a literal does not fix the
+literal.* All are now `--app-btn-slate`, the documented neutral dialog secondary,
+and every surface-dismissing control in the app says **Back**.
+
+`BTN.cancel` is left with exactly one user — `WaitlistPanel`'s two-tap Remove —
+which is genuinely destructive, so the token now means what CLAUDE.md says it
+means. The one control still labelled "Cancel" is `LayoutSettings`' inline table
+rename, and that is deliberate: **"Back" dismisses a surface, "Cancel" abandons
+an inline edit.** You are not going back anywhere when you abandon a rename, and
+there is no booking in sight in the Layout tab.
+
+**And the permanence clause is only true of one of them.** The review asked for
+"this can't be undone" on both destructive dialogs. Delete gets it — there are no
+backups on the free plan. Cancel does **not**: a cancelled booking stays on the
+day and v17.6.0's edit form can walk it back to pending, so claiming permanence
+there would be a new copy defect in place of the old one. It states what actually
+happens instead: *"The booking stays on the day, marked cancelled."*
+
+### Commit 3 — the Customers rule was stale in two places, from one root cause
+
+**Files:** `src/components/CustomersSettings.jsx`, `CLAUDE.md`.
+**Behavioural change:** copy only.
+
+Shipped empty state: *"No customers yet — bookings with a phone number appear
+here."* True before v17.10.0; not true after. `customerIndex` keys on
+`identityKey`, so a phone-less guest who has been **joined** from the name
+suggestions is a customer with `phone: ""` — and the tab's own explanatory
+paragraph two lines away already said so correctly.
+
+The same stale rule had also been left in `CLAUDE.md`, which asserted **both**
+that a joined guest *is* a customer in Settings → Customers (the `customers.js`
+file-structure line) and that joined phone-less guests *do not appear* there. The
+code settles it — `const key = phone || alias[b.guestId] || b.guestId` — and the
+second statement described the design as it stood before v17.10.0's
+`/code-review` alias fix. Two independent passes found the two halves separately;
+they are one defect.
+
+Worth naming, because the file is the app's single source of truth: **a source of
+truth that contradicts itself is worse than one that is merely incomplete**, since
+either half can be cited. The surviving paragraph now also keeps the part that is
+still true and load-bearing — consumers must handle `rawPhone: ""`.
+
+### Commit 4 — "5 no-show, unidentified"
+
+**File:** `src/components/CustomersSettings.jsx`. **Behavioural change:** copy only.
+
+The fourth totals tile was grammatically adrift and did not say what it counted.
+It counts **bookings** — `!identityKey(b) && isNoShow(b)` — which is a different
+unit from the tile beside it ("customers *with a no-show*"), so the label has to
+carry that difference. "no-shows with no phone" says both the count and the reason
+those rows are not in the list below it. CLAUDE.md already described the tile in
+almost these words; the screen had never been updated to match.
+
+### Commit 5 — one user-facing noun for the thing the app talks to
+
+**Files:** `src/App.jsx`, `ConnectionStatus.jsx`, `AppBanners.jsx`,
+`StatusToasts.jsx`, `usePersistence.js`, `useWaitlist.js`, `useReminders.jsx`,
+`useRecurring.js`. **Behavioural change:** copy only.
+
+Staff were told about **"Firebase"** and **"the Realtime Database"** — products
+they have no reason to know — and the same thing was named three ways, sometimes
+two of them on one screen:
+
+- "Connected to Firebase" · "Connecting to Firebase…" · "Firebase connected — N
+  bookings loaded." · "Firebase connection lost"
+- "Realtime Database is connected." · "Establishing the first connection to the
+  Realtime Database…" · "Lost connection to the Realtime Database…"
+- "Can't reach the database…" · "Refused to write: Firebase not yet connected."
+
+All of it is **"the server"** now. Patryk chose the noun over the alternative of
+making the sentence about the app ("Connected", "Connection lost"), on the
+grounds that a noun says *what* is failing — useful when the wifi is the usual
+suspect.
+
+**"Firebase" stays in the console**, where it is the correct and genuinely useful
+name: `usePersistence`'s reconnect-backoff log still says so, and every
+`Firebase-shared (settings/…)` source comment is untouched. The distinction is
+audience, not vocabulary hygiene.
+
+Three comments in `StatusToasts.jsx` *quoted* the old strings and were updated in
+the same commit — the v17.9.0 lesson that **copy describing a thing has to change
+when the thing does**, which the app has now been bitten by for glyphs and for
+prose.
+
+### Commit 6 — one spelling convention, in the four words staff read
+
+**Files:** `TimelineView.jsx`, `Shortcuts.jsx`, `Settings.jsx`,
+`LayoutSettings.jsx`, `PrefPickerModal.jsx`, `CustomersSettings.jsx`.
+**Behavioural change:** copy only.
+
+"**Optimizer**" (US) was the label on the timeline control and throughout
+Settings, while the dialogs said "re-**optimised**" (UK), the Customers tab said
+"recogni**s**ed" (UK) and "anonymi**z**ed" (US) — in the same sentence. British is
+already the majority in the app's prose, so it is British everywhere:
+Optimiser · re-optimised · recognised · anonymised.
+
+**Scope is strictly the words on screen.** Every identifier is untouched —
+`autoOptimizer`, `onSaveOptimizer`, `useOptimizerSettings`, the `settings/optimizer`
+node — and so is the persisted `anonymized: true` booking flag, which is a data
+field in the sanitize whitelist and renaming it would be a migration, not a copy
+change. Source comments about that code keep the code's spelling.
+
+### Commit 7 — `clampStep` lived twice, and the copy said so
+
+**Files:** `src/lib/clamp.js` (new), `useBookingDefaults.js`,
+`useGeneralSettings.js`, `tests/clamp.test.js` (new).
+**Behavioural change:** none.
+
+`useBookingDefaults.js` and `useGeneralSettings.js` each defined the same
+function, same signature, same body. What makes it worth moving rather than
+tolerating is the second copy's comment:
+
+> `// NaN check AFTER the round (see useBookingDefaults for the why).`
+
+The code already knew it was a copy and **pointed at the original instead of
+importing it** — the same condition as "a literal duplicate of a token is a token
+that cannot be fixed", one level up the stack. A third settings hook would have
+made a third copy.
+
+The ordering that comment protects is real and easy to tidy wrongly: a
+non-numeric `n` makes `Number(n)` NaN, which survives `Math.round(n / step) *
+step` — so the finite check has to run AFTER the round, or NaN escapes through
+`Math.max`/`Math.min` and a stepper renders "NaN min" and writes it back.
+
+**The test found something the move did not.** `Number(null)` and `Number("")`
+are both `0`, which is finite — so those do **not** take the fallback, they clamp
+to `min`. Shipped behaviour since v16.1.0, unchanged here, and unreachable from
+Firebase (RTDB cannot store null; writing null deletes the key, so an absent
+field arrives as `undefined` and correctly takes the default). It is pinned in
+`tests/clamp.test.js` so the next person to "fix" the guard sees the distinction
+before they move it. **368 tests.**
+
+### Commit 8 — `isTyping`, the keyboard guard, in two places
+
+**Files:** `src/lib/keyboard.js` (new), `useKeyboardShortcuts.js`,
+`ManualModal.jsx`. **Behavioural change:** none.
+
+Both the global shortcut handler and `ManualModal`'s local S / C / Enter handling
+defined their own copy of "is focus inside something the user is typing into". One
+concern, two implementations — and the failure mode of a drift between them is the
+kind that costs a service: a key correctly ignored while typing on one surface and
+silently swallowing a keystroke on the other.
+
+The shared version records the one thing about it that looks like a mistake:
+`SELECT` is in the list even though you do not type into a dropdown. A `<select>`
+handles its own letter keys for type-ahead, so treating it as a text field is what
+stops the app's single-letter shortcuts from stealing them.
+
+**Verified live**: `l` still switches to List; `/` then typing `tp` puts "tp" in
+the search box and does **not** switch to Timeline or Plan behind it.
+
+### Commit 10 — an infinite render loop, shipped since v15.6.1
+
+**Files:** `src/App.jsx`, `src/lib/booking-logic.js`, `tests/booking-logic.test.js`.
+**Behavioural change:** yes — the app stops re-rendering forever on a date that
+holds an unresolvable table clash. **Not a review finding: found while verifying
+one.**
+
+Reloading the app on the review's seeded service day filled the console with
+
+> `Maximum update depth exceeded.`
+
+**and it reproduced identically at v17.10.1**, so it was not something this
+version introduced. It has been shipping since **v15.6.1**.
+
+**The mechanism.** The post-sync reconciliation effect collects dates that fail
+`verifyClean` and resolves them. Its optimizer branch assigned
+`bookingsAfterAction(...)` unconditionally — and `bookingsAfterAction` returns a
+**new array whether or not the pass changed anything**. `setBookings` therefore
+saw a new reference, the effect's `bookings` dep changed, and it ran again.
+Forever.
+
+That is only a loop if some date can never be cleaned, and one can: **two
+`_locked` bookings on one table.** `applyOpt` copies a locked booking's tables
+through verbatim (`booking-logic.js:491`, `:523`), so no reshuffle separates
+them. It is reachable by ordinary use — every walk-in is `_manual:true
+_locked:true` by definition and every drag-drop path sets `_locked:true` — which
+is the same reachability argument the review made about the clash being
+*invisible*. It is worse than invisible: it spins the tablet's CPU during
+service, and the interface looks perfectly normal while it does.
+
+The effect's own comment asserted the opposite — *"Self-stabilising: optimiser/
+relocate output is clean → next pass is a no-op (also breaks any Firebase echo
+loop)"* — which holds for every case except the one the sibling branch has an
+explicit escape for (`if(!movable.length) break; // only locked overlaps — leave
+as-is`). **The manual branch survived only by accident**: it breaks with `next`
+still `=== prev`, and React bails out of identical state. The optimizer branch
+had no such luck.
+
+**The fix makes that bail-out explicit rather than lucky.** A new pure
+`tableAssignSig(list, date)` — every booking's id paired with its sorted tables,
+sorted — lets the branch ask whether the pass actually moved anything, and keep
+the ORIGINAL reference when it did not. `changed` (and so the "Resolved a table
+conflict after syncing." toast, which was also re-firing) now means what it says.
+
+**Verified live**, same fixture that produced it: 0 `Maximum update depth` errors
+across view switches, and **0 DOM mutations in 4 seconds of idle** — where a
+spinning effect is in the thousands. Ten new tests pin both halves: the signature
+comparison, and the property it detects (an all-locked clash survives
+`bookingsAfterAction` with an identical signature but a **different array
+reference**). **378 tests.**
+
+**Why seven review passes missed it:** every one of them measured the rendered
+DOM, and the DOM is correct. Nothing on screen is wrong. The defect is only
+visible in the console — which is also how the bimodal-quality thesis at the top
+of this entry predicts it: nobody *saw* it fail.
+
+### Commit 11 — `weekdayOf` returned a number in one file and a name in another
+
+**File:** `src/components/DaySheet.jsx`. **Behavioural change:** none.
+
+`constants.js` exports `weekdayOf(dateStr)` returning **0–6**. `DaySheet.jsx`
+defined its own `weekdayOf(dateStr)` returning the weekday **name**.
+
+This is **not** a duplicate — the review checked, expecting one — and that makes
+it worse than a duplicate. Two functions, one name, incompatible return types,
+one of them exported from the shared module. Someone importing `weekdayOf` into
+`DaySheet` to "remove the copy" would silently print `3 · 2026-08-19` at the top
+of the day sheet the kitchen works from, and nothing would fail. `weekdayName`
+says what it returns.
+
+### Commit 12 — the notification strip clipped its own focus ring
+
+**File:** `src/components/NotificationStrip.jsx`. **Behavioural change:** none
+visible; a keyboard-focused lid now shows its full ring.
+
+The strip's lid had **1px** of room inside its nearest `overflow` ancestor; the
+focus ring needs **4** (2px offset + 2px width). Exactly the clipping trap
+CLAUDE.md documents for the hover lift, recurring at a new site — and this is the
+one app here that is explicitly keyboard-driven.
+
+The `overflow: hidden` was on the strip's own pane and was only ever protecting
+its rounded corners from the lid's full-bleed hover tint, so **the child takes a
+radius and the parent stops clipping**. The lid's bottom corners go square while
+the body is open — it is then the top of a taller surface, not the whole of it.
+Nothing else in the pane needs a clip: the body's rows are transparent with
+hairline separators, and `Reveal` already manages its own overflow while it
+animates.
+
+**It was clipping something the review did not report, too.** Every button in the
+expanded body — Book, Reassign, each ✕ — sits inside that same pane, so their
+hover lifts were being clipped by it as well. Measured after the change: the lid
+has **13px** of room above (was 1) and the Book button 55px, against 4 needed for
+the ring and 1.4 for the lift.
+
+### Commit 13 — the `@canvas` exemption list had drifted 17 → 26
+
+**File:** `CLAUDE.md`. **Behavioural change:** none — documentation.
+
+CLAUDE.md listed "the 17 genuine exceptions". The code carries **26**. Ten were
+added without the documented list being updated, and each may be individually
+justified — the marker is at its site, which was the point — but *an exemption
+list that drifts is how a rule quietly stops meaning anything*. The refreshed
+entry names all 26 by group rather than giving a bare number, so the next drift
+is visible as a category that is missing rather than as an integer nobody can
+check.
+
+**One correction to the finding, which the count itself demonstrates.** The
+review reported 27 from a plain grep. The 27th hit is `constants.js`'s own
+*prose about* the marker, not an exemption — so the rule for checking this is
+written down with the number: grep for the marker **on a line that also carries
+an exempted property**. Counting the documentation as an instance of the thing it
+documents is how the figure drifts back in the other direction.
+
+### Commit 15 — /code-review fixes: the loop guard was narrower than the pass
+
+**Files:** `src/lib/booking-logic.js`, `src/App.jsx`, `tests/booking-logic.test.js`,
+`CLAUDE.md`. **Behavioural change:** the reconciliation effect no longer discards
+non-table updates on a dirty date.
+
+The review found the commit-10 guard wrong in two ways that share one fix.
+
+**It compared table assignment alone, and the pass changes more than that.**
+`bookingsAfterAction` runs `syncLiveDurations` first — which extends a seated
+party's `duration`/`customDur` — and `applyOpt` writes `_conflict` on every
+booking for the date. On a date that stays dirty, which is exactly the
+all-locked clash the guard exists for, both of those read as "no change" and
+were **thrown away**. A guard may not be narrower than the thing it gates.
+
+`dayBookingsSig(list, date)` replaces `tableAssignSig` and reuses **`undoKey`'s**
+field set — the same fields undo already trusts to decide whether a booking
+changed. That is the reuse the first version missed: `undoKey`/`UNDO_FIELDS`
+was sitting twenty lines away, and using it would have made the narrowing
+impossible.
+
+**Its separators were reachable from the data.** `undoKey` joined fields with
+`|` and arrays with `+`, and `idOk` (`LayoutSettings.jsx:79`) rejects only the
+empty string and `|` — so a venue naming a joined table **`1+2`** made
+`["1+2"]` and `["1","2"]` the same key, and `notes` is free text that can carry
+either. A collision reads as "nothing changed": for the new guard it discards a
+real reshuffle, and **for undo, which has used this key since v17.4.0, it means
+a snapshot is never taken.** Both now use ASCII control characters (unit /
+record / group / file), which no text field in the app can produce. The key is
+only ever compared — never stored, never displayed.
+
+**The widened signature caught a bad fixture on its first run**, which is the
+argument for widening it. `clash()` omitted `_conflict`, so `applyOpt` moved it
+`undefined → false` and the test saw a change the real app cannot: `sanitize`
+coerces `_conflict: !!b._conflict` and every booking reaches state through
+`sanitizeAll`. The fixture trap CLAUDE.md records for `ALL_TABLES`, one field
+along — **build fixtures to what `sanitize` guarantees, or the test measures the
+fixture instead of the code.**
+
+Five new tests pin what the narrow version missed: a duration extension with no
+table move, a `_conflict` flip, a status change, per-write metadata still
+correctly ignored, and both separator collisions. **383 tests.**
+
+Also from the review: `src/lib/clamp.js` and `src/lib/keyboard.js` were added to
+CLAUDE.md's file-structure block, and `dayBookingsSig` to the `booking-logic.js`
+entry — the file's own header requires it ("When a change adds a feature or makes
+a decision, record it here"), and a shared helper that is not in the block is a
+helper the next session writes a third copy of.
+
+### Commit 16 — `Fld` owns `aria-required`, instead of trusting the call site
+
+**Files:** `src/components/atoms.jsx`, `src/components/BookingFormModal.jsx`.
+**Behavioural change:** none visible.
+
+Commit 1 made the required `*` `aria-hidden` — a screen reader announcing "star"
+is noise — and left the real signal to the call site: *"Where a field is
+genuinely required the CONTROL says so, via `aria-required`."* That is a
+convention with nothing enforcing it, and **one of twenty call sites** actually
+did it. The next `<Fld req>` would have got a visible asterisk that assistive
+technology cannot see and no `aria-required` at all, i.e. a required field that
+reads as **optional** — a fresh instance of the exact defect this version exists
+to fix.
+
+The atom already hands the function-shaped call site an id; it now hands it the
+required attributes the same way (`children(id, reqAttrs)`), so the call site
+spreads them rather than remembering them. Verified live: the name field still
+reports `aria-required` on a form where every field is named.
+
+Three findings from the same review are deferred to ROADMAP rather than squeezed
+into a patch version: making `bookingsAfterAction` return its input array on a
+no-op (the deep fix for the loop class, but it changes a function **39 call
+sites** depend on), `dayBookingsSig`'s double scan, and the strip lid's 1px
+radius.
+
+---
+
+## v17.11.0 — what staff hit during service
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** see each entry. No persisted-data change and no Firebase
+console step for any of them.
+**Verification:** see each entry.
+
+The second version staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`). v17.10.2 took the findings that needed
+no decision; this one takes the findings that show up *during service*, on the
+three views a host is actually looking at while parties arrive.
+
+One of them is different in kind from everything else in the review, and it is
+worth saying why before the entries. Almost every finding in all seven passes is
+an OMISSION — a name a screen reader cannot hear, a state with no text
+alternative, a control that keyboard focus cannot reach. The double-booking is
+not an omission. The app detects the clash correctly, decides correctly that it
+cannot resolve it, and then **draws it as something that is not true**: two
+parties promised one table render as two tidy consecutive sittings, because the
+later block paints over the earlier one and nothing says so. That is the only
+place in this app where the interface asserts something false, which is why it
+leads the version.
+
+### 1/n · Draw the double-booking
+
+**Files:** `src/lib/booking-logic.js`, `src/components/ClashBanner.jsx` (new),
+`src/components/Icons.jsx`, `src/components/TimelineView.jsx`, `src/App.jsx`,
+`index.html`, `tests/booking-logic.test.js`
+**Behavioural change:** a same-table clash on the viewed day now draws a red
+border and a marker on both blocks, a stripe across the contested minutes, and a
+`Double-booked` section in the notification strip. Detection logic is unchanged —
+`findClashes` is `findConflicts`' own pair-scan with the pairing kept.
+
+**The gap.** `overlapWarnings` (App.jsx) is an OVERSTAY detector: it iterates
+`seated` bookings and warns when one runs into the next booking's slot. Two
+*confirmed* bookings on one table never reach it. `findConflicts`, which does see
+them, had exactly one consumer since v15.6.1 — the post-sync reconciliation
+effect, which relocates the newest NON-LOCKED booking and then stops:
+`if(!movable.length) break; // only locked overlaps — leave as-is`. So an
+all-locked clash was detected, deliberately left alone, and never shown to
+anybody. `_conflict` is never set `true` anywhere in `src/`; it is only cleared
+or read.
+
+It is reachable by completely ordinary use — every walk-in is `_manual:true
+_locked:true` by definition, and every drag-drop path sets `_locked:true`.
+Measured live on the seeded review day: the two blocks sat on one row and
+overlapped by 288px, the later painting over the earlier.
+
+**`findClashes`.** The pairs behind `findConflicts`: who clashes with whom, on
+which tables, over which minutes. The id set was enough for the reconciler, which
+picks one booking out of it and does not care what it collided with; a block that
+must say "double-booked with Rita Camps on table 3" and a strip row that is
+*about a pair* can recover neither from `["p","r"]`. `findConflicts` is now
+derived from it — one loop instead of two, and its existing tests are what prove
+the contract did not move. `verifyClean` deliberately keeps its own copy: it
+short-circuits at the first clash and runs over every active date on every
+settled snapshot, so building a pair list it would throw away is a real cost.
+
+Unbuffered, like the two functions whose loop it replaces — turning the
+turnaround setting on must never make an already-booked day start reporting
+clashes (the v17.6.0 scope rule).
+
+`tables` is the INTERSECTION, and the tests pin the case where it is **empty**:
+`canAssign` also rejects a pair when each booking takes two or more tables from
+the same join cluster, since they would need the same physical join, and those
+two sets need not intersect. Unreachable in the default layout by pigeonhole —
+its biggest cluster is three tables and two 2-subsets of a 3-set always share a
+member — but a join group of FOUR is a legitimate Settings → Layout edit. Callers
+must handle it: "both on table N" is otherwise a sentence with no N in it, and
+`ClashBanner` says "tables that cannot both be joined" instead.
+
+**Three surfaces, one source.** The block marker, the stripe and the strip
+section all read the same `findClashes` output, so they cannot disagree about
+what is clashing.
+
+- **The block** takes a 3px danger-red border, outranking both the overstay
+  warning and the late timer — those are predictions, this is the schedule
+  already being wrong. It reuses the overstay's red rather than adding a sixth
+  block-border colour; the two are told apart by the marker and the stripe, not
+  by hue, because making the border the distinguishing signal is the
+  colour-only-status mistake this release exists to fix.
+- **The marker** is part of the block's FIXED width cost, not a rail flag, so it
+  can never be dropped. `block-layout.js`'s ladder sheds informational flags
+  first and exception flags last; a double-booking is not on that scale at all.
+  A seated block starts a few pixels wide and grows, so anything droppable is
+  invisible for the first stretch of every visit — which for this marker would
+  mean it disappears exactly while a host is deciding where to seat the party
+  who just walked in. `chipRoomFor` gained the same term, so the day-wide
+  start-time-chip rule still knows what a block really costs.
+- **`ClashBand`** is a 5px stripe across the minutes both bookings claim, and it
+  is the one part that carries information the border cannot: it runs from the
+  later booking's start to the EARLIER one's end, so its right-hand edge is the
+  exact minute the earlier booking finishes — the fact the later block is
+  painting over. Verified live: it ends at Pau's right edge, 72px short of
+  Rita's, on a pair where Pau is otherwise invisible past 20:30.
+
+**The stripe was a full-height hatch first, and that was wrong.** At 0.55 opacity
+across the row it marked the span correctly and sat directly on the later
+booking's name and start-time chip — "20:30 Rita Ca…" behind diagonal stripes. A
+marker that obscures the label it is warning about has traded one unreadable
+block for another, which is this whole change's own complaint. No opacity fixes
+it: anything faint enough to read through is too faint to be the alarm. It moved
+to a stripe inside the block, low enough to clear the vertically-centred label
+and high enough to clear the block's own border — that second gap is the point,
+since the border is also danger red and a stripe flush against it just read as a
+thicker border. The row's own gutter (5px, from the blocks' `top: 3` /
+`ROW_H - 8` inset) was tried and is not enough to separate them.
+
+**`ClashIcon`** — two overlapping rounded squares. It could NOT reuse
+`OverlapIcon`, even though that icon's own comment ("two blocks sharing a span,
+which is literally the fault") describes a clash at least as well as the overstay
+it was drawn for: the strip lists an icon + count PER SECTION in its collapsed
+tally, so two sections wearing one mark would render "⧉2 ⧉1" and say nothing. An
+icon there is an identity, not a decoration. The two marks split along what the
+sections mean — offset bars are a TIME fault, overlapping squares an ASSIGNMENT
+fault.
+
+Chosen by rasterising six candidates at the 14px it ships at and magnifying, per
+the `DepositIcon` lesson. **Four failed there and would all have looked fine at
+24**: two arrowheads facing each other merged into a pair of plus signs; a
+bar-with-dots merged into one blob; two chevrons facing made a BOWTIE, which at
+14px is `WaitIcon`'s hourglass — the mark of the waitlist section, sitting in the
+same tally row; and two bars on one baseline read as a single long bar with holes
+punched in it, a domino rather than a collision.
+
+**The banner's action is Assign, not Reassign**, and copying `OverlapBanner`'s
+row would have shipped a button that can only ever fail. `reassignBooking`
+refuses a locked booking outright — and a clash that survived the reconciler is
+locked BY DEFINITION, since being locked is the exact condition under which the
+reconciler leaves it. The row opens the manual assign modal instead. It offers
+the LATER booking: both are equally "wrong", but the earlier party may already be
+at the table, and the reconciler's own tie-break (newest first) points the same
+way, so the automatic path and the manual one propose the same move rather than
+fighting over it.
+
+**Scoped to the VIEWED date**, unlike late/overlap/waitlist which are today-only.
+This is the one section whose rows correspond 1:1 to markers drawn on the view
+you are looking at, and whose action operates on that day. A clash section about
+today, sitting under a date navigator showing next Tuesday, beside blocks
+carrying no marker, would be three different days in one glance.
+
+The dismissal Set is keyed by PAIR (`clashRowId`), not by booking, so dismissing
+"Pau vs Rita" does not also silence "Rita vs a third party". The block marker
+reads the UNFILTERED pairs — dismissing a strip row quiets the row; it does not
+make the double-booking stop being true.
+
+**Two traps hit while building it, both recorded at their sites.**
+`clashRowId`'s separator is an ASCII control character for the reason `undoKey`
+learned in v17.10.2 (a separator reachable from the data is a collision waiting
+to happen; `"_"` and `"-"` are already spoken for by recurring occurrence ids) —
+but written as the `\u001f` ESCAPE and never as the raw byte, which is invisible
+in every editor, grep and diff. And it lives in `booking-logic.js` rather than in
+`ClashBanner`, because a component file that also exports a plain function trips
+`react-refresh/only-export-components`, a lint ERROR and a hard CI gate — the
+trap `Icons.jsx`'s `StatusIcon` note already records, walked into anyway. It
+belongs there on the merits too: the id of a clash is a property of the clash,
+not of the banner listing it.
+
+**Verification:** build ✓ · 387 tests ✓ (4 new on `findClashes`, incl. the
+empty-intersection case under a custom 4-table join group) · lint 0 errors ·
+`check:style` OK. Live on the seeded fixture in **both themes**: both blocks
+measured at `3px rgb(220, 38, 38)`, the stripe measured spanning exactly
+`ritaLeft → pauRight`, the strip section rendering "Pau Estévez (20:00) and Rita
+Camps (20:30) are both on table 3." with Assign and dismiss. Console clean; 3 DOM
+mutations in 5s idle (the 15s clock tick), i.e. no render loop.
+
+### 2/n · `StatusIcon` on the timeline block
+
+**Files:** `src/components/TimelineView.jsx`
+**Behavioural change:** every timeline block now carries its status as a mark as
+well as a fill, and the status reaches the accessibility tree. The legend chips
+carry the same mark.
+
+A block's status was `BLOCK_BG[b.status]` and nothing else — no text, no mark. A
+WCAG **1.4.1** failure (use of colour), found independently by three of the
+review's seven passes, and the legend at the bottom of the view does not answer
+it: a legend is a lookup rather than an in-context indicator, and it does nothing
+at all for a screen reader. `StatusIcon` shipped in v17.10.0 for exactly this
+reason and went onto buttons only.
+
+It also closes the consistency gap the design-critique pass named: List states
+the status in a solid badge ("Seated", "Confirmed"), Plan uses occupancy fills,
+and Timeline said it in colour alone — three views, three languages for the app's
+most important attribute. `STATUS_LABEL` here is the LIST CARD's vocabulary
+rather than a new one, so the mark's accessible name and the badge agree.
+
+**It leads the rail, and it is not a flag.** The flags say what is unusual about
+a booking; this says what the booking IS. It is fixed width cost rather than a
+`railFlags` entry, for the same reason as the clash marker: a seated block is
+drawn at its LIVE duration, so it starts a few pixels wide and grows, and a
+droppable status mark would be missing from every block for the first stretch of
+every visit — while the party is being seated, which is when the status just
+changed. `role="img"` + `aria-label` come free from `BlockFlag`.
+
+**The clash marker moved to the END of the marker run in the same commit.**
+v17.9.0's rail order is facts first and exception states last (deposit,
+preferred, then locked / repeat-no-show / overstaying). 1/n put the clash marker
+at the head because it is the most severe; with the status mark taking the lead
+position on its own merits, following the established order costs nothing and
+keeps one rule instead of two.
+
+**The width cost is real and was checked rather than assumed.** Every block now
+reserves an extra 18px, which also enters `chipRoomFor`, so the day-wide
+start-time-chip threshold rises from 162px to 180px. At the restaurant's real
+13:00–22:00 hours a block averages 192px, so chips stay on; at the DEV
+06:00–01:00 they average 96px and were already off — which is the legibility
+cliff 5/n is about, not something this adds.
+
+**Verification:** build ✓ · lint 0 · `check:style` OK. Live: blocks measured
+carrying `aria-label` "Confirmed" / "Pending — awaiting confirmation" /
+"Completed", and the two clashing blocks carrying both their status label and
+"Double-booked with …". Legend measured with 5 of 5 status chips rendering an
+icon. Console clean.
+
+### 3/n · Share the empty-day prompt with Timeline and Plan
+
+**Files:** `src/components/EmptyDay.jsx` (new), `src/components/ListView.jsx`,
+`src/components/TimelineView.jsx`, `src/components/PlanView.jsx`, `src/App.jsx`
+**Behavioural change:** an empty day now prompts in all three views instead of
+one. A CLOSED empty day stops prompting at all — including in List, where it
+previously offered two buttons the app refuses.
+
+v17.8.0 wrote a proper empty state for List and it never left. Timeline drew an
+empty grid, Plan drew an empty room: the same condition answered three ways, one
+of them useful.
+
+**The shared thing is the prompt and its position, not "blank the view".** One
+rule for all three — the prompt sits at the top of the view's content. In List
+that IS the whole body, because a list of nothing has nothing else to draw, so
+List's behaviour is byte-for-byte what v17.8.0 shipped. In Timeline and Plan it
+sits above a canvas that is still worth drawing: the grid and the floor plan are
+pictures of the ROOM, an empty room is exactly what you want to see on an empty
+day, and both carry affordances that have nothing to do with bookings (tapping a
+table label to block it, reading the layout). Replacing them would have taken
+those away to deliver a sentence.
+
+**The closed day is not this, and List had it wrong.** On a closed day List
+offered "New booking" and "Walk-in" and the app refuses both — a prompt whose
+only outcome is a refusal. `EmptyDay` renders nothing when `closed`, because the
+strip's own `Closed this day` section is the empty state for that case and has
+appeared above all three views since v17.8.0's strip audit. Verified live by
+closing Tuesday in DEV settings and restoring it after: the closed day shows the
+strip's notice and no prompt, in both List and Timeline.
+
+App computes `isViewToday` / `emptyWalkin` / `dayClosed` ONCE and passes them to
+all three, so the views cannot disagree about when a day is empty or what may be
+done with it. The walk-in rule is List's own, generalised: a walk-in is a party
+standing at the door now, so offering it on any day but today opens a form for
+the wrong date. `PlanView` keeps `emptyWalkin` as a SEPARATE prop from its
+existing `onWalkin` — that one is the per-table handler and is always present,
+and folding them together would have put a Walk-in button on next month's plan.
+
+**The TDZ gotcha, hit exactly as CLAUDE.md describes it.** The three consts were
+first declared next to `timelineEl`, the first element that reads them — but
+`planView` is built earlier in the same body, so it read them above their
+declaration. That is a ReferenceError which blanks the whole app behind a generic
+"An error occurred in `<BookingApp>`", and **both `npm run build` and lint passed
+on it**. Only loading the page catches this. They are declared above all three
+now, with the reason at the site.
+
+**Verification:** build ✓ · 387 tests ✓ · lint 0 · `check:style` OK. Live in DEV
+on an empty future day: the prompt renders in all three views, with Walk-in
+correctly withheld (not today) and New booking present; List unchanged; the
+closed-day case checked by toggling the setting and restoring it. Console clean.
+
+### 4/n · Bound the expanded notification strip
+
+**Files:** `src/components/NotificationStrip.jsx`
+**Behavioural change:** the expanded strip body is capped at 40vh and scrolls
+inside itself. Collapsed behaviour, the lid and the tally are untouched.
+
+v17.8.0's whole point was that the COLLAPSED height is one row however many
+notifications fire — "the cost of a bad evening stops scaling with how bad it
+is". Expanding was left unbounded, and measured live the expanded strip took
+**305px of an 860px viewport (35%) with only two of six sections up**. Six late
+bookings plus a waitlist would have pushed the timeline off the tablet again:
+the exact failure the strip was built to prevent, moved one tap away.
+
+**The cap goes on the BODY, never on the pane.** The lid is a sibling and must
+stay put — which is also what makes this work, because v17.8.0 had already
+decided the collapsed tally survives expansion "because the sections scroll and
+the lid doesn't". That sentence described an intent the code had not implemented;
+this is it. A reader halfway down a scrolled body still has a fixed icon+count
+summary above it.
+
+`Reveal`'s inner track goes `overflow: visible` once open and settled, so the cap
+belongs on a scroller INSIDE it rather than on the Reveal — otherwise the two
+would fight over the same property and the open/close ease would clip wrongly.
+
+**No `padding-inline` gutter, and that is a measurement rather than an
+oversight.** CLAUDE.md's rule is that a scroll container clips its children's
+hover lift and focus ring at the padding box, and `overflow-y: auto` makes the
+other axis clip too per spec. These rows already carry their own inset from
+`BannerRows`: measured live at **14px of right clearance against a 5.8px worst
+case** — 4% of the WIDEST control, a 145px "Assign &lt;name&gt;" button, not the
+36px ✕ it is tempting to size against — plus 4px for the focus ring. Noted at the
+site to re-measure if a wider control is ever added to a banner row.
+
+**Verification:** build ✓ · 387 tests ✓ · lint 0 · `check:style` OK. Proven with
+real content rather than by reading the CSS: 12 clashing bookings seeded into DEV
+on a scratch date produced a 12-row `Double-bookings` section measuring
+`scrollHeight` **635px** — 84% of the viewport — bounded to `clientHeight` 304px
+(40vh of 760) and scrolling, with the timeline still visible below. Clearances
+measured on the live nodes. Seed deleted afterwards; DEV left as found.
+
+### 5/n · Name the day, for the two strip sections that cross dates
+
+**Files:** `src/App.jsx`
+**Behavioural change:** while the viewed date is not today, the `Waitlist — table
+free` and `Reminder(s)` section titles gain " · today". Nothing else changes.
+
+The strip sits DIRECTLY under the date navigator, so a bare time in it reads as
+belonging to the day on screen. Measured in the review: viewing 15.09.2026, it
+advertised "Sofía Herrera · 2 pax — table free · **20:00**" — today's waitlist,
+and today's 20:00.
+
+**Date-scoping the strip was the other option and is the wrong one.** It would
+hide a live problem behind an unrelated navigation: someone browsing next Tuesday
+to take a booking still needs to know a reminder just fired. The sections keep
+their scope and say what it is.
+
+**Exactly TWO sections can be on screen while showing another day's business, and
+the first draft of this applied the suffix to four.** `lateMap` and
+`overlapWarnings` both `return EMPTY_OBJ` when `viewDate !== today`, so their
+sections cannot render off-today at all — a qualifier there is dead code that
+tells the next reader they can. Caught by trying it live and watching the
+Running-late section disappear on navigation rather than gain a suffix. The two
+that genuinely cross are `waitBannerEntries`, which explicitly falls back to
+today's waitlist when you navigate away, and the reminder banners, whose hook
+says outright they are "operational, not tied to the day being viewed".
+
+On the TITLE rather than on each row: one place per section, it covers rows
+carrying no time at all, and it survives collapse — where the lid shows the top
+section's own title. `Double-booked` takes no suffix because it IS scoped to the
+viewed date (4/n), and `AppBanners` takes none because offline / write-failed /
+load-failed are not about a day while `Closed this day` and the inefficiency
+notice are already about the viewed one.
+
+**Verification:** build ✓ · 387 tests ✓ · lint 0 · `check:style` OK. Reproduced
+the review's exact case in DEV — a waitlist entry for today, viewed from
+15.09.2026 — and read the rendered title back as "Waitlist — table free · today"
+above the row "Sofia Test · 2 pax — table free · 21:00"; then confirmed the
+suffix is absent on today. Both seeds deleted; DEV left as found.
+
+### 6/n · The opening timeline zoom follows the hours span
+
+**Files:** `src/lib/time-grid.js`, `src/App.jsx`, `tests/time-grid.test.js`
+**Behavioural change:** on a day whose OPEN→GRID_CLOSE span is longer than the
+reference 10 hours, the timeline opens zoomed in far enough to restore the
+reference density. A restaurant on the default 13:00–22:00 sees no change at all.
+
+A block's width is a fraction of the grid and the grid spans the day, so widening
+the day narrows every block, with nothing in between. Measured in the review: at
+the real 13:00–22:00 the average block is **192px**, 2 of 13 labels truncate and
+**8 of 13** show their start-time chip; at 06:00–01:00 it is **96px**, **10 of
+13** truncate and **none** shows a time. Settings permits open 6 through close
+25, so a restaurant reaches that through an entirely legitimate choice, and the
+view degrades to colour-and-position exactly when a long day means more bookings
+to tell apart.
+
+`spanZoom(gridMins, maxZoom)` lives in `time-grid.js` with the arithmetic tested,
+because it is a rule nobody can see by reading the render. `REFERENCE_GRID_MINS`
+is 600 — the MGT default day, 13:00 open through a 23:00 GRID_CLOSE — so the
+default configuration returns exactly 1× and is untouched by construction. It
+rounds to **0.5, the zoom control's own step**: a derived 1.83× would be a zoom
+the user cannot return to once they touch the buttons, which would make the reset
+control lie about what it resets to. It never returns below 1 (a short day is not
+a reason to shrink the app's baseline) and never above the device's `maxZoom`.
+
+**An effect, not the initial state, and the reasons are both real.** The hours
+arrive from the server after mount, so a lazy initializer would compute against
+the seeded default and never correct itself. And hours are PER WEEKDAY, so a
+Saturday closing at 01:00 needs a different answer from the Tuesday beside it.
+
+**It stops the moment the user touches the controls.** `setTimelineZoomManual`
+wraps every user-driven entry point — the +/- buttons, reset, Follow, the
+keyboard shortcuts — and sets `zoomTouchedRef`. The app choosing a starting zoom
+is help; the app re-choosing it under someone who has already zoomed is a fight
+they would lose on every date change. The `maxZoom` setting's own clamp
+deliberately does NOT count as a touch: it is a bound being applied, not a zoom
+being chosen. The effect returns the same value when it already matches, so it
+cannot re-enter — the v17.10.2 lesson about effects that write derived state.
+
+`defaultZoom` is a FLOOR, never a ceiling: a device set to open at 3× still opens
+at 3× on a short day and at max(3, span) on a long one. The setting says how
+close in you like to start; this says how much the day owes you.
+
+**Verification:** build ✓ · 393 tests ✓ (6 new on `spanZoom`) · lint 0 ·
+`check:style` OK. Live on DEV's 06:00–01:00 hours: the timeline opens at **2×**
+and **9 of 14 blocks show their start-time chip**, against the review's measured
+0 of 13 at 1×. Manual override checked end to end — zoomed to 1×, navigated to
+another date, zoom stayed 1×; reloaded, back to 2×.
+
+One test assertion in this commit was wrong before it was right, and the failure
+is the useful part: 760 minutes was written as rounding DOWN to 1×, and it rounds
+to 1.5× — 1.267 is nearer 1.5 than 1. The code was correct and the expectation
+was not, which is the only reason to write the arithmetic down in a test at all.
+
+### 7/n · A Timeline may not take a side-by-side pane that is too narrow for it
+
+**Files:** `src/App.jsx`, `src/components/SplitMenu.jsx`
+**Behavioural change:** on a shell narrower than ~2110px, Split View will not put
+the Timeline beside another view. `Side by side` is offered but refused with the
+reason; an existing split that becomes too narrow turns STACKED rather than being
+torn down. A stacked split is never affected, and neither is any split without a
+Timeline in it.
+
+The `winW < 600` gate has always said "a Timeline in a ~180px pane is unusable" —
+that reasoning is about the PANE and was only ever applied to the WINDOW.
+Measured live at 1280px in a 50/50 side-by-side split: the Timeline's own
+scroller is **371px against a 2896px grid, 13% of the service visible at once**.
+
+Scrolling a timeline is normal and is not the complaint. The complaint is that a
+half-width Timeline can show you the whole day OR readable blocks and never both,
+and the view exists to do both — "where does the evening stand" is the question
+it answers.
+
+**The threshold is derived, not chosen.** Measured on the live DOM, a pane loses
+~124px to the table-label column (58) and the card's padding and gutters before
+the grid starts. On the reference 10-hour day a 90-minute booking is 15% of the
+grid, and the block's own width budget says it needs 138px (`NAME_MIN` 55 +
+assign handle 41 + size ring 24 + 2/n's status mark 18) before the guest name
+renders at all. 138 / 0.15 = 920px of grid, + 124 = 1044 → `MIN_TL_PANE` 1050.
+One pure `tlPaneOk(appW, dir, ratio, tlPane)`, so the menu, the view switcher and
+the repair effect all ask the question the same way.
+
+**Three enforcement points, three different right answers.**
+- The MENU refuses, and says why. The option is shown disabled rather than
+  hidden: a control that vanishes teaches nothing, and the answer depends on a
+  setting the user can change — hence the pointer to Settings → App width. It is
+  refused at whichever step the Timeline actually appears (step 1 when it is the
+  view you opened the menu on, step 2 when it would be the partner).
+- A view-button TAP turns the split stacked instead of refusing. The user asked
+  for the Timeline; the orientation is the part that does not fit.
+- An existing split that becomes too narrow — window resized, divider dragged,
+  App width lowered — also turns stacked. The phone rule beside it collapses the
+  split entirely because a phone cannot host one at all; here the split is still
+  perfectly viable and only this orientation is not, so preserving the user's
+  intent is the better repair.
+
+The width the panes divide is `min(winW, appWidth)`, not the window: the app is
+clamped to the per-device App-width setting, so a 2400px window with a 1000px app
+width still gives 495px panes.
+
+**Verification:** build ✓ · 393 tests ✓ · lint 0 · `check:style` OK. Both
+directions checked live. At 1280px: a stored side-by-side Timeline+List split was
+repaired to `dir: "h"` on load (read back out of localStorage), the Timeline
+keeping full width; the menu rendered `Side by side` disabled with the
+explanation. At 2400px with the App width raised to match: both direction buttons
+enabled, no warning — so this is a real threshold and not a blanket ban. Settings
+restored afterwards.
+
+### 8/n · Split Settings → General into service rules and an App tab
+
+**Files:** `src/components/SettingsChrome.jsx`, `src/components/Settings.jsx`
+**Behavioural change:** a 6th Settings tab, **App**, holding the eight controls
+that make the app comfortable on your screen. General keeps the restaurant's
+operating rules. No setting changed, moved node, or altered its meaning.
+
+Settings → General held **47 controls** against 12 in Layout, 25 in Reminders,
+10 in Customers and 6 in Shortcuts. It had become the tab for everything that was
+not obviously somewhere else: dark mode, hours, optimiser, shifts, duration
+tiers, late thresholds, turnaround, motion, gestures, nav lock, split view, zoom
+steppers, party-size defaults.
+
+**The split is by AUDIENCE, not by count**, which is why the line falls where it
+does. The App tab is read by whoever is holding the device, usually once, to make
+the app comfortable on their screen. General is the RESTAURANT'S rules — when it
+opens, how long a booking runs, when the optimiser stops — set by whoever runs
+the place and shared with everyone. Two different people, two different
+occasions, and until now one scroll.
+
+The moved JSX is the ex-General block VERBATIM, **including the intro line**,
+which belongs with it: "Settings follow your account on every device, except
+where noted" is a statement about exactly those controls, and the two marked
+"This device only" are the exceptions it names. Left behind it would have been a
+rule with nothing left to govern.
+
+`SETTINGS_TABS` is still the ONE list — the TabBar renders it and App's ←/→ nav
+derives its cycle from it, so adding the tab in one place was the whole wiring.
+Verified live by cycling the arrows through all six. Ordered General · Layout ·
+Customers · Reminders · **App** · Shortcuts: what the restaurant IS, then what it
+HOLDS, then how you look at it, then reference.
+
+**Two things the split exposed, both fixed here.** The v14.2.0 dark-mode comment
+stayed behind in General, describing a control that was no longer under it —
+re-homed above the row it documents. And **twelve** sections carried "Shared
+across all devices." in their subtitle; with the tab now entirely restaurant-wide
+that is the rule rather than the exception, so it is stated once at the top and
+removed from all twelve. That is v17.8.0's own lesson applied to the other half
+of the same split — it deleted five copies of "Follows your account on every
+device" for burying the only fact a reader needs, and left the converse in place
+because it was, at the time, the exception. A rule repeated on every row is
+wallpaper.
+
+**Naming is the one easily-changed decision here.** "App" was chosen over
+"Device" (five of the eight follow the ACCOUNT since v17.6.0, not the device),
+over "Preferences" (already a Collapsible inside General) and over renaming
+General to "Service" (which would move Opening hours, the most-visited setting in
+the app, away from where staff already look).
+
+**Verification:** build ✓ · 393 tests ✓ · lint 0 · `check:style` OK. Live: the
+App tab renders all eight controls under the moved intro line; General measured
+with **no** personal controls and its service sections intact; the six tabs fit
+one row at 900px; arrow-key cycling reaches the new tab. Console clean, app
+serving 17.11.0.
+
+### 10–13/n · `/code-review` fixes
+
+**Files:** `index.html`, `src/components/TimelineView.jsx`, `src/App.jsx`,
+`src/components/NotificationStrip.jsx`, `tests/contrast.test.js`
+**Behavioural change:** the double-booked band is legible on every block fill;
+a dismissed clash re-arms when it recurs; the timeline stops re-rendering on
+every keystroke; the strip cap is measured against the real viewport.
+
+The review returned 12 findings. Patryk took the five substantive ones; the
+other seven (efficiency and naming cleanups) went to ROADMAP.
+
+**1 · The clash band did not contrast with the blocks it is drawn on.** Measured
+against the fills it actually paints on, the red bar is **1.02–1.63:1** across
+the four statuses in both themes — invisible on a seated block, 1.34 on a
+confirmed one. It is the ONE part of the treatment carrying information the
+border cannot (its right edge is the minute the painted-over booking really
+ends), so the feature's unique contribution was the part you could not see.
+
+**The token's own comment is what hid it.** It claimed the bar "sits in the 6px
+strip below the blocks where nothing competes with it" — describing the FIRST
+attempt, not the shipped `bottom: 7` geometry inside the block. That false claim
+is what justified shipping one opaque colour with no contrast check. Exactly the
+`SIZE_RING` lesson one element along: a marker given a single colour, documented
+as sitting somewhere safe, never measured against what it really sits on.
+
+The red keeps the meaning and a near-black **casing** carries the boundary, which
+is how a marker over a variable fill is normally done. It clears WCAG 1.4.11's
+3:1 on every block fill in both themes (min **3.48**, dark/completed). Guarded in
+`contrast.test.js` in its own block, for the two `SIZE_RING` reasons: `measure()`
+takes a fill/ink pair and there is no ink here, and **the registry's coverage
+guard matches `--tl-.*(pill|badge)`, so it structurally cannot see a
+`--tl-clash-*` token** — that blind spot, which the guard documents about itself,
+is why the band shipped unmeasured. A second assertion pins the core as still
+red, so collapsing the pair to one flat neutral (which would pass the casing
+test alone) does not go unnoticed.
+
+**2 · `setZoom` was defeating TimelineView's `React.memo`.** 6/n replaced a React
+state setter — stable across renders forever — with `setTimelineZoomManual`, a
+plain function declared in BookingApp's body, i.e. a new identity every render.
+CLAUDE.md's rule is explicit: function props on the memoized views must be App's
+stable `VA` wrappers, never inline closures. Every other one already was. The
+booking-form draft lives in BookingApp, so this re-ran the timeline's entire
+block layout on every keystroke — the exact failure recorded for `liveBookings`.
+Now `VA.onSetZoom`, stable by construction.
+
+**3 · A dismissed clash never re-armed.** The other two dismissal Sets get away
+with never pruning because their conditions are monotonic within a day: a late
+booking stays late. A double-booking is the opposite — it is the one
+notification whose whole point is that you go and FIX it, so it clears, and it
+can recur on the same pair. Until then the strip row, the only surface carrying
+the Assign action, never came back for that pair for the rest of the session
+while the block markers said the clash was live. `clashDismissed` is now pruned
+to the live pair ids, and only when the set actually shrinks, so it cannot
+re-enter.
+
+**4 · The strip cap used `vh` where the shell uses `dvh`.** The shell is `100dvh`
+in every branch; on a device with a dynamic browser toolbar `100vh` is the LARGER
+viewport, so a `40vh` cap is ~45–50% of what is on screen — loosest on exactly
+the tablets it exists to protect.
+
+**Verification:** build ✓ · **404 tests** ✓ (11 new on the band's casing) · lint
+0 · `check:style` OK. Live: casing measured at min 3.48:1 with the band clearing
+the label by 1.5px and the block border by 1px; zoom still 2× → minus → 1.5×
+surviving a date change; the dismiss → resolve → recur cycle driven through DEV
+end to end, with the section returning on recurrence; `40dvh` measured at 145px
+of a 363px viewport, still bounding 635px of content. All seeded test bookings
+deleted, DEV verified clean.
+
+One test-methodology trap worth carrying: the first dismiss→recur run read as a
+pass for the wrong reason. PATCHing a booking with `baseUpdatedAt: 0` is rejected
+by the per-`$id` CAS rule on an UPDATE (0 is only valid on a create), so nothing
+moved and every step of the cycle looked identical. **Read the stored
+`updatedAt` first** — a rejected write and an unchanged UI are indistinguishable
+from the outside.
+
+
+---
+
+## v17.12.0 — reachable and announced
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** see each entry. No persisted-data change and no Firebase
+console step for any of them.
+**Verification:** see each entry.
+
+The third version staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`; `01-accessibility.md` is the source of
+truth for every measurement quoted below). v17.10.2 took the findings that needed
+no decision and v17.11.0 the ones staff hit during service. This one takes the
+half of the app that has never been measured at all.
+
+**The framing that decides how to read these entries.** Quality here is bimodal,
+and the split falls exactly along *did anyone ever see it fail*. Measured on the
+same build, in the same moment: 6 of 6 rendered font sizes on the type scale, 1
+backdrop-blur of an allowed 4, 0 craft-detector findings, a 12.5:1 focus ring, no
+horizontal scroll at 320px — and 0 landmarks, 0 headings above `h2`, 0 live
+regions, 0 form fields with an accessible name, 0 bookings reachable by keyboard
+in any of the three views.
+
+That is not carelessness, and reading it that way produces the wrong fix. Every
+rule in `CLAUDE.md` was earned by an **observed** failure: a tablet froze, a
+sleeping laptop overwrote a night of bookings, a stray `*/` silently deleted a
+CSS rule. The method is exceptional at turning a visible defect into a permanent
+rule. Accessibility defects are the ones nobody sees — they cause no incident, so
+they generate no lesson, so they never entered the file that governs everything
+else. The fix is therefore not "be more careful"; it is to ship these and then
+**mechanise the standard**, which is what v17.14.0 exists to do.
+
+**Order note.** `ROADMAP.md` had this version and the modal stack the other way
+round, on the reasoning that `inert`, focus management and Escape would become
+properties of a stack entry and be added once rather than to fifteen
+hand-maintained lists. Re-checked against the code before branching, that
+coupling is weaker than it reads: `Overlay` already owns `role="dialog"`,
+`aria-modal`, the focus trap and focus restore (all four verified as passes by
+the review itself), the Escape chain is already correct — the stack would make it
+*maintainable*, not *correct* — and `inert` needs exactly one boolean, which
+already exists. So the accessibility work does not actually wait on the refactor,
+and it is the group with users behind it. Patryk confirmed the swap; the modal
+stack keeps its rationale intact as v17.13.0. The one piece of it that *is*
+genuinely entangled — `anyModal`, hand-written as a 17-term expression twice in
+`useKeyboardShortcuts.js`, which `inert` would have made a third copy of — comes
+forward into this version rather than being added to and then cleaned up.
+
+### 1/n · Landmarks, and the app's one `<h1>`
+
+**Files:** `src/App.jsx`
+**Behavioural change:** none visible. Four `<div>`s become `<header>`, `<nav>`,
+`<main>` and an `<h1>`; no style, no class and no layout changes.
+
+**The finding (M1, M2).** `main`, `header`, `nav`, `footer`, `section` and every
+equivalent `role`: **0 of each**, app-wide. So there was no skip mechanism and no
+programmatic regions — reaching the timeline meant traversing all the header
+chrome, every time, on every day change. Separately the app defined only `<h2>`,
+nine of them, all inside modals: the Timeline, List and Plan screens contained
+**zero headings**, and "MGT Bookings" was a styled `<div>`.
+
+The mapping is the whole change:
+
+- the header row → `<header>` (`banner`), which is the title block, the view
+  switcher, Walk-in / + New / Find and the connection dot;
+- the date stepper group → `<nav aria-label="Date">`, scoped to the three
+  controls that actually navigate (previous day, next day, the date field) and
+  deliberately **not** the whole row — Today, the waitlist badge and the summary
+  panel share that row and are not navigation;
+- the scroll region → `<main>`, which is the notification strip plus the view,
+  i.e. everything that is not pinned chrome. This is the one that pays for the
+  finding: it is a single jump past every control above it;
+- the restaurant name → `<h1>`.
+
+**The one trap.** `index.html` has no heading reset, so a bare `<h1>` would have
+arrived with UA margins and a UA font size. It carries `margin: 0` beside its
+existing inline `fontSize`/`fontWeight` for exactly the reason `ModalTitle`'s
+`<h2>` does — same problem, same answer, and worth keeping the two spellings
+identical.
+
+**Deliberately not done here:** a visible skip link. Landmarks are the
+programmatic bypass and cost nothing visually; a skip link is new chrome that
+appears on focus, which is a design decision rather than a defect fix. Noted in
+`ROADMAP.md` instead.
+
+**Verification:** measured live in DEV after the change — `main` 1, `header` 1,
+`nav` 1, `h1` 1, `h1` computed `margin: 0px` at its unchanged 22px, header box
+identical at 16,16 708×40. Build ✓, 404 tests ✓.
+
+### 2/n · Live regions — the app says things out loud for the first time
+
+**Files:** `index.html`, `src/components/StatusToasts.jsx`,
+`src/components/NotificationStrip.jsx`, `src/App.jsx`
+**Behavioural change:** none visible. Transient toasts and changes to the
+notification set are now announced; the strip becomes a named landmark.
+
+**The finding (C4, and 4.1.3 Status Messages is Level AA).** **Zero**
+`aria-live`, `role="status"`, `role="alert"` or `<output>` anywhere in `src/`, on
+any screen, in any modal — in an app that is *built around* a notification
+architecture: the strip, nine priority toast slots, Late / Overlap / WaitAvail /
+Clash rows, offline and write-error banners, "Booking saved", the undo pill. A
+screen-reader user received none of it.
+
+**The two surfaces needed opposite treatments, and the reason is the pitfall
+that kills most live regions.** A live region has to already BE in the DOM when
+its content changes; if the region and its first message arrive together, the
+insertion is not announced.
+
+- **`StatusToasts` gets `role="status"` on its container** and works
+  immediately, because that container has been **always-mounted since v15.8.0** —
+  for a completely unrelated reason (each `Toast` self-manages its
+  out-animation, so the container must outlive it). The layer's one-slot model
+  also happens to match `role="status"`'s implicit `aria-atomic`: what is read is
+  whatever is in the slot.
+- **`NotificationStrip` has the opposite shape.** It is mounted only while
+  `notifSections` is non-empty, so it arrives *with* its first message every
+  time — a live region inside it would announce nothing. So the strip itself is
+  **`role="region" aria-label="Notifications"`** (persistent content, a landmark
+  to jump to) and the announcement is a composed sentence carried by an
+  always-mounted hidden region in `App`.
+
+**Why the announcement is composed rather than borrowed from the lid.** Two
+things rule the lid out, and both are consequences of decisions that are right on
+their own terms. Every mark in the strip is `aria-hidden` — correct, they are
+decorative — so the collapsed tally reads as bare numbers: *"Notifications 2 1"*.
+And with several sections the lid deliberately says the generic word, so going
+from one section to two would announce *"Notifications"*, which is **less than it
+knew before**. `notifAnnounce` is built from the same `title`/`count` the strip
+renders, so the two cannot drift, and it changes only when the notification set
+does. One section reads *"Notification: Double-booked."*; several read
+*"3 notifications: Double-booked; Running late, 2; Waitlist — table free."*
+
+**Why the pane is not itself live:** dismissing one row would re-read all of
+them. Persistent content is a region; the CHANGE is the message.
+
+**New utility, `.mgt-sr-only`** (`index.html`) — visually hidden, present to
+assistive technology. Not `display:none` and not `visibility:hidden`; both remove
+the node from the accessibility tree, which is the one thing it must not do. It
+is deliberately **not** in `tests/stylesheet.test.js`'s `CRITICAL_SELECTORS`:
+that list's entry criterion is "does the rule fail SILENTLY when missing", and
+this one fails by printing a stray sentence across the top of the view.
+
+**Verification:** measured live in DEV on the seeded 2026-08-19 fixture — live
+regions 0 → 2; the hidden region computed `position:absolute`, `1×1`,
+`clip-path: inset(50%)`, `overflow:hidden`, reading *"Notification:
+Double-booked."*; strip exposes `region`/"Notifications"; screenshot confirms
+nothing visible changed. Build ✓, 404 tests ✓, lint 0 errors, `check:style` OK.
+
+### 3/n · Validation errors are announced, and attached to the field that caused them
+
+**Files:** `src/components/atoms.jsx`, `src/components/BookingFormModal.jsx`,
+`src/components/WalkinForm.jsx`, `src/App.jsx`
+**Behavioural change:** none visible. A save error is now announced, and the
+offending control carries `aria-invalid` pointing at the message.
+
+**The finding (C4's other half, plus 3.3.1).** Clicking Save on an empty booking
+form rendered "Customer name is required." — good, specific copy — with
+`role="alert"`, `aria-live`, `aria-invalid`, `aria-errormessage` and
+`aria-describedby` **all absent**, measured 0 of each. Nothing was spoken, and
+the invalid field was not marked. The review's own closing note on this: *the
+wiring is missing, not the writing.*
+
+**The alert region is always mounted.** An alert announces a change to its
+CONTENT, so a region that arrives already holding its first message is the same
+pitfall entry 2/n is about. `errorEl` is now an unconditional `<div
+role="alert">` whose child appears when there is an error — an empty div is a
+block box with no content, padding or margin, so it costs nothing in the footer
+fragment. Assertive rather than polite is right here: this fires in response to
+pressing Save, and the user is waiting on exactly this answer.
+
+**Attaching it to a field needed one new piece of state, and it is deliberately
+a sibling rather than a reshaped `error`.** `error` is read as a string at a
+dozen sites and passed to two components; which field it is about is additive
+information. `errorField` is set only inside `doSave`'s validation — five
+branches, three fields (`name`, `date`, `time`; the closed-day and outside-hours
+errors are about the date and the time respectively) — and **cleared at
+`doSave`'s entry**, so the form-level errors further down (capacity,
+displacement, "could not assign a table") leave it null without needing to say
+so. There is no field to point at for those, and claiming one would be worse
+than claiming none.
+
+**`Fld` carries it through the channel `req` already opened.** The atom's second
+callback argument grew from "the required attrs" to "the state attrs", so a call
+site that already spreads it gained validity for free and one that does not is
+untouched. Date and Time now spread it; Customer name already did.
+
+**The ordering inside `Fld` is the load-bearing part.** `aria-describedby` is
+emitted only alongside `aria-invalid`, and both only when the caller says the
+field is invalid — which in this form means the message is on screen, since
+`invalidField()` gates on `error` being truthy as well as on the name matching.
+A `describedby` aimed at an id that is not in the tree is a dangling reference,
+the exact failure `Overlay` refuses when it resolves its own accessible name
+from the DOM rather than taking a prop. Better no description than a broken one.
+
+`WalkinForm` gets the always-mounted alert wrapper and **no field marking** —
+its errors are all form-level (capacity, no table available), so there is
+nothing to point at.
+
+**Verification:** driven live in DEV. Before any error, the dialog already
+contained 1 `role="alert"` and 0 invalid fields — i.e. the region pre-exists its
+content, which is the property that makes it announce. Save with an empty name:
+alert reads "Customer name is required.", the name input carries
+`aria-invalid="true"` + `aria-describedby="mgt-form-error"`, and that id
+resolves to an element holding that exact text. Save with a name but no time:
+**exactly one** field invalid, and it is Time — so the discrimination is real
+and not "mark everything". Build ✓, 404 tests ✓, lint 0 errors, `check:style` OK.
+
+One process note: a booking was accidentally written to DEV during this
+verification, because a hot reload had reset `viewDate` to today between
+navigating to the fixture day and opening the form, so the draft's default date
+was not the one being looked at. Deleted through the app's own delete path and
+re-verified — 0 cards, 0 dialogs, nothing matching the test name anywhere in the
+document. The second test case was then chosen to be one that **cannot** save
+(an empty time), which is the right way to probe a validation path.
+
+### 4/n · The List's selection becomes real focus, and its cards become a list
+
+**Files:** `src/components/ListView.jsx`
+**Behavioural change:** ↑/↓ now moves DOM focus as well as the selection ring;
+Enter or Space on a focused card opens the edit form (matching the card's click
+and the existing `E` shortcut). One card is in the tab order at a time. Nothing
+moves on screen that did not move before.
+
+**The finding (C2, and List's half of C1) — and half of it was already good.**
+↑/↓ *did* move a selection and it *was* clearly drawn (a 3px accent ring,
+verified walking Marco Silva → Familia Delgado → Elena Prats). But
+`document.activeElement` stayed on `BODY` throughout, with no
+`aria-activedescendant` and no list semantics anywhere. So a sighted keyboard
+user was well served and a screen-reader user was told **nothing at all**: no
+focus moved, so nothing was announced. The pattern was 90% built.
+
+**Real focus, not `aria-activedescendant`.** The roadmap entry named the latter,
+but it is the wrong half of the pair here: `aria-activedescendant` requires a
+container that holds DOM focus and publishes which descendant is active, and
+this app's arrow keys are served by a **global window listener** that works with
+nothing focused at all. Moving actual focus fits the existing model exactly, needs
+no container to own anything, and is strictly more informative — the card is
+announced by the platform, with no ARIA relationship to keep in sync.
+
+**`role="listitem"`, and NOT `role="button"`.** This is the design decision in
+the entry. A button's children are **presentational** in ARIA, so labelling the
+card a button would hide Assign, the four status changers and Delete from
+assistive technology — trading one unreachable card for six unreachable
+controls, which is worse than the defect. `role="grid"`/`row` is the pattern
+built for rows-containing-controls, and it was the first choice, but a grid's
+children must be rows and the "Completed & cancelled" `Collapsible` sits between
+these cards and breaks that structure. So the card is a list item that happens to
+be focusable and operable, inside two real `role="list"` containers (two, because
+a list must contain its items directly and the finished cards live inside the
+Collapsible).
+
+**The accessible name is composed, not left to the DOM.** Read as raw text the
+card is a run of times, tags and button labels. It now announces
+*"Pau Estévez, 20:00, 4 guests, table 3, confirmed"* — the decision-shaped
+sentence. The status word is `b.status` itself, the same string `SBadge` prints
+two lines below, so spoken and printed vocabulary cannot drift.
+
+**One tab stop, not seventy.** Ten bookings × ~6 controls each would otherwise
+sit between the top of the list and anything after it, so the cards use a roving
+tab stop: the selected card holds it, or the first card when nothing is selected,
+so the list is always enterable. A closed fold is not a hazard — `Reveal`
+unmounts its children, so a finished card can never be an invisible tab stop.
+
+**Enter/Space is guarded by `e.target === e.currentTarget`**, which is the
+keyboard equivalent of the `stopped()` wrapper every control in this card already
+goes through. Without it, Enter on Assign would fire Assign *and* open the edit
+form — the exact failure mode v17.10.0 recorded when it made the card clickable.
+
+**A bug found in this change, worth recording because it is a documented lesson
+recurring.** Focus was first scheduled inside the same `requestAnimationFrame`
+as the scroll — and **rAF does not fire while a tab is hidden or occluded**,
+which CLAUDE.md already records from the Preview pane. The symptom was precise
+and confusing: the scroll worked (it also runs on 120/300/550/850ms timers) and
+the focus never did, on identical input. Focus is now attempted **synchronously**
+in the effect — the element exists by the time an effect runs — with one 120ms
+retry for a card still mounting behind a `SlideView` day change, and a `focused`
+flag so the scroll's repeat schedule cannot yank focus back four more times.
+**Anything gated on rAF needs a non-rAF path**, and "it works when I watch it" is
+exactly how this hides.
+
+**Verification:** driven live in DEV against the 12-booking 2026-08-19 fixture.
+`role="list"` "Bookings" with 8 items; **exactly 1** card in the tab order;
+labels composing correctly ("Grupo Ferrer, 19:00, 5 guests, table 1A and 1B,
+confirmed"). Two ↑/↓ presses: `document.activeElement` becomes the card `<div>`
+and tracks the selection (Jordi Lloret → Grupo Ferrer). Enter on the focused card
+opens **"Edit booking"** with that booking loaded. Enter on the nested Assign
+button opens **no** dialog, proving the guard. Screenshot confirms the 3px
+selection ring and centred scroll are unchanged. Build ✓, 404 tests ✓, lint 0
+errors, `check:style` OK.
+
+### 5/n · Timeline blocks and waitlist ghosts become real buttons
+
+**Files:** `src/components/TimelineView.jsx`
+**Behavioural change:** every block and ghost is now in the tab order and
+activates on Enter or Space. Nothing moves on screen.
+
+**The finding (C1, Timeline).** All 13 booking blocks and all 4 waitlist ghosts
+were `<div>` with `cursor: pointer`, `tabIndex -1` and no `role`. Measured, the
+tab order held **21 chrome controls and not one booking** — in the one app here
+that is explicitly keyboard-driven.
+
+**`role="button"` IS right here, unlike on the List card**, and the difference is
+worth stating because it is the same question with the opposite answer. ARIA
+makes a button's children presentational; the List card would have lost six real
+controls to that rule, but a timeline block is a **leaf** — its flags are
+decorative spans, and their meaning is folded into the accessible name instead.
+Nothing is lost.
+
+**The name carries the two states v17.11.0 made visible**, because they are the
+whole reason a host looks at a block twice: *"Pau Estévez, 20:00, 4 guests, table
+3, confirmed, double-booked"*. Colour, a border and a stripe say that to a
+sighted user; nothing said it at all otherwise. Overstaying and running-late are
+in there for the same reason. The waitlist ghost leads with **"Waiting:"** —
+dimming and a ⏳ are the only things separating it from a real booking, and
+neither survives being read aloud.
+
+**Enter and Space route through `handleClick`**, so they inherit its `didLong`
+guard for free and cannot fire the edit form on the tail of a press-and-hold.
+
+**This also closes finding m2 exactly as the review predicted it would.**
+`index.html`'s `button, [role="button"] { user-select: none }` matched nothing in
+the app, and the review's note was: *"if C1 is fixed by adding `role="button"` to
+blocks, this rule starts applying — which is what you'd want."* It does, and it
+is: measured `user-select: none` on the blocks now, which is correct for a
+surface whose label is not text anyone wants to select and which opens a popup
+under a finger that is still pressed.
+
+**Verification:** live in DEV — 14 blocks, all `role="button"`, all tabbable,
+labels composing correctly, and **both** halves of the seeded clash announcing
+"double-booked". Enter on a focused block opens "Edit booking" with that booking
+loaded. Focus-ring room measured against the nearest clipping ancestor (the
+horizontal scroller, `overflow: auto hidden`): 35px above, far more below,
+against the 4px the ring needs; horizontally the scroller scrolls rather than
+clips and carries the Fix-3 8px padding. Build ✓, 404 tests ✓, lint 0 errors.
+
+### 6/n · The floor plan becomes reachable — and needs its own focus ring
+
+**Files:** `src/components/FloorGlyphs.jsx`, `src/components/PlanView.jsx`,
+`index.html`, `src/App.jsx`, `tests/stylesheet.test.js`
+**Behavioural change:** every table on the Plan is now in the tab order, named,
+and activates on Enter or Space. A keyboard-focused table draws the app's focus
+ring; a tapped one does not.
+
+**The finding (C1, Plan).** 27 floor-plan shapes carried `cursor: pointer`, the
+`<svg>` had `tabIndex -1`, and there were **0** focusable descendants. The floor
+plan was pointer-only in its entirety.
+
+**Operability is gated on `onClick`, not on the existing `live` flag.** The
+editor passes `onPointerDown` to DRAG a table, and a drag has no keyboard
+equivalent to offer — announcing a button that does nothing on Enter is worse
+than staying silent. `live` (which is either handler) still governs the hover
+halo, where it is the right condition.
+
+**The name comes from the caller**, because the glyph knows a table id and a
+rectangle while only `PlanView` knows whether the table is free, blocked or
+holding a party — and on this view the FILL *is* the state, so without it a
+screen-reader user meets a room of identical "Table 5A" buttons. It describes the
+table at the SELECTED time, exactly like the fill it mirrors:
+*"Table 3, Pau Estévez, 20:00, 4 guests, confirmed"*.
+
+**Then the focus ring, which is the part worth reading.** Making something
+focusable without a visible focus indicator trades one WCAG failure for another,
+and SVG broke the app's single focus rule in **two** independent ways. Both were
+measured live; neither is inferable from the source:
+
+1. **A browser paints no `outline` on a `<g>`.** An inline
+   `outline: 2px solid #fff` on the group rendered nothing at all; the identical
+   declaration on its `<rect>` child rendered a clean ring. So the ring goes on
+   `.mgt-glyph-shape` — which is also where it belongs, on the table's
+   silhouette rather than around its chairs and label, and riding the rotation of
+   a rotated table because it is drawn in the shape's own coordinate space.
+2. **`:focus-visible` never matches an SVG element in Chrome.** Two consecutive
+   *real* Tab presses left the focused `<g>` matching `:focus` and **not**
+   `:focus-visible`, with `document.querySelectorAll(":focus-visible")` empty. A
+   rule keyed on it would never have fired — the worst kind of fix, one that
+   reads correctly in the source and does nothing on screen.
+
+Plain `:focus` was the obvious fallback and is wrong: a real mouse click **does**
+focus the group (verified), so every table tap during service would leave a white
+ring behind it. Hence **`data-kbd`**, a two-line `:focus-visible` stand-in — set
+on `Tab`/arrow keydown, cleared on `pointerdown`, both in the capture phase, and
+deliberately narrow (typing a letter into a field is not a request for focus
+rings). It lives in `App.jsx` rather than the boot script because that script is
+**pinned by a CSP hash**, and two lines there would silently kill it in
+production if the hash were not regenerated.
+
+`[data-kbd] .mgt-glyph:focus` is added to `tests/stylesheet.test.js`'s
+`CRITICAL_SELECTORS`: a missing focus ring is precisely that list's entry
+criterion — it fails silently, with no error and no visual hole.
+
+**Verification:** live in DEV. 13 tables, all `role="button"`, all `tabindex="0"`,
+all named; scrubbing the tape to 20:00 produced the occupied labels
+("Table 1A, Grupo Ferrer, 19:00, 5 guests, confirmed" ×2 for the joined pair,
+"Table 6, Nuria Bosch, 19:30, 2 guests, pending"), matching the fills in the same
+screenshot. A **real** Tab press set `data-kbd="1"` and put
+`outline: rgb(255,255,255) solid 2px` at `2px` offset on the focused shape —
+confirmed visually. A **real** click then cleared `data-kbd` and left **0**
+outlined shapes while the table still held DOM focus, which is exactly
+`:focus-visible`'s contract. Enter on a focused table opened that table's own
+popover ("Table 5A · No bookings on this table today · Walk-in here"). Build ✓,
+405 tests ✓ (1 new), lint 0 errors, `check:style` OK.
+
+### 7/n · `inert` behind a modal — and the one `anyModal` it needed
+
+**Files:** `src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`
+**Behavioural change:** while any modal is open, the header, the date-nav row and
+`<main>` are `inert` — unreachable by pointer, tab and screen-reader browse mode
+alike. Nothing changes visually.
+
+**The finding (M6).** With the booking form open there were 16 focusables inside
+it and **21 still outside**, `body` had no `aria-hidden` and `#root` no `inert`.
+The Tab trap was already correct (verified with a real key press — Tab from
+"Save booking" wrapped back inside), but a screen reader in **browse mode** does
+not use Tab: it walks the document, and the entire page behind the dialog was
+still there to be walked.
+
+**`inert` goes on three siblings, not one wrapper.** The modals render inline in
+`BookingApp`'s tree as siblings of `<main>` inside the width-clamp div, so there
+is no single ancestor that contains the app and excludes the dialogs. Wrapping
+the three chrome regions in a new div would have been the obvious move and is the
+wrong one: in the `shellFixed` layout that div is a flex column whose children
+carry `flexShrink: 0` / `flex: 1`, and inserting a wrapper re-parents all three.
+Three attributes, no structural change.
+
+**The announcer had to move out of `<main>` first, and this is the trap in this
+commit.** `inert` removes a subtree from the **accessibility tree** as well as
+from the tab order — so the live region added in 2/n would have gone SILENT for
+exactly as long as any modal was open. The things it announces (a failed write,
+the connection dropping, a double-booking appearing) are precisely the ones a
+modal must not suppress. It is now a sibling after `</main>`.
+
+**One `anyModal`, brought forward from v17.13.0.** The same 17-term expression
+was written out **twice** inside `useKeyboardShortcuts`, and `inert` would have
+made it a third copy — three hand-maintained lists that every new modal has to be
+added to, with nothing to catch the omission but the bug. It is now computed once
+in `App`, beside the state it reads, and passed in the ctx. Coerced to a real
+boolean deliberately: half these states hold an object or an id, and `inert` is a
+boolean DOM attribute. When the modal stack lands this becomes
+`stack.length > 0` and every reader is already pointed at one place — which is
+why doing it now was better than adding to the mess and cleaning it up after.
+
+It is declared **above** the `useKeyboardShortcuts` call, and the comment there
+says why: the ctx object is built mid-render, and a `const` read before its
+declaration is a TDZ `ReferenceError` that blanks the whole app behind a generic
+message. That has now happened twice in this codebase (v17.5.0's `activeView`,
+v17.11.0's `isViewToday`), and neither lint nor `npm run build` catches it.
+
+**Verification:** live in DEV. No modal: nothing inert. Booking form open: header,
+date-nav and `<main>` all carry `inert`; the dialog is **not** inside an inert
+subtree and still holds 16 focusables; the announcer is **not** inert. A
+background header button was asked to take focus while the modal was open and
+**could not**. Escape closed the dialog and removed `inert` from all three
+regions. Build ✓, 405 tests ✓, lint 0 errors, `check:style` OK.
+
+### 8/n · The connection dot announces its popover — and m1 was already fixed
+
+**Files:** `src/components/ConnectionStatus.jsx`
+**Behavioural change:** none visible. The dot reports that it has a popup and
+whether it is open; the popover is a named dialog.
+
+**The finding (M7).** The dot opens a popover holding the connection status, the
+signed-in email, the device list, "Reconnect now" and **Log out** — and carried
+`aria-expanded: null` **before and after opening**, with no `aria-haspopup`. To
+assistive technology, the one control that can sign you out looked like a
+decorative dot. Its `aria-label` already tracked the connection state and still
+does; this adds the disclosure half.
+
+`role="dialog"` with a name, and deliberately **no `aria-modal` and no focus
+trap** — it is a non-modal popover that closes on outside-click and Escape, and
+claiming a modality it does not enforce would be the same class of lie `Overlay`
+refuses when it resolves its accessible name from the DOM rather than taking a
+prop. The role sits on a wrapper inside `Presence`, which forwards only
+`className` and `style`.
+
+**m1 was checked and needed no work, which is the point of checking.** The review
+measured the notification lid's focus ring with **1px** of room inside its
+nearest `overflow` ancestor where it needs 4 — but that was measured against
+**v17.10.1**, and v17.10.2 removed the `overflow: hidden` from the strip pane for
+exactly this reason. Re-measured live now: the nearest clipping ancestor is the
+`<main>` scroller, and the lid has **13px above and 32.5px on each side**. Fixing
+it again would have meant inventing a defect. **A finding is a measurement with a
+date on it** — anything from a review that predates a release has to be re-run
+before it is acted on.
+
+**m2 needed no work either**, and was closed by 5/n rather than by a change of
+its own: `[role="button"] { user-select: none }` matched nothing in the app until
+the timeline blocks took that role.
+
+**Verification:** live in DEV — `aria-expanded` reads `"false"` closed and
+`"true"` open, `aria-haspopup="dialog"` on the trigger, the popover exposes
+`role="dialog"` named "Connection and account" with `aria-modal` absent. Lid
+focus-ring clearance re-measured as above. Build ✓, 405 tests ✓, lint 0 errors,
+`check:style` OK.
+
+### 9/n · CLAUDE.md and ROADMAP for the accessibility group
+
+**Files:** `CLAUDE.md`, `ROADMAP.md`
+**Behavioural change:** none — documentation.
+
+`CLAUDE.md` gains an **Accessibility** section under the UI rules, carrying the
+seven decisions this version had to make and the reasoning that is not
+recoverable from the diff: a live region must pre-exist its content;
+`role="button"` makes its children presentational so it must never sit on a
+container of controls; announce a selection by moving real focus rather than with
+`aria-activedescendant`, because this app's arrow keys are a global listener;
+SVG breaks the focus rule twice; `inert` removes a subtree from the
+accessibility tree, not just the tab order; `aria-describedby` must never dangle;
+and anything gated on rAF needs a non-rAF path. Five of the seven cost a
+measurement to discover and none is visible in source. Five matching rows were
+added to the Gotchas table, the file-structure block notes the nine changed
+files, and the test count moved to 405.
+
+`ROADMAP.md` records the order change (this version and the modal stack swapped,
+with the reasoning and Patryk's confirmation), renumbers the stack to v17.13.0
+with a note that `anyModal` already landed, and opens a **Follow-up from
+v17.12.0** section with the three things deliberately left out: a visible skip
+link (landmarks are the bypass; a skip link is new chrome and therefore a design
+decision), an announcement for the day's own content, and `role="grid"` for List
+if the finished fold is ever restructured.
+
+**One closing note on method, since it recurred in three of the eight commits.**
+Every defect this version fixed was found by *measuring the live DOM*, and three
+of the fixes were themselves wrong on first attempt in ways that source review
+could not catch: focus scheduled inside a rAF that never fires in a hidden tab;
+a focus ring keyed on a pseudo-class that never matches SVG; and a live region
+that would have gone silent inside `inert`. **In accessibility the failure mode
+is silence**, and silence looks exactly like success in a diff.
+
+### 10/n · Fix: content is focusable by KEYBOARD, not by pointer
+
+**Files:** `src/components/FloorGlyphs.jsx`, `src/components/TimelineView.jsx`,
+`CLAUDE.md`
+**Behavioural change:** tapping a floor-plan table or a timeline block no longer
+scrolls the view. Reported by Patryk against 6/n with a screen recording.
+
+**The regression this version shipped, and the mechanism.** Making the bookings
+focusable is the whole point of 5/n and 6/n — but a browser focuses an element on
+**mousedown**, and *scrolling it into view is part of focusing*. So the element
+travels out from under the finger between press and release: the `click` lands
+somewhere else, and the popover or the edit form never opens. Measured live:
+
+| Surface | Scroll caused by pressing one item |
+|---|---|
+| Plan table | **40px** vertical |
+| Timeline block | **1000–2000px** horizontal |
+| List card | 297px vertical |
+
+The Plan is the acute case and the one reported: 40px is more than half a table,
+so the pointer can land on a different table or on nothing, and the view lurches
+under the hand on every tap.
+
+**The fix is `onMouseDown` → `preventDefault()`**, which is precise about what it
+suppresses: **only the focus** (plus native drag-start and text selection,
+neither of which applies to a shape whose label is already `user-select: none`).
+It does **not** cancel the `click`, and it does **not** touch pointer events —
+`pointerdown` has already fired by then, so PlanView's pan, its touch long-press,
+and TimelineView's 6px mouse-drag threshold are all untouched. Keyboard focus is
+completely unaffected: Tab still reaches every block and table and still draws the
+ring.
+
+**`ListView`'s card deliberately does not get this.** `preventDefault` on
+mousedown also kills text selection, and staff select the phone number off that
+card to ring a party — the behaviour `endsASelection` exists to protect. Its click
+opens a modal that covers the scroll, and being left scrolled to the card you just
+edited is reasonable rather than wrong.
+
+**Why the review and the whole verification pass missed it: a synthetic click is
+not a finger.** The Browser tool's mousedown and mouseup are back-to-back, so the
+focus-scroll lands *after* the click and everything looks correct — the same
+family of trap as v17.10.1's `:active` measurements. It needs the ~100ms gap of a
+real press. What finally isolated it was not clicking at all: calling `.focus()`
+on a table and reading `main.scrollTop` before and after.
+
+**Verification:** live in DEV, real clicks. Plan — table popover opens with
+`scrollTop` delta **0** (was 40) and focus stays where it was. Timeline — the edit
+form opens for the clicked block with a horizontal scroll delta of **0** across
+five blocks (was 1000–2000). Keyboard unchanged: a real Tab press still walks
+table to table with `data-kbd` set and the 2px ring on the shape. Build ✓, 405
+tests ✓, lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (11/n) — fix: `role="button"` armed a rule that had matched nothing
+
+**Files:** `index.html` (the two press-feedback rules), `tests/stylesheet.test.js`.
+
+Patryk, on the same screen recording: *"In Plan this jumping move still exists.
+The fix didn't resolve the problem."* He was right, and 10/n was treating a
+different defect that happened to share a symptom. The focus-scroll it fixed is
+real and measured — it just is not what the video shows.
+
+**What the video actually shows, frame by frame at 50ms.** At 3.40s the pointer
+presses table 2, sitting in its slot. At 3.50s table 2 is at the **top-left corner
+of the plan**, clipped by the room's edge. At 3.60s it is halfway back. At 3.80s
+it is home and the pointer has moved on, with no popover ever opened. One table
+moves; its neighbours do not; it travels to the plan **origin** and returns, over
+about the length of one `--t-tap`.
+
+That trajectory is a signature, and CLAUDE.md already names it — in the note that
+exists to explain why `.mgt-glyph` had to be invented:
+
+> `.mgt-hover-scale` cannot be used AT ALL. It sets a CSS `transform`, and a CSS
+> transform on an element REPLACES its `transform` presentation attribute — the
+> glyph's own `translate(x,y) rotate(r)` — so the table would teleport to the
+> plan's origin.
+
+**The door it came through was `role="button"`.** Commit 6/n gave `TableGlyph`'s
+`<g>` a button role so the floor plan could be reached by keyboard. `index.html`
+holds three rules keyed on `[role="button"]`, and until this version **all three
+matched nothing whatsoever** — the seven-pass review recorded exactly that as
+finding **m2**, and read it as harmless housekeeping that would come good:
+
+> if C1 is fixed by adding `role="button"` to blocks, this rule starts applying —
+> which is what you'd want.
+
+For a `<div>` block that is true. For an SVG `<g>` two of the three are the
+teleport. `[role="button"]:active { transform: scale(0.96) }` does not shrink a
+table; it deletes the table's position. `button, [role="button"] { transition:
+transform }` is what makes it *fly* rather than jump, in both directions.
+
+Measured directly, with the presentation attribute intact and one CSS declaration
+applied: a table at **(554, 243)** settles at **(313, 176)**, and its computed
+transform reads `matrix(0.96, 0, 0, 0.96, 0, 0)` — a bare scale, the
+`translate(70,250)` gone. That is the video.
+
+It also explains the second half of the report cleanly, and better than 10/n did:
+the click target leaves from under the pointer *during the press*, so `click`
+resolves on the parent and the day-queue popover never opens. Left-click stops
+working on the floor plan for as long as the rule is armed — which is to say,
+always.
+
+**The fix is `:not(.mgt-glyph)` on the two transform rules**, and it is written
+into the selectors rather than onto the element. `.mgt-nopress` was the tempting
+one-word alternative and is the wrong word: it means *"this control is inert;
+animating a press would be a lie about what the tap did"*, and a plan table is
+neither inert nor without feedback — it has the halo on hover and the brightness
+dim on press, which is the entire reason `.mgt-glyph` exists as a third
+affordance. Putting the exclusion beside the rules it disarms is also where the
+next person giving an SVG element a button role will be reading.
+
+`user-select: none` — the third `[role="button"]` rule — is deliberately left
+applying. Suppressing an OS text selection under a long press is wanted on a
+floor-plan table for precisely the reason v17.10.1 wanted it on a timeline block.
+
+**Nothing else regressed on the specificity change.** `[role="button"]:not(
+.mgt-glyph):active:not(.mgt-nopress)` is (0,4,0) where it was (0,3,0), which now
+*ties* `.mgt-hover-scale:active:not(:disabled):not(.mgt-nopress)` instead of
+losing to it — and the hover-lift rule is declared later, so it still wins and a
+lifted button still presses from 1.08 to 1.02. Timeline blocks and waitlist ghosts
+carry both classes and are unchanged in both pointer modes.
+
+**A new stylesheet guard, shaped like the two v17.10.1 ones.** Any rule whose
+prelude contains `[role="button"]` and whose body sets `transform` — or a
+`transition` naming it — must exclude `.mgt-glyph`. It is a **declaration**
+assertion for the same reason those were: `[role="button"]` already appears in
+several preludes, so a selector-matching list cannot see the `:not()` half being
+"simplified" away. 406 tests.
+
+**Verification, and one honest limitation.** Live in DEV with gestures ON — which
+matters, because the whole of 10/n's verification ran with **Plan zoom & pan
+switched off** on this device, and that is a second reason it looked clean. A real
+click on a table now holds the glyph at exactly `(576, 197)` across **45
+consecutive `requestAnimationFrame` samples** spanning the entire press and
+release, and the popover opens. The limitation: the negative control could not be
+run. Re-injecting the offending rule and clicking again produced *no* movement
+either — because, per CLAUDE.md's own gotcha, **synthetic input does not set the
+UA `:active` state**, and CDP's `dispatchMouseEvent` is explicitly named there as
+one of the things that cannot. So the causal chain is: the selector matched the
+glyph before and does not now (verified against the live CSSOM), and the
+declaration it applied moves the table along exactly the path the recording shows
+(measured). The recording is the negative control. Build ✓, 406 tests ✓, lint 0
+errors, `check:style` OK.
+
+---
+
+### v17.12.0 (12/n) — `/code-review`: the toast live region was inert behind every modal
+
+**Files:** `src/App.jsx`.
+
+`inert` was on `<main>`, and `<main>` also contains `StatusToasts` — the app's
+live region for transient status, and the one this version had just designated as
+such. `inert` removes a subtree from the **accessibility tree** as well as from
+the tab order, so for as long as any modal was open every toast went unannounced:
+the connection dropping, a write failing, "⟳ Syncing the latest data…". Those are
+precisely the events App's own comment says a modal must not suppress — the note
+explaining why `notifAnnounce` sits *outside* `</main>`. The same finding, one
+level down, in the same commit that wrote the rule.
+
+It was not only silent. The **Undo pill lives in that layer**, so arming an undo
+and then opening Settings left a visible, unclickable Undo — a working control
+that stopped working, on this branch.
+
+**The fix moves `inert` off `<main>` and onto the two CONTENT children**: the
+notification strip's wrapper, and a new wrapper around `SlideView`. `<main>` is
+now just the scroll region it always was. The reasoning is the same one that
+placed `notifAnnounce`: a floating status layer pinned *above* the dialog is not
+"the page behind the dialog", which is the only thing `inert` describes.
+
+The `SlideView` wrapper carries `flex:1; minHeight:0; display:flex;
+flexDirection:column` in the `shellFixed` layout and is load-bearing there rather
+than decorative — `SlideView`'s own `fill` resolves against its PARENT, so a plain
+block in between would collapse the definite-height chain and the panes would size
+to content.
+
+**Verified live, both halves.** With Settings open: `main` no longer inert, the
+toast layer **not** inert, and the strip, the timeline blocks and the header all
+inert — i.e. exactly the intended split. Layout unchanged: with the strip open the
+Reveal measures 98px, the strip 88px at y=150, and the toast layer anchors at
+y=248 — 150 + 98, the same relationship as before. An A/B against the unmodified
+file in the identical state returned identical geometry. Build ✓, 406 tests ✓,
+lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (13/n) — `/code-review`: the roving tab stop could name an unmounted card
+
+**Files:** `src/components/ListView.jsx`.
+
+`rovingId` was resolved against `day` — every booking on the date — but the cards
+that actually EXIST are `active`, plus `finished` only while the "Completed &
+cancelled" fold is open, because `Collapsible` wraps its body in a `Reveal` and
+`Reveal` unmounts once shut. Name an unmounted card and every rendered card keeps
+`tabIndex={-1}`, so the List has **no tab stop at all** — the exact opposite of
+the guarantee the line was written to provide.
+
+Two keystrokes away: select a card with ↑/↓, press **C** to complete it, and the
+selection follows it into the closed fold. And reachable with none at all on a day
+whose bookings are all completed or cancelled — a state `ROADMAP` already records
+as real, under the empty-day inconsistency.
+
+The comment was half right and that is what hid it: it correctly reasoned that a
+closed fold cannot leave an *invisible tab stop*, and then stopped, without asking
+what happens to the only tab stop there is.
+
+`reachable = showFinished ? day : active` is the whole fix. When every booking is
+finished and the fold is shut, `reachable` is legitimately empty and `rovingId` is
+null — correct, because there is no card to point at, and the fold's own header
+button is still in the tab order, so the list stays enterable.
+
+**Verified live**, on the seeded 2026-08-19 fixture (8 active, 5 finished): with a
+completed booking selected and the fold open, that card holds the stop; closing
+the fold moves it to the first active card. Before the fix the same sequence left
+zero cards at `tabIndex 0`. Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (14/n) — `/code-review`: `role="button"` on a container of controls
+
+**Files:** `src/components/TimelineView.jsx`.
+
+The timeline block carries an interactive child — the manual-assign handle — and
+commit 5/n put `role="button"` on the block. ARIA makes a button's children
+**presentational**, so that hid the one control inside it. It is the exact rule
+this same version wrote into `CLAUDE.md` after refusing to make the List card a
+button for the identical reason, broken two files away, and the code comment
+justifying it ("its flags are decorative spans, not buttons") was true of the
+flags and false of the handle four elements further down.
+
+**The role moved down one level**, onto a wrapper holding everything except the
+handle. The handle is now a sibling of that wrapper and a **real `<button>`** —
+it had been a bare `<span onClick>` with `title` as its only name, so it has never
+been reachable or even announced; moving the role off the block is what made
+fixing that possible rather than merely non-harmful.
+
+Splitting it is arithmetically free: the wrapper takes the `1 1 0%` the name group
+used to take against the handle, and the name group keeps that basis inside it, so
+the grow/shrink distribution is unchanged. The absolutely-positioned children (the
+status overlay, the note dog-ear) stay OUTSIDE the wrapper — they are painted
+against the block's own box and have nothing to do with its name.
+
+**One measured trap on the way.** A `<button>` resolves `min-width` against its
+BORDER box where a `<span>` resolves it against its content box, so the handle
+silently narrowed from **42px to 28** — a third off a tap target, invisible in
+review and invisible in a screenshot. `boxSizing: "content-box"` restores it.
+`box-sizing` is the one property a UA button stylesheet changes that a visual
+reset (`background/border/font/color`) does not cover.
+
+**Verified live** against a geometry snapshot taken before the change: 12 of 14
+blocks byte-identical in child offsets and widths, and the other two differ only
+in that their note dog-ear is now enumerated outside the wrapper — its own
+position is unchanged at (0,0) with the pencil at (1,1). Handle back at 42px on
+every block. Functionally: Enter on a block opens **Edit booking**; the Assign
+button opens **Manual table assignment** and does not also open the form
+(`stopPropagation` intact); a real mouse click on a block leaves `scrollLeft` at
+1700 and `activeElement` on BODY, then opens the form. Build ✓, 406 tests ✓,
+lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (15/n) — `/code-review`: the error-clearing effect never watched the name
+
+**Files:** `src/App.jsx`.
+
+The effect that drops a stale save error depended on `time`, `size`, `date`,
+`preference` and `customDur` — every field except the one the app's most common
+error is about. So "Customer name is required." stayed on screen while the user
+typed a perfectly good name.
+
+Survivable while it was only a banner. Not once 3/n turned it into an **assertion
+about the control**: the field then keeps `aria-invalid="true"` and an
+`aria-describedby` aimed at that message for the entire time it is being
+corrected — and this is the one field where *required* is the only thing that can
+be wrong, so the assertion is guaranteed false the moment the first character
+lands. One word in a dependency array.
+
+**Verified live:** Save on an empty form gives `role="alert"` carrying "Customer
+name is required.", the name input `aria-invalid="true"` and
+`aria-describedby="mgt-form-error"` resolving to a real element, plus
+`aria-required="true"` and a properly associated label. Typing a single character
+clears all three, and the alert region stays mounted and empty — which is what
+lets the *next* error announce. Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (16/n) — `/code-review`: the List card's exemption traded one break for another
+
+**Files:** `src/components/ListView.jsx`.
+
+Timeline and Plan answer the focus-scroll with `preventDefault` on mousedown.
+10/n deliberately withheld it from the List card, because `preventDefault` also
+kills text selection and staff select the phone number off that card to ring a
+party — the behaviour `endsASelection` exists to protect.
+
+That reasoning is right about `preventDefault` and wrong about the conclusion. It
+left pointer focus enabled, so pressing on the phone number **scrolls the card up
+to 297px before the selection drag has begun** — the text travels out from under
+the finger, and the selection covers a different run or the press lands on
+another card. The exemption protected the feature from one break by handing it
+another.
+
+**Focusing the card OURSELVES, with `preventScroll`, has both.** The browser's
+focusing steps are a no-op on an element that is already focused, so its default
+action has nothing left to scroll; and because nothing is prevented, the selection
+drag proceeds exactly as before. Skipped when the press is on a nested control —
+those take their own focus and stealing it would break the button.
+
+**Verified live**, with the counterfactual measured rather than assumed. On a card
+sitting 32px below the fold: a plain `.focus()` scrolls **32px**,
+`focus({preventScroll:true})` scrolls **0**, and a real mouse press on the card's
+name leaves `scrollTop` at 0 at mousedown, at the next frame and at +80ms, then
+opens the edit form. Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (17/n) — `/code-review`: the focus guard latched on the attempt, not the result
+
+**Files:** `src/components/ListView.jsx`.
+
+`focusOnce` set `focused = true` immediately *before* calling `el.focus()`, so a
+focus that did not take disabled the 120ms retry that exists for exactly that
+case. The concrete one: a card inside an `inert` subtree, where `focus()` is a
+silent no-op — the old form turned that into a permanent one, and the failure is
+invisible, since the scroll still lands and only the announcement is missing.
+
+The `!el` branch two lines above already had the rule right, returning above the
+assignment. This is the same rule applied one line further down:
+`if (document.activeElement === el) focused = true`.
+
+Build ✓, 406 tests ✓.
+
+---
+
+### v17.12.0 (18/n) — `/code-review`: one card lookup, not two
+
+**Files:** `src/components/ListView.jsx`.
+
+`focusOnce` re-derived the selected card with the same
+`querySelector('[data-flip-id="…"]')` expression `go()` had built four lines
+above, so the contract "a card is identified by its flip id" was asserted twice in
+one effect — and the scroll and the focus could be pointed at different elements
+by a change to either copy. `data-bk`'s note in `TimelineView` is the precedent
+for that identity changing. One `findCard()` closure, two callers.
+
+Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (19/n) — `/code-review`: `Fld` ignored `invalid` on its composite path
+
+**Files:** `src/components/atoms.jsx`.
+
+`Fld` has two shapes — `children` as a function for a single control, `children`
+as elements for a composite one (a stepper pair, a chip row) — and 3/n built the
+state attributes only for the first. Passing `invalid` to a composite field was
+therefore **silently ignored**: no error, no lint warning, no test, and a field
+that reports VALID to assistive technology while a red banner sits above it.
+
+Nothing does that today, which is precisely why it had to be fixed now rather than
+found later — the props are on the public signature with nothing marking them
+single-only, so the next person wiring validation onto party size or preferred
+tables would have shipped it in good faith.
+
+On the group path they land on the wrapper, which is the element already carrying
+the role and the name; `aria-invalid` and `aria-describedby` are global, so a
+`group` may hold them. `aria-required` stays single-only on purpose — it belongs
+on a control rather than a wrapper, and that path already signals required with
+the `*` in its label.
+
+Build ✓, 406 tests ✓, lint 0 errors.
+
+---
+
+### v17.12.0 (20/n) — `/code-review`: one source for what a booking sounds like
+
+**Files:** `src/lib/booking-logic.js`, `src/components/ListView.jsx`,
+`src/components/TimelineView.jsx`, `src/components/PlanView.jsx`,
+`tests/booking-logic.test.js`.
+
+The spoken label shipped as three hand-written copies — the List card, the
+timeline block and the floor-plan table. The first two were byte-identical down to
+the `size === 1 ? " guest" : " guests"` branch and the `"no table assigned"`
+fallback, so adding a status or changing the pluralisation meant three edits, and
+the app's own `STATUS_LABEL` note ("reuses the List card's vocabulary so the two
+cannot drift") is the standing argument against exactly that.
+
+`describeBooking(b, opts)` in `booking-logic.js`. **PlanView is why it takes an
+option rather than becoming a second function**: its subject is a TABLE, so it
+prefixes `"Table 3, "` and must not then repeat the table at the end — but the
+rest of the sentence is this one exactly. That is a parameter, not a different
+sentence. Worth stating because `time-grid.js` records the opposite case, where
+`hourLabel` and Settings' `cutoffLabel` looked like copies and unifying them would
+have shipped a bug: **check whether the apparent copies are the same function
+before merging them, and whether the differences are parameters before splitting.**
+
+The state clauses stay at the call site, and correctly so — `double-booked`,
+`overstaying`, `running late` describe how a block is being DRAWN right now, not
+what the booking is.
+
+Deliberately **byte-identical output**, so the extraction is provably a no-op.
+Verified live on all three surfaces: List and Timeline match the strings captured
+before the change character for character (including the clash pair, which reads
+"Pau Estévez, 20:00, 4 guests, table 3, confirmed, double-booked"), and Plan with
+the scrubber at 20:00 reads "Table 3, Pau Estévez, 20:00, 4 guests, confirmed" —
+the table named once. Six new tests pin the format, the singular, both
+no-table forms, the multi-table join and the `tables: false` path. Build ✓,
+**412 tests** ✓, lint 0 errors, `check:style` OK.
+
+---
+
+### v17.12.0 (21/n) — `/code-review`: CLAUDE.md and ROADMAP for the review round
+
+**Files:** `CLAUDE.md`, `ROADMAP.md`.
+
+Doc-only. Three of the nine fixes contradicted paragraphs this same version had
+written, so the record has to move with the code or it becomes a false map:
+
+- **`inert` marks the page behind the dialog, not `<main>`.** The accessibility
+  section said `inert` goes on three siblings including `main`; it now says why
+  that was wrong and what the test actually is.
+- **The timeline block is not a leaf.** The `role="button"` rule claimed it was,
+  in the same paragraph that refused the role for the List card on identical
+  grounds. Corrected, with the general fix (role on an inner wrapper, nested
+  control as its sibling) and the new half nobody had written down: **a role
+  subscribes an element to every shared rule written for that role.**
+- **`Fld` carries validity on both shapes**, and `ListView`'s roving stop is
+  resolved against rendered cards.
+
+Plus `describeBooking` in the `booking-logic.js` entry, and the test count, which
+had drifted to 406 in the same session that took it to 412.
+
+`ROADMAP.md` records that all ten `/code-review` findings were fixed on the branch
+rather than deferred, and gains one genuinely new item: `describeBooking` joins
+tables with `" and "`, which is right for two and wrong for three — a one-line
+change now that the sentence has one source, and deliberately not made in the
+extraction commit, whose whole claim was byte-identical output.
+
+---
+
+## v17.13.0 — close the gate behind it
+
+**Date:** 2026-08-20
+**Files:** see each entry.
+**Behavioural change:** see each entry. No persisted-data change and no Firebase
+console step for any of them.
+**Verification:** see each entry.
+
+The fourth and last version staged out of the 2026-08-19 seven-pass review
+(`MGT_Bookings_SevenReview_2026-08-19/`; `04-design-system.md` is the source of
+truth for the figures quoted here). v17.10.2 took the findings that needed no
+decision, v17.11.0 the ones staff hit during service, v17.12.0 the half of the
+app nobody had ever measured. This one stops all three from drifting back.
+
+**Note the ordering.** The ROADMAP staged this as v17.14.0 behind the modal
+stack; Patryk moved it forward. The reasoning holds either way and is worth
+stating: v17.12.0 shipped roughly forty individually-correct decisions that
+nothing in CI can see. Landmarks, a live region, a label association and a
+roving tab stop are all *invisible* when they are removed — the app looks and
+behaves identically to a sighted mouse user — which is the same property that
+let them be missing for seventeen versions. A fix with no gate behind it is a
+fix with a half-life. The modal stack, by contrast, is a refactor whose defects
+announce themselves the moment you press Escape.
+
+### 1/n — the colour rule's first half: stop hand-writing colours
+
+**Files:** `index.html`, `src/lib/constants.js`, `src/App.jsx`,
+`src/components/{TimelineView,BookingFormModal,WalkinForm,ReminderEditor,ManualModal,BlockModal,PlanView,PrefPickerModal,FloorPlanEditor,HistoryPopup,Shortcuts,Settings,atoms}.jsx`,
+`tests/contrast.test.js`
+**Behavioural change:** one measured fix (below); everything else is
+byte-identical rendering.
+
+`check:style` has seven rules — radius, marker placement, type, spacing, height,
+white-inset, shadow — and **none of them looks at a colour**, in a codebase whose
+recorded history is a series of colour-literal defects. The rule itself is 2/n.
+This entry is the debt it would otherwise report: 76 literal colours across
+twelve files, of which the design-system pass named three groups.
+
+**The 26 copies of one value.** `border: "1px solid rgba(255,255,255,0.2)"` — the
+hairline rim on a solid-fill button or block — hand-written twenty-six times in
+twelve files, the single most-duplicated literal in the app and the exact
+condition of "a literal duplicate of a token is a token that cannot be fixed".
+It is now `RIM_SOLID` (`constants.js`) over `--rim-solid`.
+
+**Why not `--border-glass`, which already exists for "white rim on filled
+btns".** Because that token FLIPS — 0.3 light, 0.14 dark — and these rims sit on
+`BLOCK_BG` / `--app-*-solid` / `BTN.*` fills, which are deliberately the same
+colour in both themes. A rim on an invariant surface must be invariant too; that
+is the v17.8.0 white-inset rule one property along. So `--rim-solid` and
+`--rim-solid-strong` are declared in `:root` **only** and deliberately not
+repeated in the dark block, exactly as `BLOCK_BG` is.
+
+**And that is what the old comment at `SIZE_RING` got wrong.** It said the alpha
+was a literal "because BLOCK_BG is theme-invariant" — which is a reason not to
+use `--border-glass`, and was read as a reason not to use a token at all. A
+`:root`-only token has the property that sentence was reaching for. `SIZE_RING`
+and the waitlist ghost's dashed edge now take `--rim-solid-strong`, and
+`tests/contrast.test.js`'s `ringAlpha()` resolves the token out of `index.html`
+instead of reading a number out of the component — strictly what that guard was
+already trying to be, and it now catches a retune of the token as well as of the
+call site. A raw rgba is still accepted there, so reverting cannot silently
+disable it.
+
+**Two fills that were hiding from the contrast registry**, which is the v17.8.0
+lesson recurring: that file enumerates TOKENS, so a literal is invisible to it.
+The timeline Follow button's active fill was `rgba(0,0,0,0.6)` — eight lines
+below a comment about this very bug class, left behind by the sweep that wrote
+it — and is now `--app-btn-dark`. The greyed-out primary in both form footers,
+`ReminderEditor` and `ManualModal` was `rgba(180,180,190,0.4)`, a copy of
+`--toggle-off`'s LIGHT value that never flipped; it is now `--btn-disabled`.
+Both are registered, and the coverage guard is what forced them in — adding the
+tokens failed the build until they were.
+
+`--btn-disabled` is recorded as an exemption rather than fixed, and the reason is
+the standard's rather than this app's: WCAG 1.4.3 exempts inactive components,
+and every button wearing this fill is `disabled`. What the number says is still
+worth knowing — at **1.30:1** in light the label is not dim, it is gone — so a
+staff member who has not picked a date sees an empty pill rather than a
+greyed-out "Save booking". Floored so it cannot get worse, and left in
+`ROADMAP.md` as a design question rather than answered inside a gate-closing
+commit.
+
+**One measured live fix.** `HistoryPopup`'s scroll panel was a hard-coded
+`rgba(255,255,255,0.35)` — a white wash — while its rows take `--text-muted`,
+which INVERTS. In dark mode that is light grey text on a light grey panel:
+measured in the running app at **1.70:1**. On `--bg-input` it is **4.03:1** dark
+and **5.42:1** light (was 5.25 — light never showed the defect, which is why it
+survived). The same file's two hairlines and `Shortcuts`' row rule were
+undocumented greys and are now `--border-soft`; `Settings`' "Open" day pill was
+`rgba(52,199,89,0.16)` and is now `--suggest-bg`, the app's existing chip-weight
+positive wash, which composites within a couple of levels of it in both themes.
+
+The remaining literals are deliberate and are marked at their sites in 2/n.
+
+**Verification:** build ✓ (201.91 kB gz, +0.00 vs v17.12.0), lint 0 errors,
+**416 tests** (+4: the two new fills × two themes), `check:style` OK. Both themes
+walked in the running app; the history-panel numbers above are measured from the
+live paint stack, not computed from the tokens.
+
+### 2/n — the colour rule itself
+
+**Files:** `scripts/check-style-invariants.mjs`, `tests/style-check.test.js`,
+`src/components/{BookingFormModal,WalkinForm,DaySheet,ManualModal,PlanView,PrefPickerModal,TableGrid,TimelineView}.jsx`
+**Behavioural change:** none — 22 exemption markers and one fallback that stops
+being a literal.
+
+`check:style` Rule 7. It flags an `rgb()`/`rgba()` with a NUMERIC first argument
+(so `rgba(var(--tbl-out-rgb),0.8)`, the composed-token idiom, is not a literal)
+or a `#` hex, anywhere under `src/`, unless the line carries `/* @fixed-fill */`
+or `/* @shadow */`.
+
+**The marker is `@fixed-fill`, shared with Rule 2, deliberately.** Rule 2 asks
+whether the surface under a white inset is theme-invariant; Rule 7 asks whether
+the surface under a colour is. That is one question about one line, and
+inventing a second word for it is exactly how "two names for one concept" let
+`--app-btn-grey` hide from a check written around the `--btn-*` prefix. The
+coupling is real — a marker added for a colour also blesses a white inset on
+that line — and is stated in the script.
+
+**Two things it must not see, and both are structural rather than marked.**
+Comments, because half this repo's apparent colour literals are prose ABOUT
+colour literals, including ones a previous version removed; a
+`startsWith("//")` test does not cover a JSX block comment's continuation lines,
+so the file is scanned once tracking block and string state and each line is
+judged on its code only. And devtools `%c` styling — `firebase.js`'s DEV/PROD
+badge, `App.jsx`'s boot banner — which is a CSS declaration list handed to
+`console.log`, not app UI. Rule 4 met the same site and its comment already says
+why marking it would be the wrong fix: the rule would keep mis-firing on the
+next piece of console styling anyone writes.
+
+**The first draft of that second exclusion was a false negative, and it is the
+reason this entry exists in this shape.** It was one regex across the whole line
+— quote, anything, `prop:`, anything, `;` — and on dense JSX it started at a
+CLOSING quote and ran through the markup to the STATEMENT's trailing semicolon.
+So `border:"1.5px solid rgba(220,38,38,0.4)"` in `BookingFormModal` read as
+console styling and was silently not reported, while the rule printed a
+confident 21 findings. It was caught by diffing the rule's output against a
+plain `grep` — this repo's most-repeated checker defect, blind exactly where it
+was meant to bite. It now tests the CONTENTS of each quoted string, and
+`tests/style-check.test.js` pins that exact line shape.
+
+The 23 remaining literals are all deliberate and now say so at their sites: the
+kitchen-suggestion chips in both forms (the fills are theme-invariant precisely
+so the hex ink on them cannot invert — the v17.8.0 decision, unchanged), the
+print sheet (paper has no theme), and white on a saturated block or badge.
+`TimelineView`'s legend swatch was the one that did not deserve a marker — its
+`BLOCK_BG[s] || "#999"` fallback is now `|| BLOCK_BG.confirmed`, which is the
+same defensive default `PlanView` already spells five lines from the same data.
+
+Two pre-existing shadow fixtures moved from `expect(r.code).toBe(0)` to
+`expect(r.out).not.toMatch(/shadow-literal/)`. Both use an rgba ring on purpose,
+which the colour rule reports — correctly, since a ring in this app takes a
+token — and naming the rule a fixture is about is what it should always have
+done. Weakening either rule to preserve an exit code would have been the wrong
+trade.
+
+**Verification:** build ✓, lint 0 errors, **428 tests** (+12 fixtures for this
+rule: four literal shapes, a literal behind a `const`, the composed-token
+idiom, both markers, block-comment continuation lines, devtools styling, the
+false-negative line shape, and an HTML entity not being read as a hex colour),
+`check:style` OK. App reloaded in DEV: no console errors, and no marker text
+rendered anywhere (Rule 0's failure mode, checked live rather than assumed).
+
+### 3/n — the waitlist ghost, measured at last
+
+**Files:** `tests/contrast.test.js`
+**Behavioural change:** none — a guard over an existing element.
+
+The contrast registry declares its own gap in a comment: `chipOpacity()` is
+anchored on `const timeChip`, and that comment names the three `...HOUR_PILL`
+spreads in `TimelineView.jsx` and says only the first is measured. **`WaitGhost`
+is the second.** So the one component in the app that takes an already-exempt
+fill and dims it a further 45% was, by construction, outside everything this
+file looks at.
+
+The design-system pass went and measured what that costs: the ghost's guest name
+renders at **1.50:1**, the lowest text contrast in the application, on
+`--block-pending` — which is already this registry's worst recorded exemption at
+1.82:1. It is the v17.9.0 hour-pill defect one level further along, and it
+arrived through the same door: **a token's number is not the screen's number
+wherever that token is reused over something else**, and an element-level
+`opacity` is exactly such a reuse — invisible to a registry that reads
+`index.html`.
+
+Eight new cases: name, chip and size ring, at both shipped opacities (0.55, and
+0.4 for a reshuffle-only match), in both themes. Both opacities are read out of
+`WaitGhost` rather than typed here, for `chipOpacity()`'s reason — a guard that
+names the thing it guards and then uses a number typed into the test is not
+guarding it — and the anchor throws with a message rather than silently
+measuring a default.
+
+Asserted against ITSELF, like `SIZE_RING` and unlike the clash band. A 0.55
+dimming cannot reach 4.5:1 over any fill this app owns, so a 4.5 bar here would
+be a permanently red test, which is a muted test. What the floors buy is that
+the dimming cannot deepen without saying so — verified by turning the ghost down
+to 0.45/0.3, which fails four of the eight, then reverting.
+
+Two numbers worth keeping. The registry computes **1.39:1** for the light guest
+name where the live measurement said 1.50, and both are right: this file takes
+the extreme of each theme as the worst case for washout, while the real timeline
+row has a faint tint under the ghost. And the dark side is *worse than it looks*
+relative to its neighbours — 1.82 plain, 1.63 reshuffle-only.
+
+**The number is recorded, not endorsed**, and that distinction is the whole
+reason the `exempt` machinery exists here. The amber exemption's justification —
+a block's meaning is carried by colour, position and width, and the one part
+that is INFORMATION moved onto an opaque chip — does not reach the ghost,
+because the chip is *inside* the ghost and dims with it. On a ghost, every
+element is below the bar at once. `ROADMAP.md` carries it as a design question
+with the numbers attached, the way the waitlist-amber decision was put in
+v17.10.0.
+
+**Verification:** build ✓, lint 0 errors, **432 tests** (+4 cases, each
+asserting name, chip and ring), `check:style` OK. Guard proven against
+known-bad input rather than assumed.
+
+### 4/n — the two free rules: the icon scale and the motion scale
+
+**Files:** `scripts/check-style-invariants.mjs`, `tests/style-check.test.js`,
+`src/components/Icons.jsx`, `src/lib/constants.js`
+**Behavioural change:** none — nothing on screen moves (see the icon defaults).
+
+`CLAUDE.md` states both as rules — "No new numeric `size={n}` on an icon", and
+`grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back empty apart
+from `M`'s own WAAPI values — and neither was enforced by anything. They are
+`check:style` Rules 8 and 9 now.
+
+**They were added precisely because compliance is already 100%**, which is the
+whole argument for doing it in this version rather than any earlier one. A rule
+adopted at zero debt costs nothing and guards the next edit; a rule adopted
+against a backlog gets muted, and muting it is the rational response. That
+asymmetry is why these waited for a version with nothing to clear.
+
+**Rule 8 is JSX-attribute and destructured-default position only** — `size={14}`
+and `{ size = 20 }` — and deliberately not `size: <number>` in an object, which
+in this app is overwhelmingly a *party* size: `EMPTY_FORM`, every booking, every
+waitlist entry. A rule that fires on a booking's guest count would be muted
+within a day and would deserve it. There is a fixture for that exact case.
+
+It found three sites, all in `Icons.jsx`: `Svg`, `StarIcon` and `SplitGlyph`
+defaulted to `size = 20`, a fourth value beside the scale's 12/14/18 and
+reachable by any caller that omits the prop. Every one of the 31 icon exports is
+currently called with an explicit size — checked, not assumed — so nothing on
+screen moves; what changes is that the fallback is now a member of the scale.
+
+**Rule 9 requires a TIME before the easing keyword**, and that is load-bearing
+rather than incidental: `M.resize` is `"var(--t-shift) linear"`, the documented
+linear exception, and a rule matching a bare keyword would report the scale's
+own member — leaving no way to write `M` at all. The one genuine escape hatch,
+`M.easeOut` (useFlip drives WAAPI, which cannot read a CSS var and silently runs
+linear if you try), is marked `/* @motion */`.
+
+**One lesson from the fixtures, and it cost three of them.** Adding two rules
+broke three pre-existing tests that asserted `expect(r.code).toBe(0)` on lines
+containing an rgba ring or a `240ms ease` transition. Each was written about ONE
+rule, but `toBe(0)` quietly asserts "and no future rule may ever have an opinion
+about this line", which is not what any of them meant. All three now assert on
+the rule they are about. **A fixture should name its own rule** — otherwise
+every new rule looks like a regression in the old ones.
+
+**Verification:** build ✓, lint 0 errors, **443 tests** (+11 fixtures across the
+two rules, including the party-size false positive and the token-composition
+one), `check:style` OK. Also corrects the test count stated in 3/n above, which
+said 436 where the run says 432 — four cases, each asserting three parts.
+
+### 5/n — the accessibility gate
+
+**Files:** `tests/a11y.test.js` (new), `scripts/strip-comments.mjs` (new),
+`scripts/check-style-invariants.mjs`
+**Behavioural change:** none.
+
+The reason this version exists. v17.12.0 shipped roughly forty individually
+correct accessibility decisions, and **every one of them is invisible when it is
+removed**: delete the `<main>` landmark, the `role="status"` on the toast layer,
+the `htmlFor` in `Fld`, the roving tab stop in `ListView` — the app looks
+identical, behaves identically to a mouse user, passes every other test here,
+and ships. That is the same property that let all of it be missing for seventeen
+versions.
+
+**What it claims, and what it must not be read as claiming.** It reads SOURCE,
+so it cannot say the app is accessible. What it asserts is narrower and worth
+more: the specific wirings v17.12.0 established are still present, and the three
+rules that version had to *learn* — two of them by shipping their violation —
+have not been undone. Live measurement remains the method for anything new;
+v17.12.0's own entry records two SVG facts that source review provably cannot
+catch (a browser paints no `outline` on a `<g>`; `:focus-visible` never matches
+an SVG element in Chrome).
+
+24 assertions in seven groups: landmarks and exactly one `<h1>`; the three live
+regions and **where each one has to live** (a live region must already be in the
+DOM when its content changes, which is why `StatusToasts` can own its own and
+the strip cannot); `inert` never on `<main>`; `Fld`'s label association on both
+shapes, with `aria-required` on the control and `aria-describedby` emitted only
+where it cannot dangle; bookings reachable in all three views; the List card
+explicitly NOT a button; pointer-focus suppression on the two surfaces that
+scroll under a finger; and the connection popover claiming `haspopup` but not
+`aria-modal`.
+
+**Every assertion goes through `has()` / `hasnt()`, which throw on a pattern
+matching nothing**, so a check cannot rot into a tautology when a file is
+renamed or a shape rewritten — and three of them run the helpers against
+known-bad strings, for the reason `tests/style-check.test.js` exists. Proven the
+same way: `role="status"` was removed from `StatusToasts` and `inert` put back
+on `<main>`, both were caught, both reverted.
+
+**The gate's first run produced two false positives, and both were comments.**
+`ConnectionStatus.jsx` explains in prose that the popover is "NOT `aria-modal`
+and no focus trap" — so a grep for `aria-modal` read a sentence as the opposite
+of what it says — and `ListView.jsx`'s card carries "`role="listitem"`, NOT
+`role="button"`". In a codebase commented this heavily, **a source check that
+reads comments is measuring the documentation.** Rule 7 had hit the identical
+wall an hour earlier, so its line-by-line comment stripper moved out to
+`scripts/strip-comments.mjs` and both now share it — the second consumer is what
+made it worth a file rather than a helper.
+
+**Verification:** build ✓, lint 0 errors, **467 tests** (+24), `check:style` OK.
+
+### 6/n — the weight pass, and a ratchet to hold it
+
+**Files:** `src/components/{BookingFormModal,CustomersSettings,FloorPlanEditor,LayoutSettings,Settings,Summary,TimeAxis,WaitlistPanel,WalkinForm,WeekView,atoms}.jsx`,
+`tests/style-check.test.js`
+**Behavioural change:** none. 46 runs of descriptive text drop from semibold or
+bold to `FW.medium`.
+
+v17.8.0's type change had two halves and only one of them was ever enforced.
+Its own reasoning: "There was no regular weight: 93 of 95 elements were 500+.
+When everything is semibold, weight cannot carry emphasis, so size carries all
+of it, so sizes multiply and crowd." The SIZE half is Rule 3, and the live DOM
+now renders exactly six sizes, every one on the scale. The weight half was held
+by nothing and had drifted back to **84% semibold or bolder** by the review.
+
+**The criterion, which is what makes this a pass rather than 63 taste calls: a
+run coloured as secondary must not also be weighted as primary.** `--text-muted`
+/ `--text-secondary` / `--text-faint` and `FW.semi`/`FW.bold` co-occurred on 63
+lines. Colour is already saying "this is subordinate"; weight was saying the
+opposite on the same word.
+
+46 of those were plainly descriptive and moved: the connector words between
+Settings' steppers ("to", "party", "seats", "cap", "priority", "from a party
+of"), row labels in `Summary` and `WeekView`, the inspector labels in the floor
+plan, `Collapsible`'s collapsed summary, "waiting", "no phone", "Checking table
+availability…", and `Fld`'s label — which is the app-wide one, and reads
+markedly better: the value now dominates the field.
+
+**The other 17 were left, and they are why this is not a lint rule.** A quiet
+section heading — muted colour, bold weight, letterspaced — is a legitimate
+device, and `LayoutSettings` and `WeekView` are full of them; so is a disabled
+button's faint label and a 10px "This device" marker. A rule with a 24%
+exemption rate teaches people to type the marker rather than to think, which is
+the opposite of what every other rule in `check:style` does. The review that
+found the problem said "this is not worth a lint rule" and was right.
+
+**So the gate is an AGGREGATE ratchet instead**, in `tests/style-check.test.js`:
+regular+medium must stay at or above 30% of all `FW.` references. It judges no
+individual line — the same shape as `EXEMPT_FLOOR`, asserted against itself so
+an accepted position cannot quietly get worse. The pass took the source ratio
+from 20% to **32.5%** (58 regular + 60 medium against 104 semi + 141 bold).
+
+Measured live, rendered: the booking form went to **45%** heavy from a
+whole-app 84%, Settings to 56%, and the Timeline — where the remaining mass is
+legend chips, the hour ruler and table row identifiers, all of which
+legitimately carry weight — barely moved, which is the right outcome. The
+legend chips were considered and deliberately left: they are SOLID badges on
+`BLOCK_BG`, two of which are the recorded amber exemption, and demoting weight
+there would trade a hierarchy improvement for legibility on the app's
+worst-contrast fills.
+
+**Verification:** build ✓, lint 0 errors, **469 tests** (+2), `check:style` OK.
+Both themes walked in DEV; Settings, the booking form and the three views
+screenshotted after the change.
+
+### 7/n — `DESIGN.md`
+
+**Files:** `DESIGN.md` (new), `CLAUDE.md`
+**Behavioural change:** none — documentation.
+
+`CLAUDE.md` is auto-loaded into every session, and **57% of it had become the
+visual system**: 817 of 1,436 lines, across `### Style tokens` and everything
+from `## UI / style rules` through the motion sections. None of it is needed to
+answer "how does the optimizer pick a table" or "why was that write refused".
+It is now `DESIGN.md`, 901 lines, and `CLAUDE.md` is 686 — down 52%.
+
+**The split has exactly one hazard: a rule nobody loads is a rule nobody
+follows.** Three things answer it, and they are the reason this is a safe move
+rather than a tidy one.
+
+First, the non-negotiables stayed. Both extracted sections leave a stub that
+carries what ships a bug when unseen — the ≤4 blur limit, `Overlay` owning
+every modal, no colour literal, the four exemption markers and the fact that a
+marker in JSX children position renders as text, "a colour token may only sit
+on a surface that flips with it", and the three accessibility rules v17.12.0
+learned by shipping their violation.
+
+Second, and more to the point, **most of what moved is no longer held by a
+document at all**. Nine `check:style` rules, `tests/contrast.test.js`,
+`tests/stylesheet.test.js` and now `tests/a11y.test.js` hold the parts that can
+be held mechanically. `DESIGN.md` opens by saying so, and with the instruction
+that follows from it: if you find yourself writing a rule there that a test
+could hold instead, write the test.
+
+Third, the file explains how to read itself. Nearly every entry carries more
+history than a style guide normally would, because nearly every rule is the
+residue of a specific shipped defect — a light-mode fill at 1.8:1, a stray `*/`
+that deleted a CSS rule, a `scale(1.08)` on an 820px card that moved the button
+out from under the cursor. **The number and the story are what stop the rule
+being "simplified" back into the bug**, so the sections that look fussy are the
+ones to read rather than trim.
+
+Two cross-references in the file-structure block pointed at "the motion
+section" and "the accessibility section" and now name `DESIGN.md` — the same
+class of stale-copy defect this repo has recorded twice under "copy that
+describes a glyph has to change when the glyph does".
+
+v17.13.0's own additions were written into `DESIGN.md` rather than left in this
+log: the two rim tokens, Rules 7/8/9, the weight ratchet, and the accessibility
+gate.
+
+**Verification:** build ✓, 469 tests, `check:style` OK. Text moved verbatim —
+the extraction is a line-range move with the two headings re-levelled, not a
+rewrite, so nothing recorded was lost or paraphrased.
+
+### 8/n — `/code-review max`: 13 findings, all fixed
+
+**Files:** `src/components/{ManualModal,BookingFormModal,WeekView,HistoryPopup}.jsx`,
+`scripts/{check-style-invariants,strip-comments}.mjs`,
+`tests/{contrast,style-check,a11y}.test.js`, `DESIGN.md`
+**Behavioural change:** three restored font weights and one border token; the
+rest are guards.
+
+None met the "fix without asking" bar — no data loss, no crash, no security, no
+broken build — so all thirteen went to Patryk in one question. He chose all
+thirteen. **Nine of them are this version's own new machinery failing in the
+way it was written to prevent**, which is the finding worth keeping.
+
+**The one that matters most.** The colour rule's first pass marked
+`ManualModal`'s idle swap-panel rim `/* @fixed-fill */` — an assertion that the
+surface under it is theme-invariant. It is not: `swapBg` is `S.bg`, i.e.
+`"transparent"`, so the idle panel shows the modal sheet, which flips. That
+white 0.5 rim measures **1.00–1.04:1 against the light sheet** and 4.69:1
+against the dark one. The rim was already wrong; what this version added was a
+marker that would have certified it forever and stopped Rule 7 ever reporting
+the line again. It now takes `--border-soft`, the token `Section` uses, because
+that is what this panel is.
+
+**Why it happened, which is the transferable part.** `@fixed-fill` was being
+applied to mean "I looked and it is fine" rather than its literal definition.
+Applied literally — *is the surface under this theme-invariant?* — `S.bg` fails
+at the point of writing. Three other new markers carry the same looseness
+harmlessly (the "Kitchen busy" border sits on `--warn-bg`/`--bg-soft`, both
+theme tokens; `TableGrid`'s white ink sits on `--accent`, which is redefined for
+dark) — and that looseness is exactly what let the one real case through.
+`DESIGN.md` now states the test as a question to answer rather than a label to
+apply.
+
+**The mechanical sweep over-reached in three places**, and the mechanism is
+worth recording: the weight pass matched a muted colour and a heavy weight
+within ±140 characters of each other, which on dense JSX reaches across element
+boundaries. It demoted the autocomplete "N visits" chip while its SIBLING "N
+no-shows" chip on the same row kept `FW.bold` — two chips of identical size,
+shape, padding and role at different weights — plus the "no phone" chip and
+`WeekView`'s month-grid weekday header, a structural column header that dropped
+two steps. All three restored; the ratchet still holds, since the pass was 46
+sites and this is 3.
+
+**Four guards had stopped guarding, three of them written in this version.**
+`ringAlpha()`'s new token branch returned an alpha and let the caller composite
+a hard-coded white, so a non-white ring would pass while the function's own
+throw message promised otherwise. `EXEMPT_FLOOR["--btn-disabled"]` was one
+number for two themes measuring 1.30 and 6.42, so it could not see a dark-mode
+regression at all. The weight ratchet's second test was named "every weight
+reference is one of the four scale steps" and asserted `total > 300` — a
+tautology, since the counter only ever counted those four names. And the
+`<main>`-is-never-inert guard read a fixed 400-character window of a
+316-character opening tag: one more style branch and it would have stopped
+covering the end of the tag that attribute gets added to. **Every fix was proven
+against known-bad input**, not asserted.
+
+**Two blind spots in the checkers.** `stripComments` claimed in its header that
+a `/*` inside a regex is not read as a comment, and did no such thing — a regex
+is not a string literal, so it truncated the line (and would have swallowed
+lines on a `/*`). It handles regex literals now, distinguishing them from
+division by what precedes the slash. And Rule 8's destructured-default arm
+matched any `size = <number>`, including `let size = 20` and `o.size = 4`,
+contrary to its own documented scope.
+
+Two smaller ones: the ratchet counted `FW.` references inside comments — in the
+version that established comment-stripping twice, with the shared module
+already one import away — and walked `src/` once per test; and `HistoryPopup`
+had taken `--bg-input` ("text inputs / selects") for a read-only scroll panel.
+
+**Verification:** build ✓, lint 0 errors, **473 tests** (+4: two `openingTag`
+self-tests and two Rule 8 fixtures; the contrast fixes strengthened existing
+cases rather than adding any), `check:style` OK. The swap panel re-measured in
+the running app: transparent background confirmed, rim now resolving to
+`--border-soft`.
+
+---
+
+## v17.14.0 — the modal stack, and the end of the Deferred list
+
+**Date:** 2026-08-21
+**Files:** see each entry.
+**Behavioural change:** see each entry. No persisted-data change and no Firebase
+console step for any of them.
+**Verification:** see each entry.
+
+`ROADMAP.md`'s **Deferred** section had reached 19 items across five headings:
+the modal-stack refactor the last three versions were staged behind, two
+contrast trade-offs v17.13.0 measured and deliberately left open, four
+accessibility follow-ups from v17.12.0, seven `/code-review` findings deferred
+at v17.11.0 and four more from v17.10.2. Patryk's instruction for this version
+was that **all of it lands** — one version that empties the file rather than
+another pass taking the easy half.
+
+**One item is excluded and stays.** The WhatsApp sandbox hardening (a uid/email
+allow-list in `verifyStaffToken`, `sanitizeKey` at the `_lib/rtdb.js` boundary)
+targets code that exists only on the `wa-sandbox` branch — neither symbol is on
+`main`. It is annotated as branch-scoped rather than silently carried.
+
+**Two items are closed as decisions rather than shipped as fixes**, both design
+calls with the numbers in front of Patryk, the way the v17.10.0 amber exemption
+was settled: the waitlist ghost's guest name stays at its shipped opacity (the
+dimming IS the "proposal, not booking" signal, and the ⏳ marker and dashed edge
+carry the meaning independently of the text), and the List keeps `list` /
+`listitem` semantics because the "Completed & cancelled" fold is not being
+restructured, so a `grid` whose children must be rows would be the wrong shape.
+
+### 1/n — `bookingsAfterAction` returns its input array on a no-op
+
+**Files:** `src/App.jsx` (version bump), `src/lib/booking-logic.js`,
+`tests/booking-logic.test.js`
+**Behavioural change:** none visible. One reference-identity contract, at the
+source of a bug class that had been fixed at exactly one call site.
+
+v17.10.2 fixed an infinite render loop in the post-sync reconciliation effect by
+comparing `dayBookingsSig` before dispatching. The **root cause** was untouched:
+`bookingsAfterAction` returned a fresh array whether or not the pass changed
+anything, so any `useEffect` that depends on `bookings` and calls it was one
+line away from reintroducing the same loop with no warning. Its sibling manual
+branch survived only by accident — it happens to break with `next === prev`, and
+React bails out of identical state.
+
+The transform is unchanged and now lives in a private `computeAfterAction`;
+`bookingsAfterAction` runs it and hands back `updatedBks` when nothing moved.
+
+**The compare is `undoKey`'s field set, and that is the load-bearing part.**
+v17.10.2's own lesson is that a gate NARROWER than the pass it guards silently
+discards work — its first version compared `id:tables` alone and threw away both
+the `duration` extension `syncLiveDurations` writes and the `_conflict` flag
+`applyOpt` writes. Every field either of those two touches is in `UNDO_FIELDS`,
+which is what makes this compare exactly as wide as the transform rather than
+approximately as wide.
+
+Order differences count as a change. Nothing in the module reorders, so the
+branch is unreachable today; treating it as changed is the conservative
+direction if something ever does.
+
+**Callers must keep treating the result as immutable** — the returned array may
+now BE the caller's own input. All 29 call sites were read: every one goes
+through `map` / `filter` / `find`, none writes into the result.
+
+The one existing test asserting the opposite (`"returns a NEW array even though
+nothing changed — the loop's actual fuel"`, whose comment said *do not optimise
+that away*) is inverted, with the reversal explained at the site. It was
+guarding the call-site fix, which still stands — `dayBookingsSig` stays, because
+identity answers "did THIS pass change anything" while a signature answers "are
+these two lists the same day", and the reconciliation loop needs the second.
+
+**Verification:** build ✓ (201.92 kB gz, +0.01 vs v17.13.0), lint 0 errors,
+**477 tests** (+4: OFF-path no-op, ON-path no-op, a real move still returning a
+new array, and a seated party past its duration proving the compare is not
+narrower than `syncLiveDurations`), `check:style` OK. Note the suite reports 476
+when `dist/` is absent — `tests/csp.test.js` has one `it.runIf` on the built
+`index.html`, so run the build first or the count looks one short.
+
+### 2/n — `findConflicts` stops allocating pairs it discards
+
+**Files:** `src/lib/booking-logic.js`
+**Behavioural change:** none — same ids, same order (insertion order of first
+sighting, which `Object.keys` preserved before and preserves now).
+
+v17.11.0 derived `findConflicts` from `findClashes` rather than repeating the
+pair-scan a third time, and its own note says `verifyClean` keeps a separate
+copy because "making it build a pair list it then throws away would be a real
+cost for no gain". That is exactly what the derivation then had `findConflicts`
+doing: an object literal and an `Array.filter` intersection per clashing pair,
+for a function that wants ids and nothing else — inside the reconciliation loop,
+which calls it up to 20 times per dirty date on every settled snapshot.
+
+The loop moves into a private `clashScan(bookings,date,idsOnly)`; `findClashes`
+and `findConflicts` are one line each. **The two rejection tests stay shared**,
+which is the point — `findClashes`' existing tests remain the proof of both
+contracts, including the `findConflicts is exactly findClashes deduped` case
+that now spans two code paths rather than one.
+
+**Verification:** build ✓ (201.91 kB gz, −0.01), lint 0 errors, **477 tests**
+(no new ones: the contract is unchanged and the existing equivalence test is
+what proves it), `check:style` OK.
+
+### 3/n — `clashRowId` gets the tests its comment demanded
+
+**Files:** `tests/booking-logic.test.js`
+**Behavioural change:** none — five assertions over an untested function.
+
+`clashRowId` shipped in v17.11.0 with a comment making its separator
+load-bearing and no test. That matters more than it sounds: it is the key of the
+notification strip's per-clash dismissal Set, so a collision does not throw — it
+silently dismisses a DIFFERENT double-booking than the one the X was pressed on,
+which is a failure nobody would report as a bug.
+
+Pinned: the id is stable; it keys by PAIR, so dismissing "Pau vs Rita" does not
+key "Pau vs someone else" (both directions); and **the collision the comment
+predicts actually collides under the separator it rejects.** The `"_"` case
+builds two pairs that both render `rA_2026-08-21_x` under an underscore —
+reachable because a recurring occurrence id is `"r" + ruleId + "_" + date` — and
+asserts they differ here *and* that substituting the separator back re-creates
+the collision, so the test proves its own premise rather than asserting that two
+arbitrary strings differ.
+
+The fifth reads the **source file** and asserts the separator appears as the
+`\u001f` escape and never as a raw 0x1F byte. That covers `undoKey`'s four keys
+in the same pass, and it is the half a value test structurally cannot see: a raw
+control character is invisible in every editor, grep and diff, so the code would
+keep working while becoming unmaintainable.
+
+**Verification:** build OK (201.91 kB gz, unchanged), **482 tests** (+5),
+`check:style` OK. Lint needed a follow-up commit: the premise assertion was
+written as `k.replace(/\u001f/g, "_")`, and a control character in a regex
+literal is `no-control-regex` — an ESLint **error**, i.e. a hard CI gate. It is
+`split(...).join(...)` now. Worth recording because of how it was missed: `npm
+run lint` was read as passing off its "0 errors and 1 warning potentially
+fixable" tail line, which reports what `--fix` could handle, not the error
+count. Read the `problems` line.
+
+### 4/n — a multi-table booking no longer reads "5A and 5B and 6"
+
+**Files:** `src/lib/booking-logic.js`, `tests/booking-logic.test.js`
+**Behavioural change:** the table clause of every accessible name for a booking
+with two or more tables. Nothing visual — this is the string the List card, the
+timeline block and the floor-plan table hand to a screen reader.
+
+`describeBooking` joined with `" and "`, which is right for two tables and wrong
+for three. A three- or four-table mega-combo is an ordinary Settings → Layout
+configuration, so this was reachable rather than theoretical. It is now a list:
+`"5A, 5B and 6"`, no serial comma, matching the app's copy elsewhere.
+
+**The noun follows the count too** — `"tables 5A, 5B and 6"`, not `"table"`.
+Fixing the join alone leaves the same sentence still half-broken, and the reason
+this function exists at all (v17.12.0 extracted it from three hand-written
+copies) is that there should be exactly one place deciding what a booking sounds
+like. Doing half of it here would be the first step back towards three.
+
+Deliberately not made in the extraction commit, whose whole claim was
+byte-identical output — which is why it was recorded and deferred rather than
+slipped in.
+
+`ClashBanner` and `TimelineView`'s clash title keep their own phrasing: they
+describe the tables two bookings SHARE, which is a different sentence, and both
+already pluralise correctly.
+
+**Verification:** build OK (201.91 kB gz, unchanged), lint 0 errors,
+**484 tests** (+2, and one existing expectation updated for the plural noun),
+`check:style` OK.
+
+### 5/n — the post-sync reconciliation decision leaves the effect
+
+**Files:** `src/lib/reconcile.js` (new), `tests/reconcile.test.js` (new),
+`src/App.jsx`
+**Behavioural change:** one, in the manual branch (below). The optimiser branch
+is the same decision, reachable by a test for the first time.
+
+The rule is v17.8.0's, the one that produced `placeWaitlist` and
+`presenceState`: **logic that decides something the restaurant acts on does not
+live in a `useEffect`.** This one decides which booking gets MOVED TO ANOTHER
+TABLE after two devices' offline edits merge, which is as consequential as
+either of those, and until now the only part of it any test could reach was the
+`dayBookingsSig` compare v17.10.2 added to stop it spinning. The loop itself was
+found by *reading the console* — the app looks and behaves perfectly while it
+burns the tablet's CPU, which is exactly the class of defect a test catches and
+observation does not.
+
+`dirtyDates(bookings,today)` and `reconcile(prev,dirty,blocks,autoOptimizer)`
+are pure. App keeps the gates (`resyncing`, the loaded ref), the `saveBookings`
+dispatch and the toast — 4055 characters of effect down to 1434.
+
+**The `dayBookingsSig` double-rescan is closed by the identity contract from
+1/n, not by hoisting.** The optimiser branch now asks `after !== next` first,
+which since 1/n is `false` whenever the pass moved nothing — so the
+unresolvable all-locked clash, the case that REPEATS and the one that used to
+spin, costs zero signature scans instead of two full passes over all 518
+bookings. The signature is still required when the reference did change: this
+pass also runs `syncLiveDurations`, which can extend a seated party's duration
+TODAY while iterating a FUTURE date, and that is a change on a date this
+iteration is not about. Skipping the sig there would silently widen what the
+branch commits.
+
+**The one behavioural change is in the manual branch**, and it is also only
+expressible because of 1/n: when `bookingsAfterAction` hands back the same
+reference, the loop now breaks instead of re-running up to 19 more times, and
+does NOT set `changed`. Reachable when `findFreeSlot` returns the tables the
+booking already had — previously that burned the whole guard on the heaviest
+function in the app and then fired "Resolved a table conflict after syncing."
+for a conflict that was still there.
+
+**Verification:** build OK (201.96 kB gz, +0.05 — the new module), lint 0
+errors, **494 tests** (+10: `dirtyDates` over clean/dirty/past/unassigned days;
+the resolvable clash; the unresolvable one returning the SAME reference with
+`changed:false`; idempotence; the manual branch's locked-only no-op, its
+deterministic newest-first pick, and its clean-date no-op; and an empty dirty
+list). `check:style` OK. App reloaded in DEV against 518 bookings: boots clean,
+v17.14.0 in the banner, **no console output at all** after the boot lines —
+which is the specific thing being watched here.
+
+### 6/n — the modal stack
+
+**Files:** `src/hooks/useModalStack.js` (new), `tests/modal-stack.test.js`
+(new), `src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`,
+`src/hooks/useReminders.jsx`, `src/hooks/useWalkin.js`
+**Behavioural change:** four, all of them the same defect surfacing in four
+places (below). No visual change; every mount site, payload read and setter
+call site in App.jsx is untouched.
+
+The refactor the last three versions were staged behind. App.jsx had **eighteen**
+independent modal-visibility states, and two of the recurring bug classes
+`CLAUDE.md` documents were properties of that arrangement rather than of any one
+modal: *"the Esc chain bypasses every `onClose`"* and *"adding a new drafting
+surface = three wirings, not one"*.
+
+**What was actually wrong is worth stating precisely.** The set of open surfaces
+and their order were spread across eighteen `useState` calls, a hand-written
+descending Escape chain, a *second* hand-written chain for Enter, a
+hand-written ten-term `topLayer` expression, and a seventeen-term `anyModal`.
+Five lists of the same fact, kept in step by nothing. So they had drifted, and
+the drift is the version's best argument:
+
+- **`showWaitlist` was in none of them.** The waitlist Overlay could not be
+  closed with Esc — the only modal in the app you could not dismiss from the
+  keyboard — did not suppress the single-letter shortcuts firing behind it, and
+  did not mark the page behind it `inert`. Found while writing the stack, not
+  by using the app, which is the point.
+- **`topLayer` omitted the discard confirm, the pref picker, the search panel
+  and the split menu**, so the booking form's A/P/B/H shortcuts fired straight
+  through those into the form underneath.
+- **The Settings tab-cycle gate** named the two sub-modals that existed when it
+  was written (`!reminderEditor && !confirmReminderDel`), so ←/→ cycled Settings
+  tabs behind the discard confirm and the split menu.
+
+`MODAL_Z` is the z-order, ascending — **exactly the old Escape chain read
+bottom-up**, now data. Escape acts on `topModal(stack)`; `anyModal` is
+`modalStack.length > 0`; the two `topLayer`-shaped gates are `topModalId === …`.
+
+**The names survive as one-line derivations**, which is what keeps the diff
+reviewable: `showForm` is `!!modalOpen.form`, `manualTarget` is
+`modalOpen.manual || null`, and `setShowForm` is a memoised
+`setModalFor("form")`. Nothing downstream knows the difference — including the
+payload-carrying reads (`confirmKitchen === "walkin"`, `manualTarget.id`) and
+`ReminderEditor`'s updater-form `setDraft`, which `applyModal` supports.
+
+**Three states moved between hooks**, all on the established
+"legitimately shared" pattern `confirmKitchen` already had with `useWalkin`:
+`showWalkin` out of `useWalkin`, `reminderEditor` and `confirmReminderDel` out
+of `useReminders`. Only *"is this surface on screen"* moved — every draft, every
+baseline and every dirty flag stayed where it was, because those are facts about
+walk-ins and reminders rather than about which surface is on top.
+
+**Enter deliberately keeps its own order, and that is not laziness.** The two
+chains had already diverged: Enter checks the manual picker ABOVE the kitchen
+confirm while Escape has it far below, and eight modals have no Enter branch at
+all and FALL THROUGH to whatever is under them. Unifying them would be a
+keyboard behaviour change smuggled into a refactor. `MODAL_ENTER_ORDER` is the
+old sequence verbatim, an id absent from it falls through exactly as before, and
+the divergence is now visible in one place instead of implicit in two.
+
+**Two coverage guards, both proven against known-bad input** (not asserted):
+every `setModalFor("…")` id in App.jsx must have a rank in `MODAL_Z`, and every
+id in `MODAL_Z` must have an `escapeAction` case. Deleting the waitlist entry
+from either file fails the corresponding test. That is the property the eighteen
+booleans could not have at any price — a surface added without an Escape branch
+used to be silently unreachable, and is now a red build.
+
+The z-order test is the regression guard for the whole change: it asserts every
+pair of the old seventeen-branch chain still resolves the same way round, in
+both push orders, since the chain itself no longer exists to be read.
+
+**Verification:** build OK (202.70 kB gz, +0.74), lint 0 errors, **508 tests**
+(+14). Walked in DEV against 518 bookings: Esc on a clean form closes silently;
+Esc on a dirty form raises the discard confirm with both dialogs stacked; Esc
+again dismisses only the confirm and leaves the form; Enter on the confirm
+discards; Esc closes the search panel and Settings; ←/→ still cycle Settings
+tabs. Console clean throughout.
+
+### 7/n — the four dismissal Sets become one mechanism
+
+**Files:** `src/hooks/useDismissals.js` (new), `tests/dismissals.test.js` (new),
+`src/App.jsx`
+**Behavioural change:** none.
+
+Four session-only `Set`s with identical bodies written out four times: a
+`useState(() => new Set())`, a `dismissXRow(id)` that copies and adds, and a
+filter-the-map-by-the-Set memo. (ROADMAP said three; `clashDismissed` arrived in
+v17.11.0 and made it four, which is the pattern this version keeps meeting.)
+
+What actually differed between them was the KEY — `clash` is keyed by
+`clashRowId(pair)`, the rest by booking id — and the LIFECYCLE, and only the
+second is a real distinction worth keeping visible. `late`, `overlap` and `wait`
+are today-only sections whose conditions are monotonic within a day, so they
+never prune and are emptied on a date change. `clash` is the opposite: it is the
+one notification whose point is that you go and FIX it, so it clears and can
+recur on the same pair, and it prunes against its live pairs instead — which
+covers the date change for free, since those pairs are already viewDate-scoped.
+**`clash` being absent from the day-change reset is therefore correct, not the
+drift it looks like**, and `DAY_DISMISS_KEYS` now says so in one place instead
+of leaving it to be re-derived.
+
+**Both identity properties are preserved deliberately, and both were free
+before.** A no-op returns the same object (React bails out, and the clash prune
+effect — which depends on the Set it writes — cannot re-enter, the v17.10.2
+lesson one file along). And an untouched key keeps ITS Set by reference, so
+`[dismissed.late]` is still a stable memo dep when an overlap row is dismissed;
+a naive single state object would have quietly invalidated all four banners on
+every dismissal.
+
+**Verification:** build OK (202.87 kB gz, +0.17), lint 0 errors, **517 tests**
+(+9, including both identity properties and the "clash survives a day change"
+asymmetry), `check:style` OK.
+
+### 8/n — the preference mirror becomes a declarative table
+
+**Files:** `src/hooks/useUserPrefs.js`, `src/App.jsx`, `tests/prefs.test.js` (new)
+**Behavioural change:** none, and one drift removed (below).
+
+The four synced boolean prefs — reduce animations, plan gestures, lock
+navigation, split view — were each written out **three** times in App: a
+`useState` initializer reading `localStorage`, a toggle handler writing it, and
+a branch of the v17.6.0 seeding effect doing both again. Twelve near-identical
+blocks differing only in a key name and in which way round the default goes.
+
+`PREF_SPEC` (in `useUserPrefs.js`, which already owns the node) states each one
+once. `store` captures the second difference, which is the house convention
+rather than an accident: **only the non-default value is ever stored, so an
+absent key means the default.** `"whenOn"` is the default-OFF shape (`navLocked`,
+`reduceMotion` — store `"1"` when true); `"whenOff"` the default-ON one
+(`planGestures`, `splitEnabled` — store `"0"` when false). App keeps one reader
+(`readPrefLS`), one writer (`writePref`) and one flip (`togglePref`).
+
+**The drift it found immediately:** `readSplit` had a *second* hand-written read
+of `"mgt-split-enabled"`, checking the master switch before restoring a saved
+layout. Two literals for one key, one of them nowhere near the other three.
+
+**Two things stay written out in full, and that is the instruction, not an
+omission.** `theme` is a tri-state STRING with a `?theme=` override that must
+skip both the apply and the seed branches, and whose `undefined` case
+(follow the OS) is deliberately never seeded — folding that into a table hides
+the one pref whose special cases have actually bitten. And `setSplit(null)`
+when Split View goes off is React state rather than storage, so it stays at the
+two call sites; the table only drops the saved-layout localStorage key.
+
+**The tri-state semantics are untouched.** The seeding loop takes the apply
+branch only for a real boolean: `null` means "this user has never chosen", and
+a sanitize returning `false` for an absent field would reset every configured
+device at first login — the property the whole device-fallback migration rests
+on, now pinned by a test.
+
+**Verification:** build OK (202.99 kB gz, +0.12), lint 0 errors, **526 tests**
+(+9: both defaults, both round-trips, `PREF_SPEC` covering exactly the synced
+booleans and not `theme`, no surviving hand-written read of any of the four
+keys in App, `clears` matching `SPLIT_KEY`, and absent-sanitizes-to-null).
+`check:style` OK. Toggled Plan zoom & pan in DEV both ways and watched the key
+go absent and back to `"0"`.
+
+### 9/n — `hoursFor(viewDate)` is evaluated once per render, not four times
+
+**Files:** `src/App.jsx`
+**Behavioural change:** none.
+
+One value, four names: `viewHours`, the `notifSections` memo's `dayClosed`, the
+`dayClosed` const beside the view elements, and the header's hours line each
+called `hoursFor(viewDate)` and re-derived the same weekday lookup.
+
+`dayClosed` moves up beside `viewHours` rather than staying with its first
+reader — for the reason the comment down at the view elements already gives, and
+which this file has hit twice: a `const` used above its declaration in a render
+body is a TDZ ReferenceError that blanks the whole app, and neither `npm run
+build` nor lint sees it.
+
+**Verification:** build OK (202.98 kB gz, −0.01), lint 0 errors, **526 tests**,
+`check:style` OK. Loaded in DEV: renders, console clean — which for this change
+is the only check that matters.
+
+### 10/n — `pickView`'s swap branch
+
+**Files:** `src/App.jsx`
+**Behavioural change:** two, both making a plain view tap settle in ONE render
+instead of visibly correcting itself.
+
+Tapping the view that already occupies the other pane swaps the two. That branch
+was two lines, and both were subtly wrong next to the `swapSides` handler
+sitting twenty lines below it:
+
+- **It did not invert the ratio.** `swapSides` does, so each view keeps its own
+  size across a swap; this one let each view inherit the size of the pane it
+  moved into. A 70/30 split came back as 30/70 for the same two views.
+- **It skipped the Timeline width check** the *replace* branch right beneath it
+  performs, so it could drop the Timeline into a side-by-side pane too narrow
+  for one and leave the repair effect to reorient the layout a render later —
+  which the user sees as the split flipping after a plain tap.
+
+Both branches now go through one `fitTimeline(next)`, which asks where the
+Timeline actually ENDS UP rather than assuming it is the view that was tapped —
+a swap moves both views, so "did the user tap timeline" is the wrong question.
+
+**Verification:** build OK (203.00 kB gz, +0.02), lint 0 errors, **526 tests**,
+`check:style` OK. Both halves measured live in DEV at a 946px shell: seeding
+`{a:list, b:plan, dir:v, ratio:0.7}` and tapping *plan* wrote
+`{a:plan, b:list, ratio:0.3}` — each view keeping its width; seeding
+`{a:list, b:timeline, dir:v}` and tapping *timeline* wrote
+`{a:timeline, b:list, dir:h}` — stacked in the same commit as the swap, with no
+intermediate side-by-side frame.
+
+### 11/n — the empty-day walk-in prop has one name
+
+**Files:** `src/components/{TimelineView,ListView,EmptyDay}.jsx`, `src/App.jsx`
+**Behavioural change:** none.
+
+`EmptyDay`'s walk-in callback arrived as `onWalkin` in TimelineView and ListView
+and as `emptyWalkin` in PlanView. The collision is real rather than sloppy —
+PlanView already has an `onWalkin(tableId)` of its own, for the table popover's
+"Walk-in here", and the two callbacks are genuinely different — but the result
+was one input under two names across three views, and the next surface to grow
+an empty-day prompt would have guessed and got a silently missing button.
+
+All three views take `emptyWalkin`. `EmptyDay`'s own prop stays `onWalkin`:
+inside that component there is nothing to tell it apart from, so it keeps the
+plain `on*` handler convention, and its JSDoc now says which name the callers
+use and why.
+
+**Verification:** build OK (203.00 kB gz, unchanged), lint 0 errors,
+**526 tests**, `check:style` OK.
+
+### 12/n — one shared answer to "is this day empty"
+
+**Files:** `src/App.jsx`, `src/components/{TimelineView,ListView,PlanView}.jsx`
+**Behavioural change:** a cancelled-only day now shows the empty-day prompt in
+List too, above its cards rather than instead of them.
+
+Each view derived its own `day.length === 0`, and **List's `day` includes
+cancelled bookings while Timeline's and Plan's exclude them.** So on a day whose
+bookings had all been cancelled, two views said "Nothing booked for this day
+yet." and the third rendered its card list — which with the finished fold shut
+is a nearly blank screen with no prompt and no New-booking button, i.e. exactly
+the defect `EmptyDay` was written in v17.8.0 to fix, surviving in the one view
+it originally shipped in.
+
+`isEmptyDay` is derived once in App and passed down, the way `dayClosed` and
+`emptyWalkin` already are. A cancelled booking is not a booked table, so the
+other two views' reading wins.
+
+**The live check changed the design, which is why it was worth running.** With
+List simply returning `EmptyDay` on `isEmpty`, the cancelled cards stopped
+rendering at all — no reopen, no undo, no record of who cancelled — trading one
+blank screen for a worse one. The early return now fires only when there is
+genuinely nothing to draw (`day.length === 0`), and a cancelled-only day gets
+the prompt ABOVE the fold. That is precisely what Timeline and Plan do with
+their canvases: the day is empty AND there is still something worth showing.
+
+**Verification:** build OK (203.08 kB gz, +0.08), lint 0 errors, **526 tests**,
+`check:style` OK. Round-tripped in DEV on an otherwise-empty future date:
+booking created (prompt gone in all three), cancelled (prompt back in all three,
+List also showing "Completed & cancelled · 1 booking"), fold opened, booking
+deleted, prompt alone again. Both the earlier cases re-checked too — a day with
+live bookings shows no prompt anywhere.
+
+### 13/n — `clashSpans` draws one band per distinct span
+
+**Files:** `src/lib/booking-logic.js`, `src/App.jsx`, `tests/booking-logic.test.js`
+**Behavioural change:** none visible today; one fewer way for the band to be
+wrong later.
+
+`clashSpans` emitted one band per clashing PAIR, so three bookings all clashing
+on one table drew three coincident bands on the same pixels — three times the
+paint for one fact, and the moment the band grew any transparency a three-way
+clash would have rendered a different colour from a two-way one. The band's
+whole job is to say "these minutes are double-claimed", which is a property of
+the row, not of a pair.
+
+`mergeSpans` is in `booking-logic.js` rather than App because it is pure
+interval arithmetic with edge cases worth pinning. **Touching spans merge**, not
+just strictly overlapping ones: two clashes meeting at 20:30 are one
+continuously-contested stretch of that row, and drawing them as two bands
+separated by a zero-width seam is a rendering artefact rather than information.
+
+**Verification:** build OK (203.02 kB gz, −0.06 — the merged output is smaller
+than the code it replaced), lint 0 errors, **533 tests** (+7: identical spans,
+overlapping, contained, touching, disjoint-and-reordered, the trivial cases, and
+input not mutated), `check:style` OK.
+
+### 14/n — the notification strip's lid radius accounts for the pane's border
+
+**Files:** `src/components/NotificationStrip.jsx`
+**Behavioural change:** a sub-pixel sliver of pane no longer shows at the lid's
+corners.
+
+The lid carried the pane's own `R.card` (14px), but it sits INSIDE the pane's
+1px border, so the geometrically correct inner radius is 13px. An inner surface
+repeating the outer radius bulges past the curve, and it was visible rather than
+theoretical because the lid's hover veil is a different colour from the pane
+under it.
+
+There is no token for "card minus a border", and adding one would put an entry
+in a shared scale that only ever has this one caller — so it is a `calc()` at
+the site, behind a named `LID_R` const so the open and closed cases cannot
+disagree.
+
+**Verification:** build OK (203.05 kB gz, +0.01), lint 0 errors, **533 tests**,
+`check:style` OK. `calc(var(--r-card) - 1px)` resolved live in the running app:
+14px → 13px.
+
+### 15/n — the disabled primary button has a label again
+
+**Files:** `index.html`, `src/components/{BookingFormModal,WalkinForm,ReminderEditor,ManualModal}.jsx`,
+`tests/contrast.test.js`
+**Behavioural change:** the greyed-out primary in the two form footers,
+`ReminderEditor` and `ManualModal` now shows its label. **This closes a
+v17.13.0 open design question**; Patryk chose muted ink over a darker fill.
+
+v17.13.0 measured white on `--btn-disabled` at **1.30:1** in light — at which
+the label is not dim, it is GONE — and recorded it as an exemption, because WCAG
+1.4.3 exempts inactive components and answering it inside a gate-closing commit
+would have been the wrong place. A staff member who had not picked a date saw an
+empty grey pill where "Save booking" should be.
+
+**Why it is a new token and not `--text-muted`, which was the obvious answer.**
+`--btn-disabled` is declared in `:root` only and composites toward whatever is
+behind it, so its *effective* colour flips with the theme even though its
+declaration does not — light grey in light, mid-dark in dark. That is why white
+is invisible in one theme and fine in the other (6.42:1 dark). `--text-muted`
+inverts the same way the composite does, so it measures 4.59:1 light and
+**2.30:1 dark**: it would have swapped which theme was broken, not fixed either.
+`--btn-disabled-ink` is per-theme, picked against the two composited fills.
+
+**The light value is a step darker than `--text-muted`, and the reason is a
+limit of `tests/contrast.test.js` worth recording.** That file composites over
+the THEME EXTREME and calls it the worst case — which is true for WHITE ink and
+false for dark ink. The real modal sheet is a translucent panel over a tinted
+app background, so the fill composites to rgb(211,211,217) on screen against
+rgb(225,225,229) in the file. `--text-muted` read 4.59 in the registry and
+**4.02 in the running app**. The number to trust is the measured one, which is
+why this was walked in the browser rather than declared done when the test
+turned green.
+
+The entry stops being an exemption: `role: "label"`, held to 4.5, and
+`EXEMPT_FLOOR` loses its only per-theme member (the pair FORM stays, so the next
+fill whose themes diverge does not have to rediscover why one number is not
+enough).
+
+**One guard needed widening rather than dodging.** `--btn-disabled-ink` matches
+the `--btn-*` prefix the registry-coverage sweep scans, and it is an ink, not a
+fill. Naming it outside that prefix would have made the sweep blind to it —
+which is exactly how `--app-btn-grey` once hid from a check written around
+`--btn-*`. It is declared in a new `INKS` bucket instead, and a second assertion
+requires anything listed there to actually be some registered fill's `ink`, so
+"it is an ink" cannot become a sentence that silences the sweep.
+
+**Verification:** build OK (203.10 kB gz, +0.05), lint 0 errors, **534 tests**
+(+1: the new INKS assertion), `check:style` OK. Measured in the running app
+against the real paint stack, with the date cleared so the button is disabled:
+**5.14:1 light, 4.60:1 dark**. Screenshotted in both themes — the label reads as
+greyed-out beside the live "Back" button rather than as a second live control.
+
+### 16/n — the skip link
+
+**Files:** `src/App.jsx`, `index.html`, `tests/a11y.test.js`,
+`tests/stylesheet.test.js`
+**Behavioural change:** one new control, invisible until focused.
+
+v17.12.0 added the landmarks, which are the *programmatic* bypass and cost
+nothing visually. This is the one a **sighted keyboard user** can take, in an
+app that is explicitly keyboard-driven: the header holds a cog, a title block,
+three view buttons, two primary actions, a search and a connection dot before
+you reach the first booking — and every date change puts you back at the top of
+it.
+
+Focus-revealed pill in the app's own chrome vocabulary (`--r-pill`, `--accent`,
+`--text-on-accent`, `--shadow-btn-accent`), pinned to the viewport corner.
+
+**Three ways this control can be present and useless, all closed:**
+
+- **Hidden by TRANSLATION, never `display:none` or `visibility:hidden`** — both
+  make an element unfocusable, so the link could never be reached while looking
+  perfectly correct in the source. `tests/a11y.test.js` asserts the rule uses a
+  transform and asserts the absence of the other two; proven by swapping in
+  `display:none` and watching it fail.
+- **`<main>` carries `tabIndex={-1}`.** Following a fragment link moves focus to
+  the target only if the target can hold it; without this the browser scrolls
+  and the next Tab starts from the header again — which looks exactly like the
+  link working. `-1`, not `0`: it must be able to receive focus without joining
+  the tab order.
+- **It sits OUTSIDE `<header>`**, which takes `inert` while a modal is open. A
+  skip link inside an inert subtree is silently unfocusable — the same trap as a
+  live region in one, one element along.
+
+`position: fixed`, because the app is a normal scrolling page by default and a
+`100dvh` flex shell under nav-lock or split view; an absolutely-positioned link
+would resolve against a different box in each. `z-index: 200` puts it above the
+header and below the modal layer — a dialog owns the screen while it is open,
+and a bypass to something the user cannot reach is worse than none.
+
+`main:focus { outline: none }` — the ring belongs on the link you pressed, not
+as a browser-default outline drawn around a full-width region, which reads as
+the whole page being selected.
+
+Both selectors are in `CRITICAL_SELECTORS`: losing either fails silently in
+opposite directions — the link never appears, or never hides.
+
+**Verification:** build OK (203.14 kB gz, +0.04), lint 0 errors, **536 tests**
+(+7), `check:style` OK. Walked in the running app: one Tab from a fresh load
+focuses it and it slides in at (8, 8); activating it sets the hash, moves
+`document.activeElement` to `<main>`, and the next Tab lands on the first
+control INSIDE main with the link retracted. **The Enter key had to be a real
+click** — a synthetic `Return` focused the link but never activated it and left
+the hash empty, which is the same tooling limit v17.10.1 recorded for `:active`
+and the drag gestures. Measuring the wrong thing here would have looked like the
+link being broken.
+
+### 17/n — the day announcer
+
+**Files:** `src/App.jsx`, `tests/a11y.test.js`
+**Behavioural change:** changing the viewed date now says what changed.
+
+The strip and the toasts have spoken since v17.12.0; the VIEW itself still did
+not, so ←/→ moved a screen-reader user through the week in silence — and the
+date input's own value change announces the date without saying what is on it.
+
+**A summary, deliberately not a live region over the grid.** Thirteen bookings
+re-read on every status change would be unusable. This says the one thing
+navigation actually changed: *"Wednesday 19 August. 14 bookings."*, or *"…
+Nothing booked."*, or *"… Closed."*
+
+**On the DATE only, and that is structural rather than intended.** It is an
+effect keyed on `[viewDate]` reading a ref mirror of the bookings — the shape
+this codebase already uses. A `useMemo` over `bookings` would recompute on every
+write, and a write that changes the COUNT (a cancellation, a walk-in) would
+re-announce the whole day at a moment nobody navigated. Not on view switches
+either: T/L/P already announce on activation, so it would repeat what the button
+just said.
+
+**A THIRD region, not a share of the notification one.** They answer different
+questions and can change in the same commit — measured exactly that during
+verification: stepping onto 19 August, one region said "Wednesday 19 August. 14
+bookings." while the other independently said "Notification: Double-booked." In
+one region those would overwrite each other with the winner decided by render
+order. Same placement rules as `notifAnnounce`: always mounted (a region that
+arrives holding its message announces nothing) and outside `<main>`, because
+`inert` removes a subtree from the accessibility tree.
+
+`timeZone: "UTC"` for the same reason `weekdayOf` is all-UTC: a local weekday
+against a UTC date string shifts a day in UTC+ zones (the v14.7.0 Week-view
+lesson).
+
+**Verification:** build OK (203.33 kB gz, +0.19), lint 0 errors, **544 tests**
+(+4; the dep-array guard proven by adding `bookings` back and watching it fail),
+`check:style` OK. Measured in the running app with a `MutationObserver` on the
+region: stepping back two days produced exactly two updates with the right
+counts, and switching Timeline → List → Plan → Timeline produced **zero**.
+
+### 18/n — `ROADMAP.md`, `CLAUDE.md`, `DESIGN.md`
+
+**Files:** `ROADMAP.md`, `CLAUDE.md`, `DESIGN.md`
+**Behavioural change:** none — documentation.
+
+**`ROADMAP.md`'s Deferred section is empty of app work.** Every entry this
+version shipped is deleted; the two closed as DECISIONS (the waitlist ghost's
+opacity, the List's `list` semantics) are recorded as decisions in this log
+rather than left looking pending; the WhatsApp sandbox entry stays, annotated
+that it is scoped to the `wa-sandbox` branch and cannot ship from `main`. 220
+lines to 78.
+
+**`CLAUDE.md`.** The two gotcha rows the stack retires are rewritten rather than
+deleted — the history is the point, and the general shape is now stated
+explicitly as a row of its own: *any set of facts written out N times will be
+written out N−1 times by somebody, and the missing one is invisible.* That is
+the same defect as the settings-tab list, the four dismissal Sets and the four
+`hoursFor(viewDate)` calls, all met again in this version. The array-identity
+row now says the fix is at the source. New file-structure entries for
+`useModalStack`, `useDismissals` and `lib/reconcile`; updated ones for App.jsx,
+`useKeyboardShortcuts`, `useWalkin`, `useReminders`, `useUserPrefs` and
+`booking-logic`. Test list and count refreshed (544, with the `it.runIf`
+caveat).
+
+**Two stale lines fixed while passing through**, both in the file that calls
+itself the living architecture record: the icon note still said "since v17.4.1
+there is no service worker", true then and wrong since v17.10.1; and
+`DESIGN.md` said mechanising the accessibility standard "is v17.14.0's job",
+which stopped being true when Patryk moved the gate ahead of the modal stack and
+`tests/a11y.test.js` shipped in v17.13.0.
+
+**`DESIGN.md`** gains the skip link's treatment (and the three ways a hidden
+control can be present and useless) and the disabled-ink decision, including the
+general form: a `:root`-only fill composites toward what is behind it, so its
+effective colour flips with the theme even though its declaration does not — and
+an ink that inverts the same way does not fix a contrast failure, it swaps which
+theme has one.
+
+**Verification:** build OK (203.33 kB gz, unchanged), lint 0 errors,
+**544 tests**, `check:style` OK.
+
+### 19/n — `/code-review xhigh`: 11 findings, all fixed
+
+**Files:** `src/App.jsx`, `src/components/ListView.jsx`,
+`src/hooks/{useModalStack,useKeyboardShortcuts}.js`,
+`tests/{modal-stack,a11y,prefs}.test.js`
+**Behavioural change:** three (below). The rest are guards that could not fail,
+and shape.
+
+Bundled as one commit rather than eleven, on this repo's own
+`"/code-review fixes"` precedent: the edits interleave in `App.jsx` and
+`modal-stack.test.js`, and splitting them would mean partial staging with
+broken intermediates — the opposite of what commit separability buys.
+
+**1. The critical one: `K.setShowWaitlist` was never in the keyboard ctx.**
+`escapeAction` gained a `waitlist` case; the setter it calls was not added
+beside it, because the OLD chain had no waitlist branch and so had never needed
+the key. Pressing Escape on the waitlist panel threw
+`TypeError: K.setShowWaitlist is not a function` and left it open — **the exact
+defect this version exists to remove, shipped in the commit that removes it.**
+It escaped the live walk because the DEV database had no waiting entries, so
+the panel could not be opened; it was found by diffing every `K.*` reference in
+the hook against the ctx keys.
+
+Proven both ways in the running app, by temporarily forcing the panel open:
+with the key removed, `TypeError` in the console and the panel stays; with it
+present, Escape closes it and the console is clean.
+
+**The fix is the guard, not the key.** `tests/modal-stack.test.js` now extracts
+every `K.<prop>` the hook reads and every key App passes, and fails on the
+difference — the two lists had nothing checking them against each other, which
+is why one was short. Verified by deleting the key and watching it fail. This is
+the same lesson as the eighteen booleans, one level up: **a `case` in
+`escapeAction` is only half a wiring.**
+
+**2. The day announcer spoke at mount, against no data.** `bookings` starts as
+`[]` and the hours start at their seed, so a day with twelve bookings announced
+"Nothing booked" and a closed day announced as open — then never corrected,
+because the dep array is `[viewDate]`. It was also wrong in principle: nothing
+had changed, which is the only thing that region is for. It now records the
+mount date without speaking for it.
+
+**And the first attempt at that was wrong in a way only DEV showed.** A
+`null` + first-run flag is consumed by StrictMode's simulated remount — refs
+survive it — so the second invocation announced anyway, measured live. Seeding
+the ref with `viewDate` and comparing is idempotent under any number of
+re-runs, which is the property actually wanted: announce when the DATE changed,
+not when the effect ran.
+
+**3. An empty `role="list"` announced itself.** On a cancelled-only day the
+Bookings list rendered with zero items directly under "Nothing booked for this
+day yet", so a screen reader heard a contradiction. The ROLE is now conditional
+and the element is not — it carries `flipRef`, and `useFlip` bails out on a
+null container, so unmounting it would have silently disabled the list-reorder
+animation for the session.
+
+**Two guards that could not fail, both reintroductions of a recorded lesson:**
+
+- The skip link's "outside the inert subtree" assertion sliced a **fixed
+  400-character window** — exactly what v17.13.0's review condemned ("the
+  `<main>`-never-inert guard read a fixed 400-char window of a 316-char opening
+  tag"). Moving the link inside `<header inert={anyModal}>` left markup the
+  regex stopped at, so it passed. Structural now: the link's index must precede
+  the first `inert={anyModal}` in the file. Verified by making that move.
+- The `MODAL_Z` coverage guard matched ids with `[a-z]+`, so `"block2"` or
+  `"pref-picker"` escaped the check written against exactly that failure. It
+  also scraped `setModalFor("x")`, which the simplification below deletes —
+  and generated setters make that direction tautological anyway, so it now
+  checks the READ side (`modalOpen.<id>`), which is where a missing rank still
+  bites.
+- `tests/prefs.test.js`'s key check was **negative only** — "App does not
+  contain `getItem(<key>)`" passes against an App that never mentions
+  `PREF_SPEC`, and never looked at writes. Both directions now, verified by
+  restoring the `readSplit` drift this version fixed.
+
+**Two simplifications.** `setModalFor` was a factory called from eighteen
+separate `useMemo`s — 36 hook slots per render to produce eighteen stable
+closures. One memo builds them all **from `MODAL_Z`**, which also makes "every
+id has a setter" structural instead of eighteen lines a test has to police. And
+`enterAction` was an `if`-chain ten lines below `escapeAction`'s `switch`; two
+shapes for one dispatch problem in one file, now one.
+
+**Two contracts written down rather than changed.** `applyModal` closes on any
+falsy payload — the semantics the eighteen booleans already had — which makes
+`0` and `""` unusable and would silently never open a numerically-keyed modal;
+stated at the boundary and pinned. And the `dayAnnounce` effect's
+`hoursFor(viewDate)` is deliberately not the `dayClosed` const that commit 9/n
+introduced: it must read the value for the date being announced at effect time,
+and `dayClosed` in the dep array would re-announce the day on every Opening
+hours save.
+
+**Verification:** build OK (203.33 kB gz, −0.00), lint 0 errors, **548 tests**
+(+4), `check:style` OK. Every new guard proven against known-bad input rather
+than asserted. In the running app: the waitlist panel closes on Escape with a
+clean console, the day region is empty at mount and correct after one
+navigation, and no console output on load.
+
+---
+
+## v17.15.0 — both directions, and one colour per role
+
+**Date:** 2026-08-23
+**Files:** `src/App.jsx`, `src/lib/constants.js`, `index.html`,
+`src/components/atoms.jsx`, `TimelineView.jsx`, `ListView.jsx`, `PlanView.jsx`,
+`BookingFormModal.jsx`, `WalkinForm.jsx`, `ReminderEditor.jsx`, `BlockModal.jsx`,
+`ManualModal.jsx`, `ConnectionStatus.jsx`, `CustomersSettings.jsx`,
+`AppBanners.jsx`, `NotificationStrip.jsx`, `BannerRows.jsx`, `ClashBanner.jsx`,
+`src/hooks/useRevealRows.js`, `tests/motion.test.js` (new),
+`tests/contrast.test.js`, `tests/a11y.test.js`, `tests/stylesheet.test.js`,
+`CLAUDE.md`, `DESIGN.md`, `ROADMAP.md`.
+**Behavioural change:** motion only, plus three colour corrections. No persisted-data
+change, no security-rule change, **no Firebase console step**. Rolling deploy.
+**Verification:** every item measured in the running DEV app before and after —
+see each entry. Build + 564 tests + lint (0 errors) + `check:style` green.
+
+Patryk reported six things in two groups: four about transitions that snap, run
+too fast or only run one way, and three about buttons, banners and chips that
+differ between surfaces and between themes. Four of the six turned out to have a
+cause other than the one the symptom suggested, and two of those causes were
+shipping a defect nobody had reported.
+
+A second round (entries 9–11) came from watching the first: the inline alert the
+version had just standardised still snapped, and the date switch was still
+diagonal. That one turned out not to be a motion defect at heart.
+
+### 1. The empty-day prompt eases in and out
+
+"Nothing booked for this day yet." was the only in-flow surface left that changed
+the page height without easing it. All three views now mount it inside `Reveal`.
+
+ListView needed a structural change first. It had TWO mount sites — an early
+`return` for a genuinely empty day and an in-flow one for a cancelled-only day —
+and the early return cannot animate out by construction: the branch is taken only
+WHILE the day is empty, so the first booking replaces the whole subtree in one
+frame with nothing left to collapse. It was also redundant; the normal return
+already produces the identical screen (`active` is empty, the list role is
+conditional since v17.14.0, the finished fold is gated on `finished.length`).
+Removing it also fixed something the note beside `flipRef` had already warned
+about: `useFlip` bails on a null container and stays dead for the session, and the
+early return unmounted that container on every empty day.
+
+### 2. The timeline grid moves vertically only — and it was never the grid
+
+Reported as: when the notification strip turns up, the grid animates in from a top
+corner instead of being pushed down.
+
+The vertical push was already correct. Seeking the strip's `Reveal` transition
+frame by frame showed the grid body and every block easing straight down with `x`
+and `width` constant to the tenth of a pixel, in default and `shellFixed` modes,
+with `min-width` binding and not. The planned fix — the grid's own
+`transition: width` misfiring — was measured and **disproved**.
+
+The diagonal is `useFlip`. It records each element's top in VIEWPORT coordinates
+and re-measures only when its deps change, which for TimelineView is `assignSig`.
+The strip changes neither, so when it appears or collapses every block moves, the
+effect does not run, and `prevTops` is left holding pre-shift coordinates. The
+next unrelated edit measures against that stale baseline.
+
+Reproduced exactly: collapse the strip (blocks move 391px → 286px, **zero** WAAPI
+calls, baseline now stale), then add a booking — and all FIVE blocks play
+`translateY(-46px) → 0` over 385ms, four of them still on the same table. With the
+blocks' own `left`/`width` transition, which a real reshuffle fires, that is a
+diagonal.
+
+The fix is one subtraction — measure relative to the container — and it is what the
+hook has always meant: it animates a block re-parenting into a different ROW,
+which is movement inside the container. Verified both ways afterwards: the same
+shift-then-edit sequence produces zero animations, and moving a List card from 3rd
+to 7th still plays `translateY(-584px)` on that card and `translateY(146px)` on
+the four that shifted up.
+
+### 3. `--t-reveal`, and the timeout that would have broken the exit
+
+The Summary body and "Completed & cancelled" took `--t-shift` (385ms) along with
+every geometry change in the app. They are not the same question: a block
+repositioning is something you WATCH ARRIVE; a disclosure is something you READ AS
+IT ARRIVES. "Too snappy" is the complaint of being handed something before you are
+looking at it. So `--t-reveal: 520ms` joins `--t-status` and `--t-wipe` as a
+documented off-scale step, `Reveal` is its only consumer, and nothing geometric
+moved.
+
+The part that would have bitten: `Reveal`'s two internal timeouts were literals,
+320 and 300 against 385ms. At 520 the unmount fires 220ms early and the collapse
+is cut off — the fix for "too fast" silently breaking the exit, in the version
+whose stated purpose was removing one-way transitions.
+
+### 4. The sweep: every exit in the app was cut off
+
+An element that animates out has two halves nothing connects — a keyframe class
+with a duration, and a JS timeout deciding when to unmount. When the timeout is
+shorter the exit is not broken in any way a reviewer can see: it plays part way and
+the node blinks out at whatever opacity it reached.
+
+Every `.mgt-*-out` class runs for `--t-move` (240ms). The holds were 200
+(`Presence`), 190 (its six call sites), 210 (`Toast`), 200 (`ModalPresence` — every
+modal in the app), 300 (`Reveal`) and 350 (`useRevealRows`). Measured: closing the
+booking form ran `mgt-scrim-out` and unmounted it at `currentTime` **167 of 240**,
+so the scrim vanished at 70% of its own fade while plainly visible. After: 218 at
+252ms, unmounting at ~260.
+
+Exactly ONE site had it right, and it is the interesting part — `ConnectionStatus`,
+whose comment read *"outMs must match --t-move (240ms) or the node unmounts
+mid-animation"*. The knowledge existed at one call site and had not propagated,
+which is the same shape as v17.14.0's five hand-written modal lists. So the number
+is no longer writable at a call site: `EXIT_MS` and `REVEAL_EXIT_MS` live beside
+the tokens they follow and are the defaults.
+
+`tests/motion.test.js` (6 tests) holds it: every hold outlasts its animation,
+`M.dur` matches index.html, a disclosure stays slower than a geometry move, and no
+component may pass a literal `outMs`. All three guards proven against the exact
+historical values.
+
+**Three one-way transitions were left**, each needing two copies of a stateful view
+mounted at once — the view switch, the Settings tab body and the timeline's
+waitlist ghost. Reasons and the ghost's one arguable case are in `ROADMAP.md`.
+
+### 5. One solid decision button
+
+"No show" exists in four places. Three are `mkBtn` on `--btn-orange` with
+`NoShowIcon`; the fourth — the Cancel-booking confirm — was hand-written on
+`--app-warn-solid` with no icon. Two oranges for one action.
+
+It was hand-written because there was nothing to write it with: the SOLID decision
+button existed as twelve verbatim copies of nine declarations. They agreed, which
+is the condition that produces the next disagreement, and it had already produced
+this one. `mkSolidBtn` is that shape; `background` is required with no default, for
+`ModalTitle`'s reason.
+
+Two things the conversion surfaced. ReminderEditor's footer was `minHeight: 40`,
+the only modal-footer decision button below the 44 floor. And its title was an
+EIGHTH hand-written copy of the pill `ModalTitle` was created in v17.9.1 to absorb
+— invisible to that sweep because it renders outside `Overlay`, which is where the
+sweep looked. It also has no `role="dialog"` at all; that is recorded in
+`ROADMAP.md` rather than fixed here.
+
+Verified: all three "No show" buttons `rgba(210, 91, 28, 0.8)` with the icon, and
+the confirm popover's three buttons at one height, radius and padding.
+
+### 6. The inline alert is a strip section
+
+"Text is required." and its twins in the booking and walk-in forms: three copies
+differing only in padding and margin, all three wearing the one label shape
+`DESIGN.md` bans outright — pale semantic fill PLUS a matching border PLUS bold
+text in a third shade. `InlineAlert` gives them the strip's section shape, so a
+fault looks the same whether it fires on the main screen or inside a form. No new
+icon: `AlertIcon` already means "the app failing rather than the restaurant
+needing something", and the rule against two sections sharing a mark is about the
+collapsed tally, which an in-modal alert never enters.
+
+Copying the strip's `tone: --status-offline` was the obvious move and would have
+been wrong. Measured first, because `--status-offline` is `#ff3b30` in BOTH themes
+while `--danger-bg` inverts:
+
+| ink on `--danger-bg` | light | dark |
+|---|---|---|
+| `--status-offline` | **3.03:1** | 4.31:1 |
+| `--danger-text` | 7.09:1 | 8.05:1 |
+
+Below AA in light, and a 42% swing between themes — the exact inconsistency this
+version was asked to remove, shipping on "Couldn't save" and "Couldn't load
+bookings". `AppBanners` was corrected in the same commit.
+
+**Nothing could have caught it.** The contrast guard's coverage prefixes do not
+match `--danger-bg`, and `check:style` sees literals, not token pairings. So the
+pair is a registered `FILLS` entry now, proven against the old one.
+
+### 7. Outline chips derive their border from their text
+
+An outline chip took its BORDER from `--suggest-border`/`--warn-border` and its
+TEXT from `--success-text`/`--warn-text` — two families never required to agree.
+In light that is a pale mint ring around dark forest text; in dark the two nearly
+converge. The chip read as a different component per theme, which is what was
+reported.
+
+A border is the same statement as the text, quieter, so it is now the same colour
+at half strength: `--chip-<role>-border` is `color-mix(in srgb,
+var(--<role>-text) 50%, transparent)`. First use of `color-mix` here; the failure
+mode is benign rather than broken (an unsupported mix makes the property
+guaranteed-invalid and `border-color` falls back to `currentColor`, which IS the
+ink), verified in the browser. Declared once, never duplicated into the dark
+block — each references an ink that already flips.
+
+`OutlineChip` replaces the two hand-written copies plus the autocomplete
+dropdown's chips, which were the banned shape in full. ListView's SOLID row tags
+are deliberately unchanged: they share a dense row with four other solid tags, and
+the rule is "match whatever sits next to you".
+
+Verified in both themes: `rgba(0,0,0,0)` fill, border exactly the ink at 0.5 alpha
+— light `srgb(0.086 0.396 0.204 / 0.5)` against `rgb(22,101,52)`, dark
+`srgb(0.525 0.937 0.675 / 0.5)` against `rgb(134,239,172)`.
+
+### 8. ReminderEditor is a real dialog
+
+Found while doing (5): it was the only modal in the app not built on `Overlay`,
+so it had no `role="dialog"`, no `aria-modal`, no focus trap, no focus restore
+and no accessible name — five things every other modal has had since v17.9.1,
+and five things nothing on screen reveals as missing.
+
+**Its stated reason for the exception was false, and had been for eleven
+versions.** The file header said the z-index 250 "is why it doesn't reuse the
+shared `Overlay`" (whose scrim is 200). But the discard confirm sits at z=260
+using `Overlay`, and gets there by wrapping it in a positioned div: `position` +
+`z-index` makes a stacking context, so the whole subtree stacks at that level
+whatever the fixed children inside it declare. The same idiom at 250 works
+here, and **`Overlay` is untouched** — no `z` prop, no new branch, nothing for
+the other eleven modals to regress on.
+
+The rest of the port is deletion. v14.4.1 had already reproduced Overlay's
+shape BY HAND — a scrolling body with the error and actions pinned below it —
+with a comment saying it "mirrors Overlay's `footer` slot (this modal predates
+it)". That structure is now the slot it was imitating; the hand-written scrim,
+card, `useModalPresence` and four animation classes are gone.
+
+Two accepted consequences: the desktop card goes 520 → 580, and below 600px it
+becomes Overlay's full-screen sheet rather than a centred card, so the reminder
+editor stops being the one modal that behaves differently on a phone. Checked
+at 375px — `mgt-sheet-in`, full viewport, footer pinned; both sheets are
+`--bg-sheet-mobile` at 98% opacity, so what looks like bleed-through in a
+screenshot is 2% of an identically coloured surface.
+
+Verified in the running app: role, `aria-modal`, `aria-labelledby` resolving to
+the `<h2>` "New reminder", focus landing on the dialog container, Tab wrapping
+in both directions, and focus returning to the "+ New reminder" button. The
+ancestor chain is card → Overlay's scrim (fixed, z=200) → the z=250 wrapper,
+with the editor topmost at its own centre and Settings still mounted beneath.
+
+**A measurement trap worth recording.** The first focus-restore reading said
+focus returned to the Settings container, not the button — an artefact of
+driving the test with `.click()`, which does not move focus the way a real
+press does, so `Overlay` had captured the wrong element to restore TO. Focusing
+the opener first, which is what a finger does, shows the restore working.
+CLAUDE.md already says a synthetic press is not a finger; this is that rule one
+layer up, in the thing the press was supposed to set up rather than in the press
+itself.
+
+`tests/a11y.test.js` gained the gate (558 tests), and it checks the STRUCTURE
+rather than the roles — because ReminderEditor was not a modal that forgot its
+role, it was a modal that never went through the atom. `var(--scrim)` may
+appear in exactly one file; the popups paint `--tl-popup-scrim`, since a popup
+is not a dialog and must not claim to be one. Proven against real regressions:
+restoring the pre-port file verbatim fails both assertions, and deleting only
+the z=250 wrapper fails the second — a one-div deletion that would otherwise
+make the editor paint under the modal that opened it with nothing to catch it.
+
+### 9. The inline alert eases in and out
+
+`InlineAlert` was standardised in entry 6 and still appeared and disappeared in
+one frame. It is the clearest possible case for the in-and-out rule: it arrives
+because you pressed Save and leaves because you typed a character, i.e. it comes
+and goes under the eye of someone already reading the form, and each of the
+three copies snapped the footer — and the card above it — by its own height.
+
+Each is wrapped in `Reveal` now, which caches its last truthy child so the exit
+still animates once `error` is already null. The always-mounted `role="alert"`
+stays OUTSIDE it, per v17.12.0's rule that a live region must be in the tree
+before its content changes.
+
+ReminderEditor had no `role="alert"` at all, so its error was announced by
+nobody — found only because this entry touched all three sites side by side.
+It has one now and the three read identically. Measured, both directions:
+46px ↔ 0 over ~520ms with the opacity in lockstep.
+
+### 10. A date change replaces the strip; it does not edit it
+
+Reported as two things — the horizontal date switch moves diagonally when the
+notification strip is up, and the strip's content snaps when it changes. They
+are one defect, and it is not really about motion.
+
+The strip's per-section lifecycle (`useRevealRows`) is built for a notification
+ARRIVING or RESOLVING while you watch: it holds a departed section mounted so
+its `Reveal` can collapse, and mounts a newcomer closed so it can ease open. A
+date change is not that. Nothing arrived and nothing resolved; you navigated,
+and the sections differ because it is a different day. Sampled per frame going
+22 → 23 August:
+
+- For **~550ms the strip showed the day you had left**. At t=62 it read
+  "Running late" — the new day's heading, taken live — above a body about a
+  table reshuffle belonging to the previous day. That is not slow motion, it is
+  the wrong information, and it is the half of this that no timing could fix.
+- Departure and arrival overlapped, so the pane passed through a state that
+  exists on **neither** day: two sections, each wearing the sub-header a lone
+  section does not get, under a lid reading "Notifications". It travelled
+  **70px of height to finish 2px from where it started**, reversing direction
+  twice across 1.15s.
+
+That second bullet is the entire diagonal. With no strip on either date the
+same switch is 28px sideways and **zero** vertical, measured; with one it
+dragged the timeline up 13px, down 32px and back, under a slide lasting 240ms.
+
+So `useRevealRows` takes an optional `resetKey` meaning "this is a different
+list, not a changed one", and re-seeds on it exactly as it does on first mount
+— which is what its own initializers already describe. Ids common to both days
+keep their place untouched, so a notification equally true on both does not
+blink. With the content replaced in one frame the only thing left is the box,
+which eases once: a single WAAPI shot on `--t-move`, so it starts and ends with
+the view's own slide. The fade is gated on the rendered text actually
+differing, because "Working offline" is not about the day and fading it because
+you pressed Next is motion describing something that did not happen.
+
+**It cannot be `AutoHeight`**, and the reason generalises. That atom's observer
+fires every frame while its content is itself animating and eases the box to
+follow, clipping the overflow — correct for a Settings tab, wrong here, where
+the sections' own Reveals animate constantly by design. Every notification
+arriving in place would be clipped mid-reveal by a box chasing it. A one-shot
+fires on the swap and touches nothing else; with WAAPI's default `fill: none`
+it also leaves no inline height behind to get stuck, verified by interrupting a
+swap mid-flight.
+
+`ClashBanner` takes the same key one level down — the only rows banner scoped to
+the VIEWED date rather than to today, so the only one whose rows can be replaced
+by another day's while its section stays put.
+
+The re-seed runs during render rather than from an effect, and that is
+load-bearing: it makes the first committed DOM the new list, so the strip's own
+layout effect can measure the height it is leaving against the height it is
+arriving at. From an effect it lands a commit late and the height in between
+belongs to the two-section state nobody was meant to see. The ref writes it
+implies were first done during render too, next to the setState calls; they are
+in a layout effect now, which is both what the linter asks for and where they
+belong — a render may be discarded and a ref written there survives it.
+
+After: 28px horizontal, y constant at 326, strip height constant at 98, and the
+new day's text in the first frame.
+
+**One follow-up, found by asking where the guards stop.** The first version
+nested the lid's fade inside `if (body)`, so a strip that was COLLAPSED when the
+date changed got no transition at all — `Reveal` has unmounted the body in that
+state and the guard took the whole block with it. Collapsed is not hidden: it is
+one row carrying the worst section's title and the per-category tally, both of
+which change with the day, and measured there "Running late 1" became "Tables
+could be reshuffled 1" with zero animations. The two questions are independent
+now — the fade asks whether the rendered text changed, the height asks whether
+there is a body to ease from.
+
+### 11. The strip arrives on the clock it is arriving with
+
+`--t-reveal`'s own definition is "a DISCLOSURE opening or closing **under your
+finger**", and its list of examples ends with "the notification strip" — a
+component holding TWO `Reveal`s, only one of them under anybody's finger. The
+lid's body opening because you pressed the lid is the disclosure the token was
+written for. The pane arriving because a booking went late, or because you
+pressed Next day, is nobody's press: it is `--t-move`'s own definition,
+"something arriving or leaving". Entry 3 gave the token to both.
+
+At 520ms it outlasted the view's 240ms slide by more than double, so a date
+change slid sideways for 240ms and then went on rising for another 280ms — one
+event read as two, and the last of the vertical component entry 10 did not
+already remove.
+
+`Reveal` takes a `speed` naming an entry of the `M` scale, defaulting to
+`"reveal"` so every other call site is unchanged. A **name** and not a number,
+because the CSS timing and the unmount hold have to come from the same entry —
+they are the two halves that were wrong in six places in entry 4, and a caller
+able to pass one without the other is that defect with a nicer spelling.
+`exitHold(speed)` is the arithmetic now, and `EXIT_MS` / `REVEAL_EXIT_MS` are
+what they always were: its two named applications.
+
+A misspelt speed fails silently in both halves at once. `M["slide"]` is
+undefined, so the transition declaration reads `grid-template-rows undefined`
+and the browser drops it; `M.dur["slide"]` is undefined, so the hold is `NaN`,
+which `setTimeout` takes as 0. A Reveal that neither animates nor waits, from
+one wrong word. Three guards in `tests/motion.test.js`, two proven against
+exactly that.
+
+Measured: appear 0→100px and the slide's 28px now start and finish together at
+~300ms; the collapse is 250ms where it was 530ms; the lid's own disclosure is
+untouched at ~500ms.
+
+### 12. A date change owns the vertical axis
+
+Reported twice, and still true after entries 10 and 11 had removed the wobble
+and put both clocks on `--t-move`: switching dates with the strip up moved the
+grid diagonally, "as if to a top corner".
+
+**Entry 11 is why retiming could never have fixed it.** Co-timing two movements
+is exactly what turns a wobble into one clean diagonal. The grid moves on both
+axes because a date change drives both — the view enters with a 28px horizontal
+slide, and the strip's height change pushes it vertically. Measured across
+19 → 26 August, four of seven steps move vertically:
+
+| step | vertical | |
+|---|---|---|
+| 19→20 | **−98** | strip disappears |
+| 21→22 | **+100** | strip appears |
+| 22→23 | **+51** | strip grows to two sections |
+| 23→24 | **−151** | strip disappears |
+
+The two negatives are the "top corner" precisely: the grid rises ~150px while
+sliding sideways.
+
+So the axes are separated instead of the clocks aligned. A date change fades
+(`mgt-view-fade` — opacity only, no transform) and its sole movement is the
+strip's own vertical reveal pushing the grid. The T/L/P switch keeps its
+directional slide and keeps it honestly: the strip sits OUTSIDE the view, so a
+view switch never moves anything vertically and its horizontal slide is already
+pure. Accepted cost, put to Patryk before building it: a date change loses its
+left/right direction cue, and on a day where the strip does not change the grid
+crossfades without moving.
+
+One call site — every date path runs through `goToDate`. Verified live: the nav
+buttons, the arrow keys and the date input all report `mgt-view-fade`; both view
+buttons still report `mgt-view-in-left`/`-right`.
+
+**The guard is three entries, not one.** `SlideView` mounts with `animating:
+true` and leaves that state only on `animationend`, so a missing rule means the
+event never comes and the view wrapper keeps `overflow: hidden` forever — hover
+lifts clipped app-wide, panes clipped in the fixed-shell and Split View layouts.
+Verified by injecting `animation: none` on the new class and changing the date:
+class still applied, computed overflow still `hidden`, nothing thrown and
+nothing visibly missing. The two slide classes had carried that failure mode
+since v15.8.0 without being in `CRITICAL_SELECTORS`; all three are now, proven
+by deletion.
+
+### 13. `/code-review xhigh`: 12 findings, all fixed
+
+Four behavioural, eight statements of record. The behavioural four:
+
+**The strip's swap animations ignored reduced motion.** index.html's
+kill-switch rewrites CSS `animation-duration` and `transition-duration`, and
+neither reaches a WAAPI `animate()` — `useFlip` says exactly that in a comment
+and checks `data-motion` / `prefers-reduced-motion` in JS before animating. The
+three calls added in entry 10 did not, so the per-device "Reduce animations"
+toggle, whose stated job is weak tablet hardware, still played 240ms of height
+and opacity on every date change. The expression is `reduceMotionOn()` in
+atoms.jsx now and both callers read it, because two copies of it is how one of
+them silently stops asking. Verified live: three animations with motion normal,
+**zero** with reduce on.
+
+**That layout effect ran its measurements on every commit.** No early return and
+no dep array, so `offsetHeight` plus two `textContent`s on every render — and
+this component is not memoized while `notifSections` is rebuilt each App render,
+so that included every keystroke in the booking form, a path CLAUDE.md documents
+as performance-critical. Benchmarked in the running app with the strip expanded
+and 1402 nodes under `<main>`: **2.886ms per commit**, on desktop, to serve a
+measurement wanted only on a date change. It returns early now, and the baseline
+moved to a passive effect where layout is already clean.
+
+**The baseline was sampled during the animation.** `offsetHeight` on an element
+with a WAAPI run in flight returns the INTERPOLATED height, so any commit inside
+those 240ms overwrote the resting height with a value true for one frame — and a
+second date change in the window would then ease from a position the box is not
+in. Skipped while `playState === "running"`.
+
+**The new speed guard had a hole exactly where it mattered.** It scanned
+`src/components` and `src/App.jsx`, leaving `src/hooks/` out — and
+`useReminders.jsx` is the one hook in the app that returns JSX, i.e. the single
+place a `Reveal` can be written outside a component file was the one place
+unguarded. It walks all of `src/` now, proven by planting a bad speed in exactly
+that file.
+
+The eight others were the same defect in prose, and it is the one this version
+keeps naming: **a statement of record that a later commit made false.**
+ListView still promised "the early return above guarantees `day` is non-empty"
+three commits after entry 1 deleted that return; App's `slide` comment still
+named date nav as a source of the directional classes after entry 12 stopped it
+passing them; `M.reveal` pointed at a `REVEAL_MS` that has never existed.
+Also removed: an exported `EXIT_PAD` nothing imports (a caller able to reach it
+is a caller able to hand-compute `M.dur.x + EXIT_PAD`, which is the split
+`exitHold` exists to prevent) and a `/* @motion */` marker on a line containing
+no literal, which would have suppressed the check:style failure that should
+catch the next one added beside it.
+
+### The shape of this version
+
+Four of six reports had a cause other than the obvious one, and the two that
+mattered most were invisible: a stale FLIP baseline that makes the grid slide
+diagonally on an unrelated edit, and every modal in the app closing at 70% of its
+own animation. Both were found by measuring in the running app rather than by
+reading the code, and neither would have been reported as itself — one was
+reported as "the grid moves to a corner" and the other was never reported at all,
+because a truncated exit still looks like an animation.
+
+The recurring fault underneath five of the seven entries is one thing: **a value
+that must agree with another value, written out by hand in both places.** Six
+exit timeouts against one duration token, twelve copies of one button, three
+copies of one alert, two copies of one chip, and two colour pairs drawn from
+families never required to match. v17.14.0 said it about modal lists; it is the
+same sentence.
+
+Entry 8 is its sibling rather than its counter-example: not a value duplicated,
+but a whole surface that left the shared component for a reason nobody
+re-checked, and took five invisible guarantees with it. Both are cases of the
+single source of truth having exactly one exception, and the exception being
+the thing that breaks.
+
+Entries 10 and 11 are a third variant, and the most useful one to carry
+forward: **a mechanism correct for one kind of change, applied to a different
+kind of change nobody had distinguished.** A per-row lifecycle is right for a
+notification arriving and wrong for a whole list being replaced; a disclosure
+duration is right for a panel you opened and wrong for a panel that opened
+itself. In both cases the two kinds shared a component, so nothing marked the
+seam — and in the first the visible symptom was a wobble while the real one was
+half a second of the previous day's notifications, which no amount of retiming
+would have fixed. Entry 11's seam had even been written down, in the token's
+own defining clause, and read past. Ask what KIND of change this is before
+picking how it should move.
+
+Entry 12 closes the loop on all three, because it is the one report that
+survived two fixes. Both of those made the motion better and neither made it
+right, for the same reason: they treated a two-axis movement as a timing
+problem. **Two movements on different axes cannot be reconciled by a clock —
+aligning them perfectly is what makes the diagonal clean rather than what makes
+it go away.** The question was never "when should each of these run", it was
+"which axis does this gesture own".

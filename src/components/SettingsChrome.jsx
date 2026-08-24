@@ -16,16 +16,26 @@ import { WA_SANDBOX } from "../lib/waSandbox";
 // Add or reorder tabs HERE ONLY — a hand-copied id list elsewhere is exactly
 // how the "arrow keys skip the new Customers tab" bug happened when the 5th
 // tab shipped. Never duplicate this list.
+// v17.11.0: `app` is the 6th tab — the eight controls that make the app
+// comfortable on YOUR screen, split out of a General tab that had reached 47
+// controls. Ordered after the restaurant's own configuration and its data, and
+// before Shortcuts: General and Layout are what the restaurant is, Customers and
+// Reminders are what it holds, App is how you look at it, and Shortcuts is
+// reference rather than settings at all.
+//
 // WA-sandbox note (prod-sync): this file is now WA-touched. The WhatsApp tab is
-// spliced in behind WA_SANDBOX so a non-sandbox build shows exactly the five
+// spliced in behind WA_SANDBOX so a non-sandbox build shows exactly the six
 // historical tabs — and because this stays ONE list, App's ←/→ nav follows the
-// gate automatically instead of arrowing onto a tab that renders nothing.
+// gate automatically instead of arrowing onto a tab that renders nothing. It
+// sits after Reminders, with the other things the restaurant HOLDS, and before
+// App/Shortcuts, which are about the device and reference.
 export const SETTINGS_TABS = [
   { id: "general",   label: "General" },
   { id: "layout",    label: "Layout" },
   { id: "customers", label: "Customers" },
   { id: "reminders", label: "Reminders" },
   ...(WA_SANDBOX ? [{ id: "whatsapp", label: "WhatsApp" }] : []),
+  { id: "app",       label: "App" },
   { id: "shortcuts", label: "Shortcuts" },
 ];
 

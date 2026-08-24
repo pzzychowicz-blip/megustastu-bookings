@@ -21,7 +21,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { S, BTN, BLOCK_BG, BLOCK_INK, R, T, FW, IC } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKey, isNoShow } from "../lib/customers";
-import { Section, Reveal, mkInp, mkBtn } from "./atoms";
+import { Section, OutlineChip, Reveal, mkInp, mkBtn } from "./atoms";
 import { ChevronDownIcon, ChevronRightIcon, WaitIcon } from "./Icons";
 
 export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2 }) {
@@ -76,9 +76,12 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   // ListView's solid tags are), so the pale-fill-plus-border-plus-bold-text
   // stack was three encodings of one signal on something that needs one. The
   // extra pixel of border is what keeps them legible once the fill is gone.
-  const chip = function (label, colors) {
-    return <span style={{ fontSize: T.micro, fontWeight: FW.bold, borderRadius: R.pill, padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: 2, background: "transparent", border: "2px solid " + colors.border, color: colors.text, flexShrink: 0 }}>{label}</span>;
-  };
+  //
+  // v17.15.0: the shared `OutlineChip`, which is the same component this local
+  // helper and BookingFormModal's `chipBase` had each written out. A TONE is
+  // one decision now — the border is the ink at half strength — instead of a
+  // border token and a text token from two unrelated families that disagreed
+  // in light mode and nearly converged in dark.
 
   const rows = shown.map(function (c) {
     // v17.10.0: `c.key` — the identity, which is the phone for a phone customer
@@ -90,7 +93,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     const wlCount = c.phone ? waitCountOf(c.phone) : 0;
     const historyRows = open ? c.bookings.map(function (b) {
       return (
-        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "4px 10px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? chip("no-show", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}</div>
+        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.7.0: solid, like every other status label (see SBadge). */}<span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "4px 10px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? <OutlineChip tone="warn">no-show</OutlineChip> : null}</div>
       );
     }) : null;
     return (
@@ -110,13 +113,13 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           // squared off inside its own rounded card on hover. R.card matches the
           // parent exactly. (ConnectionStatus's dot button was the first case in
           // the app; this is the second. Check any new one.)
-          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted }}>{(c.phone ? formatPhone(c.phone) : "No phone · linked guest") + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? chip(c.visits + " visit" + (c.visits !== 1 ? "s" : ""), { border: "var(--suggest-border)", text: "var(--success-text)" }) : null}{c.noShowCount > 0 ? chip(c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)", { border: "var(--warn-border)", text: "var(--warn-text)" }) : null}{wlCount > 0 ? chip(<><WaitIcon size={IC.inline} />{wlCount}</>, { border: "var(--border-soft)", text: "var(--text-secondary)" }) : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></div></div>
+          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted }}>{(c.phone ? formatPhone(c.phone) : "No phone · linked guest") + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? <OutlineChip tone="success">{c.visits + " visit" + (c.visits !== 1 ? "s" : "")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></div></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
-            <div style={{ fontSize: T.body, fontWeight: FW.bold, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.medium, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
             {historyRows}
             <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-              {armed ? <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymized as “Data removed” for statistics. Tap again to confirm.</span> : null}
+              {armed ? <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.</span> : null}
               <button
                 className="mgt-hover-scale mgt-press"
                 style={mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.del, opacity: armed ? 1 : 0.85 })}
@@ -165,11 +168,12 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           {phonelessNoShowCount > 0 ? (
             <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
               <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--warn-text)" }}>{phonelessNoShowCount}</div>
-              <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>no-show, unidentified</div>
+              <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>no-shows with no phone</div>
             </div>
           ) : null}
         </div>
         <input
+          aria-label="Search customers by name or phone number"
           value={query}
           onChange={function (e) { setQuery(e.target.value); setOpenKey(null); setArmedKey(null); }}
           placeholder="Search by name or phone…"
@@ -197,9 +201,9 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
             </span>
           ) : null}
         </div>
-        <div style={{ fontSize: T.small, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number, or — for guests who never gave one — by having been linked to each other from the name suggestions on a booking. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymized as “Data removed” for statistics.</div>
+        <div style={{ fontSize: T.small, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number, or — for guests who never gave one — by having been linked to each other from the name suggestions on a booking. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymised as “Data removed” for statistics.</div>
       </Section>
-      {rows.length ? rows : <div style={{ textAlign: "center", padding: "18px 0", color: S.muted, fontSize: T.body }}>{query.trim() ? "No customers match." : "No customers yet — bookings with a phone number appear here."}</div>}
+      {rows.length ? rows : <div style={{ textAlign: "center", padding: "18px 0", color: S.muted, fontSize: T.body }}>{query.trim() ? "No customers match." : "No customers yet — they appear here once a booking has a phone number, or once you link a guest from the name suggestions."}</div>}
     </div>
   );
 }

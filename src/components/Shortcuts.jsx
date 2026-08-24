@@ -25,7 +25,7 @@ import { T, FW } from "../lib/constants";
 // ── One row: keycap(s) + label ────────────────────────────────────────────────
 export function ShortcutRow({ keys, label }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0", borderBottom: "1px solid rgba(180,190,210,0.2)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0", borderBottom: "1px solid var(--border-soft)" }}>
       <div style={{ minWidth: 108, display: "flex", gap: 2, alignItems: "center", flexShrink: 0 }}>
         {keys.map((k, i) => (
           <Fragment key={i}>
@@ -68,8 +68,8 @@ const SHORTCUT_SECTIONS = [
     { keys: ["="],       label: "Zoom in (unshifted — ⇧+ is app width)" },
     { keys: ["−"],       label: "Zoom out" },
     { keys: ["0"],       label: "Reset zoom to 1×" },
-    { keys: ["O"],       label: "Toggle Optimizer (today)" },
-    { keys: ["R"],       label: "Reshuffle (today, optimizer OFF)" },
+    { keys: ["O"],       label: "Toggle Optimiser (today)" },
+    { keys: ["R"],       label: "Reshuffle (today, optimiser OFF)" },
   ]},
   { title: "List view", rows: [
     { keys: ["↑", "↓"], label: "Select previous / next booking" },

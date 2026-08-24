@@ -350,7 +350,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
     function persist(prev,computed){
       if(!bookingsLoaded.current){
         console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
-        if(!isSilent) setWriteWarning("Refused to write: Firebase not yet connected. If this persists, reload the page.");
+        if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
         dispatched=false;return;
       }
       if(Array.isArray(computed)&&computed.length===0&&firstLoadCount.current!==null&&firstLoadCount.current>0){

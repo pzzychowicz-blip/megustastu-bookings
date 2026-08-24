@@ -206,7 +206,7 @@ export function TimeAxis({
             <div key={"h" + m} style={{
               position: "absolute", left: xOf(m), top: "50%",
               transform: "translate(-50%,-50%)",
-              fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)",
+              fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)",
               fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", pointerEvents: "none",
             }}>{hourLabelAt(m)}</div>
           ))}

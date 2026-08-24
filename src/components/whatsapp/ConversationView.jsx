@@ -6,7 +6,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, regularChipLabel, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
-import { Reveal } from "../atoms";
+import { Reveal, mkSolidBtn } from "../atoms";
 import { RecheckIcon, TrashIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon } from "../Icons";
 import { MessageBubble } from "./MessageBubble";
@@ -14,7 +14,7 @@ import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
 import { IntentBanner } from "./IntentBanner";
-import { R, T, FW, IC } from "../../lib/constants";
+import { R, T, FW, IC, H } from "../../lib/constants";
 
 export function ConversationView({
   conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack,
@@ -181,12 +181,14 @@ export function ConversationView({
       disabled={running}
       title={running ? "Checking…" : "Re-check this conversation for requested changes"}
       className={running ? undefined : "mgt-hover-scale mgt-press"}
-      style={{ background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, width: 36, height: 36, padding: 0, cursor: running ? "default" : "pointer", color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "var(--shadow-btn)", display: "flex", alignItems: "center", justifyContent: "center", opacity: running ? 0.6 : 1 }}
+      style={mkSolidBtn("var(--btn-default)", { width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, cursor: running ? "default" : "pointer", flexShrink: 0, boxShadow: "var(--shadow-btn)", display: "flex", alignItems: "center", justifyContent: "center", opacity: running ? 0.6 : 1 })}
     >
       {/* The spin is a LOOP — nothing arrives and nothing leaves, so neither
           direction curve describes it and it keeps `linear`. Documented
-          exception, alongside .mgt-shimmer and .mgt-dot-pulse. */}
-      <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" } : { display: "block" }}><RecheckIcon size={IC.control} /></span>
+          exception, alongside .mgt-shimmer and .mgt-dot-pulse — and marked as
+          one, so `check:style`'s motion rule reads it as a decision rather than
+          as the sweep having missed a file (17.15.0-wa-sandbox). */}
+      <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" /* @motion */ } : { display: "block" }}><RecheckIcon size={IC.control} /></span>
     </button>
   ) : null;
 
@@ -195,15 +197,15 @@ export function ConversationView({
     headerActionBtns = (
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
-        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={{ background: "var(--wa-btn-handled)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 }}><RestoreIcon size={IC.inline} />Restore</button>
-        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--wa-btn-cancel)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", boxShadow: "var(--shadow-btn)" }} ><TrashIcon size={IC.inline} />Delete</button>
+        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-handled)", { padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
+        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-cancel)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)" })} ><TrashIcon size={IC.inline} />Delete</button>
       </div>
     );
   } else {
     headerActionBtns = (
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
-        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, background: "var(--btn-default)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: R.pill, padding: "8px 12px", minHeight: 36, cursor: "pointer", fontSize: T.small, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, boxShadow: "var(--shadow-btn)" }} ><ArchiveIcon size={IC.inline} />Archive</button>
+        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, boxShadow: "var(--shadow-btn)" })} ><ArchiveIcon size={IC.inline} />Archive</button>
       </div>
     );
   }
@@ -234,7 +236,7 @@ export function ConversationView({
         <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
         {regularChip}
         {acceptedBadge}
-        {conv.archived ? <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", color: "var(--text-muted)", border: "2px solid var(--border-soft)" }} ><ArchiveIcon size={12} />Archived</span> : null}
+        {conv.archived ? <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", color: "var(--text-muted)", border: "2px solid var(--border-soft)" }} ><ArchiveIcon size={IC.inline} />Archived</span> : null}
         {windowEl}
         <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
       </div>

@@ -44,15 +44,22 @@ import {
   optimizerActiveFor
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
-import { Overlay, ModalTitle, Fld, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+// v17.12.0: the id the error message renders under and the invalid field points
+// at. A module const, not an export — a plain const export from a component
+// file trips `react-refresh/only-export-components`, which is a lint ERROR and
+// a hard CI gate. Only one modal is ever mounted at a time, so a fixed id
+// cannot collide; useId() would be the answer if that stopped being true.
+const FORM_ERROR_ID = "mgt-form-error";
+
 export function BookingFormModal({
-  form, setForm, editId, error,
+  form, setForm, editId, error, errorField,
   bookings, liveBookings, tableBlocks,
   autoOptimizer, isMobile,
   onSave, onSavePending, onSaveConfirm, onClose, onClearSwap, onBookAgain,
@@ -217,18 +224,26 @@ export function BookingFormModal({
   // so the border alone carries the colour and the fill was a third copy of it.
   // v17.9.0: `gap` is new — the disclosure marker is now an SVG sibling rather
   // than a " ▾" tacked onto the label string, so the space has to be real.
-  const chipBase={display:"inline-flex",alignItems:"center",gap:4,borderRadius:R.pill,padding:"2px 10px",fontSize: T.small,fontWeight: FW.bold,cursor:"pointer",background:"transparent"};
-  const regularChip=custMatch&&custMatch.regularCount>=1?<button
-    key="reg" type="button" className="mgt-hover-scale mgt-press"
-    onClick={function(){toggleChipHist("regular");}}
-    style={Object.assign({},chipBase,{border:"2px solid var(--suggest-border)",color:"var(--success-text)"})}><span>{regularChipLabel(custMatch.regularCount,regularMin)}</span>{histWhich==="regular"?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />}</button>:null;
-  const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<button
-    key="ns" type="button" className="mgt-hover-scale mgt-press"
-    onClick={function(){toggleChipHist("noshow");}}
-    style={Object.assign({},chipBase,{border:"2px solid var(--warn-border)",color:"var(--warn-text)"})}><span>{"No-show ×"+custMatch.noShowCount}</span>{histWhich==="noshow"?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />}</button>:<button
-    key="ns" type="button" className="mgt-hover-scale mgt-press"
-    onClick={function(){toggleChipHist("noshow");}}
-    style={Object.assign({},chipBase,{border:"2px solid var(--border-soft)",color:"var(--text-secondary)"})}><span>1 no-show</span>{histWhich==="noshow"?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />}</button>):null;
+  // v17.15.0: the shared `OutlineChip`, `as="button"` for the disclosure kind.
+  // `chipBase` was the second hand-written copy of it (CustomersSettings had the
+  // other), and the two disagreed on their colour SOURCE: border from the
+  // --suggest/--warn families, text from --success-text/--warn-text. A tone is
+  // one decision now. `size="small"` keeps this chip's wider inset and T.small —
+  // it sits in a form beside inputs, not in a dense settings row.
+  //
+  // The label itself stays `regularChipLabel` (lib/customers.js), the
+  // sandbox's own /code-review extraction: prod re-inlined the same ternary
+  // here, and the threshold it compares against is a settings value, so an
+  // inline copy is a second place for `regularMin` to be read wrongly.
+  const chipMark=function(which){return histWhich===which?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />;};
+  const regularChip=custMatch&&custMatch.regularCount>=1?<OutlineChip
+    key="reg" tone="success" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
+    onClick={function(){toggleChipHist("regular");}}><span>{regularChipLabel(custMatch.regularCount,regularMin)}</span>{chipMark("regular")}</OutlineChip>:null;
+  const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<OutlineChip
+    key="ns" tone="warn" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
+    onClick={function(){toggleChipHist("noshow");}}><span>{"No-show ×"+custMatch.noShowCount}</span>{chipMark("noshow")}</OutlineChip>:<OutlineChip
+    key="ns" tone="neutral" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
+    onClick={function(){toggleChipHist("noshow");}}><span>1 no-show</span>{chipMark("noshow")}</OutlineChip>):null;
   // Disclosure panel — the WA pastListBody, on app tokens (suggest family for
   // Regular, warn family for no-shows). Top 5 rows like WA; a muted "+N earlier"
   // tail when there are more. Reveal (below) eases it open/closed; its cached-
@@ -291,7 +306,10 @@ export function BookingFormModal({
       key={c.phone}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickCustomer(c);})}
-      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{c.visits>0?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--success-text)",background:"var(--suggest-bg)",border:"1px solid var(--suggest-border)",borderRadius:R.pill,padding:"2px 6px"}}>{c.visits+" visit"+(c.visits!==1?"s":"")}</span>:null}{c.noShowCount>0?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--warn-text)",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.pill,padding:"2px 6px"}}>{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</span>:null}</div></div>
+      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{/* v17.15.0: these were the banned shape in full — pale semantic fill PLUS a
+              border in the matching hue PLUS bold text in a third shade. They are
+              the same counts as the Customers tab's chips, so they are now the
+              same chip. */}{c.visits>0?<OutlineChip tone="success">{c.visits+" visit"+(c.visits!==1?"s":"")}</OutlineChip>:null}{c.noShowCount>0?<OutlineChip tone="warn">{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</OutlineChip>:null}</div></div>
   );})}</div>:null;
   // v16.4.0: name-search dropdown — same opaque-sheet chrome as phoneDropdown.
   // Each row shows the phone (or "no phone") + last date so two same-name
@@ -369,7 +387,7 @@ export function BookingFormModal({
       const showTbl=mt||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
       const showClearManual=isManual&&!mt&&!cleared;
       const leftEls=[
-        <span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.semi}}>Tables</span>];
+        <span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium}}>Tables</span>];
       if(showTbl) showTbl.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
       else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
       if((changed||cleared)&&!mt&&curTbl) leftEls.push(<span key="prev" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
@@ -392,7 +410,7 @@ export function BookingFormModal({
                 onClick={function(){onOpenManualAssign(editId);}}><AssignIcon size={IC.control} />Assign</button>{prefBtn}</div></div></Section>
       );
     }
-    const leftEls=[<span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.semi}}>Tables</span>];
+    const leftEls=[<span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium}}>Tables</span>];
     if(mt) mt.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
     else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
     if(mt) leftEls.push(<button
@@ -443,7 +461,7 @@ export function BookingFormModal({
   // having barely opened (imperceptible sliver), a slow scan shows it fully.
   // One shared row covers both scans; it sits in the availBanner's slot region.
   const availChecking=availScan.pending||(kitchenBusy&&kitchenScan.pending);
-  const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.semi,color:"var(--text-muted)",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>;
+  const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.medium,color:"var(--text-muted)",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>;
   // v17.8.0 review fix: these two colours are hex literals ON PURPOSE, and must
   // stay that way. The chip FILLS below are hard-coded pale green / pale yellow
   // — deliberately theme-invariant, like the timeline's BLOCK_BG. The token
@@ -452,7 +470,7 @@ export function BookingFormModal({
   // mode pale-green chips carried light-green text at about 1.3:1. Triage rule:
   // a token may only be used where the SURFACE UNDER it flips too. It doesn't
   // here, so neither may the text.
-  const KTXT_OK="#166534", KTXT_TIGHT="#854d0e";
+  const KTXT_OK="#166534", KTXT_TIGHT="#854d0e";   /* @fixed-fill */
   function renderKitchenTimes(arr){
     if(!arr||!arr.length) return null;
     return arr.map(function(r){return (
@@ -460,19 +478,19 @@ export function BookingFormModal({
         key={r.timeStr}
         className="mgt-hover-scale"
         onClick={function(){setForm(function(f){return Object.assign({},f,{time:r.timeStr});});}}
-        style={{cursor:"pointer",padding:"2px 8px",borderRadius:R.pill,fontWeight: FW.semi,fontSize: T.body,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)",color:r.hasTables?KTXT_OK:KTXT_TIGHT,border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"var(--shadow-flat)"}}>{r.timeStr}</span>
+        style={{cursor:"pointer",padding:"2px 8px",borderRadius:R.pill,fontWeight: FW.semi,fontSize: T.body,background:r.hasTables?"rgba(220,252,231,0.8)":"rgba(254,249,195,0.8)", /* @fixed-fill */ color:r.hasTables?KTXT_OK:KTXT_TIGHT,border:"1px solid "+(r.hasTables?"rgba(134,239,172,0.5)":"rgba(253,230,138,0.5)"),boxShadow:"var(--shadow-flat)"}}>{r.timeStr}</span>
     );});
   }
   // v15.8.0 cont.4: the kitchen suggestion sub-panel (the part that appears when the
   // kitchen is busy) eases in/out via Reveal — the same effect as the Summary panel.
   const kitchenSugBlock=(kitchenSugg&&(kitchenSugg.before.length||kitchenSugg.after.length))?<div style={{marginTop:8}}><div style={{fontSize: T.small,color:S.muted,marginBottom:6}}><span
-          style={{background:"rgba(220,252,231,0.8)",color:KTXT_OK,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>green</span>= tables available  <span
-          style={{background:"rgba(254,249,195,0.8)",color:KTXT_TIGHT,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight: FW.bold,fontSize: T.body}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight: FW.bold,fontSize: T.body}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
+          style={{background:"rgba(220,252,231,0.8)", /* @fixed-fill */ color:KTXT_OK,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>green</span>= tables available  <span
+          style={{background:"rgba(254,249,195,0.8)", /* @fixed-fill */ color:KTXT_TIGHT,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight: FW.bold,fontSize: T.body}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight: FW.bold,fontSize: T.body}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
     (kitchenBusy?<div style={{marginTop:6,fontSize: T.body,color:"var(--danger-text)"}}>No kitchen-friendly alternatives found nearby.</div>:null);
   const kitchenSection=kitchenLoad?<div
     style={{padding:"10px 14px",borderRadius:R.card,border:"1px solid "+(kitchenBusy?"var(--warn-border)":"var(--border-soft)"),background:kitchenBusy?"var(--warn-bg)":"var(--bg-soft)",marginBottom:14,fontSize: T.body,color:kitchenBusy?"var(--warn-text)":S.muted}}><div
       style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<span
-        style={{fontWeight: FW.bold,color:"var(--text-required)",fontSize: T.body,padding:"4px 12px",borderRadius:R.pill,border:"1.5px solid rgba(220,38,38,0.4)",flexShrink:0}}>Kitchen busy</span>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>:null;
+        style={{fontWeight: FW.bold,color:"var(--text-required)",fontSize: T.body,padding:"4px 12px",borderRadius:R.pill,border:"1.5px solid rgba(220,38,38,0.4)", /* @fixed-fill */ flexShrink:0}}>Kitchen busy</span>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>:null;
 
   // v17.6.0: which statuses the edit form offers.
   //
@@ -496,7 +514,7 @@ export function BookingFormModal({
   })();
   const quickStatusBtns=editId?<Section style={{position:"relative"}}>{statusFlash?(
         <div key={statusFlash.k} className="mgt-wipe-ltr" style={{position:"absolute",inset:0,borderRadius:R.card,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
-      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.semi,marginRight:4}}>Status:</span>{statusTargets.map(function(s){return (
+      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium,marginRight:4}}>Status:</span>{statusTargets.map(function(s){return (
         // v17.10.0: the per-status mark, from the ONE source in Icons.jsx that
         // this row, the List card and the quick-status popup all read.
         <button
@@ -578,8 +596,36 @@ export function BookingFormModal({
     );
   })();
 
-  const errorEl=error?<div
-    style={{color:"var(--danger-text)",fontSize: T.body,padding:"10px 14px",background:"var(--danger-bg)",borderRadius:R.card,border:"1px solid var(--danger-border)",marginBottom:14}}>{error}</div>:null;
+  // v17.12.0: the message is announced, and the field that caused it points at
+  // it. Two separate wirings, and they need opposite mount strategies.
+  //
+  // The `role="alert"` wrapper is ALWAYS rendered, even with no error. An alert
+  // is announced when its CONTENT changes, and a region that arrives already
+  // holding its first message is the live-region pitfall this version keeps
+  // running into (see notifAnnounce in App). An empty div is a block box with
+  // no content, padding or margin, so it costs nothing visually — verified
+  // against the footer layout, which is a fragment.
+  //
+  // Assertive rather than polite because this fires in response to pressing
+  // Save: the user is waiting on exactly this answer.
+  // v17.15.0: the shared InlineAlert. `id` stays on the element itself, because
+  // that is what `aria-describedby` names — `Fld` emits the reference only when
+  // the caller says the field is invalid, and a describedby aimed at an id not
+  // in the tree is the dangling reference the atom exists to avoid.
+  // v17.15.0: eased, in BOTH directions. The alert appears and disappears while
+  // the modal is open and being read — pressing Save raises it, typing into the
+  // field clears it — so it is exactly the case the in-and-out rule is about,
+  // and it was snapping the footer (and the card above it) by its own height.
+  // `Reveal` caches its last truthy child, which is what makes the exit animate
+  // once `error` is already null. The `role="alert"` div stays OUTSIDE it and
+  // permanently mounted: a live region announces a change to its CONTENT, so a
+  // region that arrives holding its message says nothing.
+  const errorEl=<div role="alert"><Reveal show={!!error}>{error?
+    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14}}>{error}</InlineAlert>
+  :null}</Reveal></div>;
+  // Gated on `error` as well as the field name, so the id handed to
+  // aria-describedby can only ever name an element that is on screen.
+  function invalidField(name){return !!error&&errorField===name;}
 
   const resetDurBtn=form.customDur?<button
     key="rd"
@@ -630,7 +676,7 @@ export function BookingFormModal({
            primary, so the footer read as three warnings. --app-btn-slate is the
            documented neutral dialog secondary. */
         style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
-        onClick={function(){onClose();}}>Cancel</button>{(function(){
+        onClick={function(){onClose();}}>Back</button>{(function(){
         // v14 p1 (Issue 3): Save is disabled when date is empty. Prevents the
         // dd.mm.yyyy placeholder state from being submitted (esp. via Book Again
         // where we intentionally clear the date to force staff to pick one).
@@ -640,15 +686,15 @@ export function BookingFormModal({
             disabled={!canSave}
             onClick={onSave}
             className="mgt-hover-scale"
-            style={{background:canSave?S.accent:"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:canSave?"var(--shadow-btn-accent)":"none"}}>Save booking</button>
+            style={mkSolidBtn(canSave?S.accent:"var(--btn-disabled)",{cursor:canSave?"pointer":"not-allowed",color:canSave?"var(--text-on-accent)":"var(--btn-disabled-ink)",boxShadow:canSave?"var(--shadow-btn-accent)":"none"})}>Save booking</button>
         );
       })()}{origPendingBooking?(
-        <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" outMs={190} tag="span">
+        <Presence show={form.status==="pending"} inClass="mgt-slide-in-r" outClass="mgt-slide-out-r" tag="span">
           <button
             disabled={!form.date}
             onClick={onSaveConfirm}
             className="mgt-hover-scale"
-            style={{background:form.date?"var(--app-success-solid)":"rgba(180,180,190,0.4)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:R.pill,padding:"10px 18px",cursor:form.date?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-on-accent)",minHeight:44,boxShadow:form.date?"var(--shadow-btn-success)":"none"}}>Save&confirm</button>
+            style={mkSolidBtn(form.date?"var(--app-success-solid)":"var(--btn-disabled)",{cursor:form.date?"pointer":"not-allowed",color:form.date?"var(--text-on-accent)":"var(--btn-disabled-ink)",boxShadow:form.date?"var(--shadow-btn-success)":"none"})}>Save&confirm</button>
         </Presence>
       ):null}</div></div>
     </>
@@ -656,7 +702,9 @@ export function BookingFormModal({
 
   // ── The form modal itself ──
   return (
-    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true}><div style={{position:"relative"}}><input
+    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true} invalid={invalidField("name")} describedBy={FORM_ERROR_ID}>{function(fid,reqAttrs){return <div style={{position:"relative"}}><input
+            id={fid}
+            {...reqAttrs}
             value={form.name}
             /* v17.10.0: the dropdown reopens on TYPING and on CLICK, not only on
                focus. Picking a row calls preventDefault on mousedown so the input
@@ -671,7 +719,8 @@ export function BookingFormModal({
             onBlur={function(){setNameFocus(false);}}
             placeholder="Full name"
             className="mgt-hover-scale"
-            style={inp()} />{nameDropdown}</div></Fld><Fld label="Phone number"><div style={{position:"relative"}}><input
+            style={inp()} />{nameDropdown}</div>;}}</Fld><Fld label="Phone number">{function(fid){return <div style={{position:"relative"}}><input
+            id={fid}
             type="tel"
             value={form.phone}
             /* Same reopen fix as the name field above. */
@@ -681,23 +730,28 @@ export function BookingFormModal({
             onBlur={function(){setPhoneFocus(false);}}
             placeholder="+34 600 000 000"
             className="mgt-hover-scale"
-            style={inp()} />{phoneDropdown}</div></Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date"><input
+            style={inp()} />{phoneDropdown}</div>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date" invalid={invalidField("date")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
+            id={fid}
+            {...attrs}
             type="date"
             value={form.date}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}
             className="mgt-hover-scale"
-            style={inp()} /></Fld><Fld label="Time"><input
+            style={inp()} />;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
+            id={fid}
+            {...attrs}
             type="time"
             value={form.time}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});}}
             min={String(fh.open).padStart(2, "0") + ":00"}
             max={fh.close >= 24 ? "23:59" : String(fh.close).padStart(2, "0") + ":00"}
             className="mgt-hover-scale"
-            style={inp()} /></Fld><Fld label="Seating preference"><select
+            style={inp()} />;}}</Fld><Fld label="Seating preference">{function(fid){return <select
+            id={fid}
             value={form.preference}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{preference:e.target.value});});}}
             className="mgt-hover-scale"
-            style={mkSel()}><option value="auto">Auto (recommended)</option>{INDOOR.length>0?<option value="indoor">Indoor</option>:null}{OUTDOOR.length>0?<option value="outdoor">Outdoor</option>:null}</select></Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
+            style={mkSel()}><option value="auto">Auto (recommended)</option>{INDOOR.length>0?<option value="indoor">Indoor</option>:null}{OUTDOOR.length>0?<option value="outdoor">Outdoor</option>:null}</select>;}}</Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               onPointerDown={function(e){e.preventDefault();const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}}>-</button><span
@@ -711,13 +765,15 @@ export function BookingFormModal({
               style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{dur+" min"}</span><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
-              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal><Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes"><textarea
+              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal><Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes">{function(fid){return <textarea
+          id={fid}
           value={form.notes}
           onChange={function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});}}
           rows={2}
           placeholder="Allergies, special requests..."
           className="mgt-hover-scale"
-          style={mkArea()} /></Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none. */}<Fld label={"Deposit (" + (currency || "€") + ")"}><input
+          style={mkArea()} />;}}</Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none. */}<Fld label={"Deposit (" + (currency || "€") + ")"}>{function(fid){return <input
+          id={fid}
           type="number"
           min={0}
           step={5}
@@ -725,7 +781,7 @@ export function BookingFormModal({
           onChange={function(e){setForm(function(f){return Object.assign({},f,{deposit:e.target.value});});}}
           placeholder="0"
           className="mgt-hover-scale"
-          style={inp()} /></Fld></Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
+          style={inp()} />;}}</Fld></Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
         <Section>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <div style={{textAlign:"left"}}>

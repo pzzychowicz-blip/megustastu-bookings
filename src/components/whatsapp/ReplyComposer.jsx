@@ -5,9 +5,9 @@
 // window has expired. Enter sends; Shift+Enter inserts a newline.
 
 import { useState, useRef, useEffect } from "react";
-import { Reveal } from "../atoms";
+import { Reveal, mkSolidBtn } from "../atoms";
 import { TemplatesIcon } from "./WaIcons";
-import { R, T, FW, M } from "../../lib/constants";
+import { R, T, FW, M, H, IC } from "../../lib/constants";
 
 // TemplateChips — private to the composer. Tapping a chip inserts its text.
 // scrollLang (compact mode): the language switch joins the chips inside ONE
@@ -123,7 +123,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
           title="Templates"
           className="mgt-hover-scale mgt-press"
           style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: R.pill, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "var(--shadow-btn)", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
-        ><TemplatesIcon size={18} /></button>
+        ><TemplatesIcon size={IC.chrome} /></button>
         <textarea
           ref={areaRef}
           value={txt}
@@ -148,7 +148,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
           onClick={send}
           disabled={!canSend}
           className="mgt-hover-scale mgt-press"
-          style={{ background: canSend ? "var(--wa-green-dark)" : "var(--btn-default)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: R.pill, padding: "10px 18px", cursor: canSend ? "pointer" : "not-allowed", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-on-accent)", minHeight: 44, boxShadow: "var(--shadow-btn)" }}
+          style={mkSolidBtn(canSend ? "var(--wa-green-dark)" : "var(--btn-default)", { padding: "10px 18px", cursor: canSend ? "pointer" : "not-allowed", fontSize: T.body, minHeight: H.touch, boxShadow: "var(--shadow-btn)" })}
         >Send</button>
       </div>
     </div>
