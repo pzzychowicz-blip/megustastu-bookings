@@ -19,6 +19,15 @@ import { validateReminderDraft } from "../lib/reminders";
 // v16.0.0 follow-up: the ←/→ Settings tab-cycle derives from SETTINGS_TABS (the
 // ONE tab list) so a newly added tab can never be skipped. Never inline ids.
 import { SETTINGS_TABS } from "../components/SettingsChrome";
+// WA sandbox: gates the I (inbox) / X (simulator) keys, exactly like the
+// toolbar button — a non-sandbox build must expose no WhatsApp surface.
+//
+// RESTORED at the 17.15.0 sync, having been silently reverted by it. This file
+// conflicted only on the `anyModal` line, and taking prod's copy wholesale threw
+// away the two key handlers with it — the module's only keyboard entry points,
+// both documented in the mount card, neither reachable by any test. See
+// tests/wa-sandbox-integrity.test.js.
+import { WA_SANDBOX } from "../lib/waSandbox";
 
 // v14.6.0: keyboard shortcut for the Summary panel toggle — "S" for Summary.
 // NB: in List view with a booking focused, S marks it Seated (that check runs
@@ -340,6 +349,11 @@ export function useKeyboardShortcuts(ctx){
       if(k==="d"||k==="D"){e.preventDefault();K.goToDate(new Date().toISOString().slice(0,10));return;}
       if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
+      // WhatsApp sandbox: I → open the inbox ("w" was taken by Walk-in).
+      // WA_SANDBOX-gated like the toolbar button (PROD-leak guard).
+      if((k==="i"||k==="I")&&WA_SANDBOX){e.preventDefault();K.setShowInbox(true);return;}
+      // WhatsApp sandbox: X → open the 🧪 simulator (sandbox builds only).
+      if((k==="x"||k==="X")&&WA_SANDBOX){e.preventDefault();K.setShowSim(true);return;}
       // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
       if(k===SUMMARY_KEY||k===SUMMARY_KEY.toUpperCase()){e.preventDefault();K.setSummaryOpen(function(o){return !o;});return;}
       if(k===WEEK_KEY||k===WEEK_KEY.toUpperCase()){e.preventDefault();K.setShowWeek(true);return;}
