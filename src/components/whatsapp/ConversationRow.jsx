@@ -6,6 +6,7 @@
 import { useRef, useEffect } from "react";
 import { matchCustomerByPhone, formatPhone, formatRelativeTime, isParsing } from "../../lib/whatsapp";
 import { R, T, FW, IC } from "../../lib/constants";
+import { OutlineChip } from "../atoms";
 import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon } from "./WaIcons";
 import { CheckIcon } from "../Icons";
 
@@ -24,7 +25,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
   // measures 4.02:1 light / 3.62 dark, under the 4.5 a small label needs.
   // Nothing is lost — the SHIMMER is what says "in progress", and the
   // accent was decorating a state the animation already announces.
-  if (isParsing(conv)) tagEl = <span title="Reading the message…" className="mgt-shimmer" style={{ fontSize: T.micro, fontWeight: FW.semi, marginLeft: 6, padding: "0 6px", borderRadius: R.pill, color: "var(--text-secondary)", border: "2px solid var(--wa-bubble-in-border)" }}>parsing…</span>;
+  if (isParsing(conv)) tagEl = <OutlineChip title="Reading the message…" tone="neutral" className="mgt-shimmer" style={{ marginLeft: 6 }}>parsing…</OutlineChip>;
   else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--danger-text)", fontWeight: FW.semi, display: "inline-flex", alignItems: "center" }}><WarnIcon size={IC.inline} /></span>;
   else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--warn-text)", fontWeight: FW.semi, display: "inline-flex", alignItems: "center" }}><PencilIcon size={IC.inline} /></span>;
   else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ marginLeft: 6, color: "var(--text-secondary)", display: "inline-flex", alignItems: "center" }}><DraftIcon size={IC.inline} /></span>;

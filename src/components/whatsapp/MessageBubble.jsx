@@ -6,6 +6,7 @@
 
 import { formatClockTime } from "../../lib/whatsapp";
 import { R, T, FW, IC } from "../../lib/constants";
+import { OutlineChip } from "../atoms";
 import { RetryIcon } from "./WaIcons";
 
 // `isLast` (set by ConversationView for the newest message only) opts the bubble
@@ -40,12 +41,14 @@ export function MessageBubble({ msg, isLast, onRetry }) {
   // Retry affordance for a failed outgoing send (client mock path — see
   // useWhatsApp.handleResend). Only shown when a resend handler is wired.
   const retryEl = (!incoming && msg.status === "failed" && onRetry) ? (
-    <button
+    <OutlineChip
+      as="button"
+      tone="danger"
       onClick={() => onRetry(msg.id)}
       className="mgt-hover-scale mgt-press"
       title="Resend this message"
-      style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 6, background: "transparent", border: "2px solid var(--danger-border)", borderRadius: R.pill, padding: "0 6px", cursor: "pointer", fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}
-    ><RetryIcon size={IC.inline} />Retry</button>
+      style={{ marginLeft: 6, padding: "0 6px" }}
+    ><RetryIcon size={IC.inline} />Retry</OutlineChip>
   ) : null;
 
   return (

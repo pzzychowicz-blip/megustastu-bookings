@@ -6,7 +6,7 @@
 // here — the IntentBanner in ConversationView takes over.
 
 import { useState } from "react";
-import { Reveal, mkSolidBtn } from "../atoms";
+import { Reveal, mkSolidBtn, OutlineChip } from "../atoms";
 import { clampConfidence } from "../../lib/whatsapp";
 import { R, T, FW, IC, M, H, RIM_SOLID } from "../../lib/constants";
 import { DraftIcon, WarnIcon } from "./WaIcons";
@@ -83,12 +83,19 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   // legacy/stale drafts stored before the clamp rule (e.g. a "? time" draft that
   // was saved as "high").
   const conf = clampConfidence(d.confidence, d);
-  const confColor = conf === "low" ? "var(--danger-text)" : conf === "medium" ? "var(--warn-text)" : "var(--success-text)";
+  // 17.15.0-wa-sandbox: ONE tone, not a colour and a border chosen separately.
+  // These were two parallel ternaries — `confColor` from the --*-text family and
+  // `confBorder` from --danger-border/--warn-border/--suggest-border — which is
+  // exactly the pairing `OutlineChip` was written to end: families never
+  // required to agree, so light rendered a pale ring around dark text while dark
+  // nearly converged. A tone is one decision and the border is derived from the
+  // ink; "suggest" for high confidence was the odd one out and is now "success",
+  // which is what it always meant.
+  const confTone = conf === "low" ? "danger" : conf === "medium" ? "warn" : "success";
   // v17.8.0 label treatments: OUTLINE, not a pale fill. This chip lives
   // INSIDE the draft card, which already has its own fill and 2px rim — a
   // filled chip in a filled container is the card-inside-a-card shape the
   // sweep bans. The border hue carries the confidence on its own.
-  const confBorder = conf === "low" ? "var(--danger-border)" : conf === "medium" ? "var(--warn-border)" : "var(--suggest-border)";
   const confLbl = conf;
   // Seating preference suffix — only shown when the customer stated an area
   // (indoor/outdoor); "auto"/unset adds nothing (it's the default).
@@ -120,7 +127,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
             {hasDetail ? <span style={{ color: "var(--wa-draft-text)", flexShrink: 0, display: "inline-flex", transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.inline} /></span> : null}
           </div>
           {/* Confidence level — always shown, immediately left of Accept. */}
-          <span title={confLbl + " confidence"} style={{ fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", border: "2px solid " + confBorder, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em", flexShrink: 0 }}>{confLbl}</span>
+          <OutlineChip title={confLbl + " confidence"} tone={confTone} size="small" style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl}</OutlineChip>
           <button onClick={onAccept} className="mgt-hover-scale mgt-press" style={smallBtn("var(--wa-btn-open)", FW.bold, RIM_SOLID)}>Accept</button>
           {/* Secondary = OUTLINE (see the full card's note): one saturated pill
               per pane, so the eye can find the primary without reading. */}
@@ -150,7 +157,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           <span style={{ color: "var(--wa-draft-text)", display: "inline-flex", flexShrink: 0 }}><DraftIcon size={IC.control} /></span>
           <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)" }}>Draft booking — parsed from message</span>
         </div>
-        <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", border: "2px solid " + confBorder, color: confColor, textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl + " confidence"}</span>
+        <OutlineChip tone={confTone} size="small" style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl + " confidence"}</OutlineChip>
       </div>
       <div style={{ fontSize: T.lead, color: "var(--wa-draft-text-dim)", lineHeight: 1.6, marginBottom: d.ambiguity ? 8 : 12 }}>
         <span style={{ fontWeight: FW.semi }}>{(d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time") + prefSuffix}</span>

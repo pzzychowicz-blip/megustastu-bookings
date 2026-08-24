@@ -6,7 +6,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, regularChipLabel, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
-import { Reveal, mkSolidBtn } from "../atoms";
+import { Reveal, mkSolidBtn, OutlineChip } from "../atoms";
 import { RecheckIcon, TrashIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon } from "../Icons";
 import { MessageBubble } from "./MessageBubble";
@@ -125,7 +125,7 @@ export function ConversationView({
   // "Booking confirmed" header chip — non-dismissable (the big DraftCard banner
   // is the dismissable element instead).
   const acceptedBadge = conv.draftStatus === "accepted"
-    ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", color: "var(--success-text)", border: "2px solid var(--suggest-border)" }}><CheckIcon size={IC.inline} />Booking confirmed</span>
+    ? <OutlineChip tone="success" size="small"><CheckIcon size={IC.inline} />Booking confirmed</OutlineChip>
     : null;
   // The disclosure lists the customer's OTHER visits. The linked booking is
   // already rendered in full by LinkedBookingCard a few lines below, and now the
@@ -145,11 +145,14 @@ export function ConversationView({
   // display/gap are load-bearing since v17.9.1: the disclosure marker is an SVG
   // SIBLING now, not a " ▾" tacked onto the label string, so the space between
   // them has to be real — without it the chevron wraps to its own line.
-  const chipStyle = { display: "inline-flex", alignItems: "center", gap: 4, background: "transparent", border: "2px solid var(--suggest-border)", borderRadius: R.pill, padding: "2px 10px", fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)" };
+  // 17.15.0-wa-sandbox: the shared OutlineChip, `as="button"` for the
+  // disclosure kind — which is the same choice the booking form's copy of this
+  // chip makes, and it is the same chip. `chipStyle` was a third hand-written
+  // copy taking its border from --suggest and its text from --success.
   const regularChip = match && match.regularCount >= 1
     ? (pastList.length
-      ? <button className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)} style={Object.assign({}, chipStyle, { cursor: "pointer" })}><span>{regularChipLabel(match.regularCount, regularMin)}</span>{histOpen ? <ChevronDownIcon size={IC.inline} /> : <ChevronRightIcon size={IC.inline} />}</button>
-      : <span style={chipStyle}>{regularChipLabel(match.regularCount, regularMin)}</span>)
+      ? <OutlineChip tone="success" size="small" as="button" className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)}><span>{regularChipLabel(match.regularCount, regularMin)}</span>{histOpen ? <ChevronDownIcon size={IC.inline} /> : <ChevronRightIcon size={IC.inline} />}</OutlineChip>
+      : <OutlineChip tone="success" size="small">{regularChipLabel(match.regularCount, regularMin)}</OutlineChip>)
     : null;
   // Body rendered whenever there are other visits to show; Reveal (below) eases
   // it open/closed off histOpen so the disclosure doesn't snap.
@@ -167,7 +170,7 @@ export function ConversationView({
     </div>
   ) : null;
   const windowEl = win
-    ? <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", color: win.expired ? "var(--danger-text)" : "var(--success-text)", border: "2px solid " + (win.expired ? "var(--danger-border)" : "var(--suggest-border)") }}>{win.label}</span>
+    ? <OutlineChip tone={win.expired ? "danger" : "success"} size="small">{win.label}</OutlineChip>
     : null;
 
   // Manual LLM re-check — leftmost of the header actions in BOTH states (an
@@ -236,7 +239,7 @@ export function ConversationView({
         <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
         {regularChip}
         {acceptedBadge}
-        {conv.archived ? <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, fontSize: T.small, fontWeight: FW.semi, padding: "2px 10px", borderRadius: R.pill, background: "transparent", color: "var(--text-muted)", border: "2px solid var(--border-soft)" }} ><ArchiveIcon size={IC.inline} />Archived</span> : null}
+        {conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}
         {windowEl}
         <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
       </div>
