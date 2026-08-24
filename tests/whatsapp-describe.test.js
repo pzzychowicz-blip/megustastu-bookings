@@ -74,6 +74,16 @@ describe("describeConversation", () => {
     expect(describeConversation({ ...CONV, lastMessageSnippet: long }, {})).toContain(long);
   });
 
+  it("never opens with an empty segment when the matched booking has no name", () => {
+    // A walk-in can be saved without a name, so `match.name` is "" — and
+    // `join(", ")` on an empty first part yields ", 34600111222, hola", i.e. a
+    // label that begins with a comma and names nobody.
+    const nameless = [{ id: "w1", name: "", phone: "34600111222", date: "2026-08-01", time: "20:00", size: 2, status: "completed" }];
+    const s = describeConversation({ phoneKey: "34600111222", phone: "34600111222", lastMessageSnippet: "hola" }, { bookings: nameless });
+    expect(s.startsWith(",")).toBe(false);
+    expect(s).toBe("34600111222, hola");
+  });
+
   it("survives the empty cases rather than composing a name out of undefined", () => {
     expect(describeConversation(null, {})).toBe("");
     expect(describeConversation({ phoneKey: "34600000000" }, {})).toBe("34600000000");
