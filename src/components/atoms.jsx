@@ -189,13 +189,18 @@ const OverlayScrollContext = createContext(null);
 export function useOverlayScroll() { return useContext(OverlayScrollContext); }
 
 // ── useDialog (v17.9.1 prod; extracted here in 17.9.1-wa-sandbox) ────────────
-// Everything below was written inside Overlay, which is right for the modals
-// that ARE Overlays — and unreachable for the one surface that is not. The WA
-// inbox is a bespoke full-screen panel with its own scrim, so it inherited none
-// of the audit's work: no role, no name, no focus trap, on the module's main
-// surface. Duplicating a focus trap is exactly the "one implementation of a
-// subtle pattern" rule's target, so the behaviour is a hook and Overlay is its
-// first caller — byte-for-byte the same logic, same comments, one owner.
+// This was pulled out of Overlay so the WA inbox — then a bespoke panel with
+// its own scrim, and so the one modal surface in the app with no role, no name
+// and no focus trap — could take the identical contract without a second copy
+// of a focus trap.
+//
+// 17.15.0-wa-sandbox: that caller is GONE. The inbox is an Overlay now (`panel`
+// mode below), so this has exactly one caller again, which is the shape it had
+// before the extraction. It stays extracted rather than being folded back in
+// for one reason and it is not inertia: the reason it was ever separable is
+// that a dialog's semantics are not Overlay's layout, and the next surface that
+// needs the one without the other should find it already named. If none
+// appears, folding it back is a safe five-minute change.
 //
 // Measured in the live DOM before this: no role, no aria-modal, no accessible
 // name, and focus left sitting on <body> when a modal opened. A screen-reader
@@ -270,7 +275,29 @@ function onKeyDown(e) {
   return { role: "dialog", "aria-modal": "true", tabIndex: -1, onKeyDown };
 }
 
-export function Overlay({ onClose, children, footer }) {
+// `panel` (17.15.0-wa-sandbox) — a dialog that brings its OWN body.
+//
+// Every branch below gives you a padded, scrolling card at maxWidth 580 on
+// --bg-sheet, which is right for the twelve modals that are a column of fields
+// and a footer. The WhatsApp inbox is not one: it is 1200px wide, a fixed
+// min(900px, 90dvh) tall, and its body is a flex column holding two
+// independently-scrolling panes, so a padded scroll port around it is exactly
+// wrong. That is why it was bespoke for its whole life — and being bespoke is
+// what left it, alone among the app's modals, with no role, no accessible name,
+// no focus trap and no focus restore until v17.9.1 had to extract `useDialog`
+// to reach it.
+//
+// So this is ONE prop and one concept, not a styling API. `panel` takes
+// `{ maxWidth, height, background, blur }`; Overlay keeps the scrim, the card
+// and sheet classes, the mobile full-screen branch, and the whole dialog
+// contract, and simply does not wrap the children in a scroll port. Omitted —
+// which is every caller in prod — nothing here runs and the four branches are
+// byte-for-byte what they were.
+//
+// It deliberately does NOT accept arbitrary style. A caller that needs more
+// than a size and a surface is describing a different component, and the next
+// person should have to say so out loud rather than reach for a fifth key.
+export function Overlay({ onClose, children, footer, panel }) {
   const mob = typeof window !== "undefined" && window.innerWidth < 600;
   const lockRef = useRef(false);
   const scrollRef = useRef(null);
@@ -305,6 +332,46 @@ export function Overlay({ onClose, children, footer }) {
   const wrap = (el) => (
     <OverlayScrollContext.Provider value={scrollApi.current}>{el}</OverlayScrollContext.Provider>
   );
+
+  // ── panel mode ─────────────────────────────────────────────────────────────
+  // One branch for both widths: below 600px it is the full-screen sheet every
+  // other modal becomes, above it a centred card at the caller's size. The
+  // children are handed a flex column and nothing else — no padding, no scroll
+  // port, and no OverlayScrollContext, because there is no single scroll port
+  // to reset and a provider promising one would be a lie a child could call.
+  if (panel) {
+    const pw = panel.maxWidth || 1200;
+    return (
+      <div
+        className={scrimCls}
+        style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: mob ? 0 : 16, boxSizing: "border-box" }}
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
+        <div
+          ref={dialogRef}
+          {...dialogProps}
+          className={mob ? sheetCls : cardCls}
+          style={{
+            background: panel.background || "var(--bg-sheet)",
+            backdropFilter: "blur(" + (panel.blur || 16) + "px)",
+            WebkitBackdropFilter: "blur(" + (panel.blur || 16) + "px)",
+            borderRadius: mob ? 0 : R.sheet,
+            border: "1px solid var(--border-sheet)",
+            width: "100%",
+            maxWidth: mob ? "none" : pw,
+            height: mob ? "100dvh" : (panel.height || "min(900px, 90dvh)"),
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "var(--shadow-sheet)",
+            overflow: "hidden",
+            boxSizing: "border-box",
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    );
+  }
 
   if (mob) {
     // Footer pinned to the viewport bottom; body scrolls between top and footer.

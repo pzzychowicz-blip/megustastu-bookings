@@ -471,7 +471,6 @@ describe("registry coverage", () => {
     "--wa-draft-border": "shimmer bar fill in the parsing card; no longer a rim",
     "--wa-row-active-border": "rim of the selected row",
     "--wa-divider": "hairline between rows / header strips",
-    "--wa-panel-scrim": "scrim behind the panel, nothing sits on it",
     "--wa-shimmer": "the parsing sweep, a moving gradient stop",
     "--wa-unread-ring": "a box-shadow, not a fill",
     "--wa-row-active-glow": "a box-shadow, not a fill",

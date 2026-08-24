@@ -2,9 +2,24 @@
 // Full-screen WhatsApp inbox overlay: a list pane + a conversation pane (two-pane
 // ≥900px, stacked below). Owns the active-conversation selection, the Inbox /
 // Archived tab, the Templates sub-modal, Esc handling, body-scroll lock, and
-// mark-read-on-open. This is a deliberately wide custom panel (not the atoms
-// Overlay). Blur budget: scrim blur(6) + card blur(16) = 2 (≤4 holds; the
-// Templates sub-modal adds 2 more only while open).
+// mark-read-on-open.
+//
+// 17.15.0-wa-sandbox: it is an `Overlay` in `panel` mode. For its whole life it
+// was "a deliberately wide custom panel (not the atoms Overlay)", and the cost
+// of that exception was invisible from the screen: no role, no accessible name,
+// no focus trap, no focus restore — on the module's MAIN surface. v17.9.1 had
+// to extract `useDialog` out of Overlay just to reach it, and v17.15.0 made
+// "every modal uses Overlay" literally true in prod with a test enforcing that
+// exactly one file paints the modal scrim.
+//
+// The port was mostly deletion: the scrim div, the card div, the `*-in`/`*-out`
+// class picking, the `mob` branch and the `useDialog` call are all Overlay's
+// now. What stays is what is actually this panel's own — the two-pane body, the
+// header, and the size, which is what `panel` carries. `--wa-panel-scrim` is
+// gone; the scrim is the app's one scrim.
+//
+// Blur budget: Overlay's scrim blur(8) + the panel's blur(16) = 2 (≤4 holds;
+// the Templates sub-modal adds 2 more only while open).
 
 import { useState, useEffect, useRef } from "react";
 import { useWinW } from "../../hooks/useWinW";
@@ -15,7 +30,7 @@ import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { TemplatesIcon, SelectIcon, FlaskIcon, TrashIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
 import { CloseIcon } from "../Icons";
-import { mkBtn, mkInp, mkSolidBtn, useModalPresence, ModalPresence, Overlay, Reveal, useDialog } from "../atoms";
+import { mkBtn, mkInp, mkSolidBtn, ModalPresence, Overlay, Reveal } from "../atoms";
 import { R, T, FW, M, IC, H } from "../../lib/constants";
 
 // A conversation is "actionable" when it needs a staff response. For a
@@ -23,6 +38,12 @@ import { R, T, FW, M, IC, H } from "../../lib/constants";
 // "marked as handled" — intentBannerVisible respects intentHandledAt), so a
 // handled request drops out of the filter. Otherwise: an unread thread, or a
 // pending new-booking draft awaiting accept/dismiss.
+// The panel's own size and surface, the only two things Overlay's `panel` mode
+// takes. A module const rather than an inline object: Overlay is memo-free, but
+// a fresh object per render is a fresh prop per render, and this one never
+// changes.
+const INBOX_PANEL = { maxWidth: 1200, height: "min(900px, 90dvh)", background: "var(--wa-panel-bg)", blur: 16 };
+
 function isActionable(c) {
   const intent = c.draftData && c.draftData.intent;
   if (intent === "cancel" || intent === "modify") return intentBannerVisible(c);
@@ -89,18 +110,6 @@ export function InboxPanel({
   // composer template chips behind a button so the message thread stays readable.
   const winH = useWinH();
   const compact = winH < INBOX_COMPACT_HEIGHT;
-  // v15.8.0 open/close animation: ModalPresence (in App.jsx) provides `leaving`;
-  // the panel swaps its scrim/card to the *-out keyframes before unmounting.
-  const { leaving } = useModalPresence();
-  // v17.9.1 (audit P1), reaching the one modal surface that is not an Overlay.
-  // This panel is bespoke — its own scrim, its own two-pane body — so it
-  // inherited none of the dialog work: no role, no accessible name, and focus
-  // left on <body>, on the module's main screen. Same hook Overlay uses.
-  const panelRef = useRef(null);
-  const dialogProps = useDialog(panelRef);
-  const mob = winW < 600;
-  const scrimCls = leaving ? "mgt-scrim-out" : "mgt-scrim-in";
-  const cardCls = leaving ? (mob ? "mgt-sheet-out" : "mgt-card-out") : (mob ? "mgt-sheet-in" : "mgt-card-in");
 
   // Search + "Needs action" filter (client-only). The filtered set feeds BOTH the
   // rendered list and the ↑/↓ keyboard nav so they stay in lockstep. State is
@@ -345,8 +354,7 @@ export function InboxPanel({
   }
 
   return (
-    <div className={scrimCls} style={{ position: "fixed", inset: 0, zIndex: 200, background: "var(--wa-panel-scrim)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: winW < 600 ? 0 : 16, boxSizing: "border-box" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div ref={panelRef} {...dialogProps} className={cardCls} style={{ background: "var(--wa-panel-bg)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: winW < 600 ? 0 : R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 1200, height: winW < 600 ? "100dvh" : "min(900px, 90dvh)", display: "flex", flexDirection: "column", boxShadow: "var(--shadow-sheet)", overflow: "hidden", boxSizing: "border-box" }}>
+    <Overlay onClose={onClose} panel={INBOX_PANEL}>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             {/* An <h2>, not a <span>: useDialog resolves the dialog's accessible
@@ -453,7 +461,6 @@ export function InboxPanel({
             <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>This permanently removes the selected conversations and their messages. This can't be undone.</div>
           </Overlay>
         ) : null}</ModalPresence>
-      </div>
-    </div>
+    </Overlay>
   );
 }
