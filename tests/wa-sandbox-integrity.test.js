@@ -94,6 +94,14 @@ describe("WA sandbox — edits to shared PROD files survive a sync", () => {
     expect(src, "the prune window must derive from the caller's named speed").toContain("exitHold(speed)");
   });
 
+  it("Reveal still offers `presentational`, and the conversation list still uses it", () => {
+    // Without it the list stops OWNING its items — three levels of generic div
+    // between `role="list"` and each `role="listitem"` — and a screen reader
+    // loses the count and position the role exists to give. Nothing throws.
+    expect(read("src/components/atoms.jsx")).toMatch(/export function Reveal\(\{[^}]*presentational[^}]*\}\)/);
+    expect(read("src/components/whatsapp/ConversationList.jsx")).toMatch(/^\s*presentational\s*$/m);
+  });
+
   it("Overlay still offers panel mode, and the inbox still uses it", () => {
     expect(read("src/components/atoms.jsx")).toMatch(/export function Overlay\(\{[^}]*panel[^}]*\}\)/);
     expect(read("src/components/whatsapp/InboxPanel.jsx")).toMatch(/<Overlay[^>]*panel=\{/);

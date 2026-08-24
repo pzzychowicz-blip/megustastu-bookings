@@ -136,6 +136,11 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
           key={c.phoneKey}
           show={openIds.has(c.phoneKey)}
           speed={ROW_SPEED}
+          /* Reveal's two wrappers sit between `role="list"` and each
+             `role="listitem"`, and a list must OWN its items — measured here
+             at three levels of separation, which loses the count and position
+             the role exists to provide. */
+          presentational
           style={openIds.has(c.phoneKey) ? undefined : { pointerEvents: "none" }}
         >
           <ConversationRow

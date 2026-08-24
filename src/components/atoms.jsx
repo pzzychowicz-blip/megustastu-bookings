@@ -817,7 +817,21 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // takes a NAME and not a number: they are the two halves that were wrong in six
 // places at the start of this version, and a caller able to pass one without the
 // other is the same defect with a nicer spelling.
-export function Reveal({ show, children, style, horizontal = false, speed = "reveal" }) {
+// `presentational` (17.15.0-wa-sandbox) — mark BOTH wrapper divs
+// `role="presentation"` so they vanish from the accessibility tree.
+//
+// A `role="list"` must OWN its `role="listitem"` children, and this component
+// puts two generic divs between them. Measured in the WA conversation list
+// before this: 17 listitems, ZERO of them a direct child of the list, each
+// three levels down — so the list announced its items as loose content and the
+// count and position a list exists to give were both lost. Prod's ListView
+// never hit it because it maps its cards straight into the list element; the
+// moment a per-row Reveal sits in between, the relationship needs saying.
+//
+// Presentation is the right tool rather than `aria-owns`: these divs carry no
+// focus and no ARIA of their own, which is exactly the condition under which
+// the role is honoured, and it needs no ids to keep in step.
+export function Reveal({ show, children, style, horizontal = false, speed = "reveal", presentational = false }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -877,8 +891,8 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
     // now by tests/wa-sandbox-integrity.test.js.
     : { overflow: revealed ? "visible" : "hidden", minHeight: 0, minWidth: 0 };
   return (
-    <div style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
-      <div style={innerStyle}>{children || last.current}</div>
+    <div role={presentational ? "presentation" : undefined} style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
+      <div role={presentational ? "presentation" : undefined} style={innerStyle}>{children || last.current}</div>
     </div>
   );
 }

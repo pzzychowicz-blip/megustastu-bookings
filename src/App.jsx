@@ -3867,7 +3867,7 @@ function BookingApp({uid}){
           initialActiveKey={returnToInboxKey}
           regularMin={generalSettings.regularMin}
           query={waQuery} setQuery={setWaQuery} needsAction={waNeedsAction} setNeedsAction={setWaNeedsAction}
-          onClose={function(){setShowInbox(false);setReturnToInboxKey(null);setWaQuery("");setWaNeedsAction(false);}}
+          onClose={closeInbox}
           onSend={wa.handleSendReply}
           onAccept={wa.handleAcceptDraft}
           onDismiss={wa.handleDismissDraft}

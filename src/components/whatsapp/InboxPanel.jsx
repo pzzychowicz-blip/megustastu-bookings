@@ -206,14 +206,40 @@ export function InboxPanel({
 
   // Keyboard: Esc (close templates → back to list on mobile → close inbox), plus
   // in-panel navigation — ←/→ switch tabs, ↑/↓ walk the conversation list.
+  //
+  // ── CAPTURE phase, and it is load-bearing (17.15.0-wa-sandbox) ─────────────
+  // This panel now has TWO Escape handlers over it: this one, and the app-wide
+  // chain in `useKeyboardShortcuts`, which since the modal stack landed has an
+  // `inbox` entry that calls `closeInbox`. Both listen on `window`, and the
+  // global one is registered first (BookingApp mounts before this panel), so on
+  // a bubble listener it would win EVERY press — closing the whole inbox when
+  // the user meant to dismiss the Templates editor, cancel the bulk-delete
+  // confirm, leave select mode, or go back to the list on a phone. Four
+  // sub-states, none of which the stack can see, because none of them is a
+  // modal-stack entry.
+  //
+  // Capture reverses that: a capture listener on `window` runs before any
+  // bubble listener on it, so this handler gets first refusal. Where it HANDLES
+  // the key it stops propagation and the global never sees it; where it does
+  // not — the plain close — it deliberately falls through, and the global's
+  // `closeInbox` does the closing. That keeps ONE owner for the full close,
+  // which matters because `closeInbox` also clears the filter and the
+  // return-to-inbox key that must not outlive the panel.
+  //
+  // Safe for the other keys in here: the global returns early on `anyModal`,
+  // which is true whenever this panel is open, so its letter and arrow branches
+  // are unreachable from under the inbox either way.
   useEffect(() => {
     function onKey(e) {
       if (e.key === "Escape") {
-        if (showTpl) { setShowTpl(false); return; }
-        if (confirmBulkDelete) { setConfirmBulkDelete(false); return; }
-        if (selectMode) { exitSelectMode(); return; }
-        if (!twoPane && activeKey) { setActiveKey(null); return; }
-        onClose();
+        // Each of these CONSUMES the key — see the note above.
+        const consume = () => { e.preventDefault(); e.stopPropagation(); };
+        if (showTpl) { consume(); setShowTpl(false); return; }
+        if (confirmBulkDelete) { consume(); setConfirmBulkDelete(false); return; }
+        if (selectMode) { consume(); exitSelectMode(); return; }
+        if (!twoPane && activeKey) { consume(); setActiveKey(null); return; }
+        // Falls through on purpose: the global chain closes the inbox, so the
+        // filter state goes with it.
         return;
       }
       // Never hijack typing (the reply textarea) or fire under the Templates modal.
@@ -277,8 +303,8 @@ export function InboxPanel({
         return;
       }
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [twoPane, activeKey, showTpl, tab, conversations, onClose, query, needsAction, selectMode, confirmBulkDelete, onAccept, onDismiss, onArchive, onUnarchive, onBulkArchive, onBulkUnarchive]);
   // Body-scroll lock while the inbox is open.
   useEffect(() => {

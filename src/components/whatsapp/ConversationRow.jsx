@@ -108,6 +108,14 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
           type="checkbox"
           checked={!!checked}
           readOnly
+          /* Not a tab stop. This checkbox is decorative in the strict sense —
+             `readOnly`, `pointerEvents: none`, and the ROW is what toggles it —
+             but a bare <input type="checkbox"> is natively focusable, so in
+             select mode it put a stop on EVERY row: measured 18 tab stops in a
+             list whose whole design is one. It stays in the accessibility tree
+             (that is why the row is a listitem and not a button) and it still
+             reports its checked state; it simply is not tabbed to. */
+          tabIndex={-1}
           aria-label="Select conversation"
           style={{ flexShrink: 0, width: 18, height: 18, accentColor: "var(--accent)", pointerEvents: "none", cursor: "pointer" }}
         />
