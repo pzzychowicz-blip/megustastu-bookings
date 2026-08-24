@@ -4,13 +4,13 @@
 // relative time, and the last-message snippet. Archived rows render dimmed.
 
 import { useRef, useEffect } from "react";
-import { matchCustomerByPhone, formatPhone, formatRelativeTime, isParsing } from "../../lib/whatsapp";
+import { matchCustomerByPhone, formatPhone, formatRelativeTime, isParsing, describeConversation } from "../../lib/whatsapp";
 import { R, T, FW, IC } from "../../lib/constants";
 import { OutlineChip } from "../atoms";
 import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon } from "./WaIcons";
 import { CheckIcon } from "../Icons";
 
-export function ConversationRow({ conv, active, onClick, bookings, flipId, selectMode, checked }) {
+export function ConversationRow({ conv, active, onClick, bookings, flipId, selectMode, checked, roving = false, departing = false }) {
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
   const displayName = match ? match.name : (conv.phone || conv.phoneKey);
   const phoneLine = match ? formatPhone(conv.phone || conv.phoneKey) : null;
@@ -51,6 +51,48 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
       ref={rowRef}
       data-flip-id={flipId}
       onClick={onClick}
+      /* 17.15.0-wa-sandbox — reachable and announced, on prod's ListView
+         pattern (v17.12.0).
+
+         `role="listitem"`, NOT `role="button"`: in select mode this row holds a
+         checkbox, and a button's children are PRESENTATIONAL in ARIA, so the
+         checked state — the only thing select mode is about — would stop being
+         announced at exactly the moment it matters. The same trade prod refused
+         on the booking card.
+
+         ONE roving tab stop, anchored on `activeKey`, which is what the panel's
+         own ↑/↓ already moves. That is the whole reconciliation: the arrows are
+         not a second keyboard model competing with this one, they ARE the model
+         — they move the selection, and the tab stop follows the selection.
+
+         A DEPARTING row is never the tab stop and is never focusable. It is
+         mounted only so its Reveal can finish collapsing, it already carries
+         `pointerEvents: none` for the same reason, and a tab stop on a row on
+         its way out is a stop that vanishes under the keyboard.
+
+         Enter and Space match the row's own click. The `target ===
+         currentTarget` guard keeps a key pressed on the nested checkbox from
+         also firing the row — the keyboard twin of the pointer-events guard. */
+      role="listitem"
+      tabIndex={departing ? -1 : (roving ? 0 : -1)}
+      aria-label={describeConversation(conv, { bookings })}
+      aria-current={active && !selectMode ? "true" : undefined}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        if (onClick) onClick();
+      }}
+      /* The v17.12.0 scroll trap: the browser focuses an element on mousedown
+         and scrolling it into view is PART of focusing, so the row moves out
+         from under the finger between press and release. `preventDefault` is
+         not available here — it would kill selection of the phone number the
+         row prints — so the row focuses ITSELF with preventScroll, which makes
+         the browser's own focusing steps a no-op with nothing left to scroll. */
+      onMouseDown={(e) => {
+        if (departing || e.target.closest("button")) return;
+        e.currentTarget.focus({ preventScroll: true });
+      }}
       // v17.9.1: .mgt-ac-row, the app's one tint-on-hover class for a CONTAINER
       // of controls (the hover LIFT is for the controls themselves). This row
       // hand-rolled the same effect with useState + onMouseEnter/onMouseLeave,

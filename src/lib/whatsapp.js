@@ -90,6 +90,13 @@ export const AUTO_ACK_TEXT = {
 // NB: the explicit .js extension is load-bearing — this module is ALSO imported
 // by the Node server side (api/_lib), where extensionless ESM specifiers fail.
 export { normalizePhone, formatPhone, matchCustomerByPhone, regularChipLabel } from "./customers.js";
+// A re-export is NOT a local binding — the names above are visible to importers
+// of this module and undefined INSIDE it. `describeConversation` at the foot of
+// this file needs two of them, so they are imported as well. The build cannot
+// see the difference (rolldown resolves the re-export for every consumer and
+// never evaluates the body), which is what makes this worth stating: it fails
+// at runtime, in the one function, and only when a row renders.
+import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone } from "./customers.js";
 
 // Human-readable relative time ("2 min ago", "yesterday", "3 days ago").
 export function formatRelativeTime(ts) {
@@ -235,4 +242,50 @@ export function sortConversations(conversations, archivedView) {
   return conversations
     .filter((c) => (archivedView ? c.archived : !c.archived))
     .sort(conversationOrder(archivedView));
+}
+
+// describeConversation(conv, { bookings }) — what ONE conversation row sounds
+// like (17.15.0-wa-sandbox).
+//
+// The `describeBooking` precedent, applied to the module's own list. The row is
+// a stack of a dot, a name, a glyph, a relative time and a truncated snippet;
+// read as raw text that is a run of fragments with no subject, and three of the
+// five things it tells you at a glance — unread, what the customer wants, that
+// the thread is archived — are carried ONLY by a coloured dot or an icon. Those
+// have `title` attributes, which a screen reader may or may not reach and a
+// keyboard user never sees.
+//
+// It lives here rather than in ConversationRow for `describeBooking`'s reason:
+// it is a pure function of the data, it is the one place the vocabulary is
+// decided, and a component file that also exports a plain function trips
+// `react-refresh/only-export-components`.
+//
+// The intent vocabulary is the same wording the IntentBanner prints ("requesting
+// to cancel" / "requesting changes"), so what is spoken and what is shown cannot
+// drift. State that belongs to the LIST rather than to the conversation —
+// select mode, checked — stays at the call site, exactly as the booking card's
+// clash and late clauses do.
+export function describeConversation(conv, opts) {
+  if (!conv) return "";
+  const bookings = (opts && opts.bookings) || [];
+  const match = _matchByPhone(conv.phoneKey, bookings);
+  const parts = [];
+  parts.push(match ? match.name : (conv.phone || conv.phoneKey));
+  // The number is spoken only when it is not already the name — an unmatched
+  // conversation is titled by its number, and saying it twice is noise.
+  if (match && (conv.phone || conv.phoneKey)) parts.push(_formatPhone(conv.phone || conv.phoneKey));
+  if (conv.unread) parts.push("unread");
+  if (conv.archived) parts.push("archived");
+  const intent = (conv.draftData && conv.draftData.intent) || null;
+  if (isParsing(conv)) parts.push("reading the message");
+  else if (intent === "cancel") parts.push("requesting to cancel");
+  else if (intent === "modify") parts.push("requesting changes");
+  else if (conv.draftStatus === "accepted") parts.push("booking confirmed");
+  else if (conv.draftStatus === "parsed" && conv.draftData) parts.push("draft booking");
+  const when = formatRelativeTime(conv.lastMessageAt);
+  if (when) parts.push(when);
+  // Last: the snippet is what the row is ABOUT, and it is spoken in full — the
+  // visual ellipsis is a width constraint, not a decision about content.
+  if (conv.lastMessageSnippet) parts.push(conv.lastMessageSnippet);
+  return parts.join(", ");
 }

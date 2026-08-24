@@ -107,8 +107,26 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
       </div>
     );
   }
+  // ── the roving tab stop (17.15.0-wa-sandbox) ──────────────────────────────
+  // One stop for the whole list, resolved against the LIVE rows rather than the
+  // rendered ones: `rows` also holds the departing rows that are mid-collapse,
+  // and a tab stop on a row on its way out is a stop that disappears under the
+  // keyboard. Anchored on `activeKey` — which is what the panel's ↑/↓ moves —
+  // and falling back to the first row, so the list is always reachable from the
+  // keyboard even before anything is selected. This is prod's ListView `rovingId`
+  // with `activeKey` in `selectedId`'s place.
+  const rovingKey = (activeKey && sorted.some((c) => c.phoneKey === activeKey))
+    ? activeKey
+    : (sorted[0] ? sorted[0].phoneKey : null);
   return (
-    <div ref={flipRef} style={{ padding: "10px 10px 18px", height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
+    <div
+      ref={flipRef}
+      /* A real list, so a screen reader is told how many conversations there
+         are and where in them it is. The label distinguishes the two tabs,
+         which render through this same component. */
+      role="list"
+      aria-label={archivedView ? "Archived conversations" : "Conversations"}
+      style={{ padding: "10px 10px 18px", height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
       {/* A collapsing row stays mounted for the whole prune window, so it is
           made inert: without this you can click a row on its way out and select
           a conversation no longer in this tab, which the leaves-the-tab effect
@@ -123,6 +141,8 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
           <ConversationRow
             flipId={c.phoneKey}
             conv={c}
+            roving={c.phoneKey === rovingKey}
+            departing={!live[c.phoneKey]}
             active={c.phoneKey === activeKey}
             onClick={() => (selectMode ? onToggleSelect(c.phoneKey) : onSelect(c.phoneKey))}
             bookings={bookings}
