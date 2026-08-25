@@ -37,8 +37,11 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// v17.15.1: the token blocks moved out of index.html into src/index.css (the
+// service worker can cache a hashed asset; it re-sent the inline block on every
+// open). Same bytes, same blocks — only the file changed.
 const HTML = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "..", "index.html"),
+  join(dirname(fileURLToPath(import.meta.url)), "..", "src", "index.css"),
   "utf8"
 );
 
@@ -49,9 +52,9 @@ const HTML = readFileSync(
 // to be wrong in dark for so long without anyone noticing.
 function block(selector) {
   const i = HTML.indexOf(selector);
-  if (i < 0) throw new Error("no " + selector + " block in index.html");
+  if (i < 0) throw new Error("no " + selector + " block in src/index.css");
   const open = HTML.indexOf("{", i);
-  const end = HTML.indexOf("\n      }", open);
+  const end = HTML.indexOf("\n}", open);
   const body = HTML.slice(open + 1, end);
   const out = {};
   for (const m of body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();

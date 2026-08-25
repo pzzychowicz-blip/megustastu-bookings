@@ -67,7 +67,9 @@ const Reminder = read("components/ReminderEditor.jsx");
 // is where it can fail invisibly (hidden in a way that also makes it
 // unfocusable). Read RAW — stripComments is for JS/JSX, and the point here is
 // the declarations, not the prose around them.
-const HTML = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "index.html"), "utf8");
+// v17.15.1: the stylesheet moved to src/index.css. The rules this file
+// asserts (.mgt-skip and friends) went with it, unchanged.
+const HTML = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "index.css"), "utf8");
 
 // Assert a source shape is present, with a message saying what breaks without
 // it. `why` is not decoration: a failure here is always someone tidying, and
