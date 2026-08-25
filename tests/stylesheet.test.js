@@ -38,6 +38,13 @@ import { dirname, join } from "node:path";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const HTML = readFileSync(join(ROOT, "index.html"), "utf8");
 
+// v17.15.1 — the stylesheet moved OUT of index.html into src/index.css so the
+// service worker can cache it (see that file's header). This test follows it:
+// what is being guarded is the CSS, not the file it happened to live in. Every
+// check below is unchanged — the parse walk, the prose guards and the whole
+// CRITICAL_SELECTORS list still run, against the same bytes in a new home.
+const CSS_SRC = readFileSync(join(ROOT, "src", "index.css"), "utf8");
+
 // Every rule here fails SILENTLY when it goes missing — no error, no visual
 // hole, just an affordance that quietly stops working. That is the entry
 // criterion for this list, not importance in the abstract.
@@ -116,14 +123,33 @@ function preludes(css) {
   return out.filter(Boolean);
 }
 
-describe("index.html stylesheet", () => {
-  const blocks = styleBlocks(HTML);
-
-  it("has exactly one <style> block", () => {
-    expect(blocks.length).toBe(1);
+describe("the app stylesheet (src/index.css)", () => {
+  // The inline block must NOT come back. It was 89 kB of index.html, and
+  // navigations are network-first in public/sw.js, so inlining it means
+  // re-sending it on every single app open — the exact cost v17.15.1 removed.
+  // Vite injects the <link> itself from main.jsx's import, so a <style> block
+  // reappearing here means someone pasted CSS back into the HTML.
+  it("is not inlined back into index.html", () => {
+    expect(styleBlocks(HTML)).toEqual([]);
   });
 
-  const css = stripComments(blocks[0]);
+  // /code-review — the silent-failure this whole move introduced. The
+  // stylesheet now reaches the app through ONE import line, and nothing else
+  // verifies it: an unused .css file is not a build error, eslint does not read
+  // it, and every CSS test in this repo (here, contrast, motion, a11y) reads the
+  // file straight off disk rather than through the import graph. So deleting
+  // that line ships an app with NO styling at all while the build, the linter
+  // and all 565 tests stay green.
+  //
+  // Inline in index.html the CSS could not fail to load. That property is what
+  // was traded away for the caching win, and this is what buys it back.
+  it("is actually imported by the entry module", () => {
+    const main = readFileSync(join(ROOT, "src", "main.jsx"), "utf8");
+    expect(main, "src/main.jsx must import ./index.css or the app ships unstyled")
+      .toMatch(/^\s*import\s+["']\.\/index\.css["']/m);
+  });
+
+  const css = stripComments(CSS_SRC);
 
   it("has no unterminated comment", () => {
     expect(css).not.toContain("/* UNTERMINATED */");

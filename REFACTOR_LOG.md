@@ -14484,3 +14484,143 @@ problem. **Two movements on different axes cannot be reconciled by a clock —
 aligning them perfectly is what makes the diagonal clean rather than what makes
 it go away.** The question was never "when should each of these run", it was
 "which axis does this gesture own".
+
+---
+
+## v17.15.1 — the stylesheet crosses the cache line
+
+**Date:** 2026-08-25 · **Behavioural change:** None · **Scope:** asset delivery
+**Files:** `index.html` · `src/index.css` (new) · `src/main.jsx` · `vite.config.js` ·
+`tests/{stylesheet,contrast,motion,a11y}.test.js`
+
+A performance round, scoped by a scan run against the Vercel skill set. The
+headline finding was a negative one and is the most useful thing here: **the
+React render layer is already optimised and had no target worth taking.** What
+was left was asset delivery, and there the numbers were large.
+
+### What shipped
+
+**1. The stylesheet left `index.html` (`src/index.css`).** It was 89 kB of a
+100.5 kB HTML file — 33.7 kB gzipped. `public/sw.js` is **network-first for
+navigations** and **cache-first for `/assets/*`**, so as an inline block it was
+re-sent on *every app open, forever*, while every other byte the app loads was
+fetched once. Imported from `main.jsx` so Vite owns the hash and the `<link>`
+and the two cannot drift. Vite also minifies it, which the inline block never
+was: **89 kB → 15 kB raw, 4.20 kB gz.**
+
+The boot script stays inline and its CSP hash is **byte-for-byte unchanged** —
+verified, not assumed. An external sheet in `<head>` is still render-blocking,
+so the no-flash theme guarantee is untouched.
+
+**2. Vendor chunking (`vite.config.js`).** React and Firebase are ~60% of the
+main chunk and never change between our releases, yet every version bump handed
+the tablet a fresh 203 kB gz because it was one file with one hash. Split into
+`vendor-react` (59.64 kB gz) and `vendor-firebase` (72.96 kB gz), both keep
+their hashes across a deploy and the SW serves them from disk. Firebase is one
+group, not three: app/auth/database share internal `@firebase/*` utils, and a
+finer split just relocates shared code without reducing what a release
+invalidates. Vite emits all three as `modulepreload`, so no request waterfall.
+
+| | Before | After | |
+|---|---|---|---|
+| Repeat open (HTML only) | 33.70 kB gz | **4.59 kB gz** | −86% |
+| First load (eager total) | 258.45 kB gz | **231.52 kB gz** | −10% |
+| Re-downloaded per release | 258.45 kB gz | **~94 kB gz** | −63% |
+
+### What was measured and deliberately NOT done
+
+The plan's third phase was to memoise `notifSections` (rebuilt every App render,
+and v17.15.0 had measured 2.886 ms of forced layout per commit in the strip).
+Measured live, with the booking form open and a 21-keystroke guest name:
+
+| | median | p90 | max |
+|---|---|---|---|
+| Strip present | 10.9 ms | 16.9 ms | 27.1 ms |
+| Strip absent (quiet day) | 10.4 ms | 15.5 ms | 22.3 ms |
+
+**~0.5 ms, with the strip producing ZERO DOM mutations either way** — it
+reconciles and bails. v17.15.0's early-return had already removed the layout
+cost this was aimed at. Typing with Timeline, List and Plan behind the modal
+gave ~10 ms and an **identical 413 DOM mutations**, i.e. the view contributes
+nothing: the `VA` stable-wrapper pattern and the five `memo()`'d views are doing
+their job. The residual is the form's own necessary re-render plus dev-build
+StrictMode double-rendering, which roughly halves in production.
+
+Memoising a ~30-dependency array in the path that draws double-booking and
+running-late banners, to buy ~0.2 ms in prod, is the wrong trade: one missed
+dependency is a stale safety banner. `content-visibility` was dropped on the
+same grounds — it is built for 1000+ item lists, the busiest day here is ~40
+cards, and it would have broken `useFlip`'s measurement and `focusReq`
+scrolling. **Recorded so it is not re-proposed: the render layer is done, and
+the next person to look should measure before believing otherwise.**
+
+### Two defects the existing guards caught, both self-inflicted
+
+Worth logging because both were invisible in review and both were caught by
+tests written for exactly this:
+
+1. `src/index.css`'s new header spelled a comment-terminator literally, which
+   closed the header early and put prose in a selector — the v17.8.0 bug, in the
+   commit that moved the file. `tests/stylesheet.test.js` failed on it.
+2. `index.html`'s replacement comment contained a literal `<script>` tag. The
+   CSP hash extractor finds the boot block **by regex**, so the tag name in
+   prose made it hash the wrong bytes and report a pin mismatch. Fixed by not
+   naming the tag; the comment now says so. **A guard that finds its subject by
+   regex can be blinded by prose that merely mentions it.**
+
+### Verification
+
+`npm run build` + `npm test` → **565 passed** (564 + one added: the inline block
+must not come back). `npm run lint` 0 errors / 47 warnings — identical to `main`.
+`npm run check:style` OK. Live on DEV at the dev server: all 24
+`CRITICAL_SELECTORS` present in the CSSOM, `.mgt-hover-scale` resolving, theme
+correct on first paint, no console errors. Four test files were repointed at
+`src/index.css`; none was weakened.
+
+### `/code-review` fixes (xhigh) — 8 findings, all applied
+
+**The one that mattered.** Moving the CSS out of `index.html` traded away a
+property nothing was tracking: **inline, the stylesheet could not fail to
+load.** It now reaches the app through a single `import "./index.css"` in
+`main.jsx` that nothing verified — an unused CSS file is not a build error,
+eslint does not read it, and all four CSS test files (`stylesheet`, `contrast`,
+`motion`, `a11y`) read the file straight off disk rather than through the import
+graph. Deleting that line ships an app with **no styling at all** while the
+build, the linter and every test stay green. `tests/stylesheet.test.js` now
+asserts the entry module imports it, **proven against known-bad input**: with
+the line removed the test fails and `npm run build` still succeeds, which is the
+whole shape of the defect. Same entry criterion as `CRITICAL_SELECTORS` — does
+it fail SILENTLY.
+
+**The docs had drifted in the same commit that caused the drift.** `DESIGN.md`
+is the designated visual-system authority ("read it before changing how anything
+looks"), and it pointed at `index.html` for the token families, the
+`.mgt-hover-scale` utility, the `role="button"` rules, the radius scale and the
+font stack — 13 references, all now aimed at a file containing none of it.
+`CLAUDE.md` kept two more (DaySheet's `@media print`, QuickStatusPopup's control
+rule) after five others were updated, i.e. one file disagreeing with itself
+about where the stylesheet lives. Both fixed, plus a locator note at the top of
+DESIGN.md's theming section. The `index.html` references that remain in both
+files are the correct ones: the boot script, which is still inline.
+
+**Also fixed:** the paired no-build test count still read 563 when the added
+test made it 564 (the suite reports `564 passed | 1 skipped` without a build,
+565 with) — updating one half of a pair of numbers and not the other is how the
+count stopped meaning anything the last time. The two `manualChunks` regexes
+were hoisted out of the callback (a regex literal is re-evaluated on every call,
+so they allocated two objects per module inspected) and the React alternation
+reordered longest-first: `react|react-dom` matched `react-dom` **only** because
+the trailing separator failed on the hyphen and the engine backtracked, so the
+grouping rested on a backtrack a later edit could silently remove. Verified
+behaviour-neutral — both vendor chunk hashes are byte-identical across the
+change. `tests/contrast.test.js` now **brace-counts** the token block instead of
+matching its closing brace by indentation; the sentinel had been `"\n      }"`
+(index.html's `<style>` indent) and became `"\n}"`, an even weaker anchor that a
+reformat or an enclosing at-rule would break by *silently truncating* the token
+map, leaving the contrast pass measuring a partial palette rather than failing.
+The magic-number stub check added alongside it was dropped as redundant — the 24
+`CRITICAL_SELECTORS` assertions already prove the file is not a stub, and
+`length > 50000` would have failed a legitimate 40% reduction.
+
+Re-verified after the fixes: build + **565 tests**, lint 0 errors / 47 warnings
+(identical to `main`), `check:style` OK, chunk output unchanged.

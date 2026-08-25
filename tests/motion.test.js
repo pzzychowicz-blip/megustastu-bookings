@@ -43,11 +43,13 @@ import { join } from "node:path";
 import { M, EXIT_MS, REVEAL_EXIT_MS, exitHold } from "../src/lib/constants.js";
 
 const ROOT = join(import.meta.dirname, "..");
-const html = readFileSync(join(ROOT, "index.html"), "utf8");
+// v17.15.1: duration tokens now live in src/index.css (moved out of the
+// inline <style> so the service worker can cache them). Same tokens.
+const html = readFileSync(join(ROOT, "src", "index.css"), "utf8");
 
 function token(name) {
   const m = html.match(new RegExp("--" + name + ":\\s*(\\d+)ms"));
-  if (!m) throw new Error("token --" + name + " not found in index.html");
+  if (!m) throw new Error("token --" + name + " not found in src/index.css");
   return Number(m[1]);
 }
 
