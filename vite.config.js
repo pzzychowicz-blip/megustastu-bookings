@@ -1,6 +1,17 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// /code-review: hoisted out of the manualChunks callback. A regex literal is
+// re-evaluated every time control reaches it, so inline these allocated two
+// RegExp objects per module id inspected, on every build.
+//
+// The alternations are ordered LONGEST-FIRST. `react` before `react-dom` also
+// works, but only because the trailing separator fails on the hyphen and the
+// engine backtracks — correctness resting on a backtrack that a later edit to
+// the terminator would silently remove, taking every `react-*` package with it.
+const VENDOR_REACT = /[\\/]node_modules[\\/](react-dom|react|scheduler)[\\/]/;
+const VENDOR_FIREBASE = /[\\/]node_modules[\\/](@firebase|firebase)[\\/]/;
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -24,8 +35,8 @@ export default defineConfig({
         // into a fourth chunk without reducing what a release invalidates.
         manualChunks(id) {
           if (!id.includes('node_modules')) return;
-          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'vendor-react';
-          if (/[\\/]node_modules[\\/](@firebase|firebase)[\\/]/.test(id)) return 'vendor-firebase';
+          if (VENDOR_REACT.test(id)) return 'vendor-react';
+          if (VENDOR_FIREBASE.test(id)) return 'vendor-firebase';
         },
       },
     },

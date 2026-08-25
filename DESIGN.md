@@ -44,7 +44,7 @@ explaining why is usually the one to read.
 
 ## Style tokens
 - All colours, spacing, button styles, badge styles, **corner radii**, **motion** and **type** flow through `src/lib/constants.js` exports (`S`, `BTN`, `BLOCK_BG`, `BLOCK_INK`, `STATUS_COLORS`, `TBL`, `R`, `M`, `T`, `FW`).
-- **`R` = the v17.7.0 pill-radius scale** (`R.pill`/`auth`/`sheet`/`card`/`inset` → the `--r-*` tokens in `index.html`'s `:root`; radii are theme-agnostic, so they are NOT duplicated into the dark block). Assign **by role, never by the old number** — the same `12` meant "control" in one file and "card" in another. `--r-pill` is `999px` because CSS clamps an oversized radius to half the box, so one token is a true pill at every control height. **No new `borderRadius: <number>` literal.** **v17.8.0: ENFORCED, not described** — `npm run check:style` (`scripts/check-style-invariants.mjs`, a CI gate after lint) fails on any bare numeric radius unless its line carries an inline `/* @canvas */`. **The 26 genuine exceptions are marked at their sites**, so an exemption is visible where you are reading rather than in a paragraph three files away — timeline blocks + their manual-assign handle, folded corner and hour strip (7) · TimeAxis ticks, heat bar and now-marker (4) · WeekView's calendar cells and covers bars (5) · the Toggle track, `Kbd` and the safe-area `calc()` (3) · Summary's progress track+fill pair (2) · the two table-picker cells (2) · the split divider (1) · LayoutSettings' alignment indents (2). **v17.10.2 refreshed this count, which had drifted from a documented 17 while the code reached 26** — an exemption list that drifts is how a rule quietly stops meaning anything, which is the whole reason the markers are at their sites. Note the grep says 27: one hit is `constants.js`'s own PROSE about the marker, not an exemption. **Grep for the marker on a line that also carries an exempted property**, or the doc drifts again in the other direction.
+- **`R` = the v17.7.0 pill-radius scale** (`R.pill`/`auth`/`sheet`/`card`/`inset` → the `--r-*` tokens in `src/index.css`'s `:root`; radii are theme-agnostic, so they are NOT duplicated into the dark block). Assign **by role, never by the old number** — the same `12` meant "control" in one file and "card" in another. `--r-pill` is `999px` because CSS clamps an oversized radius to half the box, so one token is a true pill at every control height. **No new `borderRadius: <number>` literal.** **v17.8.0: ENFORCED, not described** — `npm run check:style` (`scripts/check-style-invariants.mjs`, a CI gate after lint) fails on any bare numeric radius unless its line carries an inline `/* @canvas */`. **The 26 genuine exceptions are marked at their sites**, so an exemption is visible where you are reading rather than in a paragraph three files away — timeline blocks + their manual-assign handle, folded corner and hour strip (7) · TimeAxis ticks, heat bar and now-marker (4) · WeekView's calendar cells and covers bars (5) · the Toggle track, `Kbd` and the safe-area `calc()` (3) · Summary's progress track+fill pair (2) · the two table-picker cells (2) · the split divider (1) · LayoutSettings' alignment indents (2). **v17.10.2 refreshed this count, which had drifted from a documented 17 while the code reached 26** — an exemption list that drifts is how a rule quietly stops meaning anything, which is the whole reason the markers are at their sites. Note the grep says 27: one hit is `constants.js`'s own PROSE about the marker, not an exemption. **Grep for the marker on a line that also carries an exempted property**, or the doc drifts again in the other direction.
   **Hard rule for any box holding WRAPPING or SCROLLING text (v17.7.1): its radius must be ≤ its horizontal padding.** A rounded box is narrowest at its top and bottom edges, so a radius past the padding clips the first/last visible line — and no vertical-centring trick saves it, because centring stops applying the moment the content overflows (that is exactly how the v17.7.0 `mkArea` fix passed QA and still shipped a bug: it was only ever tested with short content). Pills are for SINGLE-LINE controls, where the text is centred by line-height and never reaches the curve. Multi-line ⇒ `R.inset` (10px, inside mkInp's 12px padding) — see `mkArea`, and the chat bubble / reply composer in the WA sandbox. **A `<select>` needs the same clearance on its RIGHT** (v17.8.0 `mkSel`): its arrow is painted inside the padding box against `padding-right`, so mkInp's 12px lands it inside the pill's 21.5px cap. Text is immune — it spans enough height that the curve has receded behind it, which is exactly why the LEFT 12px looks right and the right 12px doesn't.
 - **`T` = the v17.8.0 type scale, `FW` the weight scale.** Six role-named steps
   (`micro`/`small`/`body`/`lead`/`title`/`display`) and four named weights.
@@ -278,12 +278,12 @@ explaining why is usually the one to read.
   different question); Patryk chose flat. **If a gradient is ever wanted here
   again, ~8 L\* is the bar.** A backdrop either commits to being seen or commits
   to being a surface.
-- **One app font (v16.0.0):** the stack lives in `index.html` as `--font-app` (body sets it; App.jsx/LoginScreen wrappers read the token). `input, textarea, select, button { font-family: inherit }` is load-bearing — form controls do NOT inherit font per the CSS spec (the Notes textarea used to render monospace). Never re-introduce an inline font-family literal; the only deliberate exception is the `Kbd` keycap atom (monospace).
+- **One app font (v16.0.0):** the stack lives in `src/index.css` as `--font-app` (body sets it; App.jsx/LoginScreen wrappers read the token). `input, textarea, select, button { font-family: inherit }` is load-bearing — form controls do NOT inherit font per the CSS spec (the Notes textarea used to render monospace). Never re-introduce an inline font-family literal; the only deliberate exception is the `Kbd` keycap atom (monospace).
 - Every modal uses the **`Overlay` atom** (owns blur + mobile-sheet / desktop-card branching).
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
 - ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above).
 - **Keyboard focus is a designed state (v17.8.0).** One `:focus-visible` rule in
-  `index.html` + a `--focus-ring` token per theme. Before this the app had NO
+  `src/index.css` + a `--focus-ring` token per theme. Before this the app had NO
   focus rule at all and a focused button computed `outline: none` — in the one
   app here that is explicitly keyboard-driven. **`outline-offset: 2px` is what
   makes a single colour enough**: the ring lands on the page background instead
@@ -317,7 +317,7 @@ explaining why is usually the one to read.
   needed new shapes. Sizing: `IC.control`, not `IC.inline` — these are marks ON
   a control, and `Assign` sat in the same List row at `IC.control` already.
 - **A control's LABEL is not selectable text (v17.10.1).** One rule in
-  `index.html` — `button, [role="button"] { user-select: none;
+  `src/index.css` — `button, [role="button"] { user-select: none;
   -webkit-touch-callout: none }` — because a long-press is TWO gestures at once:
   ours, and the OS starting a text selection. The quick-status popup opens under
   the finger that is still pressed, so on Android the selection landed on its own
@@ -491,7 +491,12 @@ explaining why is usually the one to read.
   content is still mounted.
 
 ### Theming / dark mode (mechanism shipped v14.2.0 — ported from Scheduling; see `MGT_Bookings_dark-mode_PORT_INSTRUCTIONS.md`)
-- Light + dark via CSS custom properties: `:root` (light) + `[data-theme="dark"]` overrides in `index.html`; `<html data-theme="…">` set via `document.documentElement.dataset.theme`. A theme flip is **one DOM attribute change — zero React re-render** of the tree.
+- **Where the CSS lives (v17.15.1):** every rule and token below is in
+  **`src/index.css`**, imported by `src/main.jsx`. It was an inline `<style>`
+  in `index.html` until v17.15.1, when it moved so the service worker could
+  cache it (navigations are network-first, `/assets/*` is cache-first). Only
+  the no-flash boot script is still inline there, pinned in the CSP by hash.
+- Light + dark via CSS custom properties: `:root` (light) + `[data-theme="dark"]` overrides in `src/index.css`; `<html data-theme="…">` set via `document.documentElement.dataset.theme`. A theme flip is **one DOM attribute change — zero React re-render** of the tree.
 - **Hook:** `useThemeMode(explicitPref) → isDark` (`src/hooks/useThemeMode.js`) writes `data-theme` and follows the OS live when pref is `undefined` — the shared Scheduling contract, unchanged. A no-flash inline script in `index.html` paints the theme before React mounts (the hook alone runs too late).
 - **v17.9.0: a DEV-only `?theme=dark` / `?theme=light` override, and it is the
   FOURTH site in the theme-key contract** (`readThemePref`, the Settings toggle,
@@ -510,11 +515,11 @@ explaining why is usually the one to read.
   later in React is exactly the flash that script exists to prevent.
 - **Persistence is per-device `localStorage["mgt-theme"]`** (`"dark"|"light"|`absent), NOT Firebase (theme is per-device by design; the `settings/operatingHours` node added v14.4.0 is restaurant-wide config only). `readThemePref()` (module scope in `App.jsx`) feeds the hook; the Settings General-tab `Toggle` (`onToggleDark`) writes the key. The no-flash script reads the SAME key — **keep the value convention in sync across all three.**
 - **No rgba/hex literals in JS — every colour references `var(--…)`.** Migrated token-by-token in waves. **v14.2.0:** core `S` set + app background (`--bg-app`). **v14.2.1:** `constants.js` colour sets — `STATUS_COLORS` + `TBL` as **RGB-channel triplets** composed `rgba(var(--…-rgb), a)`; `BLOCK_BG` + `BTN` direct tokens (theme-invariant saturated fills; only status-chip **text** flips). **v14.2.2:** `atoms.jsx` + the full **modal/form subsystem** (every `Overlay` modal, `Section`, inputs, steppers, `Toggle`, `Kbd`, the Settings `TabBar`, in-modal banners) — surfaces + their text flip together (coupling: the shared `Overlay` backs 7 modals, so a dark sheet needs dark-themed content). Then **v14.2.3** `TimelineView` · **v14.2.4** `ListView` · **v14.2.5** the main-screen banners in `App.jsx` (offline/reconnect/load/overlap/reshuffle) completed the migration — **every in-app surface is now themed** (timeline/list canvas included; the login screen followed in v14.4.0).
-- **Token families** (index.html): surfaces `--bg-sheet`/`-sheet-mobile`/`-soft`/`-input`/`-stepper`/`-tabbar`/`-tab-active`/`-card`; borders `--border-sheet`/`-soft`/`-input`/`-kbd`/`-glass`; `--scrim`; semantic text `--text-primary`/`-secondary`/`-muted`/`-faint`/`-required`/`-on-accent` + `--warn-text`/`--danger-text`/`--success-text`; banner trios `--warn-*`/`--danger-*`/`--suggest-*` (bg+border+text move together); shadows `--shadow-sheet`/`-soft`/`-input`/`-btn`. **Dialog sheets use the near-opaque `--bg-sheet`** (dark = 0.85), per the opaque-popover rule. `ReminderEditor` has its **own** modal (not `Overlay`) — theme its scrim/card directly.
+- **Token families** (`src/index.css`): surfaces `--bg-sheet`/`-sheet-mobile`/`-soft`/`-input`/`-stepper`/`-tabbar`/`-tab-active`/`-card`; borders `--border-sheet`/`-soft`/`-input`/`-kbd`/`-glass`; `--scrim`; semantic text `--text-primary`/`-secondary`/`-muted`/`-faint`/`-required`/`-on-accent` + `--warn-text`/`--danger-text`/`--success-text`; banner trios `--warn-*`/`--danger-*`/`--suggest-*` (bg+border+text move together); shadows `--shadow-sheet`/`-soft`/`-input`/`-btn`. **Dialog sheets use the near-opaque `--bg-sheet`** (dark = 0.85), per the opaque-popover rule. `ReminderEditor` has its **own** modal (not `Overlay`) — theme its scrim/card directly.
 - The PDF/print path stays light regardless of in-app theme (currently no in-app PDF/export exists; keep it light if one is added).
 
 ### Hover affordance — COMPLETE (v14.3.0 → v14.3.2; see `MGT_Bookings_hover-scale_PORT_INSTRUCTIONS.md`)
-- Shared `.mgt-hover-scale` utility in `index.html` `<style>`: `scale(1.08)`, `120ms ease`, opaque theme-aware `--bg-hover-card` (`#ffffff` light / `rgb(50,50,53)` dark, both theme blocks), the `:hover:not(:disabled)` guard, reuses `--shadow-soft`.
+- Shared `.mgt-hover-scale` utility in `src/index.css`: `scale(1.08)`, `120ms ease`, opaque theme-aware `--bg-hover-card` (`#ffffff` light / `rgb(50,50,53)` dark, both theme blocks), the `:hover:not(:disabled)` guard, reuses `--shadow-soft`.
 - **A colour token may only sit on a surface that flips with it (v17.8.0 review fix).** The
   `--*-text` tokens INVERT between themes (`--success-text` `#166534`→`#86efac`,
   `--status-pending-text` `#854d0e`→`#fde047`). Painted on a **hard-coded** pale
@@ -620,7 +625,7 @@ explaining why is usually the one to read.
   It is applied INSIDE `TableGlyph`, gated on the table being interactive, which is
   what makes PlanView and the plan editor agree without either knowing about it.
   **v17.12.0 shipped that exact teleport for one commit, through a door nobody was
-  watching: `role="button"`.** `index.html` holds three rules keyed on
+  watching: `role="button"`.** `src/index.css` holds three rules keyed on
   `[role="button"]`, and until v17.12.0 all three matched NOTHING — the seven-pass
   review recorded that as finding m2 and read it as housekeeping that would come
   good when blocks became buttons. It does come good for a `<div>`. Two of the
@@ -676,7 +681,7 @@ explaining why is usually the one to read.
 - **v17.7.0: the hover rule no longer sets `border-radius`.** It used to hard-set `12px`, which squared off every pill the moment the pointer touched it. The declaration was **deleted**, not set to `inherit` — `inherit` resolves against the PARENT's radius, so a bare element inside a square parent would go square, which is the opposite of the intent. Each element now keeps its own resting radius on hover. Do not re-add a radius here. **Consequence: any `.mgt-hover-scale` element MUST set its own `borderRadius`** — the rule still applies an OPAQUE `--bg-hover-card`, so a radius-less element renders that background as a hard-edged rectangle on hover. `ConnectionStatus`'s dot button (transparent, no radius) was the FIRST case and got `borderRadius: R.pill`; **`CustomersSettings`' customer row was the second**, squaring off inside its own rounded card on hover until it got `R.card`. It has been called a one-off twice now. Treat a missing radius on a `.mgt-hover-scale` element as a bug by default, and grep the class when auditing.
 - **v17.8.0: `.mgt-hover-scale` and `.mgt-press` share ONE `transition` declaration.** They are designed to compose (~30 elements carry both), they had equal specificity (0,1,0), and `transition` is a **shorthand** — so `.mgt-press`, declared later, REPLACED the hover rule's list instead of adding to it. Every element with both classes had no transform transition at all and snapped to `scale(1.08)` instead of easing: the reminder banner's Snooze/Done, the whole timeline zoom cluster, every banner ✕, the form's customer chips. Broken since v15.8.0 and invisible because the `filter` dim `.mgt-press` added still worked; v17.8.0's universal press-scale doubled it by adding a press dip that also snapped. **Two shorthand declarations of one property cannot merge — so don't have two.** One selector list, one declaration, covering every property either class animates; source order then cannot matter. Same trap applies to any future composable pair.
   **And to INLINE styles, the third copy of it** (v17.8.0 review fix): an inline `transition` beats both the class rule and `button {}`, so **any `.mgt-hover-scale` element with an inline `transition` must list `transform`** or its hover lift and its press dip both snap. Settings' TabBar named three properties and dropped the fourth — in the same commit that documented the class-level version. Grep `transition:` under `src/` when auditing.
-- **v17.8.0: a stylesheet has no syntax errors, only rules that silently don't exist.** A stray `*/` after an already-closed comment left two lines of prose loose in `index.html`; CSS error recovery folds that text into the NEXT rule's *selector*, so `.mgt-press:active` was dropped outright and the press dim died app-wide. The build says nothing, lint says nothing, and the source reads fine at a glance. **Verify a CSS change by walking the live CSSOM** — `[...document.styleSheets].flatMap(s=>[...s.cssRules]).filter(r=>/yourClass/.test(r.cssText))` — for the rule you think you wrote. Reading the file cannot catch this class of bug.
+- **v17.8.0: a stylesheet has no syntax errors, only rules that silently don't exist.** A stray `*/` after an already-closed comment left two lines of prose loose in the stylesheet; CSS error recovery folds that text into the NEXT rule's *selector*, so `.mgt-press:active` was dropped outright and the press dim died app-wide. The build says nothing, lint says nothing, and the source reads fine at a glance. **Verify a CSS change by walking the live CSSOM** — `[...document.styleSheets].flatMap(s=>[...s.cssRules]).filter(r=>/yourClass/.test(r.cssText))` — for the rule you think you wrote. Reading the file cannot catch this class of bug.
 - **v15.1.0: the `:hover` rule is wrapped in `@media (hover: hover) and (pointer: fine)`.** iOS Safari makes `:hover` STICKY after a tap — unguarded, the last-tapped element stayed scaled 1.08, and full-width form inputs (Date/Time in the booking form) visibly overflowed their Section on phones. Touch devices get no hover lift at all; mouse/trackpad behaviour unchanged. The guard is part of the shared contract — **ported to MGT Scheduling in its v15.1.1** (2026-06-16); keep the two in sync.
 - Opt-in per element via `className="mgt-hover-scale"`. Because `mkInp`/`mkBtn` return style objects, put the class **directly on the call-site element**, not via a prop.
 - **In Bookings the lift is `transform: scale(1.08)` ONLY.** Every tagged surface uses `mkBtn`/`mkInp` (inline `background`+`boxShadow`+`borderRadius`), which beat the hover rule at higher specificity (Fix 2), so each keeps its own colour/shadow/radius and only scales. `--bg-hover-card`/`--shadow-soft` still apply to a bare (background-less) element — see the radius consequence above. Disabled controls stay flat via `:not(:disabled)`; for non-`disabled` "blocked" controls (TableGrid busy cells) the class is withheld instead (`className={blocked ? undefined : ...}`).
@@ -892,7 +897,7 @@ Measured live at 5.14:1 light and 4.60:1 dark, so it is no longer an exemption.
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip
 to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
-`index.html` next to the hover rule.
+`src/index.css` next to the hover rule.
 
 - **The specificity is load-bearing.** `.mgt-hover-scale:hover` is (0,2,0), so a
   plain `button:active` (0,1,1) LOSES and the press is invisible on desktop —
@@ -925,7 +930,7 @@ to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
 
 ### Motion — two curves, three durations (v17.8.0)
 
-Tokens in `index.html`'s `:root` (theme-agnostic, so NOT duplicated into the
+Tokens in `src/index.css`'s `:root` (theme-agnostic, so NOT duplicated into the
 dark block, same as the radii); JS reads them through **`M`** in
 `lib/constants.js`. **No new easing or duration literal** — `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back empty apart from `M`'s own
 WAAPI values.
@@ -1008,7 +1013,7 @@ while still plainly visible. **The hold is derived, never typed** — `EXIT_MS`
 and `REVEAL_EXIT_MS` in `lib/constants.js` sit beside the tokens they follow,
 every primitive takes them as its default, and `tests/motion.test.js` fails the
 build if a hold stops outlasting its animation, if `M.dur` drifts from
-index.html, or if a component passes a literal `outMs` again. Exactly ONE site
+src/index.css, or if a component passes a literal `outMs` again. Exactly ONE site
 had it right beforehand and said so in a comment nobody had propagated — the
 same shape as v17.14.0's five hand-written modal lists.
 

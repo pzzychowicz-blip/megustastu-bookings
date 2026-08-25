@@ -133,8 +133,20 @@ describe("the app stylesheet (src/index.css)", () => {
     expect(styleBlocks(HTML)).toEqual([]);
   });
 
-  it("exists and is not a stub", () => {
-    expect(CSS_SRC.length).toBeGreaterThan(50000);
+  // /code-review — the silent-failure this whole move introduced. The
+  // stylesheet now reaches the app through ONE import line, and nothing else
+  // verifies it: an unused .css file is not a build error, eslint does not read
+  // it, and every CSS test in this repo (here, contrast, motion, a11y) reads the
+  // file straight off disk rather than through the import graph. So deleting
+  // that line ships an app with NO styling at all while the build, the linter
+  // and all 565 tests stay green.
+  //
+  // Inline in index.html the CSS could not fail to load. That property is what
+  // was traded away for the caching win, and this is what buys it back.
+  it("is actually imported by the entry module", () => {
+    const main = readFileSync(join(ROOT, "src", "main.jsx"), "utf8");
+    expect(main, "src/main.jsx must import ./index.css or the app ships unstyled")
+      .toMatch(/^\s*import\s+["']\.\/index\.css["']/m);
   });
 
   const css = stripComments(CSS_SRC);

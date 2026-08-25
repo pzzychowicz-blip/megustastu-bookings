@@ -14576,3 +14576,51 @@ must not come back). `npm run lint` 0 errors / 47 warnings — identical to `mai
 `CRITICAL_SELECTORS` present in the CSSOM, `.mgt-hover-scale` resolving, theme
 correct on first paint, no console errors. Four test files were repointed at
 `src/index.css`; none was weakened.
+
+### `/code-review` fixes (xhigh) — 8 findings, all applied
+
+**The one that mattered.** Moving the CSS out of `index.html` traded away a
+property nothing was tracking: **inline, the stylesheet could not fail to
+load.** It now reaches the app through a single `import "./index.css"` in
+`main.jsx` that nothing verified — an unused CSS file is not a build error,
+eslint does not read it, and all four CSS test files (`stylesheet`, `contrast`,
+`motion`, `a11y`) read the file straight off disk rather than through the import
+graph. Deleting that line ships an app with **no styling at all** while the
+build, the linter and every test stay green. `tests/stylesheet.test.js` now
+asserts the entry module imports it, **proven against known-bad input**: with
+the line removed the test fails and `npm run build` still succeeds, which is the
+whole shape of the defect. Same entry criterion as `CRITICAL_SELECTORS` — does
+it fail SILENTLY.
+
+**The docs had drifted in the same commit that caused the drift.** `DESIGN.md`
+is the designated visual-system authority ("read it before changing how anything
+looks"), and it pointed at `index.html` for the token families, the
+`.mgt-hover-scale` utility, the `role="button"` rules, the radius scale and the
+font stack — 13 references, all now aimed at a file containing none of it.
+`CLAUDE.md` kept two more (DaySheet's `@media print`, QuickStatusPopup's control
+rule) after five others were updated, i.e. one file disagreeing with itself
+about where the stylesheet lives. Both fixed, plus a locator note at the top of
+DESIGN.md's theming section. The `index.html` references that remain in both
+files are the correct ones: the boot script, which is still inline.
+
+**Also fixed:** the paired no-build test count still read 563 when the added
+test made it 564 (the suite reports `564 passed | 1 skipped` without a build,
+565 with) — updating one half of a pair of numbers and not the other is how the
+count stopped meaning anything the last time. The two `manualChunks` regexes
+were hoisted out of the callback (a regex literal is re-evaluated on every call,
+so they allocated two objects per module inspected) and the React alternation
+reordered longest-first: `react|react-dom` matched `react-dom` **only** because
+the trailing separator failed on the hyphen and the engine backtracked, so the
+grouping rested on a backtrack a later edit could silently remove. Verified
+behaviour-neutral — both vendor chunk hashes are byte-identical across the
+change. `tests/contrast.test.js` now **brace-counts** the token block instead of
+matching its closing brace by indentation; the sentinel had been `"\n      }"`
+(index.html's `<style>` indent) and became `"\n}"`, an even weaker anchor that a
+reformat or an enclosing at-rule would break by *silently truncating* the token
+map, leaving the contrast pass measuring a partial palette rather than failing.
+The magic-number stub check added alongside it was dropped as redundant — the 24
+`CRITICAL_SELECTORS` assertions already prove the file is not a stub, and
+`length > 50000` would have failed a legitimate 40% reduction.
+
+Re-verified after the fixes: build + **565 tests**, lint 0 errors / 47 warnings
+(identical to `main`), `check:style` OK, chunk output unchanged.

@@ -54,7 +54,21 @@ function block(selector) {
   const i = HTML.indexOf(selector);
   if (i < 0) throw new Error("no " + selector + " block in src/index.css");
   const open = HTML.indexOf("{", i);
-  const end = HTML.indexOf("\n}", open);
+  // /code-review: brace-counted, not sentinel-matched. This used to look for
+  // the block's closing brace by its INDENTATION ("\n      }" when the rules
+  // lived inside index.html's <style>), which the v17.15.1 move turned into a
+  // column-0 "\n}" — an even weaker anchor, since it stops at the first line
+  // starting with a brace. Both break the moment the file is reformatted or a
+  // token block is wrapped in an at-rule, and they break by SILENTLY
+  // truncating the token map, so the contrast pass would then measure a
+  // partial palette instead of failing. Counting depth cannot be fooled by
+  // whitespace.
+  let depth = 0, end = -1;
+  for (let j = open; j < HTML.length; j++) {
+    if (HTML[j] === "{") depth++;
+    else if (HTML[j] === "}" && --depth === 0) { end = j; break; }
+  }
+  if (end < 0) throw new Error("unbalanced " + selector + " block in src/index.css");
   const body = HTML.slice(open + 1, end);
   const out = {};
   for (const m of body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
