@@ -419,6 +419,34 @@ describe("the bookings themselves are reachable (WCAG 2.1.1, 4.1.2)", () => {
       "so it cannot swallow a press aimed at whatever is behind it");
   });
 
+  it("a ghost that leaves while HOLDING focus hands it back", () => {
+    // /code-review: going inert means aria-hidden, and focused + hidden is a
+    // state assistive tech need not make sense of; then it unmounts and focus
+    // drops to <body>. Target is the grid scroller, tabIndex -1 (the
+    // `<main tabIndex={-1}>` skip-link pattern), with preventScroll because
+    // focusing otherwise yanks a horizontal scroller sideways.
+    has(Timeline, "focus escape", /document\.activeElement !== el/,
+      "only acts when this ghost is the focused element");
+    has(Timeline, "preventScroll", /focus\(\{ preventScroll: true \}\)/,
+      "focusing a scroller without it drags the grid under the user");
+    has(Timeline, "scroller is a programmatic focus target", /tabIndex=\{-1\}\n\s*className="mgt-tl-scroll"/,
+      "reachable by script, never by Tab");
+  });
+
+  it("the ghost's `leaving` means ABSENT, not merely un-opened", () => {
+    // /code-review: useRevealRows adds a NEWCOMER to renderIds one commit
+    // before its rAF opener adds it to openIds, so deriving `leaving` from
+    // openIds called an ARRIVING ghost leaving for a frame — painting it at
+    // full opacity on the exit keyframe, inert and aria-hidden, before the
+    // entrance restarted it from 0.
+    has(Timeline, "leaving={!cell}", /leaving=\{!cell\}/,
+      "absence from the live cell map is what departure means");
+    expect(
+      /leaving=\{!ghostOpenIds\.has/.test(Timeline),
+      "must not derive `leaving` from openIds — a newcomer is not in it either"
+    ).toBe(false);
+  });
+
   it("floor-plan tables are operable and NAMED by their caller", () => {
     has(Glyphs, "role", /role=\{activatable \? "button" : undefined\}|role=\{activatable/,
       "gated on onClick, not the wider `live` flag: the editor's onPointerDown " +

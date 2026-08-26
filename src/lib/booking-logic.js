@@ -240,7 +240,16 @@ export function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var 
 // its per-block references across snapshots.
 export function sanitizeBlock(bl){
   if(!bl||typeof bl!=="object") return null;
-  return bl.id?bl:Object.assign({id:genId()},bl);
+  // /code-review: the mint goes in the SOURCE, not the target. As
+  // `Object.assign({id:genId()},bl)` it was silently discarded whenever `bl`
+  // carried a falsy-but-PRESENT id — "" / 0 / null / an explicit undefined all
+  // overwrote it, so the branch that exists to mint an id handed back the
+  // unusable one it had just rejected. Unreachable from any current writer
+  // (addBlock routes through here, and RTDB cannot store null), but the failure
+  // it would produce is this version's own bug back again: two blocks sharing a
+  // falsy id make removeBlock's `bl.id !== block.id` drop BOTH, and BlockModal
+  // and DaySheet key their rows on it.
+  return bl.id?bl:Object.assign({},bl,{id:genId()});
 }
 // RTDB hands back an array only for sequential integer keys, an object otherwise
 // (and null for an absent node) — both read sites passed through the same

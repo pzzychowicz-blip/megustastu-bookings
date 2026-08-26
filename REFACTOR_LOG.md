@@ -15167,3 +15167,53 @@ they are decisions, not pending work.
 Build clean, **585 tests**, `check:style` OK, lint 0 errors / 47 warnings. Main
 bundle 89.84 → 90.08 kB gz.
 
+### `/code-review` fixes (commit 4/3)
+
+Three findings, none critical; all fixed on Patryk's call.
+
+**1. `leaving` meant "not yet opened", which an ARRIVING ghost also is.** It was
+derived from `!ghostOpenIds.has(k)`, and `useRevealRows` adds a newcomer to
+`renderIds` one commit BEFORE its rAF opener adds it to `openIds` — the hook's
+own header says so. So every ghost that arrived after mount painted one frame on
+the EXIT keyframe: full 0.55 opacity, `role` dropped, `aria-hidden`,
+`pointerEvents:none` — then `mgt-appear` restarted it from 0. A pop, then a
+fade, which is the opposite of the entrance this version exists to pair. First
+mount was exempt (the initializer seeds `openIds` from `ids`), which is why the
+harness runs that began with a reload never showed it.
+
+Caught by reading the hook's contract, then **confirmed with a MutationObserver**
+before being reported: frame 0 was `{cls:"mgt-ghost-out", op:0.55, role:null,
+aria-hidden:"true"}`. It is `leaving={!cell}` now — absence from the live cell
+map is what departure actually means, `cell` was already computed on the line
+above, and it is also right on the opposite edge (a cell that has just left
+starts fading in the same commit instead of waiting for the openIds removal).
+After: frame 0 is `{cls:"mgt-appear", op:0, role:"button"}`.
+
+**2. `sanitizeBlock` discarded its own mint on a falsy-but-present id.**
+`Object.assign({id:genId()}, bl)` puts the mint in the TARGET, so `""`, `0`,
+`null` and an explicit `undefined` all overwrote it — the branch that exists to
+mint an id handed back the unusable one it had just rejected. Unreachable from
+any current writer (`addBlock` routes through this same function and RTDB cannot
+store null), but the failure it would produce is this version's own bug back
+again: two blocks sharing a falsy id make `removeBlock`'s `bl.id !== block.id`
+drop BOTH, and `BlockModal` and `DaySheet` key their rows on it. Now
+`Object.assign({}, bl, {id: genId()})`, with all four falsy values pinned in a
+test.
+
+**3. A ghost that left while HOLDING focus.** Going inert means `aria-hidden`,
+and focused-plus-hidden is a state assistive tech is not required to make sense
+of; then it unmounts and focus drops to `<body>`, putting a keyboard user back
+at the top of the document. Reachable: Tab onto a ghost to consider it and the
+match evaporates before you press Enter. A layout effect now hands focus to the
+grid scroller, which takes `tabIndex={-1}` — the `<main tabIndex={-1}>`
+skip-link pattern, programmatically focusable and never in the tab order — with
+`preventScroll`, because focusing a horizontal scroller otherwise yanks the grid
+sideways. `.mgt-tl-scroll:focus` is ringless for `main:focus`'s reason: a
+container is not a control, and a ring there could only ever appear as an
+unexplained box after a ghost vanished. Verified live: focus lands on
+`DIV.mgt-tl-scroll` rather than being lost.
+
+Three new guards in `tests/a11y.test.js` and one in `tests/booking-logic.test.js`,
+each proven against known-bad input. **588 tests**, build clean, `check:style` OK,
+lint 0 errors.
+

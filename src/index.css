@@ -1227,6 +1227,12 @@ button:active:not(:disabled):not(.mgt-nopress),
    whole page being selected. The ring belongs on the link you pressed, not
    on the landmark you arrived at. */
 main:focus { outline: none; }
+/* v17.15.3: the timeline scroller is a programmatic focus target (tabIndex -1)
+   for a ghost that leaves while holding focus — see WaitGhost. Same reason
+   main:focus above is ringless: it is a container, not a control, and it can
+   never be reached by Tab, so a ring here would only ever appear as an
+   unexplained box after a ghost vanished. */
+.mgt-tl-scroll:focus { outline: none; }
 
 /* ── v17.8.0: the keyboard focus ring ───────────────────────────────────
    The app had NO :focus or :focus-visible rule anywhere, so a focused

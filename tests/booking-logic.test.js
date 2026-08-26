@@ -1003,6 +1003,24 @@ describe("sanitizeBlock / sanitizeBlocks", () => {
     expect(out.id.length).toBeGreaterThan(0);
   });
 
+  it("MINTS over a falsy-but-present id, rather than handing it back", () => {
+    // /code-review: as `Object.assign({id:genId()}, bl)` the mint sat in the
+    // TARGET, so "" / 0 / null / an explicit undefined all overwrote it and the
+    // branch that exists to mint an id returned the unusable one it had just
+    // rejected. Two blocks sharing a falsy id would then make removeBlock's
+    // `bl.id !== block.id` drop BOTH — this version's own bug, back again.
+    for (const bad of ["", 0, null, undefined]) {
+      const out = sanitizeBlock(Object.assign({}, base, { id: bad }));
+      expect(out.id, "id " + JSON.stringify(bad) + " must be replaced").toBeTruthy();
+      expect(typeof out.id).toBe("string");
+      expect(out.tableId, "the rest of the block survives the mint").toBe("3");
+    }
+    // ...and two such blocks are then distinguishable, which is the whole point.
+    const a = sanitizeBlock(Object.assign({}, base, { id: "" }));
+    const b = sanitizeBlock(Object.assign({}, base, { id: "" }));
+    expect(a.id).not.toBe(b.id);
+  });
+
   it("KEEPS an id that is already there, and returns the same object", () => {
     const withId = Object.assign({ id: "keepme" }, base);
     const out = sanitizeBlock(withId);

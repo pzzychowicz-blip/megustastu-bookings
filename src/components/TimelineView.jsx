@@ -37,7 +37,7 @@
 //     idle — fixes the previous "Follow"/"Follow" duplicate that relied on
 //     colour alone to convey state.
 
-import { useState, useRef, useEffect, useMemo, memo, Fragment } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
@@ -931,15 +931,40 @@ function BlockBar({ bl, totalMins }) {
 //
 // Hoisted to module scope per CLAUDE.md's inline-sub-component rule (a component
 // defined inside another's body is a new TYPE every render → full remount).
-function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false }) {
+function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusFallbackRef = null }) {
   // v17.15.3: a LEAVING cell is still mounted (useRevealRows holds it so this
   // fade can finish) but its ghost is already gone from waitGhosts, so `g` is
   // undefined. Cache the last real one, the `last.current` idiom Presence uses
   // — BlockModal gets the same thing free because Reveal caches its children,
   // and there is no Reveal here.
   const last = useRef(null);
+  const elRef = useRef(null);
   if (g) last.current = g;
   g = g || last.current;
+  // /code-review: hand focus back when a ghost leaves while HOLDING it. Going
+  // inert means `aria-hidden`, and an element that is focused AND hidden from
+  // the a11y tree is a state assistive tech is not required to make sense of —
+  // then it unmounts and focus falls to <body>, dropping the keyboard user at
+  // the top of the document. Reachable: Tab onto a ghost to consider it, and
+  // the match evaporates (the quarter ticks, the party is booked from the
+  // panel, the table gets blocked) before you press Enter.
+  //
+  // The target is the grid SCROLLER, which takes tabIndex={-1} for exactly this
+  // — the `<main tabIndex={-1}>` skip-link precedent: programmatically
+  // focusable, never in the tab order. Focus lands in the timeline, so the next
+  // Tab continues from here instead of restarting. `preventScroll` because
+  // focusing otherwise scrolls the target into view, which on a horizontal
+  // scroller would yank the grid sideways under the user.
+  //
+  // Must sit ABOVE the two early returns below — hooks run unconditionally.
+  useLayoutEffect(() => {
+    if (!leaving) return;
+    const el = elRef.current;
+    if (!el || document.activeElement !== el) return;
+    const fb = focusFallbackRef && focusFallbackRef.current;
+    if (fb) fb.focus({ preventScroll: true });
+    else el.blur();
+  }, [leaving, focusFallbackRef]);
   if (!g) return null;
   const gS = toMins(g.time);
   // Clamp to the grid's right edge, exactly as the turnaround tail does — an
@@ -992,6 +1017,7 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false }) {
       //
       // mgt-ghost-out is mgt-appear's exact mirror — see index.css for why it
       // alone takes `forwards`.
+      ref={elRef}
       className={"mgt-blk " + (leaving ? "mgt-ghost-out" : "mgt-hover-scale mgt-appear")}
       data-wg={g.id}
       /* v17.12.0: a ghost is a proposal you can accept, so it is a button like
@@ -1454,11 +1480,22 @@ export const TimelineView = memo(function TimelineView({
           const cell = ghostByKey.get(k);
           // A departed cell is no longer in ghostByKey — it renders from the
           // snapshot WaitGhost cached, and `leaving` puts it on the fade out.
+          //
+          // /code-review: `leaving` is the ABSENCE OF A LIVE CELL, deliberately
+          // NOT `!ghostOpenIds.has(k)`. useRevealRows adds a NEWCOMER to
+          // renderIds one commit BEFORE its rAF opener adds it to openIds, so
+          // the openIds test called an ARRIVING ghost "leaving" for exactly one
+          // frame — which painted it at full 0.55 on the exit keyframe, inert
+          // and aria-hidden, before mgt-appear restarted it from 0. A pop, then
+          // a fade. `!cell` is also right on the opposite edge: a cell that has
+          // just left starts fading in the same commit rather than waiting for
+          // the openIds removal.
           return (
             <WaitGhost
               key={"wg" + k}
               g={cell ? cell.g : null}
-              leaving={!ghostOpenIds.has(k)}
+              leaving={!cell}
+              focusFallbackRef={scrollRef}
               pxPerMin={pxPerMin}
               totalMins={totalMins}
               onBook={onBookWait}
@@ -1589,6 +1626,13 @@ export const TimelineView = memo(function TimelineView({
     <div
       ref={scrollRef}
       onScroll={onGridScroll}
+      /* /code-review (v17.15.3): programmatic focus target, never in the tab
+         order — where focus goes when a ghost leaves while holding it (see
+         WaitGhost). The `<main tabIndex={-1}>` pattern; `.mgt-tl-scroll` in
+         index.css suppresses the ring, because this is a container and not a
+         control. */
+      tabIndex={-1}
+      className="mgt-tl-scroll"
       // v14.3.1 (Fix 3): pad the scroller so a hover-scaled block at the grid
       // edges (first/last minute, top/bottom row) doesn't clip on any side.
       // labelCol gets a matching paddingTop so its rows stay aligned with the grid.
