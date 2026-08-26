@@ -11,7 +11,7 @@
 //   • Kitchen limit.
 
 import { useState, useEffect } from "react";
-import { Section, Collapsible, Toggle, mkStep, mkBtn } from "./atoms";
+import { Section, Collapsible, Toggle, mkStep, mkBtn, Reveal } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { contiguousRuns, comboKey, R, T, FW, H, IC } from "../lib/constants";
@@ -447,12 +447,21 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   {renameOrph} upcoming booking{renameOrph === 1 ? " still references" : "s still reference"} “{t.id}” — they won’t follow the rename.
                 </div>
               ) : null}
-              {/* Why the save tick is disabled — mirrors the Add form's messages (v15.0.1). */}
-              {editing && editTrim && editTrim.indexOf("|") >= 0 ? (
-                <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table id can’t contain “|”.</div>
-              ) : editing && editTrim && editTrim !== t.id && idSet[editTrim] ? (
-                <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table “{editTrim}” already exists.</div>
-              ) : null}
+              {/* Why the save tick is disabled — mirrors the Add form's messages (v15.0.1).
+                  v17.15.2: Reveal-wrapped. These appear and vanish KEYSTROKE BY
+                  KEYSTROKE as you rename a table, which is the most
+                  under-your-eye appearance in the app, and both were hard cuts
+                  that shoved the rows below them by a line. */}
+              <Reveal show={!!(editing && editTrim && (editTrim.indexOf("|") >= 0 || (editTrim !== t.id && idSet[editTrim])))}>
+                {editing && editTrim && editTrim.indexOf("|") >= 0 ? (
+                  <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table id can’t contain “|”.</div>
+                ) : editing && editTrim && editTrim !== t.id && idSet[editTrim] ? (
+                  <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table “{editTrim}” already exists.</div>
+                ) : null}
+              </Reveal>
+              {/* v17.15.2: Reveal-wrapped — it opens under the × you just
+                  pressed and closes under Cancel, both while you watch. */}
+              <Reveal show={!!confirming}>
               {confirming ? (
                 // v17.15.2: the last of the eight banned semantic triples. It is
                 // a one-line section — the question IS the message — so it takes
@@ -472,6 +481,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 </AlertRow>
                 </AlertPanel>
               ) : null}
+              </Reveal>
             </div>
           );
         })}

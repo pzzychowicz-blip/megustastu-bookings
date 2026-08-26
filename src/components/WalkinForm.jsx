@@ -44,7 +44,7 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   comboCapBest, nowTime
 } from "../lib/booking-logic";
-import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
 import { WaitIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
@@ -163,16 +163,23 @@ export function WalkinForm({
   const wSummaryText = wSel.length === 0
     ? "Select tables below."
     : "Capacity: " + wCap + (wCap >= wSize ? " (fits " + wSize + " pax)" : " — need " + wSize + " pax");
-  const wClearBtn = wSel.length > 0 ? (
-    <button
-      key="clr"
-      className="mgt-hover-scale mgt-press"
-      style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.clear })}
-      onClick={() => setDraft({ ...wf, tables: [], _pre: false })}
-    >
-      Clear
-    </button>
-  ) : null;
+  // v17.15.2: slides in and out. It appears the moment you tap a table and
+  // vanishes the moment you clear — always under the eye of the person who
+  // caused it — and it was doing both by hard cut. `Presence` with the
+  // slide pair is the app's idiom for a button arriving in a row: App's
+  // "Today", the timeline's optimiser pill, LateBanner's "No show".
+  const wClearBtn = (
+    <Presence show={wSel.length > 0} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
+      <button
+        key="clr"
+        className="mgt-hover-scale mgt-press"
+        style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.clear })}
+        onClick={() => setDraft({ ...wf, tables: [], _pre: false })}
+      >
+        Clear
+      </button>
+    </Presence>
+  );
 
   // ── Kitchen load + alternative-time suggestions ──
   // Kitchen load is computed against the full bookings array (not
@@ -503,7 +510,12 @@ export function WalkinForm({
       <Reveal show={wChecking && wSel.length === 0}>
         <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>
       </Reveal>
-      {wAutoCheck && wSel.length === 0 ? (
+      {/* v17.15.2: Reveal-wrapped. This arrives when the deferred scan lands and
+          leaves the instant you tap a table — both while you are looking at it,
+          and both were hard cuts. It sits directly under the ⏳ row, which has
+          eased since v16.3.0, so the cue faded and its own ANSWER snapped in. */}
+      <Reveal show={!!(wAutoCheck && wSel.length === 0)}>
+        {wAutoCheck && wSel.length === 0 ? (
         <>
           <AvailBanner
             msg={"No tables available at " + wTime + "."}
@@ -526,7 +538,8 @@ export function WalkinForm({
             </div>
           ) : null}
         </>
-      ) : null}
+        ) : null}
+      </Reveal>
       </AutoHeight>
     </Overlay>
   );

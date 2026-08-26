@@ -747,7 +747,7 @@ export function BookingFormModal({
 
   // ── The form modal itself ──
   return (
-    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true} invalid={invalidField("name")} describedBy={FORM_ERROR_ID}>{function(fid,reqAttrs){return <div style={{position:"relative"}}><input
+    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{/* v17.15.2: Reveal-wrapped. It appears and disappears as you change the DATE — the most-used control on this form — and it was the one banner in the modal doing that by hard cut while its three siblings below (regular / no-show / duplicate-phone) had eased since v17.8.0. */}<Reveal show={!!closedBanner}>{closedBanner}</Reveal><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true} invalid={invalidField("name")} describedBy={FORM_ERROR_ID}>{function(fid,reqAttrs){return <div style={{position:"relative"}}><input
             id={fid}
             {...reqAttrs}
             value={form.name}

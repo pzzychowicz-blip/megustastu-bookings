@@ -14875,3 +14875,52 @@ component and a role table, so the wash is expected.
 NEUTRAL `--bg-card`, with only the border and the status line tinted, which is
 the same information-panel/notice distinction the kitchen panel keeps. Measured
 anyway: 6.05:1 / 6.35:1 light, 9.16:1 / 11.00:1 dark.
+
+### Commit 7 — the panes arrive and leave, in both directions
+
+Patryk pointed at three surfaces appearing and vanishing by hard cut. The sweep
+that followed found six, all of the same kind: **a conditional block that toggles
+under the user's own action** and had no enter or exit.
+
+| Surface | Toggled by | Now |
+|---|---|---|
+| `WalkinForm` — Clear | tapping a table | `Presence` slide |
+| `WalkinForm` — `AvailBanner` + "Add to waitlist" | the deferred scan landing / a table tap | `Reveal` |
+| `BlockModal` — a blocked row | **Unblock** | `useRevealRows` + per-row `Reveal` |
+| `BlockModal` — the card, view ↔ add | "+ Add block" | `AutoHeight` |
+| `BookingFormModal` — the closed-day banner | changing the DATE | `Reveal` |
+| `LayoutSettings` — the two id-validation messages | **each keystroke** while renaming | `Reveal` |
+| `LayoutSettings` — the orphan-remove confirm | ✕ / Cancel | `Reveal` |
+
+**One of these corrects a judgement made in this same version.** Commit 4 argued
+the pane sweep's lists are static and so must NOT take `useRevealRows` — true of
+the two history panels, and **wrong for the blocked list**: Unblock removes a row
+in place, with the modal still open, whenever a table has more than one block.
+That is precisely the arrival/departure case the hook exists for, and it was the
+one list of the eight where the distinction went the other way. It takes the hook
+now, with `BannerRows`' hairline rule (`first` keys on the rows actually OPEN,
+not on the index in `renderIds`, or unblocking the first of two leaves the
+survivor wearing a line flush under the section header).
+
+`AutoHeight` sits in **both** of `BlockModal`'s `return`s at the same position,
+which is load-bearing: React reconciles the two by type, so one instance survives
+the mode flip and can measure across it. In one branch only it would unmount and
+the swap would still jump.
+
+Measured, not eyeballed, and **both directions every time** — the rule that
+exists because a one-way transition looks finished:
+
+- blocked row on Unblock: 135 → 86px over ~560ms, the departing row still
+  mounted throughout and unmounting at 640ms, i.e. *after* its collapse
+- view → add: 249 → 279px, eased
+- Clear on exit: `mgt-slide-out`, opacity 1.00 → 0.42 with a translate, then
+  unmount — not a class that sits there doing nothing
+- `AvailBanner` on exit: 122 → 0px over ~560ms
+- closed-day banner on enter: 0 → 64px over ~560ms
+
+**A comment was corrected in the same pass**: `BlockModal`'s "Back" is not the
+reverse of "+ Add block" — it calls `onClose`, so the add form's exit belongs to
+`ModalPresence`. The first draft of the `AutoHeight` note said otherwise.
+
+Deliberately NOT wrapped: `returnOfBanner`, whose condition is set when the form
+opens and never toggles while it is visible.
