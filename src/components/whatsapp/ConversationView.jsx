@@ -6,7 +6,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, regularChipLabel, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
-import { Reveal, mkSolidBtn, OutlineChip } from "../atoms";
+import { Reveal, mkSolidBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
+import { AlertPanel, AlertRow } from "../AlertPanel";
 import { RecheckIcon, TrashIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon } from "../Icons";
 import { MessageBubble } from "./MessageBubble";
@@ -158,16 +159,19 @@ export function ConversationView({
   // it open/closed off histOpen so the disclosure doesn't snap.
   const hasRegulars = pastList.length > 0;
   const pastListBody = hasRegulars ? (
-    // Carried onto the waitlist palette with the linked-booking card it sits
-    // directly above — the same customer-history green, and the row hairlines
-    // move to --border-soft, which is what separates rows everywhere else in
-    // the notification system. A semantic border was never a row divider.
-    <div style={{ padding: "8px 12px", background: "var(--suggest-bg-soft)", border: "1px solid var(--border-card)", borderRadius: R.card, marginBottom: 10, fontSize: T.body, color: "var(--text-primary)" }}>
-      <div style={{ fontWeight: FW.semi, marginBottom: 4, color: "var(--success-text)" }}>Past bookings</div>
-      {pastList.slice(0, 5).map((b) => (
-        <div key={b.id} style={{ padding: "2px 0", borderTop: "1px solid var(--border-soft)" }}>{(b.date || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</div>
+    // v17.15.3: a titled list is `AlertPanel` + `AlertRow`, which is what this
+    // had been built by hand — pane, heading in the tone, rows separated by
+    // hairlines. Everything it hand-rolled the atom owns: the hairline (and
+    // withholding it from the first row), the row indent to NOTIF_GUTTER so row
+    // text starts under the TITLE rather than under the mark, and the tone/tint
+    // PAIR, which comes from role="success" as one decision instead of two
+    // tokens chosen beside each other. The 1px --border-card goes: v17.15.2's
+    // section shape carries no border at all, the tint carries the semantics.
+    <AlertPanel role="success" icon={CheckIcon} title="Past bookings" style={{ marginBottom: 10 }}>
+      {pastList.slice(0, 5).map((b, i) => (
+        <AlertRow key={b.id} first={i === 0}>{(b.date || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</AlertRow>
       ))}
-    </div>
+    </AlertPanel>
   ) : null;
   const windowEl = win
     ? <OutlineChip tone={win.expired ? "danger" : "success"} size="small">{win.label}</OutlineChip>
@@ -249,9 +253,17 @@ export function ConversationView({
           banner. Eased in and self-clearing, so it never becomes chrome. */}
       <Reveal show={!!(recheck && recheck !== "running")} style={{ padding: "0 14px" }}>
         <div style={{ paddingTop: 8 }}>
-          <div style={{ padding: "8px 12px", borderRadius: R.card, fontSize: T.body, fontWeight: FW.regular, background: recheck && recheck.ok ? "var(--suggest-bg-soft)" : "var(--danger-bg-soft)", border: "1px solid var(--border-card)", color: recheck && recheck.ok ? "var(--success-text)" : "var(--danger-text)" }}>
-            {recheck && recheck !== "running" ? recheck.msg : ""}
-          </div>
+          {/* v17.15.3: one sentence, so `InlineAlert` — and the tone/tint come
+              from ALERT_TONES by ROLE. The pairing is the thing that goes
+              wrong: a hand-picked ink and fill are two decisions that must
+              agree, and nothing checks that they do. This site had four tokens
+              across two ternaries where there is one question (did the
+              re-check find anything), so it is one lookup now. */}
+          <InlineAlert
+            icon={recheck && recheck.ok ? CheckIcon : RecheckIcon}
+            tone={(recheck && recheck.ok ? ALERT_TONES.success : ALERT_TONES.danger).tone}
+            tint={(recheck && recheck.ok ? ALERT_TONES.success : ALERT_TONES.danger).tint}
+          >{recheck && recheck !== "running" ? recheck.msg : ""}</InlineAlert>
         </div>
       </Reveal>
       {linkedBooking ? (

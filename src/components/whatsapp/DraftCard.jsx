@@ -6,7 +6,7 @@
 // here — the IntentBanner in ConversationView takes over.
 
 import { useState } from "react";
-import { Reveal, mkSolidBtn, OutlineChip } from "../atoms";
+import { Reveal, mkSolidBtn, OutlineChip, InlineAlert } from "../atoms";
 import { clampConfidence } from "../../lib/whatsapp";
 import { R, T, FW, IC, M, H, RIM_SOLID } from "../../lib/constants";
 import { DraftIcon, WarnIcon } from "./WaIcons";
@@ -137,7 +137,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           <Reveal show={expanded} style={{ padding: "0 10px" }}>
             <div style={{ paddingBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>
               {d.notes ? <div style={{ fontSize: T.body, color: "var(--wa-draft-text-dim)" }}>{"Notes: " + d.notes}</div> : null}
-              {d.ambiguity ? <div style={{ padding: "8px 10px", borderRadius: R.inset, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: T.body, color: "var(--danger-text)", display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 0, display: "inline-flex" }}><WarnIcon size={IC.inline} /></span>{d.ambiguity}</div> : null}
+              {d.ambiguity ? <InlineAlert icon={WarnIcon}>{d.ambiguity}</InlineAlert> : null}
             </div>
           </Reveal>
         ) : null}
@@ -163,9 +163,14 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
         <span style={{ fontWeight: FW.semi }}>{(d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time") + prefSuffix}</span>
         {d.notes ? <div style={{ fontSize: T.body, marginTop: 4 }}>{"Notes: " + d.notes}</div> : null}
       </div>
-      {d.ambiguity ? (
-        <div style={{ padding: "8px 10px", borderRadius: R.inset, background: "var(--danger-bg)", border: "1px solid var(--danger-border)", fontSize: T.body, color: "var(--danger-text)", marginBottom: 10, display: "flex", alignItems: "flex-start", gap: 6 }}><span style={{ flexShrink: 0, marginTop: 0, display: "inline-flex" }}><WarnIcon size={IC.inline} /></span>{d.ambiguity}</div>
-      ) : null}
+      {/* v17.15.3: --danger-bg + a MATCHING --danger-border + --danger-text was
+          the banned shape itself — one signal encoded three times, the stock
+          badge every framework ships — and the module carried it twice, here
+          and in the compact bar above, byte-identical but for a margin.
+          `InlineAlert` is the strip's section shape, so a parse ambiguity now
+          looks like every other fault in the app whether it fires in the inbox
+          or in a booking form. */}
+      {d.ambiguity ? <InlineAlert icon={WarnIcon} style={{ marginBottom: 10 }}>{d.ambiguity}</InlineAlert> : null}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
           onClick={onAccept}
