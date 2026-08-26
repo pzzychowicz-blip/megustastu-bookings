@@ -8,47 +8,49 @@
 // visible. An absent allow-list looks exactly like a working backend, and an
 // unsanitized path segment does not throw — it writes somewhere else.
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { staffEmails, requireStaffAllowList } from "../api/_lib/env.js";
 import { sanitizeKey, staffAuthError } from "../api/_lib/rtdb.js";
 
 const DEV_DB_URL = "https://megustastu-bookings-dev-default-rtdb.europe-west1.firebasedatabase.app";
-const saved = { ...process.env };
-afterEach(() => {
-  for (const k of ["WA_STAFF_EMAILS", "WA_SEND_MODE", "WA_DB_URL"]) delete process.env[k];
-  Object.assign(process.env, saved);
-});
+
+// vi.stubEnv rather than touching process.env directly: these files are the
+// first tests in the repo to need an environment variable, and reaching for the
+// `process` global here would have meant widening eslint's node-globals block
+// from `api/**` to `tests/**` — a lint-config change to serve one test file.
+// The stub API does the same job and unwinds itself.
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe("WA hardening — the staff allow-list", () => {
   it("parses a comma list, trims, lowercases and drops blanks", () => {
-    process.env.WA_STAFF_EMAILS = " A@x.com ,, b@X.COM,  ";
+    vi.stubEnv("WA_STAFF_EMAILS", " A@x.com ,, b@X.COM,  ");
     expect(staffEmails()).toEqual(["a@x.com", "b@x.com"]);
   });
 
   it("is EMPTY when unset — the sandbox default that needs no configuration", () => {
-    delete process.env.WA_STAFF_EMAILS;
+    vi.stubEnv("WA_STAFF_EMAILS", "");
     expect(staffEmails()).toEqual([]);
   });
 
   it("is not required in the sandbox default (mock send, DEV database)", () => {
-    delete process.env.WA_SEND_MODE;
-    delete process.env.WA_DB_URL;
+    vi.stubEnv("WA_SEND_MODE", "");
+    vi.stubEnv("WA_DB_URL", "");
     expect(requireStaffAllowList()).toBe(false);
   });
 
   it("BECOMES required the moment the backend can send for real", () => {
-    process.env.WA_SEND_MODE = "live";
+    vi.stubEnv("WA_SEND_MODE", "live");
     expect(requireStaffAllowList()).toBe(true);
   });
 
   it("BECOMES required the moment the database is not the DEV default", () => {
-    process.env.WA_DB_URL = "https://megustastu-bookings-default-rtdb.europe-west1.firebasedatabase.app";
+    vi.stubEnv("WA_DB_URL", "https://megustastu-bookings-default-rtdb.europe-west1.firebasedatabase.app");
     expect(requireStaffAllowList()).toBe(true);
   });
 
   it("an explicitly-set DEV url still counts as DEV", () => {
-    process.env.WA_DB_URL = DEV_DB_URL;
+    vi.stubEnv("WA_DB_URL", DEV_DB_URL);
     expect(requireStaffAllowList()).toBe(false);
   });
 });
