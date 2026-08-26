@@ -14,21 +14,7 @@ session and keeping it in sync.
 
 ## Deferred
 
-### WhatsApp sandbox hardening — scoped to the `wa-sandbox` branch
-
-**Not addressable from `main`.** `verifyStaffToken` and `_lib/rtdb.js` exist only
-on the `wa-sandbox` branch, so this cannot ship inside an app version; it lands
-whenever that branch next moves. Confirmed by grep during v17.14.0.
-
-Both are needed **before the sandbox ever points at PROD or goes
-`WA_SEND_MODE=live`**, and neither blocks it as it stands:
-
-- A uid/email allow-list in `verifyStaffToken`. `verifyIdToken` proves a valid
-  token for the project and nothing more, while the backend grants abilities the
-  client rules do not (live Gemini calls, live sends from the restaurant's
-  number) and Firebase email/password signup is on by default.
-- `sanitizeKey` applied to `phoneKey` at the `_lib/rtdb.js` boundary, where it is
-  already applied to message ids beside it.
+_(nothing pending)_
 
 ## Designed, not implemented
 
