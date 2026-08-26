@@ -1,15 +1,76 @@
 // tests/wa-rtdb-hardening.test.js
 //
-// The ROADMAP "WhatsApp sandbox hardening" items, scoped to this branch because
-// `_lib/rtdb.js` exists only here. Required before the sandbox ever points at
-// PROD or goes WA_SEND_MODE=live.
+// The two ROADMAP "WhatsApp sandbox hardening" items, which were scoped to this
+// branch because `verifyStaffToken` and `_lib/rtdb.js` exist only here. Both are
+// required before the sandbox ever points at PROD or goes WA_SEND_MODE=live.
 //
-// What makes this worth a test rather than a comment: the failure is invisible.
-// An unsanitized path segment does not throw — it writes somewhere else.
+// What makes them worth a test rather than a comment: neither failure is
+// visible. An absent allow-list looks exactly like a working backend, and an
+// unsanitized path segment does not throw — it writes somewhere else.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
-import { sanitizeKey } from "../api/_lib/rtdb.js";
+import { staffEmails, requireStaffAllowList } from "../api/_lib/env.js";
+import { sanitizeKey, staffAuthError } from "../api/_lib/rtdb.js";
+
+const DEV_DB_URL = "https://megustastu-bookings-dev-default-rtdb.europe-west1.firebasedatabase.app";
+const saved = { ...process.env };
+afterEach(() => {
+  for (const k of ["WA_STAFF_EMAILS", "WA_SEND_MODE", "WA_DB_URL"]) delete process.env[k];
+  Object.assign(process.env, saved);
+});
+
+describe("WA hardening — the staff allow-list", () => {
+  it("parses a comma list, trims, lowercases and drops blanks", () => {
+    process.env.WA_STAFF_EMAILS = " A@x.com ,, b@X.COM,  ";
+    expect(staffEmails()).toEqual(["a@x.com", "b@x.com"]);
+  });
+
+  it("is EMPTY when unset — the sandbox default that needs no configuration", () => {
+    delete process.env.WA_STAFF_EMAILS;
+    expect(staffEmails()).toEqual([]);
+  });
+
+  it("is not required in the sandbox default (mock send, DEV database)", () => {
+    delete process.env.WA_SEND_MODE;
+    delete process.env.WA_DB_URL;
+    expect(requireStaffAllowList()).toBe(false);
+  });
+
+  it("BECOMES required the moment the backend can send for real", () => {
+    process.env.WA_SEND_MODE = "live";
+    expect(requireStaffAllowList()).toBe(true);
+  });
+
+  it("BECOMES required the moment the database is not the DEV default", () => {
+    process.env.WA_DB_URL = "https://megustastu-bookings-default-rtdb.europe-west1.firebasedatabase.app";
+    expect(requireStaffAllowList()).toBe(true);
+  });
+
+  it("an explicitly-set DEV url still counts as DEV", () => {
+    process.env.WA_DB_URL = DEV_DB_URL;
+    expect(requireStaffAllowList()).toBe(false);
+  });
+});
+
+describe("WA hardening — what a failed staff check tells the caller", () => {
+  // The distinction is not pedantry: 401 tells a human to sign in again, which
+  // can never fix either of the 503 cases or the 403 one.
+  it("a server misconfig is 503, not a misleading 'invalid token'", () => {
+    expect(staffAuthError({ code: "NO_SERVICE_ACCOUNT", message: "m" })).toEqual({ status: 503, error: "m" });
+    expect(staffAuthError({ code: "NO_STAFF_ALLOWLIST", message: "m" })).toEqual({ status: 503, error: "m" });
+  });
+
+  it("a valid token from a non-staff account is 403, not 401", () => {
+    expect(staffAuthError({ code: "NOT_STAFF", message: "nope" })).toEqual({ status: 403, error: "nope" });
+  });
+
+  it("anything else is 401 and says nothing about why", () => {
+    expect(staffAuthError(new Error("jwt expired")).status).toBe(401);
+    expect(staffAuthError(undefined).status).toBe(401);
+    expect(staffAuthError(null).error).toBe("invalid token");
+  });
+});
 
 describe("WA hardening — phoneKey is sanitized at the path boundary", () => {
   it("sanitizeKey neutralises the character that RE-TARGETS a write", () => {

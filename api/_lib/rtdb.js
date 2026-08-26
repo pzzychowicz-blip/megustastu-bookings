@@ -37,7 +37,7 @@
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
 import { getAuth } from "firebase-admin/auth";
-import { dbUrl, serviceAccount } from "./env.js";
+import { dbUrl, serviceAccount, staffEmails, requireStaffAllowList } from "./env.js";
 
 let cachedApp = null;
 let cachedDb = null;
@@ -65,8 +65,65 @@ export function getDb() {
 
 // Verify a staff Firebase ID token (the client's auth.currentUser.getIdToken()).
 // Returns the decoded token ({ email, uid, … }) or throws.
+//
+// Two checks, not one. `verifyIdToken` answers "is this a valid token for this
+// Firebase project", which is NOT the same question as "is this staff": these
+// endpoints grant abilities the client security rules do not — live Gemini
+// calls billed to us, live sends from the restaurant's number — and Firebase
+// email/password signup is on by default.
+//
+// The allow-list is WA_STAFF_EMAILS. Unset means "any signed-in account", which
+// keeps the DEV sandbox and the :3999 harness working with no configuration;
+// `requireStaffAllowList()` turns unset into a hard failure the moment the
+// backend can send for real or is pointed off the DEV database. See env.js.
 export async function verifyStaffToken(idToken) {
-  return getAuth(ensureApp()).verifyIdToken(idToken);
+  const decoded = await getAuth(ensureApp()).verifyIdToken(idToken);
+  const allowed = staffEmails();
+
+  if (!allowed.length) {
+    if (requireStaffAllowList()) {
+      // Deliberately fails CLOSED, and deliberately fails here rather than at
+      // boot: a misconfigured live backend must not serve one request.
+      const err = new Error("WA_STAFF_EMAILS is not configured. It is required whenever WA_SEND_MODE=live or WA_DB_URL points off the DEV database.");
+      err.code = "NO_STAFF_ALLOWLIST";
+      throw err;
+    }
+    return decoded;              // sandbox: any signed-in account
+  }
+
+  // A token with no verified email cannot be matched against a list of emails,
+  // so it does not pass one. `email_verified` is part of the check because an
+  // unverified address is a claim about an inbox nobody has proven they own.
+  const email = String(decoded.email || "").trim().toLowerCase();
+  if (!email || decoded.email_verified === false || !allowed.includes(email)) {
+    const err = new Error("Not authorised: this account is not on the WhatsApp staff allow-list.");
+    err.code = "NOT_STAFF";
+    throw err;
+  }
+  return decoded;
+}
+
+// The HTTP mapping for what verifyStaffToken can throw, in ONE place. It was
+// five verbatim catch blocks across the five gated endpoints, which is the
+// condition that produces the next disagreement — and it had already produced
+// the beginnings of one, since two of the five carried the explanatory comment
+// and three did not.
+//
+// The distinctions it makes are the point:
+//   503 — the SERVER is misconfigured. No service account (cannot verify any
+//         token) or, now, a live/non-DEV backend with no staff allow-list.
+//         Telling staff "invalid token" for these sends them to debug their own
+//         login for a fault that is not theirs.
+//   403 — the token is fine and the ACCOUNT is not allowed. Distinct from 401
+//         because re-authenticating can never fix it.
+//   401 — everything else: absent, expired or malformed token.
+export function staffAuthError(e) {
+  const code = e && e.code;
+  if (code === "NO_SERVICE_ACCOUNT" || code === "NO_STAFF_ALLOWLIST") {
+    return { status: 503, error: e.message };
+  }
+  if (code === "NOT_STAFF") return { status: 403, error: e.message };
+  return { status: 401, error: "invalid token" };
 }
 
 export function sanitizeKey(s) {

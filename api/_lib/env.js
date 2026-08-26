@@ -30,6 +30,14 @@
 //   META_PHONE_NUMBER_ID     The restaurant number's Cloud API id (live send).
 //   WA_ALLOW_UNSIGNED        "1" → skip HMAC verification. LOCAL ONLY — the
 //                            harness sets it; never set it on Vercel.
+//   WA_STAFF_EMAILS          Comma-separated allow-list of staff emails that
+//                            may call the token-gated endpoints. UNSET means
+//                            "any signed-in account of this Firebase project",
+//                            which is the sandbox default and is why the DEV
+//                            harness needs no configuration — but see
+//                            requireStaffAllowList() below: unset becomes a
+//                            hard failure the moment the backend can send real
+//                            messages or reach a non-DEV database.
 
 const DEV_DB_URL = "https://megustastu-bookings-dev-default-rtdb.europe-west1.firebasedatabase.app";
 
@@ -42,6 +50,33 @@ export function dbUrl() { return env("WA_DB_URL", DEV_DB_URL); }
 export function llmMode() { return env("WA_LLM_MODE", "mock") === "live" ? "live" : "mock"; }
 export function sendMode() { return env("WA_SEND_MODE", "mock") === "live" ? "live" : "mock"; }
 export function allowUnsigned() { return env("WA_ALLOW_UNSIGNED", "") === "1"; }
+
+// ── Staff allow-list ─────────────────────────────────────────────────────────
+// verifyIdToken proves a valid token FOR THIS FIREBASE PROJECT and nothing
+// more, while these endpoints grant abilities the client security rules do not:
+// live Gemini calls billed to us, and live sends from the restaurant's own
+// WhatsApp number. Firebase email/password signup is on by default, so "has a
+// token" and "is staff" are not the same claim.
+export function staffEmails() {
+  return env("WA_STAFF_EMAILS", "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+// Whether an EMPTY allow-list is acceptable. The sandbox runs against the DEV
+// database in mock-send mode, where the worst a stray account can do is write
+// test data to a scratch project — so unset is allowed there and the harness
+// needs no configuration.
+//
+// It stops being acceptable in exactly the two states ROADMAP names as the
+// trigger: a backend that can SEND from the real number, or one pointed at a
+// database that is not the DEV default. Tying the requirement to those states
+// rather than to a deploy checklist is the point — a checklist is a thing
+// someone has to remember at the moment they are busiest.
+export function requireStaffAllowList() {
+  return sendMode() === "live" || dbUrl() !== DEV_DB_URL;
+}
 
 export function serviceAccount() {
   const raw = env("FIREBASE_SERVICE_ACCOUNT", null);

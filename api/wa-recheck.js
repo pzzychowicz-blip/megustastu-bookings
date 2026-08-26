@@ -22,7 +22,7 @@
 // It never appends a message and never sends anything to the customer — the
 // thread is read-only input.
 
-import { verifyStaffToken, getConversation, readMessages, readOperatingHours } from "./_lib/rtdb.js";
+import { verifyStaffToken, staffAuthError, getConversation, readMessages, readOperatingHours } from "./_lib/rtdb.js";
 import { parseThread } from "./_lib/gemini.js";
 import { applyParse } from "./_lib/inbound-core.js";
 import { WA_RECHECK_HISTORY, normalizePhone } from "../src/lib/whatsapp.js";
@@ -50,8 +50,8 @@ export default async function handler(req, res) {
   try {
     await verifyStaffToken(idToken);
   } catch (e) {
-    if (e && e.code === "NO_SERVICE_ACCOUNT") { res.status(503).json({ error: e.message }); return; }
-    res.status(401).json({ error: "invalid token" });
+    const f = staffAuthError(e);
+    res.status(f.status).json({ error: f.error });
     return;
   }
 

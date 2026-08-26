@@ -19,7 +19,7 @@
 // exactly like production. Also routable under the local harness
 // (scripts/wa-backend-dev.mjs) for DEV testing with a real DEV id token.
 
-import { verifyStaffToken } from "./_lib/rtdb.js";
+import { verifyStaffToken, staffAuthError } from "./_lib/rtdb.js";
 import { injectSimInbound } from "./_lib/inbound-core.js";
 
 // Run `promise` after the response is sent (same hook as api/wa-inbound): on
@@ -58,10 +58,8 @@ export default async function handler(req, res) {
   try {
     await verifyStaffToken(idToken);
   } catch (e) {
-    // Distinguish a server MISCONFIG (no service account → can't verify ANY
-    // token) from a genuinely bad token, so the deploy issue is obvious.
-    if (e && e.code === "NO_SERVICE_ACCOUNT") { res.status(503).json({ error: e.message }); return; }
-    res.status(401).json({ error: "invalid token" });
+    const f = staffAuthError(e);
+    res.status(f.status).json({ error: f.error });
     return;
   }
 

@@ -24,7 +24,7 @@
 // (Q2: replying to an archived conversation un-archives it). The window is
 // NOT reset — only inbound customer messages reset it.
 
-import { verifyStaffToken, getConversation, upsertConversation, appendMessage } from "./_lib/rtdb.js";
+import { verifyStaffToken, staffAuthError, getConversation, upsertConversation, appendMessage } from "./_lib/rtdb.js";
 import { sendText } from "./_lib/meta.js";
 
 function readJsonBody(req) {
@@ -58,10 +58,8 @@ export default async function handler(req, res) {
   try {
     staff = await verifyStaffToken(idToken);
   } catch (e) {
-    // A missing service account can't verify ANY token — surface it as a server
-    // misconfig (503) rather than a misleading "invalid token".
-    if (e && e.code === "NO_SERVICE_ACCOUNT") { res.status(503).json({ error: e.message }); return; }
-    res.status(401).json({ error: "invalid token" });
+    const f = staffAuthError(e);
+    res.status(f.status).json({ error: f.error });
     return;
   }
 

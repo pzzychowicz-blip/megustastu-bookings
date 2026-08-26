@@ -12,7 +12,7 @@
 //   Authorization: Bearer <Firebase ID token>
 //   → { generated, samples: [{ phone, text }] }
 
-import { verifyStaffToken } from "./_lib/rtdb.js";
+import { verifyStaffToken, staffAuthError } from "./_lib/rtdb.js";
 import { generateScenarioMessage } from "./_lib/gemini.js";
 import { injectSimInbound } from "./_lib/inbound-core.js";
 
@@ -54,8 +54,8 @@ export default async function handler(req, res) {
   try {
     await verifyStaffToken(idToken);
   } catch (e) {
-    if (e && e.code === "NO_SERVICE_ACCOUNT") { res.status(503).json({ error: e.message }); return; }
-    res.status(401).json({ error: "invalid token" });
+    const f = staffAuthError(e);
+    res.status(f.status).json({ error: f.error });
     return;
   }
 
