@@ -14624,3 +14624,42 @@ The magic-number stub check added alongside it was dropped as redundant — the 
 
 Re-verified after the fixes: build + **565 tests**, lint 0 errors / 47 warnings
 (identical to `main`), `check:style` OK, chunk output unchanged.
+
+---
+
+## v17.15.2 — one shape and one hue per semantic role
+
+**Date:** 2026-08-26 · **Behavioural change:** None (visual only) · **Scope:** semantic panes + the warn palette
+**Files:** `src/App.jsx` · `index.html` · `public/manifest.webmanifest` ·
+`src/components/DaySheet.jsx` (commit 1); further files per commit below
+
+Patryk selected three surfaces live and asked why they looked inconsistent
+between light and dark. Investigating them turned up a documented debt, two
+measured token faults, and a stale header comment.
+
+### Commit 1 — MGT Bookings, and a version line that can't drift
+
+`src/App.jsx`'s file header opened with `Me Gustas Tú — Booking System` and, on
+the line under it, **`Version 14.1`** — a second copy of the version, kept in
+step by nothing, three majors behind `__APP_SIGNATURE__`. It is not replaced
+with `17.15.2`; a number there would drift again on the next bump. The line now
+*points at* the signature, which is the file's single source of truth.
+
+The app name moved to **MGT Bookings** in the five places that name the APP:
+the header comment, `__APP_SIGNATURE__.app`, the web manifest's `name`,
+`index.html`'s `<title>` (which still read `megustastu-bookings`, the repo slug)
+and `DaySheet`'s printed footer.
+
+**What deliberately did NOT change: every use of `restaurantName`.** The
+restaurant is called Me Gustas Tú and the app is called MGT Bookings; the two
+had been conflated. `DaySheet`'s heading (`<restaurant> — Day sheet`), the
+`settings/general` seed and `LoginScreen`'s cached-name path are all correctly
+about the restaurant. The footer was the one place they were spliced together —
+`restaurantName + " Booking System"` made the *app's own name* a different
+string per restaurant setting, the same defect the deposit flag had when it
+printed the configured currency symbol. It also said the restaurant's name
+twice, since the heading already carries it.
+
+Verified: build clean, **565 tests**, `check:style` OK. `tests/csp.test.js`
+confirms the boot-script pin is unaffected — the `<title>` edit is outside the
+`<script>` block.

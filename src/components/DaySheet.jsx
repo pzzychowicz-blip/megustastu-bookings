@@ -120,7 +120,13 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
         </div>
       ) : null}
 
-      <div style={{ marginTop: 18, fontSize: T.micro, color: "#666" /* @fixed-fill */ }}>{(restaurantName || "Me Gustas Tú") + " Booking System"}</div>
+      {/* v17.15.2: the printed footer names the APP, not the restaurant. It used
+          to compose `restaurantName + " Booking System"`, which made the app's
+          own name a different string per restaurant setting — the same defect
+          the deposit flag had when it printed the configured currency symbol.
+          The heading above already carries the restaurant name, so this line
+          was also saying it twice. */}
+      <div style={{ marginTop: 18, fontSize: T.micro, color: "#666" /* @fixed-fill */ }}>MGT Bookings</div>
     </div>,
     document.body
   );

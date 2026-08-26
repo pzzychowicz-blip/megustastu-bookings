@@ -1,6 +1,10 @@
 /**
- * Me Gustas Tú — Booking System
- * Version 14.1
+ * MGT Bookings
+ *
+ * The version lives in `__APP_SIGNATURE__` below and NOWHERE else. This line
+ * used to carry a number of its own and read "Version 14.1" for three majors:
+ * a second copy of a fact, kept in step by nothing, which is the defect this
+ * file's own Gotchas table names again and again. Read it from the signature.
  *
  * Copyright © 2026 Patryk Zychowicz. All rights reserved.
  *
@@ -269,8 +273,8 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 // (window assignment + console.log) so the bundler cannot tree-shake it.
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
-  app:"Me Gustas Tú Booking System",
-  version:"17.15.1",
+  app:"MGT Bookings",
+  version:"17.15.2",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
