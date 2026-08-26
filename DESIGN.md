@@ -482,6 +482,13 @@ explaining why is usually the one to read.
   is theme-INVARIANT on a fill that inverts, measuring 4.11:1 in light and
   **2.86:1 in dark**. It survived v17.15.0 because **nothing scans for a chip
   that never imported the atom** — that sweep found the two that had.
+  **And v17.15.2 then made the same mistake in its own formatting-dependent
+  form.** Its first pass located the banned panes with a grep matching
+  `--warn-bg` and `--warn-border` on ONE LINE, so `WalkinForm`'s kitchen panel,
+  which spells them on two, carried both faults through the very commit that
+  fixed its twin in the booking form. **Audit a SHAPE with a brace-balanced scan
+  of the whole style object, never a line grep** — the script is in v17.15.2's
+  `REFACTOR_LOG.md` entry.
   The banned shape is the fourth one: pale semantic fill
   *plus* a matching border *plus* bold text in a third shade, which encodes one
   signal three times. The outline chip drops the fill and earns its extra border
