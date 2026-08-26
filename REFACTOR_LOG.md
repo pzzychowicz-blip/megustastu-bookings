@@ -14924,3 +14924,43 @@ reverse of "+ Add block" — it calls `onClose`, so the add form's exit belongs 
 
 Deliberately NOT wrapped: `returnOfBanner`, whose condition is set when the form
 opens and never toggles while it is visible.
+
+### Commit 8 — four more banned triples, and why the first sweep missed them
+
+Re-running the audit with a **brace-balanced** scan instead of a line-based grep
+found four more, in four files:
+
+| Site | Was | Now |
+|---|---|---|
+| `WalkinForm` — the kitchen panel | the SECOND copy of the one fixed in commit 6, incl. the same 2.86:1 "Kitchen busy" chip | `AlertPanel` + `OutlineChip` |
+| `ManualModal` — "Will reassign:" | warn triple, titled list | `AlertPanel` + `SwapIcon` |
+| `LoginScreen` — the sign-in error | danger triple | `InlineAlert` (+ `role="alert"`, + a `Reveal` it never had) |
+| `ListView` — the overlap and no-table rows | two red pills | `InlineAlert` + `OverlapIcon` / `AssignIcon` |
+
+**The miss is the point.** Commit 6's grep matched `--warn-bg` and
+`--warn-border` on ONE line. `WalkinForm`'s kitchen panel spells them on two, so
+a byte-equivalent copy of both faults — the banned pane AND the below-AA chip —
+sat three files away and passed every check in the repo. That is the
+`OutlineChip` lesson this same version had already written down ("nothing scans
+for a chip that never imported the atom"), walked into again in the commit that
+wrote it, in its formatting-dependent form. The audit is a **brace-balanced
+scan** now, and it is in the commit body so the next person runs that one.
+
+Two decisions worth recording:
+
+- **`ListView`'s two rows gained MARKS, not just a shape.** The overlap row says
+  what the strip's Overlap section says, so it takes `OverlapIcon`; the "no table
+  assigned" row takes `AssignIcon`, the mark on the control that fixes it. They
+  were two red pills told apart only by wording. The overdue/soon distinction
+  stays a colour, because that is a matter of DEGREE within one fault, which is
+  what a tone is for.
+- **Three sites were checked and deliberately left**: `AvailBanner`'s time chips
+  (a tap target, not a label), and the armed-remove button in `Settings` and the
+  Prefer/Avoid toggle in `LayoutSettings` — both SELECTED-STATE CONTROLS. The ban
+  is on a notice encoding one signal three times; a control showing it is on is a
+  different thing, and every segmented control in the app does it this way.
+
+Final count for the version: **twelve** banned triples removed, from eight files.
+
+Verified live: BlockModal, List view and its cards all render; the audit now
+reports only the three documented exceptions.

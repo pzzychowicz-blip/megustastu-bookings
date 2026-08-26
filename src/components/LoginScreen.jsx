@@ -19,7 +19,7 @@ import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
 import { S, R, T, FW } from "../lib/constants";
-import { mkInp, mkBtn } from "./atoms";
+import { mkInp, mkBtn, InlineAlert, Reveal } from "./atoms";
 import { readCachedRestaurantName } from "../hooks/useGeneralSettings";
 
 export function LoginScreen() {
@@ -131,17 +131,14 @@ export function LoginScreen() {
             className="mgt-hover-scale"
             style={mkInp()}
           />
-          {error ? (
-            <div style={{
-              color: "var(--danger-text)", fontSize: T.body,
-              padding: "8px 12px",
-              background: "var(--danger-bg)",
-              borderRadius: R.pill,
-              border: "1px solid var(--danger-border)"
-            }}>
-              {error}
-            </div>
-          ) : null}
+          {/* v17.15.2 (follow-up): the tenth banned triple, and the one a new
+              member of staff meets FIRST. It is a form refusing to submit, which
+              is exactly what InlineAlert is — the `role="alert"` wrapper stays
+              mounted with only the child conditional, per the live-region rule,
+              and the Reveal gives it the enter/exit it never had. */}
+          <div role="alert"><Reveal show={!!error}>{error ? (
+            <InlineAlert>{error}</InlineAlert>
+          ) : null}</Reveal></div>
           <button
             onClick={handleLogin}
             disabled={loading}

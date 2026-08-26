@@ -35,6 +35,8 @@ import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Toggle, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
+import { AlertPanel, AlertRow } from "./AlertPanel";
+import { SwapIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { sameDraft } from "../lib/drafts";
 
@@ -297,21 +299,17 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
           </button>
         ) : null}
       </div>
+      {/* v17.15.2 (follow-up): the ninth banned triple — a titled list, so an
+          AlertPanel. `SwapIcon` because the panel IS the swap it is warning
+          about, the same icon the strip's reshuffle section wears. */}
       <Reveal show={isSwapping}>{isSwapping ? (
-        <div style={{
-          marginTop: 8, padding: "10px 14px", borderRadius: R.card,
-          background: "var(--warn-bg)",
-          border: "1px solid var(--warn-border)"
-        }}>
-          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--warn-text)", marginBottom: 4 }}>
-            Will reassign:
-          </div>
-          {affectedBookings.map((ab) => (
-            <div key={ab.id} style={{ fontSize: T.body, color: "var(--warn-text)" }}>
+        <AlertPanel role="warn" icon={SwapIcon} title="Will reassign:" style={{ marginTop: 8 }}>
+          {affectedBookings.map((ab, i) => (
+            <AlertRow key={ab.id} first={i === 0}>
               {ab.name + " — losing table " + ab.tables.join(", ")}
-            </div>
+            </AlertRow>
           ))}
-        </div>
+        </AlertPanel>
       ) : null}</Reveal>
       <TableGrid
         selected={selected}
