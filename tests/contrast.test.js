@@ -160,6 +160,12 @@ const FILLS = [
   { fill: "--warn-bg", alpha: null, ink: "--warn-text", role: "label", what: "warn pane (form: no-shows, duplicate phone, closed day, kitchen)" },
   { fill: "--suggest-bg-soft", alpha: null, ink: "--success-text", role: "label", what: "success pane (strip waitlist section)" },
   { fill: "--suggest-bg", alpha: null, ink: "--success-text", role: "label", what: "success pane (form: past bookings)" },
+  // v17.15.2: the offline pane, registered with the tone it now SHIPS. Its tone
+  // was --status-offline — #ff3b30 in BOTH themes while --app-offline-bg
+  // inverts — giving 3.13:1 light and 3.90:1 dark: below AA in EITHER theme,
+  // not merely swinging between them. It is the third section to have worn that
+  // token; v17.15.0 caught two of the three and this one sat two lines away.
+  { fill: "--app-offline-bg", alpha: null, ink: "--app-offline-text", role: "label", what: "offline pane (strip)" },
 
   // Solid semantic fills — already correct before this pass; here so they stay so.
   { fill: "--app-success-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "success tag" },

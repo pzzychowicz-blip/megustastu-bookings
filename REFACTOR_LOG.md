@@ -14704,3 +14704,24 @@ release. Neither the coverage guard (its prefixes miss these tokens) nor
 
 Verified live in both themes via computed styles, not assumed. Build clean,
 **573 tests** (+8), `check:style` OK.
+
+### Commit 3 — the offline section's tone
+
+`AppBanners`' "Working offline" section is the **third** to have worn
+`--status-offline` as its tone, and the one v17.15.0 missed while correcting the
+other two, two lines above it. `#ff3b30` is identical in both themes while
+`--app-offline-bg` inverts, so it measured **3.13:1 in light and 3.90:1 in
+dark** — below AA in *either* theme, not merely swinging between them.
+
+It also painted the section HEADER red while the section's own body text was
+already `--app-offline-text` amber: two colours for one message, in the one
+place the strip promises a section is headed on the same terms as its body.
+`--app-offline-text` is the token made for this fill and flips with it —
+**6.26:1 / 9.61:1** — and it unifies the header with the body.
+
+The connection **dot** keeps `--status-offline`, and that is not an
+inconsistency left behind: the dot sits on the neutral header, a surface that
+does not flip out from under it, which is exactly the rule being applied here.
+
+Registered in `tests/contrast.test.js` with the tone it now ships. Build clean,
+**575 tests** (+2), `check:style` OK.
