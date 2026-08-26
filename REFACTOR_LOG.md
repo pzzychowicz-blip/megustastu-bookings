@@ -15020,3 +15020,200 @@ fixed here** — it predates this version and does not belong inside a rendering
 change.
 
 Build clean, **575 tests**, `check:style` OK, lint 0 errors / 47 warnings.
+
+---
+
+## v17.15.3 — table blocks get a real id · the waitlist ghost gets an exit
+
+**Date:** 2026-08-26
+**Branch:** `fix/v17.15.3-block-ids-ghost-exit`
+**Scope:** two bug fixes and the ROADMAP hygiene that follows from them.
+**Behavioural change:** yes, twice — unblocking one of two identical table
+blocks no longer deletes both, and a waitlist ghost fades out instead of
+blinking. Both are corrections rather than features, hence a patch bump.
+
+### 1. A table block had no identity (commit 1/3)
+
+`App.jsx`'s `removeBlock` matched a block by its FIELD SET —
+`tableId`+`date`+`allDay`+`from`+`to` — and nothing dedupes blocks. Block one
+table for one range twice and the two entries agree on every one of those
+fields, so the filter matched both and **unblocking either dropped both**.
+
+The defect predates v17.15.2 and was found by that version's `/code-review`,
+which needed a per-block React key for `BlockModal`'s new `useRevealRows` list
+and had to give the ambiguity a name to work around it on screen. That
+workaround — a duplicate-occurrence ordinal — shipped, fixing the visible half
+and recording the data half at the site as deliberately unfixed. This is the
+data half.
+
+**`sanitizeBlock` / `sanitizeBlocks` (`booking-logic.js`)** mint `id: bl.id ||
+genId()`, the idiom `sanitize()` has always used for a booking. Three decisions
+worth keeping:
+
+- **Minted at READ time, with no migration pass.** `saveBlocks` writes the WHOLE
+  array, so the first add or remove after this ships persists every id in it —
+  the node self-heals, which is why there is no `connected` gate and no
+  `migratedRef` (the v15.5.0 bookings array→keyed migration needed both because
+  that node is written per-child). Verified live: DEV held **9 legacy id-less
+  blocks**, all of which were minted on read and came back byte-identical after
+  a reload, i.e. they had been persisted by an ordinary block write.
+- **A MINT, not a whitelist.** Copying `sanitize()`'s field-whitelist shape was
+  the obvious-looking move and would have been a data-loss bug: `bl.reason` is
+  read by `DaySheet` and written by nothing, and `allDay` is likewise read-only
+  legacy, so a whitelist would silently drop `reason` from any block in PROD
+  carrying one. Unknown fields pass through, and a test pins it.
+- **BOTH read sites.** The `tableBlocks` listener and `resync()` each carried
+  their own copy of the array-vs-object-vs-null shrug. A resync that skipped the
+  mint would hand the app id-less blocks after every sleep/wake — precisely when
+  the tablet has been shut since lunch.
+
+`sanitizeBlock` returns its INPUT when an id is already present, so a settled
+node keeps its per-block references across snapshots.
+
+`addBlock` stamps through that same function rather than calling `genId()`
+itself: ONE minting site, so a locally-added block has a stable identity before
+the Firebase echo lands. `BlockModal` loses `blockFields`, `blockIds` and ~35
+lines of commentary explaining the ordinal; `DaySheet` keys on `bl.id`.
+
+**Verified live in DEV**, which is the only place the interesting case exists:
+two identical blocks on table 3, unblock one → the other survives (it did not
+before), and the surviving row is the **same DOM node**, so `useRevealRows` sees
+one departure and no arrival instead of the collapse-and-reopen the ordinal
+caused. Ids identical across a reload. No React key warnings.
+
+Nine tests in `tests/booking-logic.test.js`. **No Firebase rules step** — `id`
+is a new field on an existing child of a node whose rule pair has no
+`.validate`, so this is rolling-safe.
+
+### 2. ROADMAP hygiene (commit 2/3)
+
+`ROADMAP.md` says in its own header that it holds pending work only, and was
+carrying a closed audit as if it were live. **The seven-pass review
+(2026-08-19) entry is deleted** — its heading already said "closed", v17.14.0
+emptied it across five versions, and the per-finding source of truth is
+`MGT_Bookings_SevenReview_2026-08-19/` in the context folder.
+
+Checked before deleting rather than after: the two items in its "do not
+re-flag" list that generalise beyond that audit are both already recorded
+where they belong — `DESIGN.md`:170–174 carries "44px is a FLOOR, not a
+target" with the reasoning, and `tests/contrast.test.js` carries the
+composite-the-real-paint-stack rule in three places. Nothing durable was lost.
+
+### 3. The waitlist ghost gets an exit (commit 3/3)
+
+A ghost arrived on `.mgt-appear` and left by blinking out. v17.8.0 called that
+asymmetry deliberate, and its argument is sound: a ghost vanishes when a real
+booking takes that table, so the eye belongs on the block that appeared. It
+covers **one of the four ways a ghost goes**. In the other three — the party
+leaves the waitlist, the clock crosses a quarter, the table gets blocked, the
+match moves to another table — nothing replaces it and it simply disappeared.
+
+**`.mgt-ghost-out` is `.mgt-appear`'s exact mirror.** No `from`, so it leaves
+from whatever opacity that ghost has (0.55, or 0.4 when `resh`) without the rule
+knowing the number — the same trick, reversed. Three decisions:
+
+- **`forwards`, where the entrance refuses fill.** Not an inconsistency: the
+  entrance refuses fill because pinning opacity forever kills `.mgt-hover-scale`
+  on an element that lives on, and a leaving node does not live on. Without it
+  the ghost snaps back to 0.55 for the ~20ms between the animation ending and
+  the hold unmounting it. Generalised into `DESIGN.md`: **no fill on an
+  entrance, `forwards` on an exit.**
+- **Named `-out`.** `tests/motion.test.js` scans `.mgt-*-out` and asserts each
+  runs shorter than `EXIT_MS`; the suffix buys that guard for free, and it now
+  covers six classes rather than five.
+- **On the ghost, not a `Presence` wrapper.** A wrapper's opacity would
+  *multiply* with the ghost's 0.55 — right by accident, and it re-specifies what
+  `.mgt-appear` was written to infer.
+
+**The lifecycle is `useRevealRows`, with no change to that hook.** The tracked
+identity is the CELL (waitlist id + separator + table id), not the ghost, so a
+match moving table 3 → table 5 reads as a departure on 3 and an arrival on 5.
+One call for the whole grid, never one per row. `resetKey={date}` is mandatory:
+a date change REPLACES the list, and without it stepping a day fades yesterday's
+ghosts under today's grid — the case v17.15.0 added `resetKey` for.
+
+Its `PRUNE_MS` is `REVEAL_EXIT_MS` (540ms) against a 240ms fade, so a departed
+cell outlives its animation by ~300ms. **Left alone deliberately** — those holds
+exist to stop a hold being SHORTER than its animation and truncating it, and
+over-holding an invisible inert node costs nothing.
+
+**A departing cell is INERT, all four ways**: `role` dropped, `aria-hidden`,
+`tabIndex -1`, `pointerEvents: none`. It outlives its fade, and would otherwise
+stay a focusable "Book this table" button for a party that just left the
+waitlist. `tests/a11y.test.js` gains a test asserting all four, proven against
+known-bad input.
+
+**The booking case still needs no special handling, and not by luck**: ghosts
+render BEFORE real blocks in the row, so a ghost fading under the block that
+replaced it is hidden by paint order (source order verified, line 1454 vs 1477).
+
+**Verified live**, measured rather than asserted. Entrance lands on 0.55, and on
+0.4 with the dashed edge for `resh`. On departure, at t=88ms the cell is on
+`mgt-ghost-out` still at 0.55 — starting from its own opacity, not jumping to 1
+— and already inert on all four attributes; 0.21 → 0.03 → 0.00 across ~240ms;
+holds at 0 through t=562 (that is `forwards`; without it, a snap back to 0.55);
+unmounts at 650ms. Date change: the ghost is dropped in the same frame, never
+faded. Reduce-motion: both directions collapse to `1e-06s` and it still unmounts
+cleanly with no stuck node.
+
+**Doc consequence caught in passing:** `DESIGN.md`'s "fix the exit at the same
+time as the entrance" bullet pointed at `ROADMAP.md` for "the three surfaces
+v17.15.0 left one-way". Deleting that entry would have left a dangling
+reference, so the bullet now names the **two** that remain, says why they are
+structural (a cross-fade needs two copies of a stateful view mounted, which
+collides with App's singleton view state) and points at `REFACTOR_LOG.md` —
+they are decisions, not pending work.
+
+Build clean, **585 tests**, `check:style` OK, lint 0 errors / 47 warnings. Main
+bundle 89.84 → 90.08 kB gz.
+
+### `/code-review` fixes (commit 4/3)
+
+Three findings, none critical; all fixed on Patryk's call.
+
+**1. `leaving` meant "not yet opened", which an ARRIVING ghost also is.** It was
+derived from `!ghostOpenIds.has(k)`, and `useRevealRows` adds a newcomer to
+`renderIds` one commit BEFORE its rAF opener adds it to `openIds` — the hook's
+own header says so. So every ghost that arrived after mount painted one frame on
+the EXIT keyframe: full 0.55 opacity, `role` dropped, `aria-hidden`,
+`pointerEvents:none` — then `mgt-appear` restarted it from 0. A pop, then a
+fade, which is the opposite of the entrance this version exists to pair. First
+mount was exempt (the initializer seeds `openIds` from `ids`), which is why the
+harness runs that began with a reload never showed it.
+
+Caught by reading the hook's contract, then **confirmed with a MutationObserver**
+before being reported: frame 0 was `{cls:"mgt-ghost-out", op:0.55, role:null,
+aria-hidden:"true"}`. It is `leaving={!cell}` now — absence from the live cell
+map is what departure actually means, `cell` was already computed on the line
+above, and it is also right on the opposite edge (a cell that has just left
+starts fading in the same commit instead of waiting for the openIds removal).
+After: frame 0 is `{cls:"mgt-appear", op:0, role:"button"}`.
+
+**2. `sanitizeBlock` discarded its own mint on a falsy-but-present id.**
+`Object.assign({id:genId()}, bl)` puts the mint in the TARGET, so `""`, `0`,
+`null` and an explicit `undefined` all overwrote it — the branch that exists to
+mint an id handed back the unusable one it had just rejected. Unreachable from
+any current writer (`addBlock` routes through this same function and RTDB cannot
+store null), but the failure it would produce is this version's own bug back
+again: two blocks sharing a falsy id make `removeBlock`'s `bl.id !== block.id`
+drop BOTH, and `BlockModal` and `DaySheet` key their rows on it. Now
+`Object.assign({}, bl, {id: genId()})`, with all four falsy values pinned in a
+test.
+
+**3. A ghost that left while HOLDING focus.** Going inert means `aria-hidden`,
+and focused-plus-hidden is a state assistive tech is not required to make sense
+of; then it unmounts and focus drops to `<body>`, putting a keyboard user back
+at the top of the document. Reachable: Tab onto a ghost to consider it and the
+match evaporates before you press Enter. A layout effect now hands focus to the
+grid scroller, which takes `tabIndex={-1}` — the `<main tabIndex={-1}>`
+skip-link pattern, programmatically focusable and never in the tab order — with
+`preventScroll`, because focusing a horizontal scroller otherwise yanks the grid
+sideways. `.mgt-tl-scroll:focus` is ringless for `main:focus`'s reason: a
+container is not a control, and a ring there could only ever appear as an
+unexplained box after a ghost vanished. Verified live: focus lands on
+`DIV.mgt-tl-scroll` rather than being lost.
+
+Three new guards in `tests/a11y.test.js` and one in `tests/booking-logic.test.js`,
+each proven against known-bad input. **588 tests**, build clean, `check:style` OK,
+lint 0 errors.
+

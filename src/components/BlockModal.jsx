@@ -24,42 +24,6 @@ import { AlertPanel, AlertRow } from "./AlertPanel";
 import { ClosedIcon } from "./Icons";
 import { useRevealRows } from "../hooks/useRevealRows";
 
-// A block's stable identity: the exact field set App's `removeBlock` matches
-// on, so a row's identity and its deletion can never disagree. The separator is
-// an ASCII unit separator for `undoKey`'s reason — "-" and ":" are both
-// reachable from the data (a table id, a "HH:MM"), and a collision here would
-// make two different blocks share one Reveal.
-//
-// /code-review: those fields are NOT unique. Nothing dedupes blocks, so
-// blocking 14:00–16:00 twice on one table gives two entries agreeing on every
-// field — one React key for two rows, only one of which renders. So a
-// DUPLICATE-OCCURRENCE ordinal is appended: 0 for the first entry with a given
-// field set, 1 for the next, and so on.
-//
-// Deliberately the occurrence ordinal and NOT the array index. An index makes
-// every id positional, so unblocking a middle row would renumber every row
-// after it — `useRevealRows` would read them as simultaneous departures and
-// arrivals and collapse-then-reopen rows nobody touched. With the ordinal, a
-// block whose field set is unique (the only case that occurs in practice)
-// always scores 0 and its id never moves.
-//
-// (The REMOVAL of a duplicate is ambiguous too, and has been since v14.4.1:
-// App's `removeBlock` filters on the same field set, so unblocking either drops
-// both. That is a data-layer defect, left alone rather than fixed silently
-// inside a rendering change.)
-function blockFields(bl) {
-  return [bl.tableId, bl.date, bl.allDay ? "1" : "0", bl.from || "", bl.to || ""].join("\u001f");
-}
-function blockIds(list) {
-  const seen = Object.create(null);
-  return list.map(function (bl) {
-    const f = blockFields(bl);
-    const n = seen[f] || 0;
-    seen[f] = n + 1;
-    return f + "\u001f#" + n;
-  });
-}
-
 export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose, onDirty }) {
   const existing = blocks.filter((bl) => bl.tableId === tableId && bl.date === date);
   const indoor = isIn(tableId);
@@ -68,7 +32,11 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
   const [from, setFrom] = useState(OPEN + ":00");
   const [to, setTo] = useState(GRID_CLOSE + ":00");
 
-  // v17.15.2: per-row ease-in/out for the blocked list.
+  // v17.15.2: per-row ease-in/out for the blocked list, keyed on the block's own
+  // id since v17.15.3 — before that a block had none, and this list identified a
+  // row by its field set plus a duplicate-occurrence ordinal, which meant
+  // unblocking one of two identical rows renumbered the survivor and collapsed a
+  // row nobody touched. See sanitizeBlock in booking-logic.
   //
   // This version's first commit argued the pane sweep's lists are static and so
   // do NOT want `useRevealRows` — true of the two history panels, and **wrong
@@ -79,9 +47,9 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
   //
   // Called at the TOP, never inside the `mode === "view"` branch — that branch
   // returns early, so a hook there would change the hook count between renders.
-  const ids = blockIds(existing);
+  const ids = existing.map((bl) => bl.id);
   const { renderIds, openIds } = useRevealRows(ids);
-  const byId = new Map(existing.map((bl, i) => [ids[i], bl]));
+  const byId = new Map(existing.map((bl) => [bl.id, bl]));
 
   // v17.8.0 unsaved-changes guard. The From/To times are component-local, so
   // this modal REPORTS its dirtiness up rather than App reaching in — the same
