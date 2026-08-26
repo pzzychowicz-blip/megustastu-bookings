@@ -14802,3 +14802,47 @@ strip's own geometry arriving by import rather than by retyping. The two-Reveal
 switch was exercised in both directions.
 
 Build clean, **575 tests**, `check:style` OK, lint 0 errors / 47 warnings.
+
+### Commit 6 — the five remaining banned-shape panes
+
+Same treatment, five more surfaces: the booking form's duplicate-phone warning
+(`ClashIcon` — it *is* the double-booking the strip's own section reports, seen
+from inside the form about to create one), its closed-day banner (`ClosedIcon`,
+the mark the strip already uses for that fact), the kitchen-load panel's BUSY
+state, `AvailBanner`, and `LayoutSettings`' orphan-booking confirm.
+
+The closed-day banner lost its `textAlign:"center"` with its border — a strip
+section is left-aligned under its mark, and this is a one-line section with no
+rows, the shape `InlineAlert` established.
+
+**The kitchen panel keeps its calm state exactly as it was.** `--bg-soft` with a
+neutral border is an INFORMATION panel; only the busy branch is a notice, and
+the whole value of the strip shape is that it means "this needs your attention".
+Turning both into a semantic pane would have been consistency at the cost of the
+distinction.
+
+**And it turned up a ninth thing the pane sweep was not looking for.** The
+"Kitchen busy" chip was an `OutlineChip` written out by hand — pill radius,
+transparent fill, semantic bold text — with its ink from `--text-required` and
+its border from a hand-written `rgba(220,38,38,0.4)`. That is exactly the
+border-and-ink-from-unrelated-families defect v17.15.0 removed from the two real
+chips, surviving because **nothing scans for a chip that never imported the
+atom**. It was also a theme-INVARIANT ink (`#dc2626`) on a fill that inverts —
+the offline section's fault again — and measured **4.11:1 in light and 2.86:1 in
+dark**, below AA in both and worst in dark. It is `<OutlineChip tone="danger">`
+now: 7.08:1 / 7.27:1, border derived from the ink.
+
+Verified live in both themes: all eight panes reached in the running app — the
+blocked list (one and two blocks), both history panels, the duplicate-phone
+warning, the closed-day banner, the kitchen-busy panel, the orphan confirm, and
+`AvailBanner` (a 22-guest walk-in), the last of which reports `border-width: 0`,
+`border-radius: 14px` and ink `rgb(138,75,10)` / `rgb(253,186,116)` — the new
+warn pair flipping with its fill.
+
+One incidental finding worth recording, because it cost several attempts: the
+form's steppers fire on **`onPointerDown`, not `onClick`**, so a synthetic
+`click()` is silently inert on them. The app's own "a synthetic press is not a
+finger" lesson, met from the other side.
+
+Build clean, **575 tests**, `check:style` OK (including marker placement), lint
+0 errors / 47 warnings.

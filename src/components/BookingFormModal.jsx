@@ -47,7 +47,7 @@ import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustome
 import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
 import { AlertPanel, AlertRow } from "./AlertPanel";
-import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon } from "./Icons";
+import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
@@ -298,11 +298,16 @@ export function BookingFormModal({
     return findPhoneOverlaps(bookings,{phone:form.phone,date:form.date,time:form.time,
       size:form.size,dur:form.customDur,excludeId:editId});
   },[bookings,form.phone,form.date,form.time,form.size,form.customDur,editId]);
-  const dupWarn=dupPhone.length?<div style={{marginTop:8,padding:"8px 12px",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.inset,fontSize: T.body,fontWeight: FW.semi,color:"var(--warn-text)"}}>
-    {"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}
-    {dupPhone.slice(0,3).map(function(b){return <div key={b.id} style={{fontWeight: FW.medium,paddingTop:2}}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</div>;})}
-    {dupPhone.length>3?<div style={{fontWeight: FW.medium,paddingTop:2}}>{"+ "+(dupPhone.length-3)+" more"}</div>:null}
-  </div>:null;
+  // v17.15.2: an AlertPanel. The sentence is the section TITLE (it states the
+  // fault) and the clashing bookings are its rows — the division every strip
+  // section makes. ClashIcon rather than a generic warning mark: this IS the
+  // double-booking the strip's own Double-booked section reports, seen from
+  // inside the form that is about to create one.
+  const dupWarn=dupPhone.length?<AlertPanel role="warn" icon={ClashIcon} style={{marginTop:8}}
+    title={"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}>
+    {dupPhone.slice(0,3).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</AlertRow>;})}
+    {dupPhone.length>3?<AlertRow>{"+ "+(dupPhone.length-3)+" more"}</AlertRow>:null}
+  </AlertPanel>:null;
   // The container stays mounted while ANY of the three can render, so the
   // dupWarn Reveal below can animate its collapse instead of being torn out
   // with its parent (it is often the only content, for a first-time guest).
@@ -454,7 +459,13 @@ export function BookingFormModal({
       onClick={function(){onAddToWaitlist();}}><WaitIcon size={IC.control} />Add to waitlist</button></div>:null}</>:null;
   // v15.0.0: closed-day notice — the chosen date falls on a weekday marked Closed
   // (Settings → General → Opening hours). doSave blocks the write; this explains why.
-  const closedBanner=fh.closed?<div style={{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.semi,color:"var(--warn-text)",textAlign:"center"}}>{"Closed on "+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."}</div>:null;
+  // v17.15.2: an AlertPanel, and it takes ClosedIcon — the same mark the strip's
+  // own "Closed this day" section wears for the same fact about the same day.
+  // The centred text went with the border: a strip section is left-aligned
+  // under its mark, and this is one sentence with no rows, which is exactly the
+  // one-line shape the strip already has a precedent for.
+  const closedBanner=fh.closed?<AlertPanel role="warn" icon={ClosedIcon} style={{marginBottom:12}}
+    title={"Closed on "+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."} />:null;
 
   // Pre-E1's showForm guard is dropped — component is only mounted when showForm=true.
   const kitchenLoad=form.time?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
@@ -501,10 +512,30 @@ export function BookingFormModal({
           style={{background:"rgba(220,252,231,0.8)", /* @fixed-fill */ color:KTXT_OK,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>green</span>= tables available  <span
           style={{background:"rgba(254,249,195,0.8)", /* @fixed-fill */ color:KTXT_TIGHT,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight: FW.bold,fontSize: T.body}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight: FW.bold,fontSize: T.body}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
     (kitchenBusy?<div style={{marginTop:6,fontSize: T.body,color:"var(--danger-text)"}}>No kitchen-friendly alternatives found nearby.</div>:null);
-  const kitchenSection=kitchenLoad?<div
-    style={{padding:"10px 14px",borderRadius:R.card,border:"1px solid "+(kitchenBusy?"var(--warn-border)":"var(--border-soft)"),background:kitchenBusy?"var(--warn-bg)":"var(--bg-soft)",marginBottom:14,fontSize: T.body,color:kitchenBusy?"var(--warn-text)":S.muted}}><div
-      style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<span
-        style={{fontWeight: FW.bold,color:"var(--text-required)",fontSize: T.body,padding:"4px 12px",borderRadius:R.pill,border:"1.5px solid rgba(220,38,38,0.4)", /* @fixed-fill */ flexShrink:0}}>Kitchen busy</span>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>:null;
+  // v17.15.2. Two things happened here, and only the FIRST is the pane sweep.
+  //
+  // (1) The BUSY state was the banned semantic triple and is now an AlertPanel.
+  //     The CALM state deliberately is not: --bg-soft with a neutral border is
+  //     an information panel, not a notice, and the whole point of the strip
+  //     shape is that it means "something needs your attention".
+  //
+  // (2) The "Kitchen busy" chip was an OutlineChip written by hand — 2px-ish
+  //     border, pill radius, transparent fill, bold semantic text — with its
+  //     ink from --text-required and its border from a hand-written
+  //     rgba(220,38,38,0.4). That is the border-and-ink-from-unrelated-families
+  //     defect v17.15.0 removed from the two real chips, surviving here because
+  //     nothing scans for a chip that never imported the atom. It was also a
+  //     THEME-INVARIANT ink (#dc2626) on a fill that inverts, the same fault as
+  //     the offline section: measured 4.11:1 in light and 2.86:1 in dark,
+  //     below AA in both and worst in dark. `tone="danger"` gives 7.08 / 7.27
+  //     with the border derived from the ink.
+  const kitchenBody=<><div
+      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></>;
+  const kitchenSection=kitchenLoad?(kitchenBusy
+    ?<AlertPanel role="warn" icon={AlertIcon} title="Kitchen may be busy" style={{marginBottom:14}}>
+      <AlertRow first>{kitchenBody}</AlertRow>
+     </AlertPanel>
+    :<div style={{padding:"10px 14px",borderRadius:R.card,border:"1px solid var(--border-soft)",background:"var(--bg-soft)",marginBottom:14,fontSize: T.body,color:S.muted}}>{kitchenBody}</div>):null;
 
   // v17.6.0: which statuses the edit form offers.
   //

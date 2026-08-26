@@ -13,8 +13,9 @@
 import { useState, useEffect } from "react";
 import { Section, Collapsible, Toggle, mkStep, mkBtn } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
+import { AlertPanel, AlertRow } from "./AlertPanel";
 import { contiguousRuns, comboKey, R, T, FW, H, IC } from "../lib/constants";
-import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon } from "./Icons";
+import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon } from "./Icons";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
@@ -453,19 +454,23 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table “{editTrim}” already exists.</div>
               ) : null}
               {confirming ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6, padding: "6px 8px", borderRadius: R.inset, background: "var(--warn-bg)", border: "1px solid var(--warn-border)" }}>
-                  <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--warn-text)" }}>
-                    {orph > 0
-                      ? orph + " upcoming booking" + (orph === 1 ? " uses “" : "s use “") + t.id + "”. Remove anyway?"
-                      : "Remove table “" + t.id + "”?"}
-                  </span>
+                // v17.15.2: the last of the eight banned semantic triples. It is
+                // a one-line section — the question IS the message — so it takes
+                // AlertPanel's titled form with its confirm buttons inline, the
+                // shape InlineAlert established for a modal fault.
+                <AlertPanel role="warn" icon={AlertIcon} style={{ marginTop: 6 }}
+                  title={orph > 0
+                    ? orph + " upcoming booking" + (orph === 1 ? " uses “" : "s use “") + t.id + "”. Remove anyway?"
+                    : "Remove table “" + t.id + "”?"}>
+                <AlertRow first style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                     <button onClick={function () { setPendingRemove(null); }} className="mgt-hover-scale"
                       style={{ border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 12px", fontSize: T.body, fontWeight: FW.bold, background: "var(--bg-stepper)", color: "var(--text-primary)", cursor: "pointer", boxShadow: "var(--shadow-btn)" }}>Cancel</button>
                     <button onClick={function () { removeTable(t.id); }} className="mgt-hover-scale"
                       style={mkBtn({ padding: "4px 12px", fontSize: T.body, minHeight: H.compact, background: "var(--btn-del)" })}>{orph > 0 ? "Remove anyway" : "Remove"}</button>
                   </div>
-                </div>
+                </AlertRow>
+                </AlertPanel>
               ) : null}
             </div>
           );
