@@ -112,7 +112,11 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   // the confidence badge sits inline (left of Accept), always visible. Saves
   // ~120px so the message thread stays readable.
   if (compact) {
-    const smallBtn = (bg, fw, border, color) => ({ background: bg, border, borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: fw, color: color || "var(--text-on-accent)", minHeight: H.chrome, flexShrink: 0 });
+    // One caller left (the solid Accept) now that Dismiss is an OutlineChip, so
+    // the factory takes the one thing that still varies. Four parameters for
+    // fill + weight + border + ink was six values where there are two
+    // decisions — the confColor/confBorder shape, one component over.
+    const smallBtn = (bg) => ({ background: bg, border: RIM_SOLID, borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-on-accent)", minHeight: H.chrome, flexShrink: 0 });
     return (
       <div style={{ borderRadius: R.card, background: "var(--wa-draft-bg)", border: "1px solid var(--border-card)", marginBottom: 12, boxShadow: "var(--shadow-soft)", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", flexWrap: "wrap" }}>
@@ -128,10 +132,18 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           </div>
           {/* Confidence level — always shown, immediately left of Accept. */}
           <OutlineChip title={confLbl + " confidence"} tone={confTone} size="small" style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl}</OutlineChip>
-          <button onClick={onAccept} className="mgt-hover-scale mgt-press" style={smallBtn("var(--wa-btn-open)", FW.bold, RIM_SOLID)}>Accept</button>
+          <button onClick={onAccept} className="mgt-hover-scale mgt-press" style={smallBtn("var(--wa-btn-open)")}>Accept</button>
           {/* Secondary = OUTLINE (see the full card's note): one saturated pill
               per pane, so the eye can find the primary without reading. */}
-          <button onClick={onDismiss} className="mgt-hover-scale mgt-press" style={smallBtn("transparent", 600, "2px solid var(--border-soft)", "var(--text-secondary)")}>Dismiss</button>
+          {/* v17.15.3: the neutral twin of the linked-booking card's fix — the
+              outline-chip shape typed by hand, taking its border from
+              `--border-soft` while its ink is `--text-secondary`. `OutlineChip`
+              derives one from the other, so they are one decision.
+              It also carried a bare `600` where the scale says `FW.semi`, and
+              `check:style` could not see it: the weight was an ARGUMENT to this
+              local factory, not a `fontWeight:` property, and the gate reads
+              properties. A shape hides from it; only reading does not. */}
+          <OutlineChip as="button" tone="neutral" onClick={onDismiss} className="mgt-hover-scale mgt-press" style={{ padding: "6px 12px", fontSize: T.body, fontWeight: FW.semi, minHeight: H.chrome }}>Dismiss</OutlineChip>
         </div>
         {hasDetail ? (
           <Reveal show={expanded} style={{ padding: "0 10px" }}>

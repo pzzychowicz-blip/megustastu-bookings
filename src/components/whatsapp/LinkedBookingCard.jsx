@@ -4,7 +4,7 @@
 // collapsed it shrinks to a one-line strip. Holds the single source of truth for
 // the two booking actions — Open booking (blue) and Cancel booking (red).
 
-import { Reveal, mkSolidBtn } from "../atoms";
+import { Reveal, mkSolidBtn, OutlineChip } from "../atoms";
 import { useCollapseState } from "../../hooks/useCollapseState";
 import { BLOCK_BG, R, T, FW, M, IC, H } from "../../lib/constants";
 import { LinkIcon } from "./WaIcons";
@@ -34,12 +34,26 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
           bolted onto a background. Red outline still says danger — the hue is
           intact, only the fill is gone — while "Open booking" keeps the single
           saturated fill the accent rule reserves for the primary action. */}
+      {/* v17.15.3: `OutlineChip`, not the shape typed out again. This was the
+          atom written by hand — transparent fill, 2px pill, semantic ink — and
+          it carried the exact fault the atom exists to prevent: the border came
+          from `--danger-border` and the ink from `--danger-text`, two families
+          never required to agree. Measured: in LIGHT that is rgba(252,165,165,
+          .55), a pale pink ring, around #991b1b, a dark maroon; in DARK the two
+          nearly converge. The same chip read as a different component per
+          theme, which is what `--chip-danger-border` (color-mix from the ink at
+          50%) exists to stop. Nothing scans for a chip that never imported the
+          atom — DESIGN.md says so about the booking form's "Kitchen busy" chip,
+          and this is the module's copy of that finding. The button geometry
+          stays at the call site; only the ink/border DECISION moves. */}
       {canCancel ? (
-        <button
+        <OutlineChip
+          as="button"
+          tone="danger"
           onClick={onCancel}
           className="mgt-hover-scale mgt-press"
-          style={{ background: "transparent", border: "2px solid var(--danger-border)", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--danger-text)", whiteSpace: "nowrap" }}
-        >Cancel booking</button>
+          style={{ padding: "8px 14px", minHeight: H.chrome, fontSize: T.body, fontWeight: FW.semi, whiteSpace: "nowrap" }}
+        >Cancel booking</OutlineChip>
       ) : null}
     </div>
   );
