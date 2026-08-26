@@ -12,6 +12,12 @@ contract. Read it before changing how anything looks or behaves on screen; the
 two sections here that point at it carry the non-negotiables. A design decision
 gets recorded there, not here.
 
+**The vocabulary lives in `GLOSSARY.md`** — one name per thing, three columns
+(what you see on screen · the correct term, with its code identifier · what it
+does). It names things; it does not decide them, so where a row summarises this
+file or `DESIGN.md`, those win. A version that adds a user-visible surface adds
+its row there, in the same PR — the way `ROADMAP.md` is kept current.
+
 ---
 
 ## Project
