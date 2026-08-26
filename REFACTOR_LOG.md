@@ -15085,3 +15085,17 @@ Nine tests in `tests/booking-logic.test.js`. **No Firebase rules step** — `id`
 is a new field on an existing child of a node whose rule pair has no
 `.validate`, so this is rolling-safe.
 
+### 2. ROADMAP hygiene (commit 2/3)
+
+`ROADMAP.md` says in its own header that it holds pending work only, and was
+carrying a closed audit as if it were live. **The seven-pass review
+(2026-08-19) entry is deleted** — its heading already said "closed", v17.14.0
+emptied it across five versions, and the per-finding source of truth is
+`MGT_Bookings_SevenReview_2026-08-19/` in the context folder.
+
+Checked before deleting rather than after: the two items in its "do not
+re-flag" list that generalise beyond that audit are both already recorded
+where they belong — `DESIGN.md`:170–174 carries "44px is a FLOOR, not a
+target" with the reasoning, and `tests/contrast.test.js` carries the
+composite-the-real-paint-stack rule in three places. Nothing durable was lost.
+
