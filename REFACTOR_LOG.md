@@ -14725,3 +14725,48 @@ does not flip out from under it, which is exactly the rule being applied here.
 
 Registered in `tests/contrast.test.js` with the tone it now ships. Build clean,
 **575 tests** (+2), `check:style` OK.
+
+### Commit 4 — `AlertPanel`, and the four roles named once
+
+`InlineAlert` (v17.15.0) is the notification strip's section shape for a single
+sentence. **`AlertPanel`** (`src/components/AlertPanel.jsx`) is the same shape
+for a titled LIST: tinted pane, `R.card`, no border, the mark in `tone` at
+`IC.control`, the title in `tone`, and transparent rows separated by hairlines
+and indented to `NOTIF_GUTTER` so row text starts under the TITLE rather than
+under the mark. `NOTIF_GUTTER` / `NOTIF_PAD_X` are imported from the strip,
+never re-derived — the contract `AppBanners` and `BannerRows` already sign,
+which exists because that number was once hard-coded as 31 and went stale the
+day the mark became an icon.
+
+**`ALERT_TONES` (`atoms.jsx`)** names the four roles — danger · warn · success ·
+offline — each as a `{ tone, tint }` pair, so a pane picks a *role* rather than
+pairing two tokens by hand. That is the move `CHIP_TONES` made for `OutlineChip`
+one release earlier and for the same reason: **nothing in this repo can see a
+bad token PAIRING.** `check:style` reads literals; the contrast registry's
+coverage guard matches prefixes these names miss. `--status-offline` on
+`--danger-bg` looked reasonable at three call sites and was below AA at all
+three. `ALERT_DANGER` survives as an alias because `InlineAlert`'s default
+parameter reads it, and a default is where a rename fails silently.
+
+**Why not `atoms.jsx`:** `NotificationStrip` imports atoms, so an atom importing
+the strip's geometry is a cycle — which is why `InlineAlert` approximates the
+mark-to-text gap with `SP.base` and says so at its site. A component file has no
+such problem and takes the real numbers.
+
+**Why not `BannerRows`:** that is bound to `useRevealRows`, an arrival/departure
+lifecycle for rows that come and go while you watch. These lists are static and
+already sit inside a `Reveal` that animates the whole panel. Pointing a per-item
+lifecycle at a list only ever shown or hidden WHOLE is the mistake the strip's
+date change taught, in miniature.
+
+**`AvailBanner` moved out of `atoms.jsx`** into its own file in the same commit,
+because it is one of the eight panes and therefore needs `AlertPanel` — atoms →
+AlertPanel → NotificationStrip → atoms is the cycle above. On the merits it was
+never an atom: it holds clickable suggestion chips and branches four ways on its
+input. Its message is now the section title and its alternatives are rows, which
+is what they are — the heading states the problem, the rows offer ways out. The
+time chips keep their fill deliberately: DESIGN.md's outline treatment is for a
+chip standing alone as a count or a disclosure, and these are actions.
+
+Build clean, **575 tests**, `check:style` OK, lint **0 errors / 47 warnings**
+(identical to `main`).

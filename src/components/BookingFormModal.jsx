@@ -44,7 +44,8 @@ import {
   optimizerActiveFor
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps } from "../lib/customers";
-import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { AvailBanner } from "./AvailBanner";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 

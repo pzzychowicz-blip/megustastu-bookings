@@ -44,7 +44,8 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   comboCapBest, nowTime
 } from "../lib/booking-logic";
-import { Overlay, ModalTitle, Section, Fld, InlineAlert, AvailBanner, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
+import { AvailBanner } from "./AvailBanner";
 import { WaitIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
