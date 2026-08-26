@@ -14770,3 +14770,35 @@ chip standing alone as a count or a disclosure, and these are actions.
 
 Build clean, **575 tests**, `check:style` OK, lint **0 errors / 47 warnings**
 (identical to `main`).
+
+### Commit 5 — Blocked, Past bookings and No-shows become strip sections
+
+The three surfaces Patryk selected. Each was the banned label treatment; each is
+now an `AlertPanel`.
+
+**`BlockModal`'s Blocked list was the worst of the eight**, and for a second
+reason on top of the shape: it drew **one card per block** — own fill, own
+border, own bold "Blocked" heading, own 8px margin. Two blocks on one table
+rendered as two unrelated alarms when they are one fact about one table. That is
+the "N panes with N margins" `NotificationStrip` exists to collapse, reproduced
+inside a modal where the strip could not see it. It is now one pane, a
+`Blocked · N` header, and hairline-separated rows. `ClosedIcon` is the strip's
+own "Closed this day" mark — a blocked table and a closed day are the same
+statement at two scales, so they take the same mark.
+
+**The two history panels** (`histPanel`) had their `histTk` triple — bg, border,
+text, hand-paired from two token families — collapse to a single role name.
+Marks come from the status vocabulary rather than being chosen for these panels:
+past bookings ARE completed visits (`DoubleCheckIcon`, the completed mark) and
+no-shows take `NoShowIcon`, which the chip that discloses the panel already
+wears. Rows keep `--text-primary`; only the title is tinted, exactly as a strip
+section heads its own body. Both keep their v17.8.0 two-`Reveal` arrangement.
+
+Verified live in **both themes**, and structurally rather than by eye — the
+rendered pane reports `border-width: 0px`, `border-radius: 14px` (`R.card`), no
+hairline on the first row and `1px var(--border-soft)` on the rest, and row
+padding `4px 14px 4px 38px` where **38 = NOTIF_GUTTER** (14 + 15 + 9), i.e. the
+strip's own geometry arriving by import rather than by retyping. The two-Reveal
+switch was exercised in both directions.
+
+Build clean, **575 tests**, `check:style` OK, lint 0 errors / 47 warnings.

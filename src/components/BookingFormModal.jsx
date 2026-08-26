@@ -46,7 +46,8 @@ import {
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
-import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon } from "./Icons";
+import { AlertPanel, AlertRow } from "./AlertPanel";
+import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
@@ -244,17 +245,34 @@ export function BookingFormModal({
   // Regular, warn family for no-shows). Top 5 rows like WA; a muted "+N earlier"
   // tail when there are more. Reveal (below) eases it open/closed; its cached-
   // children fallback animates the collapse when the panel goes null.
+  // v17.15.2: both panels are `AlertPanel` — the notification strip's section
+  // shape. They were the banned label treatment (a pale semantic fill PLUS a
+  // border in the matching hue PLUS bold text in a third shade), and the fill
+  // and border were carrying the ROLE while the title carried it a third time.
+  //
+  // `histTk` collapses to a role name, which is the point of ALERT_TONES: the
+  // two hand-paired token triples were the place a mismatch could hide, and one
+  // of them — warn — was measurably a different HUE per theme until this
+  // version's second commit. The rows keep --text-primary; only the title is
+  // tinted, exactly as a strip section heads its own body.
+  //
+  // The marks come from the status vocabulary rather than being chosen for
+  // these panels: past bookings ARE completed visits (DoubleCheckIcon, the
+  // completed mark) and no-shows are no-shows (NoShowIcon, which the chip that
+  // discloses this panel already wears).
   function histPanel(which){
     const histList=custMatch?(which==="regular"?custMatch.regularBookings:custMatch.noShowBookings):null;
     if(!histList||!histList.length) return null;
-    const histTk=which==="noshow"
-      ?{bg:"var(--warn-bg)",border:"var(--warn-border)",text:"var(--warn-text)",title:"No-shows"}
-      :{bg:"var(--suggest-bg)",border:"var(--suggest-border)",text:"var(--success-text)",title:"Past bookings"};
-    return <div style={{marginTop:8,padding:"8px 12px",background:histTk.bg,border:"1px solid "+histTk.border,borderRadius:R.inset,fontSize: T.body,color:S.text}}>
-      <div style={{fontWeight: FW.bold,marginBottom:4,color:histTk.text}}>{histTk.title}</div>
-      {histList.slice(0,5).map(function(b){return <div key={b.id} style={{padding:"2px 0",borderTop:"1px solid "+histTk.border}}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</div>;})}
-      {histList.length>5?<div style={{padding:"2px 0",borderTop:"1px solid "+histTk.border,color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</div>:null}
-    </div>;
+    const noshow=which==="noshow";
+    return <AlertPanel
+      role={noshow?"warn":"success"}
+      icon={noshow?NoShowIcon:DoubleCheckIcon}
+      title={noshow?"No-shows":"Past bookings"}
+      count={histList.length}
+      style={{marginTop:8}}>
+      {histList.slice(0,5).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</AlertRow>;})}
+      {histList.length>5?<AlertRow style={{color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</AlertRow>:null}
+    </AlertPanel>;
   }
   // v17.8.0: ONE Reveal PER PANEL, not one Reveal shared by both. Switching
   // Regular → No-shows never changed `show`, so the swap happened inside an
