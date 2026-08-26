@@ -11,6 +11,14 @@ import { BLOCK_BG, R, T, FW, M, IC, H } from "../../lib/constants";
 import { LinkIcon } from "./WaIcons";
 import { ChevronRightIcon } from "../Icons";
 
+// The narrowest the collapsed summary may be squeezed before it wraps to its
+// own line. Chosen from the string it carries — "Name · YYYY-MM-DD · HH:MM · N
+// pax" — as roughly the width at which the date is still readable; below that
+// the line has stopped doing its job and a wrap is strictly better than an
+// ellipsis. Not on the SP/H scales: it is a text measurement, not a spacing or
+// control-height decision.
+const SUMMARY_MIN = 180;
+
 export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, defaultCollapsed }) {
   const [collapsed, toggle] = useCollapseState(phoneKey, "linked", !!defaultCollapsed);
   if (!booking) return null;
@@ -85,7 +93,20 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
       title={<span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
         <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)", textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0 }}>Linked booking</span>
         <span style={{ fontSize: T.micro, padding: "2px 8px", borderRadius: R.pill, background: statusColor, color: "var(--text-on-accent)", fontWeight: FW.bold, textTransform: "capitalize", flexShrink: 0 }}>{booking.status}</span>
-        {collapsed ? <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span> : null}
+        {/* v17.15.3: `minWidth: SUMMARY_MIN`, not 0. The collapsed row exists to
+            show this line, and with `minWidth: 0` it was the only flexible item
+            in a row of `flexShrink: 0` buttons, so it absorbed the ENTIRE
+            shortfall: measured live in a 495px pane it rendered 18.6px of a
+            224px string — 8% of it, reading "A…" — while every button beside it
+            kept its full width. That is the timeline's `chipRoomFor` lesson in
+            another component: when fixed-width items share a row with one
+            flexible one, the flexible one is what disappears, and it disappears
+            first on exactly the narrow screens where the row matters most.
+            A floor plus the row's existing `flexWrap` turns starvation into a
+            wrap — below the floor the summary takes its own full-width line
+            instead of shrinking to nothing. It keeps the ellipsis for the case
+            where even a full line is not enough. */}
+        {collapsed ? <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: "1 1 auto", minWidth: SUMMARY_MIN, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span> : null}
       </span>}
       action={<>
         {actionBtns}
