@@ -37,8 +37,11 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// v17.15.1: the token blocks moved out of index.html into src/index.css (the
+// service worker can cache a hashed asset; it re-sent the inline block on every
+// open). Same bytes, same blocks — only the file changed.
 const HTML = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "..", "index.html"),
+  join(dirname(fileURLToPath(import.meta.url)), "..", "src", "index.css"),
   "utf8"
 );
 
@@ -49,9 +52,23 @@ const HTML = readFileSync(
 // to be wrong in dark for so long without anyone noticing.
 function block(selector) {
   const i = HTML.indexOf(selector);
-  if (i < 0) throw new Error("no " + selector + " block in index.html");
+  if (i < 0) throw new Error("no " + selector + " block in src/index.css");
   const open = HTML.indexOf("{", i);
-  const end = HTML.indexOf("\n      }", open);
+  // /code-review: brace-counted, not sentinel-matched. This used to look for
+  // the block's closing brace by its INDENTATION ("\n      }" when the rules
+  // lived inside index.html's <style>), which the v17.15.1 move turned into a
+  // column-0 "\n}" — an even weaker anchor, since it stops at the first line
+  // starting with a brace. Both break the moment the file is reformatted or a
+  // token block is wrapped in an at-rule, and they break by SILENTLY
+  // truncating the token map, so the contrast pass would then measure a
+  // partial palette instead of failing. Counting depth cannot be fooled by
+  // whitespace.
+  let depth = 0, end = -1;
+  for (let j = open; j < HTML.length; j++) {
+    if (HTML[j] === "{") depth++;
+    else if (HTML[j] === "}" && --depth === 0) { end = j; break; }
+  }
+  if (end < 0) throw new Error("unbalanced " + selector + " block in src/index.css");
   const body = HTML.slice(open + 1, end);
   const out = {};
   for (const m of body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
@@ -132,6 +149,23 @@ const FILLS = [
   // `--danger-bg`, and a token pair is not a literal. So it is named here, and
   // whoever adds the warn or suggest pane should name theirs too.
   { fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "label", what: "danger pane (strip section + InlineAlert)" },
+
+  // v17.15.2: the OTHER four semantic panes, which the entry above told the
+  // next person to add — "whoever adds the warn or suggest pane should name
+  // theirs too". They existed already; nobody had named them, which is how the
+  // offline pane shipped BELOW AA in both themes (see its entry) and how the
+  // warn ink's light/dark hue split survived. A pane is registered here the
+  // moment it exists, not the moment someone suspects it.
+  { fill: "--app-overlap-bg", alpha: null, ink: "--warn-text", role: "label", what: "warn pane (strip overlap/late/reminders/closed/reshuffle)" },
+  { fill: "--warn-bg", alpha: null, ink: "--warn-text", role: "label", what: "warn pane (form: no-shows, duplicate phone, closed day, kitchen)" },
+  { fill: "--suggest-bg-soft", alpha: null, ink: "--success-text", role: "label", what: "success pane (strip waitlist section)" },
+  { fill: "--suggest-bg", alpha: null, ink: "--success-text", role: "label", what: "success pane (form: past bookings)" },
+  // v17.15.2: the offline pane, registered with the tone it now SHIPS. Its tone
+  // was --status-offline — #ff3b30 in BOTH themes while --app-offline-bg
+  // inverts — giving 3.13:1 light and 3.90:1 dark: below AA in EITHER theme,
+  // not merely swinging between them. It is the third section to have worn that
+  // token; v17.15.0 caught two of the three and this one sat two lines away.
+  { fill: "--app-offline-bg", alpha: null, ink: "--app-offline-text", role: "label", what: "offline pane (strip)" },
 
   // Solid semantic fills — already correct before this pass; here so they stay so.
   { fill: "--app-success-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "success tag" },

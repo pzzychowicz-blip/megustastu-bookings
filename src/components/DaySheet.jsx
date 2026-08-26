@@ -105,8 +105,8 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
       {dayBlocks.length ? (
         <div style={{ marginBottom: 12, fontSize: T.body }}>
           <div style={{ fontWeight: FW.bold, marginBottom: 4 }}>Blocked tables</div>
-          {dayBlocks.map(function (bl, i) {
-            return <div key={i}>{bl.tableId + " — " + (bl.allDay ? "all day" : (bl.from + "–" + bl.to)) + (bl.reason ? " (" + bl.reason + ")" : "")}</div>;
+          {dayBlocks.map(function (bl) {
+            return <div key={bl.id}>{bl.tableId + " — " + (bl.allDay ? "all day" : (bl.from + "–" + bl.to)) + (bl.reason ? " (" + bl.reason + ")" : "")}</div>;
           })}
         </div>
       ) : null}
@@ -120,7 +120,13 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
         </div>
       ) : null}
 
-      <div style={{ marginTop: 18, fontSize: T.micro, color: "#666" /* @fixed-fill */ }}>{(restaurantName || "Me Gustas Tú") + " Booking System"}</div>
+      {/* v17.15.2: the printed footer names the APP, not the restaurant. It used
+          to compose `restaurantName + " Booking System"`, which made the app's
+          own name a different string per restaurant setting — the same defect
+          the deposit flag had when it printed the configured currency symbol.
+          The heading above already carries the restaurant name, so this line
+          was also saying it twice. */}
+      <div style={{ marginTop: 18, fontSize: T.micro, color: "#666" /* @fixed-fill */ }}>MGT Bookings</div>
     </div>,
     document.body
   );

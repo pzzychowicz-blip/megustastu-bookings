@@ -535,7 +535,32 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
 // is the token that flips with the fill it sits on, so it is the one that can
 // be trusted on it. `AppBanners` was corrected to match in the same commit —
 // its two danger sections had been shipping the 3.03:1.
-export const ALERT_DANGER = { tone: "var(--danger-text)", tint: "var(--danger-bg)" };
+// ── v17.15.2: the four roles, named once ─────────────────────────────────────
+// A semantic pane needs a tone AND a tint, and the pairing is the thing that
+// goes wrong: `--status-offline` on `--danger-bg` looked entirely reasonable at
+// three separate call sites and was below AA at all three, because one token
+// flips with the theme and the other does not. Nothing in the repo can see a
+// bad PAIRING — `check:style` reads literals, and the contrast registry's
+// coverage guard matches token PREFIXES that these names miss.
+//
+// So a pane picks a ROLE and gets both halves, the move `CHIP_TONES` made for
+// `OutlineChip` one release earlier and for the identical reason: two values
+// that must agree are one decision, not two. Every pairing here is registered
+// in `tests/contrast.test.js` and measured in both themes.
+//
+// `offline` is a role rather than a shade of warn because its fill is its own
+// (`--app-offline-bg`, more saturated than the overlap wash) and the message
+// is not a warning about the restaurant — it is a statement about this device.
+export const ALERT_TONES = {
+  danger:  { tone: "var(--danger-text)",      tint: "var(--danger-bg)" },
+  warn:    { tone: "var(--warn-text)",        tint: "var(--warn-bg)" },
+  success: { tone: "var(--success-text)",     tint: "var(--suggest-bg)" },
+  offline: { tone: "var(--app-offline-text)", tint: "var(--app-offline-bg)" }
+};
+
+// Kept as its own export: `InlineAlert`'s default parameters read it, and a
+// default is the one place a rename would fail silently rather than loudly.
+export const ALERT_DANGER = ALERT_TONES.danger;
 
 export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint, icon: Icon = AlertIcon, id, style, children }) {
   return (
@@ -1662,71 +1687,3 @@ export function Kbd({ k }) {
   );
 }
 
-// ── Availability banner shown above booking form ─────────────────────────────
-// Renders "no tables available" or warning states with optional time
-// suggestions (clickable chips) for nearby alternative slots.
-export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
-  const message = msg || "No tables available.";
-  const bgClr = warn ? "var(--warn-bg)" : "var(--danger-bg)";
-  const brdClr = warn ? "var(--warn-border)" : "var(--danger-border)";
-  const txtClr = warn ? "var(--warn-text)" : "var(--danger-text)";
-  const hasEarlier = sugg && sugg.earlier && sugg.earlier.length > 0;
-  const hasLater = sugg && sugg.later && sugg.later.length > 0;
-  const hasSugg = hasEarlier || hasLater;
-
-  function renderChips(arr) {
-    if (!onTapTime) return arr.join(", ");
-    return (
-      <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
-        {arr.map((t) => (
-          <span
-            key={t}
-            className="mgt-hover-scale"
-            onClick={() => onTapTime(t)}
-            style={{
-              cursor: "pointer", padding: "2px 8px", borderRadius: R.pill,
-              fontWeight: FW.semi, fontSize: T.body,
-              background: "var(--suggest-bg)",
-              color: "var(--success-text)",
-              border: "1px solid var(--suggest-border)",
-              boxShadow: "var(--shadow-btn)"
-            }}
-          >
-            {t}
-          </span>
-        ))}
-      </span>
-    );
-  }
-
-  return (
-    <div style={{
-      padding: "10px 14px",
-      borderRadius: R.card,
-      border: "1px solid " + brdClr,
-      background: bgClr,
-      marginBottom: 14,
-      fontSize: T.body,
-      color: txtClr,
-      boxShadow: "var(--shadow-card)",
-      ...(style || {})
-    }}>
-      <div style={{ fontWeight: FW.bold, marginBottom: hasSugg ? 6 : 0 }}>{message}</div>
-      {hasEarlier ? (
-        <div style={{ marginBottom: hasLater ? 4 : 0 }}>
-          <span style={{ fontWeight: FW.bold }}>Before: </span>
-          {renderChips(sugg.earlier)}
-        </div>
-      ) : null}
-      {hasLater ? (
-        <div>
-          <span style={{ fontWeight: FW.bold }}>After: </span>
-          {renderChips(sugg.later)}
-        </div>
-      ) : null}
-      {!hasSugg && sugg ? (
-        <div style={{ marginTop: 4 }}>No availability found.</div>
-      ) : null}
-    </div>
-  );
-}

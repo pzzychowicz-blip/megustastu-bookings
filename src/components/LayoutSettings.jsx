@@ -11,10 +11,11 @@
 //   • Kitchen limit.
 
 import { useState, useEffect } from "react";
-import { Section, Collapsible, Toggle, mkStep, mkBtn } from "./atoms";
+import { Section, Collapsible, Toggle, mkStep, mkBtn, Reveal } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
+import { AlertPanel, AlertRow } from "./AlertPanel";
 import { contiguousRuns, comboKey, R, T, FW, H, IC } from "../lib/constants";
-import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon } from "./Icons";
+import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon } from "./Icons";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
@@ -441,32 +442,52 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   </>
                 )}
               </div>
-              {editing && renameOrph > 0 ? (
-                <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>
-                  {renameOrph} upcoming booking{renameOrph === 1 ? " still references" : "s still reference"} “{t.id}” — they won’t follow the rename.
-                </div>
-              ) : null}
-              {/* Why the save tick is disabled — mirrors the Add form's messages (v15.0.1). */}
-              {editing && editTrim && editTrim.indexOf("|") >= 0 ? (
-                <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table id can’t contain “|”.</div>
-              ) : editing && editTrim && editTrim !== t.id && idSet[editTrim] ? (
-                <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table “{editTrim}” already exists.</div>
-              ) : null}
+              {/* v17.15.2 /code-review: eased like the two messages below it. It
+                  is the same keystroke-triggered warning in the same row, and
+                  wrapping only its neighbours left two adjacent messages fired
+                  by one keypress animating differently. */}
+              <Reveal show={!!(editing && renameOrph > 0)}>
+                {editing && renameOrph > 0 ? (
+                  <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>
+                    {renameOrph} upcoming booking{renameOrph === 1 ? " still references" : "s still reference"} “{t.id}” — they won’t follow the rename.
+                  </div>
+                ) : null}
+              </Reveal>
+              {/* Why the save tick is disabled — mirrors the Add form's messages (v15.0.1).
+                  v17.15.2: Reveal-wrapped. These appear and vanish KEYSTROKE BY
+                  KEYSTROKE as you rename a table, which is the most
+                  under-your-eye appearance in the app, and both were hard cuts
+                  that shoved the rows below them by a line. */}
+              <Reveal show={!!(editing && editTrim && (editTrim.indexOf("|") >= 0 || (editTrim !== t.id && idSet[editTrim])))}>
+                {editing && editTrim && editTrim.indexOf("|") >= 0 ? (
+                  <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table id can’t contain “|”.</div>
+                ) : editing && editTrim && editTrim !== t.id && idSet[editTrim] ? (
+                  <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>A table “{editTrim}” already exists.</div>
+                ) : null}
+              </Reveal>
+              {/* v17.15.2: Reveal-wrapped — it opens under the × you just
+                  pressed and closes under Cancel, both while you watch. */}
+              <Reveal show={!!confirming}>
               {confirming ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6, padding: "6px 8px", borderRadius: R.inset, background: "var(--warn-bg)", border: "1px solid var(--warn-border)" }}>
-                  <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--warn-text)" }}>
-                    {orph > 0
-                      ? orph + " upcoming booking" + (orph === 1 ? " uses “" : "s use “") + t.id + "”. Remove anyway?"
-                      : "Remove table “" + t.id + "”?"}
-                  </span>
+                // v17.15.2: the last of the eight banned semantic triples. It is
+                // a one-line section — the question IS the message — so it takes
+                // AlertPanel's titled form with its confirm buttons inline, the
+                // shape InlineAlert established for a modal fault.
+                <AlertPanel role="warn" icon={AlertIcon} style={{ marginTop: 6 }}
+                  title={orph > 0
+                    ? orph + " upcoming booking" + (orph === 1 ? " uses “" : "s use “") + t.id + "”. Remove anyway?"
+                    : "Remove table “" + t.id + "”?"}>
+                <AlertRow first style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                     <button onClick={function () { setPendingRemove(null); }} className="mgt-hover-scale"
                       style={{ border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 12px", fontSize: T.body, fontWeight: FW.bold, background: "var(--bg-stepper)", color: "var(--text-primary)", cursor: "pointer", boxShadow: "var(--shadow-btn)" }}>Cancel</button>
                     <button onClick={function () { removeTable(t.id); }} className="mgt-hover-scale"
                       style={mkBtn({ padding: "4px 12px", fontSize: T.body, minHeight: H.compact, background: "var(--btn-del)" })}>{orph > 0 ? "Remove anyway" : "Remove"}</button>
                   </div>
-                </div>
+                </AlertRow>
+                </AlertPanel>
               ) : null}
+              </Reveal>
             </div>
           );
         })}
@@ -492,11 +513,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 style={{ ...ACT_BTN, opacity: newIdValid ? 1 : 0.4, cursor: newIdValid ? "pointer" : "not-allowed" }}>Add</button>
               <button onClick={function () { setAdding(false); setNewId(""); }} className="mgt-hover-scale" title="Cancel" style={X_BTN}><CloseIcon size={IC.control} /></button>
             </div>
-            {newIdTrim && newIdTrim.indexOf("|") >= 0 ? (
-              <div style={{ width: "100%", fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)" }}>A table id can’t contain “|”.</div>
-            ) : newIdTrim && idSet[newIdTrim] ? (
-              <div style={{ width: "100%", fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)" }}>A table “{newIdTrim}” already exists.</div>
-            ) : null}
+            {/* v17.15.2 /code-review: the ORIGINAL of the pair the rename row
+                mirrors — and the first pass wrapped the mirror and left this.
+                Same keystroke trigger, same ease. */}
+            <Reveal show={!!(newIdTrim && (newIdTrim.indexOf("|") >= 0 || idSet[newIdTrim]))}>
+              {newIdTrim && newIdTrim.indexOf("|") >= 0 ? (
+                <div style={{ width: "100%", fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)" }}>A table id can’t contain “|”.</div>
+              ) : newIdTrim && idSet[newIdTrim] ? (
+                <div style={{ width: "100%", fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)" }}>A table “{newIdTrim}” already exists.</div>
+              ) : null}
+            </Reveal>
           </div>
         ) : (
           <button onClick={function () { setAdding(true); }} className="mgt-hover-scale"

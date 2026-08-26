@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC } from "../lib/constants";
+import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, M, T, FW, H, IC } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
@@ -44,8 +44,11 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   comboCapBest, nowTime
 } from "../lib/booking-logic";
-import { Overlay, ModalTitle, Section, Fld, InlineAlert, AvailBanner, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
-import { WaitIcon } from "./Icons";
+import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence, OutlineChip } from "./atoms";
+import { AvailBanner } from "./AvailBanner";
+import { AlertPanel } from "./AlertPanel";
+import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
+import { WaitIcon, AlertIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
@@ -162,16 +165,23 @@ export function WalkinForm({
   const wSummaryText = wSel.length === 0
     ? "Select tables below."
     : "Capacity: " + wCap + (wCap >= wSize ? " (fits " + wSize + " pax)" : " — need " + wSize + " pax");
-  const wClearBtn = wSel.length > 0 ? (
-    <button
-      key="clr"
-      className="mgt-hover-scale mgt-press"
-      style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.clear })}
-      onClick={() => setDraft({ ...wf, tables: [], _pre: false })}
-    >
-      Clear
-    </button>
-  ) : null;
+  // v17.15.2: slides in and out. It appears the moment you tap a table and
+  // vanishes the moment you clear — always under the eye of the person who
+  // caused it — and it was doing both by hard cut. `Presence` with the
+  // slide pair is the app's idiom for a button arriving in a row: App's
+  // "Today", the timeline's optimiser pill, LateBanner's "No show".
+  const wClearBtn = (
+    <Presence show={wSel.length > 0} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
+      <button
+        key="clr"
+        className="mgt-hover-scale mgt-press"
+        style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.clear })}
+        onClick={() => setDraft({ ...wf, tables: [], _pre: false })}
+      >
+        Clear
+      </button>
+    </Presence>
+  );
 
   // ── Kitchen load + alternative-time suggestions ──
   // Kitchen load is computed against the full bookings array (not
@@ -251,36 +261,55 @@ export function WalkinForm({
     </div>
   ) : null);
 
+  // v17.15.2 (follow-up): this is the SECOND copy of the kitchen panel, and the
+  // pane sweep earlier in this version converted only the booking form's. The
+  // grep that found the eight matched `--warn-bg` and `--warn-border` on ONE
+  // line; here they are on two, so a byte-equivalent copy of both faults sat
+  // three files away and passed every check. Searching for a SHAPE by its
+  // literal formatting is the same mistake as searching for a component by its
+  // import — the lesson this version already recorded about `OutlineChip`,
+  // walked into again in the commit that recorded it.
+  //
+  // Both faults, identical to the ones fixed there: the BUSY state was the
+  // banned semantic triple (the CALM state is an information panel and stays
+  // exactly as it was), and the "Kitchen busy" chip was an `OutlineChip` typed
+  // out by hand, with theme-INVARIANT `--text-required` on a fill that inverts
+  // — 4.11:1 in light, 2.86:1 in dark.
+  //
+  // /code-review: ONE element type across both states, never a ternary between
+  // an AlertPanel and a div. React reconciles by type, so the ternary discarded
+  // the whole subtree on every busy<->calm flip and took the suggestions
+  // `Reveal` with it — the chips vanished in a frame instead of collapsing,
+  // a REGRESSION on the single div this used to be. `AlertPanel` takes
+  // tone/tint overrides for exactly this, and the shared element also lets the
+  // tint cross-fade. Mirrors BookingFormModal's copy line for line.
   const wKitchenSection = (
-    <div style={{
-      padding: "10px 14px",
-      borderRadius: R.card,
-      border: "1px solid " + (wKitchenBusy ? "var(--warn-border)" : "var(--border-soft)"),
-      background: wKitchenBusy ? "var(--warn-bg)" : "var(--bg-soft)",
-      marginBottom: 14, fontSize: T.body,
-      color: wKitchenBusy ? "var(--warn-text)" : S.muted
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span>
-          <span style={{ fontWeight: FW.bold }}>Starting at this time: </span>
-          {wKitchenStarts + " booking" + (wKitchenStarts !== 1 ? "s" : "")
-            + " · " + wKitchenGuests + " guest" + (wKitchenGuests !== 1 ? "s" : "")}
-        </span>
-        {wKitchenBusy ? (
-          <span style={{
-            fontWeight: FW.bold, color: "var(--text-required)", fontSize: T.body,
-            padding: "4px 12px", borderRadius: R.pill,
-            border: "1.5px solid rgba(220,38,38,0.4)",  /* @fixed-fill */
-            flexShrink: 0
-          }}>
-            Kitchen busy
+    <AlertPanel
+      role="warn"
+      icon={wKitchenBusy ? AlertIcon : null}
+      title={wKitchenBusy ? "Kitchen may be busy" : null}
+      tint={wKitchenBusy ? undefined : "var(--bg-soft)"}
+      style={{ marginBottom: 14, transition: "background-color " + M.move,
+        ...(wKitchenBusy ? null : { border: "1px solid var(--border-soft)", paddingTop: 10 }) }}>
+      {/* Indented under the title only when there IS one; the calm state has no
+          mark to line up under, so it takes the pane's own padding. */}
+      <div style={{
+        padding: wKitchenBusy ? "4px " + NOTIF_PAD_X + "px 4px " + NOTIF_GUTTER + "px" : "0 " + NOTIF_PAD_X + "px",
+        fontSize: T.body, color: wKitchenBusy ? "var(--text-primary)" : S.muted
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <span>
+            <span style={{ fontWeight: FW.bold }}>Starting at this time: </span>
+            {wKitchenStarts + " booking" + (wKitchenStarts !== 1 ? "s" : "")
+              + " · " + wKitchenGuests + " guest" + (wKitchenGuests !== 1 ? "s" : "")}
           </span>
-        ) : null}
+          {wKitchenBusy ? <OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip> : null}
+        </div>
+        {/* v15.8.0 cont.4: the suggestion sub-panel eases in/out via Reveal — the same
+            effect as the Summary panel. */}
+        <Reveal show={!!wKitchenSugBlock}>{wKitchenSugBlock}</Reveal>
       </div>
-      {/* v15.8.0 cont.4: the suggestion sub-panel eases in/out via Reveal — the same
-          effect as the Summary panel. */}
-      <Reveal show={!!wKitchenSugBlock}>{wKitchenSugBlock}</Reveal>
-    </div>
+    </AlertPanel>
   );
 
   // ── Stepper button style (size + duration +/-) ──
@@ -502,7 +531,12 @@ export function WalkinForm({
       <Reveal show={wChecking && wSel.length === 0}>
         <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>
       </Reveal>
-      {wAutoCheck && wSel.length === 0 ? (
+      {/* v17.15.2: Reveal-wrapped. This arrives when the deferred scan lands and
+          leaves the instant you tap a table — both while you are looking at it,
+          and both were hard cuts. It sits directly under the ⏳ row, which has
+          eased since v16.3.0, so the cue faded and its own ANSWER snapped in. */}
+      <Reveal show={!!(wAutoCheck && wSel.length === 0)}>
+        {wAutoCheck && wSel.length === 0 ? (
         <>
           <AvailBanner
             msg={"No tables available at " + wTime + "."}
@@ -525,7 +559,8 @@ export function WalkinForm({
             </div>
           ) : null}
         </>
-      ) : null}
+        ) : null}
+      </Reveal>
       </AutoHeight>
     </Overlay>
   );

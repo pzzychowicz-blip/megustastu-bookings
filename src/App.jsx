@@ -1,6 +1,10 @@
 /**
- * Me Gustas Tú — Booking System
- * Version 14.1
+ * MGT Bookings
+ *
+ * The version lives in `__APP_SIGNATURE__` below and NOWHERE else. This line
+ * used to carry a number of its own and read "Version 14.1" for three majors:
+ * a second copy of a fact, kept in step by nothing, which is the defect this
+ * file's own Gotchas table names again and again. Read it from the signature.
  *
  * Copyright © 2026 Patryk Zychowicz. All rights reserved.
  *
@@ -27,7 +31,7 @@ import {
   OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, M, T, FW, H, IC } from "./lib/constants";
 
 import {
-  getDur, toMins, genId,
+  getDur, toMins, genId, sanitizeBlock,
   histEntry, diffBooking,
   isLocked, isActive, statusOrder,
   getBlockSlots, canAssign, getBusy, overlaps, comboCapBest,
@@ -284,10 +288,10 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // (window assignment + console.log) so the bundler cannot tree-shake it.
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
-  app:"Me Gustas Tú Booking System",
+  app:"MGT Bookings",
   // Sandbox build marker — WhatsApp module under local test, NOT a release.
   // The formal version bump happens on "give me the deployment version".
-  version:"17.15.0-wa-sandbox",
+  version:"17.15.3-wa-sandbox",
   sandbox:"WhatsApp inbox + simulator (localhost only)",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
@@ -2764,14 +2768,20 @@ function BookingApp({uid}){
   }
 
   function addBlock(block){
-    const next=tableBlocks.concat([block]);
+    // v17.15.3: through sanitizeBlock, so the id is minted at the SAME one site
+    // the read path uses. A locally-added block therefore has a stable identity
+    // before the Firebase echo lands, rather than acquiring one on the way back.
+    const next=tableBlocks.concat([sanitizeBlock(block)]);
     saveBlocks(next);
     const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
     if(ok) flash();
     setBlockTarget(null);
   }
   function removeBlock(block){
-    const next=tableBlocks.filter(function(bl){return !(bl.tableId===block.tableId&&bl.date===block.date&&bl.allDay===block.allDay&&bl.from===block.from&&bl.to===block.to);});
+    // v17.15.3: matches on IDENTITY. This used to filter on the field set
+    // (tableId+date+allDay+from+to), which two duplicate blocks share exactly —
+    // so unblocking either one dropped BOTH. See sanitizeBlock in booking-logic.
+    const next=tableBlocks.filter(function(bl){return bl.id!==block.id;});
     saveBlocks(next);
     const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
     if(ok) flash();

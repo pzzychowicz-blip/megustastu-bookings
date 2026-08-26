@@ -14484,3 +14484,736 @@ problem. **Two movements on different axes cannot be reconciled by a clock —
 aligning them perfectly is what makes the diagonal clean rather than what makes
 it go away.** The question was never "when should each of these run", it was
 "which axis does this gesture own".
+
+---
+
+## v17.15.1 — the stylesheet crosses the cache line
+
+**Date:** 2026-08-25 · **Behavioural change:** None · **Scope:** asset delivery
+**Files:** `index.html` · `src/index.css` (new) · `src/main.jsx` · `vite.config.js` ·
+`tests/{stylesheet,contrast,motion,a11y}.test.js`
+
+A performance round, scoped by a scan run against the Vercel skill set. The
+headline finding was a negative one and is the most useful thing here: **the
+React render layer is already optimised and had no target worth taking.** What
+was left was asset delivery, and there the numbers were large.
+
+### What shipped
+
+**1. The stylesheet left `index.html` (`src/index.css`).** It was 89 kB of a
+100.5 kB HTML file — 33.7 kB gzipped. `public/sw.js` is **network-first for
+navigations** and **cache-first for `/assets/*`**, so as an inline block it was
+re-sent on *every app open, forever*, while every other byte the app loads was
+fetched once. Imported from `main.jsx` so Vite owns the hash and the `<link>`
+and the two cannot drift. Vite also minifies it, which the inline block never
+was: **89 kB → 15 kB raw, 4.20 kB gz.**
+
+The boot script stays inline and its CSP hash is **byte-for-byte unchanged** —
+verified, not assumed. An external sheet in `<head>` is still render-blocking,
+so the no-flash theme guarantee is untouched.
+
+**2. Vendor chunking (`vite.config.js`).** React and Firebase are ~60% of the
+main chunk and never change between our releases, yet every version bump handed
+the tablet a fresh 203 kB gz because it was one file with one hash. Split into
+`vendor-react` (59.64 kB gz) and `vendor-firebase` (72.96 kB gz), both keep
+their hashes across a deploy and the SW serves them from disk. Firebase is one
+group, not three: app/auth/database share internal `@firebase/*` utils, and a
+finer split just relocates shared code without reducing what a release
+invalidates. Vite emits all three as `modulepreload`, so no request waterfall.
+
+| | Before | After | |
+|---|---|---|---|
+| Repeat open (HTML only) | 33.70 kB gz | **4.59 kB gz** | −86% |
+| First load (eager total) | 258.45 kB gz | **231.52 kB gz** | −10% |
+| Re-downloaded per release | 258.45 kB gz | **~94 kB gz** | −63% |
+
+### What was measured and deliberately NOT done
+
+The plan's third phase was to memoise `notifSections` (rebuilt every App render,
+and v17.15.0 had measured 2.886 ms of forced layout per commit in the strip).
+Measured live, with the booking form open and a 21-keystroke guest name:
+
+| | median | p90 | max |
+|---|---|---|---|
+| Strip present | 10.9 ms | 16.9 ms | 27.1 ms |
+| Strip absent (quiet day) | 10.4 ms | 15.5 ms | 22.3 ms |
+
+**~0.5 ms, with the strip producing ZERO DOM mutations either way** — it
+reconciles and bails. v17.15.0's early-return had already removed the layout
+cost this was aimed at. Typing with Timeline, List and Plan behind the modal
+gave ~10 ms and an **identical 413 DOM mutations**, i.e. the view contributes
+nothing: the `VA` stable-wrapper pattern and the five `memo()`'d views are doing
+their job. The residual is the form's own necessary re-render plus dev-build
+StrictMode double-rendering, which roughly halves in production.
+
+Memoising a ~30-dependency array in the path that draws double-booking and
+running-late banners, to buy ~0.2 ms in prod, is the wrong trade: one missed
+dependency is a stale safety banner. `content-visibility` was dropped on the
+same grounds — it is built for 1000+ item lists, the busiest day here is ~40
+cards, and it would have broken `useFlip`'s measurement and `focusReq`
+scrolling. **Recorded so it is not re-proposed: the render layer is done, and
+the next person to look should measure before believing otherwise.**
+
+### Two defects the existing guards caught, both self-inflicted
+
+Worth logging because both were invisible in review and both were caught by
+tests written for exactly this:
+
+1. `src/index.css`'s new header spelled a comment-terminator literally, which
+   closed the header early and put prose in a selector — the v17.8.0 bug, in the
+   commit that moved the file. `tests/stylesheet.test.js` failed on it.
+2. `index.html`'s replacement comment contained a literal `<script>` tag. The
+   CSP hash extractor finds the boot block **by regex**, so the tag name in
+   prose made it hash the wrong bytes and report a pin mismatch. Fixed by not
+   naming the tag; the comment now says so. **A guard that finds its subject by
+   regex can be blinded by prose that merely mentions it.**
+
+### Verification
+
+`npm run build` + `npm test` → **565 passed** (564 + one added: the inline block
+must not come back). `npm run lint` 0 errors / 47 warnings — identical to `main`.
+`npm run check:style` OK. Live on DEV at the dev server: all 24
+`CRITICAL_SELECTORS` present in the CSSOM, `.mgt-hover-scale` resolving, theme
+correct on first paint, no console errors. Four test files were repointed at
+`src/index.css`; none was weakened.
+
+### `/code-review` fixes (xhigh) — 8 findings, all applied
+
+**The one that mattered.** Moving the CSS out of `index.html` traded away a
+property nothing was tracking: **inline, the stylesheet could not fail to
+load.** It now reaches the app through a single `import "./index.css"` in
+`main.jsx` that nothing verified — an unused CSS file is not a build error,
+eslint does not read it, and all four CSS test files (`stylesheet`, `contrast`,
+`motion`, `a11y`) read the file straight off disk rather than through the import
+graph. Deleting that line ships an app with **no styling at all** while the
+build, the linter and every test stay green. `tests/stylesheet.test.js` now
+asserts the entry module imports it, **proven against known-bad input**: with
+the line removed the test fails and `npm run build` still succeeds, which is the
+whole shape of the defect. Same entry criterion as `CRITICAL_SELECTORS` — does
+it fail SILENTLY.
+
+**The docs had drifted in the same commit that caused the drift.** `DESIGN.md`
+is the designated visual-system authority ("read it before changing how anything
+looks"), and it pointed at `index.html` for the token families, the
+`.mgt-hover-scale` utility, the `role="button"` rules, the radius scale and the
+font stack — 13 references, all now aimed at a file containing none of it.
+`CLAUDE.md` kept two more (DaySheet's `@media print`, QuickStatusPopup's control
+rule) after five others were updated, i.e. one file disagreeing with itself
+about where the stylesheet lives. Both fixed, plus a locator note at the top of
+DESIGN.md's theming section. The `index.html` references that remain in both
+files are the correct ones: the boot script, which is still inline.
+
+**Also fixed:** the paired no-build test count still read 563 when the added
+test made it 564 (the suite reports `564 passed | 1 skipped` without a build,
+565 with) — updating one half of a pair of numbers and not the other is how the
+count stopped meaning anything the last time. The two `manualChunks` regexes
+were hoisted out of the callback (a regex literal is re-evaluated on every call,
+so they allocated two objects per module inspected) and the React alternation
+reordered longest-first: `react|react-dom` matched `react-dom` **only** because
+the trailing separator failed on the hyphen and the engine backtracked, so the
+grouping rested on a backtrack a later edit could silently remove. Verified
+behaviour-neutral — both vendor chunk hashes are byte-identical across the
+change. `tests/contrast.test.js` now **brace-counts** the token block instead of
+matching its closing brace by indentation; the sentinel had been `"\n      }"`
+(index.html's `<style>` indent) and became `"\n}"`, an even weaker anchor that a
+reformat or an enclosing at-rule would break by *silently truncating* the token
+map, leaving the contrast pass measuring a partial palette rather than failing.
+The magic-number stub check added alongside it was dropped as redundant — the 24
+`CRITICAL_SELECTORS` assertions already prove the file is not a stub, and
+`length > 50000` would have failed a legitimate 40% reduction.
+
+Re-verified after the fixes: build + **565 tests**, lint 0 errors / 47 warnings
+(identical to `main`), `check:style` OK, chunk output unchanged.
+
+---
+
+## v17.15.2 — one shape and one hue per semantic role
+
+**Date:** 2026-08-26 · **Behavioural change:** None (visual only) · **Scope:** semantic panes + the warn palette
+**Files:** `src/App.jsx` · `index.html` · `public/manifest.webmanifest` ·
+`src/components/DaySheet.jsx` (commit 1); further files per commit below
+
+Patryk selected three surfaces live and asked why they looked inconsistent
+between light and dark. Investigating them turned up a documented debt, two
+measured token faults, and a stale header comment.
+
+### Commit 1 — MGT Bookings, and a version line that can't drift
+
+`src/App.jsx`'s file header opened with `Me Gustas Tú — Booking System` and, on
+the line under it, **`Version 14.1`** — a second copy of the version, kept in
+step by nothing, three majors behind `__APP_SIGNATURE__`. It is not replaced
+with `17.15.2`; a number there would drift again on the next bump. The line now
+*points at* the signature, which is the file's single source of truth.
+
+The app name moved to **MGT Bookings** in the five places that name the APP:
+the header comment, `__APP_SIGNATURE__.app`, the web manifest's `name`,
+`index.html`'s `<title>` (which still read `megustastu-bookings`, the repo slug)
+and `DaySheet`'s printed footer.
+
+**What deliberately did NOT change: every use of `restaurantName`.** The
+restaurant is called Me Gustas Tú and the app is called MGT Bookings; the two
+had been conflated. `DaySheet`'s heading (`<restaurant> — Day sheet`), the
+`settings/general` seed and `LoginScreen`'s cached-name path are all correctly
+about the restaurant. The footer was the one place they were spliced together —
+`restaurantName + " Booking System"` made the *app's own name* a different
+string per restaurant setting, the same defect the deposit flag had when it
+printed the configured currency symbol. It also said the restaurant's name
+twice, since the heading already carries it.
+
+Verified: build clean, **565 tests**, `check:style` OK. `tests/csp.test.js`
+confirms the boot-script pin is unaffected — the `<title>` edit is outside the
+`<script>` block.
+
+### Commit 2 — the warn ink's light-mode hue
+
+The reported symptom was "No-shows uses orange tokens in dark mode and red
+tokens in light". The chip itself was already correct — `OutlineChip` derives
+its border from its ink (v17.15.0) — so the fault was one level down, in the
+token, and it is a HUE fault rather than a contrast one:
+
+```
+light   warn #9a3412 hsl(15, 79, 34)    danger #991b1b hsl(0, 70, 35)
+dark    warn #fdba74 hsl(31, 97, 72)    danger #fca5a5 hsl(0, 94, 82)
+```
+
+In **light** the app's two "something is wrong" inks sit 15° of hue apart with
+**one point** of lightness between them; in **dark**, 31° apart with ten. Warn
+and danger were twice as separable in one theme as in the other, and in light
+they had all but converged — so which role a colour meant depended on the theme.
+
+`--warn-text` light becomes **`#8a4b0a`** (hue 30°), which is the *dark* ink's
+own hue: the warn family names one colour in both themes instead of two, and
+clears danger by 30° in both. Contrast stays comfortably AA on every warn fill
+(`--warn-bg` 5.78:1, `--app-overlap-bg` 6.03:1, `--app-offline-bg` 6.00:1).
+
+**`--app-warn-solid` follows it to `#8a4b0a`.** It was the same hex as the old
+warn ink and is theme-invariant, so leaving it behind would have put a hue-15
+solid beside a hue-30 ink *in the same modal* — App's "Kitchen may be busy"
+pairs that Confirm button with a `--warn-text` heading. One role, one hue,
+whatever treatment carries it. White on it measures 6.79:1, still over its
+registered `label` bar. `--chip-warn-border` needed no edit at all, which is
+exactly what deriving it bought.
+
+**Four semantic panes joined the contrast registry** — `--app-overlap-bg`,
+`--warn-bg`, `--suggest-bg-soft` and `--suggest-bg`, each with its ink. The
+v17.15.0 entry above them had told the next person to do this ("whoever adds
+the warn or suggest pane should name theirs too"); the panes already existed and
+nobody had named them, which is why a repo-wide hue split survived a full
+release. Neither the coverage guard (its prefixes miss these tokens) nor
+`check:style` (it sees literals, not pairings) can find this class of fault.
+
+Verified live in both themes via computed styles, not assumed. Build clean,
+**573 tests** (+8), `check:style` OK.
+
+### Commit 3 — the offline section's tone
+
+`AppBanners`' "Working offline" section is the **third** to have worn
+`--status-offline` as its tone, and the one v17.15.0 missed while correcting the
+other two, two lines above it. `#ff3b30` is identical in both themes while
+`--app-offline-bg` inverts, so it measured **3.13:1 in light and 3.90:1 in
+dark** — below AA in *either* theme, not merely swinging between them.
+
+It also painted the section HEADER red while the section's own body text was
+already `--app-offline-text` amber: two colours for one message, in the one
+place the strip promises a section is headed on the same terms as its body.
+`--app-offline-text` is the token made for this fill and flips with it —
+**6.26:1 / 9.61:1** — and it unifies the header with the body.
+
+The connection **dot** keeps `--status-offline`, and that is not an
+inconsistency left behind: the dot sits on the neutral header, a surface that
+does not flip out from under it, which is exactly the rule being applied here.
+
+Registered in `tests/contrast.test.js` with the tone it now ships. Build clean,
+**575 tests** (+2), `check:style` OK.
+
+### Commit 4 — `AlertPanel`, and the four roles named once
+
+`InlineAlert` (v17.15.0) is the notification strip's section shape for a single
+sentence. **`AlertPanel`** (`src/components/AlertPanel.jsx`) is the same shape
+for a titled LIST: tinted pane, `R.card`, no border, the mark in `tone` at
+`IC.control`, the title in `tone`, and transparent rows separated by hairlines
+and indented to `NOTIF_GUTTER` so row text starts under the TITLE rather than
+under the mark. `NOTIF_GUTTER` / `NOTIF_PAD_X` are imported from the strip,
+never re-derived — the contract `AppBanners` and `BannerRows` already sign,
+which exists because that number was once hard-coded as 31 and went stale the
+day the mark became an icon.
+
+**`ALERT_TONES` (`atoms.jsx`)** names the four roles — danger · warn · success ·
+offline — each as a `{ tone, tint }` pair, so a pane picks a *role* rather than
+pairing two tokens by hand. That is the move `CHIP_TONES` made for `OutlineChip`
+one release earlier and for the same reason: **nothing in this repo can see a
+bad token PAIRING.** `check:style` reads literals; the contrast registry's
+coverage guard matches prefixes these names miss. `--status-offline` on
+`--danger-bg` looked reasonable at three call sites and was below AA at all
+three. `ALERT_DANGER` survives as an alias because `InlineAlert`'s default
+parameter reads it, and a default is where a rename fails silently.
+
+**Why not `atoms.jsx`:** `NotificationStrip` imports atoms, so an atom importing
+the strip's geometry is a cycle — which is why `InlineAlert` approximates the
+mark-to-text gap with `SP.base` and says so at its site. A component file has no
+such problem and takes the real numbers.
+
+**Why not `BannerRows`:** that is bound to `useRevealRows`, an arrival/departure
+lifecycle for rows that come and go while you watch. These lists are static and
+already sit inside a `Reveal` that animates the whole panel. Pointing a per-item
+lifecycle at a list only ever shown or hidden WHOLE is the mistake the strip's
+date change taught, in miniature.
+
+**`AvailBanner` moved out of `atoms.jsx`** into its own file in the same commit,
+because it is one of the eight panes and therefore needs `AlertPanel` — atoms →
+AlertPanel → NotificationStrip → atoms is the cycle above. On the merits it was
+never an atom: it holds clickable suggestion chips and branches four ways on its
+input. Its message is now the section title and its alternatives are rows, which
+is what they are — the heading states the problem, the rows offer ways out. The
+time chips keep their fill deliberately: DESIGN.md's outline treatment is for a
+chip standing alone as a count or a disclosure, and these are actions.
+
+Build clean, **575 tests**, `check:style` OK, lint **0 errors / 47 warnings**
+(identical to `main`).
+
+### Commit 5 — Blocked, Past bookings and No-shows become strip sections
+
+The three surfaces Patryk selected. Each was the banned label treatment; each is
+now an `AlertPanel`.
+
+**`BlockModal`'s Blocked list was the worst of the eight**, and for a second
+reason on top of the shape: it drew **one card per block** — own fill, own
+border, own bold "Blocked" heading, own 8px margin. Two blocks on one table
+rendered as two unrelated alarms when they are one fact about one table. That is
+the "N panes with N margins" `NotificationStrip` exists to collapse, reproduced
+inside a modal where the strip could not see it. It is now one pane, a
+`Blocked · N` header, and hairline-separated rows. `ClosedIcon` is the strip's
+own "Closed this day" mark — a blocked table and a closed day are the same
+statement at two scales, so they take the same mark.
+
+**The two history panels** (`histPanel`) had their `histTk` triple — bg, border,
+text, hand-paired from two token families — collapse to a single role name.
+Marks come from the status vocabulary rather than being chosen for these panels:
+past bookings ARE completed visits (`DoubleCheckIcon`, the completed mark) and
+no-shows take `NoShowIcon`, which the chip that discloses the panel already
+wears. Rows keep `--text-primary`; only the title is tinted, exactly as a strip
+section heads its own body. Both keep their v17.8.0 two-`Reveal` arrangement.
+
+Verified live in **both themes**, and structurally rather than by eye — the
+rendered pane reports `border-width: 0px`, `border-radius: 14px` (`R.card`), no
+hairline on the first row and `1px var(--border-soft)` on the rest, and row
+padding `4px 14px 4px 38px` where **38 = NOTIF_GUTTER** (14 + 15 + 9), i.e. the
+strip's own geometry arriving by import rather than by retyping. The two-Reveal
+switch was exercised in both directions.
+
+Build clean, **575 tests**, `check:style` OK, lint 0 errors / 47 warnings.
+
+### Commit 6 — the five remaining banned-shape panes
+
+Same treatment, five more surfaces: the booking form's duplicate-phone warning
+(`ClashIcon` — it *is* the double-booking the strip's own section reports, seen
+from inside the form about to create one), its closed-day banner (`ClosedIcon`,
+the mark the strip already uses for that fact), the kitchen-load panel's BUSY
+state, `AvailBanner`, and `LayoutSettings`' orphan-booking confirm.
+
+The closed-day banner lost its `textAlign:"center"` with its border — a strip
+section is left-aligned under its mark, and this is a one-line section with no
+rows, the shape `InlineAlert` established.
+
+**The kitchen panel keeps its calm state exactly as it was.** `--bg-soft` with a
+neutral border is an INFORMATION panel; only the busy branch is a notice, and
+the whole value of the strip shape is that it means "this needs your attention".
+Turning both into a semantic pane would have been consistency at the cost of the
+distinction.
+
+**And it turned up a ninth thing the pane sweep was not looking for.** The
+"Kitchen busy" chip was an `OutlineChip` written out by hand — pill radius,
+transparent fill, semantic bold text — with its ink from `--text-required` and
+its border from a hand-written `rgba(220,38,38,0.4)`. That is exactly the
+border-and-ink-from-unrelated-families defect v17.15.0 removed from the two real
+chips, surviving because **nothing scans for a chip that never imported the
+atom**. It was also a theme-INVARIANT ink (`#dc2626`) on a fill that inverts —
+the offline section's fault again — and measured **4.11:1 in light and 2.86:1 in
+dark**, below AA in both and worst in dark. It is `<OutlineChip tone="danger">`
+now: 7.08:1 / 7.27:1, border derived from the ink.
+
+Verified live in both themes: all eight panes reached in the running app — the
+blocked list (one and two blocks), both history panels, the duplicate-phone
+warning, the closed-day banner, the kitchen-busy panel, the orphan confirm, and
+`AvailBanner` (a 22-guest walk-in), the last of which reports `border-width: 0`,
+`border-radius: 14px` and ink `rgb(138,75,10)` / `rgb(253,186,116)` — the new
+warn pair flipping with its fill.
+
+One incidental finding worth recording, because it cost several attempts: the
+form's steppers fire on **`onPointerDown`, not `onClick`**, so a synthetic
+`click()` is silently inert on them. The app's own "a synthetic press is not a
+finger" lesson, met from the other side.
+
+Build clean, **575 tests**, `check:style` OK (including marker placement), lint
+0 errors / 47 warnings.
+
+### Docs
+
+`DESIGN.md` takes the design decisions (the two shipped replacements for the
+banned shape and how to choose between them, `ALERT_TONES`' role-not-tokens
+rule, the warn hue, and the `OutlineChip` warning below); `CLAUDE.md` takes the
+two new file-structure rows, the `AvailBanner` move, and two Gotchas;
+`GLOSSARY.md` gets the `AlertPanel` row. `ROADMAP.md` is deliberately unchanged
+— nothing pending was resolved, and the motion entry was assessed and deferred
+(all three of its items need a second copy of a stateful view mounted, or a new
+`useRevealRows`-style layer; none is patch-sized, and a user-visible motion
+change does not belong in a patch bump).
+
+**The `OutlineChip` warning is the generalisable finding of this version.** The
+sweep that fixed a shared atom found only the call sites that IMPORTED it. When
+you fix an atom, grep for its **SHAPE** — the radius, the transparent fill, the
+border width — as well as its name: `check:style` sees literals, the contrast
+registry sees registered PAIRS, and a lint rule sees imports, and none of the
+three can see a component someone typed out by hand.
+
+**Bundle:** main chunk 332.66 → 332.59 kB (89.77 → 89.83 kB gz, +60 B); CSS
+unchanged at 14.96 kB / 4.20 kB gz. Eight hand-written panes became one shared
+component and a role table, so the wash is expected.
+
+**One surface was checked and deliberately left**: `WalkinForm`'s
+"Selected: … / <status>" card. It is not the banned shape — the fill is the
+NEUTRAL `--bg-card`, with only the border and the status line tinted, which is
+the same information-panel/notice distinction the kitchen panel keeps. Measured
+anyway: 6.05:1 / 6.35:1 light, 9.16:1 / 11.00:1 dark.
+
+### Commit 7 — the panes arrive and leave, in both directions
+
+Patryk pointed at three surfaces appearing and vanishing by hard cut. The sweep
+that followed found six, all of the same kind: **a conditional block that toggles
+under the user's own action** and had no enter or exit.
+
+| Surface | Toggled by | Now |
+|---|---|---|
+| `WalkinForm` — Clear | tapping a table | `Presence` slide |
+| `WalkinForm` — `AvailBanner` + "Add to waitlist" | the deferred scan landing / a table tap | `Reveal` |
+| `BlockModal` — a blocked row | **Unblock** | `useRevealRows` + per-row `Reveal` |
+| `BlockModal` — the card, view ↔ add | "+ Add block" | `AutoHeight` |
+| `BookingFormModal` — the closed-day banner | changing the DATE | `Reveal` |
+| `LayoutSettings` — the two id-validation messages | **each keystroke** while renaming | `Reveal` |
+| `LayoutSettings` — the orphan-remove confirm | ✕ / Cancel | `Reveal` |
+
+**One of these corrects a judgement made in this same version.** Commit 4 argued
+the pane sweep's lists are static and so must NOT take `useRevealRows` — true of
+the two history panels, and **wrong for the blocked list**: Unblock removes a row
+in place, with the modal still open, whenever a table has more than one block.
+That is precisely the arrival/departure case the hook exists for, and it was the
+one list of the eight where the distinction went the other way. It takes the hook
+now, with `BannerRows`' hairline rule (`first` keys on the rows actually OPEN,
+not on the index in `renderIds`, or unblocking the first of two leaves the
+survivor wearing a line flush under the section header).
+
+`AutoHeight` sits in **both** of `BlockModal`'s `return`s at the same position,
+which is load-bearing: React reconciles the two by type, so one instance survives
+the mode flip and can measure across it. In one branch only it would unmount and
+the swap would still jump.
+
+Measured, not eyeballed, and **both directions every time** — the rule that
+exists because a one-way transition looks finished:
+
+- blocked row on Unblock: 135 → 86px over ~560ms, the departing row still
+  mounted throughout and unmounting at 640ms, i.e. *after* its collapse
+- view → add: 249 → 279px, eased
+- Clear on exit: `mgt-slide-out`, opacity 1.00 → 0.42 with a translate, then
+  unmount — not a class that sits there doing nothing
+- `AvailBanner` on exit: 122 → 0px over ~560ms
+- closed-day banner on enter: 0 → 64px over ~560ms
+
+**A comment was corrected in the same pass**: `BlockModal`'s "Back" is not the
+reverse of "+ Add block" — it calls `onClose`, so the add form's exit belongs to
+`ModalPresence`. The first draft of the `AutoHeight` note said otherwise.
+
+Deliberately NOT wrapped: `returnOfBanner`, whose condition is set when the form
+opens and never toggles while it is visible.
+
+### Commit 8 — four more banned triples, and why the first sweep missed them
+
+Re-running the audit with a **brace-balanced** scan instead of a line-based grep
+found four more, in four files:
+
+| Site | Was | Now |
+|---|---|---|
+| `WalkinForm` — the kitchen panel | the SECOND copy of the one fixed in commit 6, incl. the same 2.86:1 "Kitchen busy" chip | `AlertPanel` + `OutlineChip` |
+| `ManualModal` — "Will reassign:" | warn triple, titled list | `AlertPanel` + `SwapIcon` |
+| `LoginScreen` — the sign-in error | danger triple | `InlineAlert` (+ `role="alert"`, + a `Reveal` it never had) |
+| `ListView` — the overlap and no-table rows | two red pills | `InlineAlert` + `OverlapIcon` / `AssignIcon` |
+
+**The miss is the point.** Commit 6's grep matched `--warn-bg` and
+`--warn-border` on ONE line. `WalkinForm`'s kitchen panel spells them on two, so
+a byte-equivalent copy of both faults — the banned pane AND the below-AA chip —
+sat three files away and passed every check in the repo. That is the
+`OutlineChip` lesson this same version had already written down ("nothing scans
+for a chip that never imported the atom"), walked into again in the commit that
+wrote it, in its formatting-dependent form. The audit is a **brace-balanced
+scan** now, and it is in the commit body so the next person runs that one.
+
+Two decisions worth recording:
+
+- **`ListView`'s two rows gained MARKS, not just a shape.** The overlap row says
+  what the strip's Overlap section says, so it takes `OverlapIcon`; the "no table
+  assigned" row takes `AssignIcon`, the mark on the control that fixes it. They
+  were two red pills told apart only by wording. The overdue/soon distinction
+  stays a colour, because that is a matter of DEGREE within one fault, which is
+  what a tone is for.
+- **Three sites were checked and deliberately left**: `AvailBanner`'s time chips
+  (a tap target, not a label), and the armed-remove button in `Settings` and the
+  Prefer/Avoid toggle in `LayoutSettings` — both SELECTED-STATE CONTROLS. The ban
+  is on a notice encoding one signal three times; a control showing it is on is a
+  different thing, and every segmented control in the app does it this way.
+
+Final count for the version: **twelve** banned triples removed, from eight files.
+
+Verified live: BlockModal, List view and its cards all render; the audit now
+reports only the three documented exceptions.
+
+### Commit 9 — `/code-review` fixes
+
+Six findings, all fixed. Four of the six are the same shape: **a rule this
+version wrote down, then broke one file over.**
+
+**1. The departing row was handed the hairline the rule exists to withhold**
+(`BlockModal`). `first={i === 0}` where `i` is `visible.indexOf(id)` — which is
+**-1** for a row that has left `openIds` but is still mounted for its collapse.
+`-1 === 0` is false, so `AlertRow` drew a `borderTop` for the whole ~520ms,
+flush under the "Blocked" header: precisely the artefact the comment three lines
+above cites `BannerRows` for. `BannerRows` is safe because it spells the rule as
+`i > 0`, where -1 falls on the no-border side for free; re-expressing it as a
+`first` FLAG silently inverts the -1 case. It is `first={i < 1}` now, with the
+-1 case named. Measured: departing row 0px through the collapse; settled rows
+0px then 1px.
+
+**2. The kitchen panel discarded its own subtree on every busy↔calm flip**
+(`BookingFormModal` + `WalkinForm`). A ternary between `<AlertPanel>` and
+`<div>` changes the ELEMENT TYPE, so React threw the tree away and remounted —
+taking the suggestions `Reveal` with it, so the alternative-time chips vanished
+in a frame instead of collapsing. A **regression**: before this version the
+wrapper was one `<div>` whose styles changed, and the `Reveal` simply stayed.
+Both files now render ONE `AlertPanel` in both states, the calm one wearing the
+neutral pane through `tint`/`icon`/`title` overrides — which is what those props
+are for, and which additionally lets the fill cross-fade instead of cutting.
+Verified by holding a DOM reference across the flip: **same node**, background
+`--bg-soft` → `--warn-bg`.
+
+**3. `AlertPanel`'s header contradicted its own headline consumer.** It said
+these lists are static and that a per-item lifecycle is the wrong tool — while
+`BlockModal`, named twice in that header as the motivating case, had just taken
+`useRevealRows`. Rewritten as the actual decision procedure (rows that leave
+WITH the panel need nothing; rows that leave IN PLACE take the hook), with the
+two obligations that come with it, and an admission that the first version of
+this file asserted the wrong half.
+
+**4 & 5. Two more keystroke-triggered messages left as hard cuts**
+(`LayoutSettings`). The rename orphan-count warning sits directly ABOVE the two
+this version wrapped and fires on the same keypress — so one row could show two
+messages, one easing and one snapping. And the Add-a-table pair, which the
+wrapped comment literally describes itself as "mirroring", was the ORIGINAL: the
+first pass wrapped the mirror and left the thing it mirrors. Both wrapped.
+
+**6. `blockId` collided for duplicate blocks.** Nothing dedupes blocks, so
+14:00–16:00 entered twice on one table produced one React key for two rows. Now
+a duplicate-OCCURRENCE ordinal — deliberately not the array index, which would
+make every id positional and renumber every row after a middle removal, so
+`useRevealRows` would collapse-and-reopen rows nobody touched. A block with a
+unique field set always scores 0 and its id never moves. The matching
+data-layer defect (App's `removeBlock` filters on the same fields, so unblocking
+either duplicate drops both) is **recorded at the site and deliberately not
+fixed here** — it predates this version and does not belong inside a rendering
+change.
+
+Build clean, **575 tests**, `check:style` OK, lint 0 errors / 47 warnings.
+
+---
+
+## v17.15.3 — table blocks get a real id · the waitlist ghost gets an exit
+
+**Date:** 2026-08-26
+**Branch:** `fix/v17.15.3-block-ids-ghost-exit`
+**Scope:** two bug fixes and the ROADMAP hygiene that follows from them.
+**Behavioural change:** yes, twice — unblocking one of two identical table
+blocks no longer deletes both, and a waitlist ghost fades out instead of
+blinking. Both are corrections rather than features, hence a patch bump.
+
+### 1. A table block had no identity (commit 1/3)
+
+`App.jsx`'s `removeBlock` matched a block by its FIELD SET —
+`tableId`+`date`+`allDay`+`from`+`to` — and nothing dedupes blocks. Block one
+table for one range twice and the two entries agree on every one of those
+fields, so the filter matched both and **unblocking either dropped both**.
+
+The defect predates v17.15.2 and was found by that version's `/code-review`,
+which needed a per-block React key for `BlockModal`'s new `useRevealRows` list
+and had to give the ambiguity a name to work around it on screen. That
+workaround — a duplicate-occurrence ordinal — shipped, fixing the visible half
+and recording the data half at the site as deliberately unfixed. This is the
+data half.
+
+**`sanitizeBlock` / `sanitizeBlocks` (`booking-logic.js`)** mint `id: bl.id ||
+genId()`, the idiom `sanitize()` has always used for a booking. Three decisions
+worth keeping:
+
+- **Minted at READ time, with no migration pass.** `saveBlocks` writes the WHOLE
+  array, so the first add or remove after this ships persists every id in it —
+  the node self-heals, which is why there is no `connected` gate and no
+  `migratedRef` (the v15.5.0 bookings array→keyed migration needed both because
+  that node is written per-child). Verified live: DEV held **9 legacy id-less
+  blocks**, all of which were minted on read and came back byte-identical after
+  a reload, i.e. they had been persisted by an ordinary block write.
+- **A MINT, not a whitelist.** Copying `sanitize()`'s field-whitelist shape was
+  the obvious-looking move and would have been a data-loss bug: `bl.reason` is
+  read by `DaySheet` and written by nothing, and `allDay` is likewise read-only
+  legacy, so a whitelist would silently drop `reason` from any block in PROD
+  carrying one. Unknown fields pass through, and a test pins it.
+- **BOTH read sites.** The `tableBlocks` listener and `resync()` each carried
+  their own copy of the array-vs-object-vs-null shrug. A resync that skipped the
+  mint would hand the app id-less blocks after every sleep/wake — precisely when
+  the tablet has been shut since lunch.
+
+`sanitizeBlock` returns its INPUT when an id is already present, so a settled
+node keeps its per-block references across snapshots.
+
+`addBlock` stamps through that same function rather than calling `genId()`
+itself: ONE minting site, so a locally-added block has a stable identity before
+the Firebase echo lands. `BlockModal` loses `blockFields`, `blockIds` and ~35
+lines of commentary explaining the ordinal; `DaySheet` keys on `bl.id`.
+
+**Verified live in DEV**, which is the only place the interesting case exists:
+two identical blocks on table 3, unblock one → the other survives (it did not
+before), and the surviving row is the **same DOM node**, so `useRevealRows` sees
+one departure and no arrival instead of the collapse-and-reopen the ordinal
+caused. Ids identical across a reload. No React key warnings.
+
+Nine tests in `tests/booking-logic.test.js`. **No Firebase rules step** — `id`
+is a new field on an existing child of a node whose rule pair has no
+`.validate`, so this is rolling-safe.
+
+### 2. ROADMAP hygiene (commit 2/3)
+
+`ROADMAP.md` says in its own header that it holds pending work only, and was
+carrying a closed audit as if it were live. **The seven-pass review
+(2026-08-19) entry is deleted** — its heading already said "closed", v17.14.0
+emptied it across five versions, and the per-finding source of truth is
+`MGT_Bookings_SevenReview_2026-08-19/` in the context folder.
+
+Checked before deleting rather than after: the two items in its "do not
+re-flag" list that generalise beyond that audit are both already recorded
+where they belong — `DESIGN.md`:170–174 carries "44px is a FLOOR, not a
+target" with the reasoning, and `tests/contrast.test.js` carries the
+composite-the-real-paint-stack rule in three places. Nothing durable was lost.
+
+### 3. The waitlist ghost gets an exit (commit 3/3)
+
+A ghost arrived on `.mgt-appear` and left by blinking out. v17.8.0 called that
+asymmetry deliberate, and its argument is sound: a ghost vanishes when a real
+booking takes that table, so the eye belongs on the block that appeared. It
+covers **one of the four ways a ghost goes**. In the other three — the party
+leaves the waitlist, the clock crosses a quarter, the table gets blocked, the
+match moves to another table — nothing replaces it and it simply disappeared.
+
+**`.mgt-ghost-out` is `.mgt-appear`'s exact mirror.** No `from`, so it leaves
+from whatever opacity that ghost has (0.55, or 0.4 when `resh`) without the rule
+knowing the number — the same trick, reversed. Three decisions:
+
+- **`forwards`, where the entrance refuses fill.** Not an inconsistency: the
+  entrance refuses fill because pinning opacity forever kills `.mgt-hover-scale`
+  on an element that lives on, and a leaving node does not live on. Without it
+  the ghost snaps back to 0.55 for the ~20ms between the animation ending and
+  the hold unmounting it. Generalised into `DESIGN.md`: **no fill on an
+  entrance, `forwards` on an exit.**
+- **Named `-out`.** `tests/motion.test.js` scans `.mgt-*-out` and asserts each
+  runs shorter than `EXIT_MS`; the suffix buys that guard for free, and it now
+  covers six classes rather than five.
+- **On the ghost, not a `Presence` wrapper.** A wrapper's opacity would
+  *multiply* with the ghost's 0.55 — right by accident, and it re-specifies what
+  `.mgt-appear` was written to infer.
+
+**The lifecycle is `useRevealRows`, with no change to that hook.** The tracked
+identity is the CELL (waitlist id + separator + table id), not the ghost, so a
+match moving table 3 → table 5 reads as a departure on 3 and an arrival on 5.
+One call for the whole grid, never one per row. `resetKey={date}` is mandatory:
+a date change REPLACES the list, and without it stepping a day fades yesterday's
+ghosts under today's grid — the case v17.15.0 added `resetKey` for.
+
+Its `PRUNE_MS` is `REVEAL_EXIT_MS` (540ms) against a 240ms fade, so a departed
+cell outlives its animation by ~300ms. **Left alone deliberately** — those holds
+exist to stop a hold being SHORTER than its animation and truncating it, and
+over-holding an invisible inert node costs nothing.
+
+**A departing cell is INERT, all four ways**: `role` dropped, `aria-hidden`,
+`tabIndex -1`, `pointerEvents: none`. It outlives its fade, and would otherwise
+stay a focusable "Book this table" button for a party that just left the
+waitlist. `tests/a11y.test.js` gains a test asserting all four, proven against
+known-bad input.
+
+**The booking case still needs no special handling, and not by luck**: ghosts
+render BEFORE real blocks in the row, so a ghost fading under the block that
+replaced it is hidden by paint order (source order verified, line 1454 vs 1477).
+
+**Verified live**, measured rather than asserted. Entrance lands on 0.55, and on
+0.4 with the dashed edge for `resh`. On departure, at t=88ms the cell is on
+`mgt-ghost-out` still at 0.55 — starting from its own opacity, not jumping to 1
+— and already inert on all four attributes; 0.21 → 0.03 → 0.00 across ~240ms;
+holds at 0 through t=562 (that is `forwards`; without it, a snap back to 0.55);
+unmounts at 650ms. Date change: the ghost is dropped in the same frame, never
+faded. Reduce-motion: both directions collapse to `1e-06s` and it still unmounts
+cleanly with no stuck node.
+
+**Doc consequence caught in passing:** `DESIGN.md`'s "fix the exit at the same
+time as the entrance" bullet pointed at `ROADMAP.md` for "the three surfaces
+v17.15.0 left one-way". Deleting that entry would have left a dangling
+reference, so the bullet now names the **two** that remain, says why they are
+structural (a cross-fade needs two copies of a stateful view mounted, which
+collides with App's singleton view state) and points at `REFACTOR_LOG.md` —
+they are decisions, not pending work.
+
+Build clean, **585 tests**, `check:style` OK, lint 0 errors / 47 warnings. Main
+bundle 89.84 → 90.08 kB gz.
+
+### `/code-review` fixes (commit 4/3)
+
+Three findings, none critical; all fixed on Patryk's call.
+
+**1. `leaving` meant "not yet opened", which an ARRIVING ghost also is.** It was
+derived from `!ghostOpenIds.has(k)`, and `useRevealRows` adds a newcomer to
+`renderIds` one commit BEFORE its rAF opener adds it to `openIds` — the hook's
+own header says so. So every ghost that arrived after mount painted one frame on
+the EXIT keyframe: full 0.55 opacity, `role` dropped, `aria-hidden`,
+`pointerEvents:none` — then `mgt-appear` restarted it from 0. A pop, then a
+fade, which is the opposite of the entrance this version exists to pair. First
+mount was exempt (the initializer seeds `openIds` from `ids`), which is why the
+harness runs that began with a reload never showed it.
+
+Caught by reading the hook's contract, then **confirmed with a MutationObserver**
+before being reported: frame 0 was `{cls:"mgt-ghost-out", op:0.55, role:null,
+aria-hidden:"true"}`. It is `leaving={!cell}` now — absence from the live cell
+map is what departure actually means, `cell` was already computed on the line
+above, and it is also right on the opposite edge (a cell that has just left
+starts fading in the same commit instead of waiting for the openIds removal).
+After: frame 0 is `{cls:"mgt-appear", op:0, role:"button"}`.
+
+**2. `sanitizeBlock` discarded its own mint on a falsy-but-present id.**
+`Object.assign({id:genId()}, bl)` puts the mint in the TARGET, so `""`, `0`,
+`null` and an explicit `undefined` all overwrote it — the branch that exists to
+mint an id handed back the unusable one it had just rejected. Unreachable from
+any current writer (`addBlock` routes through this same function and RTDB cannot
+store null), but the failure it would produce is this version's own bug back
+again: two blocks sharing a falsy id make `removeBlock`'s `bl.id !== block.id`
+drop BOTH, and `BlockModal` and `DaySheet` key their rows on it. Now
+`Object.assign({}, bl, {id: genId()})`, with all four falsy values pinned in a
+test.
+
+**3. A ghost that left while HOLDING focus.** Going inert means `aria-hidden`,
+and focused-plus-hidden is a state assistive tech is not required to make sense
+of; then it unmounts and focus drops to `<body>`, putting a keyboard user back
+at the top of the document. Reachable: Tab onto a ghost to consider it and the
+match evaporates before you press Enter. A layout effect now hands focus to the
+grid scroller, which takes `tabIndex={-1}` — the `<main tabIndex={-1}>`
+skip-link pattern, programmatically focusable and never in the tab order — with
+`preventScroll`, because focusing a horizontal scroller otherwise yanks the grid
+sideways. `.mgt-tl-scroll:focus` is ringless for `main:focus`'s reason: a
+container is not a control, and a ring there could only ever appear as an
+unexplained box after a ghost vanished. Verified live: focus lands on
+`DIV.mgt-tl-scroll` rather than being lost.
+
+Three new guards in `tests/a11y.test.js` and one in `tests/booking-logic.test.js`,
+each proven against known-bad input. **588 tests**, build clean, `check:style` OK,
+lint 0 errors.
+

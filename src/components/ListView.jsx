@@ -34,8 +34,8 @@ import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC } from "../lib
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins, describeBooking } from "../lib/booking-logic";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
-import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, Reveal, useFlip } from "./atoms";
-import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon } from "./Icons";
+import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
+import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon } from "./Icons";
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
 // that changes status plays a colour wipe of its OLD status colour. Keyed by id,
@@ -318,29 +318,32 @@ export const ListView = memo(function ListView({
           <SmallTag label={"stayed " + stayed + " min"} style={{ background: "var(--bg-soft)", color: "var(--text-secondary)", border: "1px solid var(--border-soft)" }} />
         ) : null;
 
+        // v17.15.2 (follow-up): the eleventh and twelfth banned triples. Both
+        // are one-line notices inside the card, which is InlineAlert's shape.
+        //
+        // The mark also does real work here. This row says the same thing the
+        // strip's Overlap section says — a seated party predicted to run into
+        // the next booking — so it takes OverlapIcon; the row below says the
+        // booking has NO table, so it takes AssignIcon, the mark on the control
+        // that fixes it. Two different faults that were both a red pill before.
+        // The overdue/soon distinction stays a colour because it is a matter of
+        // DEGREE within one fault, which is what a tone is for.
         const warnEl = warn ? (
-          <div style={{
-            fontSize: T.body, fontWeight: FW.bold, marginBottom: 8,
-            padding: "6px 10px", borderRadius: R.pill,
-            background: warn.overdue ? "var(--danger-bg)" : "var(--warn-bg)",
-            color: warn.overdue ? "var(--danger-text)" : "var(--warn-text)",
-            border: "1px solid " + (warn.overdue ? "var(--danger-border)" : "var(--warn-border)")
-          }}>
+          <InlineAlert
+            tone={warn.overdue ? ALERT_TONES.danger.tone : ALERT_TONES.warn.tone}
+            tint={warn.overdue ? ALERT_TONES.danger.tint : ALERT_TONES.warn.tint}
+            icon={OverlapIcon}
+            style={{ marginBottom: 8, padding: "6px 10px" }}>
             {warn.overdue
               ? "Overdue — next booking (" + warn.next + ") at " + warn.nextTime + " is waiting"
               : "Next booking (" + warn.next + ") at " + warn.nextTime + " in " + warn.gap + " min"}
-          </div>
+          </InlineAlert>
         ) : null;
 
         const conflictEl = (b._conflict && b.status !== "completed") ? (
-          <div style={{
-            fontSize: T.body, color: "var(--danger-text)", fontWeight: FW.bold, marginBottom: 8,
-            background: "var(--danger-bg)",
-            border: "1px solid var(--danger-border)",
-            borderRadius: R.pill, padding: "6px 10px"
-          }}>
+          <InlineAlert icon={AssignIcon} style={{ marginBottom: 8, padding: "6px 10px" }}>
             No table assigned — use manual assignment.
-          </div>
+          </InlineAlert>
         ) : null;
 
         const manualTag = (b._manual && !isLocked(b)) ? (

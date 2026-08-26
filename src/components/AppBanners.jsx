@@ -111,7 +111,22 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, in
 
   if (!isOnline) out.push({
     id: "offline",
-    tone: "var(--status-offline)", tint: "var(--app-offline-bg)",
+    // v17.15.2: was --status-offline, and it is the THIRD section to have worn
+    // it. v17.15.0 measured that token on --danger-bg and corrected loadFail
+    // and writeError; this sibling was two lines away and kept it, on a fill
+    // that inverts the same way — 3.13:1 in light, 3.90:1 in dark, i.e. below
+    // AA in EITHER theme rather than in one.
+    //
+    // It also painted the section HEADER red while this section's own body text
+    // (below) was already --app-offline-text amber: two colours for one
+    // message, in the one place the strip promises a section is headed on the
+    // same terms as its body. --app-offline-text is the token made for this
+    // fill and flips with it: 6.26:1 / 9.61:1.
+    //
+    // The connection DOT keeps --status-offline. That is not an inconsistency:
+    // the dot sits on the neutral header, a surface that does not flip out from
+    // under it, which is precisely the rule this change applies here.
+    tone: "var(--app-offline-text)", tint: "var(--app-offline-bg)",
     icon: OfflineIcon,
     title: "Working offline", count: 1,
     node: body(

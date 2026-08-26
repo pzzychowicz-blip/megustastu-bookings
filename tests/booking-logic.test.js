@@ -21,6 +21,7 @@ import {
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
   stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
+  sanitizeBlock, sanitizeBlocks,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 
@@ -986,5 +987,101 @@ describe("describeBooking", () => {
   it("treats any other option object as the default", () => {
     expect(describeBooking(b, {})).toBe(describeBooking(b));
     expect(describeBooking(b, null)).toBe(describeBooking(b));
+  });
+});
+
+// ── Table-block identity (v17.15.3) ───────────────────────────────────────────
+// The defect: `removeBlock` matched a block by its field set, and nothing
+// dedupes blocks — so two identical blocks were indistinguishable and
+// unblocking either dropped BOTH. These pin the mint that replaced it.
+describe("sanitizeBlock / sanitizeBlocks", () => {
+  const base = { tableId: "3", date: "2026-08-26", allDay: false, from: "14:00", to: "16:00" };
+
+  it("mints an id on a block that has none", () => {
+    const out = sanitizeBlock(base);
+    expect(typeof out.id).toBe("string");
+    expect(out.id.length).toBeGreaterThan(0);
+  });
+
+  it("MINTS over a falsy-but-present id, rather than handing it back", () => {
+    // /code-review: as `Object.assign({id:genId()}, bl)` the mint sat in the
+    // TARGET, so "" / 0 / null / an explicit undefined all overwrote it and the
+    // branch that exists to mint an id returned the unusable one it had just
+    // rejected. Two blocks sharing a falsy id would then make removeBlock's
+    // `bl.id !== block.id` drop BOTH — this version's own bug, back again.
+    for (const bad of ["", 0, null, undefined]) {
+      const out = sanitizeBlock(Object.assign({}, base, { id: bad }));
+      expect(out.id, "id " + JSON.stringify(bad) + " must be replaced").toBeTruthy();
+      expect(typeof out.id).toBe("string");
+      expect(out.tableId, "the rest of the block survives the mint").toBe("3");
+    }
+    // ...and two such blocks are then distinguishable, which is the whole point.
+    const a = sanitizeBlock(Object.assign({}, base, { id: "" }));
+    const b = sanitizeBlock(Object.assign({}, base, { id: "" }));
+    expect(a.id).not.toBe(b.id);
+  });
+
+  it("KEEPS an id that is already there, and returns the same object", () => {
+    const withId = Object.assign({ id: "keepme" }, base);
+    const out = sanitizeBlock(withId);
+    expect(out.id).toBe("keepme");
+    // Identity, not just equality: a settled node must keep its per-block
+    // references across snapshots or every consumer re-renders on every read.
+    expect(out).toBe(withId);
+  });
+
+  it("is a MINT, not a whitelist — unknown fields survive", () => {
+    // `reason` is read by DaySheet and written by nothing; `allDay` is likewise
+    // read-only legacy. A sanitize() -shaped whitelist would silently drop them.
+    const out = sanitizeBlock(Object.assign({}, base, { reason: "deep clean", allDay: true }));
+    expect(out.reason).toBe("deep clean");
+    expect(out.allDay).toBe(true);
+    expect(out.from).toBe("14:00");
+    expect(out.to).toBe("16:00");
+    expect(out.tableId).toBe("3");
+  });
+
+  it("gives two IDENTICAL blocks two DIFFERENT ids", () => {
+    // The whole point. These two agree on every field the old matcher compared.
+    const out = sanitizeBlocks([Object.assign({}, base), Object.assign({}, base)]);
+    expect(out).toHaveLength(2);
+    expect(out[0].id).not.toBe(out[1].id);
+  });
+
+  it("removing one duplicate by id leaves exactly one", () => {
+    const out = sanitizeBlocks([Object.assign({}, base), Object.assign({}, base)]);
+    const next = out.filter((bl) => bl.id !== out[0].id);
+    expect(next).toHaveLength(1);
+    expect(next[0].id).toBe(out[1].id);
+    // ...and it is still a real block, not a husk.
+    expect(next[0].tableId).toBe("3");
+    expect(next[0].from).toBe("14:00");
+  });
+
+  it("accepts the object shape RTDB returns for non-sequential keys", () => {
+    const out = sanitizeBlocks({ a: Object.assign({}, base), b: Object.assign({}, base) });
+    expect(out).toHaveLength(2);
+    expect(out[0].id).not.toBe(out[1].id);
+  });
+
+  it("returns [] for an absent node, matching both read sites", () => {
+    expect(sanitizeBlocks(null)).toEqual([]);
+    expect(sanitizeBlocks(undefined)).toEqual([]);
+    expect(sanitizeBlocks([])).toEqual([]);
+  });
+
+  it("drops holes rather than minting ids for them", () => {
+    // RTDB arrays are sparse; .filter(Boolean) was in both read sites before.
+    expect(sanitizeBlocks([null, Object.assign({}, base), undefined])).toHaveLength(1);
+    expect(sanitizeBlock(null)).toBe(null);
+    expect(sanitizeBlock("nope")).toBe(null);
+  });
+
+  it("stays compatible with getBlockSlots", () => {
+    // The consumer that matters: minted blocks must still produce slots.
+    const out = sanitizeBlocks([Object.assign({}, base)]);
+    const slots = getBlockSlots(out, "2026-08-26");
+    expect(slots).toHaveLength(1);
+    expect(slots[0].tables).toEqual(["3"]);
   });
 });

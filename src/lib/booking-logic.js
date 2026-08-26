@@ -214,6 +214,52 @@ export function histEntry(action,user){return {at:new Date().toISOString(),by:us
 export function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=orig.phone||"";var formPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var origDep=Math.max(0,Number(orig.deposit)||0);var formDep=Math.max(0,Number(f.deposit)||0);if(origDep!==formDep) ch.push("deposit "+origDep+"→"+formDep+" €");var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
 export function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var vals=Object.values(arr);return vals.map(sanitize).filter(Boolean);}return arr.map(sanitize).filter(Boolean);}
 
+// ── Table-block identity (v17.15.3) ───────────────────────────────────────────
+// A block gets a real `id` the way a booking does (`sanitize` above reads
+// `b.id||genId()`), because until v17.15.3 it had none and `removeBlock` matched
+// on the field set instead — tableId+date+allDay+from+to. Nothing dedupes
+// blocks, so blocking one table for one range TWICE produced two entries
+// agreeing on every one of those fields, and unblocking either DROPPED BOTH.
+// v17.15.2 worked around the visible half (a duplicate-occurrence ordinal, so at
+// least each row on screen targeted the right block) and recorded the data half
+// as still broken; this is that half.
+//
+// Minted at READ time, and deliberately NOT written back by a migration pass.
+// `saveBlocks` writes the WHOLE array, so the first add or remove after this
+// ships persists every id in it — the node self-heals, which is why there is no
+// connected gate and no migratedRef here. The only cost is that a node never
+// written since the upgrade re-mints on each snapshot, and `tableBlocks`
+// snapshots only fire when blocks change, i.e. on the very write that ends it.
+//
+// A MINT, NOT A WHITELIST — do not "finish" this by copying `sanitize`'s shape
+// above. `reason` is read by DaySheet and written by nothing, and `allDay` is
+// likewise read-only legacy; a whitelist would silently drop `reason` from any
+// block in PROD that carries one. Unknown fields pass through untouched.
+//
+// Returns the SAME object when an id is already present, so a settled node keeps
+// its per-block references across snapshots.
+export function sanitizeBlock(bl){
+  if(!bl||typeof bl!=="object") return null;
+  // /code-review: the mint goes in the SOURCE, not the target. As
+  // `Object.assign({id:genId()},bl)` it was silently discarded whenever `bl`
+  // carried a falsy-but-PRESENT id — "" / 0 / null / an explicit undefined all
+  // overwrote it, so the branch that exists to mint an id handed back the
+  // unusable one it had just rejected. Unreachable from any current writer
+  // (addBlock routes through here, and RTDB cannot store null), but the failure
+  // it would produce is this version's own bug back again: two blocks sharing a
+  // falsy id make removeBlock's `bl.id !== block.id` drop BOTH, and BlockModal
+  // and DaySheet key their rows on it.
+  return bl.id?bl:Object.assign({},bl,{id:genId()});
+}
+// RTDB hands back an array only for sequential integer keys, an object otherwise
+// (and null for an absent node) — both read sites passed through the same
+// three-way shrug, so it lives here once.
+export function sanitizeBlocks(val){
+  if(!val) return [];
+  var arr=Array.isArray(val)?val:Object.values(val);
+  return arr.map(sanitizeBlock).filter(Boolean);
+}
+
 // ── Table classification ──────────────────────────────────────────────────────
 // v15.0.0: indoor classification is data-driven via the layout config's zones
 // (ZONE_OF), not the legacy id.startsWith("i") convention — so a re-zoned or
