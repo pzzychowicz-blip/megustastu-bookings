@@ -35,7 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
-import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, T, FW, H, IC } from "../lib/constants";
+import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, M, T, FW, H, IC } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
@@ -46,7 +46,8 @@ import {
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence, OutlineChip } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
-import { AlertPanel, AlertRow } from "./AlertPanel";
+import { AlertPanel } from "./AlertPanel";
+import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { WaitIcon, AlertIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
@@ -274,31 +275,41 @@ export function WalkinForm({
   // exactly as it was), and the "Kitchen busy" chip was an `OutlineChip` typed
   // out by hand, with theme-INVARIANT `--text-required` on a fill that inverts
   // — 4.11:1 in light, 2.86:1 in dark.
-  const wKitchenBody = (
-    <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-        <span>
-          <span style={{ fontWeight: FW.bold }}>Starting at this time: </span>
-          {wKitchenStarts + " booking" + (wKitchenStarts !== 1 ? "s" : "")
-            + " · " + wKitchenGuests + " guest" + (wKitchenGuests !== 1 ? "s" : "")}
-        </span>
-        {wKitchenBusy ? <OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip> : null}
+  //
+  // /code-review: ONE element type across both states, never a ternary between
+  // an AlertPanel and a div. React reconciles by type, so the ternary discarded
+  // the whole subtree on every busy<->calm flip and took the suggestions
+  // `Reveal` with it — the chips vanished in a frame instead of collapsing,
+  // a REGRESSION on the single div this used to be. `AlertPanel` takes
+  // tone/tint overrides for exactly this, and the shared element also lets the
+  // tint cross-fade. Mirrors BookingFormModal's copy line for line.
+  const wKitchenSection = (
+    <AlertPanel
+      role="warn"
+      icon={wKitchenBusy ? AlertIcon : null}
+      title={wKitchenBusy ? "Kitchen may be busy" : null}
+      tint={wKitchenBusy ? undefined : "var(--bg-soft)"}
+      style={{ marginBottom: 14, transition: "background-color " + M.move,
+        ...(wKitchenBusy ? null : { border: "1px solid var(--border-soft)", paddingTop: 10 }) }}>
+      {/* Indented under the title only when there IS one; the calm state has no
+          mark to line up under, so it takes the pane's own padding. */}
+      <div style={{
+        padding: wKitchenBusy ? "4px " + NOTIF_PAD_X + "px 4px " + NOTIF_GUTTER + "px" : "0 " + NOTIF_PAD_X + "px",
+        fontSize: T.body, color: wKitchenBusy ? "var(--text-primary)" : S.muted
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <span>
+            <span style={{ fontWeight: FW.bold }}>Starting at this time: </span>
+            {wKitchenStarts + " booking" + (wKitchenStarts !== 1 ? "s" : "")
+              + " · " + wKitchenGuests + " guest" + (wKitchenGuests !== 1 ? "s" : "")}
+          </span>
+          {wKitchenBusy ? <OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip> : null}
+        </div>
+        {/* v15.8.0 cont.4: the suggestion sub-panel eases in/out via Reveal — the same
+            effect as the Summary panel. */}
+        <Reveal show={!!wKitchenSugBlock}>{wKitchenSugBlock}</Reveal>
       </div>
-      {/* v15.8.0 cont.4: the suggestion sub-panel eases in/out via Reveal — the same
-          effect as the Summary panel. */}
-      <Reveal show={!!wKitchenSugBlock}>{wKitchenSugBlock}</Reveal>
-    </>
-  );
-  const wKitchenSection = wKitchenBusy ? (
-    <AlertPanel role="warn" icon={AlertIcon} title="Kitchen may be busy" style={{ marginBottom: 14 }}>
-      <AlertRow first>{wKitchenBody}</AlertRow>
     </AlertPanel>
-  ) : (
-    <div style={{
-      padding: "10px 14px", borderRadius: R.card,
-      border: "1px solid var(--border-soft)", background: "var(--bg-soft)",
-      marginBottom: 14, fontSize: T.body, color: S.muted
-    }}>{wKitchenBody}</div>
   );
 
   // ── Stepper button style (size + duration +/-) ──

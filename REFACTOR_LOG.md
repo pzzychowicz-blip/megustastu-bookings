@@ -14964,3 +14964,59 @@ Final count for the version: **twelve** banned triples removed, from eight files
 
 Verified live: BlockModal, List view and its cards all render; the audit now
 reports only the three documented exceptions.
+
+### Commit 9 — `/code-review` fixes
+
+Six findings, all fixed. Four of the six are the same shape: **a rule this
+version wrote down, then broke one file over.**
+
+**1. The departing row was handed the hairline the rule exists to withhold**
+(`BlockModal`). `first={i === 0}` where `i` is `visible.indexOf(id)` — which is
+**-1** for a row that has left `openIds` but is still mounted for its collapse.
+`-1 === 0` is false, so `AlertRow` drew a `borderTop` for the whole ~520ms,
+flush under the "Blocked" header: precisely the artefact the comment three lines
+above cites `BannerRows` for. `BannerRows` is safe because it spells the rule as
+`i > 0`, where -1 falls on the no-border side for free; re-expressing it as a
+`first` FLAG silently inverts the -1 case. It is `first={i < 1}` now, with the
+-1 case named. Measured: departing row 0px through the collapse; settled rows
+0px then 1px.
+
+**2. The kitchen panel discarded its own subtree on every busy↔calm flip**
+(`BookingFormModal` + `WalkinForm`). A ternary between `<AlertPanel>` and
+`<div>` changes the ELEMENT TYPE, so React threw the tree away and remounted —
+taking the suggestions `Reveal` with it, so the alternative-time chips vanished
+in a frame instead of collapsing. A **regression**: before this version the
+wrapper was one `<div>` whose styles changed, and the `Reveal` simply stayed.
+Both files now render ONE `AlertPanel` in both states, the calm one wearing the
+neutral pane through `tint`/`icon`/`title` overrides — which is what those props
+are for, and which additionally lets the fill cross-fade instead of cutting.
+Verified by holding a DOM reference across the flip: **same node**, background
+`--bg-soft` → `--warn-bg`.
+
+**3. `AlertPanel`'s header contradicted its own headline consumer.** It said
+these lists are static and that a per-item lifecycle is the wrong tool — while
+`BlockModal`, named twice in that header as the motivating case, had just taken
+`useRevealRows`. Rewritten as the actual decision procedure (rows that leave
+WITH the panel need nothing; rows that leave IN PLACE take the hook), with the
+two obligations that come with it, and an admission that the first version of
+this file asserted the wrong half.
+
+**4 & 5. Two more keystroke-triggered messages left as hard cuts**
+(`LayoutSettings`). The rename orphan-count warning sits directly ABOVE the two
+this version wrapped and fires on the same keypress — so one row could show two
+messages, one easing and one snapping. And the Add-a-table pair, which the
+wrapped comment literally describes itself as "mirroring", was the ORIGINAL: the
+first pass wrapped the mirror and left the thing it mirrors. Both wrapped.
+
+**6. `blockId` collided for duplicate blocks.** Nothing dedupes blocks, so
+14:00–16:00 entered twice on one table produced one React key for two rows. Now
+a duplicate-OCCURRENCE ordinal — deliberately not the array index, which would
+make every id positional and renumber every row after a middle removal, so
+`useRevealRows` would collapse-and-reopen rows nobody touched. A block with a
+unique field set always scores 0 and its id never moves. The matching
+data-layer defect (App's `removeBlock` filters on the same fields, so unblocking
+either duplicate drops both) is **recorded at the site and deliberately not
+fixed here** — it predates this version and does not belong inside a rendering
+change.
+
+Build clean, **575 tests**, `check:style` OK, lint 0 errors / 47 warnings.

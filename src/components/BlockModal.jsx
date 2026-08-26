@@ -29,8 +29,35 @@ import { useRevealRows } from "../hooks/useRevealRows";
 // an ASCII unit separator for `undoKey`'s reason — "-" and ":" are both
 // reachable from the data (a table id, a "HH:MM"), and a collision here would
 // make two different blocks share one Reveal.
-function blockId(bl) {
+//
+// /code-review: those fields are NOT unique. Nothing dedupes blocks, so
+// blocking 14:00–16:00 twice on one table gives two entries agreeing on every
+// field — one React key for two rows, only one of which renders. So a
+// DUPLICATE-OCCURRENCE ordinal is appended: 0 for the first entry with a given
+// field set, 1 for the next, and so on.
+//
+// Deliberately the occurrence ordinal and NOT the array index. An index makes
+// every id positional, so unblocking a middle row would renumber every row
+// after it — `useRevealRows` would read them as simultaneous departures and
+// arrivals and collapse-then-reopen rows nobody touched. With the ordinal, a
+// block whose field set is unique (the only case that occurs in practice)
+// always scores 0 and its id never moves.
+//
+// (The REMOVAL of a duplicate is ambiguous too, and has been since v14.4.1:
+// App's `removeBlock` filters on the same field set, so unblocking either drops
+// both. That is a data-layer defect, left alone rather than fixed silently
+// inside a rendering change.)
+function blockFields(bl) {
   return [bl.tableId, bl.date, bl.allDay ? "1" : "0", bl.from || "", bl.to || ""].join("\u001f");
+}
+function blockIds(list) {
+  const seen = Object.create(null);
+  return list.map(function (bl) {
+    const f = blockFields(bl);
+    const n = seen[f] || 0;
+    seen[f] = n + 1;
+    return f + "\u001f#" + n;
+  });
 }
 
 export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose, onDirty }) {
@@ -52,8 +79,9 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
   //
   // Called at the TOP, never inside the `mode === "view"` branch — that branch
   // returns early, so a hook there would change the hook count between renders.
-  const { renderIds, openIds } = useRevealRows(existing.map(blockId));
-  const byId = new Map(existing.map((bl) => [blockId(bl), bl]));
+  const ids = blockIds(existing);
+  const { renderIds, openIds } = useRevealRows(ids);
+  const byId = new Map(existing.map((bl, i) => [ids[i], bl]));
 
   // v17.8.0 unsaved-changes guard. The From/To times are component-local, so
   // this modal REPORTS its dirtiness up rather than App reaching in — the same
@@ -147,11 +175,17 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
             // borderTop flush under the section header: a line appearing
             // exactly where the design says none.
             const visible = renderIds.filter((x) => openIds.has(x));
+            // `i < 1`, not `i === 0`: a DEPARTING row is not in `visible`, so
+            // indexOf gives -1, and `-1 === 0` is false — which would hand it
+            // the very borderTop this block exists to withhold. BannerRows
+            // spells the same rule as `i > 0 ? border : none`, where -1 falls
+            // on the no-border side for free; writing it as a `first` flag
+            // inverts that, so the -1 case has to be named.
             const i = visible.indexOf(id);
             return (
               <Reveal key={id} show={openIds.has(id)}>
                 {bl ? (
-                  <AlertRow first={i === 0} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <AlertRow first={i < 1} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                     <span style={{ color: "var(--danger-text)", fontWeight: FW.semi }}>
                       {bl.allDay ? hourLabel(OPEN) + " – " + hourLabel(GRID_CLOSE) : bl.from + " – " + bl.to}
                     </span>

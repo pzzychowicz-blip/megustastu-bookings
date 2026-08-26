@@ -442,11 +442,17 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   </>
                 )}
               </div>
-              {editing && renameOrph > 0 ? (
-                <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>
-                  {renameOrph} upcoming booking{renameOrph === 1 ? " still references" : "s still reference"} “{t.id}” — they won’t follow the rename.
-                </div>
-              ) : null}
+              {/* v17.15.2 /code-review: eased like the two messages below it. It
+                  is the same keystroke-triggered warning in the same row, and
+                  wrapping only its neighbours left two adjacent messages fired
+                  by one keypress animating differently. */}
+              <Reveal show={!!(editing && renameOrph > 0)}>
+                {editing && renameOrph > 0 ? (
+                  <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 4 }}>
+                    {renameOrph} upcoming booking{renameOrph === 1 ? " still references" : "s still reference"} “{t.id}” — they won’t follow the rename.
+                  </div>
+                ) : null}
+              </Reveal>
               {/* Why the save tick is disabled — mirrors the Add form's messages (v15.0.1).
                   v17.15.2: Reveal-wrapped. These appear and vanish KEYSTROKE BY
                   KEYSTROKE as you rename a table, which is the most
@@ -507,11 +513,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 style={{ ...ACT_BTN, opacity: newIdValid ? 1 : 0.4, cursor: newIdValid ? "pointer" : "not-allowed" }}>Add</button>
               <button onClick={function () { setAdding(false); setNewId(""); }} className="mgt-hover-scale" title="Cancel" style={X_BTN}><CloseIcon size={IC.control} /></button>
             </div>
-            {newIdTrim && newIdTrim.indexOf("|") >= 0 ? (
-              <div style={{ width: "100%", fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)" }}>A table id can’t contain “|”.</div>
-            ) : newIdTrim && idSet[newIdTrim] ? (
-              <div style={{ width: "100%", fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)" }}>A table “{newIdTrim}” already exists.</div>
-            ) : null}
+            {/* v17.15.2 /code-review: the ORIGINAL of the pair the rename row
+                mirrors — and the first pass wrapped the mirror and left this.
+                Same keystroke trigger, same ease. */}
+            <Reveal show={!!(newIdTrim && (newIdTrim.indexOf("|") >= 0 || idSet[newIdTrim]))}>
+              {newIdTrim && newIdTrim.indexOf("|") >= 0 ? (
+                <div style={{ width: "100%", fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)" }}>A table id can’t contain “|”.</div>
+              ) : newIdTrim && idSet[newIdTrim] ? (
+                <div style={{ width: "100%", fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)" }}>A table “{newIdTrim}” already exists.</div>
+              ) : null}
+            </Reveal>
           </div>
         ) : (
           <button onClick={function () { setAdding(true); }} className="mgt-hover-scale"

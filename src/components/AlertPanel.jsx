@@ -40,13 +40,27 @@
 // the real numbers — which is also why `AvailBanner` moved out of atoms.jsx in
 // the same commit: it is one of the eight panes and needed this.
 //
-// ── Why this is not BannerRows ───────────────────────────────────────────────
-// `BannerRows` is bound to `useRevealRows`, an arrival/departure lifecycle for
-// rows that come and go while you watch. These lists are static — a block list,
-// a guest's past visits — and already sit inside a `Reveal` that animates the
-// whole panel. Pointing a per-item lifecycle at a list that is only ever shown
-// or hidden WHOLE is the mistake CLAUDE.md records from the notification
-// strip's date change, in miniature.
+// ── Why this is not BannerRows, and when a caller still needs its hook ───────
+// `BannerRows` is bound to `useRevealRows` AND owns the strip's row geometry.
+// This component owns only the geometry, which is what makes it usable for
+// both kinds of list — the lifecycle is the caller's decision, taken per pane:
+//
+//   • Rows that only ever appear and disappear WITH the whole panel — a
+//     guest's past visits, a no-show history, the alternatives under
+//     "no tables available" — need nothing. The `Reveal` around the panel
+//     animates them, and attaching a per-item lifecycle to a list that is only
+//     ever shown or hidden whole is the mistake CLAUDE.md records from the
+//     notification strip's date change, in miniature.
+//   • Rows that depart IN PLACE while the surface stays open take
+//     `useRevealRows` themselves. `BlockModal` is the one such pane: Unblock
+//     removes a row with the modal still on screen. See its call site for the
+//     two things that come with the hook — hold the departed row mounted so its
+//     `Reveal` can collapse, and compute `first` from the rows actually OPEN
+//     (`i < 1`), or the departing row is handed the hairline this component
+//     exists to withhold.
+//
+// (v17.15.2 first shipped this header asserting the first bullet for ALL of
+// them, `BlockModal` included, and was corrected in the same version.)
 //
 // Props:
 //   role     — a key of ALERT_TONES ("danger" | "warn" | "success" | "offline").

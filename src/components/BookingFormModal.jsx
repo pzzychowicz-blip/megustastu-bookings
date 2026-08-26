@@ -36,7 +36,7 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
@@ -47,6 +47,7 @@ import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustome
 import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
 import { AlertPanel, AlertRow } from "./AlertPanel";
+import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
@@ -529,13 +530,27 @@ export function BookingFormModal({
   //     the offline section: measured 4.11:1 in light and 2.86:1 in dark,
   //     below AA in both and worst in dark. `tone="danger"` gives 7.08 / 7.27
   //     with the border derived from the ink.
-  const kitchenBody=<><div
-      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></>;
-  const kitchenSection=kitchenLoad?(kitchenBusy
-    ?<AlertPanel role="warn" icon={AlertIcon} title="Kitchen may be busy" style={{marginBottom:14}}>
-      <AlertRow first>{kitchenBody}</AlertRow>
-     </AlertPanel>
-    :<div style={{padding:"10px 14px",borderRadius:R.card,border:"1px solid var(--border-soft)",background:"var(--bg-soft)",marginBottom:14,fontSize: T.body,color:S.muted}}>{kitchenBody}</div>):null;
+  //
+  // (3) /code-review: ONE element type across both states, not a ternary between
+  //     an AlertPanel and a div. React reconciles by type, so the ternary threw
+  //     the whole subtree away on every busy<->calm flip — taking the
+  //     suggestions `Reveal` with it, so the chips vanished in a frame instead
+  //     of collapsing. That was a REGRESSION: before this version the wrapper
+  //     was a single div whose styles changed, and the Reveal simply stayed.
+  //     `AlertPanel` takes tone/tint overrides precisely so a caller can render
+  //     a non-default fill, so the calm state is the same component wearing the
+  //     neutral pane — which additionally lets the tint cross-fade.
+  const kitchenSection=kitchenLoad?<AlertPanel
+    role="warn"
+    icon={kitchenBusy?AlertIcon:null}
+    title={kitchenBusy?"Kitchen may be busy":null}
+    tint={kitchenBusy?undefined:"var(--bg-soft)"}
+    style={{marginBottom:14,transition:"background-color "+M.move,...(kitchenBusy?null:{border:"1px solid var(--border-soft)",paddingTop:10})}}>
+    {/* Indented under the title only when there IS one; the calm state has no
+        mark to line up under, so it takes the pane's own padding. */}
+    <div style={{padding:kitchenBusy?"4px "+NOTIF_PAD_X+"px 4px "+NOTIF_GUTTER+"px":"0 "+NOTIF_PAD_X+"px",fontSize: T.body,color:kitchenBusy?"var(--text-primary)":S.muted}}><div
+      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>
+  </AlertPanel>:null;
 
   // v17.6.0: which statuses the edit form offers.
   //
