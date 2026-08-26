@@ -14846,3 +14846,32 @@ finger" lesson, met from the other side.
 
 Build clean, **575 tests**, `check:style` OK (including marker placement), lint
 0 errors / 47 warnings.
+
+### Docs
+
+`DESIGN.md` takes the design decisions (the two shipped replacements for the
+banned shape and how to choose between them, `ALERT_TONES`' role-not-tokens
+rule, the warn hue, and the `OutlineChip` warning below); `CLAUDE.md` takes the
+two new file-structure rows, the `AvailBanner` move, and two Gotchas;
+`GLOSSARY.md` gets the `AlertPanel` row. `ROADMAP.md` is deliberately unchanged
+— nothing pending was resolved, and the motion entry was assessed and deferred
+(all three of its items need a second copy of a stateful view mounted, or a new
+`useRevealRows`-style layer; none is patch-sized, and a user-visible motion
+change does not belong in a patch bump).
+
+**The `OutlineChip` warning is the generalisable finding of this version.** The
+sweep that fixed a shared atom found only the call sites that IMPORTED it. When
+you fix an atom, grep for its **SHAPE** — the radius, the transparent fill, the
+border width — as well as its name: `check:style` sees literals, the contrast
+registry sees registered PAIRS, and a lint rule sees imports, and none of the
+three can see a component someone typed out by hand.
+
+**Bundle:** main chunk 332.66 → 332.59 kB (89.77 → 89.83 kB gz, +60 B); CSS
+unchanged at 14.96 kB / 4.20 kB gz. Eight hand-written panes became one shared
+component and a role table, so the wash is expected.
+
+**One surface was checked and deliberately left**: `WalkinForm`'s
+"Selected: … / <status>" card. It is not the banned shape — the fill is the
+NEUTRAL `--bg-card`, with only the border and the status line tinted, which is
+the same information-panel/notice distinction the kitchen panel keeps. Measured
+anyway: 6.05:1 / 6.35:1 light, 9.16:1 / 11.00:1 dark.

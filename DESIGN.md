@@ -415,9 +415,46 @@ explaining why is usually the one to read.
   `--danger-bg` inverts: 3.03:1 in light against 4.31:1 in dark, below AA and a
   42% swing. `--danger-text` gives 7.09:1 / 8.05:1, and `AppBanners`' two danger
   sections were corrected to match. The pairing is a registered `FILLS` entry
-  now; **register the warn and suggest panes when you add them**, because
-  neither the coverage guard (its prefixes miss `--danger-bg`) nor `check:style`
-  (it sees literals, not token pairings) can see this class of fault.
+  now. **v17.15.2 registered the warn, suggest and offline panes**, which is
+  what that sentence asked for — and finding them is what turned up the offline
+  section still on `--status-offline` at **3.13:1 light / 3.90:1 dark**, below
+  AA in *both*, the third section to wear that token and the one v17.15.0
+  missed. Neither the coverage guard (its prefixes miss `--danger-bg`) nor
+  `check:style` (it sees literals, not token pairings) can see this class of
+  fault, so the registry is the only thing that can. Add the next pane there
+  when you add the pane.
+
+- **A semantic pane picks a ROLE, not two tokens** (v17.15.2). `ALERT_TONES`
+  (`atoms.jsx`) names `danger` · `warn` · `success` · `offline`, each a
+  `{ tone, tint }` pair. The pairing is the thing that goes wrong: two tokens
+  that must agree are one decision, and hand-pairing them put `--status-offline`
+  on `--danger-bg` at three separate call sites, all below AA, all looking
+  perfectly reasonable. Exactly the move `CHIP_TONES` made for `OutlineChip` one
+  release earlier.
+
+- **The banned shape has TWO shipped replacements, and which one you use is
+  decided by whether the notice has rows.** `InlineAlert` (`atoms.jsx`) is one
+  sentence; **`AlertPanel` + `AlertRow`** (`AlertPanel.jsx`, v17.15.2) is a
+  titled list — tinted pane, no border, mark and title in the tone, transparent
+  rows separated by hairlines and indented to `NOTIF_GUTTER` so row text starts
+  under the TITLE rather than under the mark. Both are the notification strip's
+  section shape, so a fault looks the same wherever it fires. `AlertPanel` is
+  not in `atoms.jsx` because it imports the strip's geometry and the strip
+  imports atoms; that is also why `AvailBanner` moved to its own file.
+
+  It is **not** `BannerRows`, which is bound to `useRevealRows`, an
+  arrival/departure lifecycle for rows that come and go while you watch. These
+  lists are static inside a `Reveal` that animates the whole panel.
+
+- **The warn ink is hue 30 in BOTH themes** (v17.15.2). It was `#9a3412` in
+  light — hue 15, one point of lightness from `--danger-text`'s hue 0 — against
+  `#fdba74` in dark, hue 31 with ten points of lightness. Warn and danger were
+  twice as separable in dark as in light, so **which role a colour meant
+  depended on the theme**; reported as "No-shows is orange in dark and red in
+  light". Light is now `#8a4b0a`, the dark ink's own hue. `--app-warn-solid`
+  follows it: it was the same hex, it is theme-invariant, and App's "Kitchen may
+  be busy" pairs that solid with a `--warn-text` heading in the same modal. One
+  role, one hue, whatever treatment carries it.
 
 - **Three label treatments (v17.8.0), and context decides which.** **SOLID**
   where a tag competes inside a busy row (ListView's `manual`/`locked`/`★`/the
@@ -436,7 +473,16 @@ explaining why is usually the one to read.
   chip read as a different component per theme. The tokens are declared ONCE —
   each references an ink that already flips, so a dark override would re-create
   the hand-maintained pair. Build chips with `OutlineChip` (`atoms.jsx`);
-  `as="button"` is the disclosure kind. The banned shape is the fourth one: pale semantic fill
+  `as="button"` is the disclosure kind. **v17.15.2: build one with `OutlineChip`
+  or it will drift, and nothing will tell you.** The booking form's
+  "Kitchen busy" chip was this component written out by hand — pill radius,
+  transparent fill, semantic bold text — and it carried BOTH faults the atom
+  exists to prevent: its ink and its border came from unrelated families
+  (`--text-required` against a hand-written `rgba(220,38,38,0.4)`), and that ink
+  is theme-INVARIANT on a fill that inverts, measuring 4.11:1 in light and
+  **2.86:1 in dark**. It survived v17.15.0 because **nothing scans for a chip
+  that never imported the atom** — that sweep found the two that had.
+  The banned shape is the fourth one: pale semantic fill
   *plus* a matching border *plus* bold text in a third shade, which encodes one
   signal three times. The outline chip drops the fill and earns its extra border
   pixel; do not "restore" the fill.
