@@ -5,6 +5,7 @@
 // the two booking actions — Open booking (blue) and Cancel booking (red).
 
 import { Reveal, mkSolidBtn, OutlineChip } from "../atoms";
+import { AlertPanel, AlertRow } from "../AlertPanel";
 import { useCollapseState } from "../../hooks/useCollapseState";
 import { BLOCK_BG, R, T, FW, M, IC, H } from "../../lib/constants";
 import { LinkIcon } from "./WaIcons";
@@ -67,21 +68,36 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
   // The --wa-teal-* family is deleted: teal was a fourth green nobody had
   // registered, and a token whose NAME disagrees with its value is exactly how
   // a surface stays outside its own family's audit.
+  // v17.15.3: the last pane in the module still wearing the v17.8.0 idiom —
+  // soft tint plus a 1px NEUTRAL --border-card. Now that AlertPanel carries
+  // both `action` and `onHeaderClick`, this card is the same shape as the
+  // intent banner and takes the same atom, so every semantic pane in the module
+  // is drawn by one component. The LinkIcon becomes the section mark and the
+  // "Linked booking" label its title; the status chip and the collapsed summary
+  // ride in the title node, since they belong to the heading rather than to the
+  // controls. Behaviour is unchanged: the whole header is still the toggle.
   return (
-    <div style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--suggest-bg-soft)", border: "1px solid var(--border-card)", marginBottom: 8, boxShadow: "var(--shadow-soft)" }}>
-      <div onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
-        <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)", textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><LinkIcon size={IC.inline} />Linked booking</span>
+    <AlertPanel
+      role="success"
+      icon={LinkIcon}
+      onHeaderClick={toggle}
+      style={{ marginBottom: 8, boxShadow: "var(--shadow-soft)" }}
+      title={<span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
+        <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)", textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0 }}>Linked booking</span>
         <span style={{ fontSize: T.micro, padding: "2px 8px", borderRadius: R.pill, background: statusColor, color: "var(--text-on-accent)", fontWeight: FW.bold, textTransform: "capitalize", flexShrink: 0 }}>{booking.status}</span>
-        {collapsed ? <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span> : <span style={{ flex: 1 }} />}
+        {collapsed ? <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span> : null}
+      </span>}
+      action={<>
         {actionBtns}
         <span style={{ color: "var(--success-text)", flexShrink: 0, display: "inline-flex", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.control} /></span>
-      </div>
+      </>}
+    >
       <Reveal show={!collapsed}>
-        <div style={{ marginTop: 8 }}>
+        <AlertRow first>
           <div style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.semi, marginBottom: 2 }}>{booking.name || "(no name)"}</div>
           <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>{(booking.date || "?") + " · " + booking.time + " · " + booking.size + " pax" + (booking.tables && booking.tables.length ? " · tables " + booking.tables.join(", ") : "")}</div>
-        </div>
+        </AlertRow>
       </Reveal>
-    </div>
+    </AlertPanel>
   );
 }
