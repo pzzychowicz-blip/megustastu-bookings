@@ -21,7 +21,7 @@
 import { useState, useRef, useEffect } from "react";
 import { ref, onValue, set, get, update, goOnline } from "firebase/database";
 import { db } from "../firebase";
-import { sanitizeAll, toMins, bookingsAfterAction, histEntry } from "../lib/booking-logic";
+import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry } from "../lib/booking-logic";
 import { hoursFor } from "../lib/constants";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError, onDbError } from "../lib/dbError";
@@ -240,8 +240,10 @@ export function usePersistence({ autoOptimizer, nowMins }){
       setBookingsReady(true); // v17.3.0: a resync pull also proves data is present
       if(firstLoadCount.current===null) firstLoadCount.current=bArr.length;
       const tVal=snaps[1].val();
-      if(tVal){const a=Array.isArray(tVal)?tVal:Object.values(tVal);setTableBlocks(a.filter(Boolean));}
-      else setTableBlocks([]);
+      // v17.15.3: the SECOND block read site, and it has to mint ids too — a
+      // resync that skipped it would hand the app id-less blocks after every
+      // sleep/wake, i.e. exactly when the tablet has been closed all afternoon.
+      setTableBlocks(sanitizeBlocks(tVal));
       // v16.0.0: re-anchor the blocks revision-CAS ref to the true server value —
       // the rev onValue may have been dead through the stale window.
       const rVal=snaps[2].val();
@@ -478,8 +480,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
   useEffect(function(){
     const unsub=onValue(ref(db,"tableBlocks"),function(snap){
       const val=snap.val();
-      if(val){const arr=Array.isArray(val)?val:Object.values(val);setTableBlocks(arr.filter(Boolean));}
-      else setTableBlocks([]);
+      // v17.15.3: sanitizeBlocks mints a `id` on any block that has none, so
+      // removeBlock can match on identity instead of on the field set (which two
+      // duplicate blocks share — see booking-logic). It also owns the array-vs-
+      // object-vs-null shrug this line used to spell out, shared with resync().
+      setTableBlocks(sanitizeBlocks(val));
       blocksLoaded.current=true;
       clearStale(); // v15.2.0: a live server snapshot proves the local data is current
     },dbError("tableBlocks"));

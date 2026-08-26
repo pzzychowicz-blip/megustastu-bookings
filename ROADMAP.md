@@ -14,25 +14,6 @@ session and keeping it in sync.
 
 ## Deferred
 
-### Duplicate-block deletion is ambiguous (found in v17.15.2's `/code-review`)
-
-Nothing dedupes table blocks — blocking a table for the same date/time range
-twice produces two entries agreeing on every field `App.jsx`'s `removeBlock`
-matches on (`tableId`/`date`/`allDay`/`from`/`to`). It filters on that field
-set, so **unblocking either of two identical blocks drops both**. Predates
-v17.15.2; found only because `BlockModal`'s v17.15.2 rewrite needed a per-block
-React key and had to give the ambiguity a name (`blockFields`/`blockIds` in
-`BlockModal.jsx`) to work around it in the UI. The UI-side fix (a
-duplicate-occurrence ordinal, so at least each row targets the RIGHT block on
-screen) shipped; `removeBlock`'s matching still can't tell the two apart at the
-data layer, so removing one still removes both under the hood.
-
-Fix: give a block a real id at creation (`genId()`, the pattern `bookings` and
-`recurring` occurrences already use) instead of matching on its field set.
-Small, self-contained, no schema migration (blocks are a whole-array node) —
-but it touches `addBlock`/`removeBlock` and the `tableBlocks` shape, so it's its
-own patch rather than a rider on an unrelated version.
-
 ### The seven-pass review (2026-08-19) — closed
 
 **v17.14.0 emptied it.** The 2026-08-19 seven-pass review shipped across five

@@ -15020,3 +15020,68 @@ fixed here** — it predates this version and does not belong inside a rendering
 change.
 
 Build clean, **575 tests**, `check:style` OK, lint 0 errors / 47 warnings.
+
+---
+
+## v17.15.3 — table blocks get a real id · the waitlist ghost gets an exit
+
+**Date:** 2026-08-26
+**Branch:** `fix/v17.15.3-block-ids-ghost-exit`
+**Scope:** two bug fixes and the ROADMAP hygiene that follows from them.
+**Behavioural change:** yes, twice — unblocking one of two identical table
+blocks no longer deletes both, and a waitlist ghost fades out instead of
+blinking. Both are corrections rather than features, hence a patch bump.
+
+### 1. A table block had no identity (commit 1/3)
+
+`App.jsx`'s `removeBlock` matched a block by its FIELD SET —
+`tableId`+`date`+`allDay`+`from`+`to` — and nothing dedupes blocks. Block one
+table for one range twice and the two entries agree on every one of those
+fields, so the filter matched both and **unblocking either dropped both**.
+
+The defect predates v17.15.2 and was found by that version's `/code-review`,
+which needed a per-block React key for `BlockModal`'s new `useRevealRows` list
+and had to give the ambiguity a name to work around it on screen. That
+workaround — a duplicate-occurrence ordinal — shipped, fixing the visible half
+and recording the data half at the site as deliberately unfixed. This is the
+data half.
+
+**`sanitizeBlock` / `sanitizeBlocks` (`booking-logic.js`)** mint `id: bl.id ||
+genId()`, the idiom `sanitize()` has always used for a booking. Three decisions
+worth keeping:
+
+- **Minted at READ time, with no migration pass.** `saveBlocks` writes the WHOLE
+  array, so the first add or remove after this ships persists every id in it —
+  the node self-heals, which is why there is no `connected` gate and no
+  `migratedRef` (the v15.5.0 bookings array→keyed migration needed both because
+  that node is written per-child). Verified live: DEV held **9 legacy id-less
+  blocks**, all of which were minted on read and came back byte-identical after
+  a reload, i.e. they had been persisted by an ordinary block write.
+- **A MINT, not a whitelist.** Copying `sanitize()`'s field-whitelist shape was
+  the obvious-looking move and would have been a data-loss bug: `bl.reason` is
+  read by `DaySheet` and written by nothing, and `allDay` is likewise read-only
+  legacy, so a whitelist would silently drop `reason` from any block in PROD
+  carrying one. Unknown fields pass through, and a test pins it.
+- **BOTH read sites.** The `tableBlocks` listener and `resync()` each carried
+  their own copy of the array-vs-object-vs-null shrug. A resync that skipped the
+  mint would hand the app id-less blocks after every sleep/wake — precisely when
+  the tablet has been shut since lunch.
+
+`sanitizeBlock` returns its INPUT when an id is already present, so a settled
+node keeps its per-block references across snapshots.
+
+`addBlock` stamps through that same function rather than calling `genId()`
+itself: ONE minting site, so a locally-added block has a stable identity before
+the Firebase echo lands. `BlockModal` loses `blockFields`, `blockIds` and ~35
+lines of commentary explaining the ordinal; `DaySheet` keys on `bl.id`.
+
+**Verified live in DEV**, which is the only place the interesting case exists:
+two identical blocks on table 3, unblock one → the other survives (it did not
+before), and the surviving row is the **same DOM node**, so `useRevealRows` sees
+one departure and no arrival instead of the collapse-and-reopen the ordinal
+caused. Ids identical across a reload. No React key warnings.
+
+Nine tests in `tests/booking-logic.test.js`. **No Firebase rules step** — `id`
+is a new field on an existing child of a node whose rule pair has no
+`.validate`, so this is rolling-safe.
+

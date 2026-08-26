@@ -105,8 +105,8 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
       {dayBlocks.length ? (
         <div style={{ marginBottom: 12, fontSize: T.body }}>
           <div style={{ fontWeight: FW.bold, marginBottom: 4 }}>Blocked tables</div>
-          {dayBlocks.map(function (bl, i) {
-            return <div key={i}>{bl.tableId + " — " + (bl.allDay ? "all day" : (bl.from + "–" + bl.to)) + (bl.reason ? " (" + bl.reason + ")" : "")}</div>;
+          {dayBlocks.map(function (bl) {
+            return <div key={bl.id}>{bl.tableId + " — " + (bl.allDay ? "all day" : (bl.from + "–" + bl.to)) + (bl.reason ? " (" + bl.reason + ")" : "")}</div>;
           })}
         </div>
       ) : null}
