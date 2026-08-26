@@ -45,6 +45,7 @@ import {
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
+import { useRevealRows } from "../hooks/useRevealRows";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
 import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
@@ -930,7 +931,16 @@ function BlockBar({ bl, totalMins }) {
 //
 // Hoisted to module scope per CLAUDE.md's inline-sub-component rule (a component
 // defined inside another's body is a new TYPE every render → full remount).
-function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
+function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false }) {
+  // v17.15.3: a LEAVING cell is still mounted (useRevealRows holds it so this
+  // fade can finish) but its ghost is already gone from waitGhosts, so `g` is
+  // undefined. Cache the last real one, the `last.current` idiom Presence uses
+  // — BlockModal gets the same thing free because Reveal caches its children,
+  // and there is no Reveal here.
+  const last = useRef(null);
+  if (g) last.current = g;
+  g = g || last.current;
+  if (!g) return null;
   const gS = toMins(g.time);
   // Clamp to the grid's right edge, exactly as the turnaround tail does — an
   // absolutely-positioned child past GRID_CLOSE still counts toward the
@@ -965,30 +975,48 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
       // mgt-appear: a ghost is a SUGGESTION that comes and goes as the day's
       // availability shifts — a party joins the waitlist, a table completes, the
       // clock crosses a quarter — so it should arrive rather than blink into
-      // existence next to blocks that never move on their own. Deliberately
-      // asymmetric: there is no matching fade-out, because a ghost disappears
-      // when a REAL booking takes that table, and the eye should be on the block
-      // that just appeared, not on the proposal it replaced.
-      className="mgt-hover-scale mgt-appear mgt-blk"
+      // existence next to blocks that never move on their own.
+      //
+      // v17.15.3: and it now LEAVES the same way. v17.8.0 called the asymmetry
+      // deliberate, on the grounds that a ghost disappears when a real booking
+      // takes that table and the eye belongs on the block that appeared. That
+      // argument is sound and covers exactly ONE of the four ways a ghost goes;
+      // in the other three — the party leaves the waitlist, the clock crosses a
+      // quarter, the table gets blocked, the match moves to another table —
+      // nothing replaces it and it simply blinked out.
+      //
+      // The booking case still needs no special handling, and not by luck: the
+      // ghosts in a row are rendered BEFORE the real blocks (see the row below),
+      // so a ghost fading underneath the block that replaced it is hidden by
+      // paint order. Measured in DEV, not assumed.
+      //
+      // mgt-ghost-out is mgt-appear's exact mirror — see index.css for why it
+      // alone takes `forwards`.
+      className={"mgt-blk " + (leaving ? "mgt-ghost-out" : "mgt-hover-scale mgt-appear")}
       data-wg={g.id}
       /* v17.12.0: a ghost is a proposal you can accept, so it is a button like
          the blocks around it. Its name says WAITING first — the dimming and the
          ⏳ are the only things separating it from a real booking visually, and
          neither survives being read aloud. */
-      role="button"
-      tabIndex={0}
-      aria-label={"Waiting: " + g.name + ", " + g.size + (g.size === 1 ? " guest" : " guests")
+      /* v17.15.3: a departing ghost is INERT. For the length of its hold it
+         would otherwise still be a focusable button offering to book a party
+         that may have just left the waitlist. */
+      role={leaving ? undefined : "button"}
+      tabIndex={leaving ? -1 : 0}
+      aria-hidden={leaving ? true : undefined}
+      aria-label={leaving ? undefined
+        : "Waiting: " + g.name + ", " + g.size + (g.size === 1 ? " guest" : " guests")
         + ", " + g.time + (g.resh ? ", fits after re-optimising" : "") + ". Book this table."}
-      onKeyDown={(e) => {
+      onKeyDown={leaving ? undefined : (e) => {
         if (e.key !== "Enter" && e.key !== " ") return;
         e.preventDefault();
         onBook(g.id);
       }}
       /* Same as TimelineBlock above: keyboard-focusable, not pointer-focusable. */
       onMouseDown={(e) => { e.preventDefault(); }}
-      onMouseEnter={() => setGroupHover(true)}
-      onMouseLeave={() => setGroupHover(false)}
-      onClick={() => onBook(g.id)}
+      onMouseEnter={leaving ? undefined : () => setGroupHover(true)}
+      onMouseLeave={leaving ? undefined : () => setGroupHover(false)}
+      onClick={leaving ? undefined : () => onBook(g.id)}
       title={"Waiting: " + g.name + " (" + g.size + ") at " + g.time
         + (g.resh ? " — fits after re-optimising" : "") + ". Tap to book."}
       style={{
@@ -996,6 +1024,9 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook }) {
         position: "absolute", top: 3, height: (ROW_H - 8) + "px",
         left: pct(gS), width: Math.max((mins / totalMins) * 100, 0.3) + "%",
         background: BLOCK_BG.pending, borderRadius: 10, overflow: "hidden",   /* @canvas */
+        // v17.15.3: the other half of "inert while leaving" — the handlers are
+        // gone above, this stops it swallowing a press aimed at what is behind.
+        pointerEvents: leaving ? "none" : undefined,
         // Dims the real block, does not re-specify it — so it takes the pending
         // fill's ink too, or the v17.8.0 contrast pass would have fixed the
         // block and left its own ghost white-on-yellow.
@@ -1160,6 +1191,46 @@ export const TimelineView = memo(function TimelineView({
 
   const day = bookings.filter((b) => b.date === date && b.status !== "cancelled");
   const dayBlocks = blocks.filter((bl) => bl.date === date);
+
+  // ── v17.15.3: the waitlist ghost's departure ────────────────────────────────
+  // A ghost draws one CELL per matched table, so the tracked identity is the
+  // cell — waitlist id + table — not the ghost. That is what makes a match
+  // MOVING from table 3 to table 5 read correctly: a departure on 3 and an
+  // arrival on 5, which is exactly what it looks like on screen.
+  //
+  // The separator is the ASCII unit separator, written as the ESCAPE and never
+  // the raw byte (undoKey / clashRowId's rule — a raw control character is
+  // invisible in every editor, grep and diff). A table id cannot contain it.
+  //
+  // ONE hook call for the whole grid, deliberately not one per row: 13 rows
+  // would mean 13 independent lifecycles, and a two-table ghost would be
+  // tracked twice.
+  //
+  // `date` is the resetKey, and it is mandatory rather than tidy — a date
+  // change REPLACES the ghost list wholesale, which is the exact case v17.15.0
+  // added resetKey for. Without it, stepping to the next day fades yesterday's
+  // ghosts out under today's grid.
+  //
+  // Accepted, and stated rather than hidden: useRevealRows prunes at
+  // REVEAL_EXIT_MS (540ms) while this fade runs for --t-move (240ms), so a
+  // departed cell stays mounted ~300ms longer than it strictly needs. That is
+  // not the failure those holds guard against — they exist to stop a hold being
+  // SHORTER than its animation and truncating it. The extra node is invisible
+  // and inert (see WaitGhost's `leaving`), so the hook is left alone; if it ever
+  // matters the fix is a `speed` param mirroring Reveal's.
+  const GHOST_SEP = "\u001f";
+  const ghostCells = [];
+  waitGhosts.forEach((g) => {
+    (g.tables || []).forEach((t) => { ghostCells.push({ key: g.id + GHOST_SEP + t, table: t, g: g }); });
+  });
+  const { renderIds: ghostRenderIds, openIds: ghostOpenIds } = useRevealRows(
+    ghostCells.map((c) => c.key), date
+  );
+  const ghostByKey = new Map(ghostCells.map((c) => [c.key, c]));
+  // Rows read this: every cell still MOUNTED for this table, live or leaving.
+  const ghostKeysFor = (tableId) => ghostRenderIds.filter(
+    (k) => k.slice(k.indexOf(GHOST_SEP) + 1) === tableId
+  );
   const unassigned = day.filter((b) =>
     b.status !== "completed" && (!(b.tables || []).length || b._conflict)
   );
@@ -1379,11 +1450,21 @@ export const TimelineView = memo(function TimelineView({
         {tblBlocks.map((bl, i) => <BlockBar key={"blk" + i} bl={bl} totalMins={totalMins} />)}
         {/* v17.8.0: waitlist ghosts — rendered BEFORE the real blocks so a live
             booking always paints on top of a preview. */}
-        {waitGhosts.map((g) =>
-          (g.tables || []).includes(id)
-            ? <WaitGhost key={"wg" + g.id + id} g={g} pxPerMin={pxPerMin} totalMins={totalMins} onBook={onBookWait} />
-            : null
-        )}
+        {ghostKeysFor(id).map((k) => {
+          const cell = ghostByKey.get(k);
+          // A departed cell is no longer in ghostByKey — it renders from the
+          // snapshot WaitGhost cached, and `leaving` puts it on the fade out.
+          return (
+            <WaitGhost
+              key={"wg" + k}
+              g={cell ? cell.g : null}
+              leaving={!ghostOpenIds.has(k)}
+              pxPerMin={pxPerMin}
+              totalMins={totalMins}
+              onBook={onBookWait}
+            />
+          );
+        })}
         {/* v15.8.1: render each seated booking's dashed "ghost" (original-duration
             outline) IMMEDIATELY BEFORE its block, so the ghost mirrors EVERY cell
             effect: (1) reposition — same left/width + transform transition; (2) vertical

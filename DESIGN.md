@@ -1090,12 +1090,26 @@ around it, which the browser has already drawn.
   animated properties forever, which on a `.mgt-hover-scale` element means the
   lift never applies again. For the same reason it animates opacity only:
   nothing may own `transform`, because the hover and press rules do.
+- **Its exit is `.mgt-ghost-out`, and the fill-mode flips — deliberately**
+  (v17.15.3). Same mirror trick in reverse (no `from`, so it leaves from
+  whatever opacity the element has), but it takes **`forwards`** where the
+  entrance refuses fill. The rule underneath is about which nodes have a
+  future: an ARRIVING node lives on, so pinning its properties kills the
+  hover-lift; a LEAVING node does not, and without `forwards` it snaps back to
+  full strength for the gap between the animation ending and the hold
+  unmounting it (measured at ~20ms — `EXIT_MS` is `--t-move` + 20). So: no fill
+  on an entrance, `forwards` on an exit.
 - **Fix the exit at the same time as the entrance, always.** A one-way
   transition is the app's most common motion defect and the least visible one:
   it looks finished. Before adding an enter animation, decide what the exit is —
   and if the answer is "the node just unmounts", that is the bug, not the
-  design. The three surfaces v17.15.0 left one-way are recorded in `ROADMAP.md`
-  with the reason (each needs two copies of a stateful view mounted at once).
+  design. v17.15.0 left three surfaces one-way; v17.15.3 fixed the third (the
+  timeline's waitlist ghost). The **two** that remain are the view switch / date
+  change and the Settings tab body, and they are structural rather than
+  outstanding: a cross-fade needs two copies of a stateful view mounted at once,
+  which collides with App's singleton view state — the same collision that stops
+  Split View putting one view in both panes. Reasons in `REFACTOR_LOG.md`
+  (v17.15.0 and v17.15.3), not `ROADMAP.md`; they are decisions, not pending work.
 - **An element that must animate OUT needs its content held.** `Reveal` already
   caches its last truthy children for exactly this — pass `null` and it fades
   out what it was showing. Corollary that bit once: it only caches **truthy**

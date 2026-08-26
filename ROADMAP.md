@@ -40,32 +40,6 @@ Both are needed **before the sandbox ever points at PROD or goes
   `src/lib/customers.js` rather than keeping its own copies (the
   complementarity contract established in v16.0.0's customer layer).
 
-### The v17.15.0 motion sweep — what it deliberately left
-
-The sweep fixed every truncated exit in the app (see `REFACTOR_LOG.md`). Three
-one-way transitions were left alone, and all three for the same structural
-reason: each would need two copies of a stateful view mounted at once.
-
-- **The view switch and the date change** (`mgt-view-in-right`/`-left` and,
-  since v17.15.0, `mgt-view-fade` — none with an `-out` twin). A cross-slide or
-  cross-fade needs the outgoing view still mounted, and `CLAUDE.md` records that
-  two instances of one view fight over App's singleton state (`timelineZoom`,
-  `selectedListId`, `showFinished`) — the same collision that makes Split View
-  refuse to put one view in both panes. Sequencing them instead (fade out, then
-  in) would double the perceived latency of every date change, which is the
-  most-used control in the app.
-- **The Settings tab body** (`.mgt-fade-in`, no fade-out). Same shape: a
-  cross-fade needs both tab bodies mounted, which would double-register ids in
-  `SettingsContent`'s `reportDirty` Set and strand the unsaved-changes guard.
-- **The timeline's waitlist ghost** (`.mgt-appear`, no fade-out). This one is
-  argued at the site and may simply be right: a ghost disappears when a real
-  booking takes that table, and the eye should be on the block that appeared,
-  not the proposal it replaced. Worth revisiting only for the OTHER ways a
-  ghost can vanish — the party leaves the waitlist, the clock crosses a
-  quarter, the table gets blocked — where nothing replaces it and it simply
-  blinks out. Would need a `useRevealRows`-style layer to keep departed ghosts
-  alive.
-
 ## Ideas
 
 _(nothing pending)_

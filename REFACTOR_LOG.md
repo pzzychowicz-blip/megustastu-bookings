@@ -15099,3 +15099,71 @@ where they belong — `DESIGN.md`:170–174 carries "44px is a FLOOR, not a
 target" with the reasoning, and `tests/contrast.test.js` carries the
 composite-the-real-paint-stack rule in three places. Nothing durable was lost.
 
+### 3. The waitlist ghost gets an exit (commit 3/3)
+
+A ghost arrived on `.mgt-appear` and left by blinking out. v17.8.0 called that
+asymmetry deliberate, and its argument is sound: a ghost vanishes when a real
+booking takes that table, so the eye belongs on the block that appeared. It
+covers **one of the four ways a ghost goes**. In the other three — the party
+leaves the waitlist, the clock crosses a quarter, the table gets blocked, the
+match moves to another table — nothing replaces it and it simply disappeared.
+
+**`.mgt-ghost-out` is `.mgt-appear`'s exact mirror.** No `from`, so it leaves
+from whatever opacity that ghost has (0.55, or 0.4 when `resh`) without the rule
+knowing the number — the same trick, reversed. Three decisions:
+
+- **`forwards`, where the entrance refuses fill.** Not an inconsistency: the
+  entrance refuses fill because pinning opacity forever kills `.mgt-hover-scale`
+  on an element that lives on, and a leaving node does not live on. Without it
+  the ghost snaps back to 0.55 for the ~20ms between the animation ending and
+  the hold unmounting it. Generalised into `DESIGN.md`: **no fill on an
+  entrance, `forwards` on an exit.**
+- **Named `-out`.** `tests/motion.test.js` scans `.mgt-*-out` and asserts each
+  runs shorter than `EXIT_MS`; the suffix buys that guard for free, and it now
+  covers six classes rather than five.
+- **On the ghost, not a `Presence` wrapper.** A wrapper's opacity would
+  *multiply* with the ghost's 0.55 — right by accident, and it re-specifies what
+  `.mgt-appear` was written to infer.
+
+**The lifecycle is `useRevealRows`, with no change to that hook.** The tracked
+identity is the CELL (waitlist id + separator + table id), not the ghost, so a
+match moving table 3 → table 5 reads as a departure on 3 and an arrival on 5.
+One call for the whole grid, never one per row. `resetKey={date}` is mandatory:
+a date change REPLACES the list, and without it stepping a day fades yesterday's
+ghosts under today's grid — the case v17.15.0 added `resetKey` for.
+
+Its `PRUNE_MS` is `REVEAL_EXIT_MS` (540ms) against a 240ms fade, so a departed
+cell outlives its animation by ~300ms. **Left alone deliberately** — those holds
+exist to stop a hold being SHORTER than its animation and truncating it, and
+over-holding an invisible inert node costs nothing.
+
+**A departing cell is INERT, all four ways**: `role` dropped, `aria-hidden`,
+`tabIndex -1`, `pointerEvents: none`. It outlives its fade, and would otherwise
+stay a focusable "Book this table" button for a party that just left the
+waitlist. `tests/a11y.test.js` gains a test asserting all four, proven against
+known-bad input.
+
+**The booking case still needs no special handling, and not by luck**: ghosts
+render BEFORE real blocks in the row, so a ghost fading under the block that
+replaced it is hidden by paint order (source order verified, line 1454 vs 1477).
+
+**Verified live**, measured rather than asserted. Entrance lands on 0.55, and on
+0.4 with the dashed edge for `resh`. On departure, at t=88ms the cell is on
+`mgt-ghost-out` still at 0.55 — starting from its own opacity, not jumping to 1
+— and already inert on all four attributes; 0.21 → 0.03 → 0.00 across ~240ms;
+holds at 0 through t=562 (that is `forwards`; without it, a snap back to 0.55);
+unmounts at 650ms. Date change: the ghost is dropped in the same frame, never
+faded. Reduce-motion: both directions collapse to `1e-06s` and it still unmounts
+cleanly with no stuck node.
+
+**Doc consequence caught in passing:** `DESIGN.md`'s "fix the exit at the same
+time as the entrance" bullet pointed at `ROADMAP.md` for "the three surfaces
+v17.15.0 left one-way". Deleting that entry would have left a dangling
+reference, so the bullet now names the **two** that remain, says why they are
+structural (a cross-fade needs two copies of a stateful view mounted, which
+collides with App's singleton view state) and points at `REFACTOR_LOG.md` —
+they are decisions, not pending work.
+
+Build clean, **585 tests**, `check:style` OK, lint 0 errors / 47 warnings. Main
+bundle 89.84 → 90.08 kB gz.
+

@@ -1352,8 +1352,28 @@ main:focus { outline: none; }
    applies again. Opacity-only for the same reason — nothing here may own
    `transform`, because the hover and press rules do. */
 @keyframes mgt-appear { from { opacity: 0; } }
+/* v17.15.3: the ghost's EXIT, and the exact mirror of mgt-appear above — no
+   `from`, so it starts from whatever opacity that element already has (0.55,
+   or 0.4 when the match needs a reshuffle) without this rule knowing the
+   number. v17.8.0 left the entrance deliberately one-way, arguing a ghost
+   vanishes because a real booking took its table and the eye belongs on the
+   block that appeared. That covers ONE of the four ways a ghost goes: the
+   party leaves the waitlist, the clock crosses a quarter, the table gets
+   blocked, or the match moves to another table — and in each of those nothing
+   replaces it and it simply blinked out. The booking case still needs no
+   special handling, because ghosts paint UNDER real blocks, so a ghost fading
+   beneath the block that replaced it is occluded by paint order.
+   `forwards` HERE, where mgt-appear deliberately takes no fill: that rule
+   refuses fill because pinning opacity forever would kill the .mgt-hover-scale
+   lift on an element that lives on, and a leaving node does not live on —
+   without it the ghost would snap back to 0.55 for the ~20ms between the
+   animation ending and EXIT_MS unmounting it.
+   Named `-out` on purpose: tests/motion.test.js scans `.mgt-*-out` and asserts
+   each runs shorter than EXIT_MS, so the suffix buys the guard for free. */
+@keyframes mgt-ghost-out { to { opacity: 0; } }
 .mgt-fade-in { animation: mgt-fade-in var(--t-shift) var(--ease-out) both; }
 .mgt-appear  { animation: mgt-appear  var(--t-move) var(--ease-out); }
+.mgt-ghost-out { animation: mgt-ghost-out var(--t-move) var(--ease-out) forwards; }
 
 /* Accessibility + weak-hardware opt-out: collapse every animation/transition
    to ~instant when the OS requests reduced motion.

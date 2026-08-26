@@ -391,9 +391,32 @@ describe("the bookings themselves are reachable (WCAG 2.1.1, 4.1.2)", () => {
   });
 
   it("timeline blocks and waitlist ghosts are operable", () => {
-    expect(count(Timeline, /role="button"/g), "the block and the ghost").toBeGreaterThanOrEqual(2);
+    // The block's role is unconditional. The ghost's is gated on `leaving`
+    // (v17.15.3) — a departing ghost is held mounted purely so its fade can
+    // finish, and must not stay a focusable "Book this table" button for a
+    // party that may have just left the waitlist. Same shape as the floor-plan
+    // glyph's `activatable` gate below.
+    const roles = count(Timeline, /role="button"/g)
+      + count(Timeline, /role=\{leaving \? undefined : "button"\}/g);
+    expect(roles, "the block and the ghost").toBeGreaterThanOrEqual(2);
     has(Timeline, "Enter/Space", /if \(e\.key !== "Enter" && e\.key !== " "\) return;/,
       "routed through the same handler as a click so they inherit its didLong guard");
+  });
+
+  it("a DEPARTING waitlist ghost is inert, not merely invisible", () => {
+    // It outlives its own fade by design (useRevealRows prunes at
+    // REVEAL_EXIT_MS). All four have to hold together: without aria-hidden a
+    // screen reader still meets it, without tabIndex -1 Tab still lands on it,
+    // without dropping onClick a tap still books, and without pointerEvents
+    // none it still swallows a press aimed at the block behind it.
+    has(Timeline, "aria-hidden while leaving", /aria-hidden=\{leaving \? true : undefined\}/,
+      "removed from the a11y tree for the length of its hold");
+    has(Timeline, "not tabbable while leaving", /tabIndex=\{leaving \? -1 : 0\}/,
+      "Tab must not land on a ghost that is on its way out");
+    has(Timeline, "no click while leaving", /onClick=\{leaving \? undefined :/,
+      "a departing ghost must not book a party that already left the waitlist");
+    has(Timeline, "no pointer events while leaving", /pointerEvents: leaving \? "none" : undefined/,
+      "so it cannot swallow a press aimed at whatever is behind it");
   });
 
   it("floor-plan tables are operable and NAMED by their caller", () => {
