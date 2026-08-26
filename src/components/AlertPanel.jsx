@@ -70,6 +70,26 @@
 //   icon     — a component, not an element (it is rendered at IC.control here).
 //   title    — the section heading. Omit it for a pane that is only rows.
 //   count    — optional; rendered in the strip's dimmed count style.
+//   action   — optional trailing node in the HEADER row: a dismiss, a pair of
+//              buttons, a collapse chevron. Defaults to nothing, so a pane that
+//              does not pass it renders byte-for-byte as before.
+//              It exists because a titled pane whose header carries controls
+//              was otherwise forced to stay hand-written, and a hand-written
+//              pane is the thing this file was created to end — the module's
+//              two such panes were the last copies of the v17.8.0 idiom left.
+//              The strip's own sections already work this way (BannerRows puts
+//              a per-row dismiss last), so this is that arrangement one level
+//              up rather than a new idea.
+//   onHeaderClick — optional; makes the header row a collapse toggle. It comes
+//              with `action`, not instead of it: the module's intent banner is
+//              a titled pane whose header carries BOTH controls and a chevron,
+//              and converting it without this would have deleted an affordance
+//              inside a design refactor, which is the one thing a refactor may
+//              not do. Deliberately a plain onClick and NOT role="button":
+//              `action` renders controls inside this row, and ARIA makes a
+//              button's children presentational — the trap CLAUDE.md records
+//              from the timeline block. A caller wanting a keyboard-reachable
+//              toggle puts it in `action` as a real <button>.
 //   children — the rows. Wrap each in <AlertRow> to get the hairline.
 
 import { ALERT_TONES } from "./atoms";
@@ -91,7 +111,7 @@ export function AlertRow({ first, style, children }) {
   );
 }
 
-export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, count, style, children }) {
+export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, count, action, onHeaderClick, style, children }) {
   const t = ALERT_TONES[role] || ALERT_TONES.danger;
   const ink = tone || t.tone;
   const fill = tint || t.tint;
@@ -102,9 +122,10 @@ export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, cou
       ...(style || null)
     }}>
       {title ? (
-        <div style={{
+        <div onClick={onHeaderClick} style={{
           display: "flex", alignItems: "center", gap: SP.base,
-          padding: "0 " + NOTIF_PAD_X + "px", marginBottom: 6
+          padding: "0 " + NOTIF_PAD_X + "px", marginBottom: 6,
+          ...(onHeaderClick ? { cursor: "pointer", flexWrap: "wrap" } : null)
         }}>
           {/* Guarded on the prop rather than rendered bare: this eslint config
               does not count a JSX reference as a use, so a component read ONLY
@@ -120,6 +141,12 @@ export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, cou
           {count > 1 ? (
             <span style={{ fontSize: T.small, fontWeight: FW.bold, color: ink, opacity: 0.75, flexShrink: 0 }}>{count}</span>
           ) : null}
+          {/* Last in the row and flexShrink:0, matching where every dismiss in
+              the notification system already sits. `action` is a NODE rather
+              than a set of props because what goes here differs per pane — one
+              button, two, or a chevron — and enumerating those would put the
+              caller's layout decisions in this file. */}
+          {action ? <span style={{ display: "inline-flex", alignItems: "center", gap: SP.tight, flexShrink: 0 }}>{action}</span> : null}
         </div>
       ) : null}
       {children}

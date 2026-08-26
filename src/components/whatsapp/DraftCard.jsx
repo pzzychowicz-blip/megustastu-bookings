@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { Reveal, mkSolidBtn, OutlineChip, InlineAlert } from "../atoms";
+import { AlertPanel, AlertRow } from "../AlertPanel";
 import { clampConfidence } from "../../lib/whatsapp";
 import { R, T, FW, IC, M, H, RIM_SOLID } from "../../lib/constants";
 import { DraftIcon, WarnIcon } from "./WaIcons";
@@ -40,27 +41,30 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
     // dismiss in the notification system is the last item of its row, and the
     // absolute version needed a paddingRight fudge on the sibling to avoid it.
     return (
-      <div style={{ padding: "10px 14px", borderRadius: R.card, background: "var(--suggest-bg-soft)", border: "1px solid var(--border-card)", marginBottom: 12, boxShadow: "var(--shadow-soft)", display: "flex", alignItems: "flex-start", gap: 8 }}>
-        <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", height: 18, flexShrink: 0, color: "var(--success-text)" }}><CheckIcon size={IC.control} /></span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--success-text)" }}>Booking confirmed</div>
-          <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--success-text)", opacity: 0.85, marginTop: 2 }}>This request has been added to the bookings list.</div>
-        </div>
-        {/* 32×32, the size every other banner dismiss in the app already is
-            (LateBanner / OverlapBanner / WaitAvailBanner all sit at minHeight
-            32). What this replaced was `padding:"2px 4px"` on a 12px glyph — a
-            ~16px hit area, on a device that is only ever touched, for the only
-            control on the notice. `--r-pill` clamps to half the SHORTER side,
-            so equal width/height with padding:0 is what makes it an actual
-            circle rather than a vertical egg. */}
-        <button
-          onClick={() => { if (onDismissAcceptedBadge) onDismissAcceptedBadge(conv.phoneKey); }}
-          title="Dismiss"
-          aria-label="Dismiss this notice"
-          className="mgt-hover-scale mgt-press"
-          style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--success-text)", width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, opacity: 0.6, borderRadius: R.pill, flexShrink: 0 }}
-        ><CloseIcon size={IC.control} /></button>
-      </div>
+      <AlertPanel
+        role="success"
+        icon={CheckIcon}
+        title="Booking confirmed"
+        style={{ marginBottom: 12 }}
+        action={
+          /* 32×32, the size every other banner dismiss in the app already is
+             (LateBanner / OverlapBanner / WaitAvailBanner all sit at minHeight
+             32). What this replaced was `padding:"2px 4px"` on a 12px glyph — a
+             ~16px hit area, on a device that is only ever touched, for the only
+             control on the notice. `--r-pill` clamps to half the SHORTER side,
+             so equal width/height with padding:0 is what makes it an actual
+             circle rather than a vertical egg. */
+          <button
+            onClick={() => { if (onDismissAcceptedBadge) onDismissAcceptedBadge(conv.phoneKey); }}
+            title="Dismiss"
+            aria-label="Dismiss this notice"
+            className="mgt-hover-scale mgt-press"
+            style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--success-text)", width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, opacity: 0.6, borderRadius: R.pill, flexShrink: 0 }}
+          ><CloseIcon size={IC.control} /></button>
+        }
+      >
+        <AlertRow first>This request has been added to the bookings list.</AlertRow>
+      </AlertPanel>
     );
   }
   if (conv.draftStatus === "dismissed") {

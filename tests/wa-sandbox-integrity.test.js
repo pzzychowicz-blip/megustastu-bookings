@@ -107,6 +107,29 @@ describe("WA sandbox — edits to shared PROD files survive a sync", () => {
     expect(read("src/components/whatsapp/InboxPanel.jsx")).toMatch(/<Overlay[^>]*panel=\{/);
   });
 
+  it("AlertPanel still offers `action` and `onHeaderClick`, and both panes use them", () => {
+    // v17.15.3. AlertPanel is a PROD file the sandbox extended, so it is now a
+    // shared merge file and inherits this file's whole reason for existing.
+    //
+    // It meets the entry criterion exactly — does it fail SILENTLY when missing.
+    // Both props are optional and read only through destructuring, so a sync
+    // that took prod's copy wholesale would drop them and React would pass the
+    // callers' `action={…}` / `onHeaderClick={…}` straight into the void: the
+    // draft banner loses its only dismiss, the intent banner loses its Apply /
+    // Handled buttons AND its collapse toggle, and the build, the lint and the
+    // other 649 tests all stay green.
+    const ap = read("src/components/AlertPanel.jsx");
+    expect(ap).toMatch(/export function AlertPanel\(\{[^}]*\baction\b[^}]*\}\)/);
+    expect(ap).toMatch(/export function AlertPanel\(\{[^}]*\bonHeaderClick\b[^}]*\}\)/);
+    // …and it is actually RENDERED, not merely accepted and dropped.
+    expect(ap).toMatch(/\{action \?/);
+    expect(ap).toMatch(/onClick=\{onHeaderClick\}/);
+    expect(read("src/components/whatsapp/DraftCard.jsx")).toMatch(/action=\{/);
+    const ib = read("src/components/whatsapp/IntentBanner.jsx");
+    expect(ib).toMatch(/action=\{/);
+    expect(ib).toMatch(/onHeaderClick=\{toggle\}/);
+  });
+
   it("the WhatsApp settings tab is spliced into the ONE tab list", () => {
     // Lose this and the whole WhatsApp settings tab disappears, taking
     // auto-archive-on-complete's only control with it — silently, since
