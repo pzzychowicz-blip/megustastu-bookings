@@ -150,6 +150,17 @@ const FILLS = [
   // whoever adds the warn or suggest pane should name theirs too.
   { fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "label", what: "danger pane (strip section + InlineAlert)" },
 
+  // v17.15.2: the OTHER four semantic panes, which the entry above told the
+  // next person to add — "whoever adds the warn or suggest pane should name
+  // theirs too". They existed already; nobody had named them, which is how the
+  // offline pane shipped BELOW AA in both themes (see its entry) and how the
+  // warn ink's light/dark hue split survived. A pane is registered here the
+  // moment it exists, not the moment someone suspects it.
+  { fill: "--app-overlap-bg", alpha: null, ink: "--warn-text", role: "label", what: "warn pane (strip overlap/late/reminders/closed/reshuffle)" },
+  { fill: "--warn-bg", alpha: null, ink: "--warn-text", role: "label", what: "warn pane (form: no-shows, duplicate phone, closed day, kitchen)" },
+  { fill: "--suggest-bg-soft", alpha: null, ink: "--success-text", role: "label", what: "success pane (strip waitlist section)" },
+  { fill: "--suggest-bg", alpha: null, ink: "--success-text", role: "label", what: "success pane (form: past bookings)" },
+
   // Solid semantic fills — already correct before this pass; here so they stay so.
   { fill: "--app-success-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "success tag" },
   { fill: "--app-danger-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "danger tag" },

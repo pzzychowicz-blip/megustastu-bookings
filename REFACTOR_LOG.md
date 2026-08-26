@@ -14663,3 +14663,44 @@ twice, since the heading already carries it.
 Verified: build clean, **565 tests**, `check:style` OK. `tests/csp.test.js`
 confirms the boot-script pin is unaffected — the `<title>` edit is outside the
 `<script>` block.
+
+### Commit 2 — the warn ink's light-mode hue
+
+The reported symptom was "No-shows uses orange tokens in dark mode and red
+tokens in light". The chip itself was already correct — `OutlineChip` derives
+its border from its ink (v17.15.0) — so the fault was one level down, in the
+token, and it is a HUE fault rather than a contrast one:
+
+```
+light   warn #9a3412 hsl(15, 79, 34)    danger #991b1b hsl(0, 70, 35)
+dark    warn #fdba74 hsl(31, 97, 72)    danger #fca5a5 hsl(0, 94, 82)
+```
+
+In **light** the app's two "something is wrong" inks sit 15° of hue apart with
+**one point** of lightness between them; in **dark**, 31° apart with ten. Warn
+and danger were twice as separable in one theme as in the other, and in light
+they had all but converged — so which role a colour meant depended on the theme.
+
+`--warn-text` light becomes **`#8a4b0a`** (hue 30°), which is the *dark* ink's
+own hue: the warn family names one colour in both themes instead of two, and
+clears danger by 30° in both. Contrast stays comfortably AA on every warn fill
+(`--warn-bg` 5.78:1, `--app-overlap-bg` 6.03:1, `--app-offline-bg` 6.00:1).
+
+**`--app-warn-solid` follows it to `#8a4b0a`.** It was the same hex as the old
+warn ink and is theme-invariant, so leaving it behind would have put a hue-15
+solid beside a hue-30 ink *in the same modal* — App's "Kitchen may be busy"
+pairs that Confirm button with a `--warn-text` heading. One role, one hue,
+whatever treatment carries it. White on it measures 6.79:1, still over its
+registered `label` bar. `--chip-warn-border` needed no edit at all, which is
+exactly what deriving it bought.
+
+**Four semantic panes joined the contrast registry** — `--app-overlap-bg`,
+`--warn-bg`, `--suggest-bg-soft` and `--suggest-bg`, each with its ink. The
+v17.15.0 entry above them had told the next person to do this ("whoever adds
+the warn or suggest pane should name theirs too"); the panes already existed and
+nobody had named them, which is why a repo-wide hue split survived a full
+release. Neither the coverage guard (its prefixes miss these tokens) nor
+`check:style` (it sees literals, not pairings) can find this class of fault.
+
+Verified live in both themes via computed styles, not assumed. Build clean,
+**573 tests** (+8), `check:style` OK.

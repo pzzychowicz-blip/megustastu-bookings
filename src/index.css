@@ -218,7 +218,29 @@
   --text-secondary: #4a5568;
   --text-faint: #8a94a3;
   --text-required: #dc2626;
-  --warn-text: #9a3412;
+  /* v17.15.2 — the warn ink was #9a3412 and read RED in light while its dark
+     twin reads ORANGE, which is what was reported ("No-shows is orange in dark
+     mode and red in light"). It is a HUE fault, not a contrast one, and the
+     numbers are why it was invisible to every guard in the repo:
+
+       light  warn #9a3412 hsl(15, 79, 34)   danger #991b1b hsl(0, 70, 35)
+       dark   warn #fdba74 hsl(31, 97, 72)   danger #fca5a5 hsl(0, 94, 82)
+
+     In LIGHT the two semantic inks are 15° of hue apart with ONE point of
+     lightness between them; in DARK they are 31° apart with ten. Warn and
+     danger are twice as separable in one theme as in the other, and in light
+     they had all but converged — so the app's two "something is wrong" roles
+     were told apart by theme rather than by meaning.
+
+     #8a4b0a is hue 30°, which is the DARK ink's own hue: the warn family now
+     names one colour in both themes instead of two, and sits 30° clear of
+     danger in both. Contrast is unchanged in kind and still comfortably AA on
+     every warn fill (--warn-bg 5.78:1, --app-overlap-bg 6.03:1,
+     --app-offline-bg 6.00:1); the registry below measures all three now.
+
+     `--chip-warn-border` needs no edit — it is a color-mix of THIS token, which
+     is the whole point of deriving it (v17.15.0). */
+  --warn-text: #8a4b0a;
   --danger-text: #991b1b;
   --success-text: #166534;
   /* v16.2.0: Firebase connection dot — saturated, identical in both themes */
@@ -452,7 +474,12 @@
   --app-success-solid: rgba(22, 99, 51, 0.8); /* v17.8.0: reminder "Done" */
   --app-new: rgba(0, 116, 243, 0.75);       /* + New button */
   --app-danger-solid: #dc2626;              /* Delete (solid) */
-  --app-warn-solid: #9a3412;                /* No-show / Confirm (solid warn) */
+  /* v17.15.2: follows --warn-text to hue 30. It was the SAME hex as the old
+     warn ink, and this token is theme-invariant, so leaving it behind would
+     put a hue-15 solid beside a hue-30 ink — in the SAME modal, since App's
+     "Kitchen may be busy" pairs this button with a --warn-text heading. One
+     role, one hue, whatever treatment carries it. White on it: 6.79:1. */
+  --app-warn-solid: #8a4b0a;                /* No-show / Confirm (solid warn) */
   /* ── v14.3.0: hover-lift (.mgt-hover-scale) — opaque, theme-aware card
      shown behind a surface as it scales 1.08 on hover. Opaque ON PURPOSE
      (a translucent fill reads washy on the glass cards). Shared contract
