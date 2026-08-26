@@ -11,7 +11,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { staffEmails, requireStaffAllowList } from "../api/_lib/env.js";
-import { sanitizeKey, staffAuthError } from "../api/_lib/rtdb.js";
+import { sanitizeKey, staffAuthError, assertStaffAllowed } from "../api/_lib/rtdb.js";
 
 const DEV_DB_URL = "https://megustastu-bookings-dev-default-rtdb.europe-west1.firebasedatabase.app";
 
@@ -71,6 +71,77 @@ describe("WA hardening — what a failed staff check tells the caller", () => {
     expect(staffAuthError(new Error("jwt expired")).status).toBe(401);
     expect(staffAuthError(undefined).status).toBe(401);
     expect(staffAuthError(null).error).toBe("invalid token");
+  });
+});
+
+
+describe("WA hardening — who actually gets in", () => {
+  // The decision itself, which until now had no test at all: it lived inside
+  // verifyStaffToken, welded to getAuth().verifyIdToken, so every branch that
+  // stands between a stranger with a Firebase account and the send/Gemini
+  // endpoints was unreachable. `assertStaffAllowed` is that decision, pure.
+  const staff = { uid: "u1", email: "PZ@Example.com", email_verified: true };
+
+  it("no allow-list in the sandbox default lets any signed-in account through", () => {
+    vi.stubEnv("WA_STAFF_EMAILS", "");
+    expect(assertStaffAllowed(staff)).toBe(staff);
+  });
+
+  it("no allow-list on a LIVE backend refuses every request", () => {
+    vi.stubEnv("WA_STAFF_EMAILS", "");
+    vi.stubEnv("WA_SEND_MODE", "live");
+    expect(() => assertStaffAllowed(staff)).toThrow(/WA_STAFF_EMAILS is not configured/);
+    try { assertStaffAllowed(staff); } catch (e) { expect(e.code).toBe("NO_STAFF_ALLOWLIST"); }
+  });
+
+  it("no allow-list on a non-DEV database refuses every request", () => {
+    vi.stubEnv("WA_STAFF_EMAILS", "");
+    vi.stubEnv("WA_DB_URL", "https://megustastu-bookings-default-rtdb.europe-west1.firebasedatabase.app");
+    try { assertStaffAllowed(staff); expect.unreachable(); }
+    catch (e) { expect(e.code).toBe("NO_STAFF_ALLOWLIST"); }
+  });
+
+  it("matches the allow-list case-insensitively", () => {
+    vi.stubEnv("WA_STAFF_EMAILS", "pz@example.com");
+    expect(assertStaffAllowed(staff)).toBe(staff);
+  });
+
+  it("refuses an account that is NOT on the list", () => {
+    vi.stubEnv("WA_STAFF_EMAILS", "someone@else.com");
+    try { assertStaffAllowed(staff); expect.unreachable(); }
+    catch (e) { expect(e.code).toBe("NOT_STAFF"); }
+  });
+
+  it("refuses a token carrying no email at all", () => {
+    vi.stubEnv("WA_STAFF_EMAILS", "pz@example.com");
+    try { assertStaffAllowed({ uid: "u2" }); expect.unreachable(); }
+    catch (e) { expect(e.code).toBe("NOT_STAFF"); }
+  });
+
+  it("refuses an UNVERIFIED address that IS on the list — and says so", () => {
+    // The ship-day trap: a Firebase-console account has emailVerified=false, and
+    // the allow-list is first enforced the day WA_SEND_MODE goes live. A shared
+    // "not on the allow-list" message would be a lie about an address the
+    // operator can see on the list, and would send them to fix the wrong thing.
+    vi.stubEnv("WA_STAFF_EMAILS", "pz@example.com");
+    try { assertStaffAllowed({ ...staff, email_verified: false }); expect.unreachable(); }
+    catch (e) {
+      expect(e.code).toBe("EMAIL_UNVERIFIED");
+      expect(e.message).toMatch(/not verified/);
+      expect(e.message).not.toMatch(/not on the WhatsApp staff allow-list/);
+    }
+  });
+
+  it("a token with email_verified absent still passes (not `=== false`)", () => {
+    // Custom tokens and some providers omit the claim; only an explicit false
+    // is a statement that the address is unproven.
+    vi.stubEnv("WA_STAFF_EMAILS", "pz@example.com");
+    expect(assertStaffAllowed({ uid: "u3", email: "pz@example.com" })).toBeTruthy();
+  });
+
+  it("both 403 causes map to 403, with their own messages preserved", () => {
+    expect(staffAuthError({ code: "EMAIL_UNVERIFIED", message: "unverified" }))
+      .toEqual({ status: 403, error: "unverified" });
   });
 });
 

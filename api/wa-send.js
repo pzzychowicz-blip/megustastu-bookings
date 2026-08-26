@@ -8,8 +8,17 @@
 //   Authorization: Bearer <Firebase ID token>   (auth.currentUser.getIdToken())
 //
 // Guards, in order:
-//   401 — missing/invalid staff token (verified against the SAME Firebase
-//         project the database belongs to — DEV in the sandbox)
+//   401 — missing, expired or malformed staff token (verified against the SAME
+//         Firebase project the database belongs to — DEV in the sandbox)
+//   403 — the token is valid but the ACCOUNT may not use this endpoint: either
+//         it is absent from WA_STAFF_EMAILS, or its address is on the list but
+//         unverified. The two carry different messages; they need opposite
+//         fixes. Re-authenticating fixes neither, which is why this is not 401.
+//   503 — server misconfigured: no FIREBASE_SERVICE_ACCOUNT (no token can be
+//         verified at all), or WA_STAFF_EMAILS is unset on a backend where it
+//         is required (WA_SEND_MODE=live, or WA_DB_URL off the DEV database).
+//         All three auth statuses come from ONE mapping, `staffAuthError`
+//         in _lib/rtdb.js, shared by the five token-gated endpoints.
 //   400 — missing phoneKey/text
 //   404 — conversation does not exist (replies only go to existing threads)
 //   410 — 24h service window expired: Cloud API would reject a free-form

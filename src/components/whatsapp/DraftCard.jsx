@@ -45,7 +45,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
         role="success"
         icon={CheckIcon}
         title="Booking confirmed"
-        style={{ marginBottom: 12 }}
+        style={{ marginBottom: 12, boxShadow: "var(--shadow-soft)" }}
         action={
           /* 32×32, the size every other banner dismiss in the app already is
              (LateBanner / OverlapBanner / WaitAvailBanner all sit at minHeight

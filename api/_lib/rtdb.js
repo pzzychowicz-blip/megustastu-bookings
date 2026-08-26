@@ -63,27 +63,25 @@ export function getDb() {
   return cachedDb;
 }
 
-// Verify a staff Firebase ID token (the client's auth.currentUser.getIdToken()).
-// Returns the decoded token ({ email, uid, … }) or throws.
+// ── The staff access DECISION, as a pure function ────────────────────────────
+// Split out of verifyStaffToken so it can be tested at all. The token exchange
+// needs firebase-admin and a live project; the decision needs neither, and the
+// decision is the part that matters — it is what stands between a stranger with
+// a valid Firebase account and a backend that spends Gemini budget and, in live
+// mode, sends from the restaurant's own number.
 //
-// Two checks, not one. `verifyIdToken` answers "is this a valid token for this
-// Firebase project", which is NOT the same question as "is this staff": these
-// endpoints grant abilities the client security rules do not — live Gemini
-// calls billed to us, live sends from the restaurant's number — and Firebase
-// email/password signup is on by default.
+// This is the same rule the repo already applies to `placeWaitlist` and
+// `presenceState`: logic that decides something the restaurant acts on does not
+// live where a test cannot reach it.
 //
-// The allow-list is WA_STAFF_EMAILS. Unset means "any signed-in account", which
-// keeps the DEV sandbox and the :3999 harness working with no configuration;
-// `requireStaffAllowList()` turns unset into a hard failure the moment the
-// backend can send for real or is pointed off the DEV database. See env.js.
-export async function verifyStaffToken(idToken) {
-  const decoded = await getAuth(ensureApp()).verifyIdToken(idToken);
+// Throws with a `code` (consumed by staffAuthError below) or returns `decoded`.
+export function assertStaffAllowed(decoded) {
   const allowed = staffEmails();
 
   if (!allowed.length) {
     if (requireStaffAllowList()) {
-      // Deliberately fails CLOSED, and deliberately fails here rather than at
-      // boot: a misconfigured live backend must not serve one request.
+      // Fails CLOSED, and fails per-REQUEST rather than at boot: a misconfigured
+      // live backend must not serve one request.
       const err = new Error("WA_STAFF_EMAILS is not configured. It is required whenever WA_SEND_MODE=live or WA_DB_URL points off the DEV database.");
       err.code = "NO_STAFF_ALLOWLIST";
       throw err;
@@ -91,16 +89,42 @@ export async function verifyStaffToken(idToken) {
     return decoded;              // sandbox: any signed-in account
   }
 
-  // A token with no verified email cannot be matched against a list of emails,
-  // so it does not pass one. `email_verified` is part of the check because an
-  // unverified address is a claim about an inbox nobody has proven they own.
-  const email = String(decoded.email || "").trim().toLowerCase();
-  if (!email || decoded.email_verified === false || !allowed.includes(email)) {
+  const email = String((decoded && decoded.email) || "").trim().toLowerCase();
+  if (!email || !allowed.includes(email)) {
     const err = new Error("Not authorised: this account is not on the WhatsApp staff allow-list.");
     err.code = "NOT_STAFF";
     throw err;
   }
+
+  // Checked SEPARATELY from membership, and with its own message, because the
+  // two failures need opposite fixes and one of them is a ship-day trap: an
+  // account created in the Firebase console has `emailVerified: false`, the
+  // allow-list is only enforced once WA_SEND_MODE=live, so the first time this
+  // fires is the day it matters most — and "not on the allow-list" would be a
+  // lie about an address the operator can SEE on the list.
+  //
+  // The check itself stays: with signup open, an address on the list that has
+  // no account yet could be self-registered by anyone, and email verification
+  // is the only thing that proves the registrant owns that inbox.
+  if (decoded.email_verified === false) {
+    const err = new Error("Not authorised: " + email + " is on the staff allow-list but its email address is not verified. Verify it in the Firebase console (Authentication → the user → send a verification email), or clear the unverified account.");
+    err.code = "EMAIL_UNVERIFIED";
+    throw err;
+  }
   return decoded;
+}
+
+// Verify a staff Firebase ID token (the client's auth.currentUser.getIdToken()).
+// Returns the decoded token ({ email, uid, … }) or throws.
+//
+// Two checks, not one. `verifyIdToken` answers "is this a valid token for this
+// Firebase project", which is NOT the same question as "is this staff": these
+// endpoints grant abilities the client security rules do not — live Gemini
+// calls billed to us, live sends from the restaurant's number — and Firebase
+// email/password signup is on by default. The second check is
+// `assertStaffAllowed` above; see env.js for WA_STAFF_EMAILS.
+export async function verifyStaffToken(idToken) {
+  return assertStaffAllowed(await getAuth(ensureApp()).verifyIdToken(idToken));
 }
 
 // The HTTP mapping for what verifyStaffToken can throw, in ONE place. It was
@@ -114,15 +138,17 @@ export async function verifyStaffToken(idToken) {
 //         token) or, now, a live/non-DEV backend with no staff allow-list.
 //         Telling staff "invalid token" for these sends them to debug their own
 //         login for a fault that is not theirs.
-//   403 — the token is fine and the ACCOUNT is not allowed. Distinct from 401
-//         because re-authenticating can never fix it.
+//   403 — the token is fine and the ACCOUNT is not allowed, either because it
+//         is not on the list or because its email is unverified. Distinct from
+//         401 because re-authenticating can never fix either one; the two carry
+//         different MESSAGES because they need opposite fixes.
 //   401 — everything else: absent, expired or malformed token.
 export function staffAuthError(e) {
   const code = e && e.code;
   if (code === "NO_SERVICE_ACCOUNT" || code === "NO_STAFF_ALLOWLIST") {
     return { status: 503, error: e.message };
   }
-  if (code === "NOT_STAFF") return { status: 403, error: e.message };
+  if (code === "NOT_STAFF" || code === "EMAIL_UNVERIFIED") return { status: 403, error: e.message };
   return { status: 401, error: "invalid token" };
 }
 
