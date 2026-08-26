@@ -1,6 +1,6 @@
 # GLOSSARY.md
 
-The vocabulary of **Me Gustas Tú Bookings** — one name per thing, so a
+The vocabulary of **MGT Bookings** — one name per thing, so a
 conversation about the app doesn't spend half its time establishing what is
 being pointed at.
 
@@ -100,6 +100,7 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | The same, but clickable (▸/▾) — "Regular · N past visits" | **chip button** (`OutlineChip as="button"`) | A disclosure. Reveals past bookings / no-shows. |
 | Coloured text, no fill, no border — "Table free · HH:MM", "This device" | **text treatment** | Where the colour carries itself unaided. |
 | Red message inside a form: "Text is required." | **inline alert** (`InlineAlert`, `atoms.jsx`) | A strip section, inside a modal. `role="alert"` wrapper stays mounted; only the child is conditional. |
+| Tinted panel with a mark, a heading and a list under it — the Blocked list, a guest's Past bookings / No-shows, the kitchen-busy notice | **alert panel** (`AlertPanel` + `AlertRow`, `AlertPanel.jsx`) | The notification strip's section shape for a titled LIST, as `InlineAlert` is for one sentence. Picks a `role` from `ALERT_TONES`, which supplies tone AND tint as one decision. |
 | The coloured pill at the top of a modal | **title pill** (`ModalTitle`) | An `<h2>` that also names the dialog. Create/act surfaces wear their action's colour; configure/read surfaces wear neutral grey. |
 | Small mark at the top of a section | **section mark** (`SectionMark`) | The section's icon at header size. |
 

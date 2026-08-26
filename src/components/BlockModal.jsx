@@ -19,7 +19,46 @@ import { useState, useEffect } from "react";
 import { S, BTN, TBL, OPEN, GRID_CLOSE, R, T, FW } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
 import { hourLabel } from "../lib/time-grid";
-import { Overlay, Section, Fld, mkBtn, mkSolidBtn, mkInp } from "./atoms";
+import { Overlay, Section, Fld, mkBtn, mkSolidBtn, mkInp, Reveal, AutoHeight } from "./atoms";
+import { AlertPanel, AlertRow } from "./AlertPanel";
+import { ClosedIcon } from "./Icons";
+import { useRevealRows } from "../hooks/useRevealRows";
+
+// A block's stable identity: the exact field set App's `removeBlock` matches
+// on, so a row's identity and its deletion can never disagree. The separator is
+// an ASCII unit separator for `undoKey`'s reason — "-" and ":" are both
+// reachable from the data (a table id, a "HH:MM"), and a collision here would
+// make two different blocks share one Reveal.
+//
+// /code-review: those fields are NOT unique. Nothing dedupes blocks, so
+// blocking 14:00–16:00 twice on one table gives two entries agreeing on every
+// field — one React key for two rows, only one of which renders. So a
+// DUPLICATE-OCCURRENCE ordinal is appended: 0 for the first entry with a given
+// field set, 1 for the next, and so on.
+//
+// Deliberately the occurrence ordinal and NOT the array index. An index makes
+// every id positional, so unblocking a middle row would renumber every row
+// after it — `useRevealRows` would read them as simultaneous departures and
+// arrivals and collapse-then-reopen rows nobody touched. With the ordinal, a
+// block whose field set is unique (the only case that occurs in practice)
+// always scores 0 and its id never moves.
+//
+// (The REMOVAL of a duplicate is ambiguous too, and has been since v14.4.1:
+// App's `removeBlock` filters on the same field set, so unblocking either drops
+// both. That is a data-layer defect, left alone rather than fixed silently
+// inside a rendering change.)
+function blockFields(bl) {
+  return [bl.tableId, bl.date, bl.allDay ? "1" : "0", bl.from || "", bl.to || ""].join("\u001f");
+}
+function blockIds(list) {
+  const seen = Object.create(null);
+  return list.map(function (bl) {
+    const f = blockFields(bl);
+    const n = seen[f] || 0;
+    seen[f] = n + 1;
+    return f + "\u001f#" + n;
+  });
+}
 
 export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose, onDirty }) {
   const existing = blocks.filter((bl) => bl.tableId === tableId && bl.date === date);
@@ -28,6 +67,21 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
   const [mode, setMode] = useState(existing.length > 0 ? "view" : "add");
   const [from, setFrom] = useState(OPEN + ":00");
   const [to, setTo] = useState(GRID_CLOSE + ":00");
+
+  // v17.15.2: per-row ease-in/out for the blocked list.
+  //
+  // This version's first commit argued the pane sweep's lists are static and so
+  // do NOT want `useRevealRows` — true of the two history panels, and **wrong
+  // here**: Unblock removes a row IN PLACE, with the modal still open, whenever
+  // the table has more than one block. That is exactly the arrival/departure
+  // case this hook exists for, and it is the one list of the eight where the
+  // distinction goes the other way.
+  //
+  // Called at the TOP, never inside the `mode === "view"` branch — that branch
+  // returns early, so a hook there would change the hook count between renders.
+  const ids = blockIds(existing);
+  const { renderIds, openIds } = useRevealRows(ids);
+  const byId = new Map(existing.map((bl, i) => [ids[i], bl]));
 
   // v17.8.0 unsaved-changes guard. The From/To times are component-local, so
   // this modal REPORTS its dirtiness up rather than App reaching in — the same
@@ -71,8 +125,19 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
         </button>
       </div>
     );
+    // v17.15.2: AutoHeight, so the card EASES instead of jumping. Two changes
+    // need it — "+ Add block" swapping the list of blocks for a pair of time
+    // inputs (measured 249 → 279px), and a row collapsing on Unblock.
+    //
+    // It is in BOTH branches at the same position on purpose: React reconciles
+    // the two `return`s by type, so ONE AutoHeight instance survives the mode
+    // flip and can measure across it. In one branch only it would unmount and
+    // the swap would still jump.
+    //
+    // ("Back" is not the reverse of "+ Add block" — it calls `onClose`, so the
+    // add form's exit belongs to ModalPresence, not here.)
     return (
-      <Overlay onClose={onClose} footer={footerViewEl}>
+      <Overlay onClose={onClose} footer={footerViewEl}><AutoHeight>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
           <span style={{
             fontSize: T.body, fontWeight: FW.bold, padding: "4px 10px", borderRadius: R.pill,
@@ -84,31 +149,60 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
             {"Table " + tableId + " — " + date}
           </span>
         </div>
-        {existing.map((bl, i) => {
-          const label = bl.allDay ? hourLabel(OPEN) + " – " + hourLabel(GRID_CLOSE) : bl.from + " – " + bl.to;
-          return (
-            <div key={i} style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "10px 14px", borderRadius: R.card,
-              background: "var(--danger-bg)",
-              border: "1px solid var(--danger-border)",
-              marginBottom: 8
-            }}>
-              <div>
-                <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--danger-text)" }}>Blocked</div>
-                <div style={{ fontSize: T.body, color: "var(--danger-text)" }}>{label}</div>
-              </div>
-              <button
-                onClick={() => onRemove(bl)}
-                className="mgt-hover-scale"
-                style={mkBtn({ background: BTN.del, fontSize: T.body })}
-              >
-                Unblock
-              </button>
-            </div>
-          );
-        })}
-      </Overlay>
+        {/* v17.15.2: ONE pane with N rows, where this drew N CARDS — each with
+            its own danger fill, its own border in the matching hue, its own
+            bold text in a third shade of it, and its own 8px margin. That is
+            both DESIGN.md's banned label shape and, at the same time, the
+            "N panes with N margins" that NotificationStrip exists to collapse
+            — reproduced inside a modal, where the strip could not see it. Two
+            blocks on one table took two cards and read as two unrelated
+            alarms; they are one fact about one table.
+
+            ClosedIcon is the strip's own "Closed this day" mark. A blocked
+            table and a closed day are the same statement at two scales, so
+            they take the same mark rather than inventing a second one. */}
+        <AlertPanel role="danger" icon={ClosedIcon} title="Blocked" count={existing.length}>
+          {renderIds.map((id) => {
+            // `byId` no longer holds a row that has just been unblocked, but
+            // `renderIds` keeps it mounted so its Reveal can collapse — so the
+            // label comes from a snapshot the Reveal itself caches, and a
+            // missing entry renders nothing rather than throwing.
+            const bl = byId.get(id);
+            // BannerRows' lesson: the hairline keys on this row's position
+            // among the rows actually OPEN, not its index in renderIds — which
+            // retains a departing row while it collapses. With the raw index,
+            // unblocking the first of two leaves the survivor wearing a
+            // borderTop flush under the section header: a line appearing
+            // exactly where the design says none.
+            const visible = renderIds.filter((x) => openIds.has(x));
+            // `i < 1`, not `i === 0`: a DEPARTING row is not in `visible`, so
+            // indexOf gives -1, and `-1 === 0` is false — which would hand it
+            // the very borderTop this block exists to withhold. BannerRows
+            // spells the same rule as `i > 0 ? border : none`, where -1 falls
+            // on the no-border side for free; writing it as a `first` flag
+            // inverts that, so the -1 case has to be named.
+            const i = visible.indexOf(id);
+            return (
+              <Reveal key={id} show={openIds.has(id)}>
+                {bl ? (
+                  <AlertRow first={i < 1} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                    <span style={{ color: "var(--danger-text)", fontWeight: FW.semi }}>
+                      {bl.allDay ? hourLabel(OPEN) + " – " + hourLabel(GRID_CLOSE) : bl.from + " – " + bl.to}
+                    </span>
+                    <button
+                      onClick={() => onRemove(bl)}
+                      className="mgt-hover-scale"
+                      style={mkBtn({ background: BTN.del, fontSize: T.body, flexShrink: 0 })}
+                    >
+                      Unblock
+                    </button>
+                  </AlertRow>
+                ) : null}
+              </Reveal>
+            );
+          })}
+        </AlertPanel>
+      </AutoHeight></Overlay>
     );
   }
 
@@ -136,7 +230,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
     </div>
   );
   return (
-    <Overlay onClose={onClose} footer={footerAddEl}>
+    <Overlay onClose={onClose} footer={footerAddEl}><AutoHeight>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <span style={{
           fontSize: T.body, fontWeight: FW.bold, padding: "4px 10px", borderRadius: R.pill,
@@ -177,6 +271,6 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           )}</Fld>
         </div>
       </Section>
-    </Overlay>
+    </AutoHeight></Overlay>
   );
 }

@@ -36,7 +36,7 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
@@ -44,8 +44,11 @@ import {
   optimizerActiveFor
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps } from "../lib/customers";
-import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, AvailBanner, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
-import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon } from "./Icons";
+import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { AvailBanner } from "./AvailBanner";
+import { AlertPanel, AlertRow } from "./AlertPanel";
+import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
+import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
@@ -243,17 +246,34 @@ export function BookingFormModal({
   // Regular, warn family for no-shows). Top 5 rows like WA; a muted "+N earlier"
   // tail when there are more. Reveal (below) eases it open/closed; its cached-
   // children fallback animates the collapse when the panel goes null.
+  // v17.15.2: both panels are `AlertPanel` — the notification strip's section
+  // shape. They were the banned label treatment (a pale semantic fill PLUS a
+  // border in the matching hue PLUS bold text in a third shade), and the fill
+  // and border were carrying the ROLE while the title carried it a third time.
+  //
+  // `histTk` collapses to a role name, which is the point of ALERT_TONES: the
+  // two hand-paired token triples were the place a mismatch could hide, and one
+  // of them — warn — was measurably a different HUE per theme until this
+  // version's second commit. The rows keep --text-primary; only the title is
+  // tinted, exactly as a strip section heads its own body.
+  //
+  // The marks come from the status vocabulary rather than being chosen for
+  // these panels: past bookings ARE completed visits (DoubleCheckIcon, the
+  // completed mark) and no-shows are no-shows (NoShowIcon, which the chip that
+  // discloses this panel already wears).
   function histPanel(which){
     const histList=custMatch?(which==="regular"?custMatch.regularBookings:custMatch.noShowBookings):null;
     if(!histList||!histList.length) return null;
-    const histTk=which==="noshow"
-      ?{bg:"var(--warn-bg)",border:"var(--warn-border)",text:"var(--warn-text)",title:"No-shows"}
-      :{bg:"var(--suggest-bg)",border:"var(--suggest-border)",text:"var(--success-text)",title:"Past bookings"};
-    return <div style={{marginTop:8,padding:"8px 12px",background:histTk.bg,border:"1px solid "+histTk.border,borderRadius:R.inset,fontSize: T.body,color:S.text}}>
-      <div style={{fontWeight: FW.bold,marginBottom:4,color:histTk.text}}>{histTk.title}</div>
-      {histList.slice(0,5).map(function(b){return <div key={b.id} style={{padding:"2px 0",borderTop:"1px solid "+histTk.border}}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</div>;})}
-      {histList.length>5?<div style={{padding:"2px 0",borderTop:"1px solid "+histTk.border,color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</div>:null}
-    </div>;
+    const noshow=which==="noshow";
+    return <AlertPanel
+      role={noshow?"warn":"success"}
+      icon={noshow?NoShowIcon:DoubleCheckIcon}
+      title={noshow?"No-shows":"Past bookings"}
+      count={histList.length}
+      style={{marginTop:8}}>
+      {histList.slice(0,5).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</AlertRow>;})}
+      {histList.length>5?<AlertRow style={{color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</AlertRow>:null}
+    </AlertPanel>;
   }
   // v17.8.0: ONE Reveal PER PANEL, not one Reveal shared by both. Switching
   // Regular → No-shows never changed `show`, so the swap happened inside an
@@ -279,11 +299,16 @@ export function BookingFormModal({
     return findPhoneOverlaps(bookings,{phone:form.phone,date:form.date,time:form.time,
       size:form.size,dur:form.customDur,excludeId:editId});
   },[bookings,form.phone,form.date,form.time,form.size,form.customDur,editId]);
-  const dupWarn=dupPhone.length?<div style={{marginTop:8,padding:"8px 12px",background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.inset,fontSize: T.body,fontWeight: FW.semi,color:"var(--warn-text)"}}>
-    {"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}
-    {dupPhone.slice(0,3).map(function(b){return <div key={b.id} style={{fontWeight: FW.medium,paddingTop:2}}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</div>;})}
-    {dupPhone.length>3?<div style={{fontWeight: FW.medium,paddingTop:2}}>{"+ "+(dupPhone.length-3)+" more"}</div>:null}
-  </div>:null;
+  // v17.15.2: an AlertPanel. The sentence is the section TITLE (it states the
+  // fault) and the clashing bookings are its rows — the division every strip
+  // section makes. ClashIcon rather than a generic warning mark: this IS the
+  // double-booking the strip's own Double-booked section reports, seen from
+  // inside the form that is about to create one.
+  const dupWarn=dupPhone.length?<AlertPanel role="warn" icon={ClashIcon} style={{marginTop:8}}
+    title={"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}>
+    {dupPhone.slice(0,3).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</AlertRow>;})}
+    {dupPhone.length>3?<AlertRow>{"+ "+(dupPhone.length-3)+" more"}</AlertRow>:null}
+  </AlertPanel>:null;
   // The container stays mounted while ANY of the three can render, so the
   // dupWarn Reveal below can animate its collapse instead of being torn out
   // with its parent (it is often the only content, for a first-time guest).
@@ -435,7 +460,13 @@ export function BookingFormModal({
       onClick={function(){onAddToWaitlist();}}><WaitIcon size={IC.control} />Add to waitlist</button></div>:null}</>:null;
   // v15.0.0: closed-day notice — the chosen date falls on a weekday marked Closed
   // (Settings → General → Opening hours). doSave blocks the write; this explains why.
-  const closedBanner=fh.closed?<div style={{background:"var(--warn-bg)",border:"1px solid var(--warn-border)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.semi,color:"var(--warn-text)",textAlign:"center"}}>{"Closed on "+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."}</div>:null;
+  // v17.15.2: an AlertPanel, and it takes ClosedIcon — the same mark the strip's
+  // own "Closed this day" section wears for the same fact about the same day.
+  // The centred text went with the border: a strip section is left-aligned
+  // under its mark, and this is one sentence with no rows, which is exactly the
+  // one-line shape the strip already has a precedent for.
+  const closedBanner=fh.closed?<AlertPanel role="warn" icon={ClosedIcon} style={{marginBottom:12}}
+    title={"Closed on "+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."} />:null;
 
   // Pre-E1's showForm guard is dropped — component is only mounted when showForm=true.
   const kitchenLoad=form.time?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
@@ -482,10 +513,44 @@ export function BookingFormModal({
           style={{background:"rgba(220,252,231,0.8)", /* @fixed-fill */ color:KTXT_OK,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>green</span>= tables available  <span
           style={{background:"rgba(254,249,195,0.8)", /* @fixed-fill */ color:KTXT_TIGHT,padding:"2px 6px",borderRadius:R.pill,fontSize: T.micro,fontWeight: FW.semi}}>yellow</span>= kitchen ok, tables tight</div>{kitchenSugg.before.length?<div style={{marginBottom:4}}><span style={{fontWeight: FW.bold,fontSize: T.body}}>Before: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.before)}</span></div>:null}{kitchenSugg.after.length?<div><span style={{fontWeight: FW.bold,fontSize: T.body}}>After: </span><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{renderKitchenTimes(kitchenSugg.after)}</span></div>:null}</div>:
     (kitchenBusy?<div style={{marginTop:6,fontSize: T.body,color:"var(--danger-text)"}}>No kitchen-friendly alternatives found nearby.</div>:null);
-  const kitchenSection=kitchenLoad?<div
-    style={{padding:"10px 14px",borderRadius:R.card,border:"1px solid "+(kitchenBusy?"var(--warn-border)":"var(--border-soft)"),background:kitchenBusy?"var(--warn-bg)":"var(--bg-soft)",marginBottom:14,fontSize: T.body,color:kitchenBusy?"var(--warn-text)":S.muted}}><div
-      style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<span
-        style={{fontWeight: FW.bold,color:"var(--text-required)",fontSize: T.body,padding:"4px 12px",borderRadius:R.pill,border:"1.5px solid rgba(220,38,38,0.4)", /* @fixed-fill */ flexShrink:0}}>Kitchen busy</span>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>:null;
+  // v17.15.2. Two things happened here, and only the FIRST is the pane sweep.
+  //
+  // (1) The BUSY state was the banned semantic triple and is now an AlertPanel.
+  //     The CALM state deliberately is not: --bg-soft with a neutral border is
+  //     an information panel, not a notice, and the whole point of the strip
+  //     shape is that it means "something needs your attention".
+  //
+  // (2) The "Kitchen busy" chip was an OutlineChip written by hand — 2px-ish
+  //     border, pill radius, transparent fill, bold semantic text — with its
+  //     ink from --text-required and its border from a hand-written
+  //     rgba(220,38,38,0.4). That is the border-and-ink-from-unrelated-families
+  //     defect v17.15.0 removed from the two real chips, surviving here because
+  //     nothing scans for a chip that never imported the atom. It was also a
+  //     THEME-INVARIANT ink (#dc2626) on a fill that inverts, the same fault as
+  //     the offline section: measured 4.11:1 in light and 2.86:1 in dark,
+  //     below AA in both and worst in dark. `tone="danger"` gives 7.08 / 7.27
+  //     with the border derived from the ink.
+  //
+  // (3) /code-review: ONE element type across both states, not a ternary between
+  //     an AlertPanel and a div. React reconciles by type, so the ternary threw
+  //     the whole subtree away on every busy<->calm flip — taking the
+  //     suggestions `Reveal` with it, so the chips vanished in a frame instead
+  //     of collapsing. That was a REGRESSION: before this version the wrapper
+  //     was a single div whose styles changed, and the Reveal simply stayed.
+  //     `AlertPanel` takes tone/tint overrides precisely so a caller can render
+  //     a non-default fill, so the calm state is the same component wearing the
+  //     neutral pane — which additionally lets the tint cross-fade.
+  const kitchenSection=kitchenLoad?<AlertPanel
+    role="warn"
+    icon={kitchenBusy?AlertIcon:null}
+    title={kitchenBusy?"Kitchen may be busy":null}
+    tint={kitchenBusy?undefined:"var(--bg-soft)"}
+    style={{marginBottom:14,transition:"background-color "+M.move,...(kitchenBusy?null:{border:"1px solid var(--border-soft)",paddingTop:10})}}>
+    {/* Indented under the title only when there IS one; the calm state has no
+        mark to line up under, so it takes the pane's own padding. */}
+    <div style={{padding:kitchenBusy?"4px "+NOTIF_PAD_X+"px 4px "+NOTIF_GUTTER+"px":"0 "+NOTIF_PAD_X+"px",fontSize: T.body,color:kitchenBusy?"var(--text-primary)":S.muted}}><div
+      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>
+  </AlertPanel>:null;
 
   // v17.6.0: which statuses the edit form offers.
   //
@@ -697,7 +762,7 @@ export function BookingFormModal({
 
   // ── The form modal itself ──
   return (
-    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{closedBanner}<Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true} invalid={invalidField("name")} describedBy={FORM_ERROR_ID}>{function(fid,reqAttrs){return <div style={{position:"relative"}}><input
+    <Overlay onClose={function(){onClose();}} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={form.returnOf?"var(--app-success-solid)":"var(--app-new)"}>{editId?"Edit booking":(form.returnOf?"Book again":"New booking")}</ModalTitle>{returnOfBanner}{/* v17.15.2: Reveal-wrapped. It appears and disappears as you change the DATE — the most-used control on this form — and it was the one banner in the modal doing that by hard cut while its three siblings below (regular / no-show / duplicate-phone) had eased since v17.8.0. */}<Reveal show={!!closedBanner}>{closedBanner}</Reveal><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Customer name" req={true} invalid={invalidField("name")} describedBy={FORM_ERROR_ID}>{function(fid,reqAttrs){return <div style={{position:"relative"}}><input
             id={fid}
             {...reqAttrs}
             value={form.name}
