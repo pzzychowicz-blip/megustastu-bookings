@@ -1073,6 +1073,53 @@ describe("a reminder row's three controls share one name (v17.15.6)", () => {
   });
 });
 
+describe("the List card's actions stay named by their ancestor (v17.15.6)", () => {
+  // A DECISION pin, not a fix — the only one in this file, and it is here
+  // because the alternative is invisible: nothing about six statically-named
+  // buttons says somebody weighed them and chose to leave them.
+  //
+  // Measured live on a 10-booking day: Assign x10, Delete x10, cancelled x10,
+  // completed x9, seated x8. Sixty controls, five names.
+  //
+  // They are LEFT, and the whole argument is one structural fact: the card is a
+  // `role="listitem"` carrying `describeBooking(b)`, so a screen-reader user
+  // has already been told whose booking this is before reaching any button.
+  // Renaming all sixty would repeat the guest on every control — measurably
+  // more verbose in the app's most-used view, for exactly the users the change
+  // would be for. No WCAG SC is failed either way (2.5.3 is satisfied: the
+  // visible text IS the name), and voice control falls back to numbered
+  // overlays when names collide.
+  //
+  // The contrast with the four banners two describes up is the entire rule, and
+  // it is worth stating as one sentence: **a repeated control inside a NAMED
+  // listitem may rely on that ancestor; a control in a bare row may not.**
+  it("the card is what carries the booking's identity", () => {
+    has(List, "card aria-label", /aria-label=\{describeBooking\(b\)\}/,
+      "this is what the action buttons rely on instead of naming themselves — " +
+      "remove it and sixty controls lose their context at once");
+    has(List, "card is a listitem", /role="listitem"/,
+      "the ancestor must be a real list item, or there is no context to inherit");
+  });
+
+  it("the action buttons are deliberately NOT renamed", () => {
+    // If a later pass adds per-card labels, this fails and sends the reader to
+    // the reasoning rather than letting a 60-control rename land unexamined.
+    // Scoped to the action row's own shapes so an unrelated label elsewhere in
+    // the file does not trip it.
+    for (const [what, re] of [
+      ["assign", /aria-label=\{"Assign[^}]*\+ b\.name/],
+      ["delete", /aria-label=\{"Delete[^}]*\+ b\.name/],
+      ["status", /aria-label=\{"?\{?s\}?[^}]*\+ b\.name/],
+    ]) {
+      hasnt(List, what, re,
+        "DECIDED in v17.15.6, not overlooked: the card is a named listitem, so " +
+        "these inherit the booking. Renaming all sixty repeats the guest on " +
+        "every control and is measurably more verbose for the users it is for. " +
+        "Change it only deliberately — and update this test's reasoning if so");
+    }
+  });
+});
+
 describe("the gate proves itself", () => {
   // tests/style-check.test.js's lesson, applied here: reading a checker does
   // not catch a blind spot. These run the helpers against strings that MUST

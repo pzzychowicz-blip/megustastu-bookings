@@ -15962,3 +15962,35 @@ priorities all open:
 | named by a bare table id | 26 | **0** |
 | sharing a name with another button | 26 | **0** |
 
+### 7. The List card's actions stay named by their ancestor — decided, not overlooked
+
+Measured live on a 10-booking day: **Assign ×10, Delete ×10, cancelled ×10,
+completed ×9, seated ×8**. Sixty controls, five names — by a long way the
+largest instance of this pattern in the app, and the one ROADMAP explicitly said
+to make a judgement about before touching.
+
+**They are left as they are.** The card is a `role="listitem"` carrying
+`describeBooking(b)`, so a screen-reader user has been told whose booking it is
+before reaching any button. Renaming all sixty would repeat the guest on every
+control — measurably more verbose in the app's most-used view, for exactly the
+users the change would be for. No WCAG SC is failed either way: 2.5.3 is
+satisfied (the visible text IS the name), and voice control falls back to
+numbered overlays when names collide.
+
+**The rule this settles, which is what makes every other case in this version
+decidable:**
+
+> A repeated control inside a **named** listitem may lean on that ancestor.
+> A control in a **bare** row may not.
+
+That is the whole difference between this section and §3. It is the reason the
+four banners' ✕s were renamed and these sixty were not, and it now lives in
+`CLAUDE.md`'s Gotchas row rather than being re-derived next time.
+
+**A decision needs a pin, because "nobody renamed these" and "somebody decided
+not to" look identical in source.** `tests/a11y.test.js` asserts the card's
+`aria-label` and `role="listitem"` are present (they are what the buttons lean
+on) and that the action row carries no per-card labels. Proven by adding
+`aria-label={"Assign tables for " + b.name}` — the exact edit a later sweep
+would make — and watching it fail.
+
