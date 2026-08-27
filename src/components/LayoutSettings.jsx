@@ -78,13 +78,44 @@ const ACT_BTN = mkBtn({ padding: "6px 12px", minHeight: 32, background: "var(--a
 // non-empty AND must not contain that separator — otherwise the key can't be
 // split back to the right ids (comboCaps overrides + rename remap would corrupt).
 const idOk = (s) => s.length > 0 && s.indexOf("|") < 0;
-function Stepper({ value, onDec, onInc, disableDec, disableInc, width = 30 }) {
+// v17.15.5: what to call ONE row of each repeating priorities editor, so the
+// controls inside it can carry the row's identity. Each is the row's own
+// visible heading, which is what makes the name findable on screen — the same
+// choice v17.15.4 made for the size band's `Toggle`, hoisted here because five
+// kinds of control now need it and a sixth copy is how they drift apart.
+const bandName = (b) => "party of " + b.min + " to " + b.max;
+const comboName = (r) => "combo " + String(r.key).split("|").join(" + ");
+const swapName = (r) => "swap rule freeing table " + r.table;
+// v17.15.5: a stepper's two buttons have a NAME.
+//
+// Their entire content was `−` and `+`, so all thirteen steppers in this tab
+// announced as twenty-six controls called "minus" and "plus" — the v17.15.4
+// `Toggle` defect one control over, and worse, because there are more of them
+// and several sit inside a `.map`. In the source that is one character; only
+// the running page shows it as thirteen identical pairs.
+//
+// `label` is REQUIRED and has no default, for `ModalTitle`'s `background`
+// reason: a default would be a silent fourteenth answer to a question every
+// call site has to answer for itself, and "unlabelled" is precisely the state
+// this exists to make unreachable. It names WHAT IS BEING STEPPED and carries
+// the item's identity where the stepper repeats — `"table 5A: seats"`, not
+// `"seats"`.
+//
+// **Label in Name (WCAG 2.5.3) does not bind here, and the distinction is the
+// one v17.15.4 got wrong first.** That rule protects the words a voice-control
+// user can say; `−` and `+` are glyphs doing an icon's job, not a text label,
+// so there is no word being taken away — these controls were unaddressable
+// before and are addressable now. A stepper labelled with real WORDS would
+// have to lead with them.
+function Stepper({ value, onDec, onInc, disableDec, disableInc, label, width = 30 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
+        aria-label={"Decrease " + label}
         style={{ ...STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
       <span style={{ minWidth: width, textAlign: "center", fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)" }}>{value}</span>
       <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
+        aria-label={"Increase " + label}
         style={{ ...STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
     </div>
   );
@@ -342,7 +373,12 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   const tableIds = tables.map(function (t) { return t.id; });
   // A labelled chip list with an add-picker; `ranked` adds up/down reorder buttons.
   // Plain helper returning JSX (NOT a component — no hooks/remount concerns).
-  function chipRow(label, list, ranked, kind, bandIdx, onChange) {
+  // v17.15.5: `rowName` identifies WHICH row this is — the chips inside it
+  // repeat per table AND per size band, so "Move up in rank" was one string in
+  // the source and a dozen identical names on the page. Null for Anchors, which
+  // appears once.
+  function chipRow(label, list, ranked, kind, bandIdx, onChange, rowName) {
+    const rowIn = rowName ? " (" + rowName + ")" : "";
     const avail = tableIds.filter(function (id) { return list.indexOf(id) < 0; });
     const open = samePick(kind, bandIdx);
     const last = list.length - 1;
@@ -355,20 +391,23 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               <span key={id} style={GCHIP}>
                 {ranked ? (
                   <button onClick={function () { onChange(moveInList(list, idx, -1)); }} disabled={idx === 0}
-                    title="Move up in rank" style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronUpIcon size={IC.inline} /></button>
+                    title="Move up in rank" aria-label={"Move " + id + " up in " + label + rowIn}
+                    style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronUpIcon size={IC.inline} /></button>
                 ) : null}
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
                 {ranked ? (
                   <button onClick={function () { onChange(moveInList(list, idx, 1)); }} disabled={idx === last}
-                    title="Move down in rank" style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronDownIcon size={IC.inline} /></button>
+                    title="Move down in rank" aria-label={"Move " + id + " down in " + label + rowIn}
+                    style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronDownIcon size={IC.inline} /></button>
                 ) : null}
-                <button onClick={function () { onChange(list.filter(function (x) { return x !== id; })); }} title="Remove"
+                <button onClick={function () { onChange(list.filter(function (x) { return x !== id; })); }}
+                  title="Remove" aria-label={"Remove " + id + " from " + label + rowIn}
                   style={{ ...GCHIP_BTN, color: "var(--danger-text)" }}><CloseIcon size={IC.inline} /></button>
               </span>
             );
           }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>—</span>}
           <button onClick={function () { setPriPick(open ? null : { kind: kind, band: bandIdx }); }} className="mgt-hover-scale"
-            title={"Add a table"} disabled={!avail.length}
+            title={"Add a table"} aria-label={"Add a table to " + label + rowIn} disabled={!avail.length}
             style={{ ...GCHIP_BTN, width: H.chip, height: H.chip, fontSize: T.title, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: avail.length ? 1 : 0.3, cursor: avail.length ? "pointer" : "not-allowed" }}>+</button>
         </div>
         {open ? (
@@ -414,7 +453,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   <span style={{ width: 44, fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", flexShrink: 0 }}>{t.id}</span>
                 )}
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>cap</span>
-                <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 20}
+                <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 20} label={"seats at table " + t.id}
                   onDec={function () { updateTable(t.id, { capacity: cap - 1 }); }} onInc={function () { updateTable(t.id, { capacity: cap + 1 }); }} />
                 <button onClick={function () { updateTable(t.id, { zone: indoor ? "outdoor" : "indoor" }); }} className="mgt-hover-scale"
                   style={{
@@ -498,7 +537,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               onChange={function (e) { setNewId(e.target.value); }}
               onKeyDown={function (e) { if (e.key === "Enter" && newIdValid) addTable(); if (e.key === "Escape") { setAdding(false); setNewId(""); } }} />
             <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>cap</span>
-            <Stepper value={newCap} disableDec={newCap <= 1} disableInc={newCap >= 20}
+            <Stepper value={newCap} disableDec={newCap <= 1} disableInc={newCap >= 20} label="seats at the new table"
               onDec={function () { setNewCap(Math.max(1, newCap - 1)); }} onInc={function () { setNewCap(Math.min(20, newCap + 1)); }} />
             <button onClick={function () { setNewZone(newZone === "indoor" ? "outdoor" : "indoor"); }} className="mgt-hover-scale"
               style={{
@@ -584,7 +623,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     ) : null}
                     <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
-                      <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 60}
+                      <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 60} label={"seats at combo " + run.join(" + ")}
                         onDec={function () { setComboCap(key, cap - 1); }} onInc={function () { setComboCap(key, cap + 1); }} />
                     </div>
                   </div>
@@ -618,7 +657,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{mc.ids.join(" + ")}</span>
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
-                  <Stepper value={mc.cap} disableDec={mc.cap <= 1} disableInc={mc.cap >= 60}
+                  <Stepper value={mc.cap} disableDec={mc.cap <= 1} disableInc={mc.cap >= 60} label={"seats at combo " + mc.ids.join(" + ")}
                     onDec={function () { setMegaCap(i, mc.cap - 1); }} onInc={function () { setMegaCap(i, mc.cap + 1); }} />
                   <button onClick={function () { removeMega(i); }} className="mgt-hover-scale" title="Remove combo" style={X_BTN}><CloseIcon size={IC.control} /></button>
                 </div>
@@ -650,7 +689,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, flexWrap: "wrap" }}>
               <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
-              <Stepper value={addCap} disableDec={addCap <= 1} disableInc={addCap >= 60}
+              <Stepper value={addCap} disableDec={addCap <= 1} disableInc={addCap >= 60} label="seats at the new combo"
                 onDec={function () { setAddCap(Math.max(1, addCap - 1)); }} onInc={function () { setAddCap(Math.min(60, addCap + 1)); }} />
               <button onClick={addMega} disabled={!canAdd} className={canAdd ? "mgt-hover-scale" : undefined}
                 style={{
@@ -690,22 +729,28 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <div key={i} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)", marginTop: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>Party of</span>
-                <Stepper value={b.min} disableDec={b.min <= 1} disableInc={b.min >= b.max}
+                <Stepper value={b.min} disableDec={b.min <= 1} disableInc={b.min >= b.max} label={bandName(b) + ": smallest party size"}
                   onDec={function () { setBand(i, { min: b.min - 1 }); }} onInc={function () { setBand(i, { min: b.min + 1 }); }} />
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
-                <Stepper value={b.max} disableDec={b.max <= b.min} disableInc={b.max >= 30}
+                <Stepper value={b.max} disableDec={b.max <= b.min} disableInc={b.max >= 30} label={bandName(b) + ": largest party size"}
                   onDec={function () { setBand(i, { max: b.max - 1 }); }} onInc={function () { setBand(i, { max: b.max + 1 }); }} />
-                <button onClick={function () { removeBand(i); }} className="mgt-hover-scale" title="Remove rule"
+                <button onClick={function () { removeBand(i); }} className="mgt-hover-scale"
+                  title="Remove rule" aria-label={"Remove rule: " + bandName(b)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
-              {chipRow("Prefer", b.prefer || [], true, "prefer", i, function (l) { setBand(i, { prefer: l }); })}
-              {chipRow("Avoid", b.avoid || [], false, "avoid", i, function (l) { setBand(i, { avoid: l }); })}
+              {chipRow("Prefer", b.prefer || [], true, "prefer", i, function (l) { setBand(i, { prefer: l }); }, bandName(b))}
+              {chipRow("Avoid", b.avoid || [], false, "avoid", i, function (l) { setBand(i, { avoid: l }); }, bandName(b))}
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>Try first</span>
                 {[["any", "Table order"], ["indoor", "Indoor"], ["outdoor", "Outdoor"]].map(function (opt) {
                   const on = zm === opt[0];
                   return (
                     <button key={opt[0]} onClick={function () { setZoneMode(i, opt[0]); }} className="mgt-hover-scale"
+                      /* The VISIBLE label leads and the disambiguator follows —
+                         v17.15.4's Label-in-Name rule. "Try first: Indoor" would
+                         read better and would stop "click Indoor" working. */
+                      aria-label={opt[1] + " (" + bandName(b) + ")"}
+                      aria-pressed={on}
                       style={{ ...SEG_BTN, background: on ? "var(--accent)" : "var(--bg-stepper)", color: on ? "var(--text-on-accent)" : "var(--text-primary)", border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)" }}>
                       {opt[1]}
                     </button>
@@ -742,29 +787,31 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             const known = declared.some(function (d) { return d.key === r.key; });
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
-                <select value={r.key} aria-label="Combo" onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
+                <select value={r.key} aria-label={"Combo for rule " + (i + 1)} onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
                   {known ? null : <option value={r.key}>{String(r.key).split("|").join(" + ")}</option>}
                   {declared.map(function (d) { return <option key={d.key} value={d.key}>{d.label}</option>; })}
                 </select>
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>party</span>
-                <Stepper value={r.min} disableDec={r.min <= 1} disableInc={r.min >= r.max}
+                <Stepper value={r.min} disableDec={r.min <= 1} disableInc={r.min >= r.max} label={comboName(r) + ": smallest party size"}
                   onDec={function () { setRule(i, { min: r.min - 1 }); }} onInc={function () { setRule(i, { min: r.min + 1 }); }} />
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
-                <Stepper value={r.max} disableDec={r.max <= r.min} disableInc={r.max >= 30}
+                <Stepper value={r.max} disableDec={r.max <= r.min} disableInc={r.max >= 30} label={comboName(r) + ": largest party size"}
                   onDec={function () { setRule(i, { max: r.max - 1 }); }} onInc={function () { setRule(i, { max: r.max + 1 }); }} />
                 <button onClick={function () { setRule(i, { avoid: !r.avoid }); }} className="mgt-hover-scale"
                   title={r.avoid ? "Used only as a last resort — tap to prefer instead" : "Preferred — tap to avoid instead"}
+                  aria-label={(r.avoid ? "Avoid" : "Prefer") + " (" + comboName(r) + ")"}
                   style={{ ...SEG_BTN, background: r.avoid ? "var(--danger-bg)" : "var(--bg-stepper)", color: r.avoid ? "var(--danger-text)" : "var(--text-primary)", border: r.avoid ? "1px solid var(--danger-border)" : "1px solid var(--border-soft)" }}>
                   {r.avoid ? "Avoid" : "Prefer"}
                 </button>
                 {r.avoid ? null : (
                   <>
                     <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>priority</span>
-                    <Stepper value={r.weight} disableDec={r.weight <= 1} disableInc={r.weight >= 10}
+                    <Stepper value={r.weight} disableDec={r.weight <= 1} disableInc={r.weight >= 10} label={comboName(r) + ": priority"}
                       onDec={function () { setRule(i, { weight: r.weight - 1 }); }} onInc={function () { setRule(i, { weight: r.weight + 1 }); }} />
                   </>
                 )}
-                <button onClick={function () { removeRule(i); }} className="mgt-hover-scale" title="Remove rule"
+                <button onClick={function () { removeRule(i); }} className="mgt-hover-scale"
+                  title="Remove rule" aria-label={"Remove rule: " + comboName(r)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
             );
@@ -786,6 +833,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               const on = priMixed.indexOf(id) >= 0;
               return (
                 <button key={id} onClick={function () { toggleMixed(id); }} className="mgt-hover-scale"
+                  aria-pressed={on}
                   style={{ ...PICK_CHIP, background: on ? "var(--accent)" : "var(--bg-stepper)", color: on ? "var(--text-on-accent)" : "var(--text-primary)", border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)" }}>
                   {id}
                 </button>
@@ -807,17 +855,18 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>Free</span>
-                <select value={r.table} aria-label="Table to free" onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
+                <select value={r.table} aria-label={"Table to free, swap rule " + (i + 1)} onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
                   {tableIds.indexOf(r.table) >= 0 ? null : <option value={r.table}>{r.table}</option>}
                   {tableIds.map(function (id) { return <option key={id} value={id}>{id}</option>; })}
                 </select>
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>from a party of</span>
-                <Stepper value={r.fromSize} disableDec={r.fromSize <= 1} disableInc={r.fromSize >= 30}
+                <Stepper value={r.fromSize} disableDec={r.fromSize <= 1} disableInc={r.fromSize >= 30} label={swapName(r) + ": party size it is taken from"}
                   onDec={function () { setSwap(i, { fromSize: r.fromSize - 1 }); }} onInc={function () { setSwap(i, { fromSize: r.fromSize + 1 }); }} />
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>for a party of</span>
-                <Stepper value={r.toSize} disableDec={r.toSize <= 1} disableInc={r.toSize >= 30}
+                <Stepper value={r.toSize} disableDec={r.toSize <= 1} disableInc={r.toSize >= 30} label={swapName(r) + ": party size it is given to"}
                   onDec={function () { setSwap(i, { toSize: r.toSize - 1 }); }} onInc={function () { setSwap(i, { toSize: r.toSize + 1 }); }} />
-                <button onClick={function () { removeSwap(i); }} className="mgt-hover-scale" title="Remove rule"
+                <button onClick={function () { removeSwap(i); }} className="mgt-hover-scale"
+                  title="Remove rule" aria-label={"Remove " + swapName(r)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
             );
@@ -843,7 +892,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               Max simultaneous booking starts before a kitchen-load warning.
             </div>
           </div>
-          <Stepper value={kitchenLimit} disableDec={kitchenLimit <= 1} disableInc={kitchenLimit >= 20}
+          <Stepper value={kitchenLimit} disableDec={kitchenLimit <= 1} disableInc={kitchenLimit >= 20} label="the kitchen limit"
             onDec={() => onSaveLayout({ ...layout, kitchenLimit: kitchenLimit - 1 })}
             onInc={() => onSaveLayout({ ...layout, kitchenLimit: kitchenLimit + 1 })} />
         </div>

@@ -707,6 +707,82 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
     expect(total, "and there are ~20 switches between them").toBeGreaterThanOrEqual(15);
   });
 
+  it("every Stepper call site names what it steps", () => {
+    // v17.15.5. The `Stepper` in LayoutSettings renders two buttons whose entire
+    // content is `−` and `+`. Thirteen call sites, so twenty-six controls all
+    // announcing as one of two characters — the Toggle defect one control over,
+    // and bigger, because seven of the thirteen are inside a `.map`.
+    //
+    // `label` is required and has no default, so the atom itself is what makes
+    // an unnamed stepper unreachable; this guards the CALL SITES, which is the
+    // half a required prop cannot enforce in plain JS.
+    const src = read("components/LayoutSettings.jsx");
+    const tags = openingTagsOf(src, "Stepper").filter((t) => !/^<Stepper\b[^>]*\bvalue=\{value\}/.test(t));
+    expect(tags.length, "LayoutSettings should still render ~13 steppers")
+      .toBeGreaterThanOrEqual(12);
+    const unlabelled = tags.filter((t) => !/\blabel=/.test(t));
+    expect(unlabelled, "a Stepper with no `label` announces as \u2212 and + — name " +
+      "what it steps, and carry the item's identity where it repeats")
+      .toEqual([]);
+  });
+
+  it("a Stepper rendered from a list names the ITEM", () => {
+    // Same rule as the list-rendered Toggle above, and the same reason a regex
+    // cannot decide "inside a .map": these are pinned by name. Each of the four
+    // repeating groups must build its label from the ROW, not from a literal —
+    // `bandName` / `comboName` / `swapName` / the table id.
+    const src = read("components/LayoutSettings.jsx");
+    // COUNTED, not merely present. `has()` is satisfied by a single match, so
+    // reverting ONE of a pair to a literal would slip through — proven: with
+    // the size band's "smallest party size" made static, its sibling "largest"
+    // still matched and the assertion passed. Each row-namer is pinned to how
+    // many steppers it must label.
+    for (const [what, re, n] of [
+      ["per-table capacity", /label=\{"seats at table " \+ t\.id\}/g, 1],
+      ["size-band party size", /label=\{bandName\(b\) \+ ": /g, 2],
+      ["combo-rule party size", /label=\{comboName\(r\) \+ ": /g, 3],
+      ["swap-rule party size", /label=\{swapName\(r\) \+ ": /g, 2],
+    ]) {
+      expect(count(src, re),
+        "LayoutSettings " + what + ": this stepper is rendered once per row, so " +
+        "every one of them must build its label from the row's own identity — a " +
+        "literal gives every row in the list the same name").toBe(n);
+    }
+  });
+
+  it("the priorities editor's repeating buttons carry their row's identity", () => {
+    // The ROADMAP entry v17.15.4 left behind. Three bands ship by default, so
+    // each of these was one string in the source and three identical names on
+    // the page: the \u2715, the Table order / Indoor / Outdoor segmented buttons,
+    // the Prefer/Avoid chips' move and remove controls, and the two <select>s.
+    const src = read("components/LayoutSettings.jsx");
+    for (const [what, re] of [
+      ["band remove", /aria-label=\{"Remove rule: " \+ bandName\(b\)\}/],
+      ["zone-order segment", /aria-label=\{opt\[1\] \+ " \(" \+ bandName\(b\) \+ "\)"\}/],
+      ["combo rule remove", /aria-label=\{"Remove rule: " \+ comboName\(r\)\}/],
+      ["combo select", /aria-label=\{"Combo for rule " \+ \(i \+ 1\)\}/],
+      ["swap select", /aria-label=\{"Table to free, swap rule " \+ \(i \+ 1\)\}/],
+      ["swap remove", /aria-label=\{"Remove " \+ swapName\(r\)\}/],
+      ["chip move up", /aria-label=\{"Move " \+ id \+ " up in " \+ label \+ rowIn\}/],
+      ["chip remove", /aria-label=\{"Remove " \+ id \+ " from " \+ label \+ rowIn\}/],
+    ]) {
+      has(src, "priorities " + what, re,
+        "rendered once per rule/band, so the name must identify which one");
+    }
+  });
+
+  it("the zone-order segments lead with their VISIBLE text", () => {
+    // WCAG 2.5.3 (Label in Name), which v17.15.4's own /code-review caught this
+    // repo breaking while it thought it was fixing something. These three
+    // buttons DO have words — "Table order", "Indoor", "Outdoor" — so a name
+    // like "Try first: Indoor (party of 2 to 2)" would stop "click Indoor"
+    // working. `opt[1]` must come FIRST, with the band in parentheses after it.
+    const src = read("components/LayoutSettings.jsx");
+    has(src, "zone-order segment", /aria-label=\{opt\[1\] \+ " \("/,
+      "the visible label leads and the disambiguator follows — never a " +
+      "paraphrase, and never the disambiguator first");
+  });
+
   it("the Opening-hours row names its buttons per weekday", () => {
     // The same fault one control over, and the reason the sweep did not stop at
     // `<Toggle`: these two buttons HAVE text, so they read as named. But an

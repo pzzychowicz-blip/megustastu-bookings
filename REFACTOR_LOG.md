@@ -14847,6 +14847,57 @@ finger" lesson, met from the other side.
 Build clean, **575 tests**, `check:style` OK (including marker placement), lint
 0 errors / 47 warnings.
 
+### Closing the ROADMAP entry: every repeating control in Table priorities
+
+v17.15.4 named every `Toggle` in the app and left one entry behind — the
+priorities editor renders three controls per size band with a fixed name, so
+the three bands that ship by default give nine buttons three names between
+them. Sweeping the panel found the entry had **understated it**: the `Stepper`
+beside those buttons renders `−` and `+` as its entire content, and there are
+**thirteen** of them in this tab, i.e. twenty-six controls announcing as one of
+two characters. That is a worse defect than the one the entry described.
+
+- **`Stepper` takes a required `label`** — no default, for `ModalTitle`'s
+  `background` reason. That made all thirteen call sites answer for
+  themselves, which is why the Tables and Combos steppers were named here too
+  even though those sections are otherwise deferred: a required prop does not
+  let you scope it.
+- **`bandName` / `comboName` / `swapName`** hoisted to module scope. Five kinds
+  of control now need a row's identity, and a sixth hand-written copy of
+  `"party of " + b.min + " to " + b.max` is how they drift.
+- Named: the band ✕, the Try-first segments, the Prefer/Avoid chip row's
+  move-up / move-down / remove / add (which repeat per chip **and** per band),
+  the Prefer/Avoid button, both `<select>`s and the two remove ✕s. The
+  cross-zone Require chips gained `aria-pressed`, which they never published.
+
+**Label in Name applies to some of these and not others, and the split matters.**
+`−` and `+` are glyphs doing an icon's job — there is no word a voice-control
+user can say, so a descriptive name only adds reach. The Try-first segments DO
+have words ("Table order", "Indoor", "Outdoor"), so they are
+`opt[1] + " (" + bandName(b) + ")"`: **visible label first, disambiguator
+after**, which is the correction v17.15.4's own `/code-review` had to make.
+
+**Four guards, each proven against known-bad input — and two of the four did
+not bite on the first attempt.** The counted-match guard passed with one of the
+size band's paired steppers reverted to a literal, because `has()` is satisfied
+by a single match and the sibling still matched; it counts occurrences now
+(1 / 2 / 3 / 2). The other miss was in the *negative test*, not the guard: the
+probe used `label={"…"}` against a call site written `label="…"`, so it edited
+nothing and the green result meant nothing. **A guard proven by a probe that
+did not apply is not proven** — check the probe changed the file before
+believing the failure it did not produce.
+
+Verified last by reading the computed accessible names out of the running page,
+which is the only place the repetition is visible: 274 named controls, and
+every priorities control distinct — `"Decrease party of 1 to 1: smallest party
+size"`, `"Remove 7 from Avoid (party of 1 to 1)"`, `"Indoor (party of 1 to 1)"`.
+
+That same live read turned up what the entry becomes: the four banners' per-row
+✕, the Tables/Combos buttons, and `ListView`'s own card actions at `Assign` ×10
+on a ten-booking day. `ROADMAP.md` carries them, with the open question about
+the last one (a `listitem` ancestor names the booking, so context may be
+enough for a screen reader while a voice-control user still has ten targets).
+
 ### Docs
 
 `DESIGN.md` takes the design decisions (the two shipped replacements for the
