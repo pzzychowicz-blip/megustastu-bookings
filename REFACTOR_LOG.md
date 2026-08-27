@@ -15388,3 +15388,91 @@ that text — plus the rewritten assertion for the copy button. Three more
 known-bad inputs run and observed to fail: the paraphrased name written back,
 the state word returned to the reminder switch, and an unlabelled `<Toggle>`
 planted in `App.jsx`, which the old one-directory sweep could not see.
+
+---
+
+## v17.15.5 — one booking, one vocabulary
+
+**Date:** 2026-08-27 · **Branch:** `feat/v17.15.5-list-timeline-parity` ·
+**Behavioural change:** the List card's flag row changes appearance (solid
+coloured pills → icon-led plain text) and the status badge gains its mark; no
+data, no write path and no keyboard behaviour moves. **Files:**
+`src/components/ListView.jsx` · `atoms.jsx` · `tests/contrast.test.js` ·
+`DESIGN.md` · `src/App.jsx` (version).
+
+### What was wrong
+
+`TimelineView` spent v17.9.0 through v17.11.0 turning a block's markers into an
+icon rail — status, deposit, preferred, locked, repeat-no-show, overstaying,
+double-booked — each a drawn mark at `IC.control` with a real accessible name,
+in a fixed order, argued through three versions of measurement.
+
+`ListView` never followed. The same facts were seven solid coloured pills
+printing words: `[manual] [locked] [★5A+5B] [no-show ×3] [12 min late]
+[€40 deposit] [35 min]`. **One booking, two visual vocabularies** — a host
+switching views had to learn both, and in Split View they sit side by side.
+
+### The change
+
+Icon + its number, no fill. The marks and their order come from
+`TimelineBlock`'s own `allFlags` (deposit → preferred → locked →
+repeat-no-show), so a booking reads the same left-to-right in either view.
+
+**What the card keeps that the block cannot.** A 36px block has room for a
+glyph, so the deposit AMOUNT, the no-show COUNT and the preferred TABLE IDS
+live only in its hover title. The card has the width, so they stay on screen.
+Reducing them to bare glyphs would have been consistency bought by levelling
+down — the same mistake v17.9.0 caught when it dimmed the one legible element
+on a block to match the illegible ones.
+
+**Three flags get no mark, deliberately:** `manual`, `N min late` and the
+duration counter have no counterpart on a block (late is an amber BORDER
+there, the duration is the block's live width, `manual` is not drawn at all).
+`LateIcon` exists — it is the notification strip's Running-late mark — and was
+left out anyway: **an icon that means something in one view and nothing in the
+other is worse than no icon**, and the comment at its site says so, because the
+next reader will otherwise re-litigate it.
+
+### The pairing nothing could have seen
+
+Taking the fills off makes the CARD the text-bearing surface, and
+`--warn-text` / `--success-text` / `--text-secondary` on `--bg-card-strong` /
+`--bg-card-dim` is a pairing **neither guard in this repo can detect**:
+`check:style` sees literals, and `tests/contrast.test.js`'s coverage check sees
+a list of token PREFIXES that `--bg-card-*` does not match. That is precisely
+the blind spot which shipped the notification strip's danger sections at
+3.03:1 in v17.15.0 and the offline pane at 3.13:1 in v17.15.2.
+
+So all six were measured before the code was written, not after:
+
+| ink on card | light | dark |
+|---|---|---|
+| `--text-secondary` | 7.53 | 7.59 / 8.08 |
+| `--warn-text` | 6.79 | 7.58 / 8.07 |
+| `--success-text` | 7.13 | 9.10 / 9.69 |
+
+All clear AA with room; all six are registered. The two card fills are alpha
+over the sheet, so in light they composite to the same white and the rows are
+identical **by construction** — kept apart anyway, because the day one of them
+stops being alpha is the day that stops being true.
+
+**The measuring script got it wrong first, in this repo's own recorded way.**
+Its first run reported 1.40–2.32:1 in dark — every pairing far below AA. The
+cause was not the colours: `indexOf('[data-theme="dark"]')` matched the
+**comment on line 32 of `src/index.css` that mentions the selector**, so the
+dark block was never read and every dark ink silently fell back to its light
+value. `tests/contrast.test.js` anchors on `'[data-theme="dark"] {'` — with
+the brace — for exactly this reason. It is the same trap `tests/csp.test.js`
+hit in v17.15.1: **prose that names the thing a regex hunts for is
+indistinguishable from the thing**, and here it produced six alarming numbers
+that would have "justified" retuning three inks that were never wrong.
+
+### Docs
+
+`DESIGN.md`'s "Three label treatments" clause cited this exact row as the
+worked example of SOLID. It is rewritten rather than deleted, because the row
+is now the worked example of the rule MOVING: "match whatever sits next to
+you" is not a preference for fills, it is a preference for one treatment per
+row, and it points wherever the row goes. `atoms.jsx`'s `OutlineChip` comment
+cited the same row and was corrected in the same commit — a stale example is
+quoted with confidence.

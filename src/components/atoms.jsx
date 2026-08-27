@@ -1448,10 +1448,14 @@ export function TBadge({ id }) {
 // DESIGN.md's note that clickable chips are "the documented exception" was
 // about them keeping a FILL, which v17.8.0 already removed.
 //
-// The SOLID row tags in ListView (`manual`, `locked`, `no-show ×N`, `N min
-// late`, `€N deposit`) are deliberately NOT this. They share a dense row with
-// four other solid tags, and DESIGN.md's rule for choosing between the two
-// treatments is "match whatever sits next to you".
+// ListView's flag row (`manual`, `locked`, `★`, `no-show ×N`, `N min late`,
+// `€N deposit`) is deliberately NOT this either — and note it is no longer the
+// SOLID row this comment used to cite. v17.15.5 took the fills off and made it
+// icon-led plain TEXT, matching TimelineBlock's rail. It is not an outline chip
+// because an outline chip is a chip that stands ALONE as a count or a
+// disclosure; these are seven facts sharing one dense row, and seven rings in a
+// line is the noise the fills were removed to escape. DESIGN.md's rule decides
+// both cases the same way: match whatever sits next to you.
 export const CHIP_TONES = {
   success: { border: "var(--chip-success-border)", text: "var(--success-text)" },
   warn:    { border: "var(--chip-warn-border)",    text: "var(--warn-text)" },
