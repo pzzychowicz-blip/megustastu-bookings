@@ -15441,6 +15441,34 @@ the block *because* colour alone is not a status (a WCAG 1.4.1 failure three
 review passes found independently), and dropping List's word to match would
 have run that argument backwards on the one view that had it right.
 
+### The gap in the other direction
+
+Comparing the two views closely turned up something the change was not looking
+for: **Timeline draws a double-booking and the List card drew nothing at all.**
+`ClashIcon`, a 3px danger border and a `ClashBand` across the contested minutes
+on the block; on the card, no marker, no border, nothing — while the card is
+the surface staff read a day from.
+
+That is the fault v17.11.0 called out as unique in this app — the one place it
+asserted something FALSE rather than merely omitting it — surviving on the
+third surface for four versions after the other two were fixed. The data was
+already there and already memoised: App's `clashMap`, which `TimelineView` has
+taken as `clashes` since v17.11.0, needed passing to one more component.
+
+The card now carries a `ClashIcon` flag reading `double-booked` and takes the
+overdue red at 3px, **outranking the overstay warning and the late timer** —
+mirroring the block's own precedence, and for the block's own reason: those two
+are predictions, a clash is the schedule already being wrong. It reuses the
+overdue red rather than adding a fifth card border colour, because making the
+BORDER the distinguishing signal is the colour-only-status mistake v17.11.0
+exists to have fixed; the marker is what tells them apart.
+
+`findClashes` can return a pair whose `tables` is EMPTY (`canAssign` also
+rejects a pair taking two or more tables from one join cluster, and those sets
+need not intersect), so the table clause is conditional exactly as
+`TimelineBlock`'s is — unreachable in the default layout by pigeonhole, and
+reachable with a join group of four.
+
 ### The pairing nothing could have seen
 
 Taking the fills off makes the CARD the text-bearing surface, and

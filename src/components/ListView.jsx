@@ -35,7 +35,7 @@ import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins, describeBo
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
 import { SBadge, TBadge, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
-import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon } from "./Icons";
+import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon } from "./Icons";
 
 // ── The card's flag rail (v17.15.5) ──────────────────────────────────────────
 // The same facts TimelineBlock draws on its right-hand rail, in the same order
@@ -135,7 +135,9 @@ function endsASelection(el) {
 export const ListView = memo(function ListView({
   bookings, date, onEdit, onStatus, onDelete, onManual,
   nowMins = 0, warnings = {},
-  late = {}, onNoShow = () => {},
+  // v17.15.5: `clashes[id]` = {names, tables} for a booking double-booked with
+  // another — App's `clashMap`, the same memo TimelineView takes.
+  late = {}, clashes = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {}, focusReq = 0,
   showFinished = false, onToggleFinished = () => {},
   // v17.14.0: `emptyWalkin` — one name across all three views, see TimelineView.
@@ -351,20 +353,32 @@ export const ListView = memo(function ListView({
         // amber border + "N min late" tag; at "noshow" a one-tap No show button.
         // Seated-overstay warnings keep precedence over the late highlight.
         const lateSt = late[b.id] || null;
+        // v17.15.5: a double-booking, from App's clashMap.
+        const clash = clashes[b.id] || null;
         const sc = STATUS_COLORS[b.status];
         const useStatusColor = b.status === "seated" || b.status === "completed" || b.status === "cancelled";
         // v17.0.0: a pending card keeps the strong (upcoming) background but
         // carries the yellow status border — the spec's List marker for pending.
         const isPending = b.status === "pending";
         const cardBg = useStatusColor ? "var(--bg-card-dim)" : "var(--bg-card-strong)";
-        const cardBrd = warn
-          ? (warn.overdue ? "var(--card-overdue-border)" : "var(--card-warn-border)")
-          : lateSt
-            ? "var(--card-late-border)"   // v17.0.0 round 10: yellow, not the amber due-soon edge
-            : b._conflict
-              ? "var(--card-conflict-border)"
-              : (useStatusColor || isPending) ? sc.border : "var(--border-card-plain)";
-        const cardBrdW = (warn || lateSt) ? "3px" : (useStatusColor || isPending) ? "3px" : "1px";
+        // v17.15.5: a CLASH outranks everything below it, mirroring the block's
+        // own precedence (TimelineView's `border`, v17.11.0). The overstay
+        // warning and the late timer are PREDICTIONS; a double-booking is the
+        // schedule already being wrong, and one of the two parties is going to
+        // be turned away. It reuses the overdue red rather than adding a fifth
+        // card border colour — the two are told apart by the ClashIcon on the
+        // flag row, because making the BORDER the distinguishing signal is the
+        // colour-only-status mistake v17.11.0 exists to have fixed.
+        const cardBrd = clash
+          ? "var(--card-overdue-border)"
+          : warn
+            ? (warn.overdue ? "var(--card-overdue-border)" : "var(--card-warn-border)")
+            : lateSt
+              ? "var(--card-late-border)"   // v17.0.0 round 10: yellow, not the amber due-soon edge
+              : b._conflict
+                ? "var(--card-conflict-border)"
+                : (useStatusColor || isPending) ? sc.border : "var(--border-card-plain)";
+        const cardBrdW = (clash || warn || lateSt) ? "3px" : (useStatusColor || isPending) ? "3px" : "1px";
 
         // v17.6.0: the same "how long were they here" number survives the visit.
         // Seated shows the LIVE elapsed minutes (green, still running); completed
@@ -446,6 +460,19 @@ export const ListView = memo(function ListView({
         const depositTag = (Number(b.deposit) || 0) > 0 ? (
           <CardFlag ink={FLAG_SUCCESS} title={"Deposit " + (currency || "€") + b.deposit}>
             <DepositIcon size={IC.control} />{(currency || "€") + b.deposit}
+          </CardFlag>
+        ) : null;
+        // v17.15.5: the double-booked marker. `findClashes` can return a pair
+        // whose `tables` is EMPTY — `canAssign` also rejects a pair when each
+        // booking takes two or more tables from one join cluster, and those
+        // sets need not intersect — so the table clause is conditional, exactly
+        // as TimelineBlock's is. Unreachable in the default layout by
+        // pigeonhole, reachable with a join group of four, which is an ordinary
+        // Settings → Layout edit.
+        const clashTag = clash ? (
+          <CardFlag ink={FLAG_WARN} title={"Double-booked with " + clash.names.join(", ")
+            + (clash.tables.length ? " on " + (clash.tables.length === 1 ? "table " : "tables ") + clash.tables.join(", ") : "")}>
+            <ClashIcon size={IC.control} />double-booked
           </CardFlag>
         ) : null;
 
@@ -646,6 +673,7 @@ export const ListView = memo(function ListView({
                 {lockedTag}
                 {manualTag}
                 {noShowTag}
+                {clashTag}
                 {lateTag}
                 {durationTag}
               </div>

@@ -3217,6 +3217,13 @@ function BookingApp({uid}){
     isEmpty={isEmptyDay}
     dayClosed={dayClosed}
     currency={generalSettings.currency} />;
+  // v17.15.5: `clashes` is the SAME memo TimelineView takes. The List card drew
+  // nothing at all for a double-booking, which is the one fault where this app
+  // asserted something FALSE rather than merely omitting it — the argument that
+  // put ClashBanner and the block's marker in v17.11.0, applied to the third
+  // surface. It is built from `clashPairs` and not the dismiss-filtered list:
+  // dismissing a strip row quiets the row, it does not make the double-booking
+  // stop being true.
   const listEl=<ListView
     bookings={bookings}
     date={viewDate}
@@ -3227,6 +3234,7 @@ function BookingApp({uid}){
     nowMins={nowMins}
     warnings={overlapWarnings}
     late={lateMap}
+    clashes={clashMap}
     onNoShow={VA.onNoShow}
     selectedId={selectedListId}
     focusReq={listFocusReq}
