@@ -214,7 +214,16 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
       <span style={{ width: 40, fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", flexShrink: 0 }}>{label}</span>
+      {/* v17.15.4: the same fault as the Toggle atom's, one control over, and
+          it is why the sweep did not stop at `<Toggle`. This pill HAS text, so
+          it reads as named — but its text is its whole accessible name, and
+          the weekday is a sibling <span>. Seven rows, seven buttons announcing
+          "Open", with nothing saying which day. It stays a plain button rather
+          than becoming a switch: "Open" and "Closed" are two states of a day,
+          not on and off of one thing, and the row's steppers appear or vanish
+          with it. */}
       <button onClick={() => onChange({ closed: !closed })} className="mgt-hover-scale"
+        aria-label={label + ": " + (closed ? "Closed" : "Open")}
         style={{ ...pill, background: closed ? "var(--bg-stepper)" : "var(--suggest-bg)", color: closed ? "var(--text-muted)" : "var(--success-text)" }}>
         {closed ? "Closed" : "Open"}
       </button>
@@ -229,7 +238,12 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
             onDec={() => onChange({ close: c - 1 })} onInc={() => onChange({ close: c + 1 })} />
         </div>
       )}
+      {/* Its `title` is a DESCRIPTION, not a name — an element with text
+          content is named by that text, so this was the third identical
+          announcement in the row: seven "copy → all" buttons, and the tooltip
+          says "this day" without ever saying which. */}
       <button onClick={onCopyAll} className="mgt-hover-scale" title="Copy this day's hours to all days"
+        aria-label={"Copy " + label + "'s hours to all days"}
         style={{ ...pill, marginLeft: "auto", background: "var(--bg-stepper)", color: "var(--accent)", fontWeight: FW.semi }}>
         copy → all
       </button>

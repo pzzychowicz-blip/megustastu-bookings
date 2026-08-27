@@ -875,6 +875,14 @@ Three things that generalise past this atom:
   computed names out of the live app, which is this section's standing method
   and the only thing that catches this shape.
 
+**A control WITH text can be just as unnamed, and it hides better.** The
+Opening-hours row was swept in the same pass for that reason: seven buttons
+reading "Open" and seven reading "copy → all", with the weekday in a sibling
+`<span>` that names nothing. An element with content is named BY that content —
+and a `title` is a *description*, not a name, so the copy button's tooltip
+("Copy this day's hours to all days") never said which day either. Both carry an
+`aria-label` prefixed with the weekday.
+
 **Why this survived v17.12.0 and v17.13.0's gate**, which is the more useful
 lesson than the fix: both passes went after the surfaces that hold *bookings* —
 the card, the block, the floor-plan table, the form field. An atom that draws a

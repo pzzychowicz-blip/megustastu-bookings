@@ -15298,6 +15298,23 @@ whitespace-collapsed, since the text comes from a `rows={2}` textarea. Not
 truncated: two long reminders can share any prefix you would cut at, and the
 name is the only thing telling their switches apart.
 
+### The same fault, one control over
+
+The sweep did not stop at `<Toggle`, because a control **with** text can be just
+as unnamed and hides better. `DayHoursRow` renders seven buttons reading "Open"
+and seven reading "copy → all", and an element with content is named BY that
+content — the weekday lives in a sibling `<span>`. The copy button's `title` is
+a *description*, not a name, so its tooltip ("Copy this day's hours to all
+days") never said which day either. Both now carry a weekday-prefixed
+`aria-label`; measured live as `Mon: Open` … `Sun: Open` and
+`Copy Mon's hours to all days` … The Open/Closed pill stays a plain button
+rather than becoming a switch: "Open" and "Closed" are two states of a day, not
+on and off of one thing, and the row's steppers appear and vanish with it.
+
+`LayoutSettings`' priorities editor has three more repeated names (the ✕ and the
+Table order / Indoor / Outdoor segmented buttons, once per band) — out of scope
+here, logged in `ROADMAP.md`.
+
 ### The gate
 
 `tests/a11y.test.js` gains eight assertions and `openingTagsOf()`, a brace-aware

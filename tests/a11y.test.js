@@ -697,6 +697,18 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
     expect(total, "and there are ~20 switches between them").toBeGreaterThanOrEqual(15);
   });
 
+  it("the Opening-hours row names its buttons per weekday", () => {
+    // The same fault one control over, and the reason the sweep did not stop at
+    // `<Toggle`: these two buttons HAVE text, so they read as named. But an
+    // element with content is named BY that content, and the weekday is a
+    // sibling <span> — seven rows announcing "Open" and seven announcing
+    // "copy → all", with nothing saying which day either belongs to.
+    const Settings = read("components/Settings.jsx");
+    has(Settings, "Open/Closed pill", /aria-label=\{label \+ ": " \+ \(closed \? "Closed" : "Open"\)\}/,
+      "the day is what distinguishes one of these seven from the next");
+    has(Settings, "copy → all", /aria-label=\{"Copy " \+ label \+ "'s hours to all days"\}/,
+      "its `title` is a DESCRIPTION, not a name — content wins");
+  });
 });
 
 describe("the gate proves itself", () => {
