@@ -14,6 +14,26 @@ session and keeping it in sync.
 
 ## Deferred
 
+- **`SBadge`'s v17.15.5 icon didn't reach its two hand-written copies.**
+  `PlanView.jsx:382` (the per-table day-queue popover) and
+  `CustomersSettings.jsx:96` (a customer's booking history row) each draw the
+  status pill by hand — same `BLOCK_BG`/`BLOCK_INK` shape `SBadge` uses, minted
+  before the atom existed — and neither picked up `StatusIcon` when the atom
+  did. Unifying them is not a pure find-replace: both sit in denser rows than
+  the List card (`PlanView`'s queue row already carries time + name + status;
+  `CustomersSettings`' row carries date + time + size + status + an optional
+  no-show chip), so adding the icon may need `T.small` there rather than the
+  atom's `T.body`, or the row needs measuring before landing it. Grep
+  `BLOCK_BG\[b\.status\]` for both.
+
+- **The List card's double-booked marker (`ClashIcon`, v17.15.5) has never been
+  exercised live.** A clash can't be created through the ordinary UI — the
+  assign modal marks an occupied table "busy" and refuses the pick — so it only
+  arises from two devices editing offline and merging into an unresolvable
+  all-locked conflict. Verify it once such a merge is reproducible (or force one
+  by writing two overlapping `_locked` bookings on one table directly via the
+  DEV Firebase console) rather than trying to trigger it from the app.
+
 - **The rest of the app's `.map`-rendered controls with fixed names.**
   v17.15.5 closed the Settings → Layout → Table priorities half of this (every
   `Stepper`, the ✕s, the segmented Try-first buttons, the Prefer/Avoid chip
