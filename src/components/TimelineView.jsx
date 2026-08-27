@@ -44,7 +44,7 @@ import {
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
-import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
+import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
@@ -83,43 +83,12 @@ const HOUR_PILL = {
 };
 
 // ── The party-size ring (v17.9.0) ────────────────────────────────────────────
-// Shared by TimelineBlock and WaitGhost, for the reason the ghost exists at all:
-// it is a DIMMED copy of the block, so anything the block specifies twice can
-// drift out from under it. HOUR_PILL above is here for the same reason.
-//
-// The border alpha is 0.55, not `--blk-rule`'s 0.3, and the measurement is worth
-// recording because it sets the ceiling. A white rule at 0.3 over the block
-// fills is 1.43:1 confirmed and **1.21:1 pending** — not "subtle", absent; the
-// ring simply did not render on the yellow blocks. 0.55 takes that to 1.82 /
-// 1.38 / 2.78 seated / 2.97 cancelled.
-//
-// It does NOT reach WCAG 1.4.11's 3:1 for a component boundary on the two amber
-// fills, and it cannot: pure white over the pending yellow tops out at 1.98:1.
-// This is the same wall the amber exemption in constants.js records, hit one
-// element further down — and the same answer applies, because the two ways out
-// are both worse. A dark ring clears 3:1 and reads as DISABLED next to the
-// white-inked name it encircles (tried and reverted at block level for exactly
-// this, one commit after it shipped). An opaque fill clears it and turns a count
-// into a second status chip competing with the time. So: transparent ring, best
-// achievable white, number recorded. The DIGIT inside is `--text-on-accent` at
-// the name's own contrast, which is what has to be legible.
-//
-// v17.13.0: `--rim-solid-strong`, not a literal. The old comment here said the
-// alpha was hand-written "because BLOCK_BG is theme-invariant", which is a
-// reason not to use --border-glass (that token FLIPS) and was read as a reason
-// not to use a token at all — so the same white rim ended up written out 26
-// times across twelve files at 0.2 and twice more at 0.55. A token declared in
-// :root ONLY is theme-invariant too, which is the property that was wanted.
-// The 0.55 above is still the recorded measurement; it now lives beside its
-// sibling in index.html, and tests/contrast.test.js resolves it from there.
-const SIZE_RING = {
-  flexShrink: 0, boxSizing: "border-box",
-  width: 18, height: 18, borderRadius: R.pill,
-  border: "1px solid var(--rim-solid-strong)", background: "transparent",
-  display: "flex", alignItems: "center", justifyContent: "center",
-  fontSize: T.micro, fontWeight: FW.semi, lineHeight: 1,
-  fontVariantNumeric: "tabular-nums", position: "relative"
-};
+// v17.15.5: `SIZE_RING` moved to atoms.jsx as the `SizeRing` component — the
+// List card is now a third consumer, and a style object imported from one view
+// into another is not sharing, it is coupling. The recorded 0.55 white rim, and
+// the measurements behind it, travelled with it; the block and the ghost pass
+// no `rim` and are unchanged.
+
 
 // ── How wide a block must be before it may wear a start-time chip (v17.9.0) ──
 // Everything on a block except the name is flexShrink:0, so the name gets
@@ -680,12 +649,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
             ring is the same fact at a glance and it is flexShrink:0, so it
             survives. Transparent fill: it is a count, not a status, and a
             filled pill here would compete with the time chip. */}
-        {showRing ? (
-          <span
-            title={b.size + " guest" + (b.size === 1 ? "" : "s")}
-            style={{ ...SIZE_RING, marginLeft: 6 }}
-          >{b.size}</span>
-        ) : null}
+        {showRing ? <SizeRing n={b.size} style={{ marginLeft: 6 }} /> : null}
       </span>
       {/* v17.9.0: the flag rail — the four markers that used to be appended to
           the label string, plus the ★ that was floating on the left. Order is
@@ -1097,7 +1061,7 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
           minWidth: 0, fontSize: T.small, fontWeight: FW.bold,
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
         }}>{g.name}</span>
-        {showRing ? <span style={{ ...SIZE_RING, marginLeft: 6 }}>{g.size}</span> : null}
+        {showRing ? <SizeRing n={g.size} style={{ marginLeft: 6 }} /> : null}
       </span>
     </div>
   );

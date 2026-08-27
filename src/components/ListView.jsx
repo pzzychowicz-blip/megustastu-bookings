@@ -34,7 +34,7 @@ import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "..
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins, describeBooking } from "../lib/booking-logic";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
-import { SBadge, TBadge, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
+import { SBadge, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
 import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon } from "./Icons";
 
 // ── The card's flag rail (v17.15.5) ──────────────────────────────────────────
@@ -662,7 +662,14 @@ export const ListView = memo(function ListView({
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontWeight: FW.bold, fontSize: T.title, color: S.text }}>{b.name}</span>
                 <SBadge status={b.status} />
-                <span style={{ fontSize: T.body, color: S.text, fontWeight: FW.bold }}>{b.size + " pax"}</span>
+                {/* v17.15.5: the party size as the block's own ring, not
+                    "4 pax". The `rim` is the card's, not the block's — see
+                    SizeRing: 0.55 white is a measurement taken against a
+                    SATURATED fill and is close to invisible on a card. Nothing
+                    is lost to a screen reader, because the card's own
+                    aria-label comes from `describeBooking`, which says
+                    "4 guests" and always has. */}
+                <SizeRing n={b.size} rim="var(--chip-neutral-border)" />
                 {/* v17.15.5: TimelineBlock's rail order — deposit, preferred,
                     then the exception flags (locked / repeat-no-show), so the
                     two views read the same left-to-right. `manual` sits with

@@ -1395,6 +1395,67 @@ export function ModalPresence({ show, children, outMs = EXIT_MS }) {
   );
 }
 
+// ── Party-size ring (v17.15.5) ───────────────────────────────────────────────
+// The circled party size. It was `SIZE_RING`, a module const in
+// `TimelineView.jsx` shared by `TimelineBlock` and `WaitGhost`; v17.15.5 gives
+// it a third consumer — the List card, which printed "4 pax" — so it moves
+// here rather than being imported across components. The rule the old site
+// recorded holds and is why it is shared at all: the ghost is a DIMMED copy of
+// the block, so anything the block specifies twice can drift out from under it.
+//
+// ── The rim is a PROP, and that is the whole subtlety ────────────────────────
+// `--rim-solid-strong` is theme-invariant white at 0.55, and that number is a
+// recorded MEASUREMENT, not a taste: white at `--blk-rule`'s 0.3 over the block
+// fills is 1.43:1 confirmed and **1.21:1 pending** — not subtle, absent, so the
+// ring did not render at all on the yellow blocks. 0.55 takes it to 1.82 /
+// 1.38 / 2.78 seated / 2.97 cancelled. It still does not reach WCAG 1.4.11's
+// 3:1 on the two amber fills and cannot — pure white over the pending yellow
+// tops out at 1.98:1 — which is the amber exemption in `constants.js` hit one
+// element further down, with the same two bad ways out: a dark ring clears 3:1
+// and reads as DISABLED beside the white-inked name it encircles (tried and
+// reverted at block level one commit after it shipped), and an opaque fill
+// turns a count into a second status chip competing with the time.
+//
+// **That reasoning is about a SATURATED BLOCK FILL and does not travel.** On
+// the List card's `--bg-card-strong` — alpha over the sheet, i.e. near white in
+// light mode — a 0.55 white rim is close to invisible. So the block and the
+// ghost pass nothing and keep their recorded value byte-for-byte, and the card
+// passes `--chip-neutral-border`, which already exists as
+// `color-mix(--text-secondary 50%)` and is DESIGN.md's own rule for an outline:
+// the border is the ink at half strength, one decision rather than two.
+// Copying the block's rim across would have been the "a quieter version of X
+// dims X, it does not re-specify X" trap run in reverse.
+//
+// The DIGIT is `color: inherit`, so it takes `--text-on-accent` on a block and
+// the card's own ink on a card without either caller stating it.
+// The DEFAULT rim stays inside this declaration rather than becoming a
+// parameter default, and that is deliberate: `tests/contrast.test.js`'s
+// `ringAlpha()` finds `const SIZE_RING` and reads the white rule out of the
+// declaration, so that it measures what SHIPS instead of a number retyped into
+// a test. Moving the value onto the signature would have left the guard
+// anchored on a declaration with no border in it — which it caught, by
+// throwing rather than passing.
+const SIZE_RING = {
+  flexShrink: 0, boxSizing: "border-box",
+  width: 18, height: 18, borderRadius: R.pill,
+  border: "1px solid var(--rim-solid-strong)", background: "transparent",
+  display: "flex", alignItems: "center", justifyContent: "center",
+  fontSize: T.micro, fontWeight: FW.semi, lineHeight: 1,
+  fontVariantNumeric: "tabular-nums", position: "relative"
+};
+export function SizeRing({ n, rim, style }) {
+  return (
+    <span
+      title={n + " guest" + (n === 1 ? "" : "s")}
+      style={{
+        ...SIZE_RING,
+        ...(rim ? { border: "1px solid " + rim } : null),
+        ...(style || {})
+      }}
+    >{n}</span>
+  );
+}
+
 // ── Status badge (colour-coded by booking status) ────────────────────────────
 // v17.15.5: it carries its MARK as well as its word.
 //

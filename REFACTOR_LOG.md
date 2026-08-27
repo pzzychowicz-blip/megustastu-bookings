@@ -15469,6 +15469,35 @@ need not intersect), so the table clause is conditional exactly as
 `TimelineBlock`'s is — unreachable in the default layout by pigeonhole, and
 reachable with a join group of four.
 
+### The party-size ring, and a guard doing its job
+
+`SIZE_RING` was a module const in `TimelineView.jsx`, shared with `WaitGhost`.
+The card printed `4 pax` instead, so the ring gained a third consumer and moved
+to `atoms.jsx` as `SizeRing` — a style object imported from one view into
+another is not sharing, it is coupling.
+
+**The rim could not travel with it.** `--rim-solid-strong` is white at 0.55 and
+that is a recorded measurement against a SATURATED BLOCK FILL: white at 0.3 is
+1.21:1 on pending, i.e. absent. On the List card's `--bg-card-strong` — alpha
+over the sheet, so near white in light — 0.55 white is close to invisible. So
+`rim` is a prop: the block and the ghost pass nothing and keep the recorded
+value byte-for-byte, and the card passes `--chip-neutral-border`, which already
+existed as `color-mix(--text-secondary 50%)` and is DESIGN.md's own rule that an
+outline's border is its ink at half strength. Copying the block's rim across
+would have been "a quieter version of X dims X, it does not re-specify X" run
+backwards.
+
+**`tests/contrast.test.js` caught the move, which is the point of it.** The
+first cut put the default on the function signature; `ringAlpha()` anchors on
+`const SIZE_RING` and reads the white rule out of the DECLARATION, so it threw
+— "The party-size ring was renamed or moved — re-anchor `ringAlpha()` on it
+rather than deleting this guard" — instead of silently measuring nothing. Both
+halves were done: the default went back inside the declaration where the guard
+can see it, and the guard was re-pointed at `atoms.jsx`. It was then re-proven
+against known-bad input (rim weakened to `--rim-solid`: ten failures; restored:
+612 pass), because a re-anchored guard that no longer bites is worse than a
+deleted one.
+
 ### The pairing nothing could have seen
 
 Taking the fills off makes the CARD the text-bearing surface, and

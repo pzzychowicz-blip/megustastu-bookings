@@ -368,6 +368,16 @@ const TIMELINE_SRC = readFileSync(
   "utf8"
 );
 
+// v17.15.5: `SIZE_RING` moved to atoms.jsx when the List card became its third
+// consumer, so `ringAlpha()` reads THIS file now. Re-anchored rather than
+// deleted, which is what the throw in `ringAlpha()` asks the next person to do
+// — and it is what happened: the move made that guard fail loudly instead of
+// measuring a default, which is the entire reason it throws.
+const ATOMS_SRC = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "atoms.jsx"),
+  "utf8"
+);
+
 // The BLOCK chip's own opacity, as authored.
 //
 // /code-review fix: this used to scan every `...HOUR_PILL` spread in the file
@@ -564,11 +574,11 @@ const RING_FLOOR = {
 // the test is not guarding it. Anchored on `const SIZE_RING`, and it THROWS if
 // that declaration is gone rather than silently measuring a default.
 function ringAlpha() {
-  const lines = TIMELINE_SRC.split("\n");
+  const lines = ATOMS_SRC.split("\n");
   const start = lines.findIndex((l) => /const\s+SIZE_RING\s*=/.test(l));
   if (start < 0) {
     throw new Error(
-      "contrast.test: could not find `const SIZE_RING` in TimelineView.jsx. " +
+      "contrast.test: could not find `const SIZE_RING` in atoms.jsx. " +
       "The party-size ring was renamed or moved — re-anchor ringAlpha() on it " +
       "rather than deleting this guard."
     );
