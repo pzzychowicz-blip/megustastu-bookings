@@ -16064,3 +16064,52 @@ new user-visible surface, only names for existing ones.
 guards in `tests/a11y.test.js`, five of them proven against known-bad input.
 Main bundle 333.55 → 333.51 kB (90.42 → 90.46 kB gz).
 
+### 9. `/code-review` fixes
+
+Three findings, all confirmed, all fixed.
+
+**1. The decision pin was built out of guessed spellings.** §7's `hasnt` trio
+matched string SHAPES — `aria-label={"Assign…" + b.name`. Run against four
+renames a later sweep would plausibly write, it **missed two**: `"Set " + s + …`
+(the literal `s` cannot match the capital S of "Set") and `"Mark " + b.name + "
+as " + s`, the most natural phrasing of the lot. And `hasnt()`, unlike `has()`,
+does **not** throw when its pattern matches nothing — so a pattern that can never
+fire passes silently forever. That is the tautology this file's own header exists
+to prevent, in the one guard of this version that had not been proven against
+known-bad input.
+
+It is STRUCTURAL now: find the action row's buttons (`onClick={stopped(`) and
+require that none carries an `aria-label` at all. No spelling to guess. Both
+previously-missed renames are now caught — verified by injecting each.
+
+**2. `ClashBanner` had no `(no name)` fallback** — the only one of the four
+banners without it (Late and WaitAvail via `who`, Overlap inline). `sanitize`
+writes `name: b.name || ""` and the booking form does not require a name, so two
+nameless bookings clashing gave the dismiss button the accessible name
+`"…warning for  and "`. **The fix for ambiguity had reintroduced ambiguity in
+its own worst case.** `firstWho`/`laterWho` now guard it, and the visible
+sentence and the Assign button read those same values rather than re-deriving
+them — or the pane would say "(no name)" while the button beside it said
+nothing.
+
+Verified live by blanking both names in DEV: `"Dismiss the double-booking
+warning for (no name) and (no name)"`. (Two genuinely anonymous bookings still
+produce two identical late-row names. That is the honest limit of the data —
+nothing distinguishes them — and it is what the visible sentence already says.)
+
+**3. An `aria-label` overrides `title`, and that cost the disabled Remove button
+its reason.** With one table left the button is disabled and its `title` reads
+"A layout needs at least one table" — which WAS its accessible name before §4.
+Adding `aria-label={"Remove table " + t.id}` took the name and left the reason in
+`title`, where announcement is inconsistent across AT. It bought nothing in
+exchange: the button is disabled only when ONE table exists, so there is exactly
+one of them on screen and nothing to disambiguate. The disabled branch carries
+the reason in the label now.
+
+**The rule: adding a name must never cost a name that was already saying more.**
+`title` is not a safe place to leave information once anything else names the
+element.
+
+Two new guards (the nameless-booking fallback across all four banners; the
+structural pin), both proven against known-bad input. **641 tests.**
+

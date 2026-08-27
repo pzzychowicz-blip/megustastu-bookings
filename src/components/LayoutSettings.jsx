@@ -497,15 +497,25 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                         accessible name — one per table, thirteen buttons called
                         "Rename table". The v17.15.5 precedent applies: the short
                         `title` stays as the tooltip, and a row-specific
-                        `aria-label` carries the identity. The disabled reason
-                        deliberately stays in `title` alone — it is a hint about
-                        why the control is inert, not what the control is. */}
+                        `aria-label` carries the identity.
+                        /code-review: the disabled reason must go IN the label,
+                        not be left in `title`. An `aria-label` overrides `title`
+                        for the accessible NAME, and `title`-as-description is
+                        announced inconsistently — so the first version traded
+                        "A layout needs at least one table" for "Remove table 1A,
+                        dimmed" and the explanation was simply gone. It bought
+                        nothing in exchange either: the button is disabled only
+                        when ONE table exists, so there is exactly one of them on
+                        screen and nothing to disambiguate. Adding a name must
+                        never cost a name that was already saying more. */}
                     <button onClick={function () { startEdit(t.id); }} className="mgt-hover-scale" title="Rename table"
                       aria-label={"Rename table " + t.id}
                       style={{ ...GCHIP_BTN, width: H.chip, height: H.chip, fontSize: T.lead, border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)" }}><EditIcon size={IC.control} /></button>
                     <button onClick={function () { setEditId(null); setPendingRemove(t.id); }} disabled={tables.length <= 1}
                       className={tables.length <= 1 ? undefined : "mgt-hover-scale"}
-                      aria-label={"Remove table " + t.id}
+                      aria-label={tables.length <= 1
+                        ? "Remove table " + t.id + " (unavailable — a layout needs at least one table)"
+                        : "Remove table " + t.id}
                       title={tables.length <= 1 ? "A layout needs at least one table" : "Remove table"}
                       style={{ ...X_BTN, opacity: tables.length <= 1 ? 0.4 : 1, cursor: tables.length <= 1 ? "not-allowed" : "pointer" }}><CloseIcon size={IC.control} /></button>
                   </>

@@ -856,7 +856,10 @@ describe("LayoutSettings' Tables and Combos name their rows (v17.15.6)", () => {
   it("every repeating Tables/Combos control carries its row", () => {
     for (const [what, re] of [
       ["rename table", /aria-label=\{"Rename table " \+ t\.id\}/],
-      ["remove table", /aria-label=\{"Remove table " \+ t\.id\}/],
+      // The disabled branch carries the REASON in the name too (/code-review):
+      // an aria-label overrides `title`, so leaving the reason there alone
+      // silently dropped it from what the button announces.
+      ["remove table", /aria-label=\{tables\.length <= 1\s*\n?\s*\? "Remove table " \+ t\.id \+ " \(unavailable/],
       ["chip move left", /aria-label=\{"Move " \+ id \+ " left in its joined group"\}/],
       ["chip move right", /aria-label=\{"Move " \+ id \+ " right in its joined group"\}/],
       ["chip remove", /aria-label=\{"Remove " \+ id \+ " from its joined group"\}/],
@@ -997,7 +1000,7 @@ describe("a banner row's controls carry their row (v17.15.6)", () => {
       // dismissal Set is keyed by pair for exactly this reason, so a name
       // mentioning one booking would describe a different thing from the one
       // the button dismisses.
-      ["clash", Clash, /aria-label=\{"Dismiss the double-booking warning for " \+ first\.name \+ " and " \+ later\.name\}/],
+      ["clash", Clash, /aria-label=\{"Dismiss the double-booking warning for " \+ firstWho \+ " and " \+ laterWho\}/],
     ]) {
       has(src, what + " dismiss", re, "the row's subject must be in the name");
     }
@@ -1020,10 +1023,33 @@ describe("a banner row's controls carry their row (v17.15.6)", () => {
     // would then be free to drift from the text beside it.
     for (const [what, src, re] of [
       ["Reassign", Overlap, /\{"Reassign " \+ w\.next\}<\/button>/],
-      ["Assign", Clash, /\{"Assign " \+ later\.name\}<\/button>/],
+      ["Assign", Clash, /\{"Assign " \+ laterWho\}<\/button>/],
     ]) {
       has(src, what + " names itself", re,
         "this button's VISIBLE text is already per-row, so it needs no label");
+    }
+  });
+
+  it("every banner name survives a nameless booking", () => {
+    // /code-review. `sanitize` writes `name: b.name || ""` and the booking form
+    // does not require a name, so an empty name is reachable data — and a name
+    // built by concatenation then announces "…warning for  and ", identifying
+    // nothing. Three of the four banners guarded it; ClashBanner did not, so
+    // the fix for ambiguity reintroduced ambiguity in its own worst case.
+    for (const [what, src] of [["LateBanner", Late], ["OverlapBanner", Overlap],
+                               ["WaitAvailBanner", Wait], ["ClashBanner", Clash]]) {
+      has(src, what + " nameless fallback", /\|\| "\(no name\)"/,
+        "an empty name is reachable data, and a button announcing a blank is " +
+        "exactly the ambiguity these names exist to remove");
+    }
+    // ClashBanner names TWO parties, so it needs two — and the visible sentence
+    // and the Assign button must read the same guarded values, or the pane says
+    // "(no name)" while the button beside it says nothing at all.
+    expect(count(Clash, /\|\| "\(no name\)"/g), "one per party in the pair").toBe(2);
+    for (const re of [/const msg = firstWho \+/, /\{"Assign " \+ laterWho\}/]) {
+      has(Clash, "guarded value reused", re,
+        "the sentence and the button must read the same guarded name as the " +
+        "dismiss label, not re-derive it");
     }
   });
 
@@ -1102,21 +1128,33 @@ describe("the List card's actions stay named by their ancestor (v17.15.6)", () =
   });
 
   it("the action buttons are deliberately NOT renamed", () => {
-    // If a later pass adds per-card labels, this fails and sends the reader to
-    // the reasoning rather than letting a 60-control rename land unexamined.
-    // Scoped to the action row's own shapes so an unrelated label elsewhere in
-    // the file does not trip it.
-    for (const [what, re] of [
-      ["assign", /aria-label=\{"Assign[^}]*\+ b\.name/],
-      ["delete", /aria-label=\{"Delete[^}]*\+ b\.name/],
-      ["status", /aria-label=\{"?\{?s\}?[^}]*\+ b\.name/],
-    ]) {
-      hasnt(List, what, re,
-        "DECIDED in v17.15.6, not overlooked: the card is a named listitem, so " +
-        "these inherit the booking. Renaming all sixty repeats the guest on " +
-        "every control and is measurably more verbose for the users it is for. " +
-        "Change it only deliberately — and update this test's reasoning if so");
-    }
+    // /code-review. The first version of this pin guessed at STRING SHAPES —
+    // three regexes like `aria-label={"Assign…" + b.name`. Run against four
+    // renames a later sweep would plausibly write, it missed two: `"Set " + s +
+    // …` (the literal `s` cannot match the capital S of "Set") and `"Mark " +
+    // b.name + " as " + s`, which is the most natural phrasing of all.
+    //
+    // And `hasnt()`, unlike `has()`, does NOT throw when its pattern matches
+    // nothing — so a pattern that can never fire passes silently forever. A pin
+    // built out of guessed spellings is the tautology this file's header exists
+    // to prevent, in the one guard of this version that was not proven against
+    // known-bad input.
+    //
+    // So it is STRUCTURAL instead: find the action row's buttons and require
+    // that none of them carries an `aria-label` at all. No spelling to guess,
+    // and it catches all four candidates plus any phrasing nobody has thought
+    // of yet.
+    const actions = openingTagsOf(List, "button")
+      .filter((t) => /\bonClick=\{stopped\(/.test(t));
+    expect(actions.length, "the card's action row should still hold ~5 buttons " +
+      "wrapped in `stopped()` — if this drops to 0 the guard has stopped " +
+      "looking at anything").toBeGreaterThanOrEqual(4);
+    const named = actions.filter((t) => /\baria-label=/.test(t));
+    expect(named, "DECIDED in v17.15.6, not overlooked: the card is a named " +
+      "listitem carrying describeBooking, so these inherit the booking. " +
+      "Renaming all sixty repeats the guest on every control and is measurably " +
+      "more verbose for the users it is for. Change it only deliberately — and " +
+      "rewrite this test's reasoning if you do").toEqual([]);
   });
 });
 
