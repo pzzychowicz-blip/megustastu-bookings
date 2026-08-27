@@ -15433,6 +15433,14 @@ left out anyway: **an icon that means something in one view and nothing in the
 other is worse than no icon**, and the comment at its site says so, because the
 next reader will otherwise re-litigate it.
 
+**The status badge keeps its word and gains its mark.** `SBadge` already used
+`BLOCK_BG`/`BLOCK_INK`, so the fill was never the difference — the difference
+was that the block says the status with a glyph and the card said it with a
+word. It now says both. Icon-only was rejected: v17.11.0 put `StatusIcon` on
+the block *because* colour alone is not a status (a WCAG 1.4.1 failure three
+review passes found independently), and dropping List's word to match would
+have run that argument backwards on the one view that had it right.
+
 ### The pairing nothing could have seen
 
 Taking the fills off makes the CARD the text-bearing surface, and

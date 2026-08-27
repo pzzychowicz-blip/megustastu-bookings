@@ -30,7 +30,7 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins, describeBooking } from "../lib/booking-logic";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
@@ -61,7 +61,7 @@ import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, L
 // registered in tests/contrast.test.js (6.73–9.69:1, both themes); a tone
 // chosen by hand is exactly what that registry exists to catch.
 const FLAG = {
-  display: "inline-flex", alignItems: "center", gap: 4,
+  display: "inline-flex", alignItems: "center", gap: SP.tight,
   fontSize: T.small, fontWeight: FW.semi, whiteSpace: "nowrap"
 };
 const FLAG_NEUTRAL = "var(--text-secondary)";

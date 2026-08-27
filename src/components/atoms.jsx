@@ -14,7 +14,7 @@
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
-import { AlertIcon, ChevronRightIcon } from "./Icons";
+import { AlertIcon, ChevronRightIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
 // Return inline-style objects. Used wherever an `<input>` or `<button>` needs
@@ -1396,6 +1396,28 @@ export function ModalPresence({ show, children, outMs = EXIT_MS }) {
 }
 
 // ── Status badge (colour-coded by booking status) ────────────────────────────
+// v17.15.5: it carries its MARK as well as its word.
+//
+// The fill was never the difference between this badge and a timeline block:
+// both have read `BLOCK_BG` / `BLOCK_INK` since v17.8.0. The difference was
+// that a block says a booking's status with `StatusIcon` and nothing else,
+// while the card said it with a word and nothing else — so the two views named
+// one attribute two ways, which is the whole defect v17.15.5 exists to close.
+//
+// **It keeps the WORD, and that is the decision.** Matching the block exactly
+// would mean dropping to a bare glyph, and v17.11.0 put `StatusIcon` on the
+// block *because* colour alone is not a status — a WCAG 1.4.1 failure three of
+// that review's seven passes found independently. Running that argument
+// backwards on the one surface which already had the text would be trading a
+// real gain for a cosmetic one. So the block gained the card's meaning in
+// v17.11.0, and here the card gains the block's mark: they meet, rather than
+// one copying the other.
+//
+// The icon is `aria-hidden` (as every icon in Icons.jsx is) and the word is
+// the badge's own text, so the accessible name is unchanged — "Seated", not
+// "Seated Seated". `IC.control`, matching the block's rail and the status
+// buttons in ListView's action row, which have carried these same marks since
+// v17.10.0.
 export function SBadge({ status }) {
   return (
     <span style={{
@@ -1403,10 +1425,10 @@ export function SBadge({ status }) {
       background: BLOCK_BG[status] || BLOCK_BG.confirmed,
       color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: RIM_SOLID,
       fontWeight: FW.semi, textTransform: "capitalize",
-      display: "inline-block",
+      display: "inline-flex", alignItems: "center", gap: SP.snug,
       boxShadow: "var(--shadow-flat)"
     }}>
-      {status}
+      <StatusIcon status={status} size={IC.control} />{status}
     </span>
   );
 }
