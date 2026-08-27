@@ -15926,3 +15926,39 @@ Edit (Call the fish supplier before they close)
 Delete (Call the fish supplier before they close)
 ```
 
+### 6. The two table multi-selects — a name AND a state
+
+Sweeping the live page after §4 left exactly two families of bare-id button: the
+**"Add a combo"** picker and the priorities editor's **"Require"** row. Thirteen
+buttons each, both on screen at once, all twenty-six announcing nothing but a
+table id.
+
+"Add a combo" was missing more than a name. **Selection there is carried by an
+accent fill and nothing else**, so with no `aria-pressed` you cannot tell which
+tables you have picked — and picking tables is the entire control. v17.15.5 had
+already answered exactly this for `Require` and stopped at that one row, so the
+fix is applying this file's own existing decision rather than making a new one.
+
+`aria-pressed` and not `role="switch"`, per the rule the `Toggle` atom records: a
+switch is a state that STAYS, while these are selections inside a set being
+assembled.
+
+**The guard is the invariant, not a count.** The first draft asserted "there are
+two `aria-pressed`" and failed immediately — there are three, because v17.15.5's
+zone-order segments are one. A count would need bumping every time a segmented
+control is added, which is the moment it stops meaning anything. It now walks
+every `<button>` whose style paints `on ? "var(--accent)"` and requires each to
+expose `aria-pressed`: **a control that paints itself selected must say it is.**
+
+#### Result, measured live
+
+The Layout tab fully expanded — Tables, Joined tables, Combos and Table
+priorities all open:
+
+| | before | after |
+|---|---|---|
+| visible buttons | 443 | 443 |
+| with no accessible name | 0 | 0 |
+| named by a bare table id | 26 | **0** |
+| sharing a name with another button | 26 | **0** |
+

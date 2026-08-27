@@ -915,6 +915,37 @@ describe("LayoutSettings' Tables and Combos name their rows (v17.15.6)", () => {
     }
   });
 
+  it("the two table multi-selects carry both a name AND a state", () => {
+    // The last bare-id lists, both 13 buttons, both on screen at once — so
+    // "Add a combo"'s 1A and "Require"'s 1A announced identically.
+    //
+    // "Add a combo" was missing its STATE too: selection is carried by an
+    // accent fill and nothing else, so without `aria-pressed` you cannot tell
+    // which tables you have picked, and picking tables IS the control.
+    // v17.15.5 had already answered this for `Require` and stopped there.
+    for (const [what, re] of [
+      ["add-combo name", /aria-label=\{t\.id \+ " — include in the new combo"\}/],
+      ["require name", /aria-label=\{id \+ " — require in cross-zone combos"\}/],
+    ]) {
+      has(src, what, re, "two 13-button lists share the ids and the screen");
+    }
+    // Not a magic count — the actual invariant. In this file a SELECTED control
+    // is drawn as `on ? "var(--accent)" : …`, and that fill is the only signal
+    // it has. So: every button that paints itself selected must SAY it is.
+    // A count would have to be bumped whenever a segmented control is added,
+    // which is the moment the guard stops meaning anything (there is already a
+    // third `aria-pressed` here — v17.15.5's zone-order segments — and an
+    // earlier draft of this test asserted 2 and failed on it).
+    const selectors = openingTagsOf(src, "button")
+      .filter((t) => /\bon \? "var\(--accent\)"/.test(t));
+    expect(selectors.length, "the file should still have selection buttons")
+      .toBeGreaterThanOrEqual(3);
+    const mute = selectors.filter((t) => !/\baria-pressed=/.test(t));
+    expect(mute, "a button that paints itself selected must SAY it is — the " +
+      "accent fill is the only other signal, and colour alone is not a state")
+      .toEqual([]);
+  });
+
   it("a single-instance control is deliberately left static", () => {
     // Not everything in a `.map` repeats on screen. `editId` and
     // `pendingRemove` are single-valued, so Save name / Cancel / Remove anyway

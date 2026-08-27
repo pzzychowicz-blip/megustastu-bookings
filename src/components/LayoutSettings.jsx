@@ -741,10 +741,21 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               Add a combo
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", marginBottom: 8 }}>
+              {/* v17.15.6: the LAST bare-id list, and the only one that was
+                  missing its STATE as well as its name. Selection here is
+                  carried by an accent fill and nothing else, so without
+                  `aria-pressed` a screen-reader user cannot tell which tables
+                  they have picked — and picking tables IS the whole control.
+                  `aria-pressed`, not `role="switch"`: the repo's rule is that a
+                  switch is a state that STAYS (see the `Toggle` atom), while
+                  these are selections inside a set being assembled. The
+                  `Require` row further down already answers it this way. */}
               {tables.map(function (t) {
                 const on = addIds.indexOf(t.id) >= 0;
                 return (
                   <button key={t.id} onClick={function () { toggleAdd(t.id); }} className="mgt-hover-scale"
+                    aria-pressed={on}
+                    aria-label={t.id + " — include in the new combo"}
                     style={{
                       fontSize: T.body, fontWeight: FW.bold, borderRadius: R.pill, padding: "4px 10px", cursor: "pointer",
                       border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)",
@@ -901,9 +912,15 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>Require</span>
             {tableIds.map(function (id) {
               const on = priMixed.indexOf(id) >= 0;
+              // v17.15.6: v17.15.5 gave this row its `aria-pressed` and left the
+              // NAME a bare id — so thirteen buttons here announce the same
+              // words as the thirteen in "Add a combo" above, which is on
+              // screen at the same time. State without identity is half a
+              // control.
               return (
                 <button key={id} onClick={function () { toggleMixed(id); }} className="mgt-hover-scale"
                   aria-pressed={on}
+                  aria-label={id + " — require in cross-zone combos"}
                   style={{ ...PICK_CHIP, background: on ? "var(--accent)" : "var(--bg-stepper)", color: on ? "var(--text-on-accent)" : "var(--text-primary)", border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)" }}>
                   {id}
                 </button>
