@@ -292,6 +292,42 @@ describe("optimise / applyOpt / bookingsAfterAction", () => {
     expect(out[0].tables).toEqual([]);
     expect(out[0]._conflict).toBe(true);
   });
+  // ── v17.15.5: a FINISHED booking's tables are a historical record ────────
+  // These pin the layer `doSaveEdit` disagreed with. App's own fix (a completed
+  // or cancelled booking is never handed to the optimiser and never has its
+  // tables blanked) is the caller's half; this is the half that was already
+  // right and must stay right, because the App fix is written to agree with it.
+  it("applyOpt never moves a completed booking, whatever else it reshuffles", () => {
+    const done = mk({ status: "completed", tables: ["7"], size: 4, time: "13:00" });
+    // A live booking that the optimiser WOULD like to put on table 7.
+    const live = mk({ status: "confirmed", tables: [], size: 4, time: "13:00" });
+    const out = applyOpt([done, live], D, []);
+    const d = out.find((x) => x.id === done.id);
+    expect(d.tables, "a party that has already left did sit where they sat")
+      .toEqual(["7"]);
+    expect(d.status).toBe("completed");
+  });
+  it("applyOpt does not refill a completed booking whose tables were blanked", () => {
+    // Why blanking one upstream is unrecoverable rather than merely untidy —
+    // this is what turned an edit into "No tables available at this time".
+    const out = applyOpt([mk({ status: "completed", tables: [], size: 4 })], D, []);
+    expect(out[0].tables).toEqual([]);
+    expect(out[0]._conflict, "and it is not even flagged as a conflict").toBe(false);
+  });
+  it("a completed booking keeps its tables through a size change", () => {
+    const done = mk({ date: today, status: "completed", tables: ["7"], size: 4, _locked: true });
+    const bigger = Object.assign({}, done, { size: 6 });
+    const out = bookingsAfterAction([bigger], today, [], done.id, true, true);
+    expect(out[0].tables, "a size edit must not relocate a finished visit")
+      .toEqual(["7"]);
+  });
+  it("a cancelled booking keeps its tables through a size change", () => {
+    const gone = mk({ date: today, status: "cancelled", tables: ["5A"], size: 2 });
+    const bigger = Object.assign({}, gone, { size: 4 });
+    const out = bookingsAfterAction([bigger], today, [], gone.id, true, true);
+    expect(out[0].tables).toEqual(["5A"]);
+  });
+
   it("bookingsAfterAction OFF-path (today + optimizer off) preserves tables", () => {
     const b = mk({ date: today, status: "confirmed", tables: ["7"], size: 4 });
     const out = bookingsAfterAction([b], today, [], null, false, false);

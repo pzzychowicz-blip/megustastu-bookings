@@ -14898,6 +14898,59 @@ on a ten-booking day. `ROADMAP.md` carries them, with the open question about
 the last one (a `listitem` ancestor names the booking, so context may be
 enough for a screen reader while a voice-control user still has ten targets).
 
+### A finished booking's tables are a record — the question, and what it turned up
+
+The question was narrow: **does editing Duration on a Completed booking let the
+optimiser reassign it?** The answer is **no**, on two independent grounds —
+`applyOpt` returns a completed booking as `{...b, _conflict:false}` and never
+recomputes its tables, and `needsR` (the flag that triggers reassignment) is
+built from size / time / date / preference / `_clearManual` / preferred-tables,
+so duration does not reach it. Verified live afterwards: a duration-only save on
+a completed booking leaves its tables untouched.
+
+**Tracing it found the neighbouring edit broken in two different ways**, and the
+static read got the more serious one wrong first. Reading the code predicted
+only the second case below; driving the actual app produced the first.
+
+- **A LOCKED completed booking is reassigned by the optimiser.** `unlockForOpt`
+  rewrites the status to `"confirmed"` *before* `bookingsAfterAction` — that is
+  exactly what it is for — so `applyOpt`'s completed guard never sees a
+  completed booking, the optimiser places it, and the restore one line later
+  puts `"completed"` back on top of the new tables. **Measured live: changing a
+  completed party from 4 to 5 moved it from table 7 to tables 1A + 1B.** The
+  app rewrote where a party that had already left had been sitting. This
+  reaches every walk-in, every drag-drop and every manual assign, since all
+  three set `_locked`.
+- **An UNLOCKED completed booking cannot be edited at all.** `tables: []` is
+  written, `applyOpt` will not refill a completed booking, and the capacity
+  guard rejects the save — **measured live: "No tables available at this time —
+  see suggestions below."** for a change of party size on a finished visit, with
+  the error blaming the restaurant being full.
+
+Both are the same disagreement — `applyOpt` treats a finished booking's tables
+as a record and `doSaveEdit` did not — so one flag settles it. `editFinished`
+keys on **`f.status`, not `orig.status`**: walking a completed booking back to
+confirmed in the same save should return it to normal placement, and
+seating→completing one in the same save should pin the table it was actually
+sat at. An explicit manual assignment or an explicit clear still wins, because
+those are the user saying so rather than the optimiser deciding.
+
+`unlockForOpt` is **hoisted out of `buildNext`** in the same commit: the
+identical condition was written twice, once to unlock and once to restore, and
+two copies of a condition that must agree is how they stop agreeing. The
+restore now reads the flag instead of re-deriving it.
+
+**What the static read missed, and why.** The prediction covered the
+`tables: []` path and stopped there, because `applyOpt`'s completed guard looks
+conclusive on its own — it is, but only for a booking that is still marked
+completed when it arrives, and `unlockForOpt` exists precisely to change that
+mark. **A guard that keys on a field is only as good as the code that has not
+already rewritten the field.** Four tests pin the pure half (`applyOpt` moves
+nothing, refills nothing, and `bookingsAfterAction` preserves tables through a
+size change for both finished statuses); the App half was verified in DEV,
+including a confirmed booking still reassigning normally (table 6 → i2 + i3) so
+the fix did not simply switch the optimiser off.
+
 ### Docs
 
 `DESIGN.md` takes the design decisions (the two shipped replacements for the
