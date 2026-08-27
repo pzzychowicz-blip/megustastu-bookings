@@ -2022,7 +2022,17 @@ function BookingApp({uid}){
           const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
           if(kicked.length>0){setError("Not enough capacity — this change would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");return;}
         }
-        if(!mt.length&&needsR){
+        // v17.15.5 (/code-review): `!editFinished`. This guard means "the
+        // optimiser could not place the booking", and a finished booking is
+        // never offered to the optimiser at all — its tables are carried
+        // through. Without the exclusion the fix above is only half applied:
+        // a booking whose tables are ALREADY empty carries `[]` through, the
+        // guard reads that as a placement failure, and the save is rejected
+        // with a message about the restaurant being full. Reachable by ordinary
+        // use — a booking the app could not place shows "No table assigned"
+        // and carries `_conflict` with `tables: []`; cancel it, then correct
+        // its party size, and the edit is refused for a table it never had.
+        if(!mt.length&&needsR&&!editFinished){
           const editedInFin=fin.find(function(b){return b.id===editId;});
           if(editedInFin&&(!editedInFin.tables||!editedInFin.tables.length)){setError("No tables available at this time — see suggestions below.");return;}
         }

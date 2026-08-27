@@ -183,9 +183,11 @@ const FILLS = [
   { fill: "--bg-card-strong", alpha: null, ink: "--text-secondary", role: "label", what: "card flag, neutral (locked / ★ / manual / stayed)" },
   { fill: "--bg-card-strong", alpha: null, ink: "--warn-text", role: "label", what: "card flag, warn (no-show / late)" },
   { fill: "--bg-card-strong", alpha: null, ink: "--success-text", role: "label", what: "card flag, success (deposit / live duration)" },
+  { fill: "--bg-card-strong", alpha: null, ink: "--danger-text", role: "label", what: "card flag, danger (double-booked)" },
   { fill: "--bg-card-dim", alpha: null, ink: "--text-secondary", role: "label", what: "card flag, neutral (seated/completed/cancelled card)" },
   { fill: "--bg-card-dim", alpha: null, ink: "--warn-text", role: "label", what: "card flag, warn (seated/completed/cancelled card)" },
   { fill: "--bg-card-dim", alpha: null, ink: "--success-text", role: "label", what: "card flag, success (seated/completed/cancelled card)" },
+  { fill: "--bg-card-dim", alpha: null, ink: "--danger-text", role: "label", what: "card flag, danger (double-booked, dim card)" },
 
   // Solid semantic fills — already correct before this pass; here so they stay so.
   { fill: "--app-success-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "success tag" },

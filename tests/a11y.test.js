@@ -671,7 +671,7 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
     for (const [file, marker] of [
       ["components/Reminders.jsx", /<Toggle\s+label=\{"Reminder: "/],
       ["components/Settings.jsx", /<Toggle\s+label=\{"Standing booking: "/],
-      ["components/LayoutSettings.jsx", /<Toggle label=\{"Party of "/],
+      ["components/LayoutSettings.jsx", /<Toggle label=\{bandName\(b, i\)/],
     ]) {
       const src = withToggle.find(([f]) => f === file);
       expect(src, file + " must still render a Toggle").toBeTruthy();
@@ -739,9 +739,9 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
     // many steppers it must label.
     for (const [what, re, n] of [
       ["per-table capacity", /label=\{"seats at table " \+ t\.id\}/g, 1],
-      ["size-band party size", /label=\{bandName\(b\) \+ ": /g, 2],
-      ["combo-rule party size", /label=\{comboName\(r\) \+ ": /g, 3],
-      ["swap-rule party size", /label=\{swapName\(r\) \+ ": /g, 2],
+      ["size-band party size", /label=\{bandName\(b, i\) \+ ": (?:smallest|largest) party size"\}/g, 2],
+      ["combo-rule party size", /label=\{comboName\(r, i\) \+ ": /g, 3],
+      ["swap-rule party size", /label=\{swapName\(r, i\) \+ ": /g, 2],
     ]) {
       expect(count(src, re),
         "LayoutSettings " + what + ": this stepper is rendered once per row, so " +
@@ -757,17 +757,36 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
     // the Prefer/Avoid chips' move and remove controls, and the two <select>s.
     const src = read("components/LayoutSettings.jsx");
     for (const [what, re] of [
-      ["band remove", /aria-label=\{"Remove rule: " \+ bandName\(b\)\}/],
-      ["zone-order segment", /aria-label=\{opt\[1\] \+ " \(" \+ bandName\(b\) \+ "\)"\}/],
-      ["combo rule remove", /aria-label=\{"Remove rule: " \+ comboName\(r\)\}/],
+      ["band remove", /aria-label=\{"Remove " \+ bandName\(b, i\)\}/],
+      ["zone-order segment", /aria-label=\{opt\[1\] \+ " \(" \+ bandName\(b, i\) \+ "\)"\}/],
+      ["combo rule remove", /aria-label=\{"Remove " \+ comboName\(r, i\)\}/],
       ["combo select", /aria-label=\{"Combo for rule " \+ \(i \+ 1\)\}/],
       ["swap select", /aria-label=\{"Table to free, swap rule " \+ \(i \+ 1\)\}/],
-      ["swap remove", /aria-label=\{"Remove " \+ swapName\(r\)\}/],
+      ["swap remove", /aria-label=\{"Remove " \+ swapName\(r, i\)\}/],
       ["chip move up", /aria-label=\{"Move " \+ id \+ " up in " \+ label \+ rowIn\}/],
       ["chip remove", /aria-label=\{"Remove " \+ id \+ " from " \+ label \+ rowIn\}/],
     ]) {
       has(src, "priorities " + what, re,
         "rendered once per rule/band, so the name must identify which one");
+    }
+  });
+
+  it("a priorities row is named by its ORDINAL, not by its contents alone", () => {
+    // /code-review, v17.15.5. `addBand`, `addRule` and `addSwap` each append a
+    // FIXED default — {min:2,max:2}, declared[0].key with 2-8, tables[0].id
+    // with 4->2 — so pressing "+ Add size rule" twice yields two rows that are
+    // character-for-character identical. A name built from row CONTENT then
+    // gives every control in one row the same name as its twin, which is this
+    // whole sweep's defect one level down, reachable in two clicks.
+    const src = read("components/LayoutSettings.jsx");
+    for (const [what, re] of [
+      ["bandName", /const bandName = \(b, i\) =>[^;]*\(i \+ 1\)/],
+      ["comboName", /const comboName = \(r, i\) =>[^;]*\(i \+ 1\)/],
+      ["swapName", /const swapName = \(r, i\) =>[^;]*\(i \+ 1\)/],
+    ]) {
+      has(src, what, re,
+        "must take its row index and put it in the name — two rows with the " +
+        "same contents are two rows, and every add button creates one");
     }
   });
 

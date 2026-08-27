@@ -14951,6 +14951,52 @@ size change for both finished statuses); the App half was verified in DEV,
 including a confirmed booking still reassigning normally (table 6 → i2 + i3) so
 the fix did not simply switch the optimiser off.
 
+### `/code-review` fixes
+
+**1. Every "+ Add" button appends an IDENTICAL default row, so a name built
+from row content is not one name.** `addBand` appends `{min:2,max:2}`,
+`addRule` appends `declared[0].key` at 2–8, `addSwap` appends `tables[0].id`
+at 4→2 — all three fixed. So pressing **"+ Add size rule" twice** produces two
+rows that are character-for-character identical, and `bandName(b)` gave all
+~8 controls in one row the same name as their twins in the other. **This is
+the defect the whole sweep is about, reproduced one level down by the most
+obvious action in the panel, in two clicks.** The three row-namers take their
+ordinal now (`"size rule 2, party of 2 to 2"`), which is the only part of a row
+guaranteed to differ. The same collision reached **v17.15.4's own `Toggle`**,
+whose label was `"Party of " + b.min + " to " + b.max + ": try joined tables…"`
+— it takes `bandName(b, i)` too, and its guard was re-pinned. Verified live by
+adding a second band and reading every computed name off the page: 49 size-rule
+controls, **zero duplicated names anywhere**.
+
+**2. The `editFinished` fix was half applied — the capacity guard still refused
+a finished booking with no tables.** That guard means "the optimiser could not
+place this", and a finished booking is never offered to the optimiser; but a
+booking whose tables are already `[]` carries `[]` through, so the guard read
+it as a placement failure and rejected the save with the same
+restaurant-is-full message the fix exists to remove. Reachable ordinarily: a
+booking the app cannot place carries `_conflict` with `tables: []` and shows
+"No table assigned" — cancel it, then correct its party size, and the edit is
+refused over a table it never had. `!editFinished` added. The DISPLACEMENT
+guard above it is deliberately left active: a time or duration edit on a
+finished booking does change the `baseSlots` it contributes to `optimise`, so
+it can still displace live bookings and should still say so.
+
+**3. The clash flag said "warn" while its own border said "danger".** The card
+border for a clash is `--card-overdue-border` (red), and the marker was
+`--warn-text` — the same amber as `no-show ×N` and `N min late`, so the most
+severe state on the card was drawn in the colour of the two lesser ones and the
+card encoded one severity two ways. It is `--danger-text`, registered in
+`tests/contrast.test.js` alongside its three siblings (8.31:1 light, 6.73:1
+dark).
+
+**A guard added in this version needed fixing by the same review that added
+it.** The counted stepper guard broke when the `Toggle` adopted `bandName`,
+because `label={bandName(b, i) + ": ` then matched three call sites rather than
+two — the regex was measuring "uses the row namer", not "is a stepper". It
+matches the stepper's own suffixes now. A fourth guard pins all three
+row-namers to taking `(…, i)`, proven by reverting `swapName` to its
+content-only form (three failures) and back.
+
 ### Docs
 
 `DESIGN.md` takes the design decisions (the two shipped replacements for the

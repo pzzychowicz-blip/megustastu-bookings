@@ -67,6 +67,13 @@ const FLAG = {
 const FLAG_NEUTRAL = "var(--text-secondary)";
 const FLAG_WARN = "var(--warn-text)";
 const FLAG_SUCCESS = "var(--success-text)";
+// v17.15.5 (/code-review): the clash flag is DANGER, not warn. The card's
+// border for a clash is `--card-overdue-border` (red), so drawing the marker
+// in the same amber as `no-show ×N` and `N min late` said two different things
+// about one booking's severity — and flattened the most severe state on the
+// card into the two lesser ones. Registered in tests/contrast.test.js like its
+// three siblings (8.31:1 light, 6.73:1 dark).
+const FLAG_DANGER = "var(--danger-text)";
 
 // An icon-bearing flag. `role="img"` + `aria-label` for TimelineBlock's own
 // reason: every icon in Icons.jsx is `aria-hidden` (correctly — an icon beside
@@ -470,7 +477,7 @@ export const ListView = memo(function ListView({
         // pigeonhole, reachable with a join group of four, which is an ordinary
         // Settings → Layout edit.
         const clashTag = clash ? (
-          <CardFlag ink={FLAG_WARN} title={"Double-booked with " + clash.names.join(", ")
+          <CardFlag ink={FLAG_DANGER} title={"Double-booked with " + clash.names.join(", ")
             + (clash.tables.length ? " on " + (clash.tables.length === 1 ? "table " : "tables ") + clash.tables.join(", ") : "")}>
             <ClashIcon size={IC.control} />double-booked
           </CardFlag>
