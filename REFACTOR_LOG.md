@@ -15994,3 +15994,73 @@ on) and that the action row carries no per-card labels. Proven by adding
 `aria-label={"Assign tables for " + b.name}` — the exact edit a later sweep
 would make — and watching it fail.
 
+### 8. The double-booked marker, exercised live at last
+
+`ClashIcon` on the List card, the strip's Double-booked section and the
+timeline's `ClashBand` all shipped in v17.15.5 **having never rendered**. ROADMAP
+said a clash cannot be built through the UI; that was checked and is true —
+`dropOnTable` (App.jsx) tests blocks, seated holds and `canAssign` before both
+its move and its swap branch, and the assign modal marks an occupied table busy.
+
+**Method.** Two overlapping `_locked` `confirmed` bookings written straight into
+DEV `bookings` — Pau Estevez 14:30–16:00 and Rita Camps 15:30–17:00, both on
+table 3. Both `_locked`, so the reconciler cannot resolve it, which is the
+all-locked case the marker exists for.
+
+The SDK route failed in a way worth recording: importing `firebase_database.js`
+from Vite's dep cache gives a **second module instance**, so `ref()` builds a
+`Path` from one copy while the cached `Database` uses the other —
+`childPathObj.split is not a function`. A trivial `set()` on a fresh key still
+succeeds, which makes it look like the connection is fine. **The REST API
+sidesteps it entirely**: `PUT /bookings/{id}.json?auth=<idToken>`, with the token
+off `auth.currentUser` (a property read, so no class boundary is crossed). The
+per-`$bid` rule allows a create on a numeric `updatedAt` alone.
+
+**Everything renders, and all of it is correct:**
+
+| surface | result |
+|---|---|
+| List card | `double-booked` flag in `--danger-text` + red card border, on both cards |
+| Strip | "Pau Estevez (14:30) and Rita Camps (15:30) are both on table 3." |
+| Strip action | **Assign Rita Camps** — the LATER booking, matching the reconciler's newest-first tie-break |
+| Timeline blocks | 3px `rgb(220,38,38)` border on both, outranking the late state |
+| `ClashBand` | 4px, danger red, **left 275 → 311** |
+
+The band's geometry is the contract stated exactly. The blocks span Pau 203–311
+and Rita 275–383, so the band runs **from the later booking's start to the
+earlier one's end** — its right edge is the precise pixel where Pau's booking
+finishes, which is the fact Rita's block is painting over.
+
+**And it doubles as the first live proof of v17.14.0's no-op identity
+contract.** Two `_locked` bookings on one table is *the* case that spun the
+reconciliation effect from v15.6.1 to v17.10.2 — `applyOpt` copies a locked
+booking's tables through, so no reshuffle can separate them. Measured: **zero
+console warnings in six seconds** with both bookings live and the day visible.
+
+It also exercised §3's names end to end. The five strip controls now read:
+
+```
+Dismiss the double-booking warning for Pau Estevez and Rita Camps
+No show (Pau Estevez)          Dismiss the running-late alert for Pau Estevez
+No show (Rita Camps)           Dismiss the running-late alert for Rita Camps
+```
+
+Before this version those were `No show`, `No show`, `Dismiss this alert`,
+`Dismiss this alert` — three collisions in one pane.
+
+The two bookings (and a stray root `__probe` key from the SDK diagnosis) are
+**left in DEV**. It is a scratch database and cleaning it is not work.
+
+### Docs
+
+`ROADMAP.md`'s **`Deferred` section is now empty.** `CLAUDE.md`'s
+`.map`-rendered-control row gained the ancestor rule, the `title`-is-a-name
+trap and the `aria-pressed` requirement; `DESIGN.md` gained the treatment-vs-scale
+rule and lost a stale `--border-glass` claim. `GLOSSARY.md` needed nothing — no
+new user-visible surface, only names for existing ones.
+
+**Verification:** `npm run build` + `npm test` (**640 passing**, up from 625) +
+`npm run check:style` + lint (0 errors) green on every commit. Fourteen new
+guards in `tests/a11y.test.js`, five of them proven against known-bad input.
+Main bundle 333.55 → 333.51 kB (90.42 → 90.46 kB gz).
+

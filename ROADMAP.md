@@ -14,13 +14,7 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **The List card's double-booked marker (`ClashIcon`, v17.15.5) has never been
-  exercised live.** A clash can't be created through the ordinary UI — the
-  assign modal marks an occupied table "busy" and refuses the pick — so it only
-  arises from two devices editing offline and merging into an unresolvable
-  all-locked conflict. Verify it once such a merge is reproducible (or force one
-  by writing two overlapping `_locked` bookings on one table directly via the
-  DEV Firebase console) rather than trying to trigger it from the app.
+_(nothing pending)_
 
 ## Designed, not implemented
 
