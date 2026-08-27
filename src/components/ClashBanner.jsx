@@ -66,17 +66,30 @@ export function ClashBanner({ pairs, bookings, onAssign, onDismiss, swapKey }) {
     const where = c.tables.length
       ? (c.tables.length === 1 ? "table " + c.tables[0] : "tables " + c.tables.join(" + "))
       : "tables that cannot both be joined";
-    const msg = first.name + " (" + first.time + ") and " + later.name + " (" + later.time + ") are both on " + where + ".";
+    // /code-review v17.15.6: the `(no name)` fallback the other three banners
+    // all carry, and this one was the only banner without it. `sanitize` writes
+    // `name: b.name || ""`, and the booking form does not require a name — so
+    // two nameless bookings clashing gave the dismiss button the accessible
+    // name "…warning for  and ", which identifies nothing. That is the exact
+    // ambiguity this version exists to remove, reintroduced by the fix for it.
+    const firstWho = first.name || "(no name)";
+    const laterWho = later.name || "(no name)";
+    const msg = firstWho + " (" + first.time + ") and " + laterWho + " (" + later.time + ") are both on " + where + ".";
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--danger-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
         <button
           onClick={function () { onAssign(later.id); }}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>{"Assign " + later.name}</button>
+          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>{"Assign " + laterWho}</button>
         <button
           onClick={function () { onDismiss(rowId); }}
-          aria-label="Dismiss this double-booking warning"
+          /* v17.15.6: the PAIR, matching `clashRowId`'s own identity — a clash
+             is about two parties, and dismissing "Pau vs Rita" must read
+             differently from "Rita vs a third party", which is the very
+             distinction the dismissal Set is keyed on. See LateBanner for the
+             rule; the Assign button needs nothing, its visible text is a name. */
+          aria-label={"Dismiss the double-booking warning for " + firstWho + " and " + laterWho}
           className="mgt-hover-scale mgt-press"
           style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
       </div>

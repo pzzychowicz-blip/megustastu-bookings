@@ -15691,3 +15691,425 @@ you" is not a preference for fills, it is a preference for one treatment per
 row, and it points wherever the row goes. `atoms.jsx`'s `OutlineChip` comment
 cited the same row and was corrected in the same commit — a stale example is
 quoted with confidence.
+
+---
+
+## v17.15.6 — the ROADMAP's `Deferred` section, cleared
+
+**Date:** 2026-08-27
+**Branch:** `fix/v17.15.6-deferred-roadmap`
+**Behavioural change:** one visual (the status badge's scale); the rest is
+accessible NAMES, which change nothing a mouse user can see.
+
+`ROADMAP.md` carried three deferred entries, all left behind by v17.15.5. This
+version closes all three and a fourth that surfaced while planning it.
+
+### 1. `SBadge` sits down in its row
+
+v17.15.5 moved the List card's flag row from SOLID to TEXT under `DESIGN.md`'s
+**"match whatever sits next to you"**, and closed only half the loop. It settled
+what TREATMENT the neighbours wear and left the badge sized for the row it used
+to be in. Measured live on the card, before:
+
+| element | type | box height | surface |
+|---|---|---|---|
+| guest name | `T.title` 17, bold | 20 | none |
+| **`SBadge`** | `T.body` 12 + `4px 10px` | **~27** | fill + `RIM_SOLID` + `--shadow-flat` |
+| `SizeRing` | 18×18, `T.micro` 10 | 18 | transparent + hairline rim |
+| flag | `T.small` 11 + `IC.control` 14 | 14 | none |
+| time (right) | `T.lead` 14, bold | 16.5 | none |
+
+So the one element carrying a fill was also the **tallest thing in the row** —
+taller than the 17px name it follows — and the row read as a status pill with a
+booking around it rather than a booking with a status. `T.body`→`T.small` and
+`4px 10px`→`2px 8px` puts it at a **measured 20px**: level with the name's box,
+one step above the ring, above the flags.
+
+**Three things deliberately did not change**, and each is load-bearing:
+
+- **The fill, `RIM_SOLID` and `--shadow-flat`.** The status is not a flag. A
+  flag says what is UNUSUAL about a booking; this says what the booking IS, and
+  the fill is the vocabulary the card shares with `TimelineBlock` (whose
+  `STATUS_LABEL` reads from the same place). Dropping it to TEXT would have made
+  the card and the block name one attribute two ways again — the exact defect
+  v17.15.5 existed to close.
+- **`IC.control`.** The flags beside it are `IC.control` too, so the MARKS stay
+  one size across the row and only the pill comes down. `IC.inline` would have
+  shrunk the wrong half.
+- **The colour pair**, which is why this needed no contrast work: the tokens are
+  untouched, and 11px and 12px are both "normal text" for WCAG, so it is the
+  same 4.5:1 threshold either way. **A smaller size never relaxes a threshold** —
+  worth stating, because it is the kind of thing that gets assumed.
+
+`DESIGN.md` gains the rule this establishes: **treatment and scale are two
+separate answers to "match your neighbours", and settling one does not settle
+the other.** The same edit corrects that clause's claim that the solid rim is
+`--border-glass` — `SBadge` ships `RIM_SOLID`, and `--border-glass` is what its
+three hand-written COPIES carried, so the doc had been describing the drift
+rather than the atom.
+
+### 2. The icon reaches the badge's hand-written copies
+
+`SBadge` gained `StatusIcon` in v17.15.5 and **three** hand-written copies of it
+could not follow — ROADMAP named two, and the sweep found the third:
+
+| site | what it is |
+|---|---|
+| `PlanView.jsx:383` | the per-table day-queue popover |
+| `CustomersSettings.jsx:96` | a customer's booking-history row |
+| `SearchPanel.jsx:48` | a search result row (**not in ROADMAP**) |
+
+All three now render `<SBadge status={b.status} />`.
+
+**Doing the resize FIRST is what made this a near-invisible diff.** ROADMAP had
+flagged the unification as "not a pure find-replace" because both dense rows use
+`T.small` against the atom's `T.body`, so adoption would have grown them. After
+§1 the atom IS `T.small` — the exact size the copies already were — so each site
+changes only by gaining the mark and swapping `--border-glass` for `RIM_SOLID`.
+The concern that deferred this entry was dissolved by the other half of the same
+version rather than worked around.
+
+**Every one of the three carried a comment asserting parity with the atom** —
+"solid, like every other status label (see SBadge)", and in `SearchPanel` the
+fuller "the same fill, text and metrics as SBadge". Each was true when written
+and silently false afterwards. **A comment claiming parity with an atom is not
+parity with it**, and it is worse than no comment: it tells the next reader the
+question has been settled.
+
+`PlanView`'s **legend** (`:402`) is deliberately NOT converted, and the reason is
+recorded at the site: it is a key for what the FILL painted on the floor plan
+means, and the plan draws no icons — a mark there would promise the room shows
+something it does not. The popover above it is the opposite case, because its
+rows are bookings.
+
+**Verified live** (DEV, 375px and desktop): all three render the mark, and the
+Customers history row — the one with no `flex:1` child, and the reason ROADMAP
+asked for measurement — reports **`scrollWidth - clientWidth === 0`** on every
+row at 375px. No `flexWrap` was needed. Dead `BLOCK_BG`/`BLOCK_INK` imports
+pruned from the two files that lost their last use (lint is a hard gate);
+`PlanView` keeps both for the occupancy fill and the legend.
+
+Bundle: 333.55 → **333.32 kB** (90.42 → 90.39 kB gz).
+
+### 3. The notification strip's per-row controls carry their row
+
+The four banners each rendered one dismiss ✕ per row with a **single static
+`aria-label`** — "Dismiss this alert" / "…this warning" / "…this double-booking
+warning". One string in the source; six identically-named buttons on a busy
+evening.
+
+**These are the case with no fallback, and that is what makes them decidable
+differently from `ListView`'s card actions (§6).** A `BannerRows` row is a bare
+`<div>` with no role and no name, so a control inside it inherits nothing. A
+List card is a named `role="listitem"`. That single structural difference is the
+whole of the argument on both sides.
+
+| control | name |
+|---|---|
+| Late ✕ | `"Dismiss the running-late alert for " + who` |
+| Late **No show** | `"No show (" + who + ")"` |
+| Overlap ✕ | `"Dismiss the overstay warning for " + sb.name` |
+| Wait ✕ | `"Dismiss the table-free alert for " + who` |
+| Wait **Book** | `"Book (" + who + ", " + w.size + " pax)"` |
+| Clash ✕ | `"Dismiss the double-booking warning for " + first.name + " and " + later.name` |
+
+**The sweep deliberately did not stop at the ✕**, and the two kinds of control
+take differently-shaped names. An icon-only ✕ has no visible text, so it takes a
+whole sentence. **No show** and **Book** have words — so they read as named
+already, and the fix is that the visible label must LEAD with the party only
+disambiguating after it. That is v17.15.4's own `/code-review` finding (WCAG
+2.5.3): a name that paraphrases the visible text stops a voice-control user
+saying what they can read.
+
+Two rows are left alone and both are pinned so a later "consistency" pass cannot
+add a redundant label: **Overlap's Reassign** and **Clash's Assign** already put
+a name in their VISIBLE text.
+
+The clash ✕ names the **pair**, matching `clashRowId`'s own identity — the
+dismissal Set is keyed by pair precisely because "Pau vs Rita" and "Rita vs a
+third party" are different things, so a name mentioning one booking would
+describe something other than what the button dismisses.
+
+`who` is derived once per row and read by both the sentence and the button, so
+the two can never disagree about what a party is called — including the
+`"(no name)"` fallback, which a waitlist genuinely produces.
+
+**Four guards in `tests/a11y.test.js`, each proven against known-bad input.**
+Reverting the wait ✕ to its old literal fails two of them; replacing "No show
+(Miriam)" with the plausible-looking **"Mark Miriam as a no-show"** fails the
+2.5.3 one — which is the point, because that string reads as an improvement in
+review and is the exact mistake v17.15.4 shipped.
+
+### 4. `LayoutSettings`' Tables and Combos sections
+
+v17.15.5 closed the **priorities editor** at the bottom of this file. The Tables
+and Combos sections sit ABOVE it and were untouched — same file, same defect,
+one scroll apart.
+
+What hid them: these buttons are icon-only with a `title`, and **`title` IS the
+accessible name when there is nothing else**. So unlike `<Toggle>`, which had no
+name at all, these read as named while giving thirteen buttons the name "Rename
+table". The v17.15.5 precedent applies unchanged — the short `title` stays as
+the tooltip, an `aria-label` carries the row.
+
+Named: rename/remove table (`t.id`), the join-group chips' move-left /
+move-right / remove (`id` alone — `sanitizeLayout` enforces single-group
+membership, so a table is in exactly one group), add-to-group and remove-group
+(`group.join(" + ")`), and remove-mega-combo (`mc.ids.join(" + ")`).
+
+The **zone toggle** is the one with visible words ("Indoor"/"Outdoor"), so it
+takes the 2.5.3 shape — `"Outdoor (table 1A)"`. It is also named for the STATE
+rather than the transition: "Make table 1A indoor" would contradict the visible
+label in one of its two states, the same reason `ReminderEditor`'s switch is
+called "Reminder status".
+
+**Deliberately left static, and pinned so a later sweep does not "finish the
+job":** Save name / Cancel / Remove anyway are gated on `editId` /
+`pendingRemove`, both single-valued, so exactly one is ever on screen.
+
+#### The worst instance in the app, and only the running page showed it
+
+Reading computed names out of the live app — not the source — turned up
+something more severe than anything ROADMAP listed. **Three** `PICK_CHIP` lists
+render the same table ids as a bare `<button>7</button>`:
+
+| list | what tapping it does |
+|---|---|
+| the open group picker | add 7 to **this** group |
+| the "Ungrouped" row | start a **new** group from 7 |
+| the priorities picker | add 7 to a prefer/avoid list |
+
+The Ungrouped row is **always rendered**. So opening either picker puts two
+buttons named "7" on screen **that do different things** — not merely ambiguous
+the way ten "Assign" buttons are, but actively misleading, and one click away.
+Each now leads with the visible id and states its action (`"7 — add to the group
+5A + 5B"`, `"7 — start a new joined group"`).
+
+**This is the entry's own rule paying out.** In the source the three lists are
+three separate `.map`s that look nothing alike; on the page they are one row of
+identical buttons.
+
+#### Checked and NOT a defect
+
+The sweep also flagged `"Assign tables for Marco Rossi"` twice. That is a
+multi-table booking drawing one timeline block per table row, each with its own
+assign handle — **same name, same booking, identical action**, so pressing
+either does exactly the same thing. Duplicate names for genuinely equivalent
+controls are not a fault, and renaming them by table would invent a distinction
+the app does not have.
+
+Five guards, one proven by deleting a chip's label and watching it fail.
+
+### 5. `Reminders`' per-row Edit / Delete
+
+v17.15.4 named the switch in this row and **stopped at the switch**, so a list of
+five reminders still offered five buttons called "Edit" and five called
+"Delete" — and Delete is the one control in that row where picking the wrong
+target cannot be undone.
+
+The name expression moved out of the `Toggle`'s prop into `rname`, read by all
+three controls, so they cannot disagree about what a reminder is called. Its two
+v17.15.4 guards travel with it: `String(r.text || "(no text)")` (a bare concat
+renders the word "undefined" for the one legacy textless row DEV holds) and the
+whitespace collapse (the text is a textarea's and can contain newlines). Still
+not truncated — two long reminders can share any prefix you would cut at.
+
+Edit and Delete have visible words, so they take the 2.5.3 shape: `"Edit (Call
+the fish supplier before they close)"`.
+
+**Verified live in DEV** — three reminders, nine controls, all uniquely named
+and all agreeing:
+
+```
+Reminder: Call the fish supplier before they close
+Edit (Call the fish supplier before they close)
+Delete (Call the fish supplier before they close)
+```
+
+### 6. The two table multi-selects — a name AND a state
+
+Sweeping the live page after §4 left exactly two families of bare-id button: the
+**"Add a combo"** picker and the priorities editor's **"Require"** row. Thirteen
+buttons each, both on screen at once, all twenty-six announcing nothing but a
+table id.
+
+"Add a combo" was missing more than a name. **Selection there is carried by an
+accent fill and nothing else**, so with no `aria-pressed` you cannot tell which
+tables you have picked — and picking tables is the entire control. v17.15.5 had
+already answered exactly this for `Require` and stopped at that one row, so the
+fix is applying this file's own existing decision rather than making a new one.
+
+`aria-pressed` and not `role="switch"`, per the rule the `Toggle` atom records: a
+switch is a state that STAYS, while these are selections inside a set being
+assembled.
+
+**The guard is the invariant, not a count.** The first draft asserted "there are
+two `aria-pressed`" and failed immediately — there are three, because v17.15.5's
+zone-order segments are one. A count would need bumping every time a segmented
+control is added, which is the moment it stops meaning anything. It now walks
+every `<button>` whose style paints `on ? "var(--accent)"` and requires each to
+expose `aria-pressed`: **a control that paints itself selected must say it is.**
+
+#### Result, measured live
+
+The Layout tab fully expanded — Tables, Joined tables, Combos and Table
+priorities all open:
+
+| | before | after |
+|---|---|---|
+| visible buttons | 443 | 443 |
+| with no accessible name | 0 | 0 |
+| named by a bare table id | 26 | **0** |
+| sharing a name with another button | 26 | **0** |
+
+### 7. The List card's actions stay named by their ancestor — decided, not overlooked
+
+Measured live on a 10-booking day: **Assign ×10, Delete ×10, cancelled ×10,
+completed ×9, seated ×8**. Sixty controls, five names — by a long way the
+largest instance of this pattern in the app, and the one ROADMAP explicitly said
+to make a judgement about before touching.
+
+**They are left as they are.** The card is a `role="listitem"` carrying
+`describeBooking(b)`, so a screen-reader user has been told whose booking it is
+before reaching any button. Renaming all sixty would repeat the guest on every
+control — measurably more verbose in the app's most-used view, for exactly the
+users the change would be for. No WCAG SC is failed either way: 2.5.3 is
+satisfied (the visible text IS the name), and voice control falls back to
+numbered overlays when names collide.
+
+**The rule this settles, which is what makes every other case in this version
+decidable:**
+
+> A repeated control inside a **named** listitem may lean on that ancestor.
+> A control in a **bare** row may not.
+
+That is the whole difference between this section and §3. It is the reason the
+four banners' ✕s were renamed and these sixty were not, and it now lives in
+`CLAUDE.md`'s Gotchas row rather than being re-derived next time.
+
+**A decision needs a pin, because "nobody renamed these" and "somebody decided
+not to" look identical in source.** `tests/a11y.test.js` asserts the card's
+`aria-label` and `role="listitem"` are present (they are what the buttons lean
+on) and that the action row carries no per-card labels. Proven by adding
+`aria-label={"Assign tables for " + b.name}` — the exact edit a later sweep
+would make — and watching it fail.
+
+### 8. The double-booked marker, exercised live at last
+
+`ClashIcon` on the List card, the strip's Double-booked section and the
+timeline's `ClashBand` all shipped in v17.15.5 **having never rendered**. ROADMAP
+said a clash cannot be built through the UI; that was checked and is true —
+`dropOnTable` (App.jsx) tests blocks, seated holds and `canAssign` before both
+its move and its swap branch, and the assign modal marks an occupied table busy.
+
+**Method.** Two overlapping `_locked` `confirmed` bookings written straight into
+DEV `bookings` — Pau Estevez 14:30–16:00 and Rita Camps 15:30–17:00, both on
+table 3. Both `_locked`, so the reconciler cannot resolve it, which is the
+all-locked case the marker exists for.
+
+The SDK route failed in a way worth recording: importing `firebase_database.js`
+from Vite's dep cache gives a **second module instance**, so `ref()` builds a
+`Path` from one copy while the cached `Database` uses the other —
+`childPathObj.split is not a function`. A trivial `set()` on a fresh key still
+succeeds, which makes it look like the connection is fine. **The REST API
+sidesteps it entirely**: `PUT /bookings/{id}.json?auth=<idToken>`, with the token
+off `auth.currentUser` (a property read, so no class boundary is crossed). The
+per-`$bid` rule allows a create on a numeric `updatedAt` alone.
+
+**Everything renders, and all of it is correct:**
+
+| surface | result |
+|---|---|
+| List card | `double-booked` flag in `--danger-text` + red card border, on both cards |
+| Strip | "Pau Estevez (14:30) and Rita Camps (15:30) are both on table 3." |
+| Strip action | **Assign Rita Camps** — the LATER booking, matching the reconciler's newest-first tie-break |
+| Timeline blocks | 3px `rgb(220,38,38)` border on both, outranking the late state |
+| `ClashBand` | 4px, danger red, **left 275 → 311** |
+
+The band's geometry is the contract stated exactly. The blocks span Pau 203–311
+and Rita 275–383, so the band runs **from the later booking's start to the
+earlier one's end** — its right edge is the precise pixel where Pau's booking
+finishes, which is the fact Rita's block is painting over.
+
+**And it doubles as the first live proof of v17.14.0's no-op identity
+contract.** Two `_locked` bookings on one table is *the* case that spun the
+reconciliation effect from v15.6.1 to v17.10.2 — `applyOpt` copies a locked
+booking's tables through, so no reshuffle can separate them. Measured: **zero
+console warnings in six seconds** with both bookings live and the day visible.
+
+It also exercised §3's names end to end. The five strip controls now read:
+
+```
+Dismiss the double-booking warning for Pau Estevez and Rita Camps
+No show (Pau Estevez)          Dismiss the running-late alert for Pau Estevez
+No show (Rita Camps)           Dismiss the running-late alert for Rita Camps
+```
+
+Before this version those were `No show`, `No show`, `Dismiss this alert`,
+`Dismiss this alert` — three collisions in one pane.
+
+The two bookings (and a stray root `__probe` key from the SDK diagnosis) are
+**left in DEV**. It is a scratch database and cleaning it is not work.
+
+### Docs
+
+`ROADMAP.md`'s **`Deferred` section is now empty.** `CLAUDE.md`'s
+`.map`-rendered-control row gained the ancestor rule, the `title`-is-a-name
+trap and the `aria-pressed` requirement; `DESIGN.md` gained the treatment-vs-scale
+rule and lost a stale `--border-glass` claim. `GLOSSARY.md` needed nothing — no
+new user-visible surface, only names for existing ones.
+
+**Verification:** `npm run build` + `npm test` (**640 passing**, up from 625) +
+`npm run check:style` + lint (0 errors) green on every commit. Fourteen new
+guards in `tests/a11y.test.js`, five of them proven against known-bad input.
+Main bundle 333.55 → 333.51 kB (90.42 → 90.46 kB gz).
+
+### 9. `/code-review` fixes
+
+Three findings, all confirmed, all fixed.
+
+**1. The decision pin was built out of guessed spellings.** §7's `hasnt` trio
+matched string SHAPES — `aria-label={"Assign…" + b.name`. Run against four
+renames a later sweep would plausibly write, it **missed two**: `"Set " + s + …`
+(the literal `s` cannot match the capital S of "Set") and `"Mark " + b.name + "
+as " + s`, the most natural phrasing of the lot. And `hasnt()`, unlike `has()`,
+does **not** throw when its pattern matches nothing — so a pattern that can never
+fire passes silently forever. That is the tautology this file's own header exists
+to prevent, in the one guard of this version that had not been proven against
+known-bad input.
+
+It is STRUCTURAL now: find the action row's buttons (`onClick={stopped(`) and
+require that none carries an `aria-label` at all. No spelling to guess. Both
+previously-missed renames are now caught — verified by injecting each.
+
+**2. `ClashBanner` had no `(no name)` fallback** — the only one of the four
+banners without it (Late and WaitAvail via `who`, Overlap inline). `sanitize`
+writes `name: b.name || ""` and the booking form does not require a name, so two
+nameless bookings clashing gave the dismiss button the accessible name
+`"…warning for  and "`. **The fix for ambiguity had reintroduced ambiguity in
+its own worst case.** `firstWho`/`laterWho` now guard it, and the visible
+sentence and the Assign button read those same values rather than re-deriving
+them — or the pane would say "(no name)" while the button beside it said
+nothing.
+
+Verified live by blanking both names in DEV: `"Dismiss the double-booking
+warning for (no name) and (no name)"`. (Two genuinely anonymous bookings still
+produce two identical late-row names. That is the honest limit of the data —
+nothing distinguishes them — and it is what the visible sentence already says.)
+
+**3. An `aria-label` overrides `title`, and that cost the disabled Remove button
+its reason.** With one table left the button is disabled and its `title` reads
+"A layout needs at least one table" — which WAS its accessible name before §4.
+Adding `aria-label={"Remove table " + t.id}` took the name and left the reason in
+`title`, where announcement is inconsistent across AT. It bought nothing in
+exchange: the button is disabled only when ONE table exists, so there is exactly
+one of them on screen and nothing to disambiguate. The disabled branch carries
+the reason in the label now.
+
+**The rule: adding a name must never cost a name that was already saying more.**
+`title` is not a safe place to leave information once anything else names the
+element.
+
+Two new guards (the nameless-booking fallback across all four banners; the
+structural pin), both proven against known-bad input. **641 tests.**
+

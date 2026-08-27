@@ -37,7 +37,7 @@ import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking } f
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
-import { mkBtn, Reveal } from "./atoms";
+import { mkBtn, Reveal, SBadge } from "./atoms";
 import { EmptyDay } from "./EmptyDay";
 
 // Neutral (free) table fill — theme tokens, matches the editor's look.
@@ -379,8 +379,14 @@ export const PlanView = memo(function PlanView({
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
                 <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name + " (" + b.size + ")"}</span>
-                {/* v17.7.0: solid, like every other status label (see SBadge). */}
-                <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "4px 10px", borderRadius: R.pill, textTransform: "capitalize", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, border: "1px solid var(--border-glass)" }}>{b.status}</span>
+                {/* v17.15.6: it IS `SBadge` now, rather than a copy whose comment
+                    pointed at `SBadge`. That comment ("solid, like every other
+                    status label") was true about the fill and silently false
+                    about everything else: the atom gained `StatusIcon` in
+                    v17.15.5 and this copy could not follow it, so the popover
+                    named a status with a word while the block behind it named
+                    the same status with a mark. */}
+                <SBadge status={b.status} />
               </div>
             );
           })}
@@ -398,6 +404,11 @@ export const PlanView = memo(function PlanView({
   })() : null;
 
   // ── Legend + slider row ─────────────────────────────────────────────────────
+  // v17.15.6: deliberately NOT `SBadge`, though it is the same fill. This is a
+  // key for what the FILL painted on the floor plan means, and the plan draws
+  // no icons — a mark here would promise the room shows something it does not.
+  // The day-queue popover above is the opposite case: its rows are BOOKINGS,
+  // and a booking's status is named the same way everywhere.
   const legend = ["seated", "confirmed", "pending"].map((s) => (
     <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi, textTransform: "capitalize" }}>{s}</span>
   ));

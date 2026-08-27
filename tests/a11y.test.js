@@ -843,6 +843,321 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
   });
 });
 
+describe("LayoutSettings' Tables and Combos name their rows (v17.15.6)", () => {
+  // The other half of the ROADMAP entry v17.15.5 opened. v17.15.5 closed the
+  // priorities editor at the bottom of this file; these sit ABOVE it and were
+  // untouched — the same file, the same defect, one scroll apart.
+  //
+  // These buttons are ICON-ONLY with a `title`, so `title` was their entire
+  // accessible name. That is what made them invisible to the earlier sweeps:
+  // a control with a `title` does not LOOK unnamed the way `<Toggle>` did.
+  const src = read("components/LayoutSettings.jsx");
+
+  it("every repeating Tables/Combos control carries its row", () => {
+    for (const [what, re] of [
+      ["rename table", /aria-label=\{"Rename table " \+ t\.id\}/],
+      // The disabled branch carries the REASON in the name too (/code-review):
+      // an aria-label overrides `title`, so leaving the reason there alone
+      // silently dropped it from what the button announces.
+      ["remove table", /aria-label=\{tables\.length <= 1\s*\n?\s*\? "Remove table " \+ t\.id \+ " \(unavailable/],
+      ["chip move left", /aria-label=\{"Move " \+ id \+ " left in its joined group"\}/],
+      ["chip move right", /aria-label=\{"Move " \+ id \+ " right in its joined group"\}/],
+      ["chip remove", /aria-label=\{"Remove " \+ id \+ " from its joined group"\}/],
+      ["add to group", /aria-label=\{"Add a table to the group " \+ group\.join\(" \+ "\)\}/],
+      ["remove group", /aria-label=\{"Remove the group " \+ group\.join\(" \+ "\)\}/],
+      ["remove mega combo", /aria-label=\{"Remove the cross-group combo " \+ mc\.ids\.join\(" \+ "\)\}/],
+    ]) {
+      has(src, what, re,
+        "rendered once per table / group / combo, so the name must say WHICH — " +
+        "`title` alone gave thirteen buttons one name and looked named doing it");
+    }
+  });
+
+  it("the zone toggle leads with its visible text (WCAG 2.5.3)", () => {
+    // The one control in these two sections that HAS words. Its visible text is
+    // "Indoor" or "Outdoor", so a name like "Change zone for table 3" would fix
+    // the ambiguity and break voice control in the same stroke.
+    has(src, "zone toggle", /aria-label=\{\(indoor \? "Indoor" : "Outdoor"\) \+ " \(table " \+ t\.id \+ "\)"\}/,
+      "the visible word leads and the table only disambiguates");
+  });
+
+  it("a name says what a control IS, never what it does next", () => {
+    // The zone toggle flips between two real values. Naming it for the ACTION
+    // ("Make table 3 indoor") would mean the name contradicts the screen in one
+    // of its two states — the same reason ReminderEditor's switch is called
+    // "Reminder status" rather than "Reminder active".
+    hasnt(src, "action-shaped zone name", /aria-label=\{"(Make|Change|Set|Switch) /,
+      "name the state, not the transition — a name that describes the NEXT " +
+      "state disagrees with the visible label in one of the two states");
+  });
+
+  it("the three PICK_CHIP lists say what tapping the id DOES", () => {
+    // Found by reading computed names out of the running page — the only thing
+    // that shows it, and the rule this whole ROADMAP entry keeps re-proving.
+    //
+    // Three lists render the same table ids as a bare `<button>7</button>`:
+    // add-to-this-group, start-a-new-group, and add-to-a-prefer/avoid-list. The
+    // "Ungrouped" row is ALWAYS rendered, so opening either picker puts two
+    // buttons named "7" on screen **doing different things**. That is worse than
+    // the ambiguity the other cases have — those repeat one action, these
+    // collide across actions — and it is one click away.
+    const chips = openingTagsOf(src, "button").filter((t) => /\bstyle=\{PICK_CHIP\}/.test(t));
+    expect(chips.length, "there should still be three PICK_CHIP lists").toBe(3);
+    const unnamed = chips.filter((t) => !/\baria-label=/.test(t));
+    expect(unnamed, "a bare table id is the SAME name in all three lists, and " +
+      "two of them can be on screen at once doing different things").toEqual([]);
+    // The visible id leads (2.5.3), then what the tap does.
+    for (const [what, re] of [
+      ["add to group", /aria-label=\{id \+ " — add to the group " \+ group\.join\(" \+ "\)\}/],
+      ["new group", /aria-label=\{id \+ " — start a new joined group"\}/],
+      ["priorities add", /aria-label=\{id \+ " — add to " \+ label \+ rowIn\}/],
+    ]) {
+      has(src, "PICK_CHIP " + what, re,
+        "the visible id leads and the ACTION follows — these three collide on " +
+        "the id, so the action is the only thing that separates them");
+    }
+  });
+
+  it("the two table multi-selects carry both a name AND a state", () => {
+    // The last bare-id lists, both 13 buttons, both on screen at once — so
+    // "Add a combo"'s 1A and "Require"'s 1A announced identically.
+    //
+    // "Add a combo" was missing its STATE too: selection is carried by an
+    // accent fill and nothing else, so without `aria-pressed` you cannot tell
+    // which tables you have picked, and picking tables IS the control.
+    // v17.15.5 had already answered this for `Require` and stopped there.
+    for (const [what, re] of [
+      ["add-combo name", /aria-label=\{t\.id \+ " — include in the new combo"\}/],
+      ["require name", /aria-label=\{id \+ " — require in cross-zone combos"\}/],
+    ]) {
+      has(src, what, re, "two 13-button lists share the ids and the screen");
+    }
+    // Not a magic count — the actual invariant. In this file a SELECTED control
+    // is drawn as `on ? "var(--accent)" : …`, and that fill is the only signal
+    // it has. So: every button that paints itself selected must SAY it is.
+    // A count would have to be bumped whenever a segmented control is added,
+    // which is the moment the guard stops meaning anything (there is already a
+    // third `aria-pressed` here — v17.15.5's zone-order segments — and an
+    // earlier draft of this test asserted 2 and failed on it).
+    const selectors = openingTagsOf(src, "button")
+      .filter((t) => /\bon \? "var\(--accent\)"/.test(t));
+    expect(selectors.length, "the file should still have selection buttons")
+      .toBeGreaterThanOrEqual(3);
+    const mute = selectors.filter((t) => !/\baria-pressed=/.test(t));
+    expect(mute, "a button that paints itself selected must SAY it is — the " +
+      "accent fill is the only other signal, and colour alone is not a state")
+      .toEqual([]);
+  });
+
+  it("a single-instance control is deliberately left static", () => {
+    // Not everything in a `.map` repeats on screen. `editId` and
+    // `pendingRemove` are single-valued, so Save name / Cancel / Remove anyway
+    // are one-at-a-time and a literal is CORRECT there. Pinned so a later sweep
+    // does not "finish the job" by adding names that say nothing.
+    for (const [what, re] of [
+      ["save name", /title="Save name"/],
+      ["cancel rename", /title="Cancel"/],
+    ]) {
+      has(src, what, re,
+        "gated on a single-valued state, so exactly one is ever on screen — " +
+        "a static name is right, and adding an id would be noise");
+    }
+  });
+});
+
+describe("a banner row's controls carry their row (v17.15.6)", () => {
+  // The ROADMAP entry v17.15.5 left behind, for the four notification-strip
+  // banners. Each renders one dismiss ✕ per row with a single static
+  // `aria-label` — one string in the source, and on a busy evening six
+  // identically-named buttons on the page.
+  //
+  // These are the case with NO fallback, which is why they are decided the
+  // opposite way to ListView's card actions two describes below: a `BannerRows`
+  // row is a bare <div> with no role and no name, so a control inside it
+  // inherits nothing. A List card is a named `role="listitem"`, and that is the
+  // entire difference between the two decisions.
+  const Late = read("components/LateBanner.jsx");
+  const Overlap = read("components/OverlapBanner.jsx");
+  const Wait = read("components/WaitAvailBanner.jsx");
+  const Clash = read("components/ClashBanner.jsx");
+
+  it("no banner names a control with a bare literal any more", () => {
+    for (const [name, src] of [["LateBanner", Late], ["OverlapBanner", Overlap],
+                               ["WaitAvailBanner", Wait], ["ClashBanner", Clash]]) {
+      hasnt(src, name + " static dismiss", /aria-label="Dismiss this/,
+        "one row per late booking / warning / waiting party, so a literal here " +
+        "is not one name — it is N identical ones, and a banner row has no " +
+        "named ancestor to fall back on the way a List card does");
+    }
+  });
+
+  it("every banner's ✕ builds its name from the row", () => {
+    for (const [what, src, re] of [
+      ["late", Late, /aria-label=\{"Dismiss the running-late alert for " \+ who\}/],
+      ["overlap", Overlap, /aria-label=\{"Dismiss the overstay warning for " \+ \(sb\.name/],
+      ["wait", Wait, /aria-label=\{"Dismiss the table-free alert for " \+ who\}/],
+      // The clash ✕ names the PAIR, matching clashRowId's own identity — the
+      // dismissal Set is keyed by pair for exactly this reason, so a name
+      // mentioning one booking would describe a different thing from the one
+      // the button dismisses.
+      ["clash", Clash, /aria-label=\{"Dismiss the double-booking warning for " \+ firstWho \+ " and " \+ laterWho\}/],
+    ]) {
+      has(src, what + " dismiss", re, "the row's subject must be in the name");
+    }
+  });
+
+  it("a banner ACTION with visible text leads with it (WCAG 2.5.3)", () => {
+    // The sweep does not stop at the ✕. `LateBanner`'s "No show" and
+    // `WaitAvailBanner`'s "Book" are also one per row — but they HAVE words, so
+    // they read as named and the fix is shaped differently: the visible label
+    // must come FIRST and the party only disambiguate, or a voice-control user
+    // can read the button and not say it. Same finding v17.15.4's own
+    // /code-review made against "copy → all".
+    has(Late, "No show", /aria-label=\{"No show \(" \+ who \+ "\)"\}/,
+      "the visible text leads; the guest follows in parentheses");
+    has(Wait, "Book", /aria-label=\{"Book \(" \+ who \+ ", " \+ w\.size \+ " pax\)"\}/,
+      "the visible text leads; the party follows in parentheses");
+    // Overlap's Reassign and Clash's Assign are deliberately untouched: their
+    // visible text already contains a name, so it differs per row on its own.
+    // Pinned so a later "consistency" pass does not add a redundant label that
+    // would then be free to drift from the text beside it.
+    for (const [what, src, re] of [
+      ["Reassign", Overlap, /\{"Reassign " \+ w\.next\}<\/button>/],
+      ["Assign", Clash, /\{"Assign " \+ laterWho\}<\/button>/],
+    ]) {
+      has(src, what + " names itself", re,
+        "this button's VISIBLE text is already per-row, so it needs no label");
+    }
+  });
+
+  it("every banner name survives a nameless booking", () => {
+    // /code-review. `sanitize` writes `name: b.name || ""` and the booking form
+    // does not require a name, so an empty name is reachable data — and a name
+    // built by concatenation then announces "…warning for  and ", identifying
+    // nothing. Three of the four banners guarded it; ClashBanner did not, so
+    // the fix for ambiguity reintroduced ambiguity in its own worst case.
+    for (const [what, src] of [["LateBanner", Late], ["OverlapBanner", Overlap],
+                               ["WaitAvailBanner", Wait], ["ClashBanner", Clash]]) {
+      has(src, what + " nameless fallback", /\|\| "\(no name\)"/,
+        "an empty name is reachable data, and a button announcing a blank is " +
+        "exactly the ambiguity these names exist to remove");
+    }
+    // ClashBanner names TWO parties, so it needs two — and the visible sentence
+    // and the Assign button must read the same guarded values, or the pane says
+    // "(no name)" while the button beside it says nothing at all.
+    expect(count(Clash, /\|\| "\(no name\)"/g), "one per party in the pair").toBe(2);
+    for (const re of [/const msg = firstWho \+/, /\{"Assign " \+ laterWho\}/]) {
+      has(Clash, "guarded value reused", re,
+        "the sentence and the button must read the same guarded name as the " +
+        "dismiss label, not re-derive it");
+    }
+  });
+
+  it("the name comes from ONE expression, not a second copy", () => {
+    // `who` exists so the sentence in the row and the name on the button cannot
+    // disagree about what the party is called — including the "(no name)"
+    // fallback, which a waitlist really does produce.
+    for (const [what, src] of [["LateBanner", Late], ["WaitAvailBanner", Wait]]) {
+      has(src, what + " who", /const who = \w+\.name \|\| "\(no name\)";/,
+        "derive the display name once per row and read it everywhere in that row");
+    }
+    has(Wait, "the row sentence reads `who` too", /\{who \+ " · " \+ w\.size \+ " pax/,
+      "the visible sentence must read the same expression the button's name does");
+  });
+});
+
+describe("a reminder row's three controls share one name (v17.15.6)", () => {
+  // v17.15.4 named the switch in this row and stopped there, so five reminders
+  // still offered five buttons called "Edit" and five called "Delete" — and
+  // Delete is the one control here where the wrong target cannot be undone.
+  const src = read("components/Reminders.jsx");
+
+  it("the reminder's display name is derived ONCE", () => {
+    has(src, "rname", /const rname = String\(r\.text \|\| "\(no text\)"\)\.replace\(\/\\s\+\/g, " "\)\.trim\(\);/,
+      "three controls in this row name the same reminder; a second copy of the " +
+      "expression is a second answer, and the two would drift");
+    expect(count(src, /String\(r\.text \|\| "\(no text\)"\)/g),
+      "exactly one copy of the guarded expression").toBe(1);
+  });
+
+  it("all three controls read it", () => {
+    for (const [what, re] of [
+      ["toggle", /label=\{"Reminder: " \+ rname\}/],
+      ["edit", /aria-label=\{"Edit \(" \+ rname \+ "\)"\}/],
+      ["delete", /aria-label=\{"Delete \(" \+ rname \+ "\)"\}/],
+    ]) {
+      has(src, what, re, "rendered once per reminder, so it must say which one");
+    }
+  });
+
+  it("Edit and Delete lead with their visible text (WCAG 2.5.3)", () => {
+    // Both have words on them, so the name extends the visible label rather
+    // than replacing it — "Delete the 09:00 prep reminder" would read as an
+    // improvement and stop "click Delete" working.
+    hasnt(src, "paraphrased action name", /aria-label=\{"(Remove|Modify|Change|Open) /,
+      "the visible word leads and the reminder follows in parentheses");
+  });
+});
+
+describe("the List card's actions stay named by their ancestor (v17.15.6)", () => {
+  // A DECISION pin, not a fix — the only one in this file, and it is here
+  // because the alternative is invisible: nothing about six statically-named
+  // buttons says somebody weighed them and chose to leave them.
+  //
+  // Measured live on a 10-booking day: Assign x10, Delete x10, cancelled x10,
+  // completed x9, seated x8. Sixty controls, five names.
+  //
+  // They are LEFT, and the whole argument is one structural fact: the card is a
+  // `role="listitem"` carrying `describeBooking(b)`, so a screen-reader user
+  // has already been told whose booking this is before reaching any button.
+  // Renaming all sixty would repeat the guest on every control — measurably
+  // more verbose in the app's most-used view, for exactly the users the change
+  // would be for. No WCAG SC is failed either way (2.5.3 is satisfied: the
+  // visible text IS the name), and voice control falls back to numbered
+  // overlays when names collide.
+  //
+  // The contrast with the four banners two describes up is the entire rule, and
+  // it is worth stating as one sentence: **a repeated control inside a NAMED
+  // listitem may rely on that ancestor; a control in a bare row may not.**
+  it("the card is what carries the booking's identity", () => {
+    has(List, "card aria-label", /aria-label=\{describeBooking\(b\)\}/,
+      "this is what the action buttons rely on instead of naming themselves — " +
+      "remove it and sixty controls lose their context at once");
+    has(List, "card is a listitem", /role="listitem"/,
+      "the ancestor must be a real list item, or there is no context to inherit");
+  });
+
+  it("the action buttons are deliberately NOT renamed", () => {
+    // /code-review. The first version of this pin guessed at STRING SHAPES —
+    // three regexes like `aria-label={"Assign…" + b.name`. Run against four
+    // renames a later sweep would plausibly write, it missed two: `"Set " + s +
+    // …` (the literal `s` cannot match the capital S of "Set") and `"Mark " +
+    // b.name + " as " + s`, which is the most natural phrasing of all.
+    //
+    // And `hasnt()`, unlike `has()`, does NOT throw when its pattern matches
+    // nothing — so a pattern that can never fire passes silently forever. A pin
+    // built out of guessed spellings is the tautology this file's header exists
+    // to prevent, in the one guard of this version that was not proven against
+    // known-bad input.
+    //
+    // So it is STRUCTURAL instead: find the action row's buttons and require
+    // that none of them carries an `aria-label` at all. No spelling to guess,
+    // and it catches all four candidates plus any phrasing nobody has thought
+    // of yet.
+    const actions = openingTagsOf(List, "button")
+      .filter((t) => /\bonClick=\{stopped\(/.test(t));
+    expect(actions.length, "the card's action row should still hold ~5 buttons " +
+      "wrapped in `stopped()` — if this drops to 0 the guard has stopped " +
+      "looking at anything").toBeGreaterThanOrEqual(4);
+    const named = actions.filter((t) => /\baria-label=/.test(t));
+    expect(named, "DECIDED in v17.15.6, not overlooked: the card is a named " +
+      "listitem carrying describeBooking, so these inherit the booking. " +
+      "Renaming all sixty repeats the guest on every control and is measurably " +
+      "more verbose for the users it is for. Change it only deliberately — and " +
+      "rewrite this test's reasoning if you do").toEqual([]);
+  });
+});
+
 describe("the gate proves itself", () => {
   // tests/style-check.test.js's lesson, applied here: reading a checker does
   // not catch a blind spot. These run the helpers against strings that MUST

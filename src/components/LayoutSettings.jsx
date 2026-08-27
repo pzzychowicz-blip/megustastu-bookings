@@ -420,9 +420,13 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         </div>
         {open ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "6px 0 2px 58px"   /* @canvas */ }}>
+            {/* v17.15.6: see the two sibling PICK_CHIP lists in the Combos
+                section for why a bare id is not a name here. `label`/`rowIn`
+                are the same pair the "+" button above already uses. */}
             {avail.map(function (id) {
               return (
                 <button key={id} onClick={function () { setPriPick(null); onChange(list.concat([id])); }}
+                  aria-label={id + " — add to " + label + rowIn}
                   className="mgt-hover-scale" style={PICK_CHIP}>{id}</button>
               );
             })}
@@ -463,7 +467,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>cap</span>
                 <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 20} label={"seats at table " + t.id}
                   onDec={function () { updateTable(t.id, { capacity: cap - 1 }); }} onInc={function () { updateTable(t.id, { capacity: cap + 1 }); }} />
+                {/* v17.15.6: one per table, and it HAS visible text — so it read
+                    as named while announcing "Indoor" or "Outdoor" thirteen
+                    times over. The visible word LEADS and the table only
+                    disambiguates (WCAG 2.5.3), the same shape as Settings'
+                    "copy → all (Mon)". The name says what the button IS, not
+                    what pressing it does: `aria-pressed` is not in play here
+                    because this is a two-way toggle between two real values,
+                    neither of which is "off". */}
                 <button onClick={function () { updateTable(t.id, { zone: indoor ? "outdoor" : "indoor" }); }} className="mgt-hover-scale"
+                  aria-label={(indoor ? "Indoor" : "Outdoor") + " (table " + t.id + ")"}
                   style={{
                     marginLeft: "auto", border: "1px solid var(--border-soft)", borderRadius: R.pill,
                     padding: "4px 12px", fontSize: T.body, fontWeight: FW.bold, cursor: "pointer", flexShrink: 0,
@@ -480,10 +493,29 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   </>
                 ) : (
                   <>
+                    {/* v17.15.6: these are icon-only, so `title` WAS their whole
+                        accessible name — one per table, thirteen buttons called
+                        "Rename table". The v17.15.5 precedent applies: the short
+                        `title` stays as the tooltip, and a row-specific
+                        `aria-label` carries the identity.
+                        /code-review: the disabled reason must go IN the label,
+                        not be left in `title`. An `aria-label` overrides `title`
+                        for the accessible NAME, and `title`-as-description is
+                        announced inconsistently — so the first version traded
+                        "A layout needs at least one table" for "Remove table 1A,
+                        dimmed" and the explanation was simply gone. It bought
+                        nothing in exchange either: the button is disabled only
+                        when ONE table exists, so there is exactly one of them on
+                        screen and nothing to disambiguate. Adding a name must
+                        never cost a name that was already saying more. */}
                     <button onClick={function () { startEdit(t.id); }} className="mgt-hover-scale" title="Rename table"
+                      aria-label={"Rename table " + t.id}
                       style={{ ...GCHIP_BTN, width: H.chip, height: H.chip, fontSize: T.lead, border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)" }}><EditIcon size={IC.control} /></button>
                     <button onClick={function () { setEditId(null); setPendingRemove(t.id); }} disabled={tables.length <= 1}
                       className={tables.length <= 1 ? undefined : "mgt-hover-scale"}
+                      aria-label={tables.length <= 1
+                        ? "Remove table " + t.id + " (unavailable — a layout needs at least one table)"
+                        : "Remove table " + t.id}
                       title={tables.length <= 1 ? "A layout needs at least one table" : "Remove table"}
                       style={{ ...X_BTN, opacity: tables.length <= 1 ? 0.4 : 1, cursor: tables.length <= 1 ? "not-allowed" : "pointer" }}><CloseIcon size={IC.control} /></button>
                   </>
@@ -593,27 +625,56 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 {group.map(function (id, idx) {
                   return (
                     <span key={id} style={GCHIP}>
+                      {/* v17.15.6: three icon-only buttons PER CHIP, and a chip
+                          per table in every group — the densest instance of this
+                          defect in the app. The table id alone disambiguates and
+                          no group id is needed: `sanitizeLayout` enforces
+                          single-group membership, so a table appears in exactly
+                          one group. */}
                       <button onClick={function () { moveInGroup(gi, idx, -1); }} disabled={idx === 0}
-                        title="Move left" style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronLeftIcon size={IC.inline} /></button>
+                        title="Move left" aria-label={"Move " + id + " left in its joined group"}
+                        style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronLeftIcon size={IC.inline} /></button>
                       <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
                       <button onClick={function () { moveInGroup(gi, idx, 1); }} disabled={idx === last}
-                        title="Move right" style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronRightIcon size={IC.inline} /></button>
+                        title="Move right" aria-label={"Move " + id + " right in its joined group"}
+                        style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronRightIcon size={IC.inline} /></button>
                       <button onClick={function () { removeFromGroup(gi, id); }} title="Remove from group"
+                        aria-label={"Remove " + id + " from its joined group"}
                         style={{ ...GCHIP_BTN, color: "var(--danger-text)" }}><CloseIcon size={IC.inline} /></button>
                     </span>
                   );
                 })}
+                {/* v17.15.6: "this group" is exactly the word a name cannot use
+                    — it points at context the control does not carry. The group
+                    names itself by its members, which is also how it is labelled
+                    on screen. */}
                 <button onClick={function () { setPickFor(pickFor === gi ? null : gi); }} className="mgt-hover-scale"
-                  title="Add a table to this group" disabled={!ungrouped.length}
+                  title="Add a table to this group" aria-label={"Add a table to the group " + group.join(" + ")}
+                  disabled={!ungrouped.length}
                   style={{ ...GCHIP_BTN, width: H.chip, height: H.chip, fontSize: T.title, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: ungrouped.length ? 1 : 0.3, cursor: ungrouped.length ? "pointer" : "not-allowed" }}>+</button>
                 <button onClick={function () { removeGroup(gi); }} className="mgt-hover-scale" title="Remove whole group"
+                  aria-label={"Remove the group " + group.join(" + ")}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
               {pickFor === gi ? (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "2px 0 8px" }}>
+                  {/* v17.15.6, and this is the WORST instance of the pattern in
+                      the app — found by reading the computed names out of the
+                      running page, which is the only thing that shows it.
+                      There are THREE `PICK_CHIP` lists rendering the same table
+                      ids as bare `<button>7</button>`: this one (add to THIS
+                      group), the "Ungrouped" row below (start a NEW group), and
+                      the priorities picker above (add to a prefer/avoid list).
+                      The Ungrouped row is ALWAYS rendered, so opening either
+                      picker puts two buttons named "7" on screen **that do
+                      different things** — not merely ambiguous, actively
+                      misleading, and reachable in one click. The visible id
+                      LEADS (2.5.3) and the action follows. */}
                   {ungrouped.length ? ungrouped.map(function (id) {
                     return (
-                      <button key={id} onClick={function () { addToGroup(gi, id); }} className="mgt-hover-scale" style={PICK_CHIP}>{id}</button>
+                      <button key={id} onClick={function () { addToGroup(gi, id); }}
+                        aria-label={id + " — add to the group " + group.join(" + ")}
+                        className="mgt-hover-scale" style={PICK_CHIP}>{id}</button>
                     );
                   }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>No ungrouped tables.</span>}
                 </div>
@@ -648,9 +709,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             ) : null}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+            {/* v17.15.6: the third `PICK_CHIP` list — see the group picker above.
+                This row is always on screen, which is what makes the other two
+                ambiguous the moment they open. "tap to start a new group" is
+                said once in a sibling <span>; the name has to carry it, because
+                a name is not read from the row's caption. */}
             {ungrouped.length ? ungrouped.map(function (id) {
               return (
-                <button key={id} onClick={function () { newGroupFrom(id); }} className="mgt-hover-scale" style={PICK_CHIP}>{id}</button>
+                <button key={id} onClick={function () { newGroupFrom(id); }}
+                  aria-label={id + " — start a new joined group"}
+                  className="mgt-hover-scale" style={PICK_CHIP}>{id}</button>
               );
             }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>none — every table is in a group</span>}
           </div>
@@ -667,7 +735,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
                   <Stepper value={mc.cap} disableDec={mc.cap <= 1} disableInc={mc.cap >= 60} label={"seats at combo " + mc.ids.join(" + ")}
                     onDec={function () { setMegaCap(i, mc.cap - 1); }} onInc={function () { setMegaCap(i, mc.cap + 1); }} />
-                  <button onClick={function () { removeMega(i); }} className="mgt-hover-scale" title="Remove combo" style={X_BTN}><CloseIcon size={IC.control} /></button>
+                  {/* v17.15.6: the combo's members, which is what the row shows
+                      and what the `Stepper` beside it already names itself by. */}
+                  <button onClick={function () { removeMega(i); }} className="mgt-hover-scale" title="Remove combo"
+                    aria-label={"Remove the cross-group combo " + mc.ids.join(" + ")}
+                    style={X_BTN}><CloseIcon size={IC.control} /></button>
                 </div>
               </div>
             );
@@ -679,10 +751,21 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               Add a combo
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", marginBottom: 8 }}>
+              {/* v17.15.6: the LAST bare-id list, and the only one that was
+                  missing its STATE as well as its name. Selection here is
+                  carried by an accent fill and nothing else, so without
+                  `aria-pressed` a screen-reader user cannot tell which tables
+                  they have picked — and picking tables IS the whole control.
+                  `aria-pressed`, not `role="switch"`: the repo's rule is that a
+                  switch is a state that STAYS (see the `Toggle` atom), while
+                  these are selections inside a set being assembled. The
+                  `Require` row further down already answers it this way. */}
               {tables.map(function (t) {
                 const on = addIds.indexOf(t.id) >= 0;
                 return (
                   <button key={t.id} onClick={function () { toggleAdd(t.id); }} className="mgt-hover-scale"
+                    aria-pressed={on}
+                    aria-label={t.id + " — include in the new combo"}
                     style={{
                       fontSize: T.body, fontWeight: FW.bold, borderRadius: R.pill, padding: "4px 10px", cursor: "pointer",
                       border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)",
@@ -839,9 +922,15 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>Require</span>
             {tableIds.map(function (id) {
               const on = priMixed.indexOf(id) >= 0;
+              // v17.15.6: v17.15.5 gave this row its `aria-pressed` and left the
+              // NAME a bare id — so thirteen buttons here announce the same
+              // words as the thirteen in "Add a combo" above, which is on
+              // screen at the same time. State without identity is half a
+              // control.
               return (
                 <button key={id} onClick={function () { toggleMixed(id); }} className="mgt-hover-scale"
                   aria-pressed={on}
+                  aria-label={id + " — require in cross-zone combos"}
                   style={{ ...PICK_CHIP, background: on ? "var(--accent)" : "var(--bg-stepper)", color: on ? "var(--text-on-accent)" : "var(--text-primary)", border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)" }}>
                   {id}
                 </button>

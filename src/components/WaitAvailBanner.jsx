@@ -32,16 +32,24 @@ export function WaitAvailBanner({ entries, availability, onBook, onDismiss, }) {
     const w = byId.get(id);
     if (!w) return null;
     const avail = availability[id] || null;
+    // v17.15.6: both controls carry the waiting PARTY — see LateBanner for the
+    // rule and for why a banner row has no ancestor to inherit a name from.
+    // `who` is the row's own existing expression rather than a second copy of
+    // it, so the button and the sentence can never disagree about the name; the
+    // size goes in too, because two parties of a name this vague ("(no name)")
+    // is exactly the case a waitlist produces.
+    const who = w.name || "(no name)";
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
-        <span style={{ fontSize: T.body, color: "var(--success-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{(w.name || "(no name)") + " · " + w.size + " pax — table free" + (avail && avail.time ? " · " + avail.time : "")}</span>
+        <span style={{ fontSize: T.body, color: "var(--success-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{who + " · " + w.size + " pax — table free" + (avail && avail.time ? " · " + avail.time : "")}</span>
         <button
           onClick={function () { onBook(w); }}
+          aria-label={"Book (" + who + ", " + w.size + " pax)"}
           className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: "var(--app-walkin)" })}>Book</button>
         <button
           onClick={function () { onDismiss(id); }}
-          aria-label="Dismiss this alert"
+          aria-label={"Dismiss the table-free alert for " + who}
           className="mgt-hover-scale mgt-press"
           style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
       </div>
