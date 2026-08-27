@@ -15791,3 +15791,52 @@ pruned from the two files that lost their last use (lint is a hard gate);
 
 Bundle: 333.55 → **333.32 kB** (90.42 → 90.39 kB gz).
 
+### 3. The notification strip's per-row controls carry their row
+
+The four banners each rendered one dismiss ✕ per row with a **single static
+`aria-label`** — "Dismiss this alert" / "…this warning" / "…this double-booking
+warning". One string in the source; six identically-named buttons on a busy
+evening.
+
+**These are the case with no fallback, and that is what makes them decidable
+differently from `ListView`'s card actions (§6).** A `BannerRows` row is a bare
+`<div>` with no role and no name, so a control inside it inherits nothing. A
+List card is a named `role="listitem"`. That single structural difference is the
+whole of the argument on both sides.
+
+| control | name |
+|---|---|
+| Late ✕ | `"Dismiss the running-late alert for " + who` |
+| Late **No show** | `"No show (" + who + ")"` |
+| Overlap ✕ | `"Dismiss the overstay warning for " + sb.name` |
+| Wait ✕ | `"Dismiss the table-free alert for " + who` |
+| Wait **Book** | `"Book (" + who + ", " + w.size + " pax)"` |
+| Clash ✕ | `"Dismiss the double-booking warning for " + first.name + " and " + later.name` |
+
+**The sweep deliberately did not stop at the ✕**, and the two kinds of control
+take differently-shaped names. An icon-only ✕ has no visible text, so it takes a
+whole sentence. **No show** and **Book** have words — so they read as named
+already, and the fix is that the visible label must LEAD with the party only
+disambiguating after it. That is v17.15.4's own `/code-review` finding (WCAG
+2.5.3): a name that paraphrases the visible text stops a voice-control user
+saying what they can read.
+
+Two rows are left alone and both are pinned so a later "consistency" pass cannot
+add a redundant label: **Overlap's Reassign** and **Clash's Assign** already put
+a name in their VISIBLE text.
+
+The clash ✕ names the **pair**, matching `clashRowId`'s own identity — the
+dismissal Set is keyed by pair precisely because "Pau vs Rita" and "Rita vs a
+third party" are different things, so a name mentioning one booking would
+describe something other than what the button dismisses.
+
+`who` is derived once per row and read by both the sentence and the button, so
+the two can never disagree about what a party is called — including the
+`"(no name)"` fallback, which a waitlist genuinely produces.
+
+**Four guards in `tests/a11y.test.js`, each proven against known-bad input.**
+Reverting the wait ✕ to its old literal fails two of them; replacing "No show
+(Miriam)" with the plausible-looking **"Mark Miriam as a no-show"** fails the
+2.5.3 one — which is the point, because that string reads as an improvement in
+review and is the exact mistake v17.15.4 shipped.
+

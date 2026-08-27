@@ -843,6 +843,84 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
   });
 });
 
+describe("a banner row's controls carry their row (v17.15.6)", () => {
+  // The ROADMAP entry v17.15.5 left behind, for the four notification-strip
+  // banners. Each renders one dismiss ✕ per row with a single static
+  // `aria-label` — one string in the source, and on a busy evening six
+  // identically-named buttons on the page.
+  //
+  // These are the case with NO fallback, which is why they are decided the
+  // opposite way to ListView's card actions two describes below: a `BannerRows`
+  // row is a bare <div> with no role and no name, so a control inside it
+  // inherits nothing. A List card is a named `role="listitem"`, and that is the
+  // entire difference between the two decisions.
+  const Late = read("components/LateBanner.jsx");
+  const Overlap = read("components/OverlapBanner.jsx");
+  const Wait = read("components/WaitAvailBanner.jsx");
+  const Clash = read("components/ClashBanner.jsx");
+
+  it("no banner names a control with a bare literal any more", () => {
+    for (const [name, src] of [["LateBanner", Late], ["OverlapBanner", Overlap],
+                               ["WaitAvailBanner", Wait], ["ClashBanner", Clash]]) {
+      hasnt(src, name + " static dismiss", /aria-label="Dismiss this/,
+        "one row per late booking / warning / waiting party, so a literal here " +
+        "is not one name — it is N identical ones, and a banner row has no " +
+        "named ancestor to fall back on the way a List card does");
+    }
+  });
+
+  it("every banner's ✕ builds its name from the row", () => {
+    for (const [what, src, re] of [
+      ["late", Late, /aria-label=\{"Dismiss the running-late alert for " \+ who\}/],
+      ["overlap", Overlap, /aria-label=\{"Dismiss the overstay warning for " \+ \(sb\.name/],
+      ["wait", Wait, /aria-label=\{"Dismiss the table-free alert for " \+ who\}/],
+      // The clash ✕ names the PAIR, matching clashRowId's own identity — the
+      // dismissal Set is keyed by pair for exactly this reason, so a name
+      // mentioning one booking would describe a different thing from the one
+      // the button dismisses.
+      ["clash", Clash, /aria-label=\{"Dismiss the double-booking warning for " \+ first\.name \+ " and " \+ later\.name\}/],
+    ]) {
+      has(src, what + " dismiss", re, "the row's subject must be in the name");
+    }
+  });
+
+  it("a banner ACTION with visible text leads with it (WCAG 2.5.3)", () => {
+    // The sweep does not stop at the ✕. `LateBanner`'s "No show" and
+    // `WaitAvailBanner`'s "Book" are also one per row — but they HAVE words, so
+    // they read as named and the fix is shaped differently: the visible label
+    // must come FIRST and the party only disambiguate, or a voice-control user
+    // can read the button and not say it. Same finding v17.15.4's own
+    // /code-review made against "copy → all".
+    has(Late, "No show", /aria-label=\{"No show \(" \+ who \+ "\)"\}/,
+      "the visible text leads; the guest follows in parentheses");
+    has(Wait, "Book", /aria-label=\{"Book \(" \+ who \+ ", " \+ w\.size \+ " pax\)"\}/,
+      "the visible text leads; the party follows in parentheses");
+    // Overlap's Reassign and Clash's Assign are deliberately untouched: their
+    // visible text already contains a name, so it differs per row on its own.
+    // Pinned so a later "consistency" pass does not add a redundant label that
+    // would then be free to drift from the text beside it.
+    for (const [what, src, re] of [
+      ["Reassign", Overlap, /\{"Reassign " \+ w\.next\}<\/button>/],
+      ["Assign", Clash, /\{"Assign " \+ later\.name\}<\/button>/],
+    ]) {
+      has(src, what + " names itself", re,
+        "this button's VISIBLE text is already per-row, so it needs no label");
+    }
+  });
+
+  it("the name comes from ONE expression, not a second copy", () => {
+    // `who` exists so the sentence in the row and the name on the button cannot
+    // disagree about what the party is called — including the "(no name)"
+    // fallback, which a waitlist really does produce.
+    for (const [what, src] of [["LateBanner", Late], ["WaitAvailBanner", Wait]]) {
+      has(src, what + " who", /const who = \w+\.name \|\| "\(no name\)";/,
+        "derive the display name once per row and read it everywhere in that row");
+    }
+    has(Wait, "the row sentence reads `who` too", /\{who \+ " · " \+ w\.size \+ " pax/,
+      "the visible sentence must read the same expression the button's name does");
+  });
+});
+
 describe("the gate proves itself", () => {
   // tests/style-check.test.js's lesson, applied here: reading a checker does
   // not catch a blind spot. These run the helpers against strings that MUST

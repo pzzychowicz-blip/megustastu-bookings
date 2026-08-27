@@ -76,7 +76,12 @@ export function ClashBanner({ pairs, bookings, onAssign, onDismiss, swapKey }) {
           style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>{"Assign " + later.name}</button>
         <button
           onClick={function () { onDismiss(rowId); }}
-          aria-label="Dismiss this double-booking warning"
+          /* v17.15.6: the PAIR, matching `clashRowId`'s own identity — a clash
+             is about two parties, and dismissing "Pau vs Rita" must read
+             differently from "Rita vs a third party", which is the very
+             distinction the dismissal Set is keyed on. See LateBanner for the
+             rule; the Assign button needs nothing, its visible text is a name. */
+          aria-label={"Dismiss the double-booking warning for " + first.name + " and " + later.name}
           className="mgt-hover-scale mgt-press"
           style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
       </div>

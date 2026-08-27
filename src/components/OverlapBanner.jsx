@@ -31,6 +31,10 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
     if (!sb || !w) return null;
     const rowTxt = w.overdue ? "var(--danger-text)" : "var(--warn-text)";
     const msg = sb.name + " (overstaying) → " + w.next + " at " + w.nextTime + (w.overdue ? " — overdue" : " — in " + w.gap + " min");
+    // v17.15.6: the ✕ names its booking (see LateBanner for the rule and why a
+    // banner row, unlike a List card, has no ancestor to inherit from). The
+    // Reassign button below needs nothing — `w.next` is the incoming party's
+    // name, so its VISIBLE text already differs per row.
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: rowTxt, fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
@@ -40,7 +44,7 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
           style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>{"Reassign " + w.next}</button>
         <button
           onClick={function () { onDismiss(id); }}
-          aria-label="Dismiss this warning"
+          aria-label={"Dismiss the overstay warning for " + (sb.name || "(no name)")}
           className="mgt-hover-scale mgt-press"
           style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
       </div>
