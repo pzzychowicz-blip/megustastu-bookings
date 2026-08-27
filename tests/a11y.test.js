@@ -88,8 +88,8 @@ function count(src, re) {
 // style objects here run to hundreds of characters and grow. It walks to the
 // `>` that closes the tag, tracking brace depth and quotes so a `>` inside an
 // expression container (`a > b`, an arrow function) does not end it early.
-function openingTag(src, open) {
-  const start = src.indexOf(open);
+function openingTag(src, open, from = 0) {
+  const start = src.indexOf(open, from);
   if (start < 0) throw new Error("a11y.test: no " + open + " found");
   let depth = 0, quote = null;
   for (let i = start; i < src.length; i++) {
@@ -105,6 +105,21 @@ function openingTag(src, open) {
     "rather than widening a window — a guard that stops seeing the attribute it " +
     "guards still passes."
   );
+}
+
+// Every `<Name ...>` opening tag in a file, whole. A LINE-based grep cannot do
+// this job and the v17.15.2 entry says why: that version fixed eight alert
+// panes with one and missed four whose two tokens sat on separate lines. Two of
+// this version's own twenty call sites are multi-line, so a line grep would
+// have reported them missing and a line grep aimed at the fixed shape would
+// have reported them present. `[\s/>]` after the name so `<ToggleGroup` never
+// answers for `<Toggle`.
+function openingTagsOf(src, name) {
+  const re = new RegExp("<" + name + "[\\s/>]", "g");
+  const out = [];
+  let m;
+  while ((m = re.exec(src)) !== null) out.push(openingTag(src, "<" + name, m.index));
+  return out;
 }
 
 describe("landmarks and headings (WCAG 1.3.1, 2.4.1)", () => {
@@ -550,6 +565,140 @@ describe("every modal is Overlay's modal (WCAG 4.1.2, 2.4.3)", () => {
   });
 });
 
+describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.1, 4.1.2)", () => {
+  // v17.15.4. `Toggle` was a bare <button> whose entire content was two
+  // coloured divs — no text, no role, no state — so every on/off control in
+  // the app announced as "button", twenty of them, indistinguishable from each
+  // other and from the buttons around them. Settings is almost entirely built
+  // out of it.
+  //
+  // It survived v17.12.0 AND v17.13.0's gate, and the reason is worth stating
+  // because it is how the next one will survive too: both passes went after the
+  // surfaces that hold BOOKINGS — the card, the block, the floor-plan table,
+  // the form field — and an atom that draws a 48×26 pill is not where anyone
+  // looks for a missing name. The generalisation is not "check the atoms"; it
+  // is that **a control with no text content has no name unless someone gives
+  // it one**, and nothing about looking at it says so.
+  //
+  // These assertions are deliberately in two halves. The atom half is one
+  // shape in one file. The call-site half is a SWEEP, because `label` has no
+  // default: the atom cannot make a caller name it, so the build has to.
+  const componentsDir = join(SRC, "components");
+  const withToggle = readdirSync(componentsDir)
+    .filter((f) => /\.jsx?$/.test(f) && f !== "atoms.jsx")
+    .map((f) => [f, stripComments(readFileSync(join(componentsDir, f), "utf8")).join("\n")])
+    .filter(([, src]) => /<Toggle[\s/>]/.test(src));
+
+  // atoms.jsx is a multi-export file and `Collapsible`'s header button comes
+  // FIRST, so a file-wide search here measures the wrong control — which is
+  // what the first version of this block did, and it failed loudly only
+  // because `Collapsible` happens to have a button too. Scope to the function.
+  const toggleStart = Atoms.indexOf("export function Toggle(");
+  const nextExport = Atoms.indexOf("export function", toggleStart + 10);
+  const ToggleFn = Atoms.slice(toggleStart, nextExport < 0 ? Atoms.length : nextExport);
+
+  it("the atom's own button carries role=switch, aria-checked and aria-label", () => {
+    expect(toggleStart, "atoms.jsx must export a Toggle").toBeGreaterThan(-1);
+    const tag = openingTag(ToggleFn, "<button");
+    expect(tag, "the role goes on the control, not on a wrapper").toMatch(/role="switch"/);
+    expect(tag, "aria-checked publishes the state").toMatch(/aria-checked=\{!!on\}/);
+    // The coercion is not decoration: `on` arrives as `r.active`, `draft.active`
+    // and `bd.lateEnabled`, any of which can be undefined — and a bare
+    // `aria-checked={on}` then omits the attribute entirely, leaving a switch
+    // that renders as off and reports no state at all.
+    expect(tag, "the name the caller supplies").toMatch(/aria-label=\{label\}/);
+    has(ToggleFn, "label in the signature", /function Toggle\(\{[^}]*\blabel\b/,
+      "a prop read but not destructured is a silent undefined");
+  });
+
+  it("it is a switch, NOT aria-pressed", () => {
+    hasnt(ToggleFn, "aria-pressed", /aria-pressed/,
+      "a toggle button reports an action you took; a switch reports a state " +
+      "that stays. Every one of these writes a setting");
+  });
+
+  it("it stays a <button> element, so the stylesheet's button rules still reach it", () => {
+    // The v17.12.0 lesson in its other direction. A role SUBSCRIBES an element
+    // to the rules written for it — and src/index.css has no `[role="switch"]`
+    // rule, which was checked before the role went on. What the role must not
+    // do is cost the element the rules it already had: `user-select: none`, the
+    // 0.96 press dip and the transform transition are all written against the
+    // `button` ELEMENT selector, which a <div role="switch"> would not match.
+    expect(openingTag(ToggleFn, "<button"), "Toggle must remain a real <button>")
+      .toMatch(/^<button\b/);
+  });
+
+  it("every <Toggle> in the app passes a label", () => {
+    const unnamed = [];
+    for (const [file, src] of withToggle) {
+      for (const tag of openingTagsOf(src, "Toggle")) {
+        if (!/\blabel=/.test(tag)) unnamed.push(file + ": " + tag.slice(0, 90));
+      }
+    }
+    expect(
+      unnamed,
+      "a Toggle with no `label` announces as an unnamed switch — which is most " +
+      "of what this version exists to fix. Name what the switch CONTROLS, never " +
+      "its state: the state is aria-checked's job, and a name that flips with " +
+      "the value makes one control read as two."
+    ).toEqual([]);
+  });
+
+  it("a Toggle rendered from a list names the ITEM, not the control", () => {
+    // The half of this that source review misses and the live page shows in
+    // one line. Three of the twenty switches are rendered inside a `.map` —
+    // one per reminder, one per standing-booking rule, one per party-size band
+    // — so a static label there is not one name, it is N identical names, and
+    // it is precisely the defect this version exists to fix, reappearing one
+    // level down. The size-band one nearly shipped that way; what caught it
+    // was reading the rendered names out of the running app, where the
+    // repetition is three identical strings, rather than out of the source,
+    // where it is one string inside a loop.
+    //
+    // A regex cannot reliably tell "inside a .map" from "beside one", so this
+    // does not try. It pins the three known list-rendered call sites to a
+    // DYNAMIC label, which is the property that makes them per-item.
+    for (const [file, marker] of [
+      ["Reminders.jsx", /<Toggle\s+label=\{"Reminder: "/],
+      ["Settings.jsx", /<Toggle\s+label=\{"Standing booking: "/],
+      ["LayoutSettings.jsx", /<Toggle label=\{"Party of "/],
+    ]) {
+      const src = withToggle.find(([f]) => f === file);
+      expect(src, file + " must still render a Toggle").toBeTruthy();
+      has(src[1], file + " list Toggle", marker,
+        "this switch is rendered once per item, so its label must carry the " +
+        "item's own identity — a string literal here gives every row in the " +
+        "list the same name");
+    }
+  });
+
+  it("no two Toggles in one file share a literal label", () => {
+    // The copy-paste case the rule above cannot see. Settings alone holds
+    // fourteen of these and they are edited by duplicating the row above.
+    const clashes = [];
+    for (const [file, src] of withToggle) {
+      const seen = new Map();
+      for (const tag of openingTagsOf(src, "Toggle")) {
+        const m = /\blabel="([^"]+)"/.exec(tag);
+        if (!m) continue;
+        if (seen.has(m[1])) clashes.push(file + ': two switches both named "' + m[1] + '"');
+        seen.set(m[1], true);
+      }
+    }
+    expect(clashes, "two switches with one name is one switch as far as a " +
+      "screen reader is concerned").toEqual([]);
+  });
+
+  it("the sweep is actually finding call sites", () => {
+    // Without this the assertion above passes triumphantly on zero files the
+    // day someone renames the atom.
+    const total = withToggle.reduce((n, [, src]) => n + openingTagsOf(src, "Toggle").length, 0);
+    expect(withToggle.length, "several components use Toggle").toBeGreaterThanOrEqual(5);
+    expect(total, "and there are ~20 switches between them").toBeGreaterThanOrEqual(15);
+  });
+
+});
+
 describe("the gate proves itself", () => {
   // tests/style-check.test.js's lesson, applied here: reading a checker does
   // not catch a blind spot. These run the helpers against strings that MUST
@@ -570,6 +719,31 @@ describe("the gate proves itself", () => {
 
   it("openingTag() throws rather than returning a truncated tag", () => {
     expect(() => openingTag("x <main style={{a: 1}", "<main")).toThrow();
+  });
+
+  // v17.15.4. The Toggle sweep is the first check here that walks a whole file
+  // looking for MISSING attributes rather than asserting one present shape, so
+  // it has two ways to rot into a tautology: find nothing, or read only part of
+  // each tag. Both are exercised against input that must fail.
+  it("openingTagsOf() finds EVERY tag, not just the first", () => {
+    const src = '<Toggle label="a" /> x <Toggle on={b} /> y <Toggle label={c} />';
+    const tags = openingTagsOf(src, "Toggle");
+    expect(tags.length).toBe(3);
+    expect(tags.filter((t) => !/\blabel=/.test(t)).length, "the middle one is unnamed").toBe(1);
+  });
+
+  it("openingTagsOf() reads a MULTI-LINE tag whole", () => {
+    // The v17.15.2 miss, reproduced: a line-based grep for `<Toggle.*label`
+    // calls this one unnamed. Two of the app's real call sites are this shape.
+    const src = '<Toggle\n  label="Swap busy"\n  on={x}\n/>';
+    const tags = openingTagsOf(src, "Toggle");
+    expect(tags.length).toBe(1);
+    expect(/\blabel=/.test(tags[0]), "the label is on line 2").toBe(true);
+    expect(/<Toggle.*label=/.test(src), "a line-based grep would have missed it").toBe(false);
+  });
+
+  it("openingTagsOf() does not let <ToggleGroup answer for <Toggle", () => {
+    expect(openingTagsOf('<ToggleGroup on={x} />', "Toggle").length).toBe(0);
   });
 
   it("count() distinguishes one heading from two", () => {

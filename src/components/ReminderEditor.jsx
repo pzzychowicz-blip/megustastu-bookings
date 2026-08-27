@@ -276,7 +276,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           borderRadius: R.card,
           border: "1px solid var(--border-soft)"
         }}>
-          <Toggle on={draft.active} onClick={toggleActive} />
+          <Toggle label="Reminder active" on={draft.active} onClick={toggleActive} />
           <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.semi }}>
             {draft.active ? "Active" : "Inactive"}
           </span>

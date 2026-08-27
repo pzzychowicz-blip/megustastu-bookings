@@ -262,6 +262,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
           </div>
         </div>
         <Toggle
+          label="Swap busy"
           on={swapBusy}
           onClick={() => {
             const next = !swapBusy;
