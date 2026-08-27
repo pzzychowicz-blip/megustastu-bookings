@@ -583,10 +583,20 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
   // These assertions are deliberately in two halves. The atom half is one
   // shape in one file. The call-site half is a SWEEP, because `label` has no
   // default: the atom cannot make a caller name it, so the build has to.
-  const componentsDir = join(SRC, "components");
-  const withToggle = readdirSync(componentsDir)
-    .filter((f) => /\.jsx?$/.test(f) && f !== "atoms.jsx")
-    .map((f) => [f, stripComments(readFileSync(join(componentsDir, f), "utf8")).join("\n")])
+  // /code-review: this read `src/components` only, while its own failure
+  // message claimed "every <Toggle> in the app" — the repo's recorded fault
+  // class, a guard NARROWER than the rule it gates. `Toggle` is a plain export
+  // importable from anywhere, and `App.jsx` already renders its own inline
+  // confirm dialogs and header controls; a switch added there would have
+  // shipped unnamed with the build green, which is exactly the defect this
+  // version exists to remove, walking past the gate built to stop it. It walks
+  // all of `src/` now. `atoms.jsx` is NOT excluded either — an atom composing
+  // Toggle has the same obligation as any other caller.
+  const jsxFilesUnder = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? jsxFilesUnder(join(dir, e.name))
+      : /\.jsx?$/.test(e.name) ? [join(dir, e.name)] : []);
+  const withToggle = jsxFilesUnder(SRC)
+    .map((f) => [f.slice(SRC.length + 1), stripComments(readFileSync(f, "utf8")).join("\n")])
     .filter(([, src]) => /<Toggle[\s/>]/.test(src));
 
   // atoms.jsx is a multi-export file and `Collapsible`'s header button comes
@@ -659,9 +669,9 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
     // does not try. It pins the three known list-rendered call sites to a
     // DYNAMIC label, which is the property that makes them per-item.
     for (const [file, marker] of [
-      ["Reminders.jsx", /<Toggle\s+label=\{"Reminder: "/],
-      ["Settings.jsx", /<Toggle\s+label=\{"Standing booking: "/],
-      ["LayoutSettings.jsx", /<Toggle label=\{"Party of "/],
+      ["components/Reminders.jsx", /<Toggle\s+label=\{"Reminder: "/],
+      ["components/Settings.jsx", /<Toggle\s+label=\{"Standing booking: "/],
+      ["components/LayoutSettings.jsx", /<Toggle label=\{"Party of "/],
     ]) {
       const src = withToggle.find(([f]) => f === file);
       expect(src, file + " must still render a Toggle").toBeTruthy();
@@ -706,8 +716,35 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
     const Settings = read("components/Settings.jsx");
     has(Settings, "Open/Closed pill", /aria-label=\{label \+ ": " \+ \(closed \? "Closed" : "Open"\)\}/,
       "the day is what distinguishes one of these seven from the next");
-    has(Settings, "copy → all", /aria-label=\{"Copy " \+ label \+ "'s hours to all days"\}/,
-      "its `title` is a DESCRIPTION, not a name — content wins");
+    // /code-review: the first version of this name was the sentence "Copy Mon's
+    // hours to all days", which fixed the ambiguity and broke WCAG 2.5.3 in the
+    // same stroke — the button's visible text is "copy → all", voice control
+    // matches on the NAME, and the old name-from-content was exactly that
+    // string, so "click copy all" worked BEFORE the fix and not after. The
+    // visible label leads; the weekday only disambiguates.
+    has(Settings, "copy → all", /aria-label=\{"copy → all \(" \+ label \+ "\)"\}/,
+      "the visible text must stay INSIDE the accessible name, or a voice-control " +
+      "user can read the button and not say it");
+  });
+
+  it("no accessible name in the app hides its own visible text", () => {
+    // The general form of the finding above, for the two buttons whose visible
+    // text and aria-label are both literals in the source. A name that replaces
+    // the visible text rather than extending it is a 2.5.3 failure, and it
+    // looks like an improvement in review — which is how it shipped.
+    const Settings = read("components/Settings.jsx");
+    for (const [visible, tag] of [["Open", /aria-label=\{label \+ ": " \+ \(closed \? "Closed" : "Open"\)\}/],
+                                  ["copy → all", /aria-label=\{"copy → all \(/]]) {
+      has(Settings, '"' + visible + '" stays in its name', tag,
+        "the accessible name must contain the visible label, not paraphrase it");
+    }
+    // ReminderEditor's switch has no text of its own; its only visible
+    // labelling is a sibling reading "Active" or "Inactive", so a name
+    // containing either word matches one state and contradicts the other.
+    hasnt(Reminder, "state word in the name", /label="Reminder (active|inactive)"/i,
+      "a name that contains neither word is sayable in both states — and " +
+      "aria-checked is what carries the state, never the name");
+    has(Reminder, "Reminder status", /label="Reminder status"/, "the name that works in both states");
   });
 });
 

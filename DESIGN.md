@@ -881,7 +881,22 @@ reading "Open" and seven reading "copy → all", with the weekday in a sibling
 `<span>` that names nothing. An element with content is named BY that content —
 and a `title` is a *description*, not a name, so the copy button's tooltip
 ("Copy this day's hours to all days") never said which day either. Both carry an
-`aria-label` prefixed with the weekday.
+`aria-label` naming the weekday.
+
+**But an `aria-label` must EXTEND the visible text, never replace it** (WCAG
+2.5.3, Label in Name) — and the first fix here broke that in the act of fixing
+the other thing, which is why the rule is written down. Voice control matches on
+the accessible NAME, so "copy → all" was sayable while its name came from its
+content, and stopped being sayable the moment the name became the sentence
+"Copy Mon's hours to all days" — two of the same words, far apart, matching
+nothing. It is `"copy → all (Mon)"`: **the visible label leads and the
+disambiguator follows.** `Mon: Open` is the same rule satisfied by accident, and
+the third case shows the trap has a second face — `ReminderEditor`'s switch is
+labelled only by a sibling reading "Active" or "Inactive", so ANY name
+containing one of those words contradicts the visible text in the other state.
+Its name is "Reminder status", which contains neither and is sayable in both.
+A paraphrase always reads as an improvement in review; ask instead whether
+someone could say what they can see.
 
 **Why this survived v17.12.0 and v17.13.0's gate**, which is the more useful
 lesson than the fix: both passes went after the surfaces that hold *bookings* —

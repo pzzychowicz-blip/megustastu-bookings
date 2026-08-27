@@ -238,12 +238,25 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
             onDec={() => onChange({ close: c - 1 })} onInc={() => onChange({ close: c + 1 })} />
         </div>
       )}
-      {/* Its `title` is a DESCRIPTION, not a name — an element with text
+      {/* Its `title` was a DESCRIPTION, not a name — an element with text
           content is named by that text, so this was the third identical
           announcement in the row: seven "copy → all" buttons, and the tooltip
-          says "this day" without ever saying which. */}
+          said "this day" without ever saying which.
+          /code-review: the first fix wrote the name as a sentence ("Copy Mon's
+          hours to all days") and thereby BROKE what it was fixing, in the other
+          direction. WCAG 2.5.3 (Label in Name) needs the visible text inside
+          the accessible name, because voice control matches on the name: the
+          old name WAS "copy → all", so "click copy all" worked, and a sentence
+          that merely contains those two words far apart does not. The visible
+          label leads and the weekday disambiguates. The `title` is gone with
+          it — beside an aria-label it is announced as a description, so the
+          button read as two near-identical sentences. The `title` STAYS, and
+          now earns its keep: it is a sighted mouse user's only explanation of
+          what "copy → all" does, and against a short identifying name it is a
+          description rather than an echo, which is the pair those two
+          properties exist to be. */}
       <button onClick={onCopyAll} className="mgt-hover-scale" title="Copy this day's hours to all days"
-        aria-label={"Copy " + label + "'s hours to all days"}
+        aria-label={"copy → all (" + label + ")"}
         style={{ ...pill, marginLeft: "auto", background: "var(--bg-stepper)", color: "var(--accent)", fontWeight: FW.semi }}>
         copy → all
       </button>

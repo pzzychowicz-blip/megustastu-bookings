@@ -15306,10 +15306,9 @@ and seven reading "copy → all", and an element with content is named BY that
 content — the weekday lives in a sibling `<span>`. The copy button's `title` is
 a *description*, not a name, so its tooltip ("Copy this day's hours to all
 days") never said which day either. Both now carry a weekday-prefixed
-`aria-label`; measured live as `Mon: Open` … `Sun: Open` and
-`Copy Mon's hours to all days` … The Open/Closed pill stays a plain button
-rather than becoming a switch: "Open" and "Closed" are two states of a day, not
-on and off of one thing, and the row's steppers appear and vanish with it.
+`aria-label`. The Open/Closed pill stays a plain button rather than becoming a
+switch: "Open" and "Closed" are two states of a day, not on and off of one
+thing, and the row's steppers appear and vanish with it.
 
 `LayoutSettings`' priorities editor has three more repeated names (the ✕ and the
 Table order / Indoor / Outdoor segmented buttons, once per band) — out of scope
@@ -15348,5 +15347,44 @@ the switch works in both directions. All eight General-tab switches, all six
 reminder rows, the reminder editor, Swap busy and the three size bands measured
 by name and state.
 
-**599 tests** (was 588), build clean, `check:style` OK, lint 0 errors. Main
+**600 tests** (was 588), build clean, `check:style` OK, lint 0 errors. Main
 bundle 90.08 → **90.20 kB gz** (+120 B, the label strings).
+
+### `/code-review` fixes
+
+**1. An `aria-label` that PARAPHRASES the visible text is a regression, and it
+reads as an improvement.** The copy button's name was written as the sentence
+"Copy Mon's hours to all days" — which fixed the ambiguity and broke WCAG 2.5.3
+(Label in Name) in the same stroke. Voice control matches on the accessible
+NAME: while the name came from the button's content it *was* "copy → all", so
+"click copy all" worked; the sentence contains those two words far apart and
+matches nothing, so the fix took away a way of operating the button that had
+been there before it. It is `"copy → all (Mon)"` now — **the visible label
+leads, the disambiguator follows.** `Mon: Open` satisfied the same rule by
+accident. The `title` stays and finally earns its place: against a short
+identifying name it is a description rather than an echo, which is the pair
+those two properties exist to be.
+
+**2. The same trap has a second face, and it is why "Reminder active" is now
+"Reminder status".** That switch has no text of its own; its only visible
+labelling is a sibling rendering `draft.active ? "Active" : "Inactive"`. Any
+name containing one of those two words matches the screen in one state and
+contradicts it in the other — a voice user reading "Inactive" could not say it.
+A name containing NEITHER is sayable in both, and it keeps this version's own
+rule that `aria-checked` carries the state and the name never does.
+
+**3. The sweep read one directory while claiming to cover the app.**
+`withToggle` was built from `src/components` alone — the repo's recorded fault
+class, a guard NARROWER than the rule it gates. `Toggle` is a plain export
+importable anywhere and `App.jsx` renders its own inline confirm dialogs and
+header controls, so a switch added there would have shipped unnamed with the
+build green, walking straight past the gate built to stop it. It walks all of
+`src/` recursively now, `atoms.jsx` included. Proven by planting an unlabelled
+`<Toggle>` in `App.jsx` and watching the sweep name the file.
+
+One more guard (**53 in `a11y.test.js`, 600 total**) carrying the general form
+of finding 1 — the accessible name of a control with visible text must contain
+that text — plus the rewritten assertion for the copy button. Three more
+known-bad inputs run and observed to fail: the paraphrased name written back,
+the state word returned to the reminder switch, and an unlabelled `<Toggle>`
+planted in `App.jsx`, which the old one-directory sweep could not see.
