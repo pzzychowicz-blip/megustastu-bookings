@@ -15840,3 +15840,63 @@ Reverting the wait ✕ to its old literal fails two of them; replacing "No show
 2.5.3 one — which is the point, because that string reads as an improvement in
 review and is the exact mistake v17.15.4 shipped.
 
+### 4. `LayoutSettings`' Tables and Combos sections
+
+v17.15.5 closed the **priorities editor** at the bottom of this file. The Tables
+and Combos sections sit ABOVE it and were untouched — same file, same defect,
+one scroll apart.
+
+What hid them: these buttons are icon-only with a `title`, and **`title` IS the
+accessible name when there is nothing else**. So unlike `<Toggle>`, which had no
+name at all, these read as named while giving thirteen buttons the name "Rename
+table". The v17.15.5 precedent applies unchanged — the short `title` stays as
+the tooltip, an `aria-label` carries the row.
+
+Named: rename/remove table (`t.id`), the join-group chips' move-left /
+move-right / remove (`id` alone — `sanitizeLayout` enforces single-group
+membership, so a table is in exactly one group), add-to-group and remove-group
+(`group.join(" + ")`), and remove-mega-combo (`mc.ids.join(" + ")`).
+
+The **zone toggle** is the one with visible words ("Indoor"/"Outdoor"), so it
+takes the 2.5.3 shape — `"Outdoor (table 1A)"`. It is also named for the STATE
+rather than the transition: "Make table 1A indoor" would contradict the visible
+label in one of its two states, the same reason `ReminderEditor`'s switch is
+called "Reminder status".
+
+**Deliberately left static, and pinned so a later sweep does not "finish the
+job":** Save name / Cancel / Remove anyway are gated on `editId` /
+`pendingRemove`, both single-valued, so exactly one is ever on screen.
+
+#### The worst instance in the app, and only the running page showed it
+
+Reading computed names out of the live app — not the source — turned up
+something more severe than anything ROADMAP listed. **Three** `PICK_CHIP` lists
+render the same table ids as a bare `<button>7</button>`:
+
+| list | what tapping it does |
+|---|---|
+| the open group picker | add 7 to **this** group |
+| the "Ungrouped" row | start a **new** group from 7 |
+| the priorities picker | add 7 to a prefer/avoid list |
+
+The Ungrouped row is **always rendered**. So opening either picker puts two
+buttons named "7" on screen **that do different things** — not merely ambiguous
+the way ten "Assign" buttons are, but actively misleading, and one click away.
+Each now leads with the visible id and states its action (`"7 — add to the group
+5A + 5B"`, `"7 — start a new joined group"`).
+
+**This is the entry's own rule paying out.** In the source the three lists are
+three separate `.map`s that look nothing alike; on the page they are one row of
+identical buttons.
+
+#### Checked and NOT a defect
+
+The sweep also flagged `"Assign tables for Marco Rossi"` twice. That is a
+multi-table booking drawing one timeline block per table row, each with its own
+assign handle — **same name, same booking, identical action**, so pressing
+either does exactly the same thing. Duplicate names for genuinely equivalent
+controls are not a fault, and renaming them by table would invent a distinction
+the app does not have.
+
+Five guards, one proven by deleting a chip's label and watching it fail.
+

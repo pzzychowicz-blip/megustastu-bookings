@@ -843,6 +843,94 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
   });
 });
 
+describe("LayoutSettings' Tables and Combos name their rows (v17.15.6)", () => {
+  // The other half of the ROADMAP entry v17.15.5 opened. v17.15.5 closed the
+  // priorities editor at the bottom of this file; these sit ABOVE it and were
+  // untouched — the same file, the same defect, one scroll apart.
+  //
+  // These buttons are ICON-ONLY with a `title`, so `title` was their entire
+  // accessible name. That is what made them invisible to the earlier sweeps:
+  // a control with a `title` does not LOOK unnamed the way `<Toggle>` did.
+  const src = read("components/LayoutSettings.jsx");
+
+  it("every repeating Tables/Combos control carries its row", () => {
+    for (const [what, re] of [
+      ["rename table", /aria-label=\{"Rename table " \+ t\.id\}/],
+      ["remove table", /aria-label=\{"Remove table " \+ t\.id\}/],
+      ["chip move left", /aria-label=\{"Move " \+ id \+ " left in its joined group"\}/],
+      ["chip move right", /aria-label=\{"Move " \+ id \+ " right in its joined group"\}/],
+      ["chip remove", /aria-label=\{"Remove " \+ id \+ " from its joined group"\}/],
+      ["add to group", /aria-label=\{"Add a table to the group " \+ group\.join\(" \+ "\)\}/],
+      ["remove group", /aria-label=\{"Remove the group " \+ group\.join\(" \+ "\)\}/],
+      ["remove mega combo", /aria-label=\{"Remove the cross-group combo " \+ mc\.ids\.join\(" \+ "\)\}/],
+    ]) {
+      has(src, what, re,
+        "rendered once per table / group / combo, so the name must say WHICH — " +
+        "`title` alone gave thirteen buttons one name and looked named doing it");
+    }
+  });
+
+  it("the zone toggle leads with its visible text (WCAG 2.5.3)", () => {
+    // The one control in these two sections that HAS words. Its visible text is
+    // "Indoor" or "Outdoor", so a name like "Change zone for table 3" would fix
+    // the ambiguity and break voice control in the same stroke.
+    has(src, "zone toggle", /aria-label=\{\(indoor \? "Indoor" : "Outdoor"\) \+ " \(table " \+ t\.id \+ "\)"\}/,
+      "the visible word leads and the table only disambiguates");
+  });
+
+  it("a name says what a control IS, never what it does next", () => {
+    // The zone toggle flips between two real values. Naming it for the ACTION
+    // ("Make table 3 indoor") would mean the name contradicts the screen in one
+    // of its two states — the same reason ReminderEditor's switch is called
+    // "Reminder status" rather than "Reminder active".
+    hasnt(src, "action-shaped zone name", /aria-label=\{"(Make|Change|Set|Switch) /,
+      "name the state, not the transition — a name that describes the NEXT " +
+      "state disagrees with the visible label in one of the two states");
+  });
+
+  it("the three PICK_CHIP lists say what tapping the id DOES", () => {
+    // Found by reading computed names out of the running page — the only thing
+    // that shows it, and the rule this whole ROADMAP entry keeps re-proving.
+    //
+    // Three lists render the same table ids as a bare `<button>7</button>`:
+    // add-to-this-group, start-a-new-group, and add-to-a-prefer/avoid-list. The
+    // "Ungrouped" row is ALWAYS rendered, so opening either picker puts two
+    // buttons named "7" on screen **doing different things**. That is worse than
+    // the ambiguity the other cases have — those repeat one action, these
+    // collide across actions — and it is one click away.
+    const chips = openingTagsOf(src, "button").filter((t) => /\bstyle=\{PICK_CHIP\}/.test(t));
+    expect(chips.length, "there should still be three PICK_CHIP lists").toBe(3);
+    const unnamed = chips.filter((t) => !/\baria-label=/.test(t));
+    expect(unnamed, "a bare table id is the SAME name in all three lists, and " +
+      "two of them can be on screen at once doing different things").toEqual([]);
+    // The visible id leads (2.5.3), then what the tap does.
+    for (const [what, re] of [
+      ["add to group", /aria-label=\{id \+ " — add to the group " \+ group\.join\(" \+ "\)\}/],
+      ["new group", /aria-label=\{id \+ " — start a new joined group"\}/],
+      ["priorities add", /aria-label=\{id \+ " — add to " \+ label \+ rowIn\}/],
+    ]) {
+      has(src, "PICK_CHIP " + what, re,
+        "the visible id leads and the ACTION follows — these three collide on " +
+        "the id, so the action is the only thing that separates them");
+    }
+  });
+
+  it("a single-instance control is deliberately left static", () => {
+    // Not everything in a `.map` repeats on screen. `editId` and
+    // `pendingRemove` are single-valued, so Save name / Cancel / Remove anyway
+    // are one-at-a-time and a literal is CORRECT there. Pinned so a later sweep
+    // does not "finish the job" by adding names that say nothing.
+    for (const [what, re] of [
+      ["save name", /title="Save name"/],
+      ["cancel rename", /title="Cancel"/],
+    ]) {
+      has(src, what, re,
+        "gated on a single-valued state, so exactly one is ever on screen — " +
+        "a static name is right, and adding an id would be noise");
+    }
+  });
+});
+
 describe("a banner row's controls carry their row (v17.15.6)", () => {
   // The ROADMAP entry v17.15.5 left behind, for the four notification-strip
   // banners. Each renders one dismiss ✕ per row with a single static
