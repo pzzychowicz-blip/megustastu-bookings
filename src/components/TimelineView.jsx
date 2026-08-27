@@ -1249,7 +1249,11 @@ export const TimelineView = memo(function TimelineView({
   waitGhosts.forEach((g) => {
     (g.tables || []).forEach((t) => { ghostCells.push({ key: g.id + GHOST_SEP + t, table: t, g: g }); });
   });
-  const { renderIds: ghostRenderIds, openIds: ghostOpenIds } = useRevealRows(
+  // `openIds` is deliberately NOT destructured. v17.15.3's own /code-review
+  // replaced the one place that read it with the `!cell` test documented at the
+  // WaitGhost call site below, and left the binding behind — where it was an
+  // unused variable, i.e. a lint ERROR, and lint is a hard CI gate here.
+  const { renderIds: ghostRenderIds } = useRevealRows(
     ghostCells.map((c) => c.key), date
   );
   const ghostByKey = new Map(ghostCells.map((c) => [c.key, c]));
