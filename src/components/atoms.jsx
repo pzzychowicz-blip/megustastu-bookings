@@ -1479,10 +1479,37 @@ export function SizeRing({ n, rim, style }) {
 // "Seated Seated". `IC.control`, matching the block's rail and the status
 // buttons in ListView's action row, which have carried these same marks since
 // v17.10.0.
+//
+// ── v17.15.6: it is SCALED to its row, not just treated like it ─────────────
+// v17.15.5 moved the List card's flag row from SOLID to TEXT under DESIGN.md's
+// "match whatever sits next to you", and closed only half the loop: it settled
+// what TREATMENT the neighbours wear and left this badge sized for the row it
+// used to be in. Measured on the card, the header row ran name `T.title`/~24px,
+// **this badge ~27px**, `SizeRing` 18px, the flags ~16px — so the one element
+// with a fill was also the tallest thing in the row, taller even than the 17px
+// name it follows.
+//
+// `T.body`→`T.small` and `4px 10px`→`2px 8px` puts the box at ~20: between the
+// ring and the flags, where a status belongs among the facts about a booking.
+//
+// **What deliberately did NOT change, and why each one is load-bearing:**
+//   · the FILL, `RIM_SOLID` and `--shadow-flat` — the status is not a flag. A
+//     flag says what is UNUSUAL about a booking; this says what the booking IS,
+//     and the fill is the shared vocabulary with `TimelineBlock`, whose own
+//     `STATUS_LABEL` reads from the same place. Dropping it to TEXT would make
+//     the card and the block name one attribute two ways again, which is the
+//     defect v17.15.5 existed to close.
+//   · `IC.control` — the flags beside it are `IC.control` too, so the MARKS
+//     stay one size across the row and only the pill comes down. Taking the
+//     icon to `IC.inline` would have shrunk the wrong half.
+//
+// The rule, for the next label that feels loud: TREATMENT and SCALE are two
+// separate answers to "match your neighbours", and settling the first does not
+// settle the second.
 export function SBadge({ status }) {
   return (
     <span style={{
-      fontSize: T.body, padding: "4px 10px", borderRadius: R.pill,
+      fontSize: T.small, padding: "2px 8px", borderRadius: R.pill,
       background: BLOCK_BG[status] || BLOCK_BG.confirmed,
       color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: RIM_SOLID,
       fontWeight: FW.semi, textTransform: "capitalize",

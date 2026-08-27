@@ -15691,3 +15691,60 @@ you" is not a preference for fills, it is a preference for one treatment per
 row, and it points wherever the row goes. `atoms.jsx`'s `OutlineChip` comment
 cited the same row and was corrected in the same commit — a stale example is
 quoted with confidence.
+
+---
+
+## v17.15.6 — the ROADMAP's `Deferred` section, cleared
+
+**Date:** 2026-08-27
+**Branch:** `fix/v17.15.6-deferred-roadmap`
+**Behavioural change:** one visual (the status badge's scale); the rest is
+accessible NAMES, which change nothing a mouse user can see.
+
+`ROADMAP.md` carried three deferred entries, all left behind by v17.15.5. This
+version closes all three and a fourth that surfaced while planning it.
+
+### 1. `SBadge` sits down in its row
+
+v17.15.5 moved the List card's flag row from SOLID to TEXT under `DESIGN.md`'s
+**"match whatever sits next to you"**, and closed only half the loop. It settled
+what TREATMENT the neighbours wear and left the badge sized for the row it used
+to be in. Measured live on the card, before:
+
+| element | type | box height | surface |
+|---|---|---|---|
+| guest name | `T.title` 17, bold | 20 | none |
+| **`SBadge`** | `T.body` 12 + `4px 10px` | **~27** | fill + `RIM_SOLID` + `--shadow-flat` |
+| `SizeRing` | 18×18, `T.micro` 10 | 18 | transparent + hairline rim |
+| flag | `T.small` 11 + `IC.control` 14 | 14 | none |
+| time (right) | `T.lead` 14, bold | 16.5 | none |
+
+So the one element carrying a fill was also the **tallest thing in the row** —
+taller than the 17px name it follows — and the row read as a status pill with a
+booking around it rather than a booking with a status. `T.body`→`T.small` and
+`4px 10px`→`2px 8px` puts it at a **measured 20px**: level with the name's box,
+one step above the ring, above the flags.
+
+**Three things deliberately did not change**, and each is load-bearing:
+
+- **The fill, `RIM_SOLID` and `--shadow-flat`.** The status is not a flag. A
+  flag says what is UNUSUAL about a booking; this says what the booking IS, and
+  the fill is the vocabulary the card shares with `TimelineBlock` (whose
+  `STATUS_LABEL` reads from the same place). Dropping it to TEXT would have made
+  the card and the block name one attribute two ways again — the exact defect
+  v17.15.5 existed to close.
+- **`IC.control`.** The flags beside it are `IC.control` too, so the MARKS stay
+  one size across the row and only the pill comes down. `IC.inline` would have
+  shrunk the wrong half.
+- **The colour pair**, which is why this needed no contrast work: the tokens are
+  untouched, and 11px and 12px are both "normal text" for WCAG, so it is the
+  same 4.5:1 threshold either way. **A smaller size never relaxes a threshold** —
+  worth stating, because it is the kind of thing that gets assumed.
+
+`DESIGN.md` gains the rule this establishes: **treatment and scale are two
+separate answers to "match your neighbours", and settling one does not settle
+the other.** The same edit corrects that clause's claim that the solid rim is
+`--border-glass` — `SBadge` ships `RIM_SOLID`, and `--border-glass` is what its
+three hand-written COPIES carried, so the doc had been describing the drift
+rather than the atom.
+

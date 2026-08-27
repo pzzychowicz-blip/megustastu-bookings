@@ -513,11 +513,29 @@ explaining why is usually the one to read.
   *plus* a matching border *plus* bold text in a third shade, which encodes one
   signal three times. The outline chip drops the fill and earns its extra border
   pixel; do not "restore" the fill.
+- **v17.15.6: "match whatever sits next to you" has a SECOND half — SCALE.**
+  v17.15.5 answered the treatment question for the List card's flag row and
+  stopped there, which left `SBadge` — correctly still SOLID — sized for the row
+  it used to be in. Measured on the card: name `T.title`/~24px, **badge ~27px**,
+  `SizeRing` 18px, flags ~16px. The one element carrying a fill was also the
+  tallest thing in the row, taller than the name it follows, so the row read as
+  a status pill with some text around it rather than a booking with a status.
+  The badge is `T.small` + `2px 8px` now (~20px, between the ring and the
+  flags); the fill, the rim, the shadow and the `IC.control` mark all stay,
+  because the status is not a flag — a flag says what is UNUSUAL about a
+  booking, this says what the booking IS, and the fill is what the card and the
+  timeline block share. The icon stays `IC.control` for the same
+  match-your-neighbours reason in the other direction: the flags beside it are
+  `IC.control`, so the marks stay one size and only the pill comes down.
+  **Treatment and scale are two separate answers, and settling one does not
+  settle the other.**
 - The SOLID/TEXT pair in full: **solid** — the fill carries the colour, text is `--text-on-accent`,
-  the rim is neutral `--border-glass` (the v17.7.0 status-label decision —
+  the rim is `RIM_SOLID` (the v17.7.0 status-label decision —
   `SBadge` is what still wears it, and since v17.15.5 it wears its
   `StatusIcon` too, so the card names a status in the same mark the block
-  does); or **plain text** —
+  does; this sentence said `--border-glass` until v17.15.6, which is the
+  token the badge's three hand-written COPIES carried — the doc had been
+  describing the drift rather than the atom); or **plain text** —
   the colour carries itself, no fill, no border. The third shape — pale
   semantic fill + border in the matching hue + bold text in a third shade of
   it — is banned. It encodes one signal three times and is the stock badge
