@@ -1495,10 +1495,38 @@ export function SmallTag({ label, style }) {
 }
 
 // ── iOS-style toggle switch ───────────────────────────────────────────────────
-export function Toggle({ on, onClick }) {
+// v17.15.4: it is a SWITCH, and it has a NAME. Until now it was a bare
+// <button> whose entire content was two coloured divs, so every on/off control
+// in the app announced as "button" — no name, no state, no way to tell one from
+// the next. Twenty call sites, all of Settings among them.
+//
+// It survived v17.12.0 ("reachable and announced") and v17.13.0's gate for the
+// reason DESIGN.md's accessibility section gives about the whole class: this
+// defect is invisible unless you go looking with the right tool. Both passes
+// swept the surfaces that hold BOOKINGS — the card, the block, the table, the
+// form field — and an atom that draws a 48×26 pill is not where you look for a
+// missing name. `tests/a11y.test.js` now asserts both halves.
+//
+// `role="switch"` + `aria-checked` rather than `aria-pressed`: a switch is a
+// state that stays, a toggle button is an action you took. Every one of these
+// writes a setting. It stays a <button> element, so all of `src/index.css`'s
+// `button` rules (user-select, the press dip, the transform transition) still
+// apply unchanged — and there is no `[role="switch"]` rule in the stylesheet
+// for it to newly subscribe to. That was checked BEFORE the role went on, per
+// the rule v17.12.0 learned by teleporting the floor-plan tables.
+//
+// `label` is REQUIRED and names what the switch CONTROLS, never its state —
+// the state is `aria-checked`'s job, and a name that flips with the value
+// ("Active" / "Inactive") makes one control read as two. It has no default: a
+// default here would be a silent twenty-first answer to a question every call
+// site has to answer for itself, which is `ModalTitle`'s `background` lesson.
+export function Toggle({ on, onClick, label }) {
   return (
     <button
       onClick={onClick}
+      role="switch"
+      aria-checked={!!on}
+      aria-label={label}
       className="mgt-hover-scale"
       style={{
         width: 48, height: 26,   /* @canvas */ borderRadius: R.pill,

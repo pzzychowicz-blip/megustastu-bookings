@@ -713,7 +713,17 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 })}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-                <Toggle on={!!b.combosFirst} onClick={function () { setBand(i, { combosFirst: !b.combosFirst }); }} />
+                {/* v17.15.4: the SECOND repeating Toggle, and the one the
+                    sweep nearly shipped with a static label — there is one
+                    size band per rule and the app opens with three, so a
+                    static name would announce three identical switches. It
+                    takes the band's own heading, the "Party of N to M" line at
+                    the top of this block. Found by reading the rendered names
+                    out of the live page, not by reading this file: on the page
+                    the repetition is one string printed three times, and in
+                    the source it is one string inside a `.map`. */}
+                <Toggle label={"Party of " + b.min + " to " + b.max + ": try joined tables before single tables"}
+                  on={!!b.combosFirst} onClick={function () { setBand(i, { combosFirst: !b.combosFirst }); }} />
                 <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)" }}>Try joined tables before single tables</span>
               </div>
             </div>

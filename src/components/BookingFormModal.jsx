@@ -850,7 +850,7 @@ export function BookingFormModal({
                 {"Create a standing booking every "+(WEEKDAY_NAMES[new Date(form.date).getUTCDay()]||"week")+(form.time?" at "+form.time:"")+". Manage it in Settings → General → Standing bookings."}
               </div>
             </div>
-            <Toggle on={!!form.repeatWeekly} onClick={function(){setForm(function(f){return Object.assign({},f,{repeatWeekly:!f.repeatWeekly});});}} />
+            <Toggle label="Repeat weekly" on={!!form.repeatWeekly} onClick={function(){setForm(function(f){return Object.assign({},f,{repeatWeekly:!f.repeatWeekly});});}} />
           </div>
         </Section>
       ):null}</AutoHeight></Overlay>

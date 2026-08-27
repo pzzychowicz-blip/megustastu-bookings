@@ -15217,3 +15217,174 @@ Three new guards in `tests/a11y.test.js` and one in `tests/booking-logic.test.js
 each proven against known-bad input. **588 tests**, build clean, `check:style` OK,
 lint 0 errors.
 
+
+---
+
+## v17.15.4 — the switch that had no name
+
+**Date:** 2026-08-27 · **Branch:** `fix/v17.15.4-toggle-switch-role` ·
+**Behavioural change:** none for a sighted user — nothing moves, nothing
+changes colour, no control gains or loses a state. Every one of the twenty
+on-off controls in the app gains an accessible name and a published state.
+**Files:** `src/components/atoms.jsx` · `Settings.jsx` · `LayoutSettings.jsx` ·
+`Reminders.jsx` · `ReminderEditor.jsx` · `ManualModal.jsx` ·
+`BookingFormModal.jsx` · `tests/a11y.test.js` · `CLAUDE.md` · `DESIGN.md` ·
+`ROADMAP.md` · `src/App.jsx` (version).
+
+### What was wrong
+
+`Toggle` rendered a bare `<button>` whose entire content was two coloured
+`<div>`s. No text, no `role`, no `aria-checked`, no name. Every switch in the
+app therefore announced as **"button"** — nothing about what it controlled,
+nothing about whether it was on. Twenty call sites: the whole of Settings →
+General and Settings → App, the reminder list and its editor, `ManualModal`'s
+Swap busy, the booking form's Repeat weekly, and `LayoutSettings`' per-band
+combos-first.
+
+### Why it survived the two versions that existed to catch it
+
+This is the part worth keeping. v17.12.0 shipped ~40 accessibility fixes and
+v17.13.0 built the gate behind them, and **both went after the surfaces that
+hold bookings** — the List card, the timeline block, the floor-plan table, the
+form field. An atom that draws a 48×26 pill is not where anyone looks for a
+missing name, and there is nothing on screen to say it is missing. The
+generalisation now in `CLAUDE.md`'s Gotchas and `DESIGN.md`: **a control with no
+text content has no name unless someone gives it one.**
+
+### The fix
+
+`role="switch"` + `aria-checked={!!on}` + `aria-label={label}`, with `label`
+**required and defaulted to nothing** — `ModalTitle`'s `background` reasoning: a
+default would be a silent twenty-first answer to a question each call site has
+to answer for itself. The atom cannot force a caller to name it, so the build
+does (below).
+
+Three decisions inside that:
+
+**`role="switch"`, not `aria-pressed`.** A switch is a state that stays; a
+toggle button is an action you just took. Every one of these writes a setting.
+
+**The role subscribes to nothing, and costs nothing.** Checked BEFORE it went
+on, per the v17.12.0 lesson that put `[role="button"]`'s transform rules onto
+the floor-plan tables and teleported them: `src/index.css` has no
+`[role="switch"]` rule at all. And it stays a `<button>` ELEMENT, so
+`user-select: none`, the 0.96 press dip and the transform transition — all
+written against the `button` element selector — still reach it. Measured live:
+tag `BUTTON`, `user-select: none`, transition intact, 48×26 unchanged.
+
+**The label names what the switch CONTROLS, never its state.** `aria-checked`
+carries the state, and a name that flips with the value makes one control read
+as two. `ReminderEditor`'s switch sits beside the words "Active"/"Inactive" and
+is named "Reminder active" in both.
+
+### What live measurement found that source review did not
+
+Two things, both only visible in the running app:
+
+**1. Three switches are rendered from a `.map`,** so a static label is not one
+name but N identical ones — this version's own defect, one level down. The
+size-band switch nearly shipped that way. **In the source it is one string
+inside a loop; only the rendered page shows it as three.** Reading the computed
+names out of the live app gave
+`["Try joined tables before single tables" × 3]`, and it is now
+`"Party of 1 to 1: try joined tables…"` and so on, off the band's own heading.
+The reminder and standing-booking switches were already per-item.
+
+**2. `"Reminder: " + r.text` printed the word "undefined"** for a legacy row
+DEV still holds, where the visible `{r.text}` renders nothing.
+`validateReminderDraft` has required text since it shipped, so nothing can
+create another — the point is that the row is already in the data. Guarded, and
+whitespace-collapsed, since the text comes from a `rows={2}` textarea. Not
+truncated: two long reminders can share any prefix you would cut at, and the
+name is the only thing telling their switches apart.
+
+### The same fault, one control over
+
+The sweep did not stop at `<Toggle`, because a control **with** text can be just
+as unnamed and hides better. `DayHoursRow` renders seven buttons reading "Open"
+and seven reading "copy → all", and an element with content is named BY that
+content — the weekday lives in a sibling `<span>`. The copy button's `title` is
+a *description*, not a name, so its tooltip ("Copy this day's hours to all
+days") never said which day either. Both now carry a weekday-prefixed
+`aria-label`. The Open/Closed pill stays a plain button rather than becoming a
+switch: "Open" and "Closed" are two states of a day, not on and off of one
+thing, and the row's steppers appear and vanish with it.
+
+`LayoutSettings`' priorities editor has three more repeated names (the ✕ and the
+Table order / Indoor / Outdoor segmented buttons, once per band) — out of scope
+here, logged in `ROADMAP.md`.
+
+### The gate
+
+`tests/a11y.test.js` gains eight assertions and `openingTagsOf()`, a brace-aware
+walker returning **every** `<Toggle …>` opening tag whole. A line grep cannot do
+this job — two of the twenty call sites are multi-line, which is v17.15.2's own
+miss repeating — so the sweep reads tags, not lines. It asserts: the atom's own
+button carries all three attributes (scoped to the function, since
+`Collapsible`'s button comes first in the file and the first version of this
+check measured that instead); it is not `aria-pressed`; it is still a
+`<button>`; **every** call site under `src/components` passes a `label`; the
+three list-rendered ones pass a dynamic one; no two literal labels collide in
+one file; and the sweep is finding call sites at all, so it cannot pass
+triumphantly on zero files.
+
+**Six known-bad inputs, each run and each observed to fail** — a call site
+stripped of its label, `role="switch"` removed, `aria-checked={!!on}` weakened
+to `{on}`, `<button>` swapped for `<div>`, the size-band label flattened to a
+literal, and two Settings switches given the same name. Plus three fixture
+cases proving `openingTagsOf` finds all tags rather than the first, reads a
+multi-line tag whole (with the line-grep failure asserted alongside it), and
+does not let `<ToggleGroup` answer for `<Toggle`.
+
+### Verification
+
+Live in DEV: Chrome's own accessibility tree reports `switch "Dark mode"`,
+`switch "Reduce animations"`, `switch "Work offline"`, `switch "Plan zoom and
+pan"`, `switch "Lock navigation"`, `switch "Split view"` — computed names and
+roles from the browser, not attributes read back. `aria-checked` flips
+`true → false → true` on click with the knob travelling 24px → 3px → 24px, so
+the switch works in both directions. All eight General-tab switches, all six
+reminder rows, the reminder editor, Swap busy and the three size bands measured
+by name and state.
+
+**600 tests** (was 588), build clean, `check:style` OK, lint 0 errors. Main
+bundle 90.08 → **90.20 kB gz** (+120 B, the label strings).
+
+### `/code-review` fixes
+
+**1. An `aria-label` that PARAPHRASES the visible text is a regression, and it
+reads as an improvement.** The copy button's name was written as the sentence
+"Copy Mon's hours to all days" — which fixed the ambiguity and broke WCAG 2.5.3
+(Label in Name) in the same stroke. Voice control matches on the accessible
+NAME: while the name came from the button's content it *was* "copy → all", so
+"click copy all" worked; the sentence contains those two words far apart and
+matches nothing, so the fix took away a way of operating the button that had
+been there before it. It is `"copy → all (Mon)"` now — **the visible label
+leads, the disambiguator follows.** `Mon: Open` satisfied the same rule by
+accident. The `title` stays and finally earns its place: against a short
+identifying name it is a description rather than an echo, which is the pair
+those two properties exist to be.
+
+**2. The same trap has a second face, and it is why "Reminder active" is now
+"Reminder status".** That switch has no text of its own; its only visible
+labelling is a sibling rendering `draft.active ? "Active" : "Inactive"`. Any
+name containing one of those two words matches the screen in one state and
+contradicts it in the other — a voice user reading "Inactive" could not say it.
+A name containing NEITHER is sayable in both, and it keeps this version's own
+rule that `aria-checked` carries the state and the name never does.
+
+**3. The sweep read one directory while claiming to cover the app.**
+`withToggle` was built from `src/components` alone — the repo's recorded fault
+class, a guard NARROWER than the rule it gates. `Toggle` is a plain export
+importable anywhere and `App.jsx` renders its own inline confirm dialogs and
+header controls, so a switch added there would have shipped unnamed with the
+build green, walking straight past the gate built to stop it. It walks all of
+`src/` recursively now, `atoms.jsx` included. Proven by planting an unlabelled
+`<Toggle>` in `App.jsx` and watching the sweep name the file.
+
+One more guard (**53 in `a11y.test.js`, 600 total**) carrying the general form
+of finding 1 — the accessible name of a control with visible text must contain
+that text — plus the rewritten assertion for the copy button. Three more
+known-bad inputs run and observed to fail: the paraphrased name written back,
+the state word returned to the reminder switch, and an unlabelled `<Toggle>`
+planted in `App.jsx`, which the old one-directory sweep could not see.

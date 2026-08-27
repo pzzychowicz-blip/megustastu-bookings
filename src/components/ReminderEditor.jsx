@@ -276,7 +276,15 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           borderRadius: R.card,
           border: "1px solid var(--border-soft)"
         }}>
-          <Toggle on={draft.active} onClick={toggleActive} />
+          {/* "Reminder status", not "Reminder active" (/code-review): the only
+              visible labelling here is the sibling span, which reads "Active"
+              or "Inactive", and a name containing the word "active" matches
+              the visible text in one state and contradicts it in the other —
+              a voice user reading "Inactive" off the screen could not say it.
+              A name that contains NEITHER word satisfies both states, and
+              keeps the rule this version is built on: aria-checked carries the
+              state, the name never does. */}
+          <Toggle label="Reminder status" on={draft.active} onClick={toggleActive} />
           <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.semi }}>
             {draft.active ? "Active" : "Inactive"}
           </span>

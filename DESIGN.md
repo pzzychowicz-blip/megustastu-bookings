@@ -259,8 +259,11 @@ explaining why is usually the one to read.
 - **`mkInp` / `mkBtn` return *style objects*** (not JSX) — usage is `<input style={mkInp()}>` /
   `<button style={mkBtn({...})}>`. (Note: the sibling Scheduling app's equivalents return JSX;
   Bookings differs. Don't assume a `className`/prop passthrough — it isn't there.)
-- Prefer the **`Toggle` atom** (`Toggle({ on, onClick })`) over `<input type="checkbox">` for
+- Prefer the **`Toggle` atom** (`Toggle({ on, onClick, label })`) over `<input type="checkbox">` for
   booleans (native checkbox is fine only for multi-select grids / native forms).
+  **`label` is required** and has no default — it is the switch's accessible
+  name, the build fails without it, and the accessibility section below says
+  what to put in it (and what a `.map` must put in it instead).
 
 ---
 
@@ -847,6 +850,61 @@ staff select the phone number off that card; its click opens a modal that covers
 the scroll anyway. **A synthetic click cannot reproduce this** — the tool's
 mousedown and mouseup are back-to-back, so the focus-scroll lands after the click;
 it needs the ~100ms gap of a real finger.
+
+**A control with no text content has NO NAME unless someone gives it one, and
+nothing about looking at it says so** (v17.15.4). The `Toggle` atom drew a 48×26
+pill out of two coloured divs and nothing else — no text, no role, no state — so
+all twenty on-off controls in the app announced as "button", indistinguishable
+from each other and from the buttons beside them. Settings is built almost
+entirely out of it. It is a `role="switch"` with `aria-checked` and a **required
+`label`** now.
+
+Three things that generalise past this atom:
+
+- **`role="switch"`, not `aria-pressed`.** A switch is a state that stays; a
+  toggle button is an action you just took. Every one of these writes a setting.
+- **The label names what the control DOES, never its state.** The state is
+  `aria-checked`'s job, and a name that flips with the value ("Active" /
+  "Inactive") makes one control read as two. `ReminderEditor`'s switch sits
+  beside exactly that text and is named "Reminder active" regardless.
+- **A control rendered from a `.map` must name the ITEM.** Three of the twenty
+  are per-reminder, per-standing-rule and per-size-band, and a static label
+  there is not one name but N identical ones — the same defect one level down.
+  **In the source it is one string; only the running page shows it as three.**
+  The size-band switch nearly shipped static and was caught by reading the
+  computed names out of the live app, which is this section's standing method
+  and the only thing that catches this shape.
+
+**A control WITH text can be just as unnamed, and it hides better.** The
+Opening-hours row was swept in the same pass for that reason: seven buttons
+reading "Open" and seven reading "copy → all", with the weekday in a sibling
+`<span>` that names nothing. An element with content is named BY that content —
+and a `title` is a *description*, not a name, so the copy button's tooltip
+("Copy this day's hours to all days") never said which day either. Both carry an
+`aria-label` naming the weekday.
+
+**But an `aria-label` must EXTEND the visible text, never replace it** (WCAG
+2.5.3, Label in Name) — and the first fix here broke that in the act of fixing
+the other thing, which is why the rule is written down. Voice control matches on
+the accessible NAME, so "copy → all" was sayable while its name came from its
+content, and stopped being sayable the moment the name became the sentence
+"Copy Mon's hours to all days" — two of the same words, far apart, matching
+nothing. It is `"copy → all (Mon)"`: **the visible label leads and the
+disambiguator follows.** `Mon: Open` is the same rule satisfied by accident, and
+the third case shows the trap has a second face — `ReminderEditor`'s switch is
+labelled only by a sibling reading "Active" or "Inactive", so ANY name
+containing one of those words contradicts the visible text in the other state.
+Its name is "Reminder status", which contains neither and is sayable in both.
+A paraphrase always reads as an improvement in review; ask instead whether
+someone could say what they can see.
+
+**Why this survived v17.12.0 and v17.13.0's gate**, which is the more useful
+lesson than the fix: both passes went after the surfaces that hold *bookings* —
+the card, the block, the floor-plan table, the form field. An atom that draws a
+small pill is not where anyone looks for a missing name. `tests/a11y.test.js`
+now sweeps every `<Toggle` call site for a `label`, using a brace-aware tag
+walker rather than a line grep (two of the call sites are multi-line, which is
+the v17.15.2 miss again).
 
 **`inert` removes a subtree from the accessibility tree as well as the tab
 order.** So a live region inside an inert region goes SILENT — which is why

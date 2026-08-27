@@ -57,7 +57,21 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
             {timesText + "  ·  " + recText}
           </div>
         </div>
-        <Toggle on={r.active} onClick={() => onToggle(r.id)} />
+        {/* v17.15.4: the reminder's own text is what tells one row's switch
+            from the next, so the label carries it — but through the same two
+            guards the visible row gets for free and a string concat does not.
+            `{r.text}` renders NOTHING for an absent text, while `"Reminder: " +
+            r.text` renders the word "undefined"; measured live in DEV, which
+            holds exactly one such legacy row (validateReminderDraft has
+            required text since it shipped, so nothing can create another —
+            the point is that the row is already in the data). And the text is
+            a textarea's, so it can contain newlines; collapsing them keeps the
+            name one predictable line. NOT truncated: two long reminders can
+            share any prefix you would cut at, and the name is the only thing
+            distinguishing their switches. */}
+        <Toggle
+          label={"Reminder: " + String(r.text || "(no text)").replace(/\s+/g, " ").trim()}
+          on={r.active} onClick={() => onToggle(r.id)} />
       </div>
       <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
         <button
