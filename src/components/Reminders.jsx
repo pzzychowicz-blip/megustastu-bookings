@@ -37,6 +37,20 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
     recText = "Weekly: " + ds.join(", ");
   }
   const timesText = (r.times || []).join(", ");
+  // v17.15.4 wrote this expression inline on the `Toggle` below; v17.15.6 hoists
+  // it, because the row has THREE controls rendered once per reminder and they
+  // must not disagree about what the reminder is called. Its two guards are the
+  // v17.15.4 ones and both are load-bearing:
+  //   · `String(r.text || "(no text)")` — `{r.text}` renders NOTHING for an
+  //     absent text, while a bare concat renders the word "undefined". DEV holds
+  //     exactly one such legacy row (validateReminderDraft has required text
+  //     since it shipped, so nothing can create another — the point is that the
+  //     row is already in the data).
+  //   · `.replace(/\s+/g," ")` — the text comes from a textarea and can contain
+  //     newlines; collapsing them keeps the name one predictable line.
+  // NOT truncated: two long reminders can share any prefix you would cut at, and
+  // this is the only thing distinguishing their three controls from each other.
+  const rname = String(r.text || "(no text)").replace(/\s+/g, " ").trim();
 
   return (
     <div style={{
@@ -57,25 +71,23 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
             {timesText + "  ·  " + recText}
           </div>
         </div>
-        {/* v17.15.4: the reminder's own text is what tells one row's switch
-            from the next, so the label carries it — but through the same two
-            guards the visible row gets for free and a string concat does not.
-            `{r.text}` renders NOTHING for an absent text, while `"Reminder: " +
-            r.text` renders the word "undefined"; measured live in DEV, which
-            holds exactly one such legacy row (validateReminderDraft has
-            required text since it shipped, so nothing can create another —
-            the point is that the row is already in the data). And the text is
-            a textarea's, so it can contain newlines; collapsing them keeps the
-            name one predictable line. NOT truncated: two long reminders can
-            share any prefix you would cut at, and the name is the only thing
-            distinguishing their switches. */}
-        <Toggle
-          label={"Reminder: " + String(r.text || "(no text)").replace(/\s+/g, " ").trim()}
-          on={r.active} onClick={() => onToggle(r.id)} />
+        {/* v17.15.4: the reminder's own text is what tells one row's switch from
+            the next. v17.15.6 moved the expression to `rname` above — see there
+            for the two guards — because Edit and Delete beside it needed the
+            same name and a second copy is a second answer. */}
+        <Toggle label={"Reminder: " + rname} on={r.active} onClick={() => onToggle(r.id)} />
       </div>
+      {/* v17.15.6: one Edit and one Delete PER REMINDER. v17.15.4 named the
+          switch above and stopped at the switch, so a list of five reminders
+          still offered five buttons called "Edit" and five called "Delete" —
+          and Delete is the one control in this row where picking the wrong
+          target cannot be undone.
+          These HAVE visible text, so they take the 2.5.3 shape: the visible word
+          LEADS and the reminder only disambiguates after it. */}
       <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
         <button
           onClick={() => onEdit(r)}
+          aria-label={"Edit (" + rname + ")"}
           className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.edit })}
         >
@@ -83,6 +95,7 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
         </button>
         <button
           onClick={() => onDelete(r.id)}
+          aria-label={"Delete (" + rname + ")"}
           className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.del })}
         >

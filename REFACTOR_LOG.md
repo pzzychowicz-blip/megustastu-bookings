@@ -15900,3 +15900,29 @@ the app does not have.
 
 Five guards, one proven by deleting a chip's label and watching it fail.
 
+### 5. `Reminders`' per-row Edit / Delete
+
+v17.15.4 named the switch in this row and **stopped at the switch**, so a list of
+five reminders still offered five buttons called "Edit" and five called
+"Delete" — and Delete is the one control in that row where picking the wrong
+target cannot be undone.
+
+The name expression moved out of the `Toggle`'s prop into `rname`, read by all
+three controls, so they cannot disagree about what a reminder is called. Its two
+v17.15.4 guards travel with it: `String(r.text || "(no text)")` (a bare concat
+renders the word "undefined" for the one legacy textless row DEV holds) and the
+whitespace collapse (the text is a textarea's and can contain newlines). Still
+not truncated — two long reminders can share any prefix you would cut at.
+
+Edit and Delete have visible words, so they take the 2.5.3 shape: `"Edit (Call
+the fish supplier before they close)"`.
+
+**Verified live in DEV** — three reminders, nine controls, all uniquely named
+and all agreeing:
+
+```
+Reminder: Call the fish supplier before they close
+Edit (Call the fish supplier before they close)
+Delete (Call the fish supplier before they close)
+```
+

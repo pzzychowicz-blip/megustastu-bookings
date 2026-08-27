@@ -1009,6 +1009,39 @@ describe("a banner row's controls carry their row (v17.15.6)", () => {
   });
 });
 
+describe("a reminder row's three controls share one name (v17.15.6)", () => {
+  // v17.15.4 named the switch in this row and stopped there, so five reminders
+  // still offered five buttons called "Edit" and five called "Delete" — and
+  // Delete is the one control here where the wrong target cannot be undone.
+  const src = read("components/Reminders.jsx");
+
+  it("the reminder's display name is derived ONCE", () => {
+    has(src, "rname", /const rname = String\(r\.text \|\| "\(no text\)"\)\.replace\(\/\\s\+\/g, " "\)\.trim\(\);/,
+      "three controls in this row name the same reminder; a second copy of the " +
+      "expression is a second answer, and the two would drift");
+    expect(count(src, /String\(r\.text \|\| "\(no text\)"\)/g),
+      "exactly one copy of the guarded expression").toBe(1);
+  });
+
+  it("all three controls read it", () => {
+    for (const [what, re] of [
+      ["toggle", /label=\{"Reminder: " \+ rname\}/],
+      ["edit", /aria-label=\{"Edit \(" \+ rname \+ "\)"\}/],
+      ["delete", /aria-label=\{"Delete \(" \+ rname \+ "\)"\}/],
+    ]) {
+      has(src, what, re, "rendered once per reminder, so it must say which one");
+    }
+  });
+
+  it("Edit and Delete lead with their visible text (WCAG 2.5.3)", () => {
+    // Both have words on them, so the name extends the visible label rather
+    // than replacing it — "Delete the 09:00 prep reminder" would read as an
+    // improvement and stop "click Delete" working.
+    hasnt(src, "paraphrased action name", /aria-label=\{"(Remove|Modify|Change|Open) /,
+      "the visible word leads and the reminder follows in parentheses");
+  });
+});
+
 describe("the gate proves itself", () => {
   // tests/style-check.test.js's lesson, applied here: reading a checker does
   // not catch a blind spot. These run the helpers against strings that MUST
