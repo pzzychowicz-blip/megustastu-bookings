@@ -274,7 +274,7 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"MGT Bookings",
-  version:"17.15.4",
+  version:"17.15.5",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1925,6 +1925,43 @@ function BookingApp({uid}){
         }
         const clearM=!!f._clearManual;
         const wasSeatedLocked=orig&&isLocked(orig)&&!mt.length;
+        // ── v17.15.5: a FINISHED booking's tables are a historical record ────
+        // Completed and cancelled bookings are the two `applyOpt` refuses to
+        // place — it copies them straight through. `doSaveEdit` did not agree
+        // with it, and the disagreement produced two different bugs depending
+        // on one flag nothing in the form shows you:
+        //
+        //   • LOCKED (every walk-in, every drag-drop, every manual assign) —
+        //     `unlockForOpt` rewrites the status to "confirmed" BEFORE
+        //     `bookingsAfterAction`, precisely so the optimiser will consider a
+        //     booking it would otherwise skip. That makes `applyOpt`'s
+        //     completed guard miss it, the optimiser reassigns it, and the
+        //     restore below puts "completed" back on top of the NEW tables.
+        //     Measured live: changing a completed party from 4 to 5 moved it
+        //     from table 7 to tables 1A + 1B — i.e. the app rewrote where a
+        //     party that has already left had sat.
+        //   • NOT LOCKED — `tables: []` is written, `applyOpt` will not refill
+        //     a completed booking, and the capacity guard below rejects the
+        //     save with "No tables available at this time". Measured live: a
+        //     completed booking's party size cannot be changed at all, and the
+        //     error blames the restaurant being full.
+        //
+        // Both directions are the same disagreement, so one flag settles it:
+        // while the booking is being SAVED as finished, its tables are carried
+        // through verbatim and it is never handed to the optimiser. An explicit
+        // manual assignment (`mt`) or an explicit clear (`clearM`) still wins —
+        // those are the user saying so, which is different from the optimiser
+        // deciding on its own.
+        //
+        // It keys on `f.status`, not `orig.status`: walking a completed booking
+        // back to confirmed in the same save SHOULD return it to normal
+        // placement, and seating→completing one in the same save should pin the
+        // table it was actually sat at.
+        const editFinished=f.status==="completed"||f.status==="cancelled";
+        // Hoisted out of buildNext: this exact expression was written twice —
+        // once to unlock and once to restore — and two copies of a condition
+        // that must agree is how they stop agreeing.
+        const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM&&!editFinished;
         // v17.4.0: the diff string is computed ONCE — it feeds the history entry
         // AND the undo gate below. diffBooking returns the sentinel "saved (no
         // field changes)" when nothing moved, which is exactly when undo must
@@ -1962,14 +1999,13 @@ function BookingApp({uid}){
             if(b.id===editId){
               let h=(b.history||[]).concat([editHist]);
               if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
-              const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
-              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||editFinished)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
             }
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
           });
           let out=bookingsAfterAction(upd,f.date,tableBlocks,editId,needsR&&!mt.length,optStateForSave);
-          if(wasSeatedLocked&&needsR&&!mt.length&&!clearM){out=out.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
+          if(unlockForOpt){out=out.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
           return out;
         }
         // /code-review perf: buildNext runs a full optimiser pass (expensive on
@@ -1986,7 +2022,17 @@ function BookingApp({uid}){
           const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
           if(kicked.length>0){setError("Not enough capacity — this change would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");return;}
         }
-        if(!mt.length&&needsR){
+        // v17.15.5 (/code-review): `!editFinished`. This guard means "the
+        // optimiser could not place the booking", and a finished booking is
+        // never offered to the optimiser at all — its tables are carried
+        // through. Without the exclusion the fix above is only half applied:
+        // a booking whose tables are ALREADY empty carries `[]` through, the
+        // guard reads that as a placement failure, and the save is rejected
+        // with a message about the restaurant being full. Reachable by ordinary
+        // use — a booking the app could not place shows "No table assigned"
+        // and carries `_conflict` with `tables: []`; cancel it, then correct
+        // its party size, and the edit is refused for a table it never had.
+        if(!mt.length&&needsR&&!editFinished){
           const editedInFin=fin.find(function(b){return b.id===editId;});
           if(editedInFin&&(!editedInFin.tables||!editedInFin.tables.length)){setError("No tables available at this time — see suggestions below.");return;}
         }
@@ -3217,6 +3263,13 @@ function BookingApp({uid}){
     isEmpty={isEmptyDay}
     dayClosed={dayClosed}
     currency={generalSettings.currency} />;
+  // v17.15.5: `clashes` is the SAME memo TimelineView takes. The List card drew
+  // nothing at all for a double-booking, which is the one fault where this app
+  // asserted something FALSE rather than merely omitting it — the argument that
+  // put ClashBanner and the block's marker in v17.11.0, applied to the third
+  // surface. It is built from `clashPairs` and not the dismiss-filtered list:
+  // dismissing a strip row quiets the row, it does not make the double-booking
+  // stop being true.
   const listEl=<ListView
     bookings={bookings}
     date={viewDate}
@@ -3227,6 +3280,7 @@ function BookingApp({uid}){
     nowMins={nowMins}
     warnings={overlapWarnings}
     late={lateMap}
+    clashes={clashMap}
     onNoShow={VA.onNoShow}
     selectedId={selectedListId}
     focusReq={listFocusReq}

@@ -14,7 +14,7 @@
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
-import { AlertIcon, ChevronRightIcon } from "./Icons";
+import { AlertIcon, ChevronRightIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
 // Return inline-style objects. Used wherever an `<input>` or `<button>` needs
@@ -1395,7 +1395,90 @@ export function ModalPresence({ show, children, outMs = EXIT_MS }) {
   );
 }
 
+// ── Party-size ring (v17.15.5) ───────────────────────────────────────────────
+// The circled party size. It was `SIZE_RING`, a module const in
+// `TimelineView.jsx` shared by `TimelineBlock` and `WaitGhost`; v17.15.5 gives
+// it a third consumer — the List card, which printed "4 pax" — so it moves
+// here rather than being imported across components. The rule the old site
+// recorded holds and is why it is shared at all: the ghost is a DIMMED copy of
+// the block, so anything the block specifies twice can drift out from under it.
+//
+// ── The rim is a PROP, and that is the whole subtlety ────────────────────────
+// `--rim-solid-strong` is theme-invariant white at 0.55, and that number is a
+// recorded MEASUREMENT, not a taste: white at `--blk-rule`'s 0.3 over the block
+// fills is 1.43:1 confirmed and **1.21:1 pending** — not subtle, absent, so the
+// ring did not render at all on the yellow blocks. 0.55 takes it to 1.82 /
+// 1.38 / 2.78 seated / 2.97 cancelled. It still does not reach WCAG 1.4.11's
+// 3:1 on the two amber fills and cannot — pure white over the pending yellow
+// tops out at 1.98:1 — which is the amber exemption in `constants.js` hit one
+// element further down, with the same two bad ways out: a dark ring clears 3:1
+// and reads as DISABLED beside the white-inked name it encircles (tried and
+// reverted at block level one commit after it shipped), and an opaque fill
+// turns a count into a second status chip competing with the time.
+//
+// **That reasoning is about a SATURATED BLOCK FILL and does not travel.** On
+// the List card's `--bg-card-strong` — alpha over the sheet, i.e. near white in
+// light mode — a 0.55 white rim is close to invisible. So the block and the
+// ghost pass nothing and keep their recorded value byte-for-byte, and the card
+// passes `--chip-neutral-border`, which already exists as
+// `color-mix(--text-secondary 50%)` and is DESIGN.md's own rule for an outline:
+// the border is the ink at half strength, one decision rather than two.
+// Copying the block's rim across would have been the "a quieter version of X
+// dims X, it does not re-specify X" trap run in reverse.
+//
+// The DIGIT is `color: inherit`, so it takes `--text-on-accent` on a block and
+// the card's own ink on a card without either caller stating it.
+// The DEFAULT rim stays inside this declaration rather than becoming a
+// parameter default, and that is deliberate: `tests/contrast.test.js`'s
+// `ringAlpha()` finds `const SIZE_RING` and reads the white rule out of the
+// declaration, so that it measures what SHIPS instead of a number retyped into
+// a test. Moving the value onto the signature would have left the guard
+// anchored on a declaration with no border in it — which it caught, by
+// throwing rather than passing.
+const SIZE_RING = {
+  flexShrink: 0, boxSizing: "border-box",
+  width: 18, height: 18, borderRadius: R.pill,
+  border: "1px solid var(--rim-solid-strong)", background: "transparent",
+  display: "flex", alignItems: "center", justifyContent: "center",
+  fontSize: T.micro, fontWeight: FW.semi, lineHeight: 1,
+  fontVariantNumeric: "tabular-nums", position: "relative"
+};
+export function SizeRing({ n, rim, style }) {
+  return (
+    <span
+      title={n + " guest" + (n === 1 ? "" : "s")}
+      style={{
+        ...SIZE_RING,
+        ...(rim ? { border: "1px solid " + rim } : null),
+        ...(style || {})
+      }}
+    >{n}</span>
+  );
+}
+
 // ── Status badge (colour-coded by booking status) ────────────────────────────
+// v17.15.5: it carries its MARK as well as its word.
+//
+// The fill was never the difference between this badge and a timeline block:
+// both have read `BLOCK_BG` / `BLOCK_INK` since v17.8.0. The difference was
+// that a block says a booking's status with `StatusIcon` and nothing else,
+// while the card said it with a word and nothing else — so the two views named
+// one attribute two ways, which is the whole defect v17.15.5 exists to close.
+//
+// **It keeps the WORD, and that is the decision.** Matching the block exactly
+// would mean dropping to a bare glyph, and v17.11.0 put `StatusIcon` on the
+// block *because* colour alone is not a status — a WCAG 1.4.1 failure three of
+// that review's seven passes found independently. Running that argument
+// backwards on the one surface which already had the text would be trading a
+// real gain for a cosmetic one. So the block gained the card's meaning in
+// v17.11.0, and here the card gains the block's mark: they meet, rather than
+// one copying the other.
+//
+// The icon is `aria-hidden` (as every icon in Icons.jsx is) and the word is
+// the badge's own text, so the accessible name is unchanged — "Seated", not
+// "Seated Seated". `IC.control`, matching the block's rail and the status
+// buttons in ListView's action row, which have carried these same marks since
+// v17.10.0.
 export function SBadge({ status }) {
   return (
     <span style={{
@@ -1403,10 +1486,10 @@ export function SBadge({ status }) {
       background: BLOCK_BG[status] || BLOCK_BG.confirmed,
       color: BLOCK_INK[status] || BLOCK_INK.confirmed, border: RIM_SOLID,
       fontWeight: FW.semi, textTransform: "capitalize",
-      display: "inline-block",
+      display: "inline-flex", alignItems: "center", gap: SP.snug,
       boxShadow: "var(--shadow-flat)"
     }}>
-      {status}
+      <StatusIcon status={status} size={IC.control} />{status}
     </span>
   );
 }
@@ -1448,10 +1531,14 @@ export function TBadge({ id }) {
 // DESIGN.md's note that clickable chips are "the documented exception" was
 // about them keeping a FILL, which v17.8.0 already removed.
 //
-// The SOLID row tags in ListView (`manual`, `locked`, `no-show ×N`, `N min
-// late`, `€N deposit`) are deliberately NOT this. They share a dense row with
-// four other solid tags, and DESIGN.md's rule for choosing between the two
-// treatments is "match whatever sits next to you".
+// ListView's flag row (`manual`, `locked`, `★`, `no-show ×N`, `N min late`,
+// `€N deposit`) is deliberately NOT this either — and note it is no longer the
+// SOLID row this comment used to cite. v17.15.5 took the fills off and made it
+// icon-led plain TEXT, matching TimelineBlock's rail. It is not an outline chip
+// because an outline chip is a chip that stands ALONE as a count or a
+// disclosure; these are seven facts sharing one dense row, and seven rings in a
+// line is the noise the fills were removed to escape. DESIGN.md's rule decides
+// both cases the same way: match whatever sits next to you.
 export const CHIP_TONES = {
   success: { border: "var(--chip-success-border)", text: "var(--success-text)" },
   warn:    { border: "var(--chip-warn-border)",    text: "var(--warn-text)" },

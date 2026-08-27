@@ -460,12 +460,29 @@ explaining why is usually the one to read.
   role, one hue, whatever treatment carries it.
 
 - **Three label treatments (v17.8.0), and context decides which.** **SOLID**
-  where a tag competes inside a busy row (ListView's `manual`/`locked`/`★`/the
-  seated counter, the reminder's time chip). **OUTLINE** — no fill, a **2px**
+  where a tag competes inside a busy row (the reminder's time chip).
+  **OUTLINE** — no fill, a **2px**
   border in the semantic hue, text in the same family — where a chip stands
   alone as a count or a disclosure (Customers' visits/no-shows,
   `BookingFormModal`'s Regular/no-show buttons). **TEXT** where the colour
   carries itself unaided.
+  **v17.15.5 moved the List card's flag row from SOLID to TEXT, and the rule is
+  what moved it.** "Match whatever sits next to you" is not a preference for
+  fills; it is a preference for ONE treatment per row, and it points wherever
+  the row goes. That row was seven solid pills because each pill was next to six
+  others; it is now icon-led text throughout — `LockIcon`, `StarIcon`,
+  `NoShowIcon`, `DepositIcon` at `IC.control`, in `TimelineBlock`'s own rail
+  order — so the same rule now makes text the right answer for all of them.
+  What the change is really about is that a booking should not have two visual
+  vocabularies: the block spent v17.9.0–v17.11.0 becoming an icon rail and the
+  card was still printing words in coloured pills. **The ink is now what the
+  fill used to be** — `--warn-text` for the two problems (repeat no-shows,
+  running late), `--success-text` for money taken and for the still-running
+  seated counter, `--text-secondary` for the settled facts. Those six pairings
+  against the two card fills are measured in `tests/contrast.test.js`
+  (6.73–9.69:1 across both themes): **a card is a text-bearing surface the
+  moment a fill comes off a label on it**, and neither `check:style` nor the
+  registry's coverage guard can see that pairing arrive on its own.
   **v17.15.0: an outline chip's border is DERIVED from its text**, not chosen
   beside it — `--chip-<role>-border` is `color-mix(in srgb, var(--<role>-text)
   50%, transparent)`. The border and the text are the same statement at two
@@ -497,15 +514,18 @@ explaining why is usually the one to read.
   signal three times. The outline chip drops the fill and earns its extra border
   pixel; do not "restore" the fill.
 - The SOLID/TEXT pair in full: **solid** — the fill carries the colour, text is `--text-on-accent`,
-  the rim is neutral `--border-glass` (the v17.7.0 status-label decision:
-  `SBadge`, `manual`, `locked`, `★`, the seated `N min`); or **plain text** —
+  the rim is neutral `--border-glass` (the v17.7.0 status-label decision —
+  `SBadge` is what still wears it, and since v17.15.5 it wears its
+  `StatusIcon` too, so the card names a status in the same mark the block
+  does); or **plain text** —
   the colour carries itself, no fill, no border. The third shape — pale
   semantic fill + border in the matching hue + bold text in a third shade of
   it — is banned. It encodes one signal three times and is the stock badge
   every framework ships. **Which of the two you pick is decided by context,
-  not taste: match whatever sits next to you.** ListView's `no-show ×N` /
-  `N min late` / `€N deposit` share a row with four solid tags, so they are
-  solid; `Table free · HH:MM`, `This device` and the reminder banner's time sit
+  not taste: match whatever sits next to you.** ListView's flag row is the
+  worked example of that rule MOVING (see above): its tags were solid while the
+  row was solid, and went to text when the row did. `Table free · HH:MM`,
+  `This device` and the reminder banner's time sit
   among plain text (and each already has a plain-text twin elsewhere — the
   waitlist string is printed verbatim by `WaitAvailBanner`), so they are text.
   Clickable chips are the documented exception: `BookingFormModal`'s

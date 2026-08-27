@@ -167,6 +167,28 @@ const FILLS = [
   // token; v17.15.0 caught two of the three and this one sat two lines away.
   { fill: "--app-offline-bg", alpha: null, ink: "--app-offline-text", role: "label", what: "offline pane (strip)" },
 
+  // v17.15.5 — the LIST CARD as a text-bearing surface. Until now nothing
+  // painted semantic ink directly onto a card: every flag in that row was a
+  // SOLID pill, so the pairing being measured was fill-vs-white and the card
+  // underneath was irrelevant. Dropping the fills makes the card itself the
+  // surface, which is a pairing neither guard in this repo could have seen —
+  // `check:style` sees literals and the coverage check below sees a list of
+  // PREFIXES, and `--bg-card-strong` matches neither. That is the same blind
+  // spot that shipped the strip's danger sections at 3.03:1.
+  //
+  // Both card fills are alpha over the sheet, so in LIGHT they composite to the
+  // same white and the two rows are identical by construction — kept apart
+  // anyway, because the day one of them stops being alpha is the day that stops
+  // being true and nobody will re-derive it.
+  { fill: "--bg-card-strong", alpha: null, ink: "--text-secondary", role: "label", what: "card flag, neutral (locked / ★ / manual / stayed)" },
+  { fill: "--bg-card-strong", alpha: null, ink: "--warn-text", role: "label", what: "card flag, warn (no-show / late)" },
+  { fill: "--bg-card-strong", alpha: null, ink: "--success-text", role: "label", what: "card flag, success (deposit / live duration)" },
+  { fill: "--bg-card-strong", alpha: null, ink: "--danger-text", role: "label", what: "card flag, danger (double-booked)" },
+  { fill: "--bg-card-dim", alpha: null, ink: "--text-secondary", role: "label", what: "card flag, neutral (seated/completed/cancelled card)" },
+  { fill: "--bg-card-dim", alpha: null, ink: "--warn-text", role: "label", what: "card flag, warn (seated/completed/cancelled card)" },
+  { fill: "--bg-card-dim", alpha: null, ink: "--success-text", role: "label", what: "card flag, success (seated/completed/cancelled card)" },
+  { fill: "--bg-card-dim", alpha: null, ink: "--danger-text", role: "label", what: "card flag, danger (double-booked, dim card)" },
+
   // Solid semantic fills — already correct before this pass; here so they stay so.
   { fill: "--app-success-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "success tag" },
   { fill: "--app-danger-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "danger tag" },
@@ -345,6 +367,16 @@ const BLOCK_FILLS = ["--block-confirmed", "--block-pending", "--block-seated",
 
 const TIMELINE_SRC = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "TimelineView.jsx"),
+  "utf8"
+);
+
+// v17.15.5: `SIZE_RING` moved to atoms.jsx when the List card became its third
+// consumer, so `ringAlpha()` reads THIS file now. Re-anchored rather than
+// deleted, which is what the throw in `ringAlpha()` asks the next person to do
+// — and it is what happened: the move made that guard fail loudly instead of
+// measuring a default, which is the entire reason it throws.
+const ATOMS_SRC = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "atoms.jsx"),
   "utf8"
 );
 
@@ -544,11 +576,11 @@ const RING_FLOOR = {
 // the test is not guarding it. Anchored on `const SIZE_RING`, and it THROWS if
 // that declaration is gone rather than silently measuring a default.
 function ringAlpha() {
-  const lines = TIMELINE_SRC.split("\n");
+  const lines = ATOMS_SRC.split("\n");
   const start = lines.findIndex((l) => /const\s+SIZE_RING\s*=/.test(l));
   if (start < 0) {
     throw new Error(
-      "contrast.test: could not find `const SIZE_RING` in TimelineView.jsx. " +
+      "contrast.test: could not find `const SIZE_RING` in atoms.jsx. " +
       "The party-size ring was renamed or moved — re-anchor ringAlpha() on it " +
       "rather than deleting this guard."
     );

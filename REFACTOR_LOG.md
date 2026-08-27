@@ -14847,6 +14847,156 @@ finger" lesson, met from the other side.
 Build clean, **575 tests**, `check:style` OK (including marker placement), lint
 0 errors / 47 warnings.
 
+### Closing the ROADMAP entry: every repeating control in Table priorities
+
+v17.15.4 named every `Toggle` in the app and left one entry behind — the
+priorities editor renders three controls per size band with a fixed name, so
+the three bands that ship by default give nine buttons three names between
+them. Sweeping the panel found the entry had **understated it**: the `Stepper`
+beside those buttons renders `−` and `+` as its entire content, and there are
+**thirteen** of them in this tab, i.e. twenty-six controls announcing as one of
+two characters. That is a worse defect than the one the entry described.
+
+- **`Stepper` takes a required `label`** — no default, for `ModalTitle`'s
+  `background` reason. That made all thirteen call sites answer for
+  themselves, which is why the Tables and Combos steppers were named here too
+  even though those sections are otherwise deferred: a required prop does not
+  let you scope it.
+- **`bandName` / `comboName` / `swapName`** hoisted to module scope. Five kinds
+  of control now need a row's identity, and a sixth hand-written copy of
+  `"party of " + b.min + " to " + b.max` is how they drift.
+- Named: the band ✕, the Try-first segments, the Prefer/Avoid chip row's
+  move-up / move-down / remove / add (which repeat per chip **and** per band),
+  the Prefer/Avoid button, both `<select>`s and the two remove ✕s. The
+  cross-zone Require chips gained `aria-pressed`, which they never published.
+
+**Label in Name applies to some of these and not others, and the split matters.**
+`−` and `+` are glyphs doing an icon's job — there is no word a voice-control
+user can say, so a descriptive name only adds reach. The Try-first segments DO
+have words ("Table order", "Indoor", "Outdoor"), so they are
+`opt[1] + " (" + bandName(b) + ")"`: **visible label first, disambiguator
+after**, which is the correction v17.15.4's own `/code-review` had to make.
+
+**Four guards, each proven against known-bad input — and two of the four did
+not bite on the first attempt.** The counted-match guard passed with one of the
+size band's paired steppers reverted to a literal, because `has()` is satisfied
+by a single match and the sibling still matched; it counts occurrences now
+(1 / 2 / 3 / 2). The other miss was in the *negative test*, not the guard: the
+probe used `label={"…"}` against a call site written `label="…"`, so it edited
+nothing and the green result meant nothing. **A guard proven by a probe that
+did not apply is not proven** — check the probe changed the file before
+believing the failure it did not produce.
+
+Verified last by reading the computed accessible names out of the running page,
+which is the only place the repetition is visible: 274 named controls, and
+every priorities control distinct — `"Decrease party of 1 to 1: smallest party
+size"`, `"Remove 7 from Avoid (party of 1 to 1)"`, `"Indoor (party of 1 to 1)"`.
+
+That same live read turned up what the entry becomes: the four banners' per-row
+✕, the Tables/Combos buttons, and `ListView`'s own card actions at `Assign` ×10
+on a ten-booking day. `ROADMAP.md` carries them, with the open question about
+the last one (a `listitem` ancestor names the booking, so context may be
+enough for a screen reader while a voice-control user still has ten targets).
+
+### A finished booking's tables are a record — the question, and what it turned up
+
+The question was narrow: **does editing Duration on a Completed booking let the
+optimiser reassign it?** The answer is **no**, on two independent grounds —
+`applyOpt` returns a completed booking as `{...b, _conflict:false}` and never
+recomputes its tables, and `needsR` (the flag that triggers reassignment) is
+built from size / time / date / preference / `_clearManual` / preferred-tables,
+so duration does not reach it. Verified live afterwards: a duration-only save on
+a completed booking leaves its tables untouched.
+
+**Tracing it found the neighbouring edit broken in two different ways**, and the
+static read got the more serious one wrong first. Reading the code predicted
+only the second case below; driving the actual app produced the first.
+
+- **A LOCKED completed booking is reassigned by the optimiser.** `unlockForOpt`
+  rewrites the status to `"confirmed"` *before* `bookingsAfterAction` — that is
+  exactly what it is for — so `applyOpt`'s completed guard never sees a
+  completed booking, the optimiser places it, and the restore one line later
+  puts `"completed"` back on top of the new tables. **Measured live: changing a
+  completed party from 4 to 5 moved it from table 7 to tables 1A + 1B.** The
+  app rewrote where a party that had already left had been sitting. This
+  reaches every walk-in, every drag-drop and every manual assign, since all
+  three set `_locked`.
+- **An UNLOCKED completed booking cannot be edited at all.** `tables: []` is
+  written, `applyOpt` will not refill a completed booking, and the capacity
+  guard rejects the save — **measured live: "No tables available at this time —
+  see suggestions below."** for a change of party size on a finished visit, with
+  the error blaming the restaurant being full.
+
+Both are the same disagreement — `applyOpt` treats a finished booking's tables
+as a record and `doSaveEdit` did not — so one flag settles it. `editFinished`
+keys on **`f.status`, not `orig.status`**: walking a completed booking back to
+confirmed in the same save should return it to normal placement, and
+seating→completing one in the same save should pin the table it was actually
+sat at. An explicit manual assignment or an explicit clear still wins, because
+those are the user saying so rather than the optimiser deciding.
+
+`unlockForOpt` is **hoisted out of `buildNext`** in the same commit: the
+identical condition was written twice, once to unlock and once to restore, and
+two copies of a condition that must agree is how they stop agreeing. The
+restore now reads the flag instead of re-deriving it.
+
+**What the static read missed, and why.** The prediction covered the
+`tables: []` path and stopped there, because `applyOpt`'s completed guard looks
+conclusive on its own — it is, but only for a booking that is still marked
+completed when it arrives, and `unlockForOpt` exists precisely to change that
+mark. **A guard that keys on a field is only as good as the code that has not
+already rewritten the field.** Four tests pin the pure half (`applyOpt` moves
+nothing, refills nothing, and `bookingsAfterAction` preserves tables through a
+size change for both finished statuses); the App half was verified in DEV,
+including a confirmed booking still reassigning normally (table 6 → i2 + i3) so
+the fix did not simply switch the optimiser off.
+
+### `/code-review` fixes
+
+**1. Every "+ Add" button appends an IDENTICAL default row, so a name built
+from row content is not one name.** `addBand` appends `{min:2,max:2}`,
+`addRule` appends `declared[0].key` at 2–8, `addSwap` appends `tables[0].id`
+at 4→2 — all three fixed. So pressing **"+ Add size rule" twice** produces two
+rows that are character-for-character identical, and `bandName(b)` gave all
+~8 controls in one row the same name as their twins in the other. **This is
+the defect the whole sweep is about, reproduced one level down by the most
+obvious action in the panel, in two clicks.** The three row-namers take their
+ordinal now (`"size rule 2, party of 2 to 2"`), which is the only part of a row
+guaranteed to differ. The same collision reached **v17.15.4's own `Toggle`**,
+whose label was `"Party of " + b.min + " to " + b.max + ": try joined tables…"`
+— it takes `bandName(b, i)` too, and its guard was re-pinned. Verified live by
+adding a second band and reading every computed name off the page: 49 size-rule
+controls, **zero duplicated names anywhere**.
+
+**2. The `editFinished` fix was half applied — the capacity guard still refused
+a finished booking with no tables.** That guard means "the optimiser could not
+place this", and a finished booking is never offered to the optimiser; but a
+booking whose tables are already `[]` carries `[]` through, so the guard read
+it as a placement failure and rejected the save with the same
+restaurant-is-full message the fix exists to remove. Reachable ordinarily: a
+booking the app cannot place carries `_conflict` with `tables: []` and shows
+"No table assigned" — cancel it, then correct its party size, and the edit is
+refused over a table it never had. `!editFinished` added. The DISPLACEMENT
+guard above it is deliberately left active: a time or duration edit on a
+finished booking does change the `baseSlots` it contributes to `optimise`, so
+it can still displace live bookings and should still say so.
+
+**3. The clash flag said "warn" while its own border said "danger".** The card
+border for a clash is `--card-overdue-border` (red), and the marker was
+`--warn-text` — the same amber as `no-show ×N` and `N min late`, so the most
+severe state on the card was drawn in the colour of the two lesser ones and the
+card encoded one severity two ways. It is `--danger-text`, registered in
+`tests/contrast.test.js` alongside its three siblings (8.31:1 light, 6.73:1
+dark).
+
+**A guard added in this version needed fixing by the same review that added
+it.** The counted stepper guard broke when the `Toggle` adopted `bandName`,
+because `label={bandName(b, i) + ": ` then matched three call sites rather than
+two — the regex was measuring "uses the row namer", not "is a stepper". It
+matches the stepper's own suffixes now. A fourth guard pins all three
+row-namers to taking `(…, i)`, proven by reverting `swapName` to its
+content-only form (three failures) and back.
+
 ### Docs
 
 `DESIGN.md` takes the design decisions (the two shipped replacements for the
@@ -15388,3 +15538,156 @@ that text — plus the rewritten assertion for the copy button. Three more
 known-bad inputs run and observed to fail: the paraphrased name written back,
 the state word returned to the reminder switch, and an unlabelled `<Toggle>`
 planted in `App.jsx`, which the old one-directory sweep could not see.
+
+---
+
+## v17.15.5 — one booking, one vocabulary
+
+**Date:** 2026-08-27 · **Branch:** `feat/v17.15.5-list-timeline-parity` ·
+**Behavioural change:** the List card's flag row changes appearance (solid
+coloured pills → icon-led plain text) and the status badge gains its mark; no
+data, no write path and no keyboard behaviour moves. **Files:**
+`src/components/ListView.jsx` · `atoms.jsx` · `tests/contrast.test.js` ·
+`DESIGN.md` · `src/App.jsx` (version).
+
+### What was wrong
+
+`TimelineView` spent v17.9.0 through v17.11.0 turning a block's markers into an
+icon rail — status, deposit, preferred, locked, repeat-no-show, overstaying,
+double-booked — each a drawn mark at `IC.control` with a real accessible name,
+in a fixed order, argued through three versions of measurement.
+
+`ListView` never followed. The same facts were seven solid coloured pills
+printing words: `[manual] [locked] [★5A+5B] [no-show ×3] [12 min late]
+[€40 deposit] [35 min]`. **One booking, two visual vocabularies** — a host
+switching views had to learn both, and in Split View they sit side by side.
+
+### The change
+
+Icon + its number, no fill. The marks and their order come from
+`TimelineBlock`'s own `allFlags` (deposit → preferred → locked →
+repeat-no-show), so a booking reads the same left-to-right in either view.
+
+**What the card keeps that the block cannot.** A 36px block has room for a
+glyph, so the deposit AMOUNT, the no-show COUNT and the preferred TABLE IDS
+live only in its hover title. The card has the width, so they stay on screen.
+Reducing them to bare glyphs would have been consistency bought by levelling
+down — the same mistake v17.9.0 caught when it dimmed the one legible element
+on a block to match the illegible ones.
+
+**Three flags get no mark, deliberately:** `manual`, `N min late` and the
+duration counter have no counterpart on a block (late is an amber BORDER
+there, the duration is the block's live width, `manual` is not drawn at all).
+`LateIcon` exists — it is the notification strip's Running-late mark — and was
+left out anyway: **an icon that means something in one view and nothing in the
+other is worse than no icon**, and the comment at its site says so, because the
+next reader will otherwise re-litigate it.
+
+**The status badge keeps its word and gains its mark.** `SBadge` already used
+`BLOCK_BG`/`BLOCK_INK`, so the fill was never the difference — the difference
+was that the block says the status with a glyph and the card said it with a
+word. It now says both. Icon-only was rejected: v17.11.0 put `StatusIcon` on
+the block *because* colour alone is not a status (a WCAG 1.4.1 failure three
+review passes found independently), and dropping List's word to match would
+have run that argument backwards on the one view that had it right.
+
+### The gap in the other direction
+
+Comparing the two views closely turned up something the change was not looking
+for: **Timeline draws a double-booking and the List card drew nothing at all.**
+`ClashIcon`, a 3px danger border and a `ClashBand` across the contested minutes
+on the block; on the card, no marker, no border, nothing — while the card is
+the surface staff read a day from.
+
+That is the fault v17.11.0 called out as unique in this app — the one place it
+asserted something FALSE rather than merely omitting it — surviving on the
+third surface for four versions after the other two were fixed. The data was
+already there and already memoised: App's `clashMap`, which `TimelineView` has
+taken as `clashes` since v17.11.0, needed passing to one more component.
+
+The card now carries a `ClashIcon` flag reading `double-booked` and takes the
+overdue red at 3px, **outranking the overstay warning and the late timer** —
+mirroring the block's own precedence, and for the block's own reason: those two
+are predictions, a clash is the schedule already being wrong. It reuses the
+overdue red rather than adding a fifth card border colour, because making the
+BORDER the distinguishing signal is the colour-only-status mistake v17.11.0
+exists to have fixed; the marker is what tells them apart.
+
+`findClashes` can return a pair whose `tables` is EMPTY (`canAssign` also
+rejects a pair taking two or more tables from one join cluster, and those sets
+need not intersect), so the table clause is conditional exactly as
+`TimelineBlock`'s is — unreachable in the default layout by pigeonhole, and
+reachable with a join group of four.
+
+### The party-size ring, and a guard doing its job
+
+`SIZE_RING` was a module const in `TimelineView.jsx`, shared with `WaitGhost`.
+The card printed `4 pax` instead, so the ring gained a third consumer and moved
+to `atoms.jsx` as `SizeRing` — a style object imported from one view into
+another is not sharing, it is coupling.
+
+**The rim could not travel with it.** `--rim-solid-strong` is white at 0.55 and
+that is a recorded measurement against a SATURATED BLOCK FILL: white at 0.3 is
+1.21:1 on pending, i.e. absent. On the List card's `--bg-card-strong` — alpha
+over the sheet, so near white in light — 0.55 white is close to invisible. So
+`rim` is a prop: the block and the ghost pass nothing and keep the recorded
+value byte-for-byte, and the card passes `--chip-neutral-border`, which already
+existed as `color-mix(--text-secondary 50%)` and is DESIGN.md's own rule that an
+outline's border is its ink at half strength. Copying the block's rim across
+would have been "a quieter version of X dims X, it does not re-specify X" run
+backwards.
+
+**`tests/contrast.test.js` caught the move, which is the point of it.** The
+first cut put the default on the function signature; `ringAlpha()` anchors on
+`const SIZE_RING` and reads the white rule out of the DECLARATION, so it threw
+— "The party-size ring was renamed or moved — re-anchor `ringAlpha()` on it
+rather than deleting this guard" — instead of silently measuring nothing. Both
+halves were done: the default went back inside the declaration where the guard
+can see it, and the guard was re-pointed at `atoms.jsx`. It was then re-proven
+against known-bad input (rim weakened to `--rim-solid`: ten failures; restored:
+612 pass), because a re-anchored guard that no longer bites is worse than a
+deleted one.
+
+### The pairing nothing could have seen
+
+Taking the fills off makes the CARD the text-bearing surface, and
+`--warn-text` / `--success-text` / `--text-secondary` on `--bg-card-strong` /
+`--bg-card-dim` is a pairing **neither guard in this repo can detect**:
+`check:style` sees literals, and `tests/contrast.test.js`'s coverage check sees
+a list of token PREFIXES that `--bg-card-*` does not match. That is precisely
+the blind spot which shipped the notification strip's danger sections at
+3.03:1 in v17.15.0 and the offline pane at 3.13:1 in v17.15.2.
+
+So all six were measured before the code was written, not after:
+
+| ink on card | light | dark |
+|---|---|---|
+| `--text-secondary` | 7.53 | 7.59 / 8.08 |
+| `--warn-text` | 6.79 | 7.58 / 8.07 |
+| `--success-text` | 7.13 | 9.10 / 9.69 |
+
+All clear AA with room; all six are registered. The two card fills are alpha
+over the sheet, so in light they composite to the same white and the rows are
+identical **by construction** — kept apart anyway, because the day one of them
+stops being alpha is the day that stops being true.
+
+**The measuring script got it wrong first, in this repo's own recorded way.**
+Its first run reported 1.40–2.32:1 in dark — every pairing far below AA. The
+cause was not the colours: `indexOf('[data-theme="dark"]')` matched the
+**comment on line 32 of `src/index.css` that mentions the selector**, so the
+dark block was never read and every dark ink silently fell back to its light
+value. `tests/contrast.test.js` anchors on `'[data-theme="dark"] {'` — with
+the brace — for exactly this reason. It is the same trap `tests/csp.test.js`
+hit in v17.15.1: **prose that names the thing a regex hunts for is
+indistinguishable from the thing**, and here it produced six alarming numbers
+that would have "justified" retuning three inks that were never wrong.
+
+### Docs
+
+`DESIGN.md`'s "Three label treatments" clause cited this exact row as the
+worked example of SOLID. It is rewritten rather than deleted, because the row
+is now the worked example of the rule MOVING: "match whatever sits next to
+you" is not a preference for fills, it is a preference for one treatment per
+row, and it points wherever the row goes. `atoms.jsx`'s `OutlineChip` comment
+cited the same row and was corrected in the same commit — a stale example is
+quoted with confidence.

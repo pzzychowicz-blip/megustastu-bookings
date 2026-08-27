@@ -30,12 +30,81 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins, describeBooking } from "../lib/booking-logic";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
-import { SmallTag, SBadge, TBadge, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
-import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon } from "./Icons";
+import { SBadge, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
+import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon } from "./Icons";
+
+// ── The card's flag rail (v17.15.5) ──────────────────────────────────────────
+// The same facts TimelineBlock draws on its right-hand rail, in the same order
+// (deposit → preferred → locked → repeat-no-show), with the same icons at the
+// same IC.control size — so a booking reads the same left-to-right whichever
+// view you are in. Before this the card said them as seven solid coloured
+// pills printing words, and a host moving between the two views had to learn
+// both vocabularies for one booking.
+//
+// WHAT THE CARD KEEPS THAT THE BLOCK CANNOT. A 36px block has room for a glyph
+// and nothing else, so the deposit AMOUNT, the no-show COUNT and the preferred
+// TABLE IDS live only in its hover title. The card has the width, so they stay
+// on screen: this is icon + its number, not the block's bare icon. Dropping
+// them to match would be levelling down — the same mistake v17.9.0 caught when
+// it dimmed the one legible element on a block to match the illegible ones.
+//
+// THE FILL IS WHAT GOES, and DESIGN.md's rule is what sends it. "Match whatever
+// sits next to you" is why these were solid: they shared a row with four other
+// solid tags. The row is icon-led text throughout now, so the same rule points
+// the other way, and each flag's INK carries what its fill used to — warn for
+// the two problems, success for money taken, secondary for the plain facts.
+// All four pairings against --bg-card-strong / --bg-card-dim are measured and
+// registered in tests/contrast.test.js (6.73–9.69:1, both themes); a tone
+// chosen by hand is exactly what that registry exists to catch.
+const FLAG = {
+  display: "inline-flex", alignItems: "center", gap: SP.tight,
+  fontSize: T.small, fontWeight: FW.semi, whiteSpace: "nowrap"
+};
+const FLAG_NEUTRAL = "var(--text-secondary)";
+const FLAG_WARN = "var(--warn-text)";
+const FLAG_SUCCESS = "var(--success-text)";
+// v17.15.5 (/code-review): the clash flag is DANGER, not warn. The card's
+// border for a clash is `--card-overdue-border` (red), so drawing the marker
+// in the same amber as `no-show ×N` and `N min late` said two different things
+// about one booking's severity — and flattened the most severe state on the
+// card into the two lesser ones. Registered in tests/contrast.test.js like its
+// three siblings (8.31:1 light, 6.73:1 dark).
+const FLAG_DANGER = "var(--danger-text)";
+
+// An icon-bearing flag. `role="img"` + `aria-label` for TimelineBlock's own
+// reason: every icon in Icons.jsx is `aria-hidden` (correctly — an icon beside
+// its own label must not be announced twice), so without a role and a label on
+// the wrapper the fact simply leaves the accessibility tree.
+//
+// The label is the FULL phrase, not the compact visible text, and that is not
+// the Label-in-Name trap v17.15.4 recorded: these are not operable controls, so
+// there is no name for a voice-control user to say and nothing to match. The
+// visible "×3" is a compact rendering for the eye; "3 past no-shows on this
+// number" is the same fact said properly. A CONTROL in this row would have to
+// lead with its visible text.
+function CardFlag({ title, ink, children }) {
+  return (
+    <span role="img" aria-label={title} title={title} style={{ ...FLAG, color: ink }}>
+      {children}
+    </span>
+  );
+}
+
+// A text-only flag — `manual`, `N min late`, and the duration counter. These
+// three have NO counterpart on a timeline block (late is an amber BORDER there,
+// the duration is the block's live width, and `manual` is not drawn at all), so
+// they get no mark: an icon that means something in one view and nothing in the
+// other is worse than no icon. `LateIcon` exists and is the notification
+// strip's Running-late mark — it was considered here and left out for exactly
+// that reason, so please do not re-litigate it without also putting it on the
+// block. No role: the text IS the label.
+function TextFlag({ ink, children }) {
+  return <span style={{ ...FLAG, color: ink }}>{children}</span>;
+}
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
 // that changes status plays a colour wipe of its OLD status colour. Keyed by id,
@@ -73,7 +142,9 @@ function endsASelection(el) {
 export const ListView = memo(function ListView({
   bookings, date, onEdit, onStatus, onDelete, onManual,
   nowMins = 0, warnings = {},
-  late = {}, onNoShow = () => {},
+  // v17.15.5: `clashes[id]` = {names, tables} for a booking double-booked with
+  // another — App's `clashMap`, the same memo TimelineView takes.
+  late = {}, clashes = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {}, focusReq = 0,
   showFinished = false, onToggleFinished = () => {},
   // v17.14.0: `emptyWalkin` — one name across all three views, see TimelineView.
@@ -289,20 +360,32 @@ export const ListView = memo(function ListView({
         // amber border + "N min late" tag; at "noshow" a one-tap No show button.
         // Seated-overstay warnings keep precedence over the late highlight.
         const lateSt = late[b.id] || null;
+        // v17.15.5: a double-booking, from App's clashMap.
+        const clash = clashes[b.id] || null;
         const sc = STATUS_COLORS[b.status];
         const useStatusColor = b.status === "seated" || b.status === "completed" || b.status === "cancelled";
         // v17.0.0: a pending card keeps the strong (upcoming) background but
         // carries the yellow status border — the spec's List marker for pending.
         const isPending = b.status === "pending";
         const cardBg = useStatusColor ? "var(--bg-card-dim)" : "var(--bg-card-strong)";
-        const cardBrd = warn
-          ? (warn.overdue ? "var(--card-overdue-border)" : "var(--card-warn-border)")
-          : lateSt
-            ? "var(--card-late-border)"   // v17.0.0 round 10: yellow, not the amber due-soon edge
-            : b._conflict
-              ? "var(--card-conflict-border)"
-              : (useStatusColor || isPending) ? sc.border : "var(--border-card-plain)";
-        const cardBrdW = (warn || lateSt) ? "3px" : (useStatusColor || isPending) ? "3px" : "1px";
+        // v17.15.5: a CLASH outranks everything below it, mirroring the block's
+        // own precedence (TimelineView's `border`, v17.11.0). The overstay
+        // warning and the late timer are PREDICTIONS; a double-booking is the
+        // schedule already being wrong, and one of the two parties is going to
+        // be turned away. It reuses the overdue red rather than adding a fifth
+        // card border colour — the two are told apart by the ClashIcon on the
+        // flag row, because making the BORDER the distinguishing signal is the
+        // colour-only-status mistake v17.11.0 exists to have fixed.
+        const cardBrd = clash
+          ? "var(--card-overdue-border)"
+          : warn
+            ? (warn.overdue ? "var(--card-overdue-border)" : "var(--card-warn-border)")
+            : lateSt
+              ? "var(--card-late-border)"   // v17.0.0 round 10: yellow, not the amber due-soon edge
+              : b._conflict
+                ? "var(--card-conflict-border)"
+                : (useStatusColor || isPending) ? sc.border : "var(--border-card-plain)";
+        const cardBrdW = (clash || warn || lateSt) ? "3px" : (useStatusColor || isPending) ? "3px" : "1px";
 
         // v17.6.0: the same "how long were they here" number survives the visit.
         // Seated shows the LIVE elapsed minutes (green, still running); completed
@@ -312,10 +395,13 @@ export const ListView = memo(function ListView({
         // confirmed→completed keeps its scheduled duration) — then no tag at all,
         // which is the point: never assert a stay that didn't happen.
         const stayed = b.status === "completed" ? stayedMins(b) : null;
+        // v17.15.5: the live counter keeps its success ink — it is the one
+        // number here that is still MOVING, and that was what the green fill
+        // said. The settled stay goes neutral, as its muted slate did.
         const durationTag = b.status === "seated" ? (
-          <SmallTag label={elapsedMin + " min"} style={{ background: "var(--app-success-solid)", color: "var(--text-on-accent)", border: "none" }} />
+          <TextFlag ink={FLAG_SUCCESS}>{elapsedMin + " min"}</TextFlag>
         ) : stayed != null ? (
-          <SmallTag label={"stayed " + stayed + " min"} style={{ background: "var(--bg-soft)", color: "var(--text-secondary)", border: "1px solid var(--border-soft)" }} />
+          <TextFlag ink={FLAG_NEUTRAL}>{"stayed " + stayed + " min"}</TextFlag>
         ) : null;
 
         // v17.15.2 (follow-up): the eleventh and twelfth banned triples. Both
@@ -346,35 +432,55 @@ export const ListView = memo(function ListView({
           </InlineAlert>
         ) : null;
 
+        // v17.15.5: `manual` keeps its word and gains no mark — see TextFlag.
+        // It renders only when `_manual && !_locked`, which walk-ins and
+        // drag-drops never hit (both set `_locked`), so it is a narrow case and
+        // a glyph for it would be a glyph nobody learns.
         const manualTag = (b._manual && !isLocked(b)) ? (
-          <SmallTag label="manual" style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
+          <TextFlag ink={FLAG_NEUTRAL}>manual</TextFlag>
         ) : null;
         const lockedTag = b._locked ? (
-          <SmallTag label="locked" style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
+          <CardFlag ink={FLAG_NEUTRAL} title="Locked to these tables — the optimiser will not move it">
+            <LockIcon size={IC.control} />
+          </CardFlag>
         ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (
-          <SmallTag label={<><StarIcon size={IC.inline} />{b.preferredTables.join("+")}</>} style={{ background: "var(--tag-flag)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
+          <CardFlag ink={FLAG_NEUTRAL} title={"Preferred tables: " + b.preferredTables.join(", ")}>
+            <StarIcon size={IC.control} />{b.preferredTables.join("+")}
+          </CardFlag>
         ) : null;
-        // v16.0.0: repeat no-show offender chip (same threshold as the timeline ⚠).
+        // v16.0.0: repeat no-show offender flag (same threshold as the block's).
         const noShowCt = nsMap[identityKey(b)] || 0;
-        // v17.8.0: solid, like every other tag in this row. The pale-fill +
-        // colour-matched-border + bold-coloured-text combination these three
-        // carried is the generic badge shape, and it sat inches from `manual`
-        // / `locked` / `★` / the seated `N min`, which are all solid-with-white.
-        // One row, two label systems. Solid wins because it is the app's own
-        // v17.7.0 status-label decision, already applied everywhere else.
-        // The ⚠ goes with it: an amber fill plus an amber warning glyph is the
-        // same signal twice (the banner restyle dropped its glyphs for this).
         const noShowTag = noShowCt >= 2 ? (
-          <SmallTag label={"no-show ×" + noShowCt} style={{ background: "var(--app-warn-solid)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
+          <CardFlag ink={FLAG_WARN} title={noShowCt + " past no-shows on this number"}>
+            <NoShowIcon size={IC.control} />{"×" + noShowCt}
+          </CardFlag>
         ) : null;
-        // v16.1.0: running-late tag (minutes past the booked time).
+        // v16.1.0: running-late flag (minutes past the booked time).
         const lateTag = lateSt ? (
-          <SmallTag label={lateMins(b, nowMins) + " min late"} style={{ background: "var(--app-warn-solid)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
+          <TextFlag ink={FLAG_WARN}>{lateMins(b, nowMins) + " min late"}</TextFlag>
         ) : null;
-        // v16.3.0: deposit chip (suggest/green tokens — a prepaid booking).
+        // v16.3.0: deposit — a prepaid booking. The AMOUNT stays visible here;
+        // on the block it fits only in the title. v17.9.0's lesson holds: the
+        // mark must never be the currency SYMBOL from settings/general, or
+        // "money has been taken" is a different shape per restaurant setting.
         const depositTag = (Number(b.deposit) || 0) > 0 ? (
-          <SmallTag label={(currency || "€") + b.deposit + " deposit"} style={{ background: "var(--app-success-solid)", color: "var(--text-on-accent)", border: "1px solid var(--border-glass)" }} />
+          <CardFlag ink={FLAG_SUCCESS} title={"Deposit " + (currency || "€") + b.deposit}>
+            <DepositIcon size={IC.control} />{(currency || "€") + b.deposit}
+          </CardFlag>
+        ) : null;
+        // v17.15.5: the double-booked marker. `findClashes` can return a pair
+        // whose `tables` is EMPTY — `canAssign` also rejects a pair when each
+        // booking takes two or more tables from one join cluster, and those
+        // sets need not intersect — so the table clause is conditional, exactly
+        // as TimelineBlock's is. Unreachable in the default layout by
+        // pigeonhole, reachable with a join group of four, which is an ordinary
+        // Settings → Layout edit.
+        const clashTag = clash ? (
+          <CardFlag ink={FLAG_DANGER} title={"Double-booked with " + clash.names.join(", ")
+            + (clash.tables.length ? " on " + (clash.tables.length === 1 ? "table " : "tables ") + clash.tables.join(", ") : "")}>
+            <ClashIcon size={IC.control} />double-booked
+          </CardFlag>
         ) : null;
 
         const notesEl = b.notes ? (
@@ -563,13 +669,26 @@ export const ListView = memo(function ListView({
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontWeight: FW.bold, fontSize: T.title, color: S.text }}>{b.name}</span>
                 <SBadge status={b.status} />
-                <span style={{ fontSize: T.body, color: S.text, fontWeight: FW.bold }}>{b.size + " pax"}</span>
-                {manualTag}
-                {lockedTag}
-                {prefTag}
-                {noShowTag}
-                {lateTag}
+                {/* v17.15.5: the party size as the block's own ring, not
+                    "4 pax". The `rim` is the card's, not the block's — see
+                    SizeRing: 0.55 white is a measurement taken against a
+                    SATURATED fill and is close to invisible on a card. Nothing
+                    is lost to a screen reader, because the card's own
+                    aria-label comes from `describeBooking`, which says
+                    "4 guests" and always has. */}
+                <SizeRing n={b.size} rim="var(--chip-neutral-border)" />
+                {/* v17.15.5: TimelineBlock's rail order — deposit, preferred,
+                    then the exception flags (locked / repeat-no-show), so the
+                    two views read the same left-to-right. `manual` sits with
+                    `locked` because it is the same fact one notch weaker, and
+                    the two counters that have no block counterpart come last. */}
                 {depositTag}
+                {prefTag}
+                {lockedTag}
+                {manualTag}
+                {noShowTag}
+                {clashTag}
+                {lateTag}
                 {durationTag}
               </div>
               <span style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>{b.time + "–" + end}</span>
