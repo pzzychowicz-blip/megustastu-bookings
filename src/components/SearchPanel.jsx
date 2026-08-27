@@ -13,9 +13,9 @@
 //   onClose()  — close the panel
 
 import { useState, useRef, useEffect } from "react";
-import { S, BLOCK_BG, BLOCK_INK, R, T, FW } from "../lib/constants";
+import { S, R, T, FW } from "../lib/constants";
 import { searchBookings, formatPhone } from "../lib/customers";
-import { Overlay, ModalTitle, mkInp, mkBtn, AutoHeight } from "./atoms";
+import { Overlay, ModalTitle, mkInp, mkBtn, AutoHeight, SBadge } from "./atoms";
 
 export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
   const [query, setQuery] = useState("");
@@ -41,11 +41,12 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
         <span style={{ flex: 1, minWidth: 0, fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "(no name)"}</span>
         <span style={{ fontSize: T.body, color: S.muted }}>{b.size + " pax"}</span>
         {b.phone ? <span style={{ fontSize: T.body, color: S.muted }}>{formatPhone(b.phone)}</span> : null}
-        {/* v17.7.0: a status LABEL renders solid everywhere — the same fill,
-            text and metrics as SBadge — so one label doesn't read at two
-            different weights depending on which screen you're looking at.
-            Was the tinted STATUS_COLORS treatment (sc.bg/sc.text/sc.border). */}
-        <span style={{ fontSize: T.small, fontWeight: FW.semi, borderRadius: R.pill, padding: "4px 10px", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, border: "1px solid var(--border-glass)", color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, textTransform: "capitalize" }}>{b.status}</span>
+        {/* v17.15.6: it IS `SBadge`. v17.7.0 gave this copy "the same fill, text
+            and metrics as SBadge" and the sentence stopped being true the moment
+            the atom moved: the icon arrived in v17.15.5 and the rim and metrics
+            in v17.15.6, and none of it could reach a span typed out by hand.
+            **A comment claiming parity with an atom is not parity with it.** */}
+        <SBadge status={b.status} />
       </button>
     );
   });

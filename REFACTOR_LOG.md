@@ -15748,3 +15748,46 @@ the other.** The same edit corrects that clause's claim that the solid rim is
 three hand-written COPIES carried, so the doc had been describing the drift
 rather than the atom.
 
+### 2. The icon reaches the badge's hand-written copies
+
+`SBadge` gained `StatusIcon` in v17.15.5 and **three** hand-written copies of it
+could not follow — ROADMAP named two, and the sweep found the third:
+
+| site | what it is |
+|---|---|
+| `PlanView.jsx:383` | the per-table day-queue popover |
+| `CustomersSettings.jsx:96` | a customer's booking-history row |
+| `SearchPanel.jsx:48` | a search result row (**not in ROADMAP**) |
+
+All three now render `<SBadge status={b.status} />`.
+
+**Doing the resize FIRST is what made this a near-invisible diff.** ROADMAP had
+flagged the unification as "not a pure find-replace" because both dense rows use
+`T.small` against the atom's `T.body`, so adoption would have grown them. After
+§1 the atom IS `T.small` — the exact size the copies already were — so each site
+changes only by gaining the mark and swapping `--border-glass` for `RIM_SOLID`.
+The concern that deferred this entry was dissolved by the other half of the same
+version rather than worked around.
+
+**Every one of the three carried a comment asserting parity with the atom** —
+"solid, like every other status label (see SBadge)", and in `SearchPanel` the
+fuller "the same fill, text and metrics as SBadge". Each was true when written
+and silently false afterwards. **A comment claiming parity with an atom is not
+parity with it**, and it is worse than no comment: it tells the next reader the
+question has been settled.
+
+`PlanView`'s **legend** (`:402`) is deliberately NOT converted, and the reason is
+recorded at the site: it is a key for what the FILL painted on the floor plan
+means, and the plan draws no icons — a mark there would promise the room shows
+something it does not. The popover above it is the opposite case, because its
+rows are bookings.
+
+**Verified live** (DEV, 375px and desktop): all three render the mark, and the
+Customers history row — the one with no `flex:1` child, and the reason ROADMAP
+asked for measurement — reports **`scrollWidth - clientWidth === 0`** on every
+row at 375px. No `flexWrap` was needed. Dead `BLOCK_BG`/`BLOCK_INK` imports
+pruned from the two files that lost their last use (lint is a hard gate);
+`PlanView` keeps both for the occupancy fill and the legend.
+
+Bundle: 333.55 → **333.32 kB** (90.42 → 90.39 kB gz).
+
