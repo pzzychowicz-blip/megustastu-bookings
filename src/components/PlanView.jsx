@@ -411,13 +411,27 @@ export const PlanView = memo(function PlanView({
   })() : null;
 
   // ── Legend + slider row ─────────────────────────────────────────────────────
-  // v17.15.6: deliberately NOT `SBadge`, though it is the same fill. This is a
-  // key for what the FILL painted on the floor plan means, and the plan draws
-  // no icons — a mark here would promise the room shows something it does not.
-  // The day-queue popover above is the opposite case: its rows are BOOKINGS,
-  // and a booking's status is named the same way everywhere.
+  // v17.15.6 argued AGAINST a mark here, and the argument was sound on its own
+  // terms: "the plan draws no icons — a mark here would promise the room shows
+  // something it does not." v17.15.7 changed the FACT that argument rested on.
+  // The room draws the mark now (see the table glyph below), so a colour-only
+  // key beside a colour-and-mark room would explain the half that never needed
+  // explaining — the sentence v17.11.0 wrote about the timeline's legend,
+  // arriving here one view later.
+  //
+  // The three chips are exactly the three marks a table can draw: `completed`
+  // never occupies (completed = table free) and `cancelled` is filtered out of
+  // `day`, so this key is COMPLETE rather than merely short.
+  //
+  // Still deliberately not `SBadge`: this keys a FILL, and SBadge is a
+  // BOOKING's badge. The day-queue popover above is the opposite case — its
+  // rows are bookings, so they take the atom. `IC.inline` rather than the
+  // glyph's `IC.control`, matching TimelineView's legend: a key is read once,
+  // a mark on the plan is scanned during service.
   const legend = ["seated", "confirmed", "pending"].map((s) => (
-    <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi, textTransform: "capitalize" }}>{s}</span>
+    <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi, textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <StatusIcon status={s} size={IC.inline} />{s}
+    </span>
   ));
 
   return (
