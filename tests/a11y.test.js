@@ -1158,6 +1158,89 @@ describe("the List card's actions stay named by their ancestor (v17.15.6)", () =
   });
 });
 
+describe("a status painted as a FILL is never colour alone (WCAG 1.4.1)", () => {
+  // The defect this catches, stated once: v17.11.0 put StatusIcon on the
+  // timeline block because `BLOCK_BG[b.status]` and nothing else is a 1.4.1
+  // failure — and the identical defect sat on the FLOOR PLAN for four more
+  // versions, on the view where it bites hardest (a block at least carries the
+  // guest's name; a table carries a table id). Nothing anywhere in tests/ so
+  // much as mentioned StatusIcon, so both halves of that were invisible.
+  //
+  // The discriminator is STRUCTURAL, not a guessed spelling: `BLOCK_BG[expr]`
+  // is a status being PAINTED — the value comes from a booking — while
+  // `BLOCK_BG.pending` is the colour being BORROWED for something that is not a
+  // status (App's waitlist count badge, WaitlistPanel's title pill, WalkinForm's
+  // "Add to waitlist"). Only the first kind owes a mark, and only the first kind
+  // can be found without guessing at spellings — the trap v17.15.6's
+  // /code-review named.
+  //
+  // Per-FILE with a recorded COUNT, not one mark per `BLOCK_BG[` site. Two real
+  // sites index it for an ANIMATION rather than an indicator — ListView's
+  // .mgt-wipe-ltr status wash and BookingFormModal's save flash — and a rule
+  // demanding a mark beside those gets muted within a day. The count is what
+  // stops a file passing on HALF a fix: PlanView has two surfaces, and marking
+  // only the legend is the exact half-measure v17.15.7 exists to avoid.
+  const PAINTS_STATUS = {
+    "components/PlanView.jsx":         { marks: 2, what: "the table glyph (v17.15.7) and the legend chip" },
+    "components/TimelineView.jsx":     { marks: 2, what: "the block's flag rail and the legend chip" },
+    "components/ListView.jsx":         { marks: 1, what: "the card's status buttons" },
+    "components/BookingFormModal.jsx": { marks: 1, what: "the edit form's Status row" },
+    "components/QuickStatusPopup.jsx": { marks: 1, what: "the four status buttons" },
+    "components/atoms.jsx":            { marks: 1, what: "SBadge" },
+  };
+
+  const jsxFilesUnder = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? jsxFilesUnder(join(dir, e.name))
+      : /\.jsx?$/.test(e.name) ? [join(dir, e.name)] : []);
+  // Comments stripped, for this file's standing reason: PlanView's own mark
+  // carries a paragraph naming `BLOCK_BG` and StatusIcon, and a guard that
+  // reads it is measuring the documentation.
+  const painting = jsxFilesUnder(SRC)
+    .map((f) => [f.slice(SRC.length + 1), stripComments(readFileSync(f, "utf8")).join("\n")])
+    .filter(([, src]) => /BLOCK_BG\[/.test(src));
+
+  it("every surface that indexes BLOCK_BG by status is registered", () => {
+    const unregistered = painting.map(([rel]) => rel).filter((rel) => !(rel in PAINTS_STATUS));
+    expect(unregistered, "a new surface paints a booking's status as a fill: " +
+      unregistered.join(", ") + " — register it above with the number of marks it " +
+      "draws, so the next check can measure it").toEqual([]);
+  });
+
+  it("the registry cannot rot into a list of files that stopped painting", () => {
+    const found = new Set(painting.map(([rel]) => rel));
+    const stale = Object.keys(PAINTS_STATUS).filter((rel) => !found.has(rel));
+    expect(stale, "registered but no longer indexes BLOCK_BG: " + stale.join(", ") +
+      " — drop the entry rather than leaving a guard pointed at nothing").toEqual([]);
+  });
+
+  it("each of them draws exactly the marks it is recorded as drawing", () => {
+    for (const [rel, src] of painting) {
+      const want = PAINTS_STATUS[rel];
+      if (!want) continue;   // the first test owns that failure
+      expect(count(src, /<StatusIcon\b/g),
+        rel + " should draw " + want.marks + " status mark(s) — " + want.what +
+        ". A fill IS the status on these surfaces, and colour alone is WCAG " +
+        "1.4.1. Added a surface? Say so above. Removed one? Say that too.").toBe(want.marks);
+    }
+  });
+
+  it("the plan's mark is drawn only where the FILL says a status", () => {
+    // `isBlocked` wins in fillFor, and a blocked table CAN still hold a booking.
+    // Without this clause a red-striped table draws a mark contradicting its own
+    // fill — and `blocked` is not a booking status.
+    has(Plan, "blocked outranks the occupant", /\{!blocked && occ \?/,
+      "the mark must mirror fillFor's precedence, or the two disagree on the one " +
+      "table where it matters");
+  });
+
+  it("the sweep is actually finding surfaces", () => {
+    // The tautology guard this file was built on: if the regex stops matching,
+    // every check above passes by looking at nothing.
+    expect(painting.length, "if this drops the guard has stopped looking")
+      .toBeGreaterThanOrEqual(6);
+  });
+});
+
 describe("the gate proves itself", () => {
   // tests/style-check.test.js's lesson, applied here: reading a checker does
   // not catch a blind spot. These run the helpers against strings that MUST
