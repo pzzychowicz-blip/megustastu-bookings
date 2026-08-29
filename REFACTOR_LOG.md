@@ -16113,3 +16113,139 @@ element.
 Two new guards (the nameless-booking fallback across all four banners; the
 structural pin), both proven against known-bad input. **641 tests.**
 
+
+---
+
+## v17.15.7 — the floor plan says its status out loud
+
+**Date:** 2026-08-29 · **Branch:** `fix/v17.15.7-plan-status-mark` ·
+**Files:** `src/components/PlanView.jsx`, `tests/a11y.test.js`, `src/App.jsx`
+(version), CLAUDE.md, DESIGN.md, GLOSSARY.md, ROADMAP.md ·
+**Behavioural change:** yes — a new mark on every occupied floor-plan table and
+on the three legend chips · **646 tests** (+5).
+
+### What was wrong
+
+`PlanView` encoded a booking's status as **table fill colour and nothing else**.
+That is WCAG 1.4.1, and it is the same defect v17.11.0 fixed on the timeline
+block by adding `StatusIcon` to its flag rail — left standing here four versions
+longer, on the view where it costs more: a timeline block at least carries the
+guest's name, a floor-plan table carries a table id.
+
+The day-queue popover badge was already right (v17.15.6 swapped it to `SBadge`).
+The visible symptom Patryk reported was the **legend**, which carried an explicit
+v17.15.6 comment arguing *against* a mark: "the plan draws no icons — a mark here
+would promise the room shows something it does not." That argument was sound **on
+its own terms**, which is why the fix was not to overrule it but to change the
+fact it rested on. Marking the legend alone would have been the half-measure the
+comment correctly predicted.
+
+### Three decisions, each load-bearing
+
+**1. `!blocked && occ`, not `occ`.** `isBlocked` wins in `fillFor`, and a blocked
+table **can still hold a booking**. Keyed on the occupant alone the mark painted
+on top of the red stripe pattern, contradicting its own fill — and `blocked` is
+not a booking status. `blocked` is hoisted so the mark, the fill and the existing
+`ariaLabel` read ONE value rather than calling `isBlocked` three times and
+risking disagreement. Verified live: a booked table blocked across its own
+minutes draws stripes, zero marks, and speaks "Table 1B, blocked".
+
+**2. Centre, never a corner.** `TableGlyph`'s inner `<g>` counter-rotates so
+children stay upright — but a child is therefore drawn **translated and not
+rotated**, so a corner offset lands on a different edge of the shape at every
+table rotation. The centre column is the one place rotation cannot move it,
+which is why the id pill has always sat there. Verified on table 7 at
+`rotate(330)`: mark upright, centred, inside the shape.
+
+**3. `color` on the wrapping `<g>`, not on the icon.** `Svg` (`Icons.jsx`)
+destructures `size` / `stroke` / `children` and **drops every other prop**, so no
+`style`, `x`, `y` or `pointerEvents` reaches the element — which is what makes
+the wrapper structural rather than decoration. Without the `color` there,
+`currentColor` resolves to the inherited `S.text` and paints near-black ink on a
+saturated fill in light mode: silent, and it looks deliberate. Measured live as
+`rgb(255,255,255)`.
+
+**No transition, and that is the answer rather than an omission.** The mark
+mounts and unmounts with the occupant, and CSS cannot fade an element that is not
+there — easing it in while it snaps out is precisely the one-way transition
+`DESIGN.md` bans. The fill still fades over `M.status`, so for one `M.status` the
+fill is mid-way while the mark is already the new one. The timeline block does
+exactly the same thing.
+
+### The test that would have caught it
+
+Nothing in `tests/` so much as mentioned `StatusIcon`, which is why both halves
+went unseen. The new guard is a **registry with a coverage sweep**, and its
+discriminator is structural rather than a guessed spelling: `BLOCK_BG[expr]` is a
+status being *painted*, `BLOCK_BG.pending` is the colour *borrowed* for something
+that is not a status (App's waitlist count badge, `WaitlistPanel`'s title,
+`WalkinForm`'s "Add to waitlist"). The sweep found exactly six painting files and
+correctly excluded all three borrowers.
+
+It records a **count per file**, not one mark per site — two real sites index
+`BLOCK_BG` for an *animation* rather than an indicator (`ListView`'s
+`.mgt-wipe-ltr` status wash, `BookingFormModal`'s save flash), and a rule firing
+on those gets muted within a day. The count is what stops a file passing on
+**half** a fix, which is the exact failure mode this version exists to avoid.
+Proven against known-bad input: run against pre-change `PlanView.jsx` it fails
+twice (`expected +0 to be 2`).
+
+### Verified live (DEV, `npm run dev`)
+
+All three marked statuses on real tables (confirmed ✓, pending ⌛, seated chair);
+free, resetting and blocked unmarked; the blocked-with-occupant case above;
+rotation at 330°; the pending → confirmed swap reading as one change with the
+fill; left-click still opening the day-queue popover with **no** `[role="button"]`
+teleport (the new `<g>` carries no role); `aria-hidden`, `pointer-events: none`
+and mark-inside-shape all measured; console clean.
+
+### One thing measured and recorded rather than fixed
+
+**Non-text contrast (WCAG 1.4.11) of the white mark**, composited over the plan
+card: **pending 1.83:1 light / 2.20:1 dark, confirmed 2.92:1 light / 3.58:1 dark,
+seated 4.59:1 / 4.58:1.** Three of six are under the 3:1 a graphical object
+wants. This is **not new** — it is the app's existing status vocabulary, already
+shipping identically on the timeline block's rail and in `SBadge` — and the
+recorded `--block-pending` / `--block-confirmed` text exemptions (floors 1.75 and
+2.8) are consistent with these numbers. Changing it means a halo or an outline on
+the mark, i.e. a new treatment, which belongs in its own version. Left as
+Patryk's decision, on ROADMAP.
+
+Also corrected while measuring: **`--block-seated` is NOT theme-invariant**
+(`rgba(24,111,56,.85)` light vs `rgba(32,152,76,.85)` dark) — `confirmed` and
+`pending` are, and all three inks are `#ffffff` in both themes. The planning note
+that "BLOCK_BG are theme-invariant solids" was true of two of the three.
+
+### `/code-review` fixes
+
+**1. The mark had no fallback; the fill it must agree with does.** `sanitize`
+writes `status: b.status || "confirmed"`, so **any truthy string survives a read**,
+and `database.rules.json` validates no booking field shapes — an unrecognised
+status is reachable, not hypothetical. `fillFor` answers it with
+`BLOCK_BG[b.status] || BLOCK_BG.confirmed`; `StatusIcon` answers it with `null`.
+So a booking with `status: "foo"` painted a **confirmed-amber table carrying no
+mark whatsoever** — precisely the colour-only status this version exists to
+remove, reintroduced in the one case nobody would think to look at, and
+indistinguishable on screen from an ordinary confirmed booking.
+
+`markStatus` mirrors `fillFor`'s fallback. The fill already asserts "confirmed"
+there, so a mark agreeing with it is strictly better than a mark being absent —
+the invariant is that the two channels never disagree, not that either is right
+about a malformed status.
+
+Both fallbacks are pinned **together** in `tests/a11y.test.js`, because it is
+their agreement that matters rather than either alone: if `fillFor` ever stops
+falling back, the mark's fallback becomes the thing that disagrees. Proven
+against known-bad input — reverting `markStatus` to `occ.status` fails the new
+assertion.
+
+**2. `jsxFilesUnder` was defined twice, byte for byte, in one file.** The new
+sweep copied the walker the Toggle sweep already had, in a different `describe`
+scope — two file-walkers that must agree about which files a coverage sweep can
+see, with nothing keeping them in step. Narrow one later and the other keeps
+reporting OK over a different set of files, which lint, `check:style` and the
+contrast registry are all structurally unable to notice. This is the
+`clampStep` / `OutlineChip` defect in the gate's own back yard. One module-scope
+`srcFilesMatching(re)`, two call sites.
+
+**647 tests.**

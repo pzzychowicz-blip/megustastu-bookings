@@ -309,7 +309,19 @@ explaining why is usually the one to read.
   timeline and the floor plan, i.e. **during service**) carried no marks at all,
   so the same five decisions looked different in three places. `StatusIcon`
   (`Icons.jsx`) is now the single source all three read — the List card, the edit
-  form's Status row, the popup. **It is exported as a COMPONENT, not as the bare
+  form's Status row, the popup. v17.11.0 added the timeline block's rail and
+  v17.15.7 the **floor-plan table**, which closes the last surface where a
+  status was colour and nothing else. That one took four versions longer than
+  the timeline's for no better reason than that a table is smaller than a
+  block, and it was the worse of the two: a block at least carries the guest's
+  name, a table carries a table id. **The plan's mark also had to learn a rule
+  the flat surfaces never needed — on a rotated SVG glyph, only the CENTRE
+  COLUMN is rotation-invariant.** `TableGlyph` counter-rotates its label group
+  so children stay upright, but a child is drawn translated and NOT rotated, so
+  a mark offset to a corner lands on a different edge of the shape at every
+  table rotation. Anything counter-rotated to stay readable must also be
+  centred; that is why the id pill has always sat there, and the mark now sits
+  directly under it. **It is exported as a COMPONENT, not as the bare
   map**: a plain const export from that file breaks Fast Refresh
   (`react-refresh/only-export-components` is a lint ERROR and CI gates on zero),
   and a call site should ask for "the mark for this status" rather than hold a

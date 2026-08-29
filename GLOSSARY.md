@@ -46,8 +46,9 @@ this file.
 ## 2. Booking statuses
 
 Five statuses, one flag. `StatusIcon` (`Icons.jsx`) is the single source of the
-mark for each — the List card, the edit form's Status row and the quick-status
-popup all read it, so they cannot drift.
+mark for each — the List card, the edit form's Status row, the quick-status
+popup, the timeline block and (v17.15.7) the floor-plan table all read it, so
+they cannot drift.
 
 | What you see | Correct term | What it does |
 |---|---|---|
@@ -137,11 +138,12 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | The drawn room | **floor plan** (`layout.floorPlan`) | Tables, walls and doors, in cm. |
 | One drawn table | **table glyph** (`TableGlyph`, `FloorGlyphs.jsx`) | Shape, size, rotation, per-side chairs. Operable — Enter/Space when it has an `onClick`. |
 | The colour filling a table | **occupancy fill** | seated · confirmed · pending · free · blocked, at the selected minute. |
+| The small white mark under a table's id | **status mark** (`StatusIcon`, v17.15.7) | The occupant's status as a SHAPE, so the fill is never the only signal. Drawn only where the fill names a status — never on blocked, free or resetting. |
 | Diagonal hatching | **blocked** | A table block covers this minute. |
 | The scrolling ruler under a fixed centre marker | **time axis** (`TimeAxis.jsx`) | Scrub the day. Snaps to 15 min on idle; tap to scroll a time to centre. |
 | The pill in the middle of the header row | **selected-time badge** | The minute the fills are drawn for. Sits exactly on the axis's centre marker. |
 | "Now" button | **now button** | Jumps the selection to the current minute and re-centres the tape. Today only. |
-| seated / confirmed / pending swatches, top right | **legend** | What the fills mean. |
+| seated / confirmed / pending swatches, top right | **legend** | What the fills mean. Each chip carries its status mark, because the room draws one. The three are the complete set a table can show. |
 | "free in about N minutes" pill | **freeing-soon pill** (`freeingSoon`, `freeSoonWindow`) | A table about to turn over. |
 | Dashed muted outline | **resetting** | The table is inside its turnaround buffer. |
 | "Walk-in here" in the tap popover | **walk-in shortcut** | Offered on **free** tables today only. |
