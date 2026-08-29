@@ -16215,3 +16215,37 @@ Also corrected while measuring: **`--block-seated` is NOT theme-invariant**
 (`rgba(24,111,56,.85)` light vs `rgba(32,152,76,.85)` dark) — `confirmed` and
 `pending` are, and all three inks are `#ffffff` in both themes. The planning note
 that "BLOCK_BG are theme-invariant solids" was true of two of the three.
+
+### `/code-review` fixes
+
+**1. The mark had no fallback; the fill it must agree with does.** `sanitize`
+writes `status: b.status || "confirmed"`, so **any truthy string survives a read**,
+and `database.rules.json` validates no booking field shapes — an unrecognised
+status is reachable, not hypothetical. `fillFor` answers it with
+`BLOCK_BG[b.status] || BLOCK_BG.confirmed`; `StatusIcon` answers it with `null`.
+So a booking with `status: "foo"` painted a **confirmed-amber table carrying no
+mark whatsoever** — precisely the colour-only status this version exists to
+remove, reintroduced in the one case nobody would think to look at, and
+indistinguishable on screen from an ordinary confirmed booking.
+
+`markStatus` mirrors `fillFor`'s fallback. The fill already asserts "confirmed"
+there, so a mark agreeing with it is strictly better than a mark being absent —
+the invariant is that the two channels never disagree, not that either is right
+about a malformed status.
+
+Both fallbacks are pinned **together** in `tests/a11y.test.js`, because it is
+their agreement that matters rather than either alone: if `fillFor` ever stops
+falling back, the mark's fallback becomes the thing that disagrees. Proven
+against known-bad input — reverting `markStatus` to `occ.status` fails the new
+assertion.
+
+**2. `jsxFilesUnder` was defined twice, byte for byte, in one file.** The new
+sweep copied the walker the Toggle sweep already had, in a different `describe`
+scope — two file-walkers that must agree about which files a coverage sweep can
+see, with nothing keeping them in step. Narrow one later and the other keeps
+reporting OK over a different set of files, which lint, `check:style` and the
+contrast registry are all structurally unable to notice. This is the
+`clampStep` / `OutlineChip` defect in the gate's own back yard. One module-scope
+`srcFilesMatching(re)`, two call sites.
+
+**647 tests.**

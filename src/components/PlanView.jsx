@@ -525,6 +525,19 @@ export const PlanView = memo(function PlanView({
               // are two renderings of one fact, and `fillFor` reads it a third
               // time. See the mark below for why the precedence matters.
               const blocked = isBlocked(t.id);
+              // v17.15.7 /code-review: the status the MARK draws, and it must
+              // fall back exactly where `fillFor` does. `sanitize` writes
+              // `status: b.status || "confirmed"`, so ANY truthy string survives
+              // a read, and the security rules impose no shape validation on a
+              // booking's fields — an unrecognised status is reachable. `fillFor`
+              // answers it with `BLOCK_BG[b.status] || BLOCK_BG.confirmed`;
+              // `StatusIcon` answers it with null. Without this line the table
+              // is painted confirmed-amber and carries NO mark — a colour-only
+              // status, i.e. precisely the defect this version exists to remove,
+              // in the one case nobody would think to look at. The fill already
+              // asserts "confirmed" here; the mark agreeing with it is strictly
+              // better than the mark being absent.
+              const markStatus = occ ? (BLOCK_BG[occ.status] ? occ.status : "confirmed") : null;
               // /code-review: the occupant clause is `describeBooking` with the
               // table dropped — the table is already the subject of this
               // sentence. Same source as the List card and the timeline block,
@@ -597,10 +610,10 @@ export const PlanView = memo(function PlanView({
                       bans. The fill still fades over M.status, so for one M.status
                       the fill is mid-way while the mark is already the new one —
                       exactly what the timeline block does. */}
-                  {!blocked && occ ? (
+                  {!blocked && markStatus ? (
                     <g transform={"translate(" + (-IC.control / 2) + "," + MARK_TOP + ")"}
-                      style={{ color: BLOCK_INK[occ.status] || "var(--text-on-accent)", pointerEvents: "none" }}>
-                      <StatusIcon status={occ.status} size={IC.control} />
+                      style={{ color: BLOCK_INK[markStatus] || "var(--text-on-accent)", pointerEvents: "none" }}>
+                      <StatusIcon status={markStatus} size={IC.control} />
                     </g>
                   ) : null}
                   {soon != null ? (

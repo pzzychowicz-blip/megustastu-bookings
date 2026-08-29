@@ -84,6 +84,26 @@ function count(src, re) {
   return (src.match(re) || []).length;
 }
 
+// Every file under `src/` whose comment-stripped source matches `re`, as
+// [path-relative-to-src, stripped source] pairs.
+//
+// /code-review (v17.15.7): this walk existed TWICE, byte for byte, in two
+// different describe scopes — the Toggle sweep and the status-fill sweep — and
+// a third guard would have made three. Two file-walkers that must agree about
+// which files a coverage sweep can see, with nothing keeping them in step, is
+// the `clampStep` / `OutlineChip` defect in this file's own back yard: narrow
+// one of them later and the other keeps reporting OK on a different set of
+// files. Lint cannot see it, check:style cannot see it, and neither can the
+// contrast registry.
+function srcFilesMatching(re) {
+  const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(join(dir, e.name))
+      : /\.jsx?$/.test(e.name) ? [join(dir, e.name)] : []);
+  return walk(SRC)
+    .map((f) => [f.slice(SRC.length + 1), stripComments(readFileSync(f, "utf8")).join("\n")])
+    .filter(([, src]) => re.test(src));
+}
+
 // The full text of an element's OPENING tag, however long it is — JSX inline
 // style objects here run to hundreds of characters and grow. It walks to the
 // `>` that closes the tag, tracking brace depth and quotes so a `>` inside an
@@ -592,12 +612,7 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
   // version exists to remove, walking past the gate built to stop it. It walks
   // all of `src/` now. `atoms.jsx` is NOT excluded either — an atom composing
   // Toggle has the same obligation as any other caller.
-  const jsxFilesUnder = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? jsxFilesUnder(join(dir, e.name))
-      : /\.jsx?$/.test(e.name) ? [join(dir, e.name)] : []);
-  const withToggle = jsxFilesUnder(SRC)
-    .map((f) => [f.slice(SRC.length + 1), stripComments(readFileSync(f, "utf8")).join("\n")])
-    .filter(([, src]) => /<Toggle[\s/>]/.test(src));
+  const withToggle = srcFilesMatching(/<Toggle[\s/>]/);
 
   // atoms.jsx is a multi-export file and `Collapsible`'s header button comes
   // FIRST, so a file-wide search here measures the wrong control — which is
@@ -1189,15 +1204,10 @@ describe("a status painted as a FILL is never colour alone (WCAG 1.4.1)", () => 
     "components/atoms.jsx":            { marks: 1, what: "SBadge" },
   };
 
-  const jsxFilesUnder = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? jsxFilesUnder(join(dir, e.name))
-      : /\.jsx?$/.test(e.name) ? [join(dir, e.name)] : []);
   // Comments stripped, for this file's standing reason: PlanView's own mark
-  // carries a paragraph naming `BLOCK_BG` and StatusIcon, and a guard that
+  // carries a paragraph naming `fillFor` and `isBlocked`, and a guard that
   // reads it is measuring the documentation.
-  const painting = jsxFilesUnder(SRC)
-    .map((f) => [f.slice(SRC.length + 1), stripComments(readFileSync(f, "utf8")).join("\n")])
-    .filter(([, src]) => /BLOCK_BG\[/.test(src));
+  const painting = srcFilesMatching(/BLOCK_BG\[/);
 
   it("every surface that indexes BLOCK_BG by status is registered", () => {
     const unregistered = painting.map(([rel]) => rel).filter((rel) => !(rel in PAINTS_STATUS));
@@ -1228,9 +1238,26 @@ describe("a status painted as a FILL is never colour alone (WCAG 1.4.1)", () => 
     // `isBlocked` wins in fillFor, and a blocked table CAN still hold a booking.
     // Without this clause a red-striped table draws a mark contradicting its own
     // fill — and `blocked` is not a booking status.
-    has(Plan, "blocked outranks the occupant", /\{!blocked && occ \?/,
+    has(Plan, "blocked outranks the occupant", /\{!blocked && markStatus \?/,
       "the mark must mirror fillFor's precedence, or the two disagree on the one " +
       "table where it matters");
+  });
+
+  it("the plan's mark falls back exactly where the FILL falls back", () => {
+    // /code-review (v17.15.7): `sanitize` writes `status: b.status || "confirmed"`
+    // and the security rules validate no booking field shapes, so an unrecognised
+    // status is reachable. `fillFor` answers it with `|| BLOCK_BG.confirmed`;
+    // `StatusIcon` answers it with null. Without a matching fallback the table is
+    // painted confirmed-amber and carries NO mark — a colour-only status, which is
+    // the exact defect this describe exists to catch, in the one case nobody looks
+    // at. The two fallbacks are pinned TOGETHER because it is their AGREEMENT that
+    // matters, not either one alone.
+    has(Plan, "fillFor's fallback", /BLOCK_BG\[b\.status\] \|\| BLOCK_BG\.confirmed/,
+      "if fillFor stops falling back to confirmed, the mark's fallback below is " +
+      "now the thing that disagrees — change both or neither");
+    has(Plan, "the mark's fallback", /BLOCK_BG\[occ\.status\] \? occ\.status : "confirmed"/,
+      "an unrecognised status must draw the mark its fill already claims, or the " +
+      "fill says confirmed while the mark says nothing at all");
   });
 
   it("the sweep is actually finding surfaces", () => {
