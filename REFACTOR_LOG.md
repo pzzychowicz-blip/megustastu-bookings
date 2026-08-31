@@ -16827,3 +16827,69 @@ Live on DEV: 505 bookings, both views render, six timeline blocks, no `NaN`
 anywhere in the document, console clean, and `lateMins` producing real figures
 (520 / 400 / 280 / 160) through the new prop. 716 tests, 0 lint errors,
 335.61 kB / 91.49 kB gz.
+
+### 11 · The write path under test (commit 4/4)
+
+**Files:** `src/lib/write-path.js` (new), `tests/write-path.test.js` (new),
+`src/hooks/usePersistence.js` (753 → 705 lines) · **Behavioural change:** none
+intended; the bodies moved verbatim and were then parameterised ·
+**747 tests** (+31).
+
+§7 of the crash-test hand-off, and the reason it outlives the fixes: **737 lines
+that decide whether a booking reaches the server had never been executed by a
+test.** Everything the report says about the retry queue, the stale gate, the
+resync and the dedupe window was established by *reading the code* — which is
+also why it rates its own confidence at 55%. Two sessions reached this
+independently, 2A because the retry logic could not be attacked from outside and
+2B because `pastCloseMins` was locked in the same file.
+
+Moved: `contentKey`, `bookingChanged`, `stampForWrite`, `buildPatch`,
+`patchSignature`, `isDuplicatePatch`, `isStaleGap`, `retryDecision`, and the
+`STALE_GAP_MS` / `MAX_RETRIES` / `DEDUPE_WINDOW_MS` constants.
+
+**The monotonic stamp is THREADED, not hidden.** `buildPatch(prev, computed,
+lastStamp, nowMs)` returns `{patch, lastStamp}`, so the ref stays in the hook
+where refs belong and the arithmetic becomes something a test can drive. That
+change is what surfaced a property the old closure made invisible: **every child
+of one patch gets a distinct, ascending stamp**, which cannot come from the wall
+clock (they share a millisecond) and only ever came from the counter.
+
+**What deliberately did NOT move:** the refs, the listeners, the effects, every
+`setState`. Restructuring the write path was explicitly ruled out for this
+version — it already carries three behavioural fixes, and a bisect has to be able
+to tell them apart. Rewriting the write path is also how this repo has lost
+production data twice.
+
+### 12 · What the tests pin, and what a wrong premise cost
+
+31 tests, and the ones worth naming assert what four major versions of comments
+have claimed: the stamp clears BOTH bars (the device counter, for StrictMode;
+the booking's stored value, for clock skew); `baseUpdatedAt` carries the stored
+stamp on an update and **0 on a create**, which is the v16.0.0 CAS that closed
+the 2026-07-05 incident and which v17.16.1's rules now require explicitly; an
+empty diff produces no write; a deletion becomes `{id: null}`; the dedupe window
+admits a genuine change and refuses a byte-identical redispatch; the retry cap
+terminates.
+
+Proven against a sabotaged build, three ways: dropping the device-counter bar
+fails 4, always claiming CAS base 0 — the 2026-07-05 hole exactly — fails 2, and
+an off-by-one retry cap fails 2.
+
+One test was wrong rather than the code, and it is the useful one. "The signature
+is stable across the fresh stamps" first drove two patches with counters of 0 and
+50 against a clock of 1000 — the clock wins both times, so the stamps were
+*equal* and the premise never held. The real StrictMode case is the second invoke
+sharing the millisecond with a counter already advanced PAST the clock. Left in
+the comment, because a test that cannot fail for its stated reason is worse than
+no test.
+
+### 13 · Verification
+
+Live end-to-end on DEV, which is the only thing that proves an extracted write
+path still writes: a new booking created through the form, **505 → 506 bookings
+after a full reload**, no refusal banner, console clean. Local state alone would
+have looked identical before the reload.
+
+`npm run build` 335.96 kB / 91.64 kB gz · `npm test` **747 passed (24 files)** ·
+`npm run lint` 0 errors, 71 warnings (the standing baseline) · `npm run
+check:style` OK.

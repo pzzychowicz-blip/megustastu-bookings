@@ -24,19 +24,14 @@ import { db } from "../firebase";
 import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry, pastCloseMins, seatedElapsed } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError, onDbError } from "../lib/dbError";
+// v17.16.2: the pure write-path core. Everything that decides WHETHER and in
+// what shape a booking reaches the server now lives in one testable module;
+// this hook keeps the refs, listeners, effects and setState. See its header.
+import {
+  buildPatch, patchSignature, isDuplicatePatch,
+  isStaleGap, retryDecision, STALE_GAP_MS, MAX_RETRIES,
+} from "../lib/write-path";
 import { todayStr } from "../lib/day";
-
-// v15.2.0: heartbeat-gap threshold for the freshness/resync gate. A foreground
-// tab ticks the heartbeat every 10s; a backgrounded tab's timers throttle to
-// ~60s. 90s is above both, so normal operation never trips it — but any real
-// OS sleep / lid-close (minutes-to-hours of a frozen event loop) does. See the
-// "Freshness / resync gate" block below.
-const STALE_GAP_MS = 90000;
-
-// v15.4.0: how many times a blocked/rejected user write is auto-replayed on
-// freshly-resynced data before giving up and surfacing a red error. ~3 covers
-// the realistic stale-wake / concurrent-reject cases without looping forever.
-const MAX_RETRIES = 3;
 
 // v17.10.1: how long `.info/connected` may stay false, with the page in the
 // FOREGROUND, before we reset the SDK's reconnect backoff ourselves.
@@ -79,14 +74,6 @@ const RECONNECT_KICK_MAX_MS = 120000;
 // transport that can never work always will.
 const LOAD_TIMEOUT_MS = 15000;
 
-
-// v15.5.0: content signature of a booking EXCLUDING its `updatedAt` stamp, so the
-// write-diff only flags bookings whose actual fields changed (not ones that merely
-// carry a fresher server stamp). Booking objects are plain JSON values and unchanged
-// ones are Object.assign({},b) copies (identical key order), so a stringify compare
-// is stable here. `bookingChanged` is the diff predicate the per-node write uses.
-function contentKey(b){const c=Object.assign({},b);delete c.updatedAt;return JSON.stringify(c);}
-function bookingChanged(a,b){return contentKey(a)!==contentKey(b);}
 
 export function usePersistence({ autoOptimizer, nowMins }){
   const [bookings, setBookings] = useState([]);
@@ -208,7 +195,8 @@ export function usePersistence({ autoOptimizer, nowMins }){
     if(!queue.length) return;
     pendingRetriesRef.current=[];
     queue.forEach(function(item){
-      if(item.tries<MAX_RETRIES) saveBookings(item.fn,false,item.tries+1);
+      const d=retryDecision(item.tries);
+      if(d.action==="retry") saveBookings(item.fn,false,d.tries);
       else setWriteWarning("Couldn't save a change after several attempts — please re-check and try again.");
     });
   }
@@ -285,7 +273,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
     // snapshot may be stale, so a frozen tab's stale data never lands on the server.
     // This is NOT a red error: a user write is PARKED for auto-replay on freshly-
     // resynced data (resync() drains the queue), and (v15.6.0) shown optimistically.
-    if(Date.now()-lastBeatRef.current>STALE_GAP_MS) gapTrip();
+    if(isStaleGap(lastBeatRef.current,Date.now())) gapTrip();
     if(staleRef.current){
       console.warn("[SAFE] bookings write held — local data may be stale; queued for resync + retry, shown optimistically.");
       if(typeof next==="function"&&!isSilent){
@@ -303,38 +291,6 @@ export function usePersistence({ autoOptimizer, nowMins }){
       return false;
     }
     let dispatched=true;
-    // v15.5.0: stamp a booking for a child write — a monotonic `updatedAt` that is
-    // (a) strictly above this device's last issued stamp (survives StrictMode's
-    // double-invoke: the 2nd write gets a higher stamp, so the rule accepts it
-    // rather than rejecting an equal one), and (b) strictly above the booking's
-    // own last-seen server value (survives cross-device clock skew: a behind-clock
-    // device still writes a stamp the server will accept). Returns a copy — never
-    // mutates React state; the real value lands back via the onValue echo.
-    // v16.0.0: also carries `baseUpdatedAt` (the CAS base — see the ref block
-    // above). Per-write metadata only: `sanitize` deliberately does NOT whitelist
-    // it, so it never enters app state; each write overwrites the whole child,
-    // refreshing the stored copy.
-    function stampForWrite(b,old){
-      const t=Math.max(Date.now(),(old&&Number(old.updatedAt)||0)+1,lastStampRef.current+1);
-      lastStampRef.current=t;
-      return Object.assign({},b,{updatedAt:t,baseUpdatedAt:old?(Number(old.updatedAt)||0):0});
-    }
-    // Diff prev vs computed → a multi-path patch of ONLY changed children
-    // ({id: stampedBooking}) plus deletions ({id: null}). Empty patch ⇒ no write.
-    function buildPatch(prev,computed){
-      const prevById={};
-      (prev||[]).forEach(function(b){ if(b&&b.id!=null) prevById[b.id]=b; });
-      const seen={};
-      const patch={};
-      computed.forEach(function(b){
-        if(!b||b.id==null) return;
-        seen[b.id]=true;
-        const old=prevById[b.id];
-        if(!old||bookingChanged(old,b)) patch[b.id]=stampForWrite(b,old);
-      });
-      Object.keys(prevById).forEach(function(id){ if(!seen[id]) patch[id]=null; });
-      return patch;
-    }
     function persist(prev,computed){
       if(!bookingsLoaded.current){
         console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
@@ -361,7 +317,12 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // server-side instead of racing on a single array node. A rejection (a stale
       // per-booking stamp on one of the children fails the rule → the whole atomic
       // update is refused) → resync + replay the function on fresh data (v15.4.0).
-      const patch=buildPatch(prev,computed);
+      // v17.16.2: the diff and the stamping are lib/write-path.js now. The
+      // monotonic counter is THREADED through rather than hidden in the closure —
+      // the ref stays here, the arithmetic became testable.
+      const built=buildPatch(prev,computed,lastStampRef.current,Date.now());
+      const patch=built.patch;
+      lastStampRef.current=built.lastStamp;
       if(!Object.keys(patch).length) return; // nothing actually changed — skip the write
       // v16.0.0: StrictMode dedupe — the dev double-invoked updater calls persist()
       // twice with the same prev/computed. The two patches differ ONLY in their
@@ -370,9 +331,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // signature within the window is the SAME write: dispatching it again would
       // be server-rejected by the CAS (base already consumed) → resync churn on
       // every dev write. Skipping a byte-identical re-dispatch is prod-safe.
-      const sig=Object.keys(patch).sort().map(function(id){return id+"="+(patch[id]===null?"null":contentKey(patch[id]));}).join("|");
+      const sig=patchSignature(patch);
       const nowMs=Date.now();
-      if(sig===lastPatchSigRef.current.sig&&nowMs-lastPatchSigRef.current.at<2000) return;
+      if(isDuplicatePatch(sig,lastPatchSigRef.current,nowMs)) return;
       lastPatchSigRef.current={sig:sig,at:nowMs};
       update(ref(db,"bookings"),patch).catch(function(){
         console.warn("[SAFE] bookings write rejected by server (stale per-booking revision) — resyncing + retry.");
@@ -395,7 +356,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // (rare, low-stakes); on a stale-block the caller simply re-does the action.
   function saveBlocks(next,isSilent){
     // v15.2.0/v15.4.0: same staleness gate as saveBookings — held, not errored.
-    if(Date.now()-lastBeatRef.current>STALE_GAP_MS) gapTrip();
+    if(isStaleGap(lastBeatRef.current,Date.now())) gapTrip();
     if(staleRef.current){
       console.warn("[SAFE] tableBlocks write held — local data may be stale; resyncing first.");
       markStale();
@@ -647,7 +608,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       if(gap>STALE_GAP_MS) gapTrip();
       kickIfStuck();
     },10000);
-    function onResume(){ if(Date.now()-lastBeatRef.current>STALE_GAP_MS) gapTrip(); }
+    function onResume(){ if(isStaleGap(lastBeatRef.current,Date.now())) gapTrip(); }
     function onVis(){ if(document.visibilityState==="visible") onResume(); }
     window.addEventListener("focus",onResume);
     window.addEventListener("pageshow",onResume);
