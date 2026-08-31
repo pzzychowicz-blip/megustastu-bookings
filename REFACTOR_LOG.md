@@ -16332,11 +16332,69 @@ defect it was written for. Proven to fail without the fix, in all three ways it
 could be removed: neutering the predicate fails 5, deleting the arm fails 2,
 moving the check below validation fails 1.
 
+### 2 · CT-2A-02 — no error boundary anywhere
+
+**The finding.** `componentDidCatch` / `getDerivedStateFromError` /
+`ErrorBoundary` / `onerror` matched **nothing** across `src/`, and `main.jsx`
+rendered `<App/>` bare. React's contract for an uncaught render error is to
+unmount the whole tree, so any throw in render or in one of ~30 effects left
+`#root` empty: a white screen on a tablet, mid-service, with no route back but
+a reload nobody is prompted to do.
+
+**The boot watchdog does not cover it**, and this is worth stating because it
+looks like it should. `index.html`'s watchdog fires once, at T+10s, gated on
+`root.children.length === 0` — it answers "did the app never mount", which is a
+different question from "did it mount and then throw". By the time a boundary is
+needed it has long since decided the boot was fine and stood down.
+
+**Why a P1 on its own.** It fixes no bug; it changes what every *other* bug
+costs. The crash test found seven reachable throw sites without looking hard —
+`dirtyDates → verifyClean → toMins` (an effect that runs on every snapshot),
+`daySummary → toMins`, `findClashes → toMins`, `describeBooking(null)`,
+`bookEnd({})`, `comboCap(null)`, `clashRowId(null)` — several reachable from a
+single malformed booking, which CT-2A-03 shows the server will happily store.
+
+**Two recoveries, because they fail differently.** *Try again* resets `hasError`
+and re-renders the same tree, keeping the session — view, date, scroll, sign-in
+— which is the right first move for a transient cause; a deterministic one
+throws straight back, costing nothing and telling the user something true.
+*Reload app* rebuilds from the server. The copy says outright that neither fixes
+a malformed booking sitting in the database, rather than sending someone round
+the same loop a third time.
+
+**Focus, not `role="alert"`.** A live region added to the DOM already holding its
+message announces nothing (CLAUDE.md's own live-region rule), and this surface is
+created holding its message by definition. The panel is `tabIndex={-1}` and
+focuses itself through a callback ref.
+
+**Thin dependencies, deliberately.** Token scales plus `mkBtn`/`mkSolidBtn`,
+which return plain style *objects* and cannot throw — and no component. A surface
+that renders only once the component tree has failed should not be built out of
+that tree. It is also not an `Overlay`: there is no app behind it to dim, so no
+scrim and no `role="dialog"`.
+
+**A defect the test found, not the review.** `getDerivedStateFromError` first
+read `(error && error.message)` — truthiness — and `new Error()` has a message of
+`""`, which is falsy, so it fell through to the value and rendered the bare word
+`"Error"`: exactly the noise that branch exists to prevent. It tests
+`typeof error.message === "string"` now. A message-less throw is not a case
+anyone pictures while reading the line.
+
+**`tests/error-boundary.test.js` (18).** This repo has no jsdom and does not want
+one, and did not need one: an error boundary's whole decision is a static method
+plus a `render()` that branches on one state field, so the tests construct the
+class directly and read the returned element tree (React elements are plain
+objects), mounting nothing. Proven to fail without the fix in three ways:
+rendering the boundary *beside* `<App/>` rather than around it fails 1, removing
+`getDerivedStateFromError` fails 6, dropping the Reload button fails 1. CLAUDE.md's
+"no UI/component tests" line was corrected in the same commit — with the bar for
+repeating the trick, so it does not read as a general licence.
+
 ### Verification
 
 ```
-npm run build       334.08 kB / 90.60 kB gz   (+0.22 kB raw, +0.05 kB gz)
-npm test            663 passed (21 files)
+npm run build       336.30 kB / 91.37 kB gz   (+2.22 kB raw, +0.77 kB gz)
+npm test            681 passed (22 files)
 npm run lint        0 errors, 71 warnings     (the pre-existing baseline)
 npm run check:style OK
 ```
