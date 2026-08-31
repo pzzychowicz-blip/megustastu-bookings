@@ -5,6 +5,108 @@ RTDB Security Rules. The rules are still applied **manually** via the Firebase c
 (Realtime Database → Rules → paste → Publish) — this file is the canonical copy to paste
 from and to diff against.
 
+## Testing the rules — the local emulator (the THIRD environment)
+
+The rules are no longer protected only by reading them. `npm run test:rules`
+runs `tests/rules/database-rules.test.js` against a **local Firebase Realtime
+Database emulator** loaded with **this file's** `database.rules.json` —
+unmodified, read off disk at test time. There is deliberately no simplified copy
+of the rules for testing; a copy is a thing that drifts.
+
+```text
+npm run dev        → DEV Firebase      → manual app testing
+production build   → PROD Firebase     → never reached from a dev machine
+npm run test:rules → LOCAL EMULATOR    → the real database.rules.json
+```
+
+The emulator does **not** become the backend for `npm run dev`. The DEV/PROD
+split in `src/firebase.js` is untouched and must stay that way.
+
+### Prerequisites (one-off, per machine)
+
+```bash
+brew install openjdk        # the RTDB emulator is a Java jar; no sudo needed
+npm i -g firebase-tools      # deliberately GLOBAL — see below
+```
+
+`openjdk` is keg-only, so it is not on `PATH` by default. The `test:rules`
+script prepends `/opt/homebrew/opt/openjdk/bin` itself, so nothing global on the
+machine has to change; if you would rather have `java` everywhere, add
+`export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"` to `~/.zshrc` and the script
+still works.
+
+`firebase-tools` is **not** a devDependency on purpose. It is a ~200 MB tool that
+only ever *starts* the emulator — no app or test code imports it — and CI runs
+`npm ci` on every PR. Adding it there would slow every build for something CI
+never executes.
+
+### Running
+
+```bash
+npm run test:rules
+```
+
+which is:
+
+```bash
+firebase emulators:exec --only database --project demo-mgt-bookings \
+  "vitest run --config vitest.rules.config.js"
+```
+
+`emulators:exec` starts the emulator on `127.0.0.1:9000`, exports
+`FIREBASE_DATABASE_EMULATOR_HOST`, runs vitest, and shuts the emulator down
+again. No login, no network, nothing cached between runs.
+
+### Two independent guarantees that this can never reach a real project
+
+1. **The project id is `demo-mgt-bookings`.** Firebase treats a `demo-` prefix
+   as emulator-only — it cannot resolve to a real backend, and the emulator says
+   so on startup ("Detected demo project ID ... attempts to access non-emulated
+   services for this project will fail").
+2. **The suite refuses to start** unless `FIREBASE_DATABASE_EMULATOR_HOST` is
+   set, which only `emulators:exec` sets. Running the config directly throws and
+   skips all tests rather than falling through to a network connection.
+
+Neither one leans on the other. The failure this guards against is silent, and
+would matter exactly once.
+
+**There is no `.firebaserc` in this repo, deliberately.** Without a default
+project, `firebase deploy` has no target and errors out instead of publishing
+rules somewhere. Applying the rules stays the manual console step described
+below — the emulator is for *attacking* them, not for shipping them.
+
+**So: never run `firebase deploy` from this repo.** `firebase.json` has to map
+`database.rules` for `emulators:exec` to load them, and that makes
+`firebase deploy --only database` a *working* command here for the first time.
+A single `firebase use <prod-project>` would then publish whatever
+`database.rules.json` currently says — PROBE behaviour and all — into
+production, bypassing the review that the manual console step exists to force.
+The absent `.firebaserc` is the only thing in the way, and it stops being one
+the moment somebody names the project.
+
+### What the suite asserts
+
+78 tests, in six groups. The first asserts the rig itself is pointed at a
+loopback emulator and a `demo-` project. The next three are what you would
+expect: the
+`auth != null` boundary, the per-`$id` booking CAS (`updatedAt` strictly
+greater **and** `baseUpdatedAt` equal to stored — the pair that closed the
+2026-07-05 overwrite incident), and the twelve `<name>Rev` pairs, each swept for
+repeated / skipped / lower / absent / non-numeric revisions.
+
+The last group is marked **`PROBE:`** and is different in kind: those tests
+assert that something *is permitted* which you might wish were not. They are
+findings, recorded so they can be ranked — not approvals. Do not make a PROBE
+pass by weakening its assertion; change the rules, then the assertion.
+
+**A new rev pair needs no test edit**: the sweep walks this file for every key
+ending in `Rev` and grows on its own. That is deliberate — the first version
+typed the twelve paths out by hand under a `describe` named "every rev pair in
+the rules", which is a claim a hand-written list cannot make. A guard asserts
+the walker found at least twelve and that `bookings` is *not* among them (it is
+guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
+returning nothing fails loudly instead of making the whole sweep vacuous.
+
 ## v17.6.0 addition — `settings/users/$uid/prefs` rev pair (per-user preferences)
 
 v17.6.0 adds an **eighth** settings node, and the first that is **not

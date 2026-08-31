@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 // /code-review: hoisted out of the manualChunks callback. A regex literal is
@@ -15,6 +15,23 @@ const VENDOR_FIREBASE = /[\\/]node_modules[\\/](@firebase|firebase)[\\/]/;
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+
+  // ── The rules suite runs somewhere else, on purpose ──────────────────────
+  // `tests/rules/**` drives a LOCAL Firebase RTDB emulator against the real
+  // database.rules.json. The emulator is a Java jar, and CI (.github/workflows/
+  // ci.yml) runs `npm test` on ubuntu-latest with no JVM and no emulator — so
+  // leaving those files inside vitest's default include would break every PR.
+  //
+  // They run under their own config instead: `npm run test:rules`, which starts
+  // the emulator via `firebase emulators:exec` and shuts it down afterwards.
+  // See vitest.rules.config.js and database.rules.README.md.
+  //
+  // The import above moved from 'vite' to 'vitest/config' (a superset) so that
+  // `configDefaults` is available — spelling the default excludes out by hand
+  // would silently drop node_modules/dist the day vitest changes them.
+  test: {
+    exclude: [...configDefaults.exclude, "tests/rules/**"],
+  },
 
   build: {
     rollupOptions: {

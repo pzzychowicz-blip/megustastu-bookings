@@ -31,3 +31,8 @@ dist-ssr
 
 # Tool caches — machine-generated, hold absolute local paths (/code-review, v17.10.0)
 .impeccable/
+
+# Firebase emulator working dir (the *.log line above already covers
+# firebase-debug.log / database-debug.log). There is deliberately NO
+# .firebaserc in this repo — see database.rules.README.md.
+.firebase/

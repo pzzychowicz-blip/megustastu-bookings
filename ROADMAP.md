@@ -26,6 +26,31 @@ session and keeping it in sync.
   not at all, so it wants its own version and Patryk's sign-off. If the answer
   is "record it, don't change it", the note belongs beside the existing
   exemption paragraph in `tests/contrast.test.js`.
+- **A deleted booking can be resurrected by a stale write (rules change,
+  needs sign-off).** Found by the v17.15.7 emulator rig; crash-test spec §5
+  Scenario D. `database.rules.json`'s `$bid` validate is
+  `!newData.exists() || (… && (!data.exists() || <CAS>))`, and once the booking
+  is gone the `!data.exists()` disjunct short-circuits the CAS entirely — so any
+  write with a numeric `updatedAt` recreates it, including an offline device's
+  queued edit naming a `baseUpdatedAt` that was deleted. Verified against the
+  emulator; a cancelled table reappears with the stale device's contents. The
+  current behaviour is PINNED in `tests/rules/database-rules.test.js`
+  ("PROBE — a deleted booking can be resurrected") so a fix fails those tests
+  deliberately rather than silently. Fixing it means either a tombstone
+  (`deletedAt`, which changes the data shape and the delete path) or requiring
+  `baseUpdatedAt === 0` on the create branch (which would reject a legitimate
+  offline re-create). **Not a tooling change** — `database.rules.json` is
+  deployed by hand to PROD via the console, so it wants its own version and
+  Patryk's sign-off.
+- **Run the Firebase rules suite in CI.** `npm run test:rules`
+  (`tests/rules/database-rules.test.js`, 78 tests against the real
+  `database.rules.json`) runs on a developer machine only. CI cannot run it as
+  it stands: `.github/workflows/ci.yml` is `ubuntu-latest` with no JVM, and the
+  emulator is a Java jar. Adding it means a `setup-java` step plus installing
+  `firebase-tools` in the job — perhaps a minute per PR for a suite that changes
+  only when `database.rules.json` does, so it may be better gated on a path
+  filter than run every time. Until this lands, a rules regression is caught
+  only if someone remembers to run the command.
 - **The Plan legend chip has no `boxShadow: var(--shadow-flat)`**, which its
   TimelineView twin has carried since v17.11.0. v17.15.7 matched the twin in
   every other respect (inline-flex, gap, `StatusIcon` at `IC.inline`) and left
