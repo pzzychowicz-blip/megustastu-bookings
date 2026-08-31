@@ -173,6 +173,20 @@ describe("the booking form is wired to the guard", () => {
     }
   });
 
+  it("guards the BUTTON's handler too, not only doSave", () => {
+    // `save()` is what the Save button calls. It can raise the kitchen-busy
+    // confirm and RETURN before doSave is ever reached, so a guard only in
+    // doSave lets a second tap produce a stray dialog for a booking that has
+    // already been written — the first tap's booking is in `bookings` by then,
+    // which is exactly what pushes the kitchen load over the limit.
+    const body = app.slice(app.indexOf("function save(statusOverride){"));
+    const check = body.indexOf("mayDispatch(saveGuardRef.current)");
+    const kitchen = body.indexOf("setConfirmKitchen(\"form\")");
+    expect(check).toBeGreaterThan(-1);
+    expect(kitchen).toBeGreaterThan(-1);
+    expect(check).toBeLessThan(kitchen);
+  });
+
   it("arms in exactly as many places as it dispatches", () => {
     // A third save path added later without arming would pass every test above.
     const arms = (app.match(/saveGuardRef\.current=DISPATCHED/g) || []).length;
@@ -201,6 +215,17 @@ describe("the walk-in form is wired to the guard", () => {
     const arm = walkin.indexOf("walkinGuardRef.current=DISPATCHED");
     expect(write).toBeGreaterThan(-1);
     expect(arm).toBeGreaterThan(write);
+  });
+
+  it("guards saveWalkin as well as doSaveWalkin", () => {
+    // Same shape: saveWalkin is the Seat button's handler and its kitchen
+    // branch returns before doSaveWalkin.
+    const body = walkin.slice(walkin.indexOf("function saveWalkin(){"));
+    const check = body.indexOf("mayDispatch(walkinGuardRef.current)");
+    const kitchen = body.indexOf("setConfirmKitchen(\"walkin\")");
+    expect(check).toBeGreaterThan(-1);
+    expect(kitchen).toBeGreaterThan(-1);
+    expect(check).toBeLessThan(kitchen);
   });
 
   it("holds the guard in a ref, not in state", () => {

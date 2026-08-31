@@ -137,6 +137,11 @@ export function useWalkin({
   // button branches on this key to dispatch back to doSaveWalkin).
   // !confirmKitchen prevents re-raising if the modal is already up.
   function saveWalkin(){
+    // v17.16.0: guarded here as well as in doSaveWalkin — this is the Seat
+    // button's handler and the kitchen branch below can return before
+    // doSaveWalkin is reached, raising a "Kitchen busy" dialog for a walk-in
+    // already seated. Same shape as App's `save`; see src/lib/submitGuard.js.
+    if(!mayDispatch(walkinGuardRef.current)) return;
     const wf=walkinForm;
     const t=wf.time||nowTime();const size=Number(wf.size)||2;const dur=wf.customDur||getDur(size);
     const wDate=new Date().toISOString().slice(0,10);

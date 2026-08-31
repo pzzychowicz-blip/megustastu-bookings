@@ -2169,6 +2169,16 @@ function BookingApp({uid}){
     }catch(err){setError("Error: "+err.message);}
   }
   function save(statusOverride){
+    // v17.16.0: the guard is checked HERE as well as in doSave, because this is
+    // the button's handler and it can return before doSave is ever reached. On a
+    // double-tap the first tap's booking is already in `bookings`, so the kitchen
+    // load below is one higher — enough to cross KITCHEN_TABLE_LIMIT and raise
+    // "Kitchen busy" for a booking that has already been written, over a form
+    // that has already closed. doSave would then refuse the duplicate correctly,
+    // but the stray dialog would have been produced by the very tap this fix
+    // exists to make inert. The kitchen round-trip is unaffected: its Confirm
+    // button re-enters doSave() directly, with the guard still READY.
+    if(!mayDispatch(saveGuardRef.current)) return;
     // v17.0.0: record the override FIRST — the kitchen-confirm path re-enters
     // doSave() without args, so the intent must survive the modal round-trip.
     statusOverrideRef.current=statusOverride||null;

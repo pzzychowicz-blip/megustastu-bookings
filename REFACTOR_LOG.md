@@ -16258,7 +16258,7 @@ contrast registry are all structurally unable to notice. This is the
 **Files:** `src/lib/submitGuard.js` (new), `src/App.jsx`,
 `src/hooks/useWalkin.js`, `tests/submit-guard.test.js` (new), CLAUDE.md ·
 **Behavioural change:** yes — a second tap on Save no longer creates a second
-booking · **682 tests** (+35).
+booking · **684 tests** (+37).
 
 The first version to act on the v17.15.7 crash test (`MGT BOOKINGS — CRASH TEST
 - ADVERSARIAL QA.md`, three sessions, 22 confirmed findings). It carries the two
@@ -16312,6 +16312,19 @@ is a real failure if broken:
    path must go through them for exactly that reason. Verified rather than
    assumed: all four `setShowForm(true)` sites call `openForm` first.
 
+**The BUTTON's handler is guarded too, not only `doSave`** (added by this
+version's `/code-review`). `save()` / `saveWalkin()` are what the Save and Seat
+buttons call, and both can raise the kitchen-busy confirm and **return before
+the guarded function is reached**. On a double-tap the first tap's booking is
+already in `bookings`, which is exactly what pushes `getKitchenLoad` over
+`KITCHEN_TABLE_LIMIT` — so with the default limit of 3 and one existing booking
+in the window, the second tap raised "Kitchen busy" for a booking that had
+already been written, over a form that had already closed. `doSave` then refused
+the duplicate correctly, so nothing was lost; but the stray dialog was produced
+by the very tap this fix exists to make inert. The kitchen round-trip is
+unaffected, because its Confirm button re-enters `doSave()` directly with the
+guard still `READY`.
+
 **No time window, deliberately.** A window would have to outlast the exit
 animation and undercut a plausible second booking, and picking that number means
 the guard silently stops guarding on a device having a slow frame. "Until this
@@ -16324,7 +16337,7 @@ closed, and a Save button that silently does nothing is the worse of the two —
 invisible, and unrecoverable without a reload, where a duplicate is at least on
 screen for somebody to delete.
 
-**`tests/submit-guard.test.js` (16).** The predicate, then the invariant over a
+**`tests/submit-guard.test.js` (18).** The predicate, then the invariant over a
 model that includes the exit window (a model without it cannot reproduce the bug
 at all) across 500 seeded random sequences, then a source sweep of the four call
 sites — because `mayDispatch` correct-and-unwired is exactly the shape of the
@@ -16469,8 +16482,8 @@ higher.
 ### Verification
 
 ```
-npm run build       336.30 kB / 91.37 kB gz   (+2.22 kB raw, +0.77 kB gz)
-npm test            682 passed (22 files)
+npm run build       336.53 kB / 91.44 kB gz   (+2.45 kB raw, +0.84 kB gz)
+npm test            684 passed (22 files)
 npm run lint        0 errors, 71 warnings     (the pre-existing baseline)
 npm run check:style OK
 ```
