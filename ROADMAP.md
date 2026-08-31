@@ -52,8 +52,9 @@ session and keeping it in sync.
 The findings from the three adversarial QA sessions that are still open
 (`MGT_Bookings_CrashTest_Phase4_FixPlan_Handoff.md` in the context folder holds
 the full register and the reproductions). **v17.16.0 shipped CT-2C-01 and
-CT-2A-02; v17.16.1 shipped CT-2A-01 and CT-2A-03's server half** — four of
-twenty-two. Delete an entry as its fix lands; the detail then goes in
+CT-2A-02; v17.16.1 shipped CT-2A-01 and CT-2A-03's server half; v17.16.2 shipped
+CT-2B-01, CT-2B-02 and CT-2B-03, and closed §7's `usePersistence` extraction** —
+seven of twenty-two. Delete an entry as its fix lands; the detail then goes in
 `REFACTOR_LOG.md`.
 
 **`database.rules.json` — what remains after v17.16.1.** The first two below are
@@ -87,26 +88,17 @@ ONE structural change, not two fixes.
   the layout, which is correct — the layout is editable, so the rules would
   duplicate it and go stale.
 
-**Version C or later — client fixes, in rough value order.**
+**Version C or later — client fixes, in rough value order.** *(v17.16.2 shipped
+CT-2B-01, CT-2B-02 and CT-2B-03, plus a DST date-navigation bug not in the
+register — the Next-day button was a no-op on the spring-forward day.)*
 
-- **CT-2B-02 (P2) — every now-vs-booking comparison breaks after midnight, except
-  one.** At 00:30 against a party seated 23:30–00:30: `liveBarDur` returns 15
-  (an hour shown as fifteen minutes), `syncLiveDurations` no-ops,
-  `occupancyEnd`/`getBusy` report **the table as free** and `canAssign` offers it
-  to a walk-in, `freeingSoon` returns nothing, and completing records
-  `stayedMin = 15`. Two source comments assert this is safe and `freeingSoon`'s
-  is false. **`pastCloseMins` is correct in both seasons** — the only function
-  that puts now and a booking on a common axis — and it is module-private inside
-  `usePersistence`. The fix is one shared time axis, which is the extraction
-  below arriving early.
-- **CT-2B-01 (P1) — seating after midnight writes a 24-hour booking.**
-  `applySeatedShift` computes `newDuration = scheduledEnd − now`; after midnight
-  `now` has wrapped and `scheduledEnd` has not, so a 23:30 booking seated at
-  00:30 persists `duration: 1440`. Its overlap guard excludes completed bookings,
-  so nothing conflicts at 00:30 and it goes through. **Not reachable at Me Gustas
-  Tú's 22:00 close** — it needs a close of 24 or 25, which is one ordinary
-  Settings change away. Fixing CT-2B-02 fixes this; clamp `newDuration` anyway,
-  as a second line of defence at the one point it reaches the database.
+- **`EMPTY_FORM.date` is evaluated once at module load (P3, new in v17.16.2).**
+  `constants.js` builds it at import, so an app left open across midnight holds
+  yesterday's default. Not currently reachable in a saved booking: all three
+  `openForm` call sites (`openNew`, `bookAgain`, `bookFromWaitlist`) set `date`
+  explicitly. Fixing it means making the default a getter or dropping `date` from
+  the constant — worth doing when something else touches that object.
+
 - **CT-2C-02 (P2) — focus restoration never works, on any modal.** `Overlay`'s
   cleanup calls `prev.focus()` so the keyboard lands where it was — which is
   exactly where it does not land: the opener sits inside a subtree marked
@@ -115,13 +107,6 @@ ONE structural change, not two fixes.
   so there is no opener for which it works. Fix: restore focus **after** `inert`
   is lifted, not before. Invisible to `tests/a11y.test.js`, which is a static AST
   sweep.
-- **CT-2B-03 (P2) — "today" is UTC, the clock is local.** `nowMins` from
-  `getHours()`, `today` from `toISOString().slice(0,10)` in **43 places**,
-  including two adjacent lines of `bookingsAfterAction`. In summer (WEST, UTC+1)
-  they disagree from local 00:00 to 01:00: the Today button lands on yesterday,
-  today-only banners key to the wrong day, and `optimizerActiveFor`'s
-  today-vs-future branch inverts. DST itself is clean — date-only strings parse
-  as UTC midnight.
 - **CT-2B-04 (P2) — a parenthesised country code splits one customer in two, and
   the fix re-keys existing records.** `normalizePhone` keeps `+` only as the
   first character, so `"(+34) 600 123 456"` → `"34600123456"`, a different
@@ -192,20 +177,13 @@ ONE structural change, not two fixes.
   `bookingsAfterAction` and made a stated contract, in the same save path.
   Harmless today because the write diff compares content.
 
-### The recommendation that outlives the fixes
+### The recommendation that outlives the fixes — DONE in v17.16.2
 
-- **Extract the pure core of `usePersistence.js`.** `buildPatch`,
-  `stampForWrite`, `contentKey`, `pastCloseMins` and the retry-queue decision are
-  module-private inside a React hook, which is why **737 lines that decide
-  whether a booking reaches the server have never been executed by a test** — in
-  this crash test or any other. Everything the report says about the retry queue,
-  the stale gate, the resync and the dedupe window was established by *reading
-  the code*. Two sessions reached this independently: 2A because the retry logic
-  could not be attacked, 2B because the one function that handles midnight
-  correctly is locked inside the same file. It is the repo's own v17.8.0 rule
-  applied to the file that decides the most, and it is the change that lets the
-  next person **raise** the crash test's 55% confidence rating rather than
-  re-argue it.
+- ~~**Extract the pure core of `usePersistence.js`.**~~ Shipped as
+  `src/lib/write-path.js` + `tests/write-path.test.js` (31 tests). `pastCloseMins`
+  went to `booking-logic.js` in the same version. The crash test's **55%
+  confidence rating is now the thing to revisit** — that was the condition it set,
+  and it has been met. The rating lives in the §25 report, not in this repo.
 
 ## Designed, not implemented
 

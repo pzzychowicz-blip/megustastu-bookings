@@ -16930,3 +16930,27 @@ Worth recording: the first live attempt pressed → and the date did **not** mov
 which looked like the fix failing. Focus was still in the date input, so
 `isTyping` had correctly swallowed the key. The app was right and the test of it
 was wrong — the same shape as the write-path test whose premise never held.
+
+### 15 · Docs
+
+`CLAUDE.md`: `lib/day.js` and `lib/write-path.js` in the file-structure block;
+`booking-logic.js` gains the shared-axis paragraph (`pastCloseMins` moved in,
+`seatedElapsed`, why `lateState` keeps its filter while `freeingSoon` loses its,
+why `applySeatedShift` refuses rather than shifts); `usePersistence.js` records
+753 → 705 and where its core went; the test count 684 → **752** across 24 files.
+
+One new **Gotchas** row, which is the rule the whole version encodes:
+*`nowMins` and `b.time` are only the same axis when `b.date === today`* — with
+the two traps beyond the arithmetic, that dropping a date filter needs a BOUND
+and that some values (a start time) cannot be re-expressed on another day's axis
+at all.
+
+`ROADMAP.md`: CT-2B-01 / CT-2B-02 / CT-2B-03 deleted; the §7 extraction marked
+DONE with the note that **the crash test's 55% confidence rating is now the thing
+to revisit**, since having the write path under test was the condition it set;
+`EMPTY_FORM.date`'s module-load evaluation added as a new P3 (not reachable in a
+saved booking — all three `openForm` sites set `date` — so it is a tidy-up, not a
+bug). Header count four → seven of twenty-two.
+
+`DESIGN.md` and `GLOSSARY.md`: no change. Nothing visual, and no new
+user-visible surface or control to name.
