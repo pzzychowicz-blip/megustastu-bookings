@@ -46,8 +46,23 @@ export function attachRev(path, revRef){
 }
 
 // Atomic { node, nodeRev: base+1 } write. `value` may be an empty array/object —
-// RTDB stores that as a node DELETE, which skips the node's own .validate, but
-// the rev child's rule still enforces +1, so the CAS holds even for wipes.
+// RTDB stores that as a node DELETE, which skips the node's own .validate.
+//
+// v17.16.1 corrects what this comment used to claim next: "but the rev child's
+// rule still enforces +1, so the CAS holds even for wipes." That is true of
+// THIS function, which always sends both keys — and false of the RULES, which
+// is where it read as a guarantee. A client that simply calls `remove()` on the
+// node and omits the rev is not constrained by the rev's rule at all: verified
+// against the emulator, `tableBlocks` is gone and `tableBlocksRev` is left at
+// its old value (CT-2A-06, tests/rules/database-rules.test.js).
+//
+// It CANNOT be fixed by adding a rule, which is the part worth knowing: RTDB
+// write permission cascades from the root's `.write: auth != null` and cannot
+// be revoked lower down — measured, a child `.write: false` does not deny the
+// delete. Closing it means moving `.write` off the root and granting it per
+// path, which is a restructure with its own hazards (see ROADMAP). Until then:
+// the app's write path is safe because it goes through here, and the rules are
+// not what makes it so.
 // Returns the update() promise (already .catch-handled via onReject).
 export function writeWithRev(path, value, revRef, onReject){
   const nextRev = (revRef.current || 0) + 1;

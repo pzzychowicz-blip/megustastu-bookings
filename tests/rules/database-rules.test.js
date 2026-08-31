@@ -40,6 +40,12 @@ import {
 import {
   initializeTestEnvironment, assertSucceeds, assertFails,
 } from "@firebase/rules-unit-testing";
+// v17.16.1: the app's OWN sanitiser, so the shape-validation tests below can
+// assert against what the app really writes rather than against a fixture that
+// merely looks like it. A rules file is deployed BY HAND to the production
+// console; a rule that is too strict is not a failing test, it is staff unable
+// to save a booking, and a fixture cannot find that.
+import { sanitize } from "../../src/lib/booking-logic.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RULES_PATH = resolve(HERE, "../../database.rules.json");
@@ -383,9 +389,9 @@ describe("every rev pair in the rules is enforced", () => {
   }
 });
 
-// ── PROBE — resurrection (crash-test spec §5, Scenario D) ───────────────────
+// ── FIXED v17.16.1 — resurrection (crash-test spec §5, Scenario D) ──────────
 // "Client A deletes X. Client B edits X from stale state. Expected: deletion
-// must not unexpectedly resurrect X." It does.
+// must not unexpectedly resurrect X." It DID, until v17.16.1 (CT-2A-01).
 //
 // The rule reads
 //   !newData.exists() || (hasChild('updatedAt') && isNumber(...) &&
@@ -395,12 +401,17 @@ describe("every rev pair in the rules is enforced", () => {
 // recreates the node — including one whose `baseUpdatedAt` names a version that
 // was deleted, which is precisely what an offline device's queued edit carries.
 //
-// These tests PIN the current behaviour rather than assert the desired one, so
-// the day the rules are tightened they fail loudly and are updated deliberately.
-// See ROADMAP.md.
+// THE FIX: the create branch now requires `baseUpdatedAt === 0`, which is
+// exactly what `stampForWrite` writes when it has no `old` — i.e. a genuine
+// create. A stale offline edit carries the DELETED version's stamp instead, so
+// it no longer satisfies the create branch either.
+//
+// These tests were `PROBE:`s pinning the defect. They were updated DELIBERATELY
+// when the rules changed — the assertions were inverted, never weakened — which
+// is what the PROBE convention exists to force.
 
-describe("PROBE — a deleted booking can be resurrected", () => {
-  it("PROBE: a stale queued write recreates a booking another device deleted", async () => {
+describe("a deleted booking STAYS deleted (v17.16.1)", () => {
+  it("a stale queued write can NO LONGER recreate a booking another device deleted", async () => {
     await seed((db) => db.ref("bookings/b1").set(booking({ updatedAt: 5000 })));
 
     // Device A cancels the booking. Deletes are unconditional by design.
@@ -408,22 +419,32 @@ describe("PROBE — a deleted booking can be resurrected", () => {
     expect(await seedRead("bookings/b1")).toBeNull();
 
     // Device B was offline and never saw the delete. Its queued edit names the
-    // base it last saw — a version that no longer exists.
-    await assertSucceeds(staff("device-b").ref("bookings").update({
+    // base it last saw — a version that no longer exists. Before v17.16.1 this
+    // SUCCEEDED and the booking came back holding its old table.
+    await assertFails(staff("device-b").ref("bookings").update({
       b1: booking({ size: 8, updatedAt: 6000, baseUpdatedAt: 5000 }),
     }));
 
-    const back = await seedRead("bookings/b1");
-    expect(back).not.toBeNull();
-    expect(back.size).toBe(8);   // and with the STALE device's contents
+    expect(await seedRead("bookings/b1")).toBeNull();   // it stays deleted
   });
 
-  it("PROBE: even a write naming a base that never existed resurrects it", async () => {
+  it("a write naming a base that never existed is refused too", async () => {
     await seed((db) => db.ref("bookings/b1").set(booking({ updatedAt: 5000 })));
     await assertSucceeds(staff().ref("bookings/b1").remove());
-    // baseUpdatedAt is not checked at all on the create branch.
-    await assertSucceeds(writeBooking(staff(), "b1",
+    // The create branch checks baseUpdatedAt now; only 0 means "a real create".
+    await assertFails(writeBooking(staff(), "b1",
       booking({ updatedAt: 1, baseUpdatedAt: 999999 })));
+    expect(await seedRead("bookings/b1")).toBeNull();
+  });
+
+  it("a GENUINE create of the same id still works — the fix must not block re-use", async () => {
+    // Staff cancel a booking and then take a new one that happens to reuse the
+    // id (or an offline device creates one fresh). `stampForWrite` writes
+    // baseUpdatedAt 0 when it has no `old`, which is the create branch.
+    await seed((db) => db.ref("bookings/b1").set(booking({ updatedAt: 5000 })));
+    await assertSucceeds(staff().ref("bookings/b1").remove());
+    await assertSucceeds(writeBooking(staff(), "b1",
+      booking({ name: "A new party", updatedAt: 7000, baseUpdatedAt: 0 })));
     expect(await seedRead("bookings/b1")).not.toBeNull();
   });
 
@@ -473,37 +494,156 @@ describe("PROBE — whole-node deletion", () => {
   });
 });
 
-describe("PROBE — no field-shape validation on bookings", () => {
-  // The rules validate `updatedAt` and nothing else. Every other field is
-  // whatever the client says it is. This is the SERVER-SIDE half of the
-  // client-side crash class: `toMins(t)` is `t.split(":")` with no guard
+describe("field shapes are validated (v17.16.1)", () => {
+  // WAS a PROBE group asserting the rules accepted all of these. CT-2A-03's
+  // server half; the assertions were inverted deliberately, not weakened.
+  //
+  // The rules used to validate `updatedAt` and nothing else, so every other
+  // field was whatever the client said it was. That is the SERVER-SIDE half of
+  // the client-side crash class: `toMins(t)` is `t.split(":")` with no guard
   // (booking-logic.js), fed from `b.time || "13:00"` — and a NUMBER survives
   // that `||`. So each of these is a stored booking that can throw in the
   // renderer of every device that loads the day.
-  const cases = {
+  // REFUSED now — each of these either threw in the renderer or was silently
+  // mis-read (a party of 2, a 90-minute booking, no table).
+  const refused = {
     "a numeric time":        { time: 1300 },
     "a string size":         { size: "many" },
     "a negative duration":   { duration: -90 },
-    "an unknown status":     { status: "teleported" },
-    "an unknown table id":   { tables: ["Z9"] },
     "tables as a string":    { tables: "3" },
     "a numeric name":        { name: 42 },
-    // `date: null` is NOT a separate case: RTDB deletes a key written as null,
-    // so it stores byte-identically to this one. Listing both would report two
-    // findings where there is one behaviour.
-    "no date at all":        { date: undefined },
+    "a numeric date":        { date: 20260901 },
   };
-
-  for (const [label, patch] of Object.entries(cases)) {
-    it(`PROBE: the rules ACCEPT ${label}`, async () => {
-      const b = booking(patch);
-      for (const k of Object.keys(b)) if (b[k] === undefined) delete b[k];
-      await assertSucceeds(writeBooking(staff(), "bad", b));
+  for (const [label, patch] of Object.entries(refused)) {
+    it(`rejects ${label}`, async () => {
+      await assertSucceeds(writeBooking(staff(), "ok", booking()));   // control
+      await assertFails(writeBooking(staff(), "bad", booking(patch)));
     });
   }
 
-  it("PROBE: a booking may be stored with NOTHING but updatedAt", async () => {
-    await assertSucceeds(writeBooking(staff(), "hollow", { updatedAt: 1 }));
+  // STILL ACCEPTED, and each is a deliberate limit rather than an oversight.
+  const accepted = {
+    // The layout is user-configurable in Settings → Layout, so the rules cannot
+    // know which ids are real without duplicating it and going stale.
+    "an unknown table id":   { tables: ["Z9"] },
+    // `sanitize` writes `date: b.date || ""`, so an empty date is REACHABLE in
+    // stored data. Refusing it would make every later write touching such a
+    // booking fail — the app unable to save, from a rules file deployed by hand.
+    "an empty date":         { date: "" },
+    "no date at all":        { date: undefined },
+    // `status` is checked as a STRING but its VALUE set is deliberately not
+    // pinned: an unrecognised status is reachable in stored data (PlanView's
+    // v17.15.7 note says so), and pinning the set would refuse every write
+    // touching that booking. See ROADMAP.
+    "an unknown status":     { status: "teleported" },
+    // Unpadded legacy times parse correctly in toMins and must keep working.
+    "an unpadded time":      { time: "9:00" },
+    // FORMAT is deliberately NOT checked on `date` or `time`, only TYPE — see
+    // the block comment below. These two would be refused by a format rule.
+    "a malformed date":      { date: "31/08/2026" },
+    "a non-time string":     { time: "banana" },
+  };
+  for (const [label, patch] of Object.entries(accepted)) {
+    it(`still accepts ${label} — deliberate`, async () => {
+      const b = booking(patch);
+      for (const k of Object.keys(b)) if (b[k] === undefined) delete b[k];
+      await assertSucceeds(writeBooking(staff(), "edge", b));
+    });
+  }
+
+  it("rejects a NON-STRING status, which is what actually broke isActive", async () => {
+    await assertFails(writeBooking(staff(), "bad", booking({ status: 7 })));
+  });
+
+  // WHY `date` AND `time` ARE TYPE-ONLY, NOT FORMAT-CHECKED.
+  //
+  // The first version of these rules matched them against
+  // /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/ and /^[0-9]{1,2}:[0-9]{2}$/, and this
+  // version's own /code-review found the hazard. `sanitize` guarantees these
+  // fields are STRINGS (`b.date || ""`, `b.time || "13:00"`) and never that
+  // they are well-formed — so a value like "31/08/2026" already in the database
+  // survives a read unchanged and is written back on the next save.
+  //
+  // A format rule would refuse it, and `persist` sends ONE multi-path
+  // `update(ref(db,"bookings"), patch)` which RTDB applies ATOMICALLY (see
+  // "rejects a whole multi-path patch when ONE child is stale" above). An
+  // optimiser reshuffle writes every touched booking on a day in a single
+  // patch, so one such booking would reject the WHOLE day's write — the retry
+  // queue would replay it, fail again, and after MAX_RETRIES leave staff a red
+  // banner and no way to save, on a day that looks perfectly normal on screen.
+  //
+  // Type-only still fixes what CT-2A-03 actually reported: `toMins(t)` is
+  // `t.split(":")`, which THROWS on a number and merely returns NaN on a bad
+  // string. And it is the same reasoning already applied to `status` two rules
+  // above — checked as a string, never against its five known values, because
+  // unrecognised data is reachable and a rule that refuses it stops the
+  // restaurant working. Applying it to `status` and not to `date`/`time` was
+  // the inconsistency; this is it applied consistently.
+  //
+  // Checking formats is a separate decision, and it needs evidence of what PROD
+  // actually holds — not a guess committed to a file that is deployed by hand
+  // with no staging. See ROADMAP.
+  it("accepts a badly FORMATTED but correctly TYPED date and time", async () => {
+    await assertSucceeds(writeBooking(staff(), "odd",
+      booking({ date: "31/08/2026", time: "half seven" })));
+  });
+
+  it("a delete is still unconditional — child validates do not run for it", async () => {
+    await seed((db) => db.ref("bookings/b1").set(booking({ updatedAt: 5000 })));
+    await assertSucceeds(staff().ref("bookings").update({ b1: null }));
+  });
+
+  it("PROBE: a booking may still be stored with nothing but the two stamps", async () => {
+    // Field-shape validation (v17.16.1) constrains fields that ARE present; it
+    // deliberately does not require any of them, because `sanitize` fills every
+    // gap on read and requiring them would make a field the app later stops
+    // writing a rejected write in production. Still a PROBE, still a finding.
+    await assertSucceeds(writeBooking(staff(), "hollow", { updatedAt: 1, baseUpdatedAt: 0 }));
+    // …but a create with no base at all is refused, per CT-2A-01's fix.
+    await assertFails(writeBooking(staff(), "hollow2", { updatedAt: 1 }));
+  });
+});
+
+// ── The shape the APP writes, not a fixture that resembles it ───────────────
+// v17.16.1. Every case below is run through `sanitize` — the same function
+// every read passes through and therefore the shape every subsequent write
+// carries — and then stamped the way `stampForWrite` stamps it. If a rule is
+// too strict for anything the app can legitimately produce, it fails HERE.
+
+describe("every booking shape the app itself produces is accepted", () => {
+  // stampForWrite's create form: no `old`, so baseUpdatedAt is 0.
+  const stamped = (b, i) => Object.assign({}, sanitize(b), { updatedAt: 1000 + i, baseUpdatedAt: 0 });
+
+  const shapes = {
+    "an ordinary booking":       { id: "s1", name: "Pau Estévez", phone: "+34600111222", date: "2026-09-01", time: "20:00", size: 4, duration: 90, status: "confirmed", tables: ["3"] },
+    "a walk-in":                 { id: "s2", name: "Walk-in 1", phone: "", date: "2026-09-01", time: "20:15", size: 2, status: "seated", tables: ["5A"], _manual: true, _locked: true },
+    "an anonymized booking":     { id: "s3", name: "Data removed", phone: "", date: "2026-09-01", time: "13:00", size: 2, status: "completed", tables: ["2"], anonymized: true },
+    "a pending booking":         { id: "s4", name: "Rita", date: "2026-09-02", time: "21:30", size: 6, status: "pending", tables: [] },
+    "a booking with NO tables":  { id: "s5", name: "Unplaced", date: "2026-09-02", time: "19:00", size: 2, status: "confirmed", tables: [] },
+    "a booking with no date":    { id: "s6", name: "Dateless", time: "19:00", size: 2, status: "confirmed", tables: ["4"] },
+    "a booking with no time":    { id: "s7", name: "Timeless", date: "2026-09-02", size: 2, status: "confirmed", tables: ["4"] },
+    "a completed visit":         { id: "s8", name: "Left", date: "2026-09-01", time: "13:00", size: 2, status: "completed", tables: ["6"], stayedMin: 74 },
+    "a cancelled no-show":       { id: "s9", name: "Gone", date: "2026-09-01", time: "13:00", size: 2, status: "cancelled", tables: [], noShow: true },
+    "a mega-combo booking":      { id: "s10", name: "Big party", date: "2026-09-03", time: "20:00", size: 8, duration: 120, status: "confirmed", tables: ["5A", "5B", "6"] },
+    "a deposit + notes booking": { id: "s11", name: "Deposit", date: "2026-09-03", time: "20:00", size: 2, status: "confirmed", tables: ["1A"], deposit: 50, notes: "window seat" },
+    "a recurring occurrence":    { id: "r1_2026-09-03", name: "Standing", date: "2026-09-03", time: "20:00", size: 2, status: "confirmed", tables: ["1B"], recurringId: "r1", recurringDate: "2026-09-03" },
+    "a joined phone-less guest": { id: "s12", name: "Maria", phone: "", date: "2026-09-03", time: "20:00", size: 2, status: "confirmed", tables: ["7"], guestId: "gs12" },
+  };
+
+  let i = 0;
+  for (const [label, raw] of Object.entries(shapes)) {
+    const n = i++;
+    it(`accepts ${label}`, async () => {
+      await assertSucceeds(writeBooking(staff(), raw.id, stamped(raw, n)));
+    });
+  }
+
+  it("accepts an EDIT of a sanitized booking (the CAS branch, real shape)", async () => {
+    const first = Object.assign({}, sanitize(shapes["an ordinary booking"]), { updatedAt: 5000, baseUpdatedAt: 0 });
+    await seed((db) => db.ref("bookings/s1").set(first));
+    const edited = Object.assign({}, sanitize(Object.assign({}, shapes["an ordinary booking"], { size: 6 })),
+      { updatedAt: 6000, baseUpdatedAt: 5000 });
+    await assertSucceeds(writeBooking(staff(), "s1", edited));
   });
 });
 

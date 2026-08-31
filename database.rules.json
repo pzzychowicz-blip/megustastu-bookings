@@ -5,7 +5,14 @@
 
     "bookings": {
       "$bid": {
-        ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber() && (!data.exists() || (newData.child('updatedAt').val() > data.child('updatedAt').val() && newData.child('baseUpdatedAt').val() === data.child('updatedAt').val())))"
+        ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber() && (data.exists() ? (newData.child('updatedAt').val() > data.child('updatedAt').val() && newData.child('baseUpdatedAt').val() === data.child('updatedAt').val()) : newData.child('baseUpdatedAt').val() === 0))",
+        "name":     { ".validate": "newData.isString()" },
+        "date":     { ".validate": "newData.isString()" },
+        "time":     { ".validate": "newData.isString()" },
+        "size":     { ".validate": "newData.isNumber()" },
+        "duration": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "status":   { ".validate": "newData.isString()" },
+        "tables":   { ".validate": "newData.hasChildren()" }
       }
     },
 

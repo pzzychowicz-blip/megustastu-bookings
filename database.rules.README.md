@@ -107,6 +107,118 @@ the walker found at least twelve and that `bookings` is *not* among them (it is
 guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
 returning nothing fails loudly instead of making the whole sweep vacuous.
 
+## v17.16.1 — the create branch is a real CAS, and fields have shapes
+
+Two changes to `bookings/$bid`, both from the v17.15.7 crash test. **Deploy is
+ROLLING-SAFE and needs no app update** — see the order below, which is the
+opposite way round from v16.0.0's.
+
+### 1 · A deleted booking can no longer be resurrected (CT-2A-01)
+
+The validate read
+
+```
+!newData.exists() || (hasChild('updatedAt') && isNumber(...) &&
+                      (!data.exists() || <the CAS>))
+```
+
+and the `!data.exists()` disjunct was a hole: once the booking was gone the CAS
+branch was never reached, so **any** write carrying a numeric `updatedAt`
+recreated it — including an offline device's queued edit naming a
+`baseUpdatedAt` that had been deleted. It came back holding its OLD table, so if
+that table had been reassigned the day was genuinely double-booked; and in the
+commoner case a cancelled party simply reappeared as live with nothing on screen
+saying so.
+
+The create branch now requires **`baseUpdatedAt === 0`**, which is exactly what
+`stampForWrite` writes when it has no `old` — i.e. a genuine create. A stale
+edit carries the deleted version's stamp and no longer satisfies either branch.
+
+### 2 · Field shapes (CT-2A-03, server half)
+
+`name` · `date` · `time` · `size` · `duration` · `status` · `tables` each get a
+`.validate`. Every one is **"if PRESENT, must be the right shape"**, never "must
+be present" — `sanitize` fills every gap on read, and a required field the app
+later stopped writing would be a rejected write in production, which is staff
+unable to save.
+
+**Every rule checks TYPE, never FORMAT**, and that is one decision applied
+consistently rather than four separate concessions:
+
+- **`status` is a string, not one of the five known values.** An unrecognised
+  status is reachable in stored data, and pinning the set would refuse every
+  write touching such a booking.
+- **`date` and `time` are strings, not patterns.** The first version of these
+  rules matched `^[0-9]{4}-[0-9]{2}-[0-9]{2}$` and `^[0-9]{1,2}:[0-9]{2}$`, and
+  this version's own `/code-review` found the hazard. `sanitize` guarantees
+  these are strings (`b.date || ""`, `b.time || "13:00"`) and never that they
+  are well-formed, so a legacy `"31/08/2026"` survives a read and is written
+  back on the next save. **`persist` sends one multi-path `update()`, which RTDB
+  applies atomically** — so one such booking would reject a whole optimiser
+  reshuffle, the retry queue would replay and fail, and staff would be left
+  unable to save a day that looks perfectly normal. Type-only still fixes what
+  CT-2A-03 reported: `toMins(t)` is `t.split(":")`, which THROWS on a number and
+  merely returns NaN on a bad string.
+- **Table ids are not checked against the layout.** The layout is editable in
+  Settings → Layout, so the rules would duplicate it and go stale.
+
+Checking formats is a separate decision and needs evidence of what PROD actually
+holds — not a guess committed to a file deployed by hand with no staging. On
+ROADMAP.
+
+### Deployment — rules can go FIRST, or at any time
+
+Unlike v16.0.0 (app first) and v15.5.0 (a hard cutover), this needs no
+coordination: **every client from v16.0.0 onward already writes the shapes and
+stamps these rules require.** That is asserted, not assumed —
+`tests/rules/database-rules.test.js` runs thirteen booking shapes produced by
+the app's own `sanitize` (walk-in, anonymized, pending, no tables, no date, no
+time, mega-combo, recurring occurrence, joined phone-less guest, …) through the
+real rules and requires every one to be accepted.
+
+1. Paste `database.rules.json` into the Firebase console → Realtime Database →
+   Rules → **Publish**. PROD only; there is no CLI step, and
+   `firebase deploy` must never be run from this repo (see above).
+2. Nothing else. No app refresh, no quiet window.
+
+**Rollback** is re-publishing the previous rules from git
+(`git show v17.16.0:database.rules.json`, or any commit before this one).
+
+**One code path changed with it.** `usePersistence`'s lazy array→keyed migration
+(v15.5.0) wrote each child with `updatedAt` and no `baseUpdatedAt`, so the new
+create branch would refuse it. It now writes `baseUpdatedAt: 0`. The path is
+unreachable on PROD — the node has been keyed since v15.5.0 and the branch is
+gated on `Array.isArray` — but a recovery path left knowingly broken is how a
+service is lost years later, by someone who reads the code and believes it
+works.
+
+### Two findings this version does NOT fix, and why
+
+Both need the same structural change and neither can be fixed by adding a rule.
+
+- **CT-2A-04** — an authenticated client can delete the entire `/bookings` node
+  in one call.
+- **CT-2A-06** — a whole-node `remove()` bypasses the rev CAS (node gone, rev
+  left behind), which `revGuard.js` and CLAUDE.md both used to say was
+  impossible. Those claims are corrected in this version.
+
+**RTDB write permission cascades from the root `.write` and cannot be revoked
+lower down** — measured against the emulator: a child `.write: false` on
+`bookings` does *not* deny the delete. Closing either finding means removing
+`".write": "auth != null"` from the root and granting it per path, which was
+also measured and carries two hazards:
+
+1. **Deleting the last booking would be refused.** The natural predicate is
+   `newData.exists() || !data.exists()`, and removing the only booking empties
+   `/bookings`, so `newData.exists()` is false.
+2. **Every path not explicitly granted becomes unwritable.** `presence` fails
+   immediately in the probe — the one node this repo documents as deliberately
+   having no rules of its own.
+
+Both sit inside the documented single-restaurant trust model. See ROADMAP.
+
+---
+
 ## v17.6.0 addition — `settings/users/$uid/prefs` rev pair (per-user preferences)
 
 v17.6.0 adds an **eighth** settings node, and the first that is **not
