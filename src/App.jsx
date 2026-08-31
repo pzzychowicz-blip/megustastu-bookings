@@ -49,6 +49,7 @@ import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
+import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
 // can be unit-tested (tests/waitlist-match.test.js).
@@ -274,7 +275,7 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"MGT Bookings",
-  version:"17.15.7",
+  version:"17.16.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -847,7 +848,12 @@ function BookingApp({uid}){
   // read a FRESH draft): this one is read during render to derive formDirty, so
   // a ref would be the wrong tool — a ref write wouldn't repaint.
   const [formBaseline, setFormBaseline] = useState(EMPTY_FORM);
-  function openForm(next){setFormBaseline(next);setForm(next);}
+  // v17.16.0: the commit-once guard resets HERE, and nowhere else. This is
+  // already the one door every open path goes through (it sets the
+  // unsaved-changes baseline), so the guard cannot be left armed by a path
+  // that forgot it — see src/lib/submitGuard.js, sequencing rule 3.
+  const saveGuardRef = useRef(READY);
+  function openForm(next){saveGuardRef.current=READY;setFormBaseline(next);setForm(next);}
   // Which surface the discard confirm is asking about: "form" | "walkin" |
   // "manual" | "reminder" | "block" | "settings" | null. One shared modal, six
   // callers as of v17.8.0.
@@ -2046,6 +2052,10 @@ function BookingApp({uid}){
         // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
         // (undo swaps it back in wholesale, incl. tables/status/duration).
         if(ok&&editChanged) armUndo(undoDelta(bookings,fin),editId,"edit",false);
+        // v17.16.0: armed only HERE — after the write is dispatched, on the
+        // line that closes the form. Every early return above leaves the form
+        // open with an error and the guard READY, so Save still works.
+        saveGuardRef.current=DISPATCHED;
         setShowForm(false);setViewDate(f.date);
   }
   function doSaveNew(f,v){
@@ -2114,9 +2124,18 @@ function BookingApp({uid}){
         // panel) — remove the entry now the booking is dispatched (a held write
         // shows optimistically + auto-retries, so the intent stands either way).
         if(pendingWaitlistRef.current){removeFromWaitlist(pendingWaitlistRef.current);pendingWaitlistRef.current=null;}
+        // v17.16.0: armed only HERE — after the write is dispatched, on the
+        // line that closes the form. Every early return above leaves the form
+        // open with an error and the guard READY, so Save still works.
+        saveGuardRef.current=DISPATCHED;
         setShowForm(false);setViewDate(f.date);
   }
   function doSave(){
+    // v17.16.0: has this open of the form already dispatched a save? The form is
+    // still mounted and clickable for EXIT_MS while it fades out, so a second tap
+    // lands on a live Save button — see src/lib/submitGuard.js. Checked before
+    // validation: a refused save must not depend on the draft being valid.
+    if(!mayDispatch(saveGuardRef.current)) return;
     // v17.0.0: apply the pending/confirm status override to a CLONE of the form
     // so every downstream read (status write, diffBooking history, completed-
     // duration gate, flash condition) sees the effective status uniformly.

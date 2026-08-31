@@ -47,7 +47,8 @@
 // it callable from this hook's args even though it's textually
 // declared further down BookingApp's body.
 
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { READY, DISPATCHED, mayDispatch } from "../lib/submitGuard";
 import { KITCHEN_TABLE_LIMIT, hoursFor } from "../lib/constants";
 import { sameDraft } from "../lib/drafts";
 import {
@@ -68,6 +69,11 @@ export function useWalkin({
 }){
   const [walkinForm, setWalkinForm] = useState({size:defaultWalkinSize,notes:"",tables:[],time:""});
   const [walkinError, setWalkinError] = useState("");
+  // v17.16.0: commit-once guard for this surface (src/lib/submitGuard.js).
+  // A ref, not state: it is read synchronously at the top of doSaveWalkin and
+  // must be current within the same tick as the tap that set it — a state
+  // update would not have landed before the second tap arrives.
+  const walkinGuardRef = useRef(READY);
   // Today-scoped "Walk-in N" numbering. Scans bookings for names
   // matching the "Walk-in " prefix on today's date and returns max+1.
   // Re-evaluated on every render that calls it (it's not memoised) —
@@ -100,17 +106,29 @@ export function useWalkin({
     setWalkinBaseline(fresh);
     setWalkinForm(fresh);
     setWalkinError("");setShowWalkin(true);
+    // v17.16.0: the commit-once guard resets HERE — openWalkin is this
+    // surface's single door, and already the one place that snapshots the
+    // unsaved-changes baseline. See src/lib/submitGuard.js, rule 3.
+    walkinGuardRef.current=READY;
   }
   // doSaveWalkin: actual write. Builds a sanitised booking object with
   // status:"seated", _manual:true, _locked:true (walk-ins are always
   // hand-assigned and never reshuffled), and appends it. Also forces
   // viewDate to today so staff immediately see the new walk-in.
   function doSaveWalkin(){
+    // v17.16.0: one open of this form produces at most one walk-in. Same defect
+    // and same shape as the booking form's doSave — a walk-in mints its `genId()`
+    // inline too, so two taps 200 ms apart seat two parties on the same tables
+    // while the modal is still fading out. src/lib/submitGuard.js.
+    if(!mayDispatch(walkinGuardRef.current)) return;
     const wf=walkinForm;
     if(!wf.tables||!wf.tables.length){setWalkinError("Please assign tables first.");return;}
     const t=wf.time||nowTime();const size=Number(wf.size)||2;const dur=wf.customDur||getDur(size);
     const nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:new Date().toISOString().slice(0,10),time:t,scheduledTime:t,size:size,duration:dur,originalDuration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true,history:[histEntry("walk-in created",getUser())]};
     saveBookings(function(prev){return prev.concat([nb]);});
+    // Armed after the dispatch, on the line that closes the form — the
+    // "Please assign tables first" return above leaves it READY.
+    walkinGuardRef.current=DISPATCHED;
     setShowWalkin(false);setViewDate(new Date().toISOString().slice(0,10));
   }
   // saveWalkin: kitchen-load guard. If adding this walk-in would push

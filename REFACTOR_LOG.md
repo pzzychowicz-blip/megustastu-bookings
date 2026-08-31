@@ -16249,3 +16249,94 @@ contrast registry are all structurally unable to notice. This is the
 `srcFilesMatching(re)`, two call sites.
 
 **647 tests.**
+
+---
+
+## v17.16.0 — two taps, one booking
+
+**Date:** 2026-08-31 · **Branch:** `feat/v17.16.0-save-guard-error-boundary` ·
+**Files:** `src/lib/submitGuard.js` (new), `src/App.jsx`,
+`src/hooks/useWalkin.js`, `tests/submit-guard.test.js` (new), CLAUDE.md ·
+**Behavioural change:** yes — a second tap on Save no longer creates a second
+booking · **663 tests** (+16).
+
+The first version to act on the v17.15.7 crash test (`MGT BOOKINGS — CRASH TEST
+- ADVERSARIAL QA.md`, three sessions, 22 confirmed findings). It carries the two
+P1 client defects; the `database.rules.json` findings ship separately, because
+that file is applied by hand in the PROD console and a rules change buried
+inside a feature release is a change nobody reviews as a rules change.
+
+### 1 · CT-2C-01 — tapping Save twice creates two bookings
+
+**The finding.** Two clicks 200 ms apart produced two confirmed reservations on
+two different tables. Three synchronous clicks produced three. The walk-in form
+has the identical shape. This was the most reachable defect in the whole crash
+test: no unusual state, no stale device, no second client — a fingertip.
+
+**Why nothing caught it.** Every safeguard behaved correctly. Each click is a
+fresh `doSave` minting a fresh `genId()`, so the per-`$id` CAS, the write
+guards, the capacity check and the optimiser all saw two genuinely distinct,
+genuinely valid creates and had no reason to think they were related. A search
+for `isSaving` / `savingRef` / `inFlight` / `submitting` across `src/` returned
+nothing: there was no re-entry guard anywhere in the app, and the Save button's
+`disabled` tracks form validity, never an in-flight save.
+
+**Why `disabled` is not the fix**, which is the part worth carrying forward.
+Both save paths dispatch and then call `setShowForm(false)` — but the modal does
+not leave immediately. `Overlay` self-animates its close through
+`ModalPresence`, holding the subtree mounted for `EXIT_MS` (`M.dur.move` 240 +
+`EXIT_PAD` 20 = **260 ms**). For that quarter-second the form is fading out and
+its Save button is still in the DOM, still hit-testable, still wired to the same
+handler. A 200 ms second tap lands on a live button inside a modal that is
+already closing. **Any fix that depends on React having re-rendered is racing
+the exit animation.** This one is a synchronous ref check at the top of the
+dispatch path, so it cannot be raced.
+
+**`src/lib/submitGuard.js`** — `READY` / `DISPATCHED` / `mayDispatch(state)`.
+A pure module rather than a ref inline in each hook, for the reason this repo
+keeps rediscovering: two surfaces with the same rule written out twice is the
+condition that produces the next disagreement. Three sequencing rules, and each
+is a real failure if broken:
+
+1. **CHECK first**, at the top of the handler, before any validation. Placed
+   after it, a second tap still passes whenever the first left the draft
+   valid — which on a double-tap it always does, so the bug would be intact.
+2. **ARM only after a dispatch actually happened**, on the line that closes the
+   form. Armed on a validation return, the user cannot correct a field and press
+   Save again. Armed *before* the write, a throw inside it leaves the form open
+   and permanently unable to save.
+3. **RESET on OPEN**, not on close and not on a timer. `openForm` (App.jsx) and
+   `openWalkin` (useWalkin.js) are each their surface's single door — and not
+   by coincidence worth leaning on quietly: both are already the one place that
+   snapshots the unsaved-changes baseline, and CLAUDE.md records that every open
+   path must go through them for exactly that reason. Verified rather than
+   assumed: all four `setShowForm(true)` sites call `openForm` first.
+
+**No time window, deliberately.** A window would have to outlast the exit
+animation and undercut a plausible second booking, and picking that number means
+the guard silently stops guarding on a device having a slow frame. "Until this
+surface is opened again" is the exact statement of the bug and needs no clock.
+
+**`mayDispatch` is `!== DISPATCHED`, not `=== READY`**, so it **fails open**: an
+uninitialised ref or a state a later version invents answers "go ahead". That
+costs at worst the duplicate this guard prevents. The inverse spelling fails
+closed, and a Save button that silently does nothing is the worse of the two —
+invisible, and unrecoverable without a reload, where a duplicate is at least on
+screen for somebody to delete.
+
+**`tests/submit-guard.test.js` (16).** The predicate, then the invariant over a
+model that includes the exit window (a model without it cannot reproduce the bug
+at all) across 500 seeded random sequences, then a source sweep of the four call
+sites — because `mayDispatch` correct-and-unwired is exactly the shape of the
+defect it was written for. Proven to fail without the fix, in all three ways it
+could be removed: neutering the predicate fails 5, deleting the arm fails 2,
+moving the check below validation fails 1.
+
+### Verification
+
+```
+npm run build       334.08 kB / 90.60 kB gz   (+0.22 kB raw, +0.05 kB gz)
+npm test            663 passed (21 files)
+npm run lint        0 errors, 71 warnings     (the pre-existing baseline)
+npm run check:style OK
+```
