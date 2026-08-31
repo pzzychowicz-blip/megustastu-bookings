@@ -16390,6 +16390,39 @@ rendering the boundary *beside* `<App/>` rather than around it fails 1, removing
 "no UI/component tests" line was corrected in the same commit — with the bar for
 repeating the trick, so it does not read as a general licence.
 
+### 3 · Two CLAUDE.md claims the crash test found false
+
+Both are in the auto-loaded architecture record, which is the file everything
+else in this repo is checked against — so a confident wrong sentence here has a
+long half-life and gets quoted rather than verified.
+
+**CT-2A-09 — "All hooks are converted as of v16.0.0 — never reintroduce the
+updater-side write."** False of the most important write path in the app.
+`saveBookings` / `saveBlocks` (`usePersistence.js`) call `persist(prev,computed)`
+— which performs the `update()` — from inside their `setBookings` updater, and
+always have. Verified directly rather than taken from the crash-test register.
+
+The row is corrected rather than deleted, because *why the predicted corruption
+has not happened* is the useful part: v15.5.0's per-child diff `update()` is
+idempotent, where the whole-node concat `set()` behind the v16.0.0 incident is
+not, and StrictMode's double-dispatch is separately caught by `lastPatchSigRef`'s
+2 s content+base signature. Two defences — either of which could be edited away
+by somebody who read the old row and believed the shape was already gone. It is
+**mitigated, not structurally removed**, and now says so.
+
+**The `dbError` listener count — "All 16 listeners pass it."** Stale since
+v17.5.1. The real figure is **18** (17 in `hooks/` + `attachRev` in
+`revGuard.js`), and all 18 do pass it.
+
+Worth recording because of *how* the recount went wrong twice. The crash-test
+hand-off gave the figure as 20, which is what `grep -c "onValue("` reports — and
+two of those matches are inside `dbError.js`'s own header, where the comment
+explains the rule by naming the call. The repo already has a Gotchas row for
+exactly this ("prose that names the thing a regex hunts for is indistinguishable
+from the thing", `tests/csp.test.js`, v17.15.1), and it was walked into again
+while correcting a different count. A 12-line grep window then falsely flagged
+four listeners as missing the callback; widening it cleared all four.
+
 ### Verification
 
 ```
