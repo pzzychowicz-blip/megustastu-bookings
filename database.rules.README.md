@@ -75,6 +75,15 @@ project, `firebase deploy` has no target and errors out instead of publishing
 rules somewhere. Applying the rules stays the manual console step described
 below — the emulator is for *attacking* them, not for shipping them.
 
+**So: never run `firebase deploy` from this repo.** `firebase.json` has to map
+`database.rules` for `emulators:exec` to load them, and that makes
+`firebase deploy --only database` a *working* command here for the first time.
+A single `firebase use <prod-project>` would then publish whatever
+`database.rules.json` currently says — PROBE behaviour and all — into
+production, bypassing the review that the manual console step exists to force.
+The absent `.firebaserc` is the only thing in the way, and it stops being one
+the moment somebody names the project.
+
 ### What the suite asserts
 
 78 tests, in six groups. The first asserts the rig itself is pointed at a
