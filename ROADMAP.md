@@ -75,12 +75,16 @@ ONE structural change, not two fixes.
   and the false claims that the rev CAS covered wipes were corrected in
   v17.16.1. Wants its own version, a full per-path audit and its own emulator
   group.
-- **CT-2A-03 follow-on (P3) — `status`'s value set is not pinned.** v17.16.1
-  validates `status` as a string, deliberately not against the five known
-  values: an unrecognised status is reachable in stored data, so pinning the set
-  would refuse every write touching such a booking. Closing it means auditing
-  what PROD actually holds first. Table ids are likewise unchecked against the
-  layout, which is correct — the layout is editable, so the rules would
+- **CT-2A-03 follow-on (P3) — the rules check TYPE, never FORMAT.** v17.16.1
+  validates `status`, `date` and `time` as strings and deliberately not against
+  a value set or a pattern. `sanitize` guarantees type but not well-formedness,
+  so a legacy `"31/08/2026"` or an unrecognised status is reachable in stored
+  data — and because `persist` sends ONE multi-path `update()` that RTDB applies
+  atomically, a single such booking would reject a whole optimiser reshuffle and
+  leave staff unable to save a day that looks normal. **Closing this means
+  auditing what PROD actually holds first**, then tightening against evidence;
+  it is not a rules edit on its own. Table ids are likewise unchecked against
+  the layout, which is correct — the layout is editable, so the rules would
   duplicate it and go stale.
 
 **Version C or later — client fixes, in rough value order.**

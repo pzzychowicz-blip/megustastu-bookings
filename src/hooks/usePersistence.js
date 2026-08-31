@@ -469,6 +469,13 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // `updatedAt` and now demands `baseUpdatedAt === 0` — which is what a
         // genuine create looks like and what `stampForWrite` writes when it has
         // no `old`. Without it every child of this migration write is refused.
+        // It is NOT a guarantee the write lands: `arr` is `sanitizeAll(val)`, so
+        // these rows are type-correct but otherwise whatever the legacy node
+        // held, and `set()` here is atomic — one row the rules dislike rejects
+        // the whole migration, and the `.catch` below resets `migratedRef`, so
+        // the rejected write's rollback echo re-fires this listener and it
+        // re-attempts on every snapshot. That is a write-reject loop, the same
+        // class as the v17.10.2 reconciliation loop (CLAUDE.md Gotchas).
         // Unreachable on PROD (the node has been keyed since v15.5.0, and this
         // branch is gated on `Array.isArray`), so nothing observable changes —
         // but a recovery path left knowingly broken is how a service is lost

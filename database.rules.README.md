@@ -142,16 +142,29 @@ be present" — `sanitize` fills every gap on read, and a required field the app
 later stopped writing would be a rejected write in production, which is staff
 unable to save.
 
-Three limits are deliberate and are recorded rather than fixed:
+**Every rule checks TYPE, never FORMAT**, and that is one decision applied
+consistently rather than four separate concessions:
 
-- **`status` is checked as a string, not against the five known values.** An
-  unrecognised status is reachable in stored data, and pinning the set would
-  refuse every write touching such a booking.
+- **`status` is a string, not one of the five known values.** An unrecognised
+  status is reachable in stored data, and pinning the set would refuse every
+  write touching such a booking.
+- **`date` and `time` are strings, not patterns.** The first version of these
+  rules matched `^[0-9]{4}-[0-9]{2}-[0-9]{2}$` and `^[0-9]{1,2}:[0-9]{2}$`, and
+  this version's own `/code-review` found the hazard. `sanitize` guarantees
+  these are strings (`b.date || ""`, `b.time || "13:00"`) and never that they
+  are well-formed, so a legacy `"31/08/2026"` survives a read and is written
+  back on the next save. **`persist` sends one multi-path `update()`, which RTDB
+  applies atomically** — so one such booking would reject a whole optimiser
+  reshuffle, the retry queue would replay and fail, and staff would be left
+  unable to save a day that looks perfectly normal. Type-only still fixes what
+  CT-2A-03 reported: `toMins(t)` is `t.split(":")`, which THROWS on a number and
+  merely returns NaN on a bad string.
 - **Table ids are not checked against the layout.** The layout is editable in
   Settings → Layout, so the rules would duplicate it and go stale.
-- **An empty `date` stays legal.** `sanitize` writes `date: b.date || ""`, so
-  `""` is reachable, and refusing it would brick writes for any booking holding
-  it.
+
+Checking formats is a separate decision and needs evidence of what PROD actually
+holds — not a guess committed to a file deployed by hand with no staging. On
+ROADMAP.
 
 ### Deployment — rules can go FIRST, or at any time
 

@@ -16497,7 +16497,7 @@ npm run check:style OK
 `src/hooks/usePersistence.js`, `src/lib/revGuard.js`, `src/App.jsx` (version),
 CLAUDE.md, `database.rules.README.md`, ROADMAP.md ·
 **Behavioural change:** server-side — two classes of write the rules used to
-accept are now refused · **99 rules tests** (+21); the app suite is unchanged at
+accept are now refused · **101 rules tests** (+23); the app suite is unchanged at
 **684**.
 
 The second half of the v17.15.7 crash-test response, split from v17.16.0 for one
@@ -16535,16 +16535,29 @@ be present": `sanitize` fills every gap on read, and a required field the app
 later stopped writing would be a rejected write in production — which is not a
 failing test, it is staff unable to save a booking.
 
-Three limits are deliberate, and each would have been a live outage:
+**Every rule checks TYPE, never FORMAT** — one decision applied consistently,
+and the version's own `/code-review` is what made it consistent:
 
 - **`status` is a string, not one of five.** An unrecognised status is reachable
   in stored data (PlanView's own v17.15.7 note says so), and pinning the set
   would refuse every write touching such a booking.
+- **`date` and `time` are strings, not patterns.** They were patterns first
+  (`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`, `^[0-9]{1,2}:[0-9]{2}$`) and the review
+  caught the hazard. `sanitize` guarantees these are strings and never that they
+  are well-formed, so a legacy `"31/08/2026"` survives a read and is written
+  back on the next save — and `persist` sends ONE multi-path `update()` that
+  RTDB applies **atomically**, so a single such booking would reject a whole
+  optimiser reshuffle. The retry queue would replay it, fail again, and after
+  `MAX_RETRIES` leave staff a red banner and no way to save a day that looks
+  perfectly normal on screen. Type-only still fixes what CT-2A-03 reported:
+  `toMins(t)` is `t.split(":")`, which THROWS on a number and merely returns NaN
+  on a bad string. **The inconsistency is the lesson** — the `status` reasoning
+  was written down two rules above and then not applied to its own neighbours.
 - **Table ids are not checked against the layout**, which is editable in
   Settings → Layout — the rules would duplicate it and go stale.
-- **An empty `date` stays legal.** `sanitize` writes `date: b.date || ""`, so
-  `""` is reachable, and refusing it would brick writes for any booking holding
-  one.
+
+Checking formats is a separate decision needing evidence of what PROD holds, not
+a guess committed to a file deployed by hand with no staging. On ROADMAP.
 
 ### The test that makes this safe to deploy
 
@@ -16601,7 +16614,7 @@ is re-publishing the previous rules from git. See `database.rules.README.md`.
 ```
 npm run build       336.42 kB / 91.40 kB gz   (version line only)
 npm test            684 passed (22 files)
-npm run test:rules   99 passed (+21)
+npm run test:rules  101 passed (+23)
 npm run lint        0 errors, 71 warnings     (the pre-existing baseline)
 npm run check:style OK
 ```

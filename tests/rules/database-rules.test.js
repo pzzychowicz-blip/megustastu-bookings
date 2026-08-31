@@ -508,12 +508,11 @@ describe("field shapes are validated (v17.16.1)", () => {
   // mis-read (a party of 2, a 90-minute booking, no table).
   const refused = {
     "a numeric time":        { time: 1300 },
-    "a non-time string":     { time: "banana" },
     "a string size":         { size: "many" },
     "a negative duration":   { duration: -90 },
     "tables as a string":    { tables: "3" },
     "a numeric name":        { name: 42 },
-    "a malformed date":      { date: "31/08/2026" },
+    "a numeric date":        { date: 20260901 },
   };
   for (const [label, patch] of Object.entries(refused)) {
     it(`rejects ${label}`, async () => {
@@ -539,6 +538,10 @@ describe("field shapes are validated (v17.16.1)", () => {
     "an unknown status":     { status: "teleported" },
     // Unpadded legacy times parse correctly in toMins and must keep working.
     "an unpadded time":      { time: "9:00" },
+    // FORMAT is deliberately NOT checked on `date` or `time`, only TYPE — see
+    // the block comment below. These two would be refused by a format rule.
+    "a malformed date":      { date: "31/08/2026" },
+    "a non-time string":     { time: "banana" },
   };
   for (const [label, patch] of Object.entries(accepted)) {
     it(`still accepts ${label} — deliberate`, async () => {
@@ -550,6 +553,39 @@ describe("field shapes are validated (v17.16.1)", () => {
 
   it("rejects a NON-STRING status, which is what actually broke isActive", async () => {
     await assertFails(writeBooking(staff(), "bad", booking({ status: 7 })));
+  });
+
+  // WHY `date` AND `time` ARE TYPE-ONLY, NOT FORMAT-CHECKED.
+  //
+  // The first version of these rules matched them against
+  // /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/ and /^[0-9]{1,2}:[0-9]{2}$/, and this
+  // version's own /code-review found the hazard. `sanitize` guarantees these
+  // fields are STRINGS (`b.date || ""`, `b.time || "13:00"`) and never that
+  // they are well-formed — so a value like "31/08/2026" already in the database
+  // survives a read unchanged and is written back on the next save.
+  //
+  // A format rule would refuse it, and `persist` sends ONE multi-path
+  // `update(ref(db,"bookings"), patch)` which RTDB applies ATOMICALLY (see
+  // "rejects a whole multi-path patch when ONE child is stale" above). An
+  // optimiser reshuffle writes every touched booking on a day in a single
+  // patch, so one such booking would reject the WHOLE day's write — the retry
+  // queue would replay it, fail again, and after MAX_RETRIES leave staff a red
+  // banner and no way to save, on a day that looks perfectly normal on screen.
+  //
+  // Type-only still fixes what CT-2A-03 actually reported: `toMins(t)` is
+  // `t.split(":")`, which THROWS on a number and merely returns NaN on a bad
+  // string. And it is the same reasoning already applied to `status` two rules
+  // above — checked as a string, never against its five known values, because
+  // unrecognised data is reachable and a rule that refuses it stops the
+  // restaurant working. Applying it to `status` and not to `date`/`time` was
+  // the inconsistency; this is it applied consistently.
+  //
+  // Checking formats is a separate decision, and it needs evidence of what PROD
+  // actually holds — not a guess committed to a file that is deployed by hand
+  // with no staging. See ROADMAP.
+  it("accepts a badly FORMATTED but correctly TYPED date and time", async () => {
+    await assertSucceeds(writeBooking(staff(), "odd",
+      booking({ date: "31/08/2026", time: "half seven" })));
   });
 
   it("a delete is still unconditional — child validates do not run for it", async () => {
