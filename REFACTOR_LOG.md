@@ -16482,7 +16482,7 @@ higher.
 ### Verification
 
 ```
-npm run build       336.53 kB / 91.44 kB gz   (+2.45 kB raw, +0.84 kB gz)
+npm run build       336.40 kB / 91.39 kB gz   (+2.32 kB raw, +0.79 kB gz)
 npm test            684 passed (22 files)
 npm run lint        0 errors, 71 warnings     (the pre-existing baseline)
 npm run check:style OK
