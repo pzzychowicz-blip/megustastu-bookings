@@ -49,46 +49,39 @@ session and keeping it in sync.
 
 ### Crash test v17.15.7 — confirmed and unfixed
 
-Twenty of the twenty-two findings from the three adversarial QA sessions
+The findings from the three adversarial QA sessions that are still open
 (`MGT_Bookings_CrashTest_Phase4_FixPlan_Handoff.md` in the context folder holds
-the full register and the reproductions). **v17.16.0 fixed CT-2C-01 and
-CT-2A-02.** Delete an entry as its fix lands; the detail then goes in
+the full register and the reproductions). **v17.16.0 shipped CT-2C-01 and
+CT-2A-02; v17.16.1 shipped CT-2A-01 and CT-2A-03's server half** — four of
+twenty-two. Delete an entry as its fix lands; the detail then goes in
 `REFACTOR_LOG.md`.
 
-**Version B — `database.rules.json`, its own branch and PR.** That file is
-applied by hand in the PROD console, so these must not ride inside a feature
-release. Each fix updates its `PROBE:` test in
-`tests/rules/database-rules.test.js` **deliberately** — never by weakening an
-assertion.
+**`database.rules.json` — what remains after v17.16.1.** The first two below are
+ONE structural change, not two fixes.
 
-- **CT-2A-01 (P1) — a deleted booking is resurrected by a stale write.**
-  `$bid`'s validate is `!newData.exists() || (… && (!data.exists() || <CAS>))`,
-  and once the booking is gone the `!data.exists()` disjunct short-circuits the
-  CAS, so any write carrying a numeric `updatedAt` recreates it — including an
-  offline device's queued edit naming a `baseUpdatedAt` that was deleted. It
-  returns holding its OLD table: if that table was reassigned the day is
-  genuinely double-booked, and in the commoner case a cancelled party simply
-  reappears as live with nothing on screen saying so. Verified against the
-  emulator. Two candidate fixes, and **the choice needs Patryk**: a tombstone
-  (`deletedAt` — changes the data shape and the delete path), or requiring
-  `baseUpdatedAt === 0` on the create branch (rejects a legitimate offline
-  re-create). Pinned by "PROBE — a deleted booking can be resurrected".
-- **CT-2A-03 (P2), server half — no field-shape validation.** The rules assert a
-  numeric `updatedAt` and nothing else, so `time: 2000`, `size:"many"`,
-  `tables:"3"` and an unknown status are all stored. Pinned by "PROBE — no field-
-  shape validation on bookings" (8 cases + a booking with nothing but a stamp).
-- **CT-2A-04 (P2) — `/bookings` is deletable in one authenticated call.**
-  `.validate` is not evaluated for deletes and `/bookings` carries no rule of its
-  own. Inside the documented single-restaurant trust model, but the only guard is
-  client-side and the free plan has no backups. Note alongside it: the client's
-  empty-array guard needs `firstLoadCount.current > 0`, frozen at the session's
-  first snapshot, so a session started against an empty database runs its whole
-  life with that guard disabled.
-- **CT-2A-06 (P2) — a whole-node wipe bypasses the rev CAS, and two documents say
-  it cannot.** `remove()` on `tableBlocks` alone succeeds: node gone,
-  `tableBlocksRev` left at its old value. True of the app's write path, false of
-  the rules. `revGuard.js`'s header and CLAUDE.md both need the correction, in
-  whichever direction the rules change goes.
+- **CT-2A-04 (P2) + CT-2A-06 (P2) — the root `.write` grant.** CT-2A-04: an
+  authenticated client can delete the entire `/bookings` node in one call.
+  CT-2A-06: a whole-node `remove()` bypasses the rev CAS (node gone, rev left
+  behind). **Neither can be fixed by adding a rule** — RTDB write permission
+  cascades from the root's `".write": "auth != null"` and cannot be revoked
+  lower down, measured against the emulator (a child `".write": false` on
+  `bookings` does not deny the delete). Closing either means moving `.write` off
+  the root and granting it per path. That was measured too, and carries two
+  hazards: **deleting the last booking would be refused** (the natural predicate
+  `newData.exists() || !data.exists()` is false when the node empties), and
+  **every path not explicitly granted becomes unwritable** — `presence` failed
+  immediately in the probe, the one node documented as deliberately having no
+  rules. Both findings sit inside the documented single-restaurant trust model,
+  and the false claims that the rev CAS covered wipes were corrected in
+  v17.16.1. Wants its own version, a full per-path audit and its own emulator
+  group.
+- **CT-2A-03 follow-on (P3) — `status`'s value set is not pinned.** v17.16.1
+  validates `status` as a string, deliberately not against the five known
+  values: an unrecognised status is reachable in stored data, so pinning the set
+  would refuse every write touching such a booking. Closing it means auditing
+  what PROD actually holds first. Table ids are likewise unchecked against the
+  layout, which is correct — the layout is editable, so the rules would
+  duplicate it and go stale.
 
 **Version C or later — client fixes, in rough value order.**
 

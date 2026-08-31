@@ -464,7 +464,16 @@ export function usePersistence({ autoOptimizer, nowMins }){
         migratedRef.current=true;
         const keyed={};
         const now=Date.now();
-        arr.forEach(function(b){ keyed[b.id]=Object.assign({},b,{updatedAt:Math.max(now,Number(b.updatedAt)||0)+1}); });
+        // v17.16.1: `baseUpdatedAt:0` is REQUIRED here now. The rules' create
+        // branch (database.rules.json, CT-2A-01) stopped accepting any numeric
+        // `updatedAt` and now demands `baseUpdatedAt === 0` — which is what a
+        // genuine create looks like and what `stampForWrite` writes when it has
+        // no `old`. Without it every child of this migration write is refused.
+        // Unreachable on PROD (the node has been keyed since v15.5.0, and this
+        // branch is gated on `Array.isArray`), so nothing observable changes —
+        // but a recovery path left knowingly broken is how a service is lost
+        // years later, by someone who reads the code and believes it works.
+        arr.forEach(function(b){ keyed[b.id]=Object.assign({},b,{updatedAt:Math.max(now,Number(b.updatedAt)||0)+1,baseUpdatedAt:0}); });
         set(ref(db,"bookings"),keyed).catch(function(){ migratedRef.current=false; });
       }
       // v15.6.0: re-apply + persist any held user changes on top of this fresh snapshot

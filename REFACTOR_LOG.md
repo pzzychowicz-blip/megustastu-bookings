@@ -16487,3 +16487,124 @@ npm test            684 passed (22 files)
 npm run lint        0 errors, 71 warnings     (the pre-existing baseline)
 npm run check:style OK
 ```
+
+---
+
+## v17.16.1 — a deleted booking stays deleted
+
+**Date:** 2026-08-31 · **Branch:** `fix/v17.16.1-rules-resurrection-shapes` ·
+**Files:** `database.rules.json`, `tests/rules/database-rules.test.js`,
+`src/hooks/usePersistence.js`, `src/lib/revGuard.js`, `src/App.jsx` (version),
+CLAUDE.md, `database.rules.README.md`, ROADMAP.md ·
+**Behavioural change:** server-side — two classes of write the rules used to
+accept are now refused · **99 rules tests** (+21); the app suite is unchanged at
+**684**.
+
+The second half of the v17.15.7 crash-test response, split from v17.16.0 for one
+reason: **`database.rules.json` is applied by hand in the production console, and
+a rules change buried inside a feature release is a change nobody reviews as a
+rules change.** Its own branch, its own PR, its own deploy note.
+
+### 1 · CT-2A-01 — a deleted booking could be resurrected
+
+The `$bid` validate read
+`!newData.exists() || (hasChild('updatedAt') && isNumber(…) && (!data.exists() || <CAS>))`,
+and the `!data.exists()` disjunct was the hole: once the booking was gone the CAS
+branch was never reached, so **any** write carrying a numeric `updatedAt`
+recreated it — including an offline device's queued edit naming a
+`baseUpdatedAt` that had been deleted.
+
+It came back **holding its old table**. If that table had since been reassigned
+the day was genuinely double-booked; in the commoner case a party that cancelled
+simply reappeared as live, with nothing on screen saying so. That is the one
+place the crash test found this app asserting something FALSE rather than merely
+omitting something.
+
+**The fix is the create branch requiring `baseUpdatedAt === 0`** — exactly what
+`stampForWrite` writes when it has no `old`, i.e. a genuine create. A stale edit
+carries the deleted version's stamp and satisfies neither branch. Chosen over a
+`deletedAt` tombstone, which would have changed the data shape, the delete path,
+every read that counts bookings, and would have needed a pruning story on a free
+plan with no backups.
+
+### 2 · CT-2A-03's server half — fields have shapes
+
+`name` · `date` · `time` · `size` · `duration` · `status` · `tables` each get a
+`.validate`. Every one is **"if PRESENT, must be the right shape"**, never "must
+be present": `sanitize` fills every gap on read, and a required field the app
+later stopped writing would be a rejected write in production — which is not a
+failing test, it is staff unable to save a booking.
+
+Three limits are deliberate, and each would have been a live outage:
+
+- **`status` is a string, not one of five.** An unrecognised status is reachable
+  in stored data (PlanView's own v17.15.7 note says so), and pinning the set
+  would refuse every write touching such a booking.
+- **Table ids are not checked against the layout**, which is editable in
+  Settings → Layout — the rules would duplicate it and go stale.
+- **An empty `date` stays legal.** `sanitize` writes `date: b.date || ""`, so
+  `""` is reachable, and refusing it would brick writes for any booking holding
+  one.
+
+### The test that makes this safe to deploy
+
+The existing PROBE assertions were **inverted, never weakened** — that is what
+the `PROBE:` convention exists to force, and eleven of them fail against the old
+rules, which is the proof the change does something.
+
+But a rules file goes to production BY HAND, so "my fixture passes" is not the
+question. The suite now imports the app's own **`sanitize`** and pushes thirteen
+real booking shapes through the real rules: an ordinary booking, a walk-in, an
+anonymized booking, pending, no tables, no date, no time, a completed visit with
+`stayedMin`, a cancelled no-show, a mega-combo across three tables, one with a
+deposit and notes, a recurring occurrence, and a joined phone-less guest — plus
+an edit through the CAS branch. If a rule is ever too strict for something the
+app can legitimately produce, it fails there rather than on the tablet.
+
+### 3 · CT-2A-06 and CT-2A-04 — corrected, not fixed, and why
+
+`revGuard.js`'s header said a wipe was covered because "the rev child's rule
+still enforces +1". True of that function, which always sends both keys; **false
+of the rules**, where it read as a guarantee — a client that calls `remove()` and
+omits the rev is not constrained by the rev's rule at all. CLAUDE.md carried the
+same claim. Both corrected.
+
+Neither CT-2A-06 nor CT-2A-04 is fixable by adding a rule, and that is the
+finding worth keeping: **RTDB write permission cascades from the root's
+`.write: auth != null` and cannot be revoked lower down** — measured, a child
+`".write": false` on `bookings` does not deny the delete. Closing them means
+moving `.write` off the root and granting it per path, which was measured too and
+carries two hazards: deleting the **last** booking would be refused (the natural
+predicate is false when the node empties), and **every ungranted path becomes
+unwritable** — `presence` failed immediately, the one node documented as
+deliberately having no rules of its own. Deferred with all of that recorded.
+
+### One code path changed with the rules
+
+`usePersistence`'s lazy array→keyed migration (v15.5.0) wrote each child with
+`updatedAt` and no `baseUpdatedAt`, so the new create branch would have refused
+it. It writes `baseUpdatedAt: 0` now. Unreachable on PROD — the node has been
+keyed since v15.5.0 and the branch is gated on `Array.isArray` — but a recovery
+path left knowingly broken is how a service is lost years later, by someone who
+reads the code and believes it works.
+
+### Deployment — rules can go first, or at any time
+
+Unlike v16.0.0 (app first, rules second) and v15.5.0 (a hard cutover), this needs
+no coordination: every client from v16.0.0 onward already writes the shapes and
+stamps these rules require, which the thirteen `sanitize` shapes assert rather
+than assume. Publish `database.rules.json` in the console; nothing else. Rollback
+is re-publishing the previous rules from git. See `database.rules.README.md`.
+
+### Verification
+
+```
+npm run build       336.42 kB / 91.40 kB gz   (version line only)
+npm test            684 passed (22 files)
+npm run test:rules   99 passed (+21)
+npm run lint        0 errors, 71 warnings     (the pre-existing baseline)
+npm run check:style OK
+```
+
+Eleven rules tests fail against the pre-v17.16.1 rules file — the change is
+proven, not asserted.
