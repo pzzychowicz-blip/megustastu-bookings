@@ -16893,3 +16893,40 @@ have looked identical before the reload.
 `npm run build` 335.96 kB / 91.64 kB gz · `npm test` **747 passed (24 files)** ·
 `npm run lint` 0 errors, 71 warnings (the standing baseline) · `npm run
 check:style` OK.
+
+### 14 · The day the Next-day button did nothing (commit 5/5)
+
+**Files:** `src/lib/day.js`, `src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`,
+`src/components/WeekView.jsx`, `tests/day.test.js` · **Behavioural change:** date
+navigation works on the spring-forward day · **752 tests** (+5).
+
+**Not from the crash-test register.** Found while widening the CT-2B-03 sweep's
+regex afterwards, because the four broken sites spell the same mistake a
+different way — which is the argument for widening it rather than trusting the
+count of 44.
+
+The two header arrows and the two arrow KEYS hand-rolled
+`new Date(viewDate); d.setDate(d.getDate() + n)`. `new Date(dateStr)` is UTC
+midnight; `setDate`/`getDate` read and write LOCAL components. On the
+spring-forward day the local day is 23 hours, so +1 local day lands BEFORE the
+next UTC midnight and `toISOString().slice(0,10)` reads back the day you started
+on. Measured in `Atlantic/Canary`: **`2026-03-29 → next` returned `2026-03-29`.**
+Forward navigation was dead for that day, once a year.
+
+**The correct implementation already existed and was the hidden one.**
+`WeekView.jsx` had a private `addDays` doing it in UTC throughout; it now lives
+in `day.js` and WeekView imports it. Everything already using `setUTCDate` — the
+recurring-occurrence generator, every WeekView grid step — was checked and is
+unaffected, so no data path was ever wrong. The **public behaviour was a broken
+hand-rolled copy of a correct private helper**, which is the same shape as
+`hourLabel`/`cutoffLabel` in reverse.
+
+Five tests, including the naive expression asserted alongside the fix so the
+difference is visible, and a property test stepping all 365 days of a DST year
+in both directions: a step must always move, and must round-trip. Verified live
+on DEV — Next day took 2026-03-29 → 2026-03-30, and ← took it back.
+
+Worth recording: the first live attempt pressed → and the date did **not** move,
+which looked like the fix failing. Focus was still in the date input, so
+`isTyping` had correctly swallowed the key. The app was right and the test of it
+was wrong — the same shape as the write-path test whose premise never held.

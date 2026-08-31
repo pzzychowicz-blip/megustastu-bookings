@@ -267,7 +267,7 @@ const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
-import { todayStr } from "./lib/day";
+import { todayStr, addDays } from "./lib/day";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -3592,13 +3592,13 @@ function BookingApp({uid}){
              still the open height. See DATE_CTRL_DROP for the numbers. */
           inert={anyModal}
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
-              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
+              onClick={function(){goToDate(addDays(viewDate,-1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Previous day"
               title="Previous day (←)"
               ><ChevronLeftIcon size={IC.chrome} /></button><button
-              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);goToDate(d.toISOString().slice(0,10));}}
+              onClick={function(){goToDate(addDays(viewDate,1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Next day"

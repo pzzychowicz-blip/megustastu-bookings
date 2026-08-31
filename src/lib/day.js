@@ -75,6 +75,31 @@ export function dayDiff(fromDateStr, toDateStr) {
   return Math.round((Date.parse(toDateStr) - Date.parse(fromDateStr)) / 86400000);
 }
 
+// v17.16.2: `dateStr` moved by `n` whole days — the ONLY correct way to step
+// the viewed date, and not the way the app was doing it.
+//
+// The four date-navigation sites (the two arrows in the header, the two arrow
+// KEYS) hand-rolled `new Date(viewDate); d.setDate(d.getDate() + n)`. That mixes
+// rulers exactly like the bug above: `new Date(dateStr)` is UTC midnight, while
+// `setDate`/`getDate` read and write LOCAL components. On the spring-forward day
+// the local day is 23 hours long, so +1 local day lands BEFORE the next UTC
+// midnight and `toISOString().slice(0,10)` reads back the day you started on.
+//
+// Measured in Atlantic/Canary: `2026-03-29 → next` returned **2026-03-29**. The
+// Next-day button and the → key did nothing at all on that date, once a year.
+//
+// Staying in UTC on both sides is what makes it exact, and it is the pattern the
+// rest of the app already used — the recurring-occurrence generator and every
+// WeekView grid step with `setUTCDate`, which is why none of THOSE drift. This
+// function is WeekView's own private `addDays`, moved out: the correct
+// implementation was the hidden one while the broken copy was the public
+// behaviour.
+export function addDays(dateStr, n) {
+  const d = new Date(dateStr);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 // NOW, expressed in minutes since midnight of `dateStr` — the one axis on which
 // `nowOn(b.date, today, nowMins)` and `toMins(b.time)` may be compared.
 //

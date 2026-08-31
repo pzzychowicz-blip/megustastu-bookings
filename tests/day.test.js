@@ -17,7 +17,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import process from "node:process";
-import { todayStr, dayDiff, nowOn } from "../src/lib/day.js";
+import { todayStr, dayDiff, nowOn, addDays } from "../src/lib/day.js";
 
 const REAL_TZ = process.env.TZ;
 function withTZ(tz, fn) {
@@ -131,5 +131,55 @@ describe("nowOn", () => {
     expect(scheduledEnd - naive).toBe(1440);      // the bug: a 24-hour booking
     expect(projected).toBe(scheduledEnd);          // the fix: the party is due out now
     expect(projected >= scheduledEnd).toBe(true);
+  });
+});
+
+// The date-navigation bug this version also closes. Not in the crash-test
+// register — found while widening the CT-2B-03 sweep's regex, because the four
+// broken sites spell the same mistake a different way.
+describe("addDays — the arrows, and the day they did nothing", () => {
+  it("steps forward and back", () => {
+    expect(addDays("2026-08-31", 1)).toBe("2026-09-01");
+    expect(addDays("2026-09-01", -1)).toBe("2026-08-31");
+    expect(addDays("2026-08-31", 7)).toBe("2026-09-07");
+    expect(addDays("2026-08-31", 0)).toBe("2026-08-31");
+  });
+  it("crosses a year and a leap day", () => {
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDays("2024-02-28", 1)).toBe("2024-02-29");
+    expect(addDays("2026-02-28", 1)).toBe("2026-03-01");
+  });
+
+  // The defect. `new Date(dateStr)` is UTC midnight while setDate/getDate are
+  // LOCAL, so on the 23-hour spring-forward day +1 local day landed before the
+  // next UTC midnight and the readback returned the SAME date: the Next-day
+  // button and the → key did nothing at all on 29 March.
+  it("crosses the spring-forward day, where the old expression stood still", () => {
+    withTZ("Atlantic/Canary", () => {
+      expect(addDays("2026-03-29", 1)).toBe("2026-03-30");
+      // The hand-rolled version this replaced, on the same input:
+      const naive = (ds, n) => { const d = new Date(ds); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+      expect(naive("2026-03-29", 1)).toBe("2026-03-29");   // stuck
+      expect(addDays("2026-03-29", 1)).not.toBe(naive("2026-03-29", 1));
+    });
+  });
+  it("crosses the autumn fall-back day too", () => {
+    withTZ("Atlantic/Canary", () => {
+      expect(addDays("2026-10-25", 1)).toBe("2026-10-26");
+      expect(addDays("2026-10-26", -1)).toBe("2026-10-25");
+    });
+  });
+  it("never stands still, on any day of a DST year, in either direction", () => {
+    // The property the four call sites actually need: a step always moves.
+    withTZ("Atlantic/Canary", () => {
+      let d = "2026-01-01";
+      for (let i = 0; i < 365; i++) {
+        const next = addDays(d, 1);
+        expect(next).not.toBe(d);
+        expect(addDays(next, -1)).toBe(d);
+        d = next;
+      }
+      expect(d).toBe("2027-01-01");
+    });
   });
 });
