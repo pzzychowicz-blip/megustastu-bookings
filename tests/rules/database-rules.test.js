@@ -4,7 +4,7 @@
 //
 // Until now the rules were protected by reading them. Everything else the app
 // asserts about write safety — the per-booking CAS that closed the 2026-07-05
-// overwrite incident, the eleven revision pairs, the `auth != null` boundary —
+// overwrite incident, the twelve revision pairs, the `auth != null` boundary —
 // was verified by argument, in prose, in CLAUDE.md and database.rules.README.md.
 // This file runs the real rules file, unmodified, inside a local emulator.
 //
@@ -270,7 +270,7 @@ async function seedRead(path) {
 }
 
 // ── The whole-node revision CAS ─────────────────────────────────────────────
-// Eleven collections share one pattern: a sibling `<name>Rev` integer, written
+// Twelve collections share one pattern: a sibling `<name>Rev` integer, written
 // atomically with the node, that the rules require to be EXACTLY stored + 1.
 
 describe("tableBlocks — the representative rev pair", () => {

@@ -91,7 +91,7 @@ loopback emulator and a `demo-` project. The next three are what you would
 expect: the
 `auth != null` boundary, the per-`$id` booking CAS (`updatedAt` strictly
 greater **and** `baseUpdatedAt` equal to stored — the pair that closed the
-2026-07-05 overwrite incident), and the eleven `<name>Rev` pairs, each swept for
+2026-07-05 overwrite incident), and the twelve `<name>Rev` pairs, each swept for
 repeated / skipped / lower / absent / non-numeric revisions.
 
 The last group is marked **`PROBE:`** and is different in kind: those tests
