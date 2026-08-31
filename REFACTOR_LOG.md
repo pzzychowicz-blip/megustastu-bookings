@@ -16423,6 +16423,35 @@ from the thing", `tests/csp.test.js`, v17.15.1), and it was walked into again
 while correcting a different count. A 12-line grep window then falsely flagged
 four listeners as missing the callback; widening it cleared all four.
 
+### 4 · The other twenty findings, on ROADMAP
+
+Every confirmed-but-unfixed finding now has an entry, grouped under
+**Crash test v17.15.7 — confirmed and unfixed**, keyed by ID so a commit message
+and a ROADMAP line refer to the same thing. They were deliberately not written
+during the three attack sessions: twenty entries added before a plan existed
+would have been noise, and they would have muddied a clean tooling PR.
+
+The grouping is by **deploy risk**, not by severity, because that is what decides
+what ships together: the four `database.rules.json` findings (CT-2A-01, -03's
+server half, -04, -06) are marked as Version B and carry the note that each fix
+updates its `PROBE:` test deliberately rather than by weakening an assertion. The
+client findings follow in rough value order, then the nine P3s.
+
+Three entries carry an **open question for Patryk** rather than a fix, because
+each is a decision rather than a change: CT-2A-01's tombstone-versus-
+`baseUpdatedAt === 0`; CT-2B-04's one-line normalisation, which retroactively
+re-keys customers already split in PROD; and CT-2B-05's "what should Delete
+customer & all data reach after a mis-join".
+
+Also folded in: the rules-suite-in-CI entry now warns that `test:rules` prepends
+an Apple-Silicon Homebrew JDK path which does not exist on `ubuntu-latest`, so
+the explicit pin silently becomes a no-op there (rig `/code-review`, CR-2). And
+the standing recommendation the crash test says outlives every fix — **extract
+the pure core of `usePersistence.js`** — is recorded as its own item: 737 lines
+that decide whether a booking reaches the server have never been executed by a
+test, which is the single reason the report's confidence rating is 55% and not
+higher.
+
 ### Verification
 
 ```
