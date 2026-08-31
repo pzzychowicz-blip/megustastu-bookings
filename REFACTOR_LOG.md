@@ -16249,3 +16249,241 @@ contrast registry are all structurally unable to notice. This is the
 `srcFilesMatching(re)`, two call sites.
 
 **647 tests.**
+
+---
+
+## v17.16.0 — two taps, one booking
+
+**Date:** 2026-08-31 · **Branch:** `feat/v17.16.0-save-guard-error-boundary` ·
+**Files:** `src/lib/submitGuard.js` (new), `src/App.jsx`,
+`src/hooks/useWalkin.js`, `tests/submit-guard.test.js` (new), CLAUDE.md ·
+**Behavioural change:** yes — a second tap on Save no longer creates a second
+booking · **684 tests** (+37).
+
+The first version to act on the v17.15.7 crash test (`MGT BOOKINGS — CRASH TEST
+- ADVERSARIAL QA.md`, three sessions, 22 confirmed findings). It carries the two
+P1 client defects; the `database.rules.json` findings ship separately, because
+that file is applied by hand in the PROD console and a rules change buried
+inside a feature release is a change nobody reviews as a rules change.
+
+### 1 · CT-2C-01 — tapping Save twice creates two bookings
+
+**The finding.** Two clicks 200 ms apart produced two confirmed reservations on
+two different tables. Three synchronous clicks produced three. The walk-in form
+has the identical shape. This was the most reachable defect in the whole crash
+test: no unusual state, no stale device, no second client — a fingertip.
+
+**Why nothing caught it.** Every safeguard behaved correctly. Each click is a
+fresh `doSave` minting a fresh `genId()`, so the per-`$id` CAS, the write
+guards, the capacity check and the optimiser all saw two genuinely distinct,
+genuinely valid creates and had no reason to think they were related. A search
+for `isSaving` / `savingRef` / `inFlight` / `submitting` across `src/` returned
+nothing: there was no re-entry guard anywhere in the app, and the Save button's
+`disabled` tracks form validity, never an in-flight save.
+
+**Why `disabled` is not the fix**, which is the part worth carrying forward.
+Both save paths dispatch and then call `setShowForm(false)` — but the modal does
+not leave immediately. `Overlay` self-animates its close through
+`ModalPresence`, holding the subtree mounted for `EXIT_MS` (`M.dur.move` 240 +
+`EXIT_PAD` 20 = **260 ms**). For that quarter-second the form is fading out and
+its Save button is still in the DOM, still hit-testable, still wired to the same
+handler. A 200 ms second tap lands on a live button inside a modal that is
+already closing. **Any fix that depends on React having re-rendered is racing
+the exit animation.** This one is a synchronous ref check at the top of the
+dispatch path, so it cannot be raced.
+
+**`src/lib/submitGuard.js`** — `READY` / `DISPATCHED` / `mayDispatch(state)`.
+A pure module rather than a ref inline in each hook, for the reason this repo
+keeps rediscovering: two surfaces with the same rule written out twice is the
+condition that produces the next disagreement. Three sequencing rules, and each
+is a real failure if broken:
+
+1. **CHECK first**, at the top of the handler, before any validation. Placed
+   after it, a second tap still passes whenever the first left the draft
+   valid — which on a double-tap it always does, so the bug would be intact.
+2. **ARM only after a dispatch actually happened**, on the line that closes the
+   form. Armed on a validation return, the user cannot correct a field and press
+   Save again. Armed *before* the write, a throw inside it leaves the form open
+   and permanently unable to save.
+3. **RESET on OPEN**, not on close and not on a timer. `openForm` (App.jsx) and
+   `openWalkin` (useWalkin.js) are each their surface's single door — and not
+   by coincidence worth leaning on quietly: both are already the one place that
+   snapshots the unsaved-changes baseline, and CLAUDE.md records that every open
+   path must go through them for exactly that reason. Verified rather than
+   assumed: all four `setShowForm(true)` sites call `openForm` first.
+
+**The BUTTON's handler is guarded too, not only `doSave`** (added by this
+version's `/code-review`). `save()` / `saveWalkin()` are what the Save and Seat
+buttons call, and both can raise the kitchen-busy confirm and **return before
+the guarded function is reached**. On a double-tap the first tap's booking is
+already in `bookings`, which is exactly what pushes `getKitchenLoad` over
+`KITCHEN_TABLE_LIMIT` — so with the default limit of 3 and one existing booking
+in the window, the second tap raised "Kitchen busy" for a booking that had
+already been written, over a form that had already closed. `doSave` then refused
+the duplicate correctly, so nothing was lost; but the stray dialog was produced
+by the very tap this fix exists to make inert. The kitchen round-trip is
+unaffected, because its Confirm button re-enters `doSave()` directly with the
+guard still `READY`.
+
+**No time window, deliberately.** A window would have to outlast the exit
+animation and undercut a plausible second booking, and picking that number means
+the guard silently stops guarding on a device having a slow frame. "Until this
+surface is opened again" is the exact statement of the bug and needs no clock.
+
+**`mayDispatch` is `!== DISPATCHED`, not `=== READY`**, so it **fails open**: an
+uninitialised ref or a state a later version invents answers "go ahead". That
+costs at worst the duplicate this guard prevents. The inverse spelling fails
+closed, and a Save button that silently does nothing is the worse of the two —
+invisible, and unrecoverable without a reload, where a duplicate is at least on
+screen for somebody to delete.
+
+**`tests/submit-guard.test.js` (18).** The predicate, then the invariant over a
+model that includes the exit window (a model without it cannot reproduce the bug
+at all) across 500 seeded random sequences, then a source sweep of the four call
+sites — because `mayDispatch` correct-and-unwired is exactly the shape of the
+defect it was written for. Proven to fail without the fix, in all three ways it
+could be removed: neutering the predicate fails 5, deleting the arm fails 2,
+moving the check below validation fails 1.
+
+### 2 · CT-2A-02 — no error boundary anywhere
+
+**The finding.** `componentDidCatch` / `getDerivedStateFromError` /
+`ErrorBoundary` / `onerror` matched **nothing** across `src/`, and `main.jsx`
+rendered `<App/>` bare. React's contract for an uncaught render error is to
+unmount the whole tree, so any throw in render or in one of ~30 effects left
+`#root` empty: a white screen on a tablet, mid-service, with no route back but
+a reload nobody is prompted to do.
+
+**The boot watchdog does not cover it**, and this is worth stating because it
+looks like it should. `index.html`'s watchdog fires once, at T+10s, gated on
+`root.children.length === 0` — it answers "did the app never mount", which is a
+different question from "did it mount and then throw". By the time a boundary is
+needed it has long since decided the boot was fine and stood down.
+
+**Why a P1 on its own.** It fixes no bug; it changes what every *other* bug
+costs. The crash test found seven reachable throw sites without looking hard —
+`dirtyDates → verifyClean → toMins` (an effect that runs on every snapshot),
+`daySummary → toMins`, `findClashes → toMins`, `describeBooking(null)`,
+`bookEnd({})`, `comboCap(null)`, `clashRowId(null)` — several reachable from a
+single malformed booking, which CT-2A-03 shows the server will happily store.
+
+**Two recoveries, because they fail differently.** *Try again* clears `hasError`
+and re-renders — the cheap first move for a transient cause, since it restarts
+without re-fetching the app; a deterministic one throws straight back, costing
+nothing and telling the user something true. *Reload app* re-fetches from the
+server. The copy says outright that neither fixes a malformed booking sitting in
+the database, rather than sending someone round the same loop a third time.
+
+**Neither resumes the session, and the first version of the copy said it did.**
+Caught by this version's own `/code-review` rather than by review of the diff:
+React unmounts the errored subtree, so clearing `hasError` is a FRESH MOUNT and
+every `useState` in `BookingApp` returns to its initializer. Measured on the dev
+server with a one-shot throw — the app sat on 2026-09-07 in List view before the
+crash and came back on today's date in Timeline after Try again. Only the
+sign-in survives, and that is Firebase auth persistence, not anything the
+boundary does. The copy had promised "Try again first — it keeps you on the same
+day", which would have returned a member of staff to today mid-service believing
+they were still on Saturday's sheet: a false statement on the one surface whose
+entire job is to say something true about what just happened. The claim was
+repeated in the file header, in CLAUDE.md and in this entry, all corrected
+together, and the test now pins the ABSENCE of the promise rather than the
+wording — the wording is free to change and the promise is not.
+
+**Focus, not `role="alert"`.** A live region added to the DOM already holding its
+message announces nothing (CLAUDE.md's own live-region rule), and this surface is
+created holding its message by definition. The panel is `tabIndex={-1}` and
+focuses itself through a callback ref.
+
+**Thin dependencies, deliberately.** Token scales plus `mkBtn`/`mkSolidBtn`,
+which return plain style *objects* and cannot throw — and no component. A surface
+that renders only once the component tree has failed should not be built out of
+that tree. It is also not an `Overlay`: there is no app behind it to dim, so no
+scrim and no `role="dialog"`.
+
+**A defect the test found, not the review.** `getDerivedStateFromError` first
+read `(error && error.message)` — truthiness — and `new Error()` has a message of
+`""`, which is falsy, so it fell through to the value and rendered the bare word
+`"Error"`: exactly the noise that branch exists to prevent. It tests
+`typeof error.message === "string"` now. A message-less throw is not a case
+anyone pictures while reading the line.
+
+**`tests/error-boundary.test.js` (19).** This repo has no jsdom and does not want
+one, and did not need one: an error boundary's whole decision is a static method
+plus a `render()` that branches on one state field, so the tests construct the
+class directly and read the returned element tree (React elements are plain
+objects), mounting nothing. Proven to fail without the fix in three ways:
+rendering the boundary *beside* `<App/>` rather than around it fails 1, removing
+`getDerivedStateFromError` fails 6, dropping the Reload button fails 1. CLAUDE.md's
+"no UI/component tests" line was corrected in the same commit — with the bar for
+repeating the trick, so it does not read as a general licence.
+
+### 3 · Two CLAUDE.md claims the crash test found false
+
+Both are in the auto-loaded architecture record, which is the file everything
+else in this repo is checked against — so a confident wrong sentence here has a
+long half-life and gets quoted rather than verified.
+
+**CT-2A-09 — "All hooks are converted as of v16.0.0 — never reintroduce the
+updater-side write."** False of the most important write path in the app.
+`saveBookings` / `saveBlocks` (`usePersistence.js`) call `persist(prev,computed)`
+— which performs the `update()` — from inside their `setBookings` updater, and
+always have. Verified directly rather than taken from the crash-test register.
+
+The row is corrected rather than deleted, because *why the predicted corruption
+has not happened* is the useful part: v15.5.0's per-child diff `update()` is
+idempotent, where the whole-node concat `set()` behind the v16.0.0 incident is
+not, and StrictMode's double-dispatch is separately caught by `lastPatchSigRef`'s
+2 s content+base signature. Two defences — either of which could be edited away
+by somebody who read the old row and believed the shape was already gone. It is
+**mitigated, not structurally removed**, and now says so.
+
+**The `dbError` listener count — "All 16 listeners pass it."** Stale since
+v17.5.1. The real figure is **18** (17 in `hooks/` + `attachRev` in
+`revGuard.js`), and all 18 do pass it.
+
+Worth recording because of *how* the recount went wrong twice. The crash-test
+hand-off gave the figure as 20, which is what `grep -c "onValue("` reports — and
+two of those matches are inside `dbError.js`'s own header, where the comment
+explains the rule by naming the call. The repo already has a Gotchas row for
+exactly this ("prose that names the thing a regex hunts for is indistinguishable
+from the thing", `tests/csp.test.js`, v17.15.1), and it was walked into again
+while correcting a different count. A 12-line grep window then falsely flagged
+four listeners as missing the callback; widening it cleared all four.
+
+### 4 · The other twenty findings, on ROADMAP
+
+Every confirmed-but-unfixed finding now has an entry, grouped under
+**Crash test v17.15.7 — confirmed and unfixed**, keyed by ID so a commit message
+and a ROADMAP line refer to the same thing. They were deliberately not written
+during the three attack sessions: twenty entries added before a plan existed
+would have been noise, and they would have muddied a clean tooling PR.
+
+The grouping is by **deploy risk**, not by severity, because that is what decides
+what ships together: the four `database.rules.json` findings (CT-2A-01, -03's
+server half, -04, -06) are marked as Version B and carry the note that each fix
+updates its `PROBE:` test deliberately rather than by weakening an assertion. The
+client findings follow in rough value order, then the nine P3s.
+
+Three entries carry an **open question for Patryk** rather than a fix, because
+each is a decision rather than a change: CT-2A-01's tombstone-versus-
+`baseUpdatedAt === 0`; CT-2B-04's one-line normalisation, which retroactively
+re-keys customers already split in PROD; and CT-2B-05's "what should Delete
+customer & all data reach after a mis-join".
+
+Also folded in: the rules-suite-in-CI entry now warns that `test:rules` prepends
+an Apple-Silicon Homebrew JDK path which does not exist on `ubuntu-latest`, so
+the explicit pin silently becomes a no-op there (rig `/code-review`, CR-2). And
+the standing recommendation the crash test says outlives every fix — **extract
+the pure core of `usePersistence.js`** — is recorded as its own item: 737 lines
+that decide whether a booking reaches the server have never been executed by a
+test, which is the single reason the report's confidence rating is 55% and not
+higher.
+
+### Verification
+
+```
+npm run build       336.40 kB / 91.39 kB gz   (+2.32 kB raw, +0.79 kB gz)
+npm test            684 passed (22 files)
+npm run lint        0 errors, 71 warnings     (the pre-existing baseline)
+npm run check:style OK
+```

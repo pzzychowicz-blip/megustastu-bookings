@@ -26,22 +26,6 @@ session and keeping it in sync.
   not at all, so it wants its own version and Patryk's sign-off. If the answer
   is "record it, don't change it", the note belongs beside the existing
   exemption paragraph in `tests/contrast.test.js`.
-- **A deleted booking can be resurrected by a stale write (rules change,
-  needs sign-off).** Found by the v17.15.7 emulator rig; crash-test spec §5
-  Scenario D. `database.rules.json`'s `$bid` validate is
-  `!newData.exists() || (… && (!data.exists() || <CAS>))`, and once the booking
-  is gone the `!data.exists()` disjunct short-circuits the CAS entirely — so any
-  write with a numeric `updatedAt` recreates it, including an offline device's
-  queued edit naming a `baseUpdatedAt` that was deleted. Verified against the
-  emulator; a cancelled table reappears with the stale device's contents. The
-  current behaviour is PINNED in `tests/rules/database-rules.test.js`
-  ("PROBE — a deleted booking can be resurrected") so a fix fails those tests
-  deliberately rather than silently. Fixing it means either a tombstone
-  (`deletedAt`, which changes the data shape and the delete path) or requiring
-  `baseUpdatedAt === 0` on the create branch (which would reject a legitimate
-  offline re-create). **Not a tooling change** — `database.rules.json` is
-  deployed by hand to PROD via the console, so it wants its own version and
-  Patryk's sign-off.
 - **Run the Firebase rules suite in CI.** `npm run test:rules`
   (`tests/rules/database-rules.test.js`, 78 tests against the real
   `database.rules.json`) runs on a developer machine only. CI cannot run it as
@@ -50,13 +34,181 @@ session and keeping it in sync.
   `firebase-tools` in the job — perhaps a minute per PR for a suite that changes
   only when `database.rules.json` does, so it may be better gated on a path
   filter than run every time. Until this lands, a rules regression is caught
-  only if someone remembers to run the command.
+  only if someone remembers to run the command. **Whoever does this: the
+  `test:rules` script prepends `/opt/homebrew/opt/openjdk/bin`, which does not
+  exist on `ubuntu-latest`** — so the explicit JDK pin silently becomes a no-op
+  and the job depends on whatever `java` the runner exposes. Drop the prefix in
+  favour of `setup-java`, or the pin will look like a guarantee while
+  guaranteeing nothing (rig `/code-review`, CR-2).
 - **The Plan legend chip has no `boxShadow: var(--shadow-flat)`**, which its
   TimelineView twin has carried since v17.11.0. v17.15.7 matched the twin in
   every other respect (inline-flex, gap, `StatusIcon` at `IC.inline`) and left
   this deliberately out of scope: it is a decision about a chip on a different
   card, and the plan's header row has no other shadowed chip. One line either
   way — make the two legends identical, or record why they differ.
+
+### Crash test v17.15.7 — confirmed and unfixed
+
+Twenty of the twenty-two findings from the three adversarial QA sessions
+(`MGT_Bookings_CrashTest_Phase4_FixPlan_Handoff.md` in the context folder holds
+the full register and the reproductions). **v17.16.0 fixed CT-2C-01 and
+CT-2A-02.** Delete an entry as its fix lands; the detail then goes in
+`REFACTOR_LOG.md`.
+
+**Version B — `database.rules.json`, its own branch and PR.** That file is
+applied by hand in the PROD console, so these must not ride inside a feature
+release. Each fix updates its `PROBE:` test in
+`tests/rules/database-rules.test.js` **deliberately** — never by weakening an
+assertion.
+
+- **CT-2A-01 (P1) — a deleted booking is resurrected by a stale write.**
+  `$bid`'s validate is `!newData.exists() || (… && (!data.exists() || <CAS>))`,
+  and once the booking is gone the `!data.exists()` disjunct short-circuits the
+  CAS, so any write carrying a numeric `updatedAt` recreates it — including an
+  offline device's queued edit naming a `baseUpdatedAt` that was deleted. It
+  returns holding its OLD table: if that table was reassigned the day is
+  genuinely double-booked, and in the commoner case a cancelled party simply
+  reappears as live with nothing on screen saying so. Verified against the
+  emulator. Two candidate fixes, and **the choice needs Patryk**: a tombstone
+  (`deletedAt` — changes the data shape and the delete path), or requiring
+  `baseUpdatedAt === 0` on the create branch (rejects a legitimate offline
+  re-create). Pinned by "PROBE — a deleted booking can be resurrected".
+- **CT-2A-03 (P2), server half — no field-shape validation.** The rules assert a
+  numeric `updatedAt` and nothing else, so `time: 2000`, `size:"many"`,
+  `tables:"3"` and an unknown status are all stored. Pinned by "PROBE — no field-
+  shape validation on bookings" (8 cases + a booking with nothing but a stamp).
+- **CT-2A-04 (P2) — `/bookings` is deletable in one authenticated call.**
+  `.validate` is not evaluated for deletes and `/bookings` carries no rule of its
+  own. Inside the documented single-restaurant trust model, but the only guard is
+  client-side and the free plan has no backups. Note alongside it: the client's
+  empty-array guard needs `firstLoadCount.current > 0`, frozen at the session's
+  first snapshot, so a session started against an empty database runs its whole
+  life with that guard disabled.
+- **CT-2A-06 (P2) — a whole-node wipe bypasses the rev CAS, and two documents say
+  it cannot.** `remove()` on `tableBlocks` alone succeeds: node gone,
+  `tableBlocksRev` left at its old value. True of the app's write path, false of
+  the rules. `revGuard.js`'s header and CLAUDE.md both need the correction, in
+  whichever direction the rules change goes.
+
+**Version C or later — client fixes, in rough value order.**
+
+- **CT-2B-02 (P2) — every now-vs-booking comparison breaks after midnight, except
+  one.** At 00:30 against a party seated 23:30–00:30: `liveBarDur` returns 15
+  (an hour shown as fifteen minutes), `syncLiveDurations` no-ops,
+  `occupancyEnd`/`getBusy` report **the table as free** and `canAssign` offers it
+  to a walk-in, `freeingSoon` returns nothing, and completing records
+  `stayedMin = 15`. Two source comments assert this is safe and `freeingSoon`'s
+  is false. **`pastCloseMins` is correct in both seasons** — the only function
+  that puts now and a booking on a common axis — and it is module-private inside
+  `usePersistence`. The fix is one shared time axis, which is the extraction
+  below arriving early.
+- **CT-2B-01 (P1) — seating after midnight writes a 24-hour booking.**
+  `applySeatedShift` computes `newDuration = scheduledEnd − now`; after midnight
+  `now` has wrapped and `scheduledEnd` has not, so a 23:30 booking seated at
+  00:30 persists `duration: 1440`. Its overlap guard excludes completed bookings,
+  so nothing conflicts at 00:30 and it goes through. **Not reachable at Me Gustas
+  Tú's 22:00 close** — it needs a close of 24 or 25, which is one ordinary
+  Settings change away. Fixing CT-2B-02 fixes this; clamp `newDuration` anyway,
+  as a second line of defence at the one point it reaches the database.
+- **CT-2C-02 (P2) — focus restoration never works, on any modal.** `Overlay`'s
+  cleanup calls `prev.focus()` so the keyboard lands where it was — which is
+  exactly where it does not land: the opener sits inside a subtree marked
+  `inert`, an inert element cannot take focus, and the call is a silent no-op.
+  Verified on "+ New" and Settings; all four inert containers cover page content,
+  so there is no opener for which it works. Fix: restore focus **after** `inert`
+  is lifted, not before. Invisible to `tests/a11y.test.js`, which is a static AST
+  sweep.
+- **CT-2B-03 (P2) — "today" is UTC, the clock is local.** `nowMins` from
+  `getHours()`, `today` from `toISOString().slice(0,10)` in **43 places**,
+  including two adjacent lines of `bookingsAfterAction`. In summer (WEST, UTC+1)
+  they disagree from local 00:00 to 01:00: the Today button lands on yesterday,
+  today-only banners key to the wrong day, and `optimizerActiveFor`'s
+  today-vs-future branch inverts. DST itself is clean — date-only strings parse
+  as UTC midnight.
+- **CT-2B-04 (P2) — a parenthesised country code splits one customer in two, and
+  the fix re-keys existing records.** `normalizePhone` keeps `+` only as the
+  first character, so `"(+34) 600 123 456"` → `"34600123456"`, a different
+  identity from `"+34600123456"`. Visits, no-show counts and history split; the
+  repeat-no-show marker trips at 2 and may never fire; "Delete customer & all
+  data" reaches only the half you clicked. Punctuation and spacing normalise
+  correctly — only the plus's POSITION is wrong. **One line, but it
+  retroactively re-keys customers already split in PROD, so it needs a decision
+  rather than a quiet fix.**
+- **CT-2B-05 (P2) — a wrong guest join files one person's visits under another's
+  number.** `customerIndex` keys as `phone || alias[guestId] || guestId`, so
+  after a mis-join the phone-LESS bookings of the other person land under the
+  first person's number (3 visits under one key, measured) and "Delete customer &
+  all data" takes all of them. Bounded: two REAL phones under one `guestId` stay
+  two customers. **Open question for Patryk:** what should the delete reach after
+  a mis-join? The safe answer may be to exclude bookings whose own phone differs
+  from the row's key.
+- **CT-2A-03 (P2), client half — `sanitize` guards truthiness only.**
+  `time: 2000` survives `b.time || "13:00"` and then `toMins` (`t.split(":")`,
+  83 call sites) throws. Also silently mis-read rather than throwing:
+  `size:"many"` → a party of **2**, `duration:"long"` → **90 min**,
+  `tables:"3"` → **no table**, and an unknown status for which `isActive`
+  returns true. v17.16.0's error boundary contains the crash; it does not make
+  the data readable.
+- **CT-2A-05 (P2) — the optimiser is not order-invariant.** `optimise`'s four
+  sort keys are not a total order, so ties fall back to array position.
+  Measured: assignment differs in **1000/1000** shuffled days; the number of
+  UNPLACED bookings differs in **2/1000** (worst: seed 47, n=24, 2 vs 3). Array
+  order is not identical across devices — one that just created a booking has it
+  appended, one that received it by snapshot has it key-sorted. Cross-device
+  divergence is argued, not reproduced. **Open question: is a tie-break worth it
+  at 2/1000?**
+
+**P3 — minor, each its own commit if taken at all.**
+
+- **CT-2A-07** — an exhausted retry (`MAX_RETRIES` 3) drops the item *after* it
+  was applied optimistically to local state, behind a dismissible banner naming
+  no booking. Screen and server disagree until the next echo silently reverts it.
+- **CT-2A-08** — the StrictMode patch-dedupe (`lastPatchSigRef`, 2 s) can swallow
+  a legitimate A→B→A write with no echo between. Every reachable instance
+  self-heals; no lasting divergence was constructed.
+- **CT-2A-09** — `saveBookings`/`saveBlocks` dispatch the write from inside their
+  `setState` updater. v17.16.0 corrected CLAUDE.md's claim that no such shape
+  survives, and recorded why the v16.0.0 corruption has not recurred (an
+  idempotent per-child diff `update()`, plus the signature dedupe). Converting it
+  to the ref-mirror shape is the structural fix the rule actually prescribes.
+- **CT-2A-10** — `2**53` freezes a booking: `old + 1 === old`, so `stampForWrite`
+  stops advancing and only a delete clears it. Pinned in the rules suite.
+- **CT-2A-11** — `undoKey`'s array separator is collidable by a pasted control
+  character in a table id, which reads as "nothing changed" so an undo snapshot
+  is never taken. The source comment asserts no text field can produce one and
+  nothing enforces it. Also unrated: nothing checks for duplicate booking ids,
+  and two sharing one collapse in the optimiser's assignment map (`genId`
+  collision ≈ 1 in 1.7M, same millisecond).
+- **CT-2B-06** — on a legacy id-less `tableBlocks` node, `sanitizeBlock` mints a
+  fresh id on every read, so a resync between opening the block list and tapping
+  Unblock makes the removal a silent no-op. Self-limiting and fails safe.
+- **CT-2B-07** — the kitchen-busy chip fires at `starts >= KITCHEN_TABLE_LIMIT`
+  while the confirm fires at `starts + 1 >= LIMIT`. With the limit at 3, at
+  exactly two existing starts the dialog appears with no busy chip to explain it.
+  Both the booking and walk-in paths.
+- **CT-2B-08** — a second join naming an already-joined seed correctly refuses to
+  re-home it, but the NEW booking keeps its own minted `guestId` and lands in a
+  group of one while the operator believes the two were joined. Nothing on screen
+  distinguishes this from success.
+- **CT-2B-09** — `stampGuestSeed` is an unconditional `.map`, so a no-op call
+  returns a fresh array: the exact shape v17.14.0 removed from
+  `bookingsAfterAction` and made a stated contract, in the same save path.
+  Harmless today because the write diff compares content.
+
+### The recommendation that outlives the fixes
+
+- **Extract the pure core of `usePersistence.js`.** `buildPatch`,
+  `stampForWrite`, `contentKey`, `pastCloseMins` and the retry-queue decision are
+  module-private inside a React hook, which is why **737 lines that decide
+  whether a booking reaches the server have never been executed by a test** — in
+  this crash test or any other. Everything the report says about the retry queue,
+  the stale gate, the resync and the dedupe window was established by *reading
+  the code*. Two sessions reached this independently: 2A because the retry logic
+  could not be attacked, 2B because the one function that handles midnight
+  correctly is locked inside the same file. It is the repo's own v17.8.0 rule
+  applied to the file that decides the most, and it is the change that lets the
+  next person **raise** the crash test's 55% confidence rating rather than
+  re-argue it.
 
 ## Designed, not implemented
 

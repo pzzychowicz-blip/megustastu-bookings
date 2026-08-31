@@ -7,10 +7,20 @@ import "./index.css";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    {/* v17.16.0 (CT-2A-02): until this, `<App/>` was rendered bare — and React's
+        contract for an uncaught render error is to unmount the WHOLE tree, so any
+        throw in render or in one of ~30 effects left `#root` empty. A white screen
+        on a tablet mid-service, with no route back but a reload nobody is prompted
+        to do. index.html's boot watchdog does not cover it: it fires once at T+10s
+        gated on an EMPTY root, which answers "did the app never mount" rather than
+        "did it mount and then throw". See src/components/ErrorBoundary.jsx. */}
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );
 

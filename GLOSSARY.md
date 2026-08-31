@@ -174,6 +174,7 @@ The distinction is load-bearing: a **modal** is a dialog (scrim, focus trap,
 | Floating message, bottom centre | **status toast** (`StatusToasts.jsx`) | **One slot** — the highest-priority live toast only, crossfading in place. `role="status"`. |
 | "Booking cancelled · Undo" | **undo pill** | The one toast you act on. `undoSecs` in settings. |
 | "Nothing booked for this day yet" + two buttons | **empty-day prompt** (`EmptyDay.jsx`) | Renders **nothing** on a closed day — the strip's closed-day section is that case's empty state. |
+| "MGT Bookings hit an error" + Try again / Reload app | **error screen** (`ErrorBoundary.jsx`, v17.16.0) | What the app shows instead of a white screen when a render throws. Deliberately **not** a modal: there is no app behind it to dim, so it is a plain centred card on `--bg-app` with no scrim and no `Overlay`. Not a live region either — it moves focus instead. |
 
 ### What `Overlay` actually is
 
