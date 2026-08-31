@@ -114,15 +114,32 @@ describe("render", () => {
   });
 
   it("offers BOTH recoveries, because they fail differently", () => {
-    // Try again keeps the session and fixes a transient cause; Reload rebuilds
-    // from the server and is what to reach for when Try again bounces. Dropping
-    // either leaves a class of failure with no way out.
+    // Try again restarts without re-fetching, which is the cheap first move for
+    // a transient cause; Reload re-fetches from the server and is what to reach
+    // for when Try again bounces. Dropping either leaves a class of failure with
+    // no way out. Neither RESUMES the session — see the test below.
     const out = boundary({ hasError: true, message: "boom" }, {}).render();
     const buttons = findAll(out, (n) => n.type === "button");
     expect(buttons).toHaveLength(2);
     const labels = buttons.map((b) => textOf(b).join("").trim());
     expect(labels).toEqual(["Try again", "Reload app"]);
     for (const b of buttons) expect(typeof b.props.onClick).toBe("function");
+  });
+
+  it("does not promise a continuity it cannot deliver", () => {
+    // React unmounts the errored subtree, so clearing `hasError` is a FRESH
+    // MOUNT: every useState in BookingApp returns to its initializer. Measured
+    // on the dev server — the app was on 2026-09-07 in List view before the
+    // crash and came back on today's date in Timeline after Try again.
+    //
+    // The first version of this copy said "Try again first — it keeps you on
+    // the same day", which would have sent someone back to today mid-service
+    // believing they were still on Saturday's sheet. This pins the absence of
+    // that promise rather than the exact wording, because the wording is free
+    // to change and the promise is not.
+    const text = textOf(boundary({ hasError: true, message: "boom" }, {}).render()).join(" ");
+    expect(text).not.toMatch(/same day|keeps you|where you left|your place/i);
+    expect(text).toMatch(/return to today/i);
   });
 
   it("names the version, so a report from the floor is actionable", () => {

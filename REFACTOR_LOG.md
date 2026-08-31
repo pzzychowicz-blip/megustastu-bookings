@@ -16258,7 +16258,7 @@ contrast registry are all structurally unable to notice. This is the
 **Files:** `src/lib/submitGuard.js` (new), `src/App.jsx`,
 `src/hooks/useWalkin.js`, `tests/submit-guard.test.js` (new), CLAUDE.md ·
 **Behavioural change:** yes — a second tap on Save no longer creates a second
-booking · **663 tests** (+16).
+booking · **682 tests** (+35).
 
 The first version to act on the v17.15.7 crash test (`MGT BOOKINGS — CRASH TEST
 - ADVERSARIAL QA.md`, three sessions, 22 confirmed findings). It carries the two
@@ -16354,13 +16354,27 @@ costs. The crash test found seven reachable throw sites without looking hard —
 `bookEnd({})`, `comboCap(null)`, `clashRowId(null)` — several reachable from a
 single malformed booking, which CT-2A-03 shows the server will happily store.
 
-**Two recoveries, because they fail differently.** *Try again* resets `hasError`
-and re-renders the same tree, keeping the session — view, date, scroll, sign-in
-— which is the right first move for a transient cause; a deterministic one
-throws straight back, costing nothing and telling the user something true.
-*Reload app* rebuilds from the server. The copy says outright that neither fixes
-a malformed booking sitting in the database, rather than sending someone round
-the same loop a third time.
+**Two recoveries, because they fail differently.** *Try again* clears `hasError`
+and re-renders — the cheap first move for a transient cause, since it restarts
+without re-fetching the app; a deterministic one throws straight back, costing
+nothing and telling the user something true. *Reload app* re-fetches from the
+server. The copy says outright that neither fixes a malformed booking sitting in
+the database, rather than sending someone round the same loop a third time.
+
+**Neither resumes the session, and the first version of the copy said it did.**
+Caught by this version's own `/code-review` rather than by review of the diff:
+React unmounts the errored subtree, so clearing `hasError` is a FRESH MOUNT and
+every `useState` in `BookingApp` returns to its initializer. Measured on the dev
+server with a one-shot throw — the app sat on 2026-09-07 in List view before the
+crash and came back on today's date in Timeline after Try again. Only the
+sign-in survives, and that is Firebase auth persistence, not anything the
+boundary does. The copy had promised "Try again first — it keeps you on the same
+day", which would have returned a member of staff to today mid-service believing
+they were still on Saturday's sheet: a false statement on the one surface whose
+entire job is to say something true about what just happened. The claim was
+repeated in the file header, in CLAUDE.md and in this entry, all corrected
+together, and the test now pins the ABSENCE of the promise rather than the
+wording — the wording is free to change and the promise is not.
 
 **Focus, not `role="alert"`.** A live region added to the DOM already holding its
 message announces nothing (CLAUDE.md's own live-region rule), and this surface is
@@ -16380,7 +16394,7 @@ read `(error && error.message)` — truthiness — and `new Error()` has a messa
 `typeof error.message === "string"` now. A message-less throw is not a case
 anyone pictures while reading the line.
 
-**`tests/error-boundary.test.js` (18).** This repo has no jsdom and does not want
+**`tests/error-boundary.test.js` (19).** This repo has no jsdom and does not want
 one, and did not need one: an error boundary's whole decision is a static method
 plus a `render()` that branches on one state field, so the tests construct the
 class directly and read the returned element tree (React elements are plain
@@ -16456,7 +16470,7 @@ higher.
 
 ```
 npm run build       336.30 kB / 91.37 kB gz   (+2.22 kB raw, +0.77 kB gz)
-npm test            681 passed (22 files)
+npm test            682 passed (22 files)
 npm run lint        0 errors, 71 warnings     (the pre-existing baseline)
 npm run check:style OK
 ```

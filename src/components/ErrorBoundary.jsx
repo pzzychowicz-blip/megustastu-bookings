@@ -25,14 +25,23 @@
 //
 // TWO RECOVERIES, because they fail differently:
 //
-//   Try again  — resets `hasError` and re-renders the same tree. This is the
-//                right first move for a transient cause (a bad snapshot that has
-//                since been replaced, a one-off race) because it keeps the
-//                session: the view, the date, the scroll, the signed-in state.
-//                A deterministic cause simply throws again and lands back here,
-//                which costs nothing and tells the user something true.
-//   Reload app — a full `location.reload()`. Rebuilds everything from the
+//   Try again  — clears `hasError` and re-renders. The right first move for a
+//                transient cause (a bad snapshot since replaced, a one-off
+//                race): it restarts the app without re-fetching it, so it is
+//                quicker. A deterministic cause simply throws again and lands
+//                back here, which costs nothing and says something true.
+//   Reload app — a full `location.reload()`. Re-fetches the app from the
 //                server, and is what to reach for when Try again bounces.
+//
+// **NEITHER RESUMES THE SESSION, and the copy must not imply otherwise.** React
+// unmounts the errored subtree, so clearing `hasError` is a FRESH MOUNT: every
+// `useState` in `BookingApp` returns to its initializer. Measured on the dev
+// server with a one-shot throw — the app was on 2026-09-07 in List view before
+// the crash and came back on today's date in Timeline after Try again. Only the
+// signed-in state survives, and that is Firebase auth persistence rather than
+// anything this file does. The first version of this copy promised "it keeps
+// you on the same day", which would have sent a member of staff back to today
+// mid-service believing they were still on Saturday's sheet.
 //
 // Neither can fix a malformed booking sitting in the database, and the copy says
 // so rather than sending someone round the same loop a third time.
@@ -144,10 +153,10 @@ export default class ErrorBoundary extends Component {
             lineHeight: 1.5 /* @canvas */,
             color: S.muted,
           }}>
-            Try again first — it keeps you on the same day. If the error comes
-            straight back, reload. If it survives a reload, the day probably
-            holds a booking the app cannot read, and it will need fixing in the
-            data rather than here.
+            Try again first — it restarts the app without re-fetching it. If the
+            error comes straight back, reload. Either way you return to today.
+            If it survives a reload, the day probably holds a booking the app
+            cannot read, and it will need fixing in the data rather than here.
           </p>
 
           <div style={{ display: "flex", gap: SP.mid, flexWrap: "wrap" }}>
